@@ -1,8 +1,8 @@
 import type { SetupReport } from "@intentic-app/api-contract";
 
 /* The machine's setup report, read for step 3's card. One decision, kept pure beside the page (the
- * setupCompose.ts pattern): a report is either a DIAGNOSIS — failures the card renders verbatim, problem and
- * fix per check — or NARRATION, the healthy run's current stage in the user's words. Never both: a spinner
+ * setupCompose.ts pattern): a report is either a DIAGNOSIS, failures the card renders verbatim, problem and
+ * fix per check, or NARRATION, the healthy run's current stage in the user's words. Never both: a spinner
  * narrating progress beside "here is what broke" is the page contradicting itself. */
 
 // The connect flow's real phases (SetupReportSchema.stage), said the way the wait reads them. The pull
@@ -21,7 +21,7 @@ const STAGE_LABELS: Record<SetupReport[`stage`], string> = {
 export interface SetupReportView {
     // The run stopped: every broken check, verbatim. Null while the run is healthy (or there is no report).
     readonly failures: SetupReport[`failed`] | null;
-    // The healthy run's live stage. Undefined when failed or when there is no report — the card then falls
+    // The healthy run's live stage. Undefined when failed or when there is no report, the card then falls
     // back to its canned line.
     readonly stage: string | undefined;
 }

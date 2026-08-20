@@ -1,25 +1,25 @@
-/* The pop-out window's own script, and the ONLY code in a floating panel that runs in that window's realm —
+/* The pop-out window's own script, and the ONLY code in a floating panel that runs in that window's realm,
  * everything the panel shows is rendered by the page that opened it (see composables/usePopout.ts for why, and
  * for the liveness contract this serves). That makes the keeper the only party able to speak for the window
  * once the realm behind it dies, so every tick it asks whatever page currently answers on the opener whether
  * anyone is drawing in this window, and acts on the answer:
- *   · `live`    — a panel is being rendered in here (a fresh load takes the window over on the very tick it
+ *   · `live`   , a panel is being rendered in here (a fresh load takes the window over on the very tick it
  *                 first answers). Nothing to do.
- *   · `waiting` — a live page owns this window but has nothing in it yet: an app still booting, or a panel host
- *                 between mounts. Veil, because an empty window must not read as the app — but keep the window,
+ *   · `waiting`, a live page owns this window but has nothing in it yet: an app still booting, or a panel host
+ *                 between mounts. Veil, because an empty window must not read as the app, but keep the window,
  *                 because the page answering at all is proof someone is coming back for it.
- *   · `none`    — nobody drives this window. Veil NOW. It may be a page mid-reload, in which case the veil
+ *   · `none`   , nobody drives this window. Veil NOW. It may be a page mid-reload, in which case the veil
  *                 lifts a few ticks later; what it must never be is a dead panel that still looks like the app.
  *
  * …and two deadlines, because the two ways of being empty are not equally hopeful. Nobody answering for ~12s is
  * a window whose app is gone. Being owned but empty for ~60s is a window whose app is there and has nothing for
- * it — a slower boot than any deadline should punish, but not an endless one. Either way the window closes
+ * it, a slower boot than any deadline should punish, but not an endless one. Either way the window closes
  * itself: nothing on this page can be left floating because the app forgot about it.
  *
  * The first ask is immediate rather than a tick in, because the handshake is also how a panel ARRIVES: popping
  * out is window.open on this page plus this question, so opening a window and re-adopting one that outlived a
- * reload are the same path through the opener's store. `window.name` — the target name window.open gave this
- * window, and the key those stores are registered under — survives navigation, so a reload out here reports in
+ * reload are the same path through the opener's store. `window.name`, the target name window.open gave this
+ * window, and the key those stores are registered under, survives navigation, so a reload out here reports in
  * as the same panel. */
 
 // Type-only, and it has to stay that way: this module is the whole of the pop-out page's bundle, and a runtime
@@ -33,7 +33,7 @@ const TICK_MS = 200;
 // gone does not sit around.
 const ORPHAN_TICKS = 60;
 // Ticks of being OWNED but empty before it gives up anyway: ~60s. A page that answers is alive, so this is not
-// the orphan case and must not share its deadline — it is an app still booting, or one whose panel host is
+// the orphan case and must not share its deadline, it is an app still booting, or one whose panel host is
 // between mounts, and both legitimately outrun twelve seconds. Bounded all the same: an app that has reached a
 // place with no panel in it at all (signed out, no sandbox selected, a viewport that fell to the mobile shell)
 // would otherwise leave a veiled window floating for the rest of the day.
@@ -69,7 +69,7 @@ const ask = (): void => {
     }
     let answer: PopoutAnswer = `none`;
     try {
-        // Running the opener's code IS the proof of life — a page mid-reload has no hook yet, and a dead realm
+        // Running the opener's code IS the proof of life, a page mid-reload has no hook yet, and a dead realm
         // has none ever again. Either way the answer is `none` and this window says so.
         answer = opener.__intentic?.adoptPopout(window.name, window) ?? `none`;
     } catch {

@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import { OkSchema, PublicListSchema, PublishResultSchema, PublishSchema, UnpublishSchema } from "../schemas.js";
 
-// The workspace outbox — what `public/` currently holds and its address (see the public section in schemas.ts).
+// The workspace outbox, what `public/` currently holds and its address (see the public section in schemas.ts).
 // `publish` copies a workspace file or directory in, creating the outbox if this is the first one; `unpublish`
 // withdraws one and removes the outbox behind the last, so the directory's presence always means exactly "there
 // is something published". There is no route to READ a published file: that is the whole point of the

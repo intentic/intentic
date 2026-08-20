@@ -1,8 +1,8 @@
-/* WHAT A PUBLISHED BUNDLE MAY IMPORT — the loader's side of the manifest contract, stated where both sides can
+/* WHAT A PUBLISHED BUNDLE MAY IMPORT, the loader's side of the manifest contract, stated where both sides can
  * read it. The host fetches an extension's entry bytes and imports them from a blob: URL, which has two hard
  * consequences: a relative import resolves against a blob: URL that was never created (a 404 for a file that
  * exists on disk), and a bare specifier resolves only if the shell's import map publishes it. Both failures are
- * invisible to the author — their own workspace loads the directory live — and fatal for every installer.
+ * invisible to the author, their own workspace loads the directory live, and fatal for every installer.
  *
  * It lives HERE, beside the manifest schema, because two independent judges have to agree on it: the daemon's
  * readiness check (before an author publishes) and the registry scanner (re-deriving the same answer cold, at
@@ -14,7 +14,7 @@
 export const HOST_PUBLISHED_SPECIFIERS = ["vue", "@intentic/extension-api", "@intentic/extension-ui", "@tanstack/vue-query"] as const;
 
 // Every specifier a single-file ESM bundle names: static imports, re-exports, bare side-effect imports, and
-// dynamic import(). A bundle is one file by contract, so a regex over its text is the right instrument — there
+// dynamic import(). A bundle is one file by contract, so a regex over its text is the right instrument, there
 // is no module graph to walk.
 export const bundleSpecifiers = (source: string): string[] => [
     ...new Set([

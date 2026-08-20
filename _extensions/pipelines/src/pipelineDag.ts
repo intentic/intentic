@@ -7,7 +7,7 @@ import type { PipelineJob, PipelineStatus } from "@intentic/sandbox-contract";
  * THREE WAYS TO LEARN THE SHAPE OF A RUN, in descending order of truth, and the picture is only ever as good
  * as the best one available:
  *
- *   1. DECLARED DEPENDENCIES (`needs`). The real graph — the only source that can say job X waited on job Y
+ *   1. DECLARED DEPENDENCIES (`needs`). The real graph, the only source that can say job X waited on job Y
  *      rather than on everything that happened before it. Neither vendor returns it from the jobs API; the
  *      daemon reads it out of the workflow definition (sandbox: ci/workflowGraph.ts). When it is here, the
  *      edges ARE the dependencies and the layers are dependency depth.
@@ -17,7 +17,7 @@ import type { PipelineJob, PipelineStatus } from "@intentic/sandbox-contract";
  *   3. EXECUTION WAVES. The last resort, and what GitHub looked like before (1) existed: overlapping runtimes
  *      ⇒ the jobs were concurrent, and a job starting only after its whole layer finished opens the next one.
  *      It reconstructs the usual build → test → deploy shape without inventing dependencies, at the cost of one
- *      honest imprecision — a job merely DELAYED (queued behind a busy runner) reads as sequential. It did run
+ *      honest imprecision, a job merely DELAYED (queued behind a busy runner) reads as sequential. It did run
  *      later; it just may not have had to. On a big real workflow that failure mode dominates, and thirteen
  *      genuinely branching jobs come out as thirteen sequential steps: a flat line. Which is precisely why (1)
  *      is worth two extra HTTP calls.
@@ -26,7 +26,7 @@ import type { PipelineJob, PipelineStatus } from "@intentic/sandbox-contract";
 export interface PipelineStage {
     // GitLab's stage name. Absent for a GitHub wave, which has no name the vendor would recognize.
     readonly name: string | undefined;
-    // The worst status among the stage's jobs — what the inline circle shows.
+    // The worst status among the stage's jobs, what the inline circle shows.
     readonly status: PipelineStatus;
     readonly jobs: readonly PipelineJob[];
 }
@@ -50,7 +50,7 @@ const startOf = (group: readonly PipelineJob[]): number =>
 
 // GitLab: group by the vendor's stage. Ordered by when each stage first started rather than by array order,
 // because the jobs endpoint's ordering is not contractual. A stage that never ran carries no timestamp and
-// sorts last — which is where wholly-skipped stages (deploy on a non-default branch) belong anyway.
+// sorts last, which is where wholly-skipped stages (deploy on a non-default branch) belong anyway.
 const namedStages = (jobs: readonly PipelineJob[]): JobGroup[] => {
     const groups = new Map<string, PipelineJob[]>();
     for (const job of jobs) {
@@ -65,14 +65,14 @@ const namedStages = (jobs: readonly PipelineJob[]): JobGroup[] => {
     return (
         [...groups.entries()]
             .toSorted(([, a], [, b]) => startOf(a) - startOf(b))
-            // A run that mixes staged and unstaged jobs leaves the latter under the empty key — unnamed, not "".
+            // A run that mixes staged and unstaged jobs leaves the latter under the empty key, unnamed, not "".
             .map(([name, group]): JobGroup => ({ name: name === `` ? undefined : name, jobs: group }))
     );
 };
 
 // GitHub: layer by observed concurrency. Walking start-ascending, a job joins the open layer while it starts
 // before that layer's last finish; a still-running job holds its layer open (anything starting after it is
-// genuinely concurrent with it). Jobs that never started are queued work — one trailing layer.
+// genuinely concurrent with it). Jobs that never started are queued work, one trailing layer.
 const executionWaves = (jobs: readonly PipelineJob[]): JobGroup[] => {
     const started = jobs.filter((job) => job.startedAt !== undefined).toSorted((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
     const queued = jobs.filter((job) => job.startedAt === undefined);
@@ -98,12 +98,12 @@ const executionWaves = (jobs: readonly PipelineJob[]): JobGroup[] => {
     return waves.map((wave): JobGroup => ({ name: undefined, jobs: wave }));
 };
 
-/* Declared dependencies: layer by DEPENDENCY DEPTH — one past the deepest thing a job waits on. That is the
+/* Declared dependencies: layer by DEPENDENCY DEPTH, one past the deepest thing a job waits on. That is the
  * layering dagre would derive from the edges anyway, computed here as well so the row's inline circles are
  * the same run as the graph rather than a second opinion about it.
  *
  * A job that matched nothing in the workflow file has no `needs` and lands at depth 0, beside the real roots.
- * That is the honest placement for "we could not tell what gated this" — better than threading it into a
+ * That is the honest placement for "we could not tell what gated this", better than threading it into a
  * sequence it may not belong to. A workflow that declares a cycle cannot happen through Actions, but a
  * hand-written file can say anything, so the walk carries a visiting guard and treats a revisit as depth 0;
  * dagre breaks the same cycle downstream. */
@@ -149,7 +149,7 @@ export const pipelineStages = (jobs: readonly PipelineJob[]): PipelineStage[] =>
 };
 
 // What to call a stage on screen. GitLab names its own. A derived GitHub wave has no vendor name, but a wave
-// holding a single job is that job — "build" beats "Step 1" — so only a genuinely parallel unnamed wave falls
+// holding a single job is that job, "build" beats "Step 1", so only a genuinely parallel unnamed wave falls
 // back to its position.
 export const stageLabel = (stage: PipelineStage, index: number): string => {
     if (stage.name !== undefined) {
@@ -185,12 +185,12 @@ interface JobLink {
 const linkKey = (link: JobLink): string => `${link.from}>${link.to}`;
 
 /* THE DECLARED GRAPH, when the run came with one. `needs` names jobs, the graph addresses nodes, and one name
- * can own several nodes — every leg of a matrix, every job of a called workflow — so depending on a name is
+ * can own several nodes, every leg of a matrix, every job of a called workflow, so depending on a name is
  * depending on all of them. A name that no job in this run answers to is dropped rather than drawn: it is an
  * `if:` that never fired or a matrix leg that was excluded, and an edge to a node the graph does not contain
  * would be a claim about work that did not happen.
  *
- * Undefined when nothing declared anything — which is how the caller knows to fall back rather than to render
+ * Undefined when nothing declared anything, which is how the caller knows to fall back rather than to render
  * a graph with no edges at all, a picture that says "these thirteen jobs are unrelated" and means "we did not
  * look". */
 const declaredLinks = (stages: readonly PipelineStage[]): JobLink[] | undefined => {
@@ -210,7 +210,7 @@ const declaredLinks = (stages: readonly PipelineStage[]): JobLink[] | undefined 
 };
 
 // The fallback shape: every job of a stage into every job of the next. That bipartite join is all a stage
-// boundary actually claims — the next stage starts when this one is done, whichever job you follow — and it is
+// boundary actually claims, the next stage starts when this one is done, whichever job you follow, and it is
 // what both vendors' own graphs draw for a stage-sequenced pipeline.
 const stageJoinLinks = (stages: readonly PipelineStage[]): JobLink[] =>
     stages.flatMap((stage, stageIndex) => {
@@ -223,10 +223,10 @@ const stageJoinLinks = (stages: readonly PipelineStage[]): JobLink[] =>
         );
     });
 
-/* ONE JOB'S LINE THROUGH THE RUN — what lights up when a card is under the pointer.
+/* ONE JOB'S LINE THROUGH THE RUN, what lights up when a card is under the pointer.
  *
  * Everything reachable BACKWARDS had to finish before this job could start; everything reachable FORWARDS
- * waited on it. Everything else — the jobs it merely ran alongside — fades, and on a run that fans out those
+ * waited on it. Everything else, the jobs it merely ran alongside, fades, and on a run that fans out those
  * are most of the picture. That is the whole point of the gesture: on the four-way `test` stage every reader
  * has, hovering one leg answers "which of these am I looking at, and what did it hold up" instantly.
  *
@@ -234,11 +234,11 @@ const stageJoinLinks = (stages: readonly PipelineStage[]): JobLink[] =>
  * With declared dependencies the answer is exact: hovering one leg of a fan-out lights the one parent it
  * actually named and leaves its five siblings' parents dark. With the stage-join fallback the same walk
  * reaches every job of every earlier and later stage, which is the strongest true statement that shape
- * supports — so one implementation says as much as each source of truth allows, and never more.
+ * supports, so one implementation says as much as each source of truth allows, and never more.
  *
  * Edges are collected DURING the walk instead of being inferred from the endpoints afterwards. An edge whose
- * two ends are both related to the focus is not necessarily on a path THROUGH it — a bypass from an ancestor
- * straight to a descendant is the standard case — and lighting one would draw a route the run never took. */
+ * two ends are both related to the focus is not necessarily on a path THROUGH it, a bypass from an ancestor
+ * straight to a descendant is the standard case, and lighting one would draw a route the run never took. */
 export interface JobLineage {
     // The focus and everything on its line, by node id: what stays lit.
     readonly nodes: ReadonlySet<string>;
@@ -284,11 +284,11 @@ export const jobLineage = (links: readonly JobLink[], focus: string): JobLineage
     };
 };
 
-/* One edge, styled by the two jobs it spans: tinted by what flowed along it so a failure's blast radius is
+/* One edge, styled by the two jobs it spans: tinted by what flowed along it so a failure's reach is
  * traceable by eye, and dashed into work that never ran rather than asserting "and then this happened".
  *
  * While a job is focused the TRACE wins that tinting, in one colour for the whole line rather than two for its
- * two directions — which is the choice the vendors' own graphs make, and it stays out of a view where every
+ * two directions, which is the choice the vendors' own graphs make, and it stays out of a view where every
  * other colour on screen already means a status. Left-to-right says the direction; the accent only says
  * "you are on it". Everything off the line fades instead. */
 const linkEdge = (link: JobLink, jobOf: ReadonlyMap<string, PipelineJob>, lineage: JobLineage | undefined): DagEdge => {
@@ -309,7 +309,7 @@ const linkEdge = (link: JobLink, jobOf: ReadonlyMap<string, PipelineJob>, lineag
 // Stages → the DagGraph model: one node per job, edges from whichever source of truth this run came with.
 // `focus` is the job under the pointer (or pinned by a click): its line is drawn, the rest fades. Only the
 // STYLING moves with it, never an id or an endpoint, so a hover cannot disturb the layout or throw away the
-// reader's pan (DagGraph refits on the layout signature, which is ids and endpoints — see dagLayout.ts).
+// reader's pan (DagGraph refits on the layout signature, which is ids and endpoints, see dagLayout.ts).
 export const pipelineDag = (stages: readonly PipelineStage[], focus?: string): PipelineDag => {
     // The links come first because the trace is walked over them, and a node cannot say whether it is dimmed
     // until that walk has happened.
@@ -322,8 +322,8 @@ export const pipelineDag = (stages: readonly PipelineStage[], focus?: string): P
             const id = jobNodeId(stageIndex, jobIndex);
             jobOf.set(id, job);
             // No `tooltip`: a card's own popup is drawn ABOVE it, over the neighbours whose lighting or fading
-            // is the entire answer to the hover that summoned it. The graph's caption says the same things —
-            // full name, stage, what the job's line reaches — in a fixed corner that occludes nothing.
+            // is the entire answer to the hover that summoned it. The graph's caption says the same things,
+            // full name, stage, what the job's line reaches, in a fixed corner that occludes nothing.
             return { id, data: job, ...(lineage !== undefined && !lineage.nodes.has(id) ? { dimmed: true } : {}) };
         }),
     );

@@ -1,12 +1,12 @@
 import { z } from "zod";
 import type { ContributionPoint } from "../contribution-point.js";
 
-/* A STARTING POINT in the automation composer — a trigger, a prompt written for that trigger's payload, and
+/* A STARTING POINT in the automation composer, a trigger, a prompt written for that trigger's payload, and
  * whatever guard or hold makes it safe to leave on. Pure prefill: creating one makes an ordinary automation and
  * the daemon knows nothing about templates afterwards.
  *
  * IT LIVES WITH THE AREA THAT KNOWS THE SERVICE, which is the point of it being a contribution at all. The
- * automation surface used to carry every one of these — Komodo's, Sentry's, Stripe's, CI's, the chore book's —
+ * automation surface used to carry every one of these. Komodo's, Sentry's, Stripe's, CI's, the chore book's,
  * so a pack that gained something worth reacting to could not say so without an edit to a surface it has
  * nothing to do with. A template declared here appears when the pack is installed and its capability connected,
  * and disappears with it.
@@ -14,7 +14,7 @@ import type { ContributionPoint } from "../contribution-point.js";
  * The daemon validates each one against the real trigger schema when it builds the catalogue and drops what
  * does not parse, so a template can never offer a trigger that `upsert` would refuse. */
 export const AutomationTemplateContributionSchema = z.object({
-    // Prefills the automation name, and is what "does one of these exist already" is asked by — so it must be
+    // Prefills the automation name, and is what "does one of these exist already" is asked by, so it must be
     // spelled as an automation id, not as prose.
     id: z
         .string()
@@ -23,7 +23,7 @@ export const AutomationTemplateContributionSchema = z.object({
     title: z.string().min(1),
     logo: z.string().min(1).optional().describe("A simple-icons slug for the card."),
     icon: z.string().min(1).optional().describe("A name from the host's icon set, drawn when no simple-icons slug fits."),
-    // Capability providers that make this template WORK — any one connected is enough (fixing CI rides github
+    // Capability providers that make this template WORK, any one connected is enough (fixing CI rides github
     // or gitlab). Omitted ⇒ nothing to connect, always offered.
     requires: z
         .array(z.string().min(1))

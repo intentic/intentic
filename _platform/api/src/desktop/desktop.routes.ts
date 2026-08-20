@@ -7,7 +7,7 @@ import { requireUser } from "../guards.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
-/* THE DESKTOP SIGN-IN HANDOFF — one sign-in, carried from the user's real browser into the app's webview.
+/* THE DESKTOP SIGN-IN HANDOFF, one sign-in, carried from the user's real browser into the app's webview.
  *
  * Google refuses OAuth authorization from an embedded webview, and Google Identity Services is FedCM-based,
  * which WebKitGTK does not implement at all. So the desktop app never asks Google for anything: it opens
@@ -16,7 +16,7 @@ const os = implement(apiContract).$context<OrpcContext>();
  *
  * Two credentials cross, and they cross differently on purpose:
  *   • the PLATFORM session, as a Better Auth one-time token. The webview spends it at
- *     /api/auth/one-time-token/verify, which answers with a Set-Cookie — so the session lands in the webview's
+ *     /api/auth/one-time-token/verify, which answers with a Set-Cookie, so the session lands in the webview's
  *     own jar through an ordinary HTTP round trip, and nothing here forges a cookie or hand-rolls a session.
  *   • the GOOGLE ID token, which the daemon verifies against Google's JWKS on first-bind and then exchanges
  *     once for a daemon session that renews silently. The platform stores it for minutes and never uses it.
@@ -37,7 +37,7 @@ const challengesMatch = (left: string, right: string): boolean => {
 };
 
 export const desktopRoutes = {
-    // Session required — this is the browser that just signed in, and the token it mints is FOR that session.
+    // Session required, this is the browser that just signed in, and the token it mints is FOR that session.
     handoff: os.desktop.handoff.handler(async ({ input, context }) => {
         requireUser(context);
         const minted = await context.auth.api.generateOneTimeToken({ headers: context.headers });
@@ -74,14 +74,14 @@ export const desktopRoutes = {
 
     /* The Google ID token already on file for this session's user, refreshed by Better Auth off the stored
      * refresh token when the one it holds has aged out. The hand-off page tries this BEFORE Google's own
-     * button, so the ordinary desktop sign-in asks Google once — in the browser, where the user already
-     * answered — rather than twice.
+     * button, so the ordinary desktop sign-in asks Google once, in the browser, where the user already
+     * answered, rather than twice.
      *
      * Everything here is best-effort by design. Google does not always return an ID token on a refresh, a
      * sign-in that produced no refresh token has nothing to refresh, and an account can have been unlinked
      * since. All of those are "we hold nothing", not failures worth a 500: the caller's fallback is the
      * Google button it is already showing, and an error would only replace a working screen with a broken
-     * one. The caller re-checks the expiry itself — this promises provenance, never freshness. */
+     * one. The caller re-checks the expiry itself, this promises provenance, never freshness. */
     googleIdToken: os.desktop.googleIdToken.handler(async ({ context }) => {
         requireUser(context);
         try {

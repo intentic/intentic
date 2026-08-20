@@ -4,10 +4,10 @@ import { pushPlugin, type PushNotificationsPlugin } from "../shell/capacitor.js"
 import type { Minted, PushDriver } from "./driver.js";
 
 // Loaded on use, not at module load: the platform client evaluates window.env on import, which only exists in
-// a real page — and this module rides the composable's import graph into every environment, shell or not.
+// a real page, and this module rides the composable's import graph into every environment, shell or not.
 const platformApi = async () => (await import("../composables/useApi.js")).apiClient;
 
-/* Push inside the native iOS shell. WKWebView has no web push, so the transport is APNs — and Apple only
+/* Push inside the native iOS shell. WKWebView has no web push, so the transport is APNs, and Apple only
  * accepts sends from the app's vendor, which is why this driver registers with the PLATFORM's push relay
  * rather than handing the daemon anything it could post to directly. The handshake:
  *
@@ -17,12 +17,12 @@ const platformApi = async () => (await import("../composables/useApi.js")).apiCl
  * minted; it is remembered locally so the settings toggle can answer "is THIS phone registered" without a
  * platform round-trip on every refresh. */
 
-// Rotates on every successful registration; holds only an id (never the secret — that goes to the daemon
+// Rotates on every successful registration; holds only an id (never the secret, that goes to the daemon
 // and exists nowhere else on this device).
 const DEVICE_KEY = `intentic:push-device`;
 
 // APNs answers a register() through a delayed event, not the call. Ten seconds is APNs being unreachable,
-// not slow — surface it rather than leaving the toggle spinning forever.
+// not slow, surface it rather than leaving the toggle spinning forever.
 const TOKEN_TIMEOUT_MS = 10_000;
 
 const apnsToken = async (plugin: PushNotificationsPlugin): Promise<string> =>
@@ -51,7 +51,7 @@ const mint = async (_publicKey: () => Promise<string>): Promise<Minted> => {
     const permission = await plugin.requestPermissions();
     if (permission.receive !== `granted`) {
         // iOS asks once: a decline IS the terminal denied state (there is no "dismissed" on the native
-        // prompt — Settings is the only way back).
+        // prompt. Settings is the only way back).
         return { outcome: `denied` };
     }
     const token = await apnsToken(plugin);
@@ -72,7 +72,7 @@ export const nativePushDriver: PushDriver = {
     supported: () => pushPlugin() !== undefined,
     denied: async () => (await pushPlugin()?.checkPermissions())?.receive === `denied`,
     // The relay grant is this device's registration; a cleared app storage reads as "off", and re-enabling
-    // re-registers — the relay's (user, token) upsert makes that a replace, not a duplicate.
+    // re-registers, the relay's (user, token) upsert makes that a replace, not a duplicate.
     localId: async () => localStorage.getItem(DEVICE_KEY),
     // No key in this transport (VAPID binding is a web-push concern): a remembered registration is sendable.
     bound: async () => localStorage.getItem(DEVICE_KEY) !== null,

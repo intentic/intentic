@@ -1,17 +1,17 @@
-/* What the search box's second field MEANS — VSCode's "files to include" grammar, read the way VSCode reads it
+/* What the search box's second field MEANS. VSCode's "files to include" grammar, read the way VSCode reads it
  * (its queryBuilder's parseSearchPaths + expandGlobalGlob), and answered as the two path-glob lists the search
  * engine takes.
  *
- * The rules that make it feel like the editor's field, each one load-bearing:
+ * The rules that make it feel like the editor's field, each one required:
  *
- *   `package.json`  a bare name is a FILE as well as a folder — every segment expands to BOTH `**\/p` and
+ *   `package.json`  a bare name is a FILE as well as a folder, every segment expands to BOTH `**\/p` and
  *                   `**\/p/**`. Reading it as a folder alone is what made a file name find nothing.
- *   `src/db`        a path is still matched at any depth, not anchored — `**\/src/db`. VSCode only anchors
+ *   `src/db`        a path is still matched at any depth, not anchored, `**\/src/db`. VSCode only anchors
  *   `./src/db`      when the segment starts with `./` (or `/`), which is how you say "the one at the root".
  *   `.ts`           a leading dot is shorthand for the extension: it becomes `*.ts`.
  *   `docs/`         a trailing slash is noise; the folder form is generated either way.
  *   `*.{ts,vue}`    commas separate patterns EXCEPT inside `{…}` or `[…]`, which are one pattern's own syntax.
- *   `!**\/*.spec.ts` a leading `!` excludes. This is ours, not VSCode's — the editor spends a second box on
+ *   `!**\/*.spec.ts` a leading `!` excludes. This is ours, not VSCode's, the editor spends a second box on
  *                   exclusions and the explorer's sidebar has room for one field.
  *
  * It lives in the contract package because both ends run it: the daemon turns it into engine scope, and the
@@ -60,7 +60,7 @@ const expand = (segment: string): string[] => {
 };
 
 export interface IncludeGlobs {
-    // Files the search is limited to — empty means the whole workspace. OR'ed: any pattern matching admits.
+    // Files the search is limited to, empty means the whole workspace. OR'ed: any pattern matching admits.
     readonly globs: readonly string[];
     // Files kept out of it, whatever the includes said.
     readonly notGlobs: readonly string[];

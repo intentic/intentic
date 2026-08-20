@@ -7,21 +7,21 @@ import { DEMO_SLUG } from "./pool-demo.js";
 import { premiumOf } from "./pool-membership.js";
 import { type ForwardOutcome, forwardToService } from "./pool-services.js";
 
-/* ONE METERED RUN, WITHOUT A PRESENTATION — the guards, the spend, the signed forward and the refund, lifted
+/* ONE METERED RUN, WITHOUT A PRESENTATION, the guards, the spend, the signed forward and the refund, lifted
  * out of pool.routes.ts so that two surfaces can drive them and neither can drift from the other.
  *
  * There are two now. The sandbox's daemon POSTs /pool/services/:slug/run and wants an NDJSON stream it can
  * fork (progress to the owner's transcript, the result to the agent). The MCP server (mcp/) wants the same run
  * with the same money rules, but turns progress into protocol notifications and hands back one JSON result.
- * The half that must be identical is everything about the MONEY — spend before the call, a provider's 4xx is
- * a paid answer, no answer is refunded before a receipt exists — so that half lives here and the two callers
+ * The half that must be identical is everything about the MONEY, spend before the call, a provider's 4xx is
+ * a paid answer, no answer is refunded before a receipt exists, so that half lives here and the two callers
  * own only how it looks.
  *
  * WHAT THIS DOES NOT DO IS CONSENT. Neither caller may invoke it on an agent's say-so: the daemon parks on an
  * approval card in the owner's chat, the MCP server parks on an approved ServiceOffer row. This function
  * assumes that already happened and charges accordingly. */
 
-// The refusals that spend nothing, in the platform's own words — every one of them is already written for the
+// The refusals that spend nothing, in the platform's own words, every one of them is already written for the
 // person who will read it, which is why both callers relay them verbatim rather than rephrasing.
 export type MeteredRefusal =
     | { readonly type: `no_such_service` }
@@ -39,7 +39,7 @@ export type MeteredRefusal =
 export type MeteredRun =
     // A guard said no. Nothing was spent, and nothing needs settling.
     | { readonly kind: `refused`; readonly refusal: MeteredRefusal }
-    // The provider answered with a non-2xx below 500 — a complete answer, CHARGED, relayed verbatim.
+    // The provider answered with a non-2xx below 500, a complete answer, CHARGED, relayed verbatim.
     | {
           readonly kind: `answered`;
           readonly service: Service;
@@ -48,10 +48,10 @@ export type MeteredRun =
           readonly contentType: string;
           readonly remaining: number;
       }
-    // Nothing answered. Already refunded and already recorded here — the caller only reports it.
+    // Nothing answered. Already refunded and already recorded here, the caller only reports it.
     | { readonly kind: `failed`; readonly service: Service }
     /* The provider is streaming. The caller pulls `events` (each already validated at the trust boundary) and
-     * MUST call `settle` with the generator's return value when it is done — that is what writes the run row
+     * MUST call `settle` with the generator's return value when it is done, that is what writes the run row
      * and refunds a stream that never produced a result. Not settling leaves a charge with no ledger entry,
      * so both callers do it in a finally. */
     | {
@@ -69,7 +69,7 @@ export interface MeteredRunDeps {
     readonly fetchFn: typeof fetch;
     readonly now: () => Date;
     /* The demo service's upstream is the platform itself, so its forward dispatches IN-PROCESS rather than
-     * over a socket — the platform's own https address is not reliably reachable from the platform (dev's
+     * over a socket, the platform's own https address is not reliably reachable from the platform (dev's
      * minted certificate fails Bun's TLS stack; prod would loop out through the proxy), and a demo that
      * refunds every run wherever the loopback is awkward demonstrates nothing. The caller supplies it because
      * only the caller holds the Hono app to dispatch into. */
@@ -99,7 +99,7 @@ export const runMeteredService = async (
     }
     const at = now();
     /* Spend FIRST, atomically, or two concurrent runs race through the same headroom. A refused spend still
-     * landed its increment (the meter is optimistic on purpose — it is the only version that cannot be raced)
+     * landed its increment (the meter is optimistic on purpose, it is the only version that cannot be raced)
      * and is given straight back: unlike a one-message slot, an N-credit bite out of a refused attempt would
      * eat real remaining allowance. */
     const spend = await spendCredits(prisma, config, input.ownerId, service.creditsPerRun, at);
@@ -166,7 +166,7 @@ export const runMeteredService = async (
     };
 };
 
-// The refusal, as JSON and a status code — shared so the HTTP route and the MCP tool say the same sentence.
+// The refusal, as JSON and a status code, shared so the HTTP route and the MCP tool say the same sentence.
 export const refusalResponse = (refusal: MeteredRefusal): { readonly status: 403 | 404 | 413 | 429; readonly json: Record<string, unknown> } => {
     switch (refusal.type) {
         case `no_such_service`:

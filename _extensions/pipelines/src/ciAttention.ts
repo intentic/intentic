@@ -6,7 +6,7 @@ import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
 
 /* The rail badge's source. Module state owned by activate(), NOT by the view: a badge that only updates while
- * you are already looking at Pipelines would never tell you anything you didn't know — which is what the
+ * you are already looking at Pipelines would never tell you anything you didn't know, which is what the
  * background poll is for (background.ts holds the five rules such a poll has to obey).
  *
  * It reads THROUGH the host's vue-query cache: the latest badge poll is therefore also the board's first paint,
@@ -24,7 +24,7 @@ const { state: runs, start: startCiAttention } = sandboxPoll<CiRunsResponse>({
 // Started by activate() so the badge is live from login, and disposed with the extension.
 export { startCiAttention };
 
-// Read inside the host's render computed — touching `runs` here is what repaints the tile.
+// Read inside the host's render computed, touching `runs` here is what repaints the tile.
 export const ciBadge = (): ViewBadge | undefined => {
     const unseen = unseenStreaks(failureStreaks(runs.value.runs), runs.value.seenAt);
     if (unseen.length === 0) {

@@ -8,7 +8,7 @@ import type { SheetRows, SheetWorkerRequest, SheetWorkerResponse } from "./sheet
  *
  * The reader is a PREVIEW, so it wants values rather than a spreadsheet engine: this reads the cells and the
  * sheet names, and deliberately does not carry formulas, merges or cell formatting across. What it buys for
- * that is the absence of an HTML-generation step — see sheetProtocol.ts for why a table built from values
+ * that is the absence of an HTML-generation step, see sheetProtocol.ts for why a table built from values
  * beats a sanitised table built from markup the file chose. */
 const sheets = new Map<string, SheetRows>();
 
@@ -33,7 +33,7 @@ self.addEventListener(`message`, (event: MessageEvent<SheetWorkerRequest>) => {
     };
 
     if (request.type === `load`) {
-        // Parsing is async now, so a throw here lands in a rejected promise rather than the catch below — the
+        // Parsing is async now, so a throw here lands in a rejected promise rather than the catch below, the
         // handler stays sync and every failure funnels through `fail`.
         load(request.buffer)
             .then((names) => self.postMessage({ id, type: `loaded`, names } satisfies SheetWorkerResponse))

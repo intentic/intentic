@@ -5,11 +5,11 @@ import { WORKSPACE_MODULES, WORKSPACE_TREE } from "../queryKeys";
 
 /* Live workspace-change state, fed from the daemon's /events SSE (useSandboxLiveness) and read by the tree
  * (auto-invalidate), the review lists' module grouping (auto-invalidate), the file viewer (re-read the open file),
- * and the tree rows (transient highlight). The agent edits /work out-of-band — its own Write/Edit/Bash tools,
- * never the daemon's HTTP routes — so this push is the only thing that keeps the view fresh without a manual
+ * and the tree rows (transient highlight). The agent edits /work out-of-band, its own Write/Edit/Bash tools,
+ * never the daemon's HTTP routes, so this push is the only thing that keeps the view fresh without a manual
  * Refresh. Module-level singleton so the SSE reader, which runs outside any component, can push into the same
  * signal every consumer watches. The invalidations happen RIGHT HERE, against the module-singleton queryClient,
- * not via a component-scoped watch — a watch installed from a component dies with that component's effect scope
+ * not via a component-scoped watch, a watch installed from a component dies with that component's effect scope
  * (the /setup round-trip unmounts the shell; see sandboxScope.ts for the same trap), which silently killed live
  * refresh for the rest of the session. */
 
@@ -29,11 +29,11 @@ const refreshTree = throttleTrailing(() => void queryClient.invalidateQueries({ 
 const refreshModules = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: WORKSPACE_MODULES.every }), MODULES_REFRESH_MS);
 
 /* Could this batch have changed WHICH PACKAGES EXIST? A manifest is the only file that decides that (see the
- * daemon's workspace/modules.ts), so an ordinary source write costs nothing here — which is what lets the
+ * daemon's workspace/modules.ts), so an ordinary source write costs nothing here, which is what lets the
  * modules query keep its long hold instead of re-walking every repo on every batch.
  *
- * The empty batch counts. It is the daemon's "more paths than a frame carries" signal — a scaffold, a branch
- * switch, a drop — and a reconnect sends one too, so a package created while the browser was away arrives
+ * The empty batch counts. It is the daemon's "more paths than a frame carries" signal, a scaffold, a branch
+ * switch, a drop, and a reconnect sends one too, so a package created while the browser was away arrives
  * exactly this way, unnamed. */
 const mayChangeModules = (paths: readonly string[]): boolean =>
     paths.length === 0 || paths.some((path) => path === `package.json` || path.endsWith(`/package.json`));
@@ -46,11 +46,11 @@ const recentlyChanged = reactive(new Set<string>());
 const clearTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let epoch = 0;
 
-/* When the last workspace-change batch landed — the evidence that a ref move ALSO swapped the working tree.
+/* When the last workspace-change batch landed, the evidence that a ref move ALSO swapped the working tree.
  *
  * A checkout, a reset or a rebase rewrites files and so arrives as both a `workspaceChanged` batch and a
  * `refsChanged` frame; a plain commit moves only the ref and leaves the tree byte-identical. The two frames are
- * pushed by independent watchers, so "did files move too" cannot be read off the refs frame itself — this is
+ * pushed by independent watchers, so "did files move too" cannot be read off the refs frame itself, this is
  * what systemEvents consults before dropping the editor's buffers, because dropping them after an ordinary
  * commit would cost the user an unsaved edit for nothing.
  *
@@ -80,12 +80,12 @@ export const markWorkspaceChanged = (paths: readonly string[]): void => {
             }, HIGHLIGHT_MS),
         );
     }
-    // Always refetch, even for an empty batch — that's the daemon's "just refetch the tree" signal. Throttled (not
+    // Always refetch, even for an empty batch, that's the daemon's "just refetch the tree" signal. Throttled (not
     // debounced): batches arrive continuously through an upload, and a debounce would keep resetting its timer and
-    // never refresh at all — see throttleTrailing.
+    // never refresh at all, see throttleTrailing.
     refreshTree();
     /* A package appearing, being renamed away, or being deleted is the one thing that makes the review lists'
-     * module grouping WRONG rather than merely old — and it is wrong at the worst moment, because a new
+     * module grouping WRONG rather than merely old, and it is wrong at the worst moment, because a new
      * package's files are all changes at once. Without this push they group under the repo's own name with
      * their paths shortened to bare filenames, for as long as the layout's hold lasts. */
     if (mayChangeModules(paths)) {
@@ -96,13 +96,13 @@ export const markWorkspaceChanged = (paths: readonly string[]): void => {
 export const changeEpochOf = (path: string): number => epochs.get(path) ?? 0;
 export const isRecentlyChanged = (path: string): boolean => recentlyChanged.has(path);
 
-/* WHAT MOVED IN /work, FORGOTTEN — one workspace's file history, dropped when the browser is pointed at another.
+/* WHAT MOVED IN /work, FORGOTTEN, one workspace's file history, dropped when the browser is pointed at another.
  * Called from resetWorkspaceScopedState.
  *
  * Everything here is keyed by workspace-relative path, and that is exactly what makes carrying it over wrong
  * rather than merely wasteful: two sandboxes of the same project have the same paths. The new tree would open
  * with rows flashing "just changed" for edits made in the box the reader left, and the file viewer's read
- * trigger would carry epochs from that box's writes — a file it then declines to re-read because it believes it
+ * trigger would carry epochs from that box's writes, a file it then declines to re-read because it believes it
  * already has that version.
  *
  * `lastWorkspaceChangeAt` goes too: it is what tells systemEvents whether a ref move also swapped the working

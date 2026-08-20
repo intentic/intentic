@@ -1,4 +1,4 @@
-/* WHAT THIS REPOSITORY IS BUILT WITH, and the patterns that follow from it — the table the UI chores are written
+/* WHAT THIS REPOSITORY IS BUILT WITH, and the patterns that follow from it, the table the UI chores are written
  * against, kept apart from both the probe that runs it and the chores that read it.
  *
  * It sits in the middle on purpose. probes.ts composes ONE ripgrep sweep out of the rules below, and chores.ts
@@ -13,14 +13,14 @@
  * THE PATTERNS ARE RIPGREP'S DIALECT, and they carry two constraints that are not obvious from reading them:
  *
  *   No literal apostrophe, ever. The scan command wraps each pattern in shell single quotes, so a `'` inside one
- *   would end the quoting and hand the rest of the regex to the shell. Match quotes as `[\x22\x27]` instead —
+ *   would end the quoting and hand the rest of the regex to the shell. Match quotes as `[\x22\x27]` instead,
  *   Rust's regex crate reads those escapes, and the shell never sees a quote character at all. stack.test.ts
  *   enforces this, because the failure is a probe that dies at three in the morning in someone else's workspace
  *   rather than anything a reader would notice here.
  *
  *   No lookaround. Rust's regex crate has none, and reaching for ripgrep's PCRE2 mode to get it would make the
  *   sweep depend on how the box's ripgrep was compiled. A rule that seems to need it is usually asking a question
- *   about the FILE rather than about a line — see `absent` below, which is what that question actually is. */
+ *   about the FILE rather than about a line, see `absent` below, which is what that question actually is. */
 
 export interface UiFramework {
     readonly id: string;
@@ -38,7 +38,7 @@ export const UI_FRAMEWORKS: readonly UiFramework[] = [
     { id: `angular`, label: `Angular`, packages: [`@angular/core`] },
 ];
 
-// Tailwind is not in the table above because it is not a UI framework and does not own any idiom rules — it is a
+// Tailwind is not in the table above because it is not a UI framework and does not own any idiom rules, it is a
 // styling system that any of the three can be wearing, and it gates exactly one chore.
 export const TAILWIND_PACKAGES: readonly string[] = [`tailwindcss`];
 
@@ -64,20 +64,20 @@ export const SCAN_IGNORES: readonly string[] = [
     `!**/*.{test,spec,stories}.*`,
 ];
 
-// What counts as a component file, across all three frameworks at once. The sweep cannot vary by repository — a
-// probe's command is a fixed string — so it asks for all of them and a Vue-only repo simply has no `.tsx` files.
+// What counts as a component file, across all three frameworks at once. The sweep cannot vary by repository, a
+// probe's command is a fixed string, so it asks for all of them and a Vue-only repo simply has no `.tsx` files.
 export const COMPONENT_GLOBS: readonly string[] = [`*.vue`, `*.tsx`, `*.jsx`, `*.component.ts`];
 
 // Where a Tailwind class can appear. Wider than COMPONENT_GLOBS because a class list lives in markup as often as
-// in a component — an Angular template and a plain .html page both style with the same utilities.
+// in a component, an Angular template and a plain .html page both style with the same utilities.
 export const MARKUP_GLOBS: readonly string[] = [`*.vue`, `*.tsx`, `*.jsx`, `*.html`, `*.svelte`, `*.astro`];
 
-/* THE DESIGN SYSTEM BYPASS. Not "any arbitrary value" — `grid-cols-[1fr_auto]` and `w-[calc(100%-2rem)]` are
+/* THE DESIGN SYSTEM BYPASS. Not "any arbitrary value", `grid-cols-[1fr_auto]` and `w-[calc(100%-2rem)]` are
  * Tailwind working as designed, and a chore that counted them would be objecting to the feature rather than to
  * anything wrong. What this matches is the two arbitrary values that route around a decision the theme already
  * made: a colour that is not in the palette, and a pixel size that is not on the spacing or type scale.
  *
- * The leading `-` is load-bearing. It anchors the match to a utility prefix (`bg-`, `text-`, `w-`), so a bare
+ * The leading `-` is required. It anchors the match to a utility prefix (`bg-`, `text-`, `w-`), so a bare
  * `[...]` in ordinary prose or an array index cannot be mistaken for a class. */
 export const BYPASS_PATTERN = `-\\[(#[0-9a-fA-F]{3,8}|(rgb|hsl)a?\\(|[0-9]+(\\.[0-9]+)?px)`;
 
@@ -87,12 +87,12 @@ export interface IdiomRule {
     readonly framework: string;
     // What the repository still has, named as the reader would name it.
     readonly label: string;
-    // What replaced it. Carried so the prompt can say where to go rather than only what to leave — an agent told
+    // What replaced it. Carried so the prompt can say where to go rather than only what to leave, an agent told
     // "you still use NgModule" and nothing else will pick a destination, and it may not pick this one.
     readonly replacement: string;
     readonly pattern: string;
     readonly globs: readonly string[];
-    /* THE IDIOM IS THE PATTERN BEING MISSING, not present — `pattern` names the NEW way, and the file is on the
+    /* THE IDIOM IS THE PATTERN BEING MISSING, not present, `pattern` names the NEW way, and the file is on the
      * old one precisely because the new one does not appear in it anywhere. The sweep spells this
      * `--files-without-match`.
      *
@@ -100,7 +100,7 @@ export interface IdiomRule {
      * <script setup>" was first written as a lookahead over `<script`, which matches per LINE: a migrated
      * component with a second plain `<script>` block for defineOptions, or one that merely mentions `<script` in
      * a comment, both read as un-migrated. It reported five files in an application whose 167 SFCs are every one
-     * of them migrated. The question was never "is there a line like this" — it is "does this file contain the
+     * of them migrated. The question was never "is there a line like this", it is "does this file contain the
      * new idiom at all", which is one flag rather than a cleverer regex, and it costs no PCRE2.
      *
      * The globs carry more weight on an absent rule than on a normal one, and narrowly is the only safe way to
@@ -110,7 +110,7 @@ export interface IdiomRule {
 }
 
 /* THE IDIOMS THEIR OWN MAINTAINERS HAVE MOVED ON FROM. Every rule here names something the framework's own
- * documentation now steers people away from, and every one of them still works — which is exactly why they
+ * documentation now steers people away from, and every one of them still works, which is exactly why they
  * accumulate, and why no editor and no linter will bring them up unprompted.
  *
  * High confidence over coverage. Each pattern is one a reader can check by eye against a file, and the ones that
@@ -156,7 +156,7 @@ export const IDIOM_RULES: readonly IdiomRule[] = [
         framework: `vue`,
         label: `the Options API`,
         replacement: `<script setup> with the Composition API`,
-        // The new idiom, inverted by `absent` below — an SFC that never opens a `<script setup>` tag is still on
+        // The new idiom, inverted by `absent` below, an SFC that never opens a `<script setup>` tag is still on
         // the old one. A file with no script block at all is swept up too, and that is the honest reading: it has
         // not been migrated because there was nothing there to migrate.
         pattern: `<script[^>]*\\bsetup\\b`,
@@ -213,14 +213,14 @@ export const idiomRule = (id: string): IdiomRule | undefined => IDIOM_RULES.find
  * side had two extra characters. */
 export const normalizePath = (path: string): string => path.replace(/^\.\//, ``);
 
-// Below this a stem is too short to have survived the stripping above with its meaning intact — `H1` and `H2`
+// Below this a stem is too short to have survived the stripping above with its meaning intact, `H1` and `H2`
 // would both reduce to `h` and read as one family of heading components that are not duplicates of anything.
 const MIN_STEM = 3;
 
 const QUALIFIER_PREFIX = /^(base|the)/;
 const QUALIFIER_SUFFIX = /(v[0-9]+|new|old|legacy|copy|component|[0-9]+)$/;
 
-/* THE NAME TWO COMPONENTS SHARE WHEN THEY ARE THE SAME COMPONENT TWICE — or `undefined` when the file has no
+/* THE NAME TWO COMPONENTS SHARE WHEN THEY ARE THE SAME COMPONENT TWICE, or `undefined` when the file has no
  * name worth comparing.
  *
  * This is a normaliser, not a similarity score, and that is the point: it answers a question the reader can check
@@ -232,7 +232,7 @@ const QUALIFIER_SUFFIX = /(v[0-9]+|new|old|legacy|copy|component|[0-9]+)$/;
  * forty index files is a finding about the naming convention rather than about any duplication. */
 export const componentStem = (path: string): string | undefined => {
     const file = normalizePath(path).split(`/`).pop() ?? ``;
-    // `.component.ts` loses both suffixes, `.vue` loses one — taking everything before the first dot handles both
+    // `.component.ts` loses both suffixes, `.vue` loses one, taking everything before the first dot handles both
     // without a table, since a component's name is never the part after a dot.
     const base = (file.split(`.`)[0] ?? ``).toLowerCase().replace(/[^a-z0-9]/g, ``);
     if (base === `` || base === `index`) {

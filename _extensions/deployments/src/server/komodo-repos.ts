@@ -4,8 +4,8 @@ import type { DeployRepoLink } from "../contract.js";
 /* Which workspace repo belongs to which Komodo stack.
  *
  * A stack in Komodo is a docker compose project, and a repo that ships a compose file is one waiting to
- * happen. The two are usually named nearly the same — `intentic` in the repo against `intentic-platform` in
- * Komodo — so the daemon derives the repo's compose project name, ranks the stack names that resemble it, and
+ * happen. The two are usually named nearly the same, `intentic` in the repo against `intentic-platform` in
+ * Komodo, so the daemon derives the repo's compose project name, ranks the stack names that resemble it, and
  * the OWNER picks. Never an automatic binding: only they know that `atlas` is this repo's staging stack, and a
  * guess that silently becomes a fact is worse than no guess at all.
  *
@@ -35,7 +35,7 @@ const normalize = (name: string): string => name.toLowerCase().replaceAll(/[^a-z
  *
  * Three tiers, and no fourth: an exact match, a stack whose name STARTS with the project name (the
  * `intentic` → `intentic-platform` case, which is how people actually name the two halves of one system), and
- * plain containment either way. A stack matching none of those is not a suggestion — it is still one click
+ * plain containment either way. A stack matching none of those is not a suggestion, it is still one click
  * away in the full picker, which is where a name nobody could have guessed belongs. */
 export const rankStacks = (projectName: string, stacks: readonly string[]): string[] => {
     const target = normalize(projectName);
@@ -56,14 +56,14 @@ export const rankStacks = (projectName: string, stacks: readonly string[]): stri
         stacks
             .map((stack) => ({ stack, rank: tier(stack) }))
             .filter((entry) => entry.rank < 3)
-            // Rank first, then name, so the order is stable across polls — a suggestion list that reshuffles under
+            // Rank first, then name, so the order is stable across polls, a suggestion list that reshuffles under
             // the cursor is worse than one that is occasionally in the wrong order.
             .toSorted((a, b) => a.rank - b.rank || a.stack.localeCompare(b.stack))
             .map((entry) => entry.stack)
     );
 };
 
-// The narrow slice of the daemon this needs — the same shape the capability handlers take, so the whole module
+// The narrow slice of the daemon this needs, the same shape the capability handlers take, so the whole module
 // is testable with a fake filesystem.
 export interface RepoScanDeps {
     readonly root: string;
@@ -71,7 +71,7 @@ export interface RepoScanDeps {
 }
 
 /* One repo's compose evidence: the first compose file docker would pick, and the project name it declares.
- * A repo with no compose file yields nothing — it is not a candidate, and listing it would pad the view with
+ * A repo with no compose file yields nothing, it is not a candidate, and listing it would pad the view with
  * rows that can never be linked. */
 const repoComposeName = async (deps: RepoScanDeps, repoDir: string): Promise<{ projectName: string; composePath: string } | undefined> => {
     for (const name of COMPOSE_NAMES) {

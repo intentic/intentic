@@ -2,7 +2,7 @@ import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { host } from "./host";
 
 /* Thumbnails for a draft's workspace attachments (.intentic/records/artifacts/attachments/…), minted from
- * /workspace/raw on first render — the same shape the chat's bubbles use, scoped to this extension because a
+ * /workspace/raw on first render, the same shape the chat's bubbles use, scoped to this extension because a
  * module-level object-URL cache belongs to whoever created the URLs.
  *
  * Module-level: one fetch per path across every row that shows it. A refused path (outside the workspace, or
@@ -11,7 +11,7 @@ import { host } from "./host";
  *
  * ALL THREE ARE SANDBOX-SCOPED, and this cache is the one where carrying over is worst: the key is a workspace
  * path, two sandboxes have the same attachment paths, and the value is a URL to bytes fetched from the box the
- * reader has left — so a draft row would show a thumbnail of a different workspace's picture. The refusals go
+ * reader has left, so a draft row would show a thumbnail of a different workspace's picture. The refusals go
  * with it, since a path this box has is not refused just because the last one lacked it. Object URLs hold their
  * blob until revoked, hence the disposer: nothing else is ever going to hand those bytes back. */
 
@@ -53,7 +53,7 @@ const load = (path: string): void => {
 };
 
 // The preview URL for a workspace attachment: the cached object URL, kicking off the byte fetch on first ask.
-// undefined for non-images, while the bytes are in flight, and for a refused path — the caller renders the name
+// undefined for non-images, while the bytes are in flight, and for a refused path, the caller renders the name
 // chip and (reactively) flips to a thumb when the URL lands.
 export const attachmentPreview = (path: string): string | undefined => {
     const cached = previews.value[path];

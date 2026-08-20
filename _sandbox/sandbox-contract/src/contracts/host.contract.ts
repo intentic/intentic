@@ -6,7 +6,7 @@ import { HostFactsSchema, HostScopesSchema, MachineFlowLineSchema, MachineSandbo
  *
  * The direction is the unusual part: the machine is the oRPC SERVER and the daemon holds the client, even though
  * the machine is the side that dialled. A personal computer sits behind NAT with a closing lid, so it can only
- * ever be the one that connects — but everything is asked OF it. oRPC's websocket adapter takes any socket-like
+ * ever be the one that connects, but everything is asked OF it. oRPC's websocket adapter takes any socket-like
  * object on either side, so the roles are free to be the opposite of who placed the call.
  *
  * No `.route()` on these: HTTP method and path are for the daemon's own REST surface, and this contract never
@@ -14,12 +14,12 @@ import { HostFactsSchema, HostScopesSchema, MachineFlowLineSchema, MachineSandbo
  *
  * `mcp` IS THE DELIBERATE HOLE in the typing, and it is worth understanding before someone "fixes" it. The agent
  * talks to a machine in MCP, over the daemon's loopback bridge; if this contract described each tool, then the
- * daemon would have to know every tool's schema and translate — and a machine could no longer learn a tool
+ * daemon would have to know every tool's schema and translate, and a machine could no longer learn a tool
  * without a matching daemon release. Keeping one opaque procedure is what buys the machine an independent
  * release cycle. The payload is still validated where it is understood: on the machine, against the tool's own
  * schema, and by the agent's MCP client on the way back. */
 export const hostContract = {
-    // What this computer is — pulled right after the socket authenticates, and again whenever the sandbox wants
+    // What this computer is, pulled right after the socket authenticates, and again whenever the sandbox wants
     // it fresh. The card shows it, and the agent's skill pack is written against it.
     describe: oc.output(HostFactsSchema),
     // The grant, pushed down on every connect and again whenever the owner edits the card. The machine ENFORCES
@@ -28,7 +28,7 @@ export const hostContract = {
     // Liveness, driven by the daemon: it doubles as the keepalive that stops an idle tunnel from reaping the
     // connection, and as the probe whose failure means the machine is gone rather than quiet.
     ping: oc.output(OkSchema),
-    // One MCP JSON-RPC message in, its answer out — forwarded verbatim in both directions. See above.
+    // One MCP JSON-RPC message in, its answer out, forwarded verbatim in both directions. See above.
     mcp: oc.input(z.unknown()).output(z.unknown()),
     /* One operation on one of this machine's sandboxes, narrated as it happens.
      *
@@ -38,7 +38,7 @@ export const hostContract = {
      * container, which is minutes of silence unless the lines travel while they are produced. A stream is what
      * the browser needs, and a stream is the one thing an MCP tool result cannot be.
      *
-     * The scope is still checked here, on the machine, by the same functions the MCP tools call — this adds a
+     * The scope is still checked here, on the machine, by the same functions the MCP tools call, this adds a
      * way of WATCHING an operation, never a way of skipping the switch that permits it. */
     runSandboxFlow: oc.input(MachineSandboxFlowSchema).output(eventIterator(MachineFlowLineSchema)),
 };

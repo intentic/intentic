@@ -54,9 +54,9 @@ export const gitContract = {
     changes: oc.route({ method: "GET", path: "/git/changes" }).output(GitChangesSchema),
     // The git-history graph over one repo's real commits: the repo list (for the tree affordance + switcher),
     // one repo's commit log, and lazy per-commit detail (changed files, then a file's before/after AT the
-    // commit). Read-only — commit/discard on the working tree stay the write path (above).
+    // commit). Read-only, commit/discard on the working tree stay the write path (above).
     repos: oc.route({ method: "GET", path: "/git/repos" }).output(GitReposSchema),
-    // The same repos with the host + project their remote names — how a caller recognises a workspace repo in a
+    // The same repos with the host + project their remote names, how a caller recognises a workspace repo in a
     // list of `owner/name` strings that came from somewhere else. Kept off `repos` (a `git remote -v` per repo).
     remoteRepos: oc.route({ method: "GET", path: "/git/remote-repos" }).output(GitRemoteReposSchema),
     log: oc.route({ method: "GET", path: "/git/{repo}/log" }).input(GitLogQuerySchema).output(GitLogSchema),
@@ -67,13 +67,13 @@ export const gitContract = {
     // GitActionResult so a conflict/clean-apply failure is a value, not a 500. Read routes above.
     /* The halted-operation pair. `operation` is a READ every git surface can use to explain a worktree it cannot
      * otherwise act on; `abort` is the single way out, and it is git's own `--abort` rather than anything
-     * clever. Neither is reachable from the daemon's own verbs — those abort themselves — so this exists purely
+     * clever. Neither is reachable from the daemon's own verbs, those abort themselves, so this exists purely
      * for what a terminal left behind. */
     operation: oc.route({ method: "GET", path: "/git/{repo}/operation" }).input(RepoParamSchema).output(GitOperationStateSchema),
     abort: oc.route({ method: "POST", path: "/git/{repo}/abort" }).input(RepoParamSchema).output(GitActionResultSchema),
     /* Walk the current branch back to where it was before its last action, off the branch's own reflog. The
      * complement to the Checkpoints timeline, not a duplicate of it: a checkpoint restores the working tree,
-     * this moves the ref. The read carries `previousSha`, which the write sends back as a concurrency token —
+     * this moves the ref. The read carries `previousSha`, which the write sends back as a concurrency token,
      * an undo prepared against a stale view is refused rather than landing somewhere unlooked-at. */
     undoable: oc.route({ method: "GET", path: "/git/{repo}/undo" }).input(RepoParamSchema).output(GitUndoStateSchema),
     undo: oc.route({ method: "POST", path: "/git/{repo}/undo" }).input(GitUndoSchema).output(GitActionResultSchema),
@@ -101,7 +101,7 @@ export const gitContract = {
     status: oc.route({ method: "GET", path: "/git/{repo}/status" }).input(RepoParamSchema).output(GitStatusSchema),
     commit: oc.route({ method: "POST", path: "/git/{repo}/commit" }).input(CommitSchema).output(CommitResultSchema),
     discard: oc.route({ method: "POST", path: "/git/{repo}/discard" }).input(DiscardSchema).output(OkSchema),
-    // Index moves. Per-path, worktree untouched, so they need no checkpoint and can't fail destructively —
+    // Index moves. Per-path, worktree untouched, so they need no checkpoint and can't fail destructively,
     // git's own error (an unmatched pathspec) propagates.
     stage: oc.route({ method: "POST", path: "/git/{repo}/stage" }).input(GitStageSchema).output(OkSchema),
     unstage: oc.route({ method: "POST", path: "/git/{repo}/unstage" }).input(GitStageSchema).output(OkSchema),
@@ -113,7 +113,7 @@ export const gitContract = {
     deleteBranch: oc.route({ method: "POST", path: "/git/{repo}/branches/delete" }).input(GitBranchDeleteSchema).output(OkSchema),
     // Remote sync. All three report a GitActionResult rather than throwing: no remote, no credentials and a
     // non-fast-forwardable pull are ORDINARY outcomes the panel renders, not 500s. `remote` is the read
-    // (ahead/behind as of the last fetch — hence the Fetch button) the sync bar polls.
+    // (ahead/behind as of the last fetch, hence the Fetch button) the sync bar polls.
     remote: oc.route({ method: "GET", path: "/git/{repo}/remote" }).input(RepoParamSchema).output(GitRemoteStateSchema),
     fetch: oc.route({ method: "POST", path: "/git/{repo}/fetch" }).input(RepoParamSchema).output(GitActionResultSchema),
     pull: oc.route({ method: "POST", path: "/git/{repo}/pull" }).input(RepoParamSchema).output(GitActionResultSchema),

@@ -1,4 +1,4 @@
-// Pure selection math over the visible (flattened) row order — no Vue, so it's unit-checkable
+// Pure selection math over the visible (flattened) row order, no Vue, so it's unit-checkable
 // (see scripts/treeSelect.check.mjs). `order` is visibleRows.map(r => r.entry.path).
 
 // The inclusive range of paths between the anchor and the lead, in visible order (VSCode Shift-select). Falls back

@@ -5,7 +5,7 @@
  * columns: alignment costs padding on every row and buys nothing to something reading the text rather than
  * scanning it.
  *
- * Nothing here truncates silently — `clip` marks what it removed, so a subject that got cut looks cut. */
+ * Nothing here truncates silently, `clip` marks what it removed, so a subject that got cut looks cut. */
 
 export const clip = (value: string, width: number): string => {
     const flat = value.replaceAll(/\s+/g, " ").trim();

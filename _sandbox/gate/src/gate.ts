@@ -1,8 +1,8 @@
-/* THE GATE CALL, AS PURE FUNCTIONS — everything the CLI decides, separated from the process that acts on it,
+/* THE GATE CALL, AS PURE FUNCTIONS, everything the CLI decides, separated from the process that acts on it,
  * so a pipeline's exact behaviour is asserted in tests rather than discovered in somebody's merge queue.
  *
  * WHY THIS PACKAGE HAS NO DEPENDENCIES. Its whole job is one HTTP POST and an exit code, and it runs cold in
- * CI — `npx @intentic/gate` on a runner that has never seen it. Every dependency is install time on every
+ * CI, `npx @intentic/gate` on a runner that has never seen it. Every dependency is install time on every
  * pipeline of every team that wires a gate, spent before the first byte reaches the daemon. The verdict it
  * reads is three fields; validating them by hand costs twelve lines, and a test (gate.test.ts) holds those
  * lines against the contract package's own schema so they cannot drift. */
@@ -100,13 +100,13 @@ export const targetOf = (url: string, waitS: number): string => {
 };
 
 // How long the HTTP client itself waits: a minute past the gate's own hold, so the deadline that fires is
-// the server's — which STOPS the run — and not the client's, which would abandon it mid-spend.
+// the server's, which STOPS the run, and not the client's, which would abandon it mid-spend.
 export const clientTimeoutMs = (waitS: number): number => (waitS + 60) * 1_000;
 
 const OUTCOMES = new Set(["pass", "fail", "blocked"]);
 
 // The daemon's answer, checked by hand (see the header for why not a schema dependency). Undefined means the
-// body was not a verdict at all — a proxy's error page, a truncated read — which is an exchange failure.
+// body was not a verdict at all, a proxy's error page, a truncated read, which is an exchange failure.
 export const readVerdict = (body: unknown): GateVerdict | undefined => {
     if (typeof body !== "object" || body === null) {
         return undefined;

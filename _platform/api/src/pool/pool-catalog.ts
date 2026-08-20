@@ -4,7 +4,7 @@ import { LIVE_STATUSES } from "./pool-admission.js";
 import { creditStatus, type CreditStatus } from "./pool-credits.js";
 import { premiumOf } from "./pool-membership.js";
 
-/* THE CATALOG READ AND THE DEMAND WRITE, without a transport — the two halves of "what can I ask for, and
+/* THE CATALOG READ AND THE DEMAND WRITE, without a transport, the two halves of "what can I ask for, and
  * what did I fail to find", lifted out of pool.routes.ts for the same reason pool-run.ts was: two surfaces
  * drive them now (the sandbox daemon over HTTP, the MCP server in-process) and neither should be able to show
  * a different catalog or count a want differently. */
@@ -15,7 +15,7 @@ export interface CatalogListing {
     readonly name: string;
     readonly description: string;
     readonly creditsPerRun: number;
-    // True while a listing is still in open admission's probation — live, price-capped, and badged `new`.
+    // True while a listing is still in open admission's probation, live, price-capped, and badged `new`.
     readonly probation: boolean;
     // A request body the provider published as a worked example of their service's shape. Agent-facing
     // documentation: an agent composing a body with one of these in front of it writes a better one.
@@ -29,7 +29,7 @@ export interface CatalogAnswer {
     readonly credits?: CreditStatus;
 }
 
-/* Everyone with an account sees the catalog — someone deciding whether to join should be able to read what
+/* Everyone with an account sees the catalog, someone deciding whether to join should be able to read what
  * membership buys before they pay for it, which is exactly the case an MCP client arrives in. */
 export const readServiceCatalog = async (prisma: PrismaClient, config: Config, ownerId: string, now: Date): Promise<CatalogAnswer> => {
     const [rows, member] = await Promise.all([
@@ -41,7 +41,7 @@ export const readServiceCatalog = async (prisma: PrismaClient, config: Config, o
         premiumOf(prisma, config, ownerId),
     ]);
     /* Written out field by field rather than spread, so this reads as what it is: the wire shape, stated once.
-     * `probation` is flattened to one boolean rather than leaking the status vocabulary to every reader — what
+     * `probation` is flattened to one boolean rather than leaking the status vocabulary to every reader, what
      * a member's card needs to say is "this listing is new", and what an agent needs to know is nothing at all
      * beyond preferring an established service when both would answer. */
     const services = rows.map((row) => ({
@@ -70,7 +70,7 @@ export const normalizedWant = (text: string): string => text.trim().toLowerCase(
 export type WantOutcome = { readonly kind: `recorded` } | { readonly kind: `malformed` } | { readonly kind: `rate_limited` };
 
 /* ONE "THE CATALOG HAD NOTHING FOR THIS". Costs nothing, needs no membership (a non-member's unmet need is
- * future demand), raises no card, and returns nothing about anyone — it is a note to providers, published only
+ * future demand), raises no card, and returns nothing about anyone, it is a note to providers, published only
  * in aggregate. The owner column exists to bound the writer and is never published. */
 export const fileServiceWant = async (prisma: PrismaClient, ownerId: string, raw: string, now: Date): Promise<WantOutcome> => {
     const text = raw.trim();

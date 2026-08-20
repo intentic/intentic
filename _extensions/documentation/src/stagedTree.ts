@@ -8,7 +8,7 @@ import { README_TAIL, stagingDir } from "./paths.js";
  * Two callers need exactly this, which is why it is one function rather than two walks: PUBLISH copies every tail
  * into the repo, and a generation run's ADVANCE step asks "which packages already have a document?" to decide
  * which agents still need starting. Deriving that from the filesystem rather than from bookkeeping is what makes
- * advancing a run idempotent — it can run on every poll, in any browser, after any interruption, and start each
+ * advancing a run idempotent, it can run on every poll, in any browser, after any interruption, and start each
  * package's agent exactly once.
  *
  * It has to be a walk because the daemon lists one directory at a time (`GET /workspace/children`) and a document
@@ -50,7 +50,7 @@ export const listStagedTails = async (api: IntenticApi, repo: string): Promise<r
     return tails.toSorted();
 };
 
-// Which package dirs the staged set holds a page for — a `README.md` tail's directory part. The map's own tails
+// Which package dirs the staged set holds a page for, a `README.md` tail's directory part. The map's own tails
 // sit at the root of the set and have no directory part, so they cannot be mistaken for a package.
 export const documentedDirs = (tails: readonly string[]): readonly string[] =>
     tails.filter((tail) => tail.endsWith(`/${README_TAIL}`)).map((tail) => tail.slice(0, -`/${README_TAIL}`.length));

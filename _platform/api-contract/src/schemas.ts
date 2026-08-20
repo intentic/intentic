@@ -218,10 +218,10 @@ export type LogFileEntry = z.infer<typeof LogFileEntrySchema>;
 export type LogRead = z.infer<typeof LogReadSchema>;
 
 // Workspace tree / file / children. The daemon's Zod schema infers `children` loosely (Record<string, unknown>[]
-// — a z.lazy recursion limit), but the web renders a recursive tree, so the platform keeps the PRECISE recursive
+//, a z.lazy recursion limit), but the web renders a recursive tree, so the platform keeps the PRECISE recursive
 // interface here. The daemon WorkspaceTree*Schema stay re-exported above for runtime parsing.
 /* A symlink entry: `to` is the link's own text (what hover shows), and `type` on the entry beside it is the
- * type of what it POINTS AT — so a link to a folder expands and a link to a file opens. `state` is absent when
+ * type of what it POINTS AT, so a link to a folder expands and a link to a file opens. `state` is absent when
  * the link resolves inside the workspace; "broken" means nothing is at the other end, "outside" means it
  * leaves the workspace and the daemon refuses to follow it. */
 export interface WorkspaceLink {
@@ -236,10 +236,10 @@ export interface WorkspaceTreeEntry {
     readonly size?: number;
     // Ignored-by-tooling (node_modules, .git, .gitignore'd, browser profiles): the row is grayed.
     readonly ignored?: boolean;
-    // Present when the entry is a symlink — `type` above is then its target's type.
+    // Present when the entry is a symlink, `type` above is then its target's type.
     readonly link?: WorkspaceLink;
     // Absent on a DIR that was listed but not descended into (ignored, or below the walk's breadth-first
-    // budget) — the client lazy-loads it on expand. An empty dir has `children: []`, not `undefined`.
+    // budget), the client lazy-loads it on expand. An empty dir has `children: []`, not `undefined`.
     readonly children?: readonly WorkspaceTreeEntry[];
 }
 export interface WorkspaceTreeResponse {
@@ -254,7 +254,7 @@ export interface WorkspaceChildrenResponse {
     readonly hidden: number;
 }
 /* One WINDOW of a file's text. `size` is the whole file on disk, `offset`/`bytes` the byte range `content`
- * decodes from — so `offset > 0 || offset + bytes < size` means there is more, and `offset + bytes` is where
+ * decodes from, so `offset > 0 || offset + bytes < size` means there is more, and `offset + bytes` is where
  * the next window starts. Byte counts, not `content.length`: they differ on non-ASCII, and the daemon reads
  * by byte. The viewer gates on `size` from here rather than on a tree entry's, which it may not have. */
 export interface WorkspaceFileWindow {
@@ -264,12 +264,12 @@ export interface WorkspaceFileWindow {
     readonly size: number;
     readonly offset: number;
     readonly bytes: number;
-    // Which tree answered — the shared /work one, or the conversation's own checkout the request named
+    // Which tree answered, the shared /work one, or the conversation's own checkout the request named
     // (`?agent=`). True despite a scope when that checkout doesn't carry the path, which is legitimate: a
     // checkout is not a superset of /work. The one thing the reader must not have to guess.
     readonly shared: boolean;
 }
-/* A read of a path with nothing at it — a successful answer, not a failure. Most reads in the product are "read
+/* A read of a path with nothing at it, a successful answer, not a failure. Most reads in the product are "read
  * it if it is there" (a bookkeeping file nobody has written yet, a directory with no UI document of its own, a
  * document set nobody has generated), so absence is an ordinary value and the daemon says so in the body rather
  * than in the status. A read the caller was not ALLOWED to make still fails. */
@@ -290,12 +290,12 @@ export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
 export type WorkspaceSearchMode = z.infer<typeof WorkspaceSearchQuerySchema>["mode"];
 
 // One repository's codebase health (GET /workspace/health): churn × complexity per file, index totals, and the
-// import graph's key modules — the same resident engine that answers search, ranking instead of matching.
+// import graph's key modules, the same resident engine that answers search, ranking instead of matching.
 export type WorkspaceHotspot = z.infer<typeof WorkspaceHotspotSchema>;
 export type WorkspaceKeyModule = z.infer<typeof WorkspaceKeyModuleSchema>;
 export type WorkspaceHealth = z.infer<typeof WorkspaceHealthSchema>;
 
-// Workspace history (daemon-captured snapshots). Daemon names: Snapshot / SnapshotsList / SnapshotDiff —
+// Workspace history (daemon-captured snapshots). Daemon names: Snapshot / SnapshotsList / SnapshotDiff,
 // kept under the platform's historical *Response names as derived aliases.
 export type SnapshotTrigger = z.infer<typeof SnapshotTriggerSchema>;
 export type WorkspaceSnapshot = z.infer<typeof SnapshotSchema>;
@@ -304,22 +304,22 @@ export type SnapshotChange = z.infer<typeof SnapshotChangeSchema>;
 export type SnapshotDiffResponse = z.infer<typeof SnapshotDiffSchema>;
 // Shared by the snapshot file diff and the working-tree (Changes review) file diff.
 export type FileDiffResponse = z.infer<typeof FileDiffSchema>;
-// Which of the working tree's two diffs a Changes row opens — index-vs-HEAD or worktree-vs-index.
+// Which of the working tree's two diffs a Changes row opens, index-vs-HEAD or worktree-vs-index.
 export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
 
 // The Changes review (uncommitted work per repo, VSCode-SCM style).
 export type GitChange = z.infer<typeof GitChangeSchema>;
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
-// One repo's slice of an action that spans repos — the whole repo, or just the paths named. git can't span
+// One repo's slice of an action that spans repos, the whole repo, or just the paths named. git can't span
 // repos, so every batch verb in the Changes panel (stage, discard, commit, the AI draft) groups into these.
 export type RepoPaths = z.infer<typeof RepoPathsSchema>;
-// Who an agent id named in a repo's `origins` is — the review carries it, because the fleet roster drops an
+// Who an agent id named in a repo's `origins` is, the review carries it, because the fleet roster drops an
 // archived agent while its landed lines are still in the tree.
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 // What a landing is called: the commit message drafted from its diff, carried by the agent's card while it is
 // on the board and by the review's origin record after it leaves. One shape, so the panel reads one lookup.
 export type LandedMessage = z.infer<typeof LandedMessageSchema>;
-// The full account of that message being drafted — which models were asked, how each went, how it ended —
+// The full account of that message being drafted, which models were asked, how each went, how it ended,
 // live on the agent's card while it runs, kept after it ends until the next land replaces it.
 export type LandedMessageDraft = z.infer<typeof LandedMessageDraftSchema>;
 export type LandedMessageStep = z.infer<typeof LandedMessageStepSchema>;
@@ -338,7 +338,7 @@ export type PushConfig = z.infer<typeof PushConfigSchema>;
 export type GitRemoteState = z.infer<typeof GitRemoteStateSchema>;
 export type GitBranch = z.infer<typeof GitBranchSchema>;
 export type GitBranchesResponse = z.infer<typeof GitBranchesSchema>;
-// The per-agent worktree review — one flat change set per repo, NOT the working tree's staged/unstaged shape.
+// The per-agent worktree review, one flat change set per repo, NOT the working tree's staged/unstaged shape.
 // A row is the agent's cumulative change to that file, flagged with whether it has already landed in the main tree.
 export type AgentChange = z.infer<typeof AgentChangeSchema>;
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
@@ -356,13 +356,13 @@ export type User = z.infer<typeof UserSchema>;
 
 // The caller's creator-pool membership, as the settings card renders it. `enabled: false` (a platform with
 // no pool configured) means the card does not exist; everything else describes the caller: `member` is the
-// premium answer, `status` is Stripe's word for the state (shown only when it isn't "active" — past_due is
+// premium answer, `status` is Stripe's word for the state (shown only when it isn't "active", past_due is
 // worth a sentence), `renewsAt` is display. Price and share ride along so the card and the transparency page
 // can never disagree with the platform about the number on the button.
 //
 // THE PUBLISHED FIGURES ARE FOR EVERYONE, member or not. `dailyCredits` and `donationCredits` are what the
 // membership actually buys, and the person deciding whether to buy it is precisely the one who does not have
-// it yet — withholding them until after checkout left the offer describing itself as "premium extensions"
+// it yet, withholding them until after checkout left the offer describing itself as "premium extensions"
 // and nothing else. They also spare the card from retyping numbers the platform already owns: what a day's
 // credits come to in installs is arithmetic, done where they are rendered.
 export const MembershipStateSchema = z.object({
@@ -375,7 +375,7 @@ export const MembershipStateSchema = z.object({
     // A member's daily credit allowance, and what installing a premium extension donates to its creator.
     dailyCredits: z.number(),
     donationCredits: z.number(),
-    // The daily credit meter for metered service runs — present exactly when the caller is a member,
+    // The daily credit meter for metered service runs, present exactly when the caller is a member,
     // because only a member has one. `resetsAt` is the next UTC midnight, rendered locally by the card.
     credits: z
         .object({
@@ -388,12 +388,12 @@ export const MembershipStateSchema = z.object({
 });
 export type MembershipState = z.infer<typeof MembershipStateSchema>;
 
-/* THE APPROVAL CARD, as a page rather than a chat frame — what an agent outside a sandbox parks on while it
+/* THE APPROVAL CARD, as a page rather than a chat frame, what an agent outside a sandbox parks on while it
  * waits for its owner to release one metered run (api mcp/mcp-offer.ts).
  *
  * Every field is read back off the offer row rather than recomputed, which is the whole point: `credits` was
  * stamped when the ask went up, so a listing repriced while somebody is deciding cannot change what they
- * agreed to, and nothing the calling agent typed can reach this card except `request` and `why` — the two
+ * agreed to, and nothing the calling agent typed can reach this card except `request` and `why`, the two
  * fields the page labels as the agent's own words. */
 export const ServiceOfferStatusSchema = z.enum([`pending`, `approved`, `declined`, `spent`, `expired`]);
 
@@ -405,27 +405,27 @@ export const ServiceOfferCardSchema = z.object({
     publisher: z.string(),
     description: z.string(),
     credits: z.number(),
-    // True while the listing is still in open admission's probation — live, price-capped, badged `new`.
+    // True while the listing is still in open admission's probation, live, price-capped, badged `new`.
     probation: z.boolean(),
     // The body the agent composed, verbatim. Shown because "what is about to be sent" is half of consent.
     request: z.string(),
     why: z.string().optional(),
     expiresAt: z.iso.datetime(),
-    // The owner's meter, so the page can state the price against what is actually left — absent when the
+    // The owner's meter, so the page can state the price against what is actually left, absent when the
     // account has no membership, which the page turns into a join prompt rather than a dead button.
     credits_remaining: z.number().optional(),
     allowance: z.number().optional(),
 });
 export type ServiceOfferCard = z.infer<typeof ServiceOfferCardSchema>;
 
-// What the click did. `already_settled` and `expired` are ordinary answers, not errors — two tabs racing, or
+// What the click did. `already_settled` and `expired` are ordinary answers, not errors, two tabs racing, or
 // a card left open past its ten minutes.
 export const ServiceOfferSettledSchema = z.object({
     outcome: z.enum([`approved`, `declined`, `already_settled`, `expired`]),
 });
 export type ServiceOfferSettled = z.infer<typeof ServiceOfferSettledSchema>;
 
-// Avatars and sandbox logos are stored inline as small data URLs (client-side canvas downscale) — this caps
+// Avatars and sandbox logos are stored inline as small data URLs (client-side canvas downscale), this caps
 // what the API will persist (~110 kB decoded; a 128px webp/jpeg is ~5-10 kB) so no multi-megabyte string
 // lands in a row. Enforced by sandbox.update's input and the auth user.update hook.
 export const ImageDataUrlSchema = z.string().startsWith("data:image/").max(150_000);
@@ -440,7 +440,7 @@ export type RemoveInventoryInput = z.infer<typeof RemoveInventoryInputSchema>;
 //
 // The platform streams the in-sandbox `intentic deploy plan` (the engine's read+diff, no apply) over SSE, mapping each
 // per-resource plan node + the terminal result. Distinct from the cached status.json snapshot: this re-reads
-// live infra. `action` is the reconcile verdict — "noop" (in sync), "create" (absent / would create),
+// live infra. `action` is the reconcile verdict, "noop" (in sync), "create" (absent / would create),
 // "update" (drift, with a reason), "delete"/"prune" (would remove). Relayed (not oRPC) like /sandbox/provision.
 export interface PlanStreamEvent {
     readonly type: "node" | "result" | "error" | "done";
@@ -458,27 +458,27 @@ export interface PlanStreamEvent {
 // ---- sandboxes: the user's workspaces + shared access ----
 
 // A sandbox as the browser sees it. `token` is the tunnel-hostname seed + the daemon's first-bind secret;
-// `daemonUrl` + `lastSeenAt` (ISO) are reported by the daemon's announce — null until it first phones home.
+// `daemonUrl` + `lastSeenAt` (ISO) are reported by the daemon's announce, null until it first phones home.
 // `role` is the caller's relationship to it (owner can manage access; member has access only). `providedTunnel`
 // is server-computed: the reported daemonUrl lives under intentic's own zone (an intentic-provided tunnel), so
 // the infra operator panel knows to mint host tunnels via the daemon's relay (POST /sandbox/host-tunnel) instead
 // of asking for the user's Cloudflare token. `setupCodeClaimedAt` (ISO) is when a machine last redeemed the
-// sandbox's CURRENT setup code — the setup wizard's only evidence that the pasted command actually ran, which
+// sandbox's CURRENT setup code, the setup wizard's only evidence that the pasted command actually ran, which
 // is what lets it stop showing a spinner at someone who has not opened a terminal yet. sandbox.list returns
 // owned ∪ shared.
 // One broken check of a machine-side setup run, as the machine reported it: the check's name, what it
-// found, and what to do about it — prose written for the person at the wizard and rendered verbatim.
+// found, and what to do about it, prose written for the person at the wizard and rendered verbatim.
 // `remedy` may be empty: the flow's own failure messages carry their fix inline.
 export const SetupReportFailureSchema = z.object({
     check: z.string().max(120),
     problem: z.string().max(2000),
     remedy: z.string().max(2000),
 });
-// Where the machine-side setup run stands — ic POSTs this to /setup/report on every stage transition and on
+// Where the machine-side setup run stands, ic POSTs this to /setup/report on every stage transition and on
 // any terminal failure, authenticated by possession of the live setup code (the claim's own trust). The
 // stages are the connect flow's real phases, so the wizard can narrate honest progress during the minutes of
 // invisible Docker work; a non-empty `failed` is a verdict, not progress. `at` (ISO) is stamped by the
-// platform on receipt — the reporting machine's clock is never trusted.
+// platform on receipt, the reporting machine's clock is never trusted.
 export const SetupReportSchema = z.object({
     stage: z.enum(["preflight", "pulling-image", "creating-tunnel", "starting-sandbox", "starting-connector", "waiting-health", "verifying", "done"]),
     failed: z.array(SetupReportFailureSchema).max(12),
@@ -486,31 +486,31 @@ export const SetupReportSchema = z.object({
 });
 export type SetupReport = z.infer<typeof SetupReportSchema>;
 
-/* THE DAEMON'S OWN ACCOUNT OF ITS BOOT — SetupReportSchema's counterpart for the half of the chain no setup
+/* THE DAEMON'S OWN ACCOUNT OF ITS BOOT. SetupReportSchema's counterpart for the half of the chain no setup
  * code covers. The hosted lane has no `ic` run to narrate (the machine's first boot IS the sandbox), and the
  * one link nothing else can see is the one that broke during the tunnel migration: a daemon that is up,
  * announcing, and whose PUBLIC ADDRESS answers nobody. So the box checks that address from the inside and
- * POSTs the verdict to /sandbox/boot-report, authenticated by the connect token — the same outbound path the
+ * POSTs the verdict to /sandbox/boot-report, authenticated by the connect token, the same outbound path the
  * announce uses, which is exactly why it still works when the tunnel is the broken thing.
  *
  * `reach` is that verdict and nothing else:
- *   • `checking`    — the daemon is up and the probe has not concluded yet
- *   • `reachable`   — its own public address answered it; the sandbox is genuinely usable from outside
- *   • `unreachable` — it did not, and `detail` says how (a status, a refusal, a timeout)
+ *   • `checking`   , the daemon is up and the probe has not concluded yet
+ *   • `reachable`  , its own public address answered it; the sandbox is genuinely usable from outside
+ *   • `unreachable`, it did not, and `detail` says how (a status, a refusal, a timeout)
  *
  * The wizard holds the handover on this: an announce means "the daemon started", which is NOT the same claim
  * as "you can reach it", and treating the two as one is what dropped people into a workspace spinner. `at`
- * (ISO) is stamped by the platform on receipt — the reporting machine's clock is never trusted. */
+ * (ISO) is stamped by the platform on receipt, the reporting machine's clock is never trusted. */
 export const BootReportSchema = z.object({
     reach: z.enum(["checking", "reachable", "unreachable"]),
-    // Why, for `unreachable` — already in the user's terms, rendered verbatim like a setup failure's problem.
+    // Why, for `unreachable`, already in the user's terms, rendered verbatim like a setup failure's problem.
     detail: z.string().max(2000).optional(),
     at: z.string(),
 });
 export type BootReport = z.infer<typeof BootReportSchema>;
 
 /* A CHECK-IN WE TURNED AWAY, kept because the refusal is otherwise a perfect silence: the box retries, we say
- * no, and every screen shows what it shows a machine that never booted. Both halves together or neither —
+ * no, and every screen shows what it shows a machine that never booted. Both halves together or neither,
  * "it announced at X" is a fact nobody can act on without "and we expect it at Y", and the browser has no way
  * to derive the second (the zone is the platform's), so the record carries the comparison rather than an
  * operand of it. Neither is secret: X is what the sandbox itself just claimed, Y is its own public address. */
@@ -522,7 +522,7 @@ export type AnnounceRefusal = z.infer<typeof AnnounceRefusalSchema>;
  * would ask once per row on every poll. Everything else the wait needs (the boot report above, a refused
  * check-in) is already on the row and rides the summary.
  *
- * `unknown` covers both "this platform cannot ask" and "the provider answered a state we don't model" — the
+ * `unknown` covers both "this platform cannot ask" and "the provider answered a state we don't model", the
  * wait must degrade to today's honest spinner on an unrecognized state, never break on one. Otherwise this is
  * the only signal that exists BEFORE the daemon does, which makes it the only way to tell a machine that
  * never booted from one that booted and went quiet. */
@@ -543,19 +543,19 @@ export const HostedStatusSchema = z.object({
 });
 export type HostedStatus = z.infer<typeof HostedStatusSchema>;
 
-// The clouds the setup wizard's cloud lane can provision a machine in — each is an adapter in the api's
+// The clouds the setup wizard's cloud lane can provision a machine in, each is an adapter in the api's
 // sandbox/cloud/. Hetzner and DigitalOcean are the paid x86 paths; Oracle is the Always-Free ARM path
 // (A1.Flex inside the user's own free-tier allowance).
 export const CloudProviderSchema = z.enum(["hetzner", "digitalocean", "oracle"]);
 
 // Oracle's famous A1 refusal, as the one phrase BOTH sides agree on: the adapter writes it into every
-// capacity refusal (oracle.ts — including the all-domains-exhausted one), and the wizard reads it to offer
+// capacity refusal (oracle.ts, including the all-domains-exhausted one), and the wizard reads it to offer
 // its keep-trying-while-this-tab-is-open retry. A shared constant because a copy-edit to the message must not
 // silently turn the retry offer off.
 export const ORACLE_CAPACITY_PHRASE = `no free-tier ARM capacity`;
 export type CloudProvider = z.infer<typeof CloudProviderSchema>;
 
-// Where the cloud lane put a sandbox's machine — the non-secret residue of a provision, stamped on the row.
+// Where the cloud lane put a sandbox's machine, the non-secret residue of a provision, stamped on the row.
 // serverName is the name visible in the provider's own console, which is exactly what the delete warning
 // needs the user to go find.
 export const SandboxCloudSchema = z.object({
@@ -565,15 +565,15 @@ export const SandboxCloudSchema = z.object({
 });
 export type SandboxCloud = z.infer<typeof SandboxCloudSchema>;
 
-// The HOSTED lane's machine as the browser sees it — SandboxCloudSchema's counterpart with the opposite
+// The HOSTED lane's machine as the browser sees it. SandboxCloudSchema's counterpart with the opposite
 // stance: the platform created this machine on its OWN provider account and keeps the way back in, so its
 // presence is an affordance, not residue: an unreachable hosted daemon means "call sandbox.wake and keep
-// probing", never "it's gone". Deliberately no live machine state — wake is idempotent (waking a running
+// probing", never "it's gone". Deliberately no live machine state, wake is idempotent (waking a running
 // machine is a no-op), so the browser needs no second source of truth beside the daemon's own answer.
 export const SandboxHostedSchema = z.object({
     region: z.string(),
-    /* Whether this machine came WARM from the pool (image already on its host — boots in seconds) or was
-     * built to order (first boot pulls the image — minutes). The setup wait reads it to make the right
+    /* Whether this machine came WARM from the pool (image already on its host, boots in seconds) or was
+     * built to order (first boot pulls the image, minutes). The setup wait reads it to make the right
      * promise: "under a minute" over a cold pull is the lie that made healthy first boots read as stuck.
      * A fact about the machine's origin, so it is stable across polls and reloads mid-wait. */
     warm: z.boolean(),
@@ -581,17 +581,17 @@ export const SandboxHostedSchema = z.object({
 export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
 
 /* The hosted lane's offer, read before anything is created: `enabled` mirrors platform config (a platform
- * with no provider token offers no hosted lane — routes 404, editor never mentions it), `remaining` is how
+ * with no provider token offers no hosted lane, routes 404, editor never mentions it), `remaining` is how
  * many more hosted sandboxes THIS caller may still create under the per-user allowance. What the editor's
  * zero-click first run and the wizard's lead card both gate on.
  *
- * `hours` is the free lane's awake-time budget for this caller, and is ABSENT for anyone unmetered — a
+ * `hours` is the free lane's awake-time budget for this caller, and is ABSENT for anyone unmetered, a
  * member, or a platform running with no ceiling. Absent means "do not mention hours at all", which is what
  * keeps a limit that does not apply to this person off their screen entirely rather than shown as a
  * generous-looking number they never asked about. */
 export const HostedHoursSchema = z.object({
-    // The monthly ceiling and what is left of it, in whole hours. Rounded for display only — the meter itself
-    // counts minutes — and `remaining` floors, so "1 hour left" never means four minutes.
+    // The monthly ceiling and what is left of it, in whole hours. Rounded for display only, the meter itself
+    // counts minutes, and `remaining` floors, so "1 hour left" never means four minutes.
     allowance: z.number().int().nonnegative(),
     remaining: z.number().int().nonnegative(),
 });
@@ -604,7 +604,7 @@ export const HostedOfferSchema = z.object({
 });
 export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 
-/* Whether this platform can give a sandbox an address of its own — the tunnel fabric behind `setupCode`. A
+/* Whether this platform can give a sandbox an address of its own, the tunnel fabric behind `setupCode`. A
  * platform that has not stood one up (the self-hoster's default) mints no codes at all, so the pasted-command
  * and cloud-machine lanes cannot finish on it, and the wizard must say so BEFORE it draws them. Asking the
  * mint was the only way to find out, which meant offering lanes first and retracting them a round-trip later. */
@@ -618,10 +618,10 @@ export const SandboxSummarySchema = z.object({
     daemonUrl: z.string().nullable(),
     lastSeenAt: z.string().nullable(),
     setupCodeClaimedAt: z.string().nullable(),
-    // The machine-side setup run's last word (see SetupReportSchema) — null until a report lands, cleared on
+    // The machine-side setup run's last word (see SetupReportSchema), null until a report lands, cleared on
     // every mint like the claim stamp.
     setupReport: SetupReportSchema.nullable(),
-    // The DAEMON's own last word about its boot (see BootReportSchema) — null until the sandbox reports, which
+    // The DAEMON's own last word about its boot (see BootReportSchema), null until the sandbox reports, which
     // is also what a sandbox running an image older than this feature looks like. Every lane's, not just the
     // hosted one: a tunnel that never came up strands a pasted run exactly as hard.
     bootReport: BootReportSchema.nullable(),
@@ -635,19 +635,19 @@ export const SandboxSummarySchema = z.object({
     // floors, so this is a rendering fact, never the security boundary.
     role: MemberRoleSchema,
     providedTunnel: z.boolean(),
-    // Where the cloud lane created this sandbox's machine (sandbox.cloudProvision) — null for every other
+    // Where the cloud lane created this sandbox's machine (sandbox.cloudProvision), null for every other
     // creation path. Display metadata only, never a credential: the platform cannot reach the machine again
-    // (the provider token was request-scoped), so this exists to SAY so — the switcher badge and the delete
-    // dialog's "the machine in your <provider> account keeps running — remove it there" warning read it.
+    // (the provider token was request-scoped), so this exists to SAY so, the switcher badge and the delete
+    // dialog's "the machine in your <provider> account keeps running, remove it there" warning read it.
     cloud: SandboxCloudSchema.nullable(),
-    // The hosted lane's live machine record (sandbox.hostedCreate) — null for every other creation path. The
+    // The hosted lane's live machine record (sandbox.hostedCreate), null for every other creation path. The
     // opposite of `cloud` above by design: the delete dialog warns the MACHINE dies with the sandbox, and an
     // unreachable daemon with `state` ≠ started means "wake it", not "it's gone".
     hosted: SandboxHostedSchema.nullable(),
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
-// The sandbox's public base URL as the OWNER asserts it (sandbox.attach) instead of the daemon announcing it —
+// The sandbox's public base URL as the OWNER asserts it (sandbox.attach) instead of the daemon announcing it,
 // the "I already run my sandbox behind a domain that works" path, where nothing ever phones home. https only:
 // the web app is served over HTTPS, so a browser blocks every call to an http:// daemon as mixed content.
 // Trailing slashes are dropped because each daemon call appends an absolute path (`${daemonUrl}/health`); a
@@ -673,7 +673,7 @@ export const InviteStatusSchema = z.enum(["pending", "accepted", "expired"]);
 export type InviteStatus = z.infer<typeof InviteStatusSchema>;
 export const InviteRecordSchema = z.object({
     email: z.string(),
-    // The trust tier this invite grants (viewer/collaborator/maintainer — never owner). The daemon's members
+    // The trust tier this invite grants (viewer/collaborator/maintainer, never owner). The daemon's members
     // list is the enforced copy; this row is what the roster renders and re-grades from.
     role: GrantedRoleSchema,
     status: InviteStatusSchema,
@@ -683,11 +683,11 @@ export const InviteRecordSchema = z.object({
 export type InviteRecord = z.infer<typeof InviteRecordSchema>;
 export const InviteListSchema = z.object({ members: z.array(InviteRecordSchema) });
 
-/* HOW THE LINK TRAVELLED — the answer to an invite/resend, beside the roster.
+/* HOW THE LINK TRAVELLED, the answer to an invite/resend, beside the roster.
  *
  * The grant is done before the mail is attempted (the daemon holds it, the row is written), so delivery is a
  * separate fact and not the verdict on the mutation. `sent` is the ordinary path. `unconfigured` is a platform
- * with no mail credentials, `local-link` one whose own address only resolves on the machine running it — both
+ * with no mail credentials, `local-link` one whose own address only resolves on the machine running it, both
  * are this platform declining to send something nobody could act on. `refused` is the send that was made and
  * rejected. In every case but the first the owner is the courier, which is why `link` always comes back. */
 export const InviteDeliverySchema = z.enum(["sent", "unconfigured", "local-link", "refused"]);
@@ -698,7 +698,7 @@ export const InviteSentSchema = z.object({
     link: z.string(),
     delivery: InviteDeliverySchema,
     /* What the mail provider said when it refused, verbatim-ish, for `refused` only. This is the owner's own
-     * platform rejecting their own send — a quota, a key, an unverified domain — and every one of those is
+     * platform rejecting their own send, a quota, a key, an unverified domain, and every one of those is
      * fixed by the person reading the card. It used to be reachable only in the server's console, which is why
      * the same invite could fail all afternoon with nothing on screen but "internal server error". */
     reason: z.string().optional(),
@@ -716,12 +716,12 @@ export const InvitePreviewSchema = z.object({
 export type InvitePreview = z.infer<typeof InvitePreviewSchema>;
 
 // Zone discovery for the setup screen's picker. The Cloudflare token can reach more than one zone (domain), and
-// the sandbox refuses to guess which one to provision under — so the user must choose before the install command
+// the sandbox refuses to guess which one to provision under, so the user must choose before the install command
 // is revealed. The browser can't list zones itself (Cloudflare's API sends no CORS headers), so the token is
 // posted here for a SINGLE request-scoped call to Cloudflare and then discarded: it is never persisted, logged,
 // or stored. This is the one place the token transits the platform (the narrowed secret-free invariant).
 // The pasted Cloudflare token + the zones it can see. NOT the sandbox tunnel's business any more (that fabric
-// is self-hosted) — this serves the in-app Cloudflare capability, where a user connects their OWN zone for the
+// is self-hosted), this serves the in-app Cloudflare capability, where a user connects their OWN zone for the
 // deploy engine to publish their apps under. Request-scoped: used for the one listing call, never stored.
 export const CfTokenSchema = z.object({ token: z.string().min(1) });
 export const CfZonesSchema = z.object({ zones: z.array(z.string()) });
@@ -729,11 +729,11 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
 
 /* The setup code: ONE short-lived value the copy-paste install command carries instead of raw tokens (nothing
  * secret lands in shell history or the process list). The connect script redeems it at POST /setup/claim (a
- * public non-oRPC route — the script has no session) for CONNECT_TOKEN plus the sandbox's reachability grant
+ * public non-oRPC route, the script has no session) for CONNECT_TOKEN plus the sandbox's reachability grant
  * on the self-hosted zrok hub: {ZROK_TOKEN, ZROK_API, ZROK_NAMESPACE, SANDBOX_HOSTNAME, OWNER_EMAIL}.
  *
  * There is no target to choose any more. Under the platform's own tunnel fabric every sandbox's address is
- * DERIVED from its connect token (`sandbox-<id>.<zone>`) — the bring-your-own-Cloudflare lane it used to
+ * DERIVED from its connect token (`sandbox-<id>.<zone>`), the bring-your-own-Cloudflare lane it used to
  * select died with the Cloudflare tunnels, and "I have my own domain" is served by the attach lane, which
  * provisions nothing at all. */
 export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });
@@ -743,14 +743,14 @@ export type SetupCode = z.infer<typeof SetupCodeSchema>;
 //
 // The command lane assumes a machine exists; this lane is for the user (a phone, most often) who has none.
 // They paste a provider credential, pick a region and size, and the platform creates ONE VM in THEIR account
-// whose first-boot script runs the exact published one-liner with the sandbox's live setup code — from there
+// whose first-boot script runs the exact published one-liner with the sandbox's live setup code, from there
 // the ordinary claim → report → announce states narrate progress. The credential follows the CfTokenSchema
-// contract exactly: request-scoped, used for the provider calls of that one request, then discarded — never
+// contract exactly: request-scoped, used for the provider calls of that one request, then discarded, never
 // persisted, logged, or stored. The platform keeps no way back into the machine; only SandboxCloudSchema's
 // display facts survive.
 //
 // Oracle's credential is not a bearer token: OCI signs every request with an RSA API key. The console's
-// "add API key" dialog emits a config snippet (user/tenancy OCID, fingerprint, region) — the user pastes
+// "add API key" dialog emits a config snippet (user/tenancy OCID, fingerprint, region), the user pastes
 // that verbatim plus the key PEM, and the adapter parses both (a malformed paste is a BAD_REQUEST naming
 // what's missing, not a signature failure later).
 export const CloudCredentialsSchema = z.discriminatedUnion("provider", [
@@ -760,7 +760,7 @@ export const CloudCredentialsSchema = z.discriminatedUnion("provider", [
 ]);
 export type CloudCredentials = z.infer<typeof CloudCredentialsSchema>;
 
-// One pickable region/size, priced from the provider's own catalog API at options time — live numbers, so the
+// One pickable region/size, priced from the provider's own catalog API at options time, live numbers, so the
 // wizard never shows a stale price it hard-coded. Prices are monthly and in the provider's billing currency;
 // Oracle's one shape carries 0/USD (inside the Always-Free allowance) with the caveat in the wizard's copy.
 export const CloudLocationSchema = z.object({ id: z.string(), label: z.string() });
@@ -788,7 +788,7 @@ export type CloudSize = z.infer<typeof CloudSizeSchema>;
 // ---- workspace state: the Overview / topology read-model ----
 //
 // A "view" is a projection of (desired-state graph ⊕ reconciliation drift). The platform reads the sandbox's
-// resolved artifact (desired-state/desired-state.json — the compiled form of deploy.config.ts) and the last
+// resolved artifact (desired-state/desired-state.json, the compiled form of deploy.config.ts) and the last
 // apply result (status.json) THROUGH the sandbox (its git file routes), and shapes this render-ready model
 // server-side. The sandbox stays the source of truth (CLAUDE.md); only non-secret scalar inputs are surfaced,
 // $secret/$ref values are dropped upstream.
@@ -797,9 +797,9 @@ export type CloudSize = z.infer<typeof CloudSizeSchema>;
 export const ResourceGroupSchema = z.enum(["infra", "git", "deploy", "data", "notify", "other"]);
 export type ResourceGroup = z.infer<typeof ResourceGroupSchema>;
 
-// The coarse group each resolver resource-type buckets into — the single source the infra render models read
+// The coarse group each resolver resource-type buckets into, the single source the infra render models read
 // (the web's local projection today; any server-side projection tomorrow) so a new kind can't silently land in
-// the wrong bucket. Typed Record<ResourceType, …> via a type-only import (erased at runtime — no dep weight in
+// the wrong bucket. Typed Record<ResourceType, …> via a type-only import (erased at runtime, no dep weight in
 // the browser bundle), so a kind added to the OSS vocabulary is a compile error here until it's grouped. Kinds
 // with no natural bucket sit in "other" (the prior projection default) on purpose.
 const RESOURCE_GROUP: Record<ResourceType, ResourceGroup> = {
@@ -896,9 +896,9 @@ export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
 // Surfaced by the in-sandbox `intentic deploy deployments` subcommand: it reads each `deployment` node's configured
 // image/env/url from the graph and confirms liveness against the Komodo API; the browser reads the result
 // from the daemon directly. `env` carries keys with non-secret scalar values; secret/ref values are blanked. Runtime
-// detail (logs, container status) lives in Komodo's own UI — deep-linked via komodoDeploymentUrl (hybrid).
+// detail (logs, container status) lives in Komodo's own UI, deep-linked via komodoDeploymentUrl (hybrid).
 export const DeploymentSchema = z.object({
-    // The graph node id (e.g. "app.production") — also the Komodo deployment name.
+    // The graph node id (e.g. "app.production"), also the Komodo deployment name.
     name: z.string(),
     // The registry image CI pushes and Komodo runs: registry/owner/repo:tag.
     image: z.string(),
@@ -916,14 +916,14 @@ export type Deployment = z.infer<typeof DeploymentSchema>;
 
 /* THE CREATOR'S SIDE OF THE POOL: which publisher names this account has proved are its own, and whether money
  * owed to them can actually be sent. Earnings have always been computable per listing; what this state adds is
- * a payee — so every field here exists to answer one of two questions a creator asks, "is this name mine" and
+ * a payee, so every field here exists to answer one of two questions a creator asks, "is this name mine" and
  * "will I be paid".
  *
  * `payouts` is present whenever the pool is on, connected or not: "you have not started" is an answer the
  * screen must render, not an absence it has to infer. */
 /* A publisher name, in either of its two provable forms. Dotless is a name as the extension manifest spells
  * it (mirrored rather than imported because the manifest lives in the sandbox packages and this contract is
- * the platform's own) — proved by push access to a registry-listed repository. Dotted is a DOMAIN — proved by
+ * the platform's own), proved by push access to a registry-listed repository. Dotted is a DOMAIN, proved by
  * serving the challenge token at its well-known path, the lane for a business with a service to sell and no
  * extension to ship.
  *
@@ -937,7 +937,7 @@ export const PublisherSlugSchema = z
 
 export const PublisherClaimSchema = z.object({
     publisher: z.string(),
-    // The repository that carried the proof — shown back so a creator can see WHICH of their repositories the
+    // The repository that carried the proof, shown back so a creator can see WHICH of their repositories the
     // platform accepted, and so a disputed name has something to point at.
     repo: z.string(),
     claimedAt: z.iso.datetime(),
@@ -948,7 +948,7 @@ export const PayoutStateSchema = z.object({
     connected: z.boolean(),
     payoutsEnabled: z.boolean(),
     detailsSubmitted: z.boolean(),
-    // Why a finished account still cannot be paid, when Stripe names a cause — a creator reading "not ready"
+    // Why a finished account still cannot be paid, when Stripe names a cause, a creator reading "not ready"
     // with no reason has nothing to act on.
     disabledReason: z.string().optional(),
 });
@@ -970,14 +970,14 @@ export const CreatorStatementSchema = z.object({
 export type CreatorStatement = z.infer<typeof CreatorStatementSchema>;
 
 /* A PAYMENT THAT WAS MADE, or is still trying to be. `pending` is shown rather than hidden because a payment
- * that has not landed is the single thing a creator most needs to be able to see — and the run never abandons
+ * that has not landed is the single thing a creator most needs to be able to see, and the run never abandons
  * one, it retries the same payment until it goes through. */
 export const CreatorPaymentSchema = z.object({
     amountCents: z.number(),
     status: z.string(),
     createdAt: z.iso.datetime(),
     paidAt: z.iso.datetime().optional(),
-    // Stripe's own id for the transfer — what a creator quotes when asking anyone about it.
+    // Stripe's own id for the transfer, what a creator quotes when asking anyone about it.
     reference: z.string().optional(),
 });
 export type CreatorPayment = z.infer<typeof CreatorPaymentSchema>;
@@ -995,7 +995,7 @@ export const CreatorStateSchema = z.object({
 export type CreatorState = z.infer<typeof CreatorStateSchema>;
 
 /* What a claimant must do, computed for one publisher name. `repos` is every repository the registry lists
- * under it — the claim is provable from ANY of them, which is why they are all named rather than one being
+ * under it, the claim is provable from ANY of them, which is why they are all named rather than one being
  * picked for the creator. Empty means the name has no github-sourced listing to prove against, and the screen
  * says that instead of offering an impossible instruction.
  *
@@ -1006,7 +1006,7 @@ export const ClaimChallengeSchema = z.object({
     repos: z.array(z.string()),
     path: z.string(),
     token: z.string(),
-    // Set when the name is already claimed — by this account (so the screen shows it as done) or by another
+    // Set when the name is already claimed, by this account (so the screen shows it as done) or by another
     // (so it says so plainly rather than letting someone push a file that can never verify).
     claimedByYou: z.boolean(),
     claimedByOther: z.boolean(),
@@ -1018,7 +1018,7 @@ export type ClaimChallenge = z.infer<typeof ClaimChallengeSchema>;
  * The claim screen used to open on an empty box, which is the wrong question: a creator does not necessarily
  * know that the name to type is the publisher half of an extension id, and typing it wrong looks identical to
  * having nothing to claim. So the screen sends the projects open in their workspace and the platform answers
- * with the publisher names those projects back — a list to click, and the exact set of names the claim can
+ * with the publisher names those projects back, a list to click, and the exact set of names the claim can
  * actually succeed for.
  *
  * `repos` names WHICH of the caller's own projects back each name, so the screen can say why a name is being
@@ -1070,7 +1070,7 @@ export const ProviderServiceSchema = z.object({
     creditsPerRun: z.number(),
     sampleRequest: z.string(),
     status: ServiceStatusSchema,
-    // When the last conformance probe passed — absent until one has.
+    // When the last conformance probe passed, absent until one has.
     probedAt: z.iso.datetime().optional(),
     // Why the watch suspended it, in a sentence written for the provider reading it.
     suspendedFor: z.string().optional(),
@@ -1084,14 +1084,14 @@ export const ProviderServicesStateSchema = z.object({
     enabled: z.boolean(),
     rules: AdmissionRulesSchema,
     services: z.array(ProviderServiceSchema),
-    // Whether this account could publish at all today — the two identity gates, answered before a provider
+    // Whether this account could publish at all today, the two identity gates, answered before a provider
     // spends an afternoon building against a door that is shut.
     holdsAnyPublisher: z.boolean(),
     payoutsEnabled: z.boolean(),
 });
 export type ProviderServicesState = z.infer<typeof ProviderServicesStateSchema>;
 
-/* WHAT A CONFORMANCE PROBE FOUND. Every check is reported, passed or not — a provider fixing their endpoint
+/* WHAT A CONFORMANCE PROBE FOUND. Every check is reported, passed or not, a provider fixing their endpoint
  * wants the whole picture, and "one of three failed" without saying which is a support ticket waiting to
  * happen. `message` is the first failure as a sentence, which is what a screen puts in front of them. */
 export const ServiceProbeResultSchema = z.object({
@@ -1102,7 +1102,7 @@ export const ServiceProbeResultSchema = z.object({
 export type ServiceProbeResult = z.infer<typeof ServiceProbeResultSchema>;
 
 // A listing as its provider writes it. The same fields the rules are checked against, which is why there is
-// no separate "draft" shape — an edit and a creation are the same validation.
+// no separate "draft" shape, an edit and a creation are the same validation.
 export const ServiceListingInputSchema = z.object({
     slug: z
         .string()
@@ -1122,12 +1122,12 @@ export type ServiceListingInput = z.infer<typeof ServiceListingInputSchema>;
 // Apple only accepts pushes from the app's vendor, so a native install cannot be posted to directly the way a
 // browser's web-push endpoint can. The relay is the platform's answer: the signed-in web app registers the
 // shell's device token here, the grant it gets back is stored on the DAEMON as a relay channel
-// (@intentic/sandbox-contract RelayChannelSchema), and from then on the daemon posts plain JSON to `url` —
+// (@intentic/sandbox-contract RelayChannelSchema), and from then on the daemon posts plain JSON to `url`,
 // sessionless, proving itself with the per-device secret alone. The relay never learns which sandbox is
 // calling, and the daemon never learns the device token; each side holds exactly the half it needs.
 
-// The one platform the relay forwards to. Android deliberately absent: the Play-store app is a TWA — real
-// Chrome — so its pushes ride the daemon's own web-push transport and never pass through here.
+// The one platform the relay forwards to. Android deliberately absent: the Play-store app is a TWA, real
+// Chrome, so its pushes ride the daemon's own web-push transport and never pass through here.
 export const PushPlatformSchema = z.enum(["ios"]);
 export type PushPlatform = z.infer<typeof PushPlatformSchema>;
 
@@ -1137,7 +1137,7 @@ export const PushDeviceInputSchema = z.object({
     token: z.string().min(1).max(400),
 });
 
-// What a registration answers — verbatim the relay channel the web app stores on the daemon. `secret` is
+// What a registration answers, verbatim the relay channel the web app stores on the daemon. `secret` is
 // returned exactly once and persisted only as a hash; `url` is absolute so the daemon needs no knowledge of
 // any platform's layout, and a self-hosted platform's grants point home automatically.
 export const PushDeviceGrantSchema = z.object({

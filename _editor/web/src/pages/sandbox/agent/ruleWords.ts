@@ -1,7 +1,7 @@
 import type { Rule, RuleMoment } from "@intentic-app/api-contract";
 import type { IconName } from "@intentic/ui";
 
-/* THE WORDS A RULE IS WRITTEN IN — one vocabulary, read by the form that writes a rule and by the row that
+/* THE WORDS A RULE IS WRITTEN IN, one vocabulary, read by the form that writes a rule and by the row that
  * shows one back.
  *
  * They used to be two tables in one component, and the risk was always the same: a row that describes itself
@@ -11,9 +11,9 @@ import type { IconName } from "@intentic/ui";
  * WHAT A MOMENT COSTS rides the option rather than a caption under the closed picker, because the only time
  * the cost matters is while you are choosing between them. Today all three are cheap (once a turn, once a push,
  * once an agent), but the whole point of this table is that moments get added, and the first hot one would
- * otherwise arrive as a foot-gun with a friendly picker in front of it.
+ * otherwise arrive as a trap with a friendly picker in front of it.
  *
- * WHAT A RULE THEN DOES is said once, at the pair — because the same "run a command" means something different
+ * WHAT A RULE THEN DOES is said once, at the pair, because the same "run a command" means something different
  * at each moment. A failing command before a turn ends sends the assistant back to repair it; the same command
  * before a push simply stops the push. One line, keyed by both halves, is the only honest way to say that. */
 
@@ -28,11 +28,11 @@ interface MomentWords {
     readonly value: RuleMoment;
     readonly label: string;
     readonly icon: IconName;
-    /** How often standing here costs something — read while choosing, not afterwards. */
+    /** How often standing here costs something, read while choosing, not afterwards. */
     readonly cost: string;
 }
 
-// Non-empty by type, so "the moment this rule stands at" never has to be answered with `undefined` — there is
+// Non-empty by type, so "the moment this rule stands at" never has to be answered with `undefined`, there is
 // always a first moment and always a first action, and every caller would otherwise re-prove it.
 export const MOMENTS: readonly [MomentWords, ...MomentWords[]] = [
     { value: `turn.ending`, label: `Before the assistant finishes`, icon: `clock`, cost: `Once per turn` },
@@ -48,7 +48,7 @@ interface ActionWords {
     readonly outcome: string;
 }
 
-/* Which actions fit which moment is not a matter of taste — a verdict at a turn's end has nothing to decide,
+/* Which actions fit which moment is not a matter of taste, a verdict at a turn's end has nothing to decide,
  * and the daemon's own schema refuses the pair. Offering only what will save keeps the refusal from arriving
  * after the user has typed. */
 export const ACTIONS: Record<RuleMoment, readonly [ActionWords, ...ActionWords[]]> = {
@@ -81,7 +81,7 @@ export const momentOf = (moment: RuleMoment): MomentWords => MOMENTS.find((entry
 
 // The globs someone typed, however they typed them. Splitting on whitespace as well as commas is not
 // tolerance for its own sake: two globs separated by a comma and the same two separated by a space are the
-// same intention, and the old comma-only split turned the second into ONE glob that matches nothing —
+// same intention, and the old comma-only split turned the second into ONE glob that matches nothing,
 // silently, and only visible weeks later as a rule that had never fired.
 export const globsOf = (text: string): string[] => text.split(/[\s,]+/).filter((glob) => glob !== ``);
 
@@ -96,7 +96,7 @@ const clip = (text: string, at = 56): string => {
 };
 
 /* WHAT THE RULE CALLS ITSELF. The old form asked for a name FIRST and refused to save without one, which is
- * the one question nobody can answer before they have said what the rule does — so it was answered badly, or
+ * the one question nobody can answer before they have said what the rule does, so it was answered badly, or
  * it was the reason the button stayed grey.
  *
  * The command or the instruction IS the name people would have typed, so it is offered as one and the box

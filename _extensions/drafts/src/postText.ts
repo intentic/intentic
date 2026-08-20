@@ -1,12 +1,12 @@
 /* WHAT A DRAFT IS, read off a body that could have come from anywhere. `platform` is a bare string by contract
- * — a new connector needs no contract change — so this page meets posts it has never heard of, and everything
+ *, a new connector needs no contract change, so this page meets posts it has never heard of, and everything
  * here degrades to "just show the words" rather than to a wrong answer.
  *
  * The rules live in one module because the page asks them from four sections and they have to agree: a draft
  * whose `title` is drawn as a post title must not also be drawn as a note beside it. */
 
 /* HOW MUCH ROOM THE PLATFORM GIVES. The one fact about a post that a reviewer cannot work out by reading it and
- * that fails the post outright when it is wrong — an over-length X draft doesn't post badly, it doesn't post.
+ * that fails the post outright when it is wrong, an over-length X draft doesn't post badly, it doesn't post.
  * Only platforms with a hard, well-known cap are listed; anything absent shows a plain character count, which
  * is a fact rather than a guess. Body limits (a title has its own, and this page shows one number, not two). */
 const LIMITS: Record<string, number> = {
@@ -27,12 +27,12 @@ export const limitOf = (platform: string): number | undefined => LIMITS[platform
 
 /* WHOSE TITLE IS IT. `title` means two different things in the wild and they want opposite treatment: on a
  * platform that publishes titles it IS the post's headline and belongs at the top in headline weight, and
- * everywhere else the agent has used the field as its own note about the draft ("Reply on r/ClaudeAI: … —
+ * everywhere else the agent has used the field as its own note about the draft ("Reply on r/ClaudeAI: …,
  * pure-value reply, no product mention"). Drawn as a headline, that note is a three-line bold block sitting
- * above the post and outweighing it — the exact inversion this page exists to avoid.
+ * above the post and outweighing it, the exact inversion this page exists to avoid.
  *
  * A REPLY HAS NO TITLE, whatever the platform. A draft aimed at a URL is attaching itself to something that
- * already exists (a thread, a video, a tweet), and comments carry no headline on any platform — so a `title`
+ * already exists (a thread, a video, a tweet), and comments carry no headline on any platform, so a `title`
  * there is always the agent talking to the owner. */
 const TITLED = new Set([`blog`, `devto`, `ghost`, `hackernews`, `linkedin`, `medium`, `reddit`, `substack`, `wordpress`, `youtube`]);
 
@@ -40,15 +40,15 @@ export const isReply = (target?: string): boolean => target?.startsWith(`http`) 
 
 export const postsATitle = (platform: string, target?: string): boolean => TITLED.has(platform.toLowerCase()) && !isReply(target);
 
-/* WHAT AN EDIT IS ALLOWED TO CARRY. The owner gets two boxes at most — the post, and the headline where the
- * platform publishes one — while the row is saved by re-posting the whole draft, so this decides which of the
+/* WHAT AN EDIT IS ALLOWED TO CARRY. The owner gets two boxes at most, the post, and the headline where the
+ * platform publishes one, while the row is saved by re-posting the whole draft, so this decides which of the
  * draft's fields a rewrite may touch. Both rules are the kind that get got wrong once and then never noticed:
  *
  * A `title` THAT ISN'T PUBLISHED IS THE AGENT'S NOTE (postsATitle above), the editor never draws a box for it,
  * and a naive "send back both fields" would post an empty headline over that note.
  *
  * NOTHING CHANGED IS NOT A SAVE. Re-posting an identical body still rewrites the file, refetches the queue and
- * flashes the row — a click that did nothing, reported as if it did. An untouched edit resolves to `undefined`
+ * flashes the row, a click that did nothing, reported as if it did. An untouched edit resolves to `undefined`
  * and the caller just closes the box. */
 export interface PostEdit {
     readonly content: string;
@@ -60,7 +60,7 @@ export const postEdit = (
     next: { readonly content: string; readonly title: string },
 ): PostEdit | undefined => {
     /* A BLANK HEADLINE IS NEVER WRITTEN. The editor saves as it is typed, so there is no Save button left to
-     * disable while a required field is empty — and the moment someone selects a headline to retype it, the
+     * disable while a required field is empty, and the moment someone selects a headline to retype it, the
      * field is empty. Writing that would put a draft on disk that cannot post at all (reddit and YouTube both
      * refuse an untitled one), for the sake of a keystroke that was on its way somewhere. So an emptied
      * headline means "unchanged": the post keeps the title it had until a new one is actually typed. */
@@ -75,7 +75,7 @@ export const postEdit = (
 
 /* WHERE A DRAFT IS GOING, in the words the platform uses for it. A target is free text by contract and arrives
  * in three shapes: a place you already recognise (`r/webdev`, `#releases`, `@ada@hachyderm.io`), a URL of the
- * thing being replied to, or something a connector made up. Only the URL needs help — a 90-character thread
+ * thing being replied to, or something a connector made up. Only the URL needs help, a 90-character thread
  * address rendered in full is the noisiest thing on the row and says less than "reply in r/ClaudeAI" does.
  *
  * The URL survives as the link and as the tooltip, so nothing is lost: the label is what you read, the address
@@ -83,12 +83,12 @@ export const postEdit = (
  *
  * A COMMENT AND A THREAD ARE DIFFERENT DECISIONS, and on Reddit they are the same URL with one more segment on
  * the end. Replying under a post is talking to the room; replying to a comment is talking to one person about
- * what they just said, and whether the reply lands depends on which — so the queue says which, rather than
+ * what they just said, and whether the reply lands depends on which, so the queue says which, rather than
  * making the reviewer count slashes or open the link to find out. */
 export interface Destination {
     /** What the reader sees: a place on the platform, or the host when that is all the URL tells us. */
     readonly label: string;
-    /** Present when the target is a reply — "reply in", "reply on" — and absent for a plain place. */
+    /** Present when the target is a reply, "reply in", "reply on", and absent for a plain place. */
     readonly verb?: string;
     /** Set only for a target that is somewhere to GO, so the row can offer to open it. */
     readonly href?: string;
@@ -96,7 +96,7 @@ export interface Destination {
 
 // The trailing capture is the comment id: a thread permalink ends after /comments/<id>/<slug>/, and one more
 // segment past it means the target is a single comment (both reddit's `/…/<slug>/<id>/` and its newer
-// `/…/comment/<id>/` land here). Any query string — reddit hands out `?context=3` — stops the match, which is
+// `/…/comment/<id>/` land here). Any query string, reddit hands out `?context=3`, stops the match, which is
 // the right answer: it is still the thread's address.
 const REDDIT_THREAD = /^https?:\/\/(?:[\w-]+\.)?reddit\.com\/(r\/[\w-]+)(?:\/comments\/\w+\/[^/]*\/(\w+))?/i;
 
@@ -113,17 +113,17 @@ export const destinationOf = (target: string): Destination => {
         // The host alone: a reply's path is an id and a slug, which is the part a reader gains nothing from.
         return { label: new URL(target).hostname.replace(/^www\./, ``), verb: `reply on`, href: target };
     } catch {
-        // A target that starts with "http" and still isn't a URL — show it as written rather than swallow it.
+        // A target that starts with "http" and still isn't a URL, show it as written rather than swallow it.
         return { label: target };
     }
 };
 
-/* HOW LONG IS LEFT TO STOP IT. Approving does not send a post, it starts a minute — so for that minute the
+/* HOW LONG IS LEFT TO STOP IT. Approving does not send a post, it starts a minute, so for that minute the
  * queue has one urgent readout, and it is counted in the unit the decision is made in. Seconds, because that is
  * what the window is made of: "in a minute" is not something you act on, "34s" is.
  *
  * IT NEVER SAYS ZERO. The last tick before a post goes out reads as the post going out, not as a countdown
- * that reached the end and stopped — a "0s" sitting next to a Stop button is a promise nobody can keep, since
+ * that reached the end and stopped, a "0s" sitting next to a Stop button is a promise nobody can keep, since
  * by the time it renders the publisher already has it. Anything past due, or a draft the daemon is already
  * sending, says the same thing.
  *
@@ -138,7 +138,7 @@ export const countdownWords = (msLeft: number): string => {
 };
 
 /* WHEN A POST IS LONG ENOUGH TO FOLD. Above this the card is taller than the decision it is asking for, and a
- * queue of them can't be scanned — so the body clamps with a "show the whole post" toggle. A threshold on the
+ * queue of them can't be scanned, so the body clamps with a "show the whole post" toggle. A threshold on the
  * CHARACTER COUNT rather than on the rendered height: it is the same answer on a phone and on a desk, it is
  * decided before the first paint (no measure, no reflow), and it is the number the footer is already showing.
  * Roughly a screenful of body text at this measure; a tweet, a Discord note and an ordinary reply stay whole. */

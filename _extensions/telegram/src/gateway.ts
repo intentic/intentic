@@ -5,7 +5,7 @@ import { createTelegramListener, deliverToChat } from "./listener.js";
 // The Telegram gateway process: a baked extension's autoStart process (contributes.processes). It reconciles one
 // long-polling connection per configured bot against the daemon's /listeners/telegram/state, dispatches every
 // inbound message (painting mention replies back into the chat), and reports its liveness. The daemon holds no
-// Telegram connection — this does. The reconcile/status/health/shutdown shell is the shared connector runtime;
+// Telegram connection, this does. The reconcile/status/health/shutdown shell is the shared connector runtime;
 // what's here is only what Telegram IS: a bot token is a connection, and a webhook conflict or revoked token is
 // fatal until fixed on the BotFather side.
 
@@ -29,7 +29,7 @@ void runConnectorGateway<TelegramConnectorConfig, string>({
                     (error) => {
                         // The poll loop died mid-life (revoked token, a webhook claiming this bot's updates):
                         // the connection took itself out of the pool, so `alive` below lets the reconcile drop
-                        // the slot — and the fatal mark keeps it from reopening until the backoff expires.
+                        // the slot, and the fatal mark keeps it from reopening until the backoff expires.
                         ctx.log.error({ err: error, capabilityId: id }, "telegram poll stopped");
                         control.markFatal(config.botToken, error.message);
                     },

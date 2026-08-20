@@ -17,7 +17,7 @@ import { host } from "./host";
  * this box's connections rather than the last box's.
  *
  * NOT a `sandboxRef`, and this is the one place in the extension where that distinction bites. Nothing renders
- * this list — it is the poller's note to itself about what to ask — while `detect()`, its only writer, runs
+ * this list, it is the poller's note to itself about what to ask, while `detect()`, its only writer, runs
  * inside the host's render computed. A reactive ref here is therefore a computed that reads and writes the
  * same cell on every pass, and since detect() hands over a freshly mapped array each time, the write always
  * counts as a change: the rail re-runs itself until Vue gives up on the frame and drops every update queued
@@ -58,7 +58,7 @@ const {
 
 export { startDeployAttention };
 
-// Called from detect() — the host's own per-facts-poll callback, which is the only place that knows which
+// Called from detect(), the host's own per-facts-poll callback, which is the only place that knows which
 // Komodo capabilities are currently connected.
 export const watchConnections = (capabilities: readonly string[]): void => {
     const added = capabilities.filter((capability) => !watched.value.includes(capability));
@@ -69,10 +69,10 @@ export const watchConnections = (capabilities: readonly string[]): void => {
     }
 };
 
-/* What the tile says. Read inside the host's render computed — touching `boards` here is what repaints it.
+/* What the tile says. Read inside the host's render computed, touching `boards` here is what repaints it.
  *
  * UNREACHABLE IS NOT BROKEN. A Komodo we cannot talk to gets a `warning` mark and no count: one fact, one
- * click, and the amount goes in the tooltip (the ViewBadge.mark case). It is emphatically not `danger` —
+ * click, and the amount goes in the tooltip (the ViewBadge.mark case). It is emphatically not `danger`,
  * reading a network blip as "production is down" is how a rail earns its colour back into meaninglessness,
  * and the whole value of `danger` here is that only one other tile in the app claims it.
  *

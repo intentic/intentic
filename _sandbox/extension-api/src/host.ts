@@ -2,7 +2,7 @@ import type { IntenticApi } from "./api.js";
 
 /* THE AMBIENT HOST HANDLE, one slot per extension. `activate(api)` binds it once, before any view renders, so
  * the extension's composables reach the authenticated daemon transport, cache scoping and workspace facts
- * through `host()` — the way `vscode.*` is ambient to a VSCode extension. Not app internals: everything flows
+ * through `host()`, the way `vscode.*` is ambient to a VSCode extension. Not app internals: everything flows
  * through the public IntenticApi.
  *
  * A FACTORY rather than a module-level slot here, and that is the whole reason this lives in the API package

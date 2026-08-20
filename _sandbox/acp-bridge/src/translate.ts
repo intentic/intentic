@@ -3,16 +3,16 @@ import type { SessionUpdate, ToolCallContent as AcpToolCallContent, ToolCallLoca
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent, ToolCallContent, ToolCallLocation } from "@intentic/sandbox-contract";
 
-/* AgentEvent → ACP session/update, the mechanical reverse of the sandbox's acp-events.ts — mechanical
+/* AgentEvent → ACP session/update, the mechanical reverse of the sandbox's acp-events.ts, mechanical
  * because the tool-call vocabulary (kind/status/locations/diff) was adopted from ACP verbatim. The one real
  * transformation is paths: the wire carries workspace-root-relative paths; the editor's world is the
  * session cwd (the user's synced mirror of /work), so relative paths JOIN onto cwd and stray
- * sandbox-absolute /work paths are stripped first. A path outside the workspace passes through unchanged —
+ * sandbox-absolute /work paths are stripped first. A path outside the workspace passes through unchanged,
  * the diff text still renders inline; only jump-to-file misses.
  *
  * Documented drops (no ACP slot): terminal (the tmux panel has no local projection), init,
  * usage/rate_limit_info (account-level accounting), compact, checkpoint (sandbox-side restore), commands
- * (the daemon relays ACP agents' commands — advertising them back out would loop). plan/question/error/done
+ * (the daemon relays ACP agents' commands, advertising them back out would loop). plan/question/error/done
  * are control flow, handled in bridge.ts, not here. */
 
 // The container root every path in an ACP message is expressed against. Named once in @intentic/constants
@@ -89,7 +89,7 @@ export const sessionUpdateOf = (event: AgentEvent, cwd: string): SessionUpdate |
         }
         case "todos":
             // Our todos ARE ACP's plan checklist (the reverse of acp-events.ts's plan→todos); priority is
-            // synthesized — the checklist carries none.
+            // synthesized, the checklist carries none.
             return {
                 sessionUpdate: "plan",
                 entries: event.items.map((item) => ({ content: item.content, priority: "medium", status: item.status })),

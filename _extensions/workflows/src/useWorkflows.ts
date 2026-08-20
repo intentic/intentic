@@ -6,11 +6,11 @@ import { host } from "./host";
 /* The sandbox's workflow manifest (.intentic/config/workflows.json) and run ledger (.intentic/records/workflow-runs.json),
  * read/written through the daemon's /workflows routes. All daemon access goes through the host api.
  *
- * NOT POLLED. Both files are on the daemon's file-change push — the scheduler writes the ledger several times
+ * NOT POLLED. Both files are on the daemon's file-change push, the scheduler writes the ledger several times
  * per step, the watcher batches each write into a `workspaceChanged` frame, and the browser invalidates the
  * `workflows` / `workflow-runs` keys (core's WORKSPACE_STATE_FILES table; core owns those keys because the
  * fleet board reads them whether or not this extension is enabled). Between writes nothing about a run
- * changes, so there is nothing for an interval to discover — a poll here could only re-read the answer the
+ * changes, so there is nothing for an interval to discover, a poll here could only re-read the answer the
  * push already delivered, seconds later.
  */
 
@@ -51,9 +51,9 @@ export function useWorkflows() {
         onSuccess: invalidate,
     });
     // The daemon acks with the opened run and executes detached, so success here means "it started". The run
-    // that comes back is already complete as a graph — every step recorded `pending` — which is what lets the
+    // that comes back is already complete as a graph, every step recorded `pending`, which is what lets the
     // run view open on it immediately rather than on a spinner.
-    /* The request rides with the start — the sentence the user typed before pressing Run, which every step is
+    /* The request rides with the start, the sentence the user typed before pressing Run, which every step is
      * handed on top of its own prompt (WorkflowRun.request). It is what makes a saved design a SHAPE you point
      * at today's job rather than a document you edit to ask a question. */
     const start = useMutation({
@@ -75,7 +75,7 @@ export function useWorkflows() {
         runs: computed<WorkflowRun[]>(() => runsQuery.data.value ?? []),
         // Whether the LEDGER has actually been read, as opposed to being empty or still in flight. Only a
         // surface that has to tell "this run is not on the record" apart from "the record has not arrived"
-        // needs it — an empty `runs` means both, and guessing wrong accuses a link of being broken while it
+        // needs it, an empty `runs` means both, and guessing wrong accuses a link of being broken while it
         // is still loading.
         runsLoaded: runsQuery.isSuccess,
         error: computed(() => query.error.value?.message ?? runsQuery.error.value?.message),

@@ -7,23 +7,23 @@ import type { NoticeModel } from "@intentic/ui";
  *
  * All three of these exist because of the same UX finding: the screen used to hand the creator a token and a
  * comma-separated list of six repository slugs and leave them to it. Nothing on it said the list was fixed by
- * the registry rather than a free choice, that any ONE of them was enough, or which one to prefer — so it read
+ * the registry rather than a free choice, that any ONE of them was enough, or which one to prefer, so it read
  * as homework with six unexplained options, and the most common outcome was a file pushed to a side branch
  * followed by a verify failure that said nothing about branches. */
 
 export interface ClaimTarget {
     // The repository as the registry names it: `owner/name`.
     readonly project: string;
-    // The workspace repo id it is checked out as, when it is — the thing that makes one-click possible.
+    // The workspace repo id it is checked out as, when it is, the thing that makes one-click possible.
     readonly repo?: string;
 }
 
-/* THE DOMAIN LANE, told apart by the dot — the platform's own discriminator (a registry publisher name is
+/* THE DOMAIN LANE, told apart by the dot, the platform's own discriminator (a registry publisher name is
  * the prefix of an extension id before its first dot, so it can never contain one). A dotted challenge has
  * no repositories at all: its proof is a file served from the domain itself. */
 export const isDomainChallenge = (challenge: ClaimChallenge): boolean => challenge.publisher.includes(`.`);
 
-// Where the domain lane's proof must be readable — spelled out whole because "the well-known path" is
+// Where the domain lane's proof must be readable, spelled out whole because "the well-known path" is
 // exactly the kind of sentence that used to make the repo lane feel like homework.
 export const domainClaimUrl = (challenge: ClaimChallenge): string => `https://${challenge.publisher}/${challenge.path}`;
 
@@ -67,14 +67,14 @@ export const publishFailureNotice = (project: string, result: GitPublishFileResu
 };
 
 /* THE MANUAL PATH, AS ONE LINE TO PASTE. The old screen gave out the token alone and left the creator to work
- * out the filename, the commit and the push from a sentence — four steps to reassemble, each of which is a way
+ * out the filename, the commit and the push from a sentence, four steps to reassemble, each of which is a way
  * to get it subtly wrong. One line that does all of it removes every one of those.
  *
  * `cd` is deliberately part of it: the creator is being told to do this in a repository that may not be the one
  * their terminal is in, and a line that silently writes the file into the wrong directory is worse than no line.
  *
  * Every value crosses into a shell the creator is about to run, so every one goes through `shellQuote` rather
- * than a bare `'…'` — the token, the path and the publisher name are all server-supplied, and "a token never
+ * than a bare `'…'`, the token, the path and the publisher name are all server-supplied, and "a token never
  * contains an apostrophe" is exactly the assumption the quoters exist to stop anyone making again. A plain
  * value quotes to itself, so the line a creator actually sees is byte-identical to the one written by hand. */
 export const claimCommand = (challenge: ClaimChallenge, project: string): string => {

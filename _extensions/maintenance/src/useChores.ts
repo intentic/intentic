@@ -5,8 +5,8 @@ import { computed, ref, watch } from "vue";
 import { choresReportQuery } from "./choresQuery";
 import { host } from "./host";
 
-/* The evidence, and what it means. One request — `GET /chores` carries every repository's cached probe results,
- * its resident signals and the ledger — and then @intentic/sandbox-contract/chores turns that into verdicts HERE, in the
+/* The evidence, and what it means. One request, `GET /chores` carries every repository's cached probe results,
+ * its resident signals and the ledger, and then @intentic/sandbox-contract/chores turns that into verdicts HERE, in the
  * browser, which is the seam the whole design rests on:
  *
  *   the daemon measures        it is the thing with a filesystem, a shell and a resident index
@@ -14,7 +14,7 @@ import { host } from "./host";
  *
  * A sandbox daemon is baked into an image the owner updates when they feel like it, so a daemon that also
  * computed verdicts would be arguing with the browser about what needs doing every time the chore book changed.
- * It also means the rail badge (attention.ts) and this panel run the SAME function over the SAME report — the
+ * It also means the rail badge (attention.ts) and this panel run the SAME function over the SAME report, the
  * number on the tile and the reason in the panel are one computation, and cannot drift apart.
  *
  * The poll is slow because nothing here is urgent: probes refresh on a daily-to-weekly TTL, so a panel that
@@ -29,8 +29,8 @@ const POLL_MS = 5 * 60_000;
  * cheap because it only ever runs while the reader is watching a spinner they asked for. */
 const MEASURING_POLL_MS = 2000;
 /* How long a click is believed on its own, before the daemon has confirmed it in `running`. The gap is one
- * request, but it is the gap the button is judged on — the whole complaint was that pressing it changed nothing
- * — so the click marks the probe measuring immediately and this is only the backstop for an ack that never
+ * request, but it is the gap the button is judged on, the whole complaint was that pressing it changed nothing
+ *, so the click marks the probe measuring immediately and this is only the backstop for an ack that never
  * arrives (the daemon restarted, the probe id went away). Long enough to cover a slow first poll. */
 const UNCONFIRMED_MS = 15_000;
 
@@ -38,7 +38,7 @@ const UNCONFIRMED_MS = 15_000;
 export const probeKey = (repo: string, id: string): string => `${repo}|${id}`;
 
 /* A measurement in flight, as the panel needs to draw it. `startedAt` absent means it is waiting behind another
- * one — the runner has one lane across the sandbox — and the row says "queued" rather than counting up from a
+ * one, the runner has one lane across the sandbox, and the row says "queued" rather than counting up from a
  * start that has not happened. */
 export interface MeasuringProbe {
     readonly repo: string;
@@ -62,22 +62,22 @@ export function useChores() {
         queryKey: reportKey,
         enabled: computed(() => api.sandbox.reachable()),
         /* Fast while anything is measuring, slow the rest of the time. Read off the query's OWN state rather
-         * than the `measuring` computed below, which would be a cycle — and OR'd with this panel's unconfirmed
+         * than the `measuring` computed below, which would be a cycle, and OR'd with this panel's unconfirmed
          * clicks, because the first moments after a press are precisely when the report has not yet heard about
          * the work and the reader most needs it to. */
         refetchInterval: (state) => (asked.value.size > 0 || (state.state.data?.running ?? []).length > 0 ? MEASURING_POLL_MS : POLL_MS),
         // The shared definition, so this panel, the rail badge's timer and the host's read-ahead all fill and
-        // read ONE entry — see choresQuery. Opening this view usually finds it already answered.
+        // read ONE entry, see choresQuery. Opening this view usually finds it already answered.
         queryFn: () => choresReportQuery().queryFn(),
     });
 
-    /* WHAT IS BEING MEASURED — the daemon's lane, plus this panel's own unconfirmed clicks.
+    /* WHAT IS BEING MEASURED, the daemon's lane, plus this panel's own unconfirmed clicks.
      *
      * Both halves are needed and neither is enough. The daemon's list is the truth about work, but it arrives a
      * request late, which is exactly the window the reader is staring at the button in. The local list is
      * instant, but it is a wish, and a wish that outlived its request is how a row ends up spinning forever. So a
      * click shows immediately, the daemon's answer takes over the moment it lands, and an unconfirmed click
-     * expires — the row falls back to the evidence rather than lying about it. */
+     * expires, the row falls back to the evidence rather than lying about it. */
     const measuring = computed<MeasuringProbe[]>(() => {
         const live = query.data.value?.running ?? [];
         const known = new Set(live.map((entry) => probeKey(entry.repo, entry.id)));
@@ -115,7 +115,7 @@ export function useChores() {
 
     // Repo → its verdicts, in the book's own order (the chore book's CHORES array is a product decision about reading
     // order, not the order they happened to be written in), and repos in the daemon's discovery order with the
-    // workspace root first — which is what `GET /chores` already returns.
+    // workspace root first, which is what `GET /chores` already returns.
     const byRepo = computed(() =>
         (query.data.value?.repos ?? []).map(({ repo }) => ({
             repo,
@@ -125,10 +125,10 @@ export function useChores() {
     );
 
     /* Re-run one repository's probe now, ahead of its TTL. An ack: the daemon queues it and the result arrives
-     * through the file push or the next poll — a jscpd sweep outlives any request.
+     * through the file push or the next poll, a jscpd sweep outlives any request.
      *
      * The probe is marked measuring BEFORE the request, not after. The round trip is short but it is not free,
-     * and the press has to change the screen in the frame it happened — that is the whole of what "the button
+     * and the press has to change the screen in the frame it happened, that is the whole of what "the button
      * does nothing" meant. If the ack fails, the mark comes straight back off and the caller shows the error. */
     const refreshProbe = async (repo: string, id: string): Promise<void> => {
         const key = probeKey(repo, id);
@@ -171,21 +171,21 @@ export function useChores() {
     };
 
     // Every report is the answer to "has my click been taken over yet", so settling rides on the data rather than
-    // on a timer of its own — a probe that finished between two polls stops spinning on the poll that saw it.
+    // on a timer of its own, a probe that finished between two polls stops spinning on the poll that saw it.
     watch(() => query.dataUpdatedAt.value, settle, { immediate: true });
 
     return {
         report: computed(() => query.data.value),
         verdicts,
         byRepo,
-        // What is being measured right now, this panel's own unconfirmed clicks included — the state every
+        // What is being measured right now, this panel's own unconfirmed clicks included, the state every
         // surface that offers a re-measure draws its progress on.
         measuring,
         measuringKeys: computed(() => new Set(measuring.value.map((entry) => probeKey(entry.repo, entry.id)))),
         error: computed(() => query.error.value?.message),
         // isPending, not isLoading: true from mount until the FIRST report, INCLUDING the window where `enabled`
         // still gates the fetch on the sandbox handshake. isLoading is false in that window (nothing is in
-        // flight), and a panel that trusts it renders "Nothing needs attention" over a report it has not read —
+        // flight), and a panel that trusts it renders "Nothing needs attention" over a report it has not read,
         // the one sentence this surface must never say wrongly.
         isPending: query.isPending,
         refresh: async (): Promise<void> => {

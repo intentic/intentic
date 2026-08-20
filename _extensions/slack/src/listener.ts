@@ -13,7 +13,7 @@ import type { SlackConnection } from "./client.js";
  * the model's reply into the thread live (one painter per matched automation, keyed by automationId).
  *
  * Slack has no bot typing indicator, so the "I'm on it" signal is an :eyes: reaction on the triggering message,
- * added the moment we're tagged and removed when the turn ends — the same job ext-discord's typing heartbeat
+ * added the moment we're tagged and removed when the turn ends, the same job ext-discord's typing heartbeat
  * does, in the gesture Slack actually has. */
 
 // Slack renders a message beyond ~4000 chars as a truncated blob with a "show more"; a longer reply spills into
@@ -24,15 +24,15 @@ const SLACK_MAX = 3_800;
 const EDIT_INTERVAL_MS = 1_500;
 // Recent `channel:ts` keys, to drop the duplicate delivery when two of our apps share a channel, and the
 // message/app_mention double-delivery Slack sends when a manifest subscribes to both.
-// ponytail: best-effort in-memory cap; a restart forgets it — at worst one duplicate wake.
+// ponytail: best-effort in-memory cap; a restart forgets it, at worst one duplicate wake.
 const RECENT_MAX = 500;
 // Prior messages pulled for context when the bot is tagged.
 const HISTORY_LIMIT = 20;
-// The "working on it" reaction. A name, not an emoji — Slack's reactions API is keyed by shortcode.
+// The "working on it" reaction. A name, not an emoji. Slack's reactions API is keyed by shortcode.
 const ACK_REACTION = "eyes";
 
-/* Message subtypes worth waking on. A Slack channel event stream is mostly bookkeeping — joins, leaves, topic
- * and purpose changes, pins, edits, deletions, huddle notices — and every one of those would otherwise fire an
+/* Message subtypes worth waking on. A Slack channel event stream is mostly bookkeeping, joins, leaves, topic
+ * and purpose changes, pins, edits, deletions, huddle notices, and every one of those would otherwise fire an
  * automation. An allowlist rather than a denylist because Slack keeps adding subtypes, and the failure mode of
  * guessing wrong is an agent woken by someone joining a channel. `bot_message` IS here: a third-party bot's CI
  * alert is a legitimate trigger (our own apps' posts are dropped by author below, not by subtype). */
@@ -102,7 +102,7 @@ export const toHistory = (
         return entry;
     });
 
-/* The gateway's /deliver door (GatewayHooks.deliver): post one message into a channel outside any live turn —
+/* The gateway's /deliver door (GatewayHooks.deliver): post one message into a channel outside any live turn,
  * the daemon's "speak as the agent" path for a Slack conversation. The origin only recorded the channel, so the
  * message lands top-level rather than in any one thread. Which app speaks is whichever connected one the channel
  * accepts; the next app is only tried when NOTHING was posted (a partial spill re-sent through a second app
@@ -135,7 +135,7 @@ export interface SlackListener {
 export const createSlackListener = (ctx: GatewayCtx, connections: () => ReadonlyMap<string, SlackConnection>): SlackListener => {
     const recent = new Set<string>();
     // Slack events carry a user ID and nothing else; the model needs a name. One lookup per user, then cached
-    // for the life of the process — display names change rarely enough that a restart is a fine refresh.
+    // for the life of the process, display names change rarely enough that a restart is a fine refresh.
     const names = new Map<string, string>();
 
     const selfIds = (): Set<string> => new Set([...connections().values()].map((connection) => connection.selfUserId));
@@ -146,7 +146,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             return cached;
         }
         const info = await connection.web.users.info({ user: userId }).catch((error: unknown) => {
-            // A name lookup must never drop a wake — the id is a worse label, not a missing one.
+            // A name lookup must never drop a wake, the id is a worse label, not a missing one.
             ctx.log.warn({ err: error, userId }, "slack users.info failed");
             return undefined;
         });
@@ -155,7 +155,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
         return name;
     };
 
-    // Whatever we can call the author without a round trip — bots have no user record to look up.
+    // Whatever we can call the author without a round trip, bots have no user record to look up.
     const localName = (message: SlackMessage): string =>
         message.username ?? (message.user !== undefined ? (names.get(message.user) ?? message.user) : (message.bot_id ?? "unknown"));
 
@@ -170,7 +170,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             return toHistory((history.messages ?? []) as SlackMessage[], "newest-first", selfIds(), localName);
         } catch (error) {
             // A history fetch failure (the bot isn't in the channel, a missing scope, a rate limit) must not drop
-            // the wake — degrade to no context.
+            // the wake, degrade to no context.
             ctx.log.warn({ err: error }, "slack history fetch failed");
             return undefined;
         }
@@ -196,7 +196,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             return;
         }
         const ours = selfIds();
-        // Never wake on our own apps' posts — an agent reply in-channel must not re-trigger, and app A must not
+        // Never wake on our own apps' posts, an agent reply in-channel must not re-trigger, and app A must not
         // wake on app B. Third-party bots still dispatch; guards can filter them.
         if (message.user !== undefined && ours.has(message.user)) {
             return;
@@ -214,7 +214,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
         }
 
         const text = message.text ?? "";
-        // "Tagged": an @mention of any of our bots, or a DM — where every message is addressed to us. A thread
+        // "Tagged": an @mention of any of our bots, or a DM, where every message is addressed to us. A thread
         // the bot is already in counts too, so a follow-up in its own reply thread doesn't need re-tagging;
         // that's decided from the history below, which we only fetch when it might matter.
         const directlyTagged = [...ours].some((id) => text.includes(`<@${id}>`)) || message.channel_type === "im";
@@ -238,7 +238,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             ...(history !== undefined && history.length > 0 ? { history } : {}),
             timestamp: tsToIso(message.ts),
             extra: {
-                // The reply target — a mention inside a thread continues that thread, a top-level one opens one.
+                // The reply target, a mention inside a thread continues that thread, a top-level one opens one.
                 threadTs: message.thread_ts ?? message.ts,
                 ...(teamId !== undefined ? { teamId } : {}),
                 ...(message.files !== undefined && message.files.length > 0
@@ -277,7 +277,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
                 ),
             );
         } finally {
-            // The turn(s) ended (or the stream broke) — the reply is there, so retire the acknowledgement.
+            // The turn(s) ended (or the stream broke), the reply is there, so retire the acknowledgement.
             await react(connection, channel, message.ts, false);
         }
     };
@@ -286,7 +286,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
         if (reaction.item.type !== "message" || selfIds().has(reaction.user)) {
             return;
         }
-        // A reaction says "this message" — which is useless without the message, so fetch the one it points at.
+        // A reaction says "this message", which is useless without the message, so fetch the one it points at.
         const target = await connection.web.conversations
             .history({ channel: reaction.item.channel, latest: reaction.item.ts, inclusive: true, limit: 1 })
             .then((result) => (result.messages ?? [])[0] as SlackMessage | undefined)

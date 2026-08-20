@@ -33,7 +33,7 @@ const hydrate = async (session: Session, ids: readonly { id: string }[], format:
 };
 
 // `UNREAD`/`INBOX`-style system labels are their own ids; a user label is not, so names are resolved against
-// the account's own list. Resolving by name is the point — nobody knows their label ids.
+// the account's own list. Resolving by name is the point, nobody knows their label ids.
 const resolveLabels = async (session: Session, names: readonly string[]): Promise<string[]> => {
     if (names.length === 0) {
         return [];
@@ -58,7 +58,7 @@ const listLine = (message: ParsedMessage): string =>
         message.labels.includes("UNREAD") ? "unread" : undefined,
     );
 
-// --body TEXT or --body-file PATH. A file is how anything with newlines in it gets here intact — a shell
+// --body TEXT or --body-file PATH. A file is how anything with newlines in it gets here intact, a shell
 // argument that has been through two levels of quoting rarely survives with its formatting.
 const bodyOf = async (args: Args): Promise<string> => {
     const file = flag(args, "body-file");

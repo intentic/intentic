@@ -6,7 +6,7 @@ import { bindHost } from "./host";
  * "Acceptance" rail view.
  *
  * ONE TILE, NOT ONE PER REPO. A user story is a promise about the product, and a product is rarely one
- * repository — testing "sign in" may mean the web app and the API in the same run. So the area is workspace-wide
+ * repository, testing "sign in" may mean the web app and the API in the same run. So the area is workspace-wide
  * and the repo is a dimension INSIDE it (a story's home, a run's target URL), not the thing that addresses it.
  *
  * ACTIVATES ON `hasPanel` TOO, not on `userStories` alone. This view is where stories are WRITTEN, so gating it
@@ -23,7 +23,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             surface: `rail`,
             detect: (repos) =>
                 repos.some((repo) => repo.userStories || repo.hasPanel) ? [{ key: `acceptance`, title: `Acceptance`, icon: `list-check` }] : [],
-            // Failed or blocked stories from a run you haven't acknowledged — see attention.ts for why that is
+            // Failed or blocked stories from a run you haven't acknowledged, see attention.ts for why that is
             // the bar rather than a count of everything that ever failed.
             badge: () => acceptanceBadge(),
             view: async () => (await import(`./AcceptanceView.vue`)).default,

@@ -4,7 +4,7 @@ import { computed, type Ref } from "vue";
 import { host } from "./host";
 
 /* The monorepo's workspace package graph (nodes + typed dep edges) via GET /workspace/repos/{repo}/graph.
- * package.jsons change rarely — no polling; the default refetch-on-focus keeps it fresh enough. */
+ * package.jsons change rarely, no polling; the default refetch-on-focus keeps it fresh enough. */
 
 export function useWorkspaceGraph(repo: Ref<string>) {
     const api = host();

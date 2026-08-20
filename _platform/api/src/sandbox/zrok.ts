@@ -1,24 +1,24 @@
 import { z } from "zod";
 
-/* THE SELF-HOSTED TUNNEL FABRIC — zrok v2 (the hub the `zrok` Komodo stack runs), replacing the Cloudflare
+/* THE SELF-HOSTED TUNNEL FABRIC, zrok v2 (the hub the `zrok` Komodo stack runs), replacing the Cloudflare
  * tunnel machinery this file's predecessor (cloudflare.ts) drove. The economics inverted with it: a sandbox
  * used to cost the zone a tunnel plus ~10 DNS records against a hard per-zone quota (error 81045); under the
  * hub ONE wildcard record and ONE wildcard certificate serve every sandbox, and "provisioning reachability"
- * shrinks to minting one zrok ACCOUNT per sandbox — a single fast API call, which is also why the
+ * shrinks to minting one zrok ACCOUNT per sandbox, a single fast API call, which is also why the
  * pre-provisioned pool died with the migration.
  *
  * The trust split it preserves: the platform holds the hub's ADMIN token and mints per-sandbox account
  * tokens, but the Ziti identity a sandbox actually tunnels with is born INSIDE the box (`zrok2 enable` runs
- * there) — the platform can create and revoke reachability, never impersonate it. Names under the wildcard
+ * there), the platform can create and revoke reachability, never impersonate it. Names under the wildcard
  * (`sandbox-<id>`, port slots, the public label, panels) are attached by the DAEMON with its own account
  * token; the platform's only naming job is deriving the hostname the browser already knows, exactly as
- * before (sandbox-contract's tunnel-ids — unchanged on purpose, so the announce flow, the wizard's address
+ * before (sandbox-contract's tunnel-ids, unchanged on purpose, so the announce flow, the wizard's address
  * line and every derived id survive the provider swap untouched).
  *
- * Plain fetch against the v2 spec (basePath /api/v2, auth header x-token) — the house rule cloudflare.ts and
+ * Plain fetch against the v2 spec (basePath /api/v2, auth header x-token), the house rule cloudflare.ts and
  * hosted/fly.ts follow: no provider SDK. */
 
-// The operator misconfigured the platform (bad admin token, wrong endpoint) — nothing a user can fix; routes
+// The operator misconfigured the platform (bad admin token, wrong endpoint), nothing a user can fix; routes
 // surface it as a gateway failure. Named apart from refusals so retention can log them differently.
 export class ZrokError extends Error {}
 
@@ -27,7 +27,7 @@ const namespacesSchema = z.array(z.object({ namespaceToken: z.string(), name: z.
 
 /* The hub's own media type, not `application/json`: zrok's v2 API declares `application/zrok.v1+json` on every
  * operation, and go-swagger answers a body sent as plain JSON with `500 no consumer registered for
- * application/json` — a server error for what is really a header mismatch, which is why it is spelled out
+ * application/json`, a server error for what is really a header mismatch, which is why it is spelled out
  * here rather than left to a default. */
 const MEDIA_TYPE = `application/zrok.v1+json`;
 
@@ -75,7 +75,7 @@ export const createSandboxAccount = async (
     } catch (error) {
         /* One retry, through a delete. The hub answers a DUPLICATE email with a bare 500 and offers no way to
          * read an existing account's token back (v2 has create and delete, and nothing else), so a collision
-         * would otherwise strand this sandbox permanently — and a collision can only mean one thing: a
+         * would otherwise strand this sandbox permanently, and a collision can only mean one thing: a
          * previous mint whose row-write never landed, i.e. an account of OURS that nothing holds. The email is
          * derived from this sandbox's own id, so this can never reach anybody else's account. */
         await deleteSandboxAccount(config, args.sandboxId).catch(() => {});
@@ -106,7 +106,7 @@ export const deleteSandboxAccount = async (config: { apiEndpoint: string; adminT
     }
 };
 
-// The public namespace the wildcard frontend serves — resolved once at boot and cached by the caller: names
+// The public namespace the wildcard frontend serves, resolved once at boot and cached by the caller: names
 // the daemon attaches live under it, and the enable payload hands the token into the box so it can.
 export const publicNamespaceToken = async (config: { apiEndpoint: string; adminToken: string }): Promise<string> => {
     const namespaces = namespacesSchema.parse(
@@ -120,8 +120,8 @@ export const publicNamespaceToken = async (config: { apiEndpoint: string; adminT
 };
 
 /* WHY THERE IS NO DAILY RECONCILE (the tunnel reaper's opposite number): zrok v2 exposes account CREATE and
- * DELETE and nothing else — no listing, no lookup — so the hub cannot be asked what it holds and a forgotten
+ * DELETE and nothing else, no listing, no lookup, so the hub cannot be asked what it holds and a forgotten
  * grant could never be found again. The invariant is kept at the only place it can be: a sandbox's grant is
  * revoked BEFORE its row is deleted (sandbox.routes.ts), so a hub hiccup fails the removal and leaves the row
- * — the record of the grant — instead of stranding an address nobody can revoke. The other way an orphan
+ *, the record of the grant, instead of stranding an address nobody can revoke. The other way an orphan
  * appears (a mint whose row-write did not land) heals itself on the next mint, above. */

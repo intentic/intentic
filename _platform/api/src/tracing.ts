@@ -8,7 +8,7 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic
 import type { MiddlewareHandler } from "hono";
 
 // Single source of the service identity, used by both the tracer resource and the HTTP middleware. OTEL_* are
-// read straight from the environment — OTel defines its own env-var contract that the SDK/exporter auto-read,
+// read straight from the environment. OTel defines its own env-var contract that the SDK/exporter auto-read,
 // so tracing stays on the standard rather than the typed purenv config.
 const SERVICE_NAME = process.env[`OTEL_SERVICE_NAME`] ?? `intentic-api`;
 const SERVICE_VERSION = `0.0.0`;

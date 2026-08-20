@@ -10,7 +10,7 @@ import { createLog } from "./log.js";
 /* The connector gateway shell: a baked extension's autoStart process (contributes.processes). It reconciles the
  * provider connections a connector module opens against the daemon's /listeners/<provider>/state, reports
  * liveness on a status cadence, serves a loopback /health (plus the connector's own control routes when it has
- * a CLI to serve), and dies cleanly on SIGTERM/SIGINT/SIGHUP. The daemon holds no provider connection — the
+ * a CLI to serve), and dies cleanly on SIGTERM/SIGINT/SIGHUP. The daemon holds no provider connection, the
  * gateway process does.
  *
  * This loop existed five times, once per connector, identical except for the provider name and the connect
@@ -22,7 +22,7 @@ import { createLog } from "./log.js";
 const FATAL_RETRY_MS = 300_000;
 const RECONCILE_MS = 30_000;
 const STATUS_MS = 30_000;
-// A wedged close must not hold shutdown hostage — the daemon's stop is `tmux kill-session`.
+// A wedged close must not hold shutdown hostage, the daemon's stop is `tmux kill-session`.
 const SHUTDOWN_TIMEOUT_MS = 3_000;
 
 export interface ConnectorEntry<TConfig> {
@@ -35,7 +35,7 @@ export interface SlotView<THandle> {
     // Whether the gateway should be holding connections at all (an enabled listener automation exists, or the
     // connector opted into connecting regardless).
     readonly holding: boolean;
-    // Whether ANY connection is desired right now (whatsapp's idle predicate — no connector has a phone yet).
+    // Whether ANY connection is desired right now (whatsapp's idle predicate, no connector has a phone yet).
     readonly anyDesired: boolean;
     readonly handle: THandle | undefined;
     readonly connecting: boolean;
@@ -65,7 +65,7 @@ export interface GatewayHooks<TConfig, THandle> {
     // token is not a connection to want). Keyed by capability id for most connectors; discord keys by bot
     // token, which deduplicates two capabilities sharing one bot.
     readonly desired: (connectors: ReadonlyArray<ConnectorEntry<TConfig>>) => ReadonlyArray<readonly [string, TConfig]>;
-    // The connection's identity: a config edit that changes it must reconnect (slack: both tokens — a bot-token
+    // The connection's identity: a config edit that changes it must reconnect (slack: both tokens, a bot-token
     // rotation must reconnect even though the app token is unchanged). Also the fatal-backoff key.
     readonly keyOf: (config: TConfig) => string;
     readonly open: (slotId: string, config: TConfig) => Promise<THandle>;
@@ -84,7 +84,7 @@ export interface GatewayHooks<TConfig, THandle> {
     // Per-gateway extras that ride the status snapshot: discord's voice session + whisper presence, whatsapp's
     // pairing codes.
     readonly statusExtras?: () => Omit<ListenerStatus, "connections">;
-    /* Deliver one outbound message into a provider channel OUTSIDE any live turn stream — the daemon's
+    /* Deliver one outbound message into a provider channel OUTSIDE any live turn stream, the daemon's
      * "speak as the agent" door (POST /deliver, served by the shell). The turn painters above only exist while
      * a dispatch response is held open; a message the OWNER places in a channel conversation between turns has
      * no such stream, so the daemon knocks here instead. `channelId` arrives exactly as the connector's own
@@ -95,8 +95,8 @@ export interface GatewayHooks<TConfig, THandle> {
     // The connector's loopback control surface (discord-voice, the whatsapp CLI). Return undefined for an
     // unmatched route; throwing reports a 500 with the error's message. /health is the shell's.
     readonly routes?: (req: IncomingMessage, body: () => Promise<string>) => Promise<{ status?: number; body: string } | undefined>;
-    // Replaces the default shutdown (close every held connection): discord only stops voice — its clients die
-    // with the process — and connectors with listeners retire their timers here too.
+    // Replaces the default shutdown (close every held connection): discord only stops voice, its clients die
+    // with the process, and connectors with listeners retire their timers here too.
     readonly shutdown?: (wired: ReadonlyMap<string, THandle>) => void | Promise<void>;
 }
 
@@ -113,7 +113,7 @@ export interface GatewaySpec<TConfig extends { readonly provider: string }, THan
     // capability is added, the agent's CLI sends through this socket, and a session left offline for weeks gets
     // unlinked). Everyone else connects only while an enabled listener automation exists.
     readonly connectWithoutAutomations?: boolean;
-    // Status cadence override (whatsapp: 5s — a fresh pairing code must not wait half a minute).
+    // Status cadence override (whatsapp: 5s, a fresh pairing code must not wait half a minute).
     readonly statusMs?: number;
     // Write .intentic/local/runtime/extensions/<provider>/gateway.url so the agent's CLI can find the control surface
     // (the daemon injects nothing provider-specific into the agent's environment).
@@ -192,7 +192,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
         }
         connectors = state.connectors;
         // Hold connections only while an enabled listener automation exists (the state route already filtered
-        // to those); no automations ⇒ release everything — unless the connector opted out of that predicate.
+        // to those); no automations ⇒ release everything, unless the connector opted out of that predicate.
         // hooks.desired runs EVERY tick (not just while holding): connectors keep their side of the world
         // current from it (discord's voice routes read the latest configs), and the shell gates the result.
         holding = spec.connectWithoutAutomations === true || state.automations.length > 0;
@@ -279,7 +279,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
                 if (req.method === "GET" && path === "/health") {
                     return send("ok");
                 }
-                /* "Re-read /state now" — the daemon pokes this the moment a listener automation or a connector
+                /* "Re-read /state now", the daemon pokes this the moment a listener automation or a connector
                  * capability changes. Without it, switching an integration ON left the bot deaf until the poll
                  * below came round: a message sent in that window was never seen at all, which reads as the
                  * integration being broken rather than as it not being up yet. Awaited, so the daemon's call
@@ -290,7 +290,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
                 }
                 /* The daemon's outbound door (see GatewayHooks.deliver): a message placed in a channel
                  * conversation between turns, carried into the channel through the connection this process
-                 * holds. A deliver that fails answers 502 with the provider's BARE sentence — the daemon shows
+                 * holds. A deliver that fails answers 502 with the provider's BARE sentence, the daemon shows
                  * that body to the owner instead of placing the message, so it must read as words, not as the
                  * generic catch's `error:`-prefixed line. */
                 if (req.method === "POST" && path === "/deliver") {

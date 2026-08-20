@@ -7,7 +7,7 @@ import { call } from "../google/request.js";
 
 const API = "https://sheets.googleapis.com/v4/spreadsheets";
 
-/* VALUES IN, VALUES OUT. Everything here is the `values` half of the Sheets API — the grid — and none of it is
+/* VALUES IN, VALUES OUT. Everything here is the `values` half of the Sheets API, the grid, and none of it is
  * the `spreadsheets.batchUpdate` half, which is formatting, charts, conditional rules and frozen panes.
  *
  * `USER_ENTERED` is what writes go in as, not `RAW`: a cell written as `=SUM(A1:A9)` should become the formula
@@ -79,7 +79,7 @@ const tabs: Command = {
     },
 };
 
-/* Sheets has no "the whole thing" range selector — a range is always a tab name, optionally narrowed. So a
+/* Sheets has no "the whole thing" range selector, a range is always a tab name, optionally narrowed. So a
  * `read` with no `--range` asks what the first tab is called and reads that whole, which is what someone who
  * did not name a range meant. */
 const firstTab = async (ctx: CommandContext, id: string): Promise<string> => {

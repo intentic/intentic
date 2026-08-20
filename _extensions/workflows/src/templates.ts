@@ -1,21 +1,21 @@
 import type { IconName } from "@intentic/extension-ui";
 import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
 
-/* "START FROM" — the ready-made workflow, the same idea as the automations recipes and for the same reason:
+/* "START FROM", the ready-made workflow, the same idea as the automations recipes and for the same reason:
  * this is a feature nobody designs well on a blank canvas, because the interesting decisions (where to break
  * the session, what each step must produce, what checks the work) are not obvious until you have seen one.
  *
  * PURE PREFILL. The daemon knows nothing about templates; picking one opens the designer with a real workflow
- * in it, which you then edit and save. Never "create it silently and hope" — a workflow costs money to run and
+ * in it, which you then edit and save. Never "create it silently and hope", a workflow costs money to run and
  * the whole point of the designer is that you look at the graph before you press go.
  *
  * TWO CARDS, AND THE FIRST ONE IS THE FEATURE. There is one thing a workflow does that nothing else in the
  * product can: two DIFFERENT models building the same request at the same time in separate worktrees, and a
- * third session that reads both diffs and writes the version worth keeping. Three steps, no paperwork — by hand
+ * third session that reads both diffs and writes the version worth keeping. Three steps, no paperwork, by hand
  * it is two chats, two branches and a comparison you hold in your head from transcripts you cannot read at once.
  * That is the whole pitch and it must stay readable in one glance at the graph.
  *
- * THE SECOND CARD IS THE SAME RACE WITH THE MACHINERY TURNED ON — a blind scoring pass with a declared JSON
+ * THE SECOND CARD IS THE SAME RACE WITH THE MACHINERY TURNED ON, a blind scoring pass with a declared JSON
  * output, and a merge whose own claim is checked by an independent judge. It exists because those controls are
  * in the designer and something should demonstrate and exercise them end to end. It is deliberately NOT the
  * default: it spends a fourth session and two more model calls before anything lands, and a person clicking
@@ -31,7 +31,7 @@ export interface WorkflowTemplate {
 }
 
 /* What a step is when it says nothing else. Short, because a step is mostly prose now: there are no ceilings to
- * declare, no worktree to opt into, and nothing to budget — a step runs the way any agent session runs.
+ * declare, no worktree to opt into, and nothing to budget, a step runs the way any agent session runs.
  *
  * `goal` and `prompt` are NOT required here any more, and their absence is a design rather than an omission: a
  * step that declares neither is handed what the person typed, verbatim and unwrapped (WorkflowStepSchema). Most
@@ -41,7 +41,7 @@ const step = (id: string, title: string, over: Partial<WorkflowStep> = {}): Work
     title,
     needs: [],
     handoff: `fresh`,
-    // `none`, not `claim`. A `claim` is not a free "tell me what you did" — it is a completion gate that fails
+    // `none`, not `claim`. A `claim` is not a free "tell me what you did", it is a completion gate that fails
     // the step unless it writes a verdict file, and it pulls the whole output contract into the prompt. A step
     // is finished when its turn is finished, and that is what this now says.
     output: { kind: `none` },
@@ -51,37 +51,37 @@ const step = (id: string, title: string, over: Partial<WorkflowStep> = {}): Work
 });
 
 /* THE TWO ATTEMPTS, SHARED BY BOTH TEMPLATES, AND THEY ARE WHERE EITHER RUN STARTS. Your request reaches both
- * of them directly, at the same moment, as the first thing either session is told — which is what makes this
+ * of them directly, at the same moment, as the first thing either session is told, which is what makes this
  * feel like starting one agent rather than commissioning a project. This used to open with a step that turned
  * the request into a brief for them, and that was a preamble sold as rigour: it spent a session and a minute
  * before any code was written, and it inserted one model's reading of the task between you and both attempts,
  * which is precisely the variable this design exists to hold still.
  *
  * NEITHER DECLARES A GOAL OR A PROMPT, and that is the second half of the same argument. What they used to
- * declare was a paraphrase of "build what was asked" wrapped in five headings about the workflow — one model's
+ * declare was a paraphrase of "build what was asked" wrapped in five headings about the workflow, one model's
  * reading of the task, re-inserted one layer down after being evicted from the step above. A step with neither
  * is handed YOUR sentence, unwrapped, and is measured against it (workflow-brief.ts). The operational facts
- * that prose used to carry — an isolated branch of your own whose commits the daemon records — are enforced by
+ * that prose used to carry, an isolated branch of your own whose commits the daemon records, are enforced by
  * the scheduler, so no design has to spend prompt space restating them.
  *
  * NOR DOES EITHER DECLARE AN OUTPUT OR A CHECK. A declared output is a COMPLETION GATE: the step fails unless
  * it writes a valid document, so an attempt that built the thing correctly and then described it in the wrong
- * shape is a FAILED step that takes everything downstream with it. And nothing read those fields anyway — the
+ * shape is a FAILED step that takes everything downstream with it. And nothing read those fields anyway, the
  * merge is told to read the diffs, "not the summaries of them", and is handed both branch names to do it with.
  *
- * Same words, same (empty) contract, different model, and neither is told the other exists — a session that
+ * Same words, same (empty) contract, different model, and neither is told the other exists, a session that
  * knows it is being raced writes for the judge, and what you wanted to measure was how it writes code. Each
  * gets its own worktree from the same immutable, per-repository run snapshot and its own branches, which is
  * what everything downstream actually reads.
  *
  * THE MODEL IS PINNED HERE AND IS THE ONLY DIFFERENCE BETWEEN THEM. Change either one in the designer
- * (Advanced ▸ Runs on) — Grok against Claude, or the same provider twice on two different models — and the rest
+ * (Advanced ▸ Runs on). Grok against Claude, or the same provider twice on two different models, and the rest
  * of the graph runs unchanged. The model VERSION is left unset on purpose: each provider's own default is the
  * one your subscription actually serves, and a pinned id here would go stale and refuse to run.
  *
  * THE TITLES ARE NEUTRAL BECAUSE TITLES TRAVEL. Every downstream step is handed its predecessors under
  * `### From "<title>"`, so "Claude's attempt" would tell the session judging the diffs which family wrote which
- * — the one thing this comparison cannot afford to leak. The pins stay visible to the owner on the graph. */
+ *, the one thing this comparison cannot afford to leak. The pins stay visible to the owner on the graph. */
 const attempts = (): WorkflowStep[] => [step(`attempt-a`, `Attempt A`, { agent: `claude` }), step(`attempt-b`, `Attempt B`, { agent: `codex` })];
 
 // How the merge reads and writes, in both templates: start from the stronger branch rather than retyping it,
@@ -109,17 +109,17 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
             maxParallel: 2,
             steps: [
                 ...attempts(),
-                /* THE SYNTHESIS — one step, and it both reads and writes. There is no scoring pass in front of
+                /* THE SYNTHESIS, one step, and it both reads and writes. There is no scoring pass in front of
                  * it, and that is the design rather than an omission: a separate session that reads both diffs
                  * and grades them spends a fourth model on producing an opinion this step is then told to
                  * verify against the code anyway. Reading the two diffs IS the comparison, and the session
                  * doing the merge is the one that has to be convinced.
                  *
-                 * FRESH, so it wrote neither attempt and has no stake in either — the same reason a reviewer is
+                 * FRESH, so it wrote neither attempt and has no stake in either, the same reason a reviewer is
                  * a different session, and what makes this merge worth more than asking either author which one
                  * won. It is handed both BRANCH NAMES (the run supplies those), so `git diff <base>...<branch>`
                  * is the whole of its reading, and its own worktree is a clean checkout that is neither attempt
-                 * — exactly the tree a merge of the two wants to start from. What comes out is a third branch,
+                 *, exactly the tree a merge of the two wants to start from. What comes out is a third branch,
                  * and that is the one you land.
                  *
                  * UNPINNED, so it runs on whatever you normally use. If you have a third provider connected,
@@ -149,7 +149,7 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
             steps: [
                 ...attempts(),
                 /* THE SCORING PASS, which is what this second card exists to show. It is a declared JSON output
-                 * — six required fields — so what reaches the merge is evidence in a fixed shape rather than
+                 *, six required fields, so what reaches the merge is evidence in a fixed shape rather than
                  * another essay, and it is pinned to a THIRD provider so neither family grades its own work.
                  * The cost is honest and is the reason this is not the default: a whole session, a full read of
                  * both diffs, and a completion gate that fails the step if the document comes out malformed. */
@@ -206,7 +206,7 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                 }),
                 /* THE CHECKED SYNTHESIS. Same merge as the simple card, plus the two things this card is here
                  * to demonstrate: it is handed the structured score as evidence (explicitly not as authority),
-                 * and its own claim cannot end the step — a tool-less judge reads the report and sends it back
+                 * and its own claim cannot end the step, a tool-less judge reads the report and sends it back
                  * unless the verification is named and run. A fixed shell command would guess a stranger's build
                  * system, so the verification is discovered by the worker and evidenced to the judge instead. */
                 step(`synthesise`, `Take the best of both`, {
@@ -232,14 +232,14 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
         },
     },
     /* THE THIRD CARD IS A DIFFERENT PROPOSITION FROM THE FIRST TWO: not a shape for work you start, but the
-     * intelligent step a CI PIPELINE starts — which is why it ships with a gate already declared and pointed
+     * intelligent step a CI PIPELINE starts, which is why it ships with a gate already declared and pointed
      * at its only step, the intended small case. Deliberately one step: the pitch is the wiring (webhook in,
      * verdict out), and a reader who wants a security review or an acceptance sweep behind the same door adds
      * steps to this graph without touching the gate.
      *
      * ITS ROOT HAS A PROMPT, unlike every other root in the gallery, and that is the difference in caller: the
      * other templates are handed a person's request, which IS the task; a gate is handed whatever a pipeline
-     * managed to interpolate — a sha, a branch, a URL — which is context that only becomes a task once the
+     * managed to interpolate, a sha, a branch, a URL, which is context that only becomes a task once the
      * step says what to do with it. */
     {
         icon: `shield`,

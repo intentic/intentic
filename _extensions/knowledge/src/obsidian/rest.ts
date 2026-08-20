@@ -11,13 +11,13 @@
  *    machine hosting it. The card's default says so, because "localhost" is the answer everybody tries first
  *    and it fails with a connection refused that names nothing.
  * 2. THE CERTIFICATE IS SELF-SIGNED, always. The plugin mints its own CA on first run and serves https on
- *    27124 with it, so certificate verification cannot succeed unless the owner installs that CA — which is a
+ *    27124 with it, so certificate verification cannot succeed unless the owner installs that CA, which is a
  *    step nobody takes to reach their own laptop. Verification is therefore switched off for https, and only
  *    for the https case, in a process whose entire life is talking to that one address. Said out loud here
  *    rather than buried, because "TLS off" deserves to be a sentence somebody can disagree with.
  *
  * The note bodies cross as PLAIN MARKDOWN (the plugin can return parsed JSON instead; it is not asked to), so
- * the knowledge base's own parser is what reads a vault note — one reader, one link resolver, one idea of what
+ * the knowledge base's own parser is what reads a vault note, one reader, one link resolver, one idea of what
  * a note says, whether the file sits in the workspace or in the owner's vault. */
 
 import type { VaultConnection } from "./connection.js";
@@ -32,7 +32,7 @@ export const isVaultError = <T>(value: T | VaultError): value is VaultError =>
     typeof value === "object" && value !== null && "error" in (value as Record<string, unknown>);
 
 /* Certificate verification, off for https and nothing else. Node reads this at connection time and offers no
- * per-request override without reaching for undici internals the self-contained CLI bundle cannot import — so
+ * per-request override without reaching for undici internals the self-contained CLI bundle cannot import, so
  * it is a process-level switch, flipped once, by a process that dials one host. */
 export const relaxTlsFor = (url: string, env: Record<string, string | undefined>): void => {
     if (url.toLowerCase().startsWith("https://")) {
@@ -40,7 +40,7 @@ export const relaxTlsFor = (url: string, env: Record<string, string | undefined>
     }
 };
 
-// Each path segment encoded, the slashes left alone — a note called "Q&A/2026.md" is a real path with a real
+// Each path segment encoded, the slashes left alone, a note called "Q&A/2026.md" is a real path with a real
 // separator, and encodeURIComponent over the whole thing would turn it into one filename with a slash in it.
 export const encodeVaultPath = (path: string): string =>
     path
@@ -75,8 +75,8 @@ const describe = (status: number, path: string): string => {
     }
 };
 
-/* Every call goes through here, so the four things that are true of all of them — the bearer header, the
- * self-signed certificate, an unreachable Obsidian, a non-2xx answer — are handled once and phrased once.
+/* Every call goes through here, so the four things that are true of all of them, the bearer header, the
+ * self-signed certificate, an unreachable Obsidian, a non-2xx answer, are handled once and phrased once.
  *
  * A DEAD CONNECTION IS THE COMMON FAILURE, not a rare one: the owner closed Obsidian, or never turned the
  * plugin on. That is the message worth spending words on, because it is the one the reader can act on and the
@@ -157,7 +157,7 @@ export const vaultDelete = async (vault: VaultConnection, file: string): Promise
     return isVaultError(result) ? result : undefined;
 };
 
-// Bring a note to the front in the owner's own window — the one verb here that is for the PERSON rather than
+// Bring a note to the front in the owner's own window, the one verb here that is for the PERSON rather than
 // for the agent, and the reason the agent can say "look at this" instead of "open the file called…".
 export const vaultOpen = async (vault: VaultConnection, file: string): Promise<undefined | VaultError> => {
     const result = await vaultCall(vault, { method: "POST", path: `/open/${encodeVaultPath(file)}` });
@@ -182,7 +182,7 @@ export const vaultSearch = async (vault: VaultConnection, query: string, context
 };
 
 /* Every markdown file in the vault, walked. The plugin lists one directory per call, so this is a breadth-first
- * walk rather than one request — and it skips the directories a vault keeps that hold no notes, the same set
+ * walk rather than one request, and it skips the directories a vault keeps that hold no notes, the same set
  * the workspace-side reader skips, so "what is in the vault" means the same thing on both sides. */
 const SKIP_DIRS = new Set([".obsidian", ".trash", ".git"]);
 

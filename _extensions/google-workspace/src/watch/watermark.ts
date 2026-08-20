@@ -5,12 +5,12 @@ import { runtimeDir } from "../google/paths.js";
 /* HOW FAR THE WATCHER HAS READ, kept on disk per connection.
  *
  * This file is the whole correctness story of watching. Without it, a restarted gateway either replays the
- * inbox — waking an agent run for every message it has already handled — or silently skips whatever arrived
+ * inbox, waking an agent run for every message it has already handled, or silently skips whatever arrived
  * while it was down. Neither is a thing anyone can be asked to tolerate on their own mail, and the difference
  * between them is one small JSON file.
  *
  * A missing or unreadable file re-baselines: it dispatches nothing and starts watching from now. That is the
- * only safe reading of "I don't know where I was" — the alternative is a flood, and a flood is worse than a
+ * only safe reading of "I don't know where I was", the alternative is a flood, and a flood is worse than a
  * gap the owner can see. */
 
 export interface Watermark {
@@ -47,7 +47,7 @@ export const writeWatermark = async (path: string, mark: Watermark): Promise<voi
 };
 
 /* Announced events are forgotten once their start is well behind the window that could still surface them.
- * Unpruned, this map is the only thing in the watcher that grows without bound — a year of meetings in a file
+ * Unpruned, this map is the only thing in the watcher that grows without bound, a year of meetings in a file
  * re-read every five minutes. */
 export const pruneAnnounced = (announced: Readonly<Record<string, string>>, now: number, keepMs: number): Record<string, string> =>
     Object.fromEntries(Object.entries(announced).filter(([, start]) => now - new Date(start).getTime() < keepMs));

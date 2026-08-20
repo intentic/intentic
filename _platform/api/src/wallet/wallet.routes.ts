@@ -6,28 +6,28 @@ import { z } from "zod";
 import type { Config } from "../config.js";
 import { type CustodyGateway, custodyGateway, type TypedData, walletEnabled } from "./wallet-custody.js";
 
-/* THE WALLET SIGNER — the platform's two sandbox-facing routes, and the place where "the agent cannot spend
+/* THE WALLET SIGNER, the platform's two sandbox-facing routes, and the place where "the agent cannot spend
  * what its owner didn't release" stops being a policy and becomes arithmetic somebody else's process does.
  *
  * A sandbox reaches these with its connect token (the pool routes' ownerOf pattern), which names WHOSE
- * wallet signs. It sends a fully-specified transfer authorization — recipient, exact amount, validity
- * window, nonce — and gets back one EIP-712 signature or a refusal. It never sends "please pay this URL"
+ * wallet signs. It sends a fully-specified transfer authorization, recipient, exact amount, validity
+ * window, nonce, and gets back one EIP-712 signature or a refusal. It never sends "please pay this URL"
  * and it never receives key material: the key is held by a custody provider (wallet-custody.ts), and the
  * platform's own credential for it never leaves this process.
  *
  * THE CAPS ARE RE-CHECKED HERE, and that is the whole point of the route existing rather than the daemon
- * signing for itself. The sandbox checks policy too — that check is the UX, so a refusal reads well and
- * costs no round trip — but the container is not a trust boundary (its agent and its daemon are one root
+ * signing for itself. The sandbox checks policy too, that check is the UX, so a refusal reads well and
+ * costs no round trip, but the container is not a trust boundary (its agent and its daemon are one root
  * process tree), so the number that actually binds is this one, computed from THIS database's own payment
  * rows. A compromised sandbox can at worst spend what its owner already delegated on the capability card.
  *
  * The row is written BEFORE the signature is returned, inside the same transaction that reads the day's
  * total, so two concurrent requests cannot both fit under one remaining cap. An authorization that is never
- * settled therefore counts against the day — the conservative direction, and it self-corrects tomorrow.
+ * settled therefore counts against the day, the conservative direction, and it self-corrects tomorrow.
  *
  * Everything 404s when no custody provider is configured, the pool's pattern verbatim. */
 
-// USDC's six decimals, as bigint atomic units. Money arithmetic never touches a float here — the sandbox's
+// USDC's six decimals, as bigint atomic units. Money arithmetic never touches a float here, the sandbox's
 // x402 module makes the same promise on its side, and the two agree because both go through these.
 const ATOMIC_PER_USD = 1_000_000n;
 const USD_RE = /^\d+(\.\d{1,6})?$/;
@@ -43,7 +43,7 @@ const atomicToUsd = (atomic: bigint): string => {
     return fraction === `` ? `${whole}.00` : `${whole}.${fraction.padEnd(2, `0`)}`;
 };
 
-// The chains this signer will mint for, and the token it will mint for on each — the compliance surface as
+// The chains this signer will mint for, and the token it will mint for on each, the compliance surface as
 // a lookup: USDC only, `exact` scheme only, so every signature is a fixed-amount transfer of a
 // dollar-pegged token the owner's caps are honestly written in.
 const NETWORKS: Record<string, { readonly chainId: number; readonly asset: string }> = {
@@ -77,7 +77,7 @@ const SignSchema = z.object({
 
 // The authorization's own validity window, bounded here as well as at the daemon: a signature is a bearer
 // instrument until it expires, and one good for an hour is a different object from one good for five
-// minutes. Anything longer is refused rather than trimmed — silently signing something other than what was
+// minutes. Anything longer is refused rather than trimmed, silently signing something other than what was
 // asked for is worse than saying no.
 const MAX_VALIDITY_S = 600;
 
@@ -86,7 +86,7 @@ const utcDay = (at: Date): string => at.toISOString().slice(0, 10);
 export interface WalletDeps {
     readonly config: Config;
     readonly prisma: PrismaClient;
-    // Injectable so tests drive ensure/sign without a custody provider — the pool's gateway pattern.
+    // Injectable so tests drive ensure/sign without a custody provider, the pool's gateway pattern.
     readonly custody?: CustodyGateway;
     readonly now?: () => Date;
 }
@@ -107,7 +107,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
     };
 
     /* Create-or-return this member's wallet, and mirror the capability card's caps onto it. Called by the
-     * wallet capability's apply — so editing the card is what re-states the numbers this signer enforces,
+     * wallet capability's apply, so editing the card is what re-states the numbers this signer enforces,
      * and the two can never drift into disagreeing about what the owner set. */
     app.post(`/ensure`, async (c) => {
         if (!walletEnabled(config)) {
@@ -175,7 +175,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
         if (known === undefined) {
             return c.json({ error: `this platform signs USDC on ${Object.keys(NETWORKS).join(`, `)} only` }, 400);
         }
-        // USDC-only, enforced against this table rather than against the token the caller named — a
+        // USDC-only, enforced against this table rather than against the token the caller named, a
         // signature over some other contract's typed data is exactly what a compromised sandbox would ask
         // for, and it is the one thing no cap would catch.
         if (asset.toLowerCase() !== known.asset.toLowerCase()) {
@@ -235,7 +235,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
             return c.json({ error: error instanceof Error ? error.message : `the daily cap check failed` }, 403);
         }
 
-        /* The typed data itself — EIP-3009's TransferWithAuthorization, in the token's own EIP-712 domain.
+        /* The typed data itself. EIP-3009's TransferWithAuthorization, in the token's own EIP-712 domain.
          * `name`/`version` ride from the endpoint's challenge (relayed by the sandbox) because the domain
          * must match what the token contract hashes, and the server publishing the price knows its token;
          * `chainId`/`verifyingContract` come from THIS table, so a challenge cannot redirect the signature

@@ -1,5 +1,5 @@
 // Low-level SSE framing for the daemon's streamed routes (oRPC eventIterator over HTTP): frames separated by
-// a blank line, each carrying one `data: <JSON>` line. Protocol-only (no domain shapes) — shared by every
+// a blank line, each carrying one `data: <JSON>` line. Protocol-only (no domain shapes), shared by every
 // consumer of the wire: the web's chat/intentic streams and the ACP bridge's daemon client.
 
 // Yields each raw SSE frame (the text between blank-line separators) as it arrives, reassembling frames split

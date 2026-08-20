@@ -3,7 +3,7 @@ import { createPrivateKey, createSign } from "node:crypto";
 import { connect, constants } from "node:http2";
 import type { Config } from "../config.js";
 
-/* The APNs forwarder — the one place in the platform that speaks Apple. Everything above it (the routes)
+/* The APNs forwarder, the one place in the platform that speaks Apple. Everything above it (the routes)
  * deals in the daemon's own notification shape and three verdicts; everything below this file is Apple's
  * HTTP/2 surface and stays here.
  *
@@ -11,13 +11,13 @@ import type { Config } from "../config.js";
  *   delivered  APNs took it.
  *   dead       APNs said the DEVICE can never be reached again (uninstalled, token rotated). The caller
  *              deletes the row and answers the daemon with a dead code.
- *   transient  everything else — including Apple refusing OUR credential. A misconfigured key must read as
+ *   transient  everything else, including Apple refusing OUR credential. A misconfigured key must read as
  *              "the relay is down", never as "prune every iPhone", which is what conflating these would do. */
 
 export type ApnsVerdict = "delivered" | "dead" | "transient";
 
 export interface ApnsForwarder {
-    // False when no APNs key is configured — the relay's routes 404, matching the platform's other
+    // False when no APNs key is configured, the relay's routes 404, matching the platform's other
     // credential-switched lanes (hosted, pool, wallet).
     readonly enabled: boolean;
     readonly send: (token: string, notification: PushNotification) => Promise<ApnsVerdict>;
@@ -27,22 +27,22 @@ export interface ApnsForwarder {
 // frequent. 50 minutes leaves margin on both edges.
 const JWT_LIFETIME_MS = 50 * 60_000;
 
-// A send must never hold a daemon's fan-out longer than the daemon's own relay timeout (10s) — after that the
+// A send must never hold a daemon's fan-out longer than the daemon's own relay timeout (10s), after that the
 // daemon has already logged a transient and moved on, and the answer is wasted breath.
 const REQUEST_TIMEOUT_MS = 8_000;
 
-// The reasons Apple gives for "this token will never work again". Everything else it says about a request —
-// bad payload, bad credential, throttling — is our problem or a passing one, not the device's.
+// The reasons Apple gives for "this token will never work again". Everything else it says about a request,
+// bad payload, bad credential, throttling, is our problem or a passing one, not the device's.
 const DEAD_REASONS = new Set(["BadDeviceToken", "Unregistered", "DeviceTokenNotForTopic"]);
 
-// Env vars often carry the .p8 with literal "\n" — normalize so both paste styles load.
+// Env vars often carry the .p8 with literal "\n", normalize so both paste styles load.
 const pem = (raw: string): string => raw.replace(/\\n/g, "\n");
 
 const base64url = (data: string): string => Buffer.from(data).toString("base64url");
 
 /* The provider token, signed with node:crypto rather than a JWT library: Apple's is the simplest possible JWT
  * (two claims, one header), and `dsaEncoding: "ieee-p1363"` gives exactly the raw r‖s signature JOSE requires
- * — the one detail that usually justifies pulling a dependency in. */
+ *, the one detail that usually justifies pulling a dependency in. */
 const signProviderToken = (keyPem: string, keyId: string, teamId: string): string => {
     const header = base64url(JSON.stringify({ alg: "ES256", kid: keyId, typ: "JWT" }));
     const payload = base64url(JSON.stringify({ iss: teamId, iat: Math.floor(Date.now() / 1000) }));
@@ -124,7 +124,7 @@ export const createApnsForwarder = (config: Config): ApnsForwarder => {
          * becomes both the collapse id (a second "waiting on you" for the same conversation REPLACES the
          * first, exactly as it does in the service worker) and the thread id (the same conversations group in
          * notification center). `url` rides in custom data for the shell's tap handler; `requireInteraction`
-         * has no APNs equivalent — iOS notifications persist in notification center regardless. */
+         * has no APNs equivalent, iOS notifications persist in notification center regardless. */
         const body = JSON.stringify({
             aps: {
                 alert: { title: notification.title, body: notification.body },

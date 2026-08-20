@@ -1,11 +1,11 @@
-/* WHOSE DRAG IS THIS, AND WHAT IS IT OFFERING — the one question every drop target in the workspace has to
+/* WHOSE DRAG IS THIS, AND WHAT IS IT OFFERING, the one question every drop target in the workspace has to
  * answer the same way, which is why it lives here rather than in whichever surface asked it first.
  *
  * A browser makes every <img> (and every link) a drag source, and Chromium types an in-page image drag as
- * `Files` — the same shape a file dragged off the desktop has. So grabbing the previewed image to move it used
+ * `Files`, the same shape a file dragged off the desktop has. So grabbing the previewed image to move it used
  * to raise "drop files to add to the workspace", and letting go uploaded a copy of the file being LOOKED at
  * into the repo. Nothing already inside the workspace is an upload, however the drag store types it, so a drag
- * that started in this document is declined: dragstart marks it, dragend clears it (drop must NOT — it fires
+ * that started in this document is declined: dragstart marks it, dragend clears it (drop must NOT, it fires
  * first, and the drop handler still needs to know). pointerdown clears it as well, because it always precedes
  * a dragstart, so the mark can't outlive its drag even when the source element is removed mid-gesture (a tree
  * row under a file the agent just deleted) and dragend never arrives.
@@ -22,7 +22,7 @@ const clearDragSource = (): void => {
 };
 
 // What a drag is offering this surface: OS files to upload, tree rows to move, or nothing it can use (an image
-// or a link dragged around inside the app) — in which case the target raises no hint and declines the drop.
+// or a link dragged around inside the app), in which case the target raises no hint and declines the drop.
 export const dragOffer = (event: DragEvent): { files: boolean; rows: boolean } => {
     const types = event.dataTransfer?.types;
     // OS-file drags expose the "Files" type; an internal tree-row move exposes our custom path key instead.

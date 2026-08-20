@@ -4,16 +4,16 @@ import { computed, type Ref } from "vue";
 import { host } from "./host.js";
 import { useRefRefresh } from "./useRefRefresh.js";
 
-/* One repo's commit graph — the daemon's `git log --all` (newest-first, across every ref, so branch topology
+/* One repo's commit graph, the daemon's `git log --all` (newest-first, across every ref, so branch topology
  * shows). The log is the query; per-commit detail (the files a commit touched, then a file's before/after AT
  * the commit) loads lazily on selection. Parameterized by a reactive repo so a caller can swap repos and the
  * query re-keys.
  *
- * The cache key goes through `api.sandbox.key`, which scopes it to the ACTIVE sandbox — a switch must not show
+ * The cache key goes through `api.sandbox.key`, which scopes it to the ACTIVE sandbox, a switch must not show
  * the previous box's history.
  *
  * Every call goes through `api.sandbox.rpc`, the daemon's contract as a typed client. What each verb answers is
- * the contract's declared output — the ref-only verbs (branch, tag) a bare ok, the sequence and HEAD-moving
+ * the contract's declared output, the ref-only verbs (branch, tag) a bare ok, the sequence and HEAD-moving
  * verbs a GitActionResult whose `ok: false` is a clean-apply conflict the dialog reports rather than a throw.
  * That distinction used to be carried by a `parse` argument threaded through a shared `post` helper; it is now
  * simply each procedure's return type. */
@@ -23,7 +23,7 @@ export function useGitLog(repo: Ref<string>) {
     const queryClient = useQueryClient();
 
     /* PAGED. A large repository's log is tens of thousands of commits, and every one of them costs a schema
-     * validation, a wire payload and a lane computation before a single row is drawn — so the graph takes a page
+     * validation, a wire payload and a lane computation before a single row is drawn, so the graph takes a page
      * at a time and asks for the next when the reader reaches the bottom.
      *
      * The page size is the daemon's own default rather than a number chosen here: one page is already more than
@@ -40,7 +40,7 @@ export function useGitLog(repo: Ref<string>) {
         enabled: computed(() => api.sandbox.reachable()),
     });
 
-    // A ref moving in THIS repo — the agent's commit, a land, a rebase in a terminal — makes the log stale
+    // A ref moving in THIS repo, the agent's commit, a land, a rebase in a terminal, makes the log stale
     // with no request here to hang an invalidation on.
     useRefRefresh(repo, [`log`]);
 
@@ -48,7 +48,7 @@ export function useGitLog(repo: Ref<string>) {
     const branch = computed(() => query.data.value?.pages[0]?.branch);
 
     // The changed-files list for a commit (vs its first parent), then one file's diff AT that commit. Both keyed
-    // to the current repo — the caller resolves them when a commit / file is clicked.
+    // to the current repo, the caller resolves them when a commit / file is clicked.
     const commitFiles = (sha: string): Promise<GitCommitDiff> => api.sandbox.rpc.git.commitDiff({ repo: repo.value, sha });
     const commitFileDiff = (sha: string, path: string): Promise<FileDiff> => api.sandbox.rpc.git.commitFileDiff({ repo: repo.value, sha, path });
     // The working tree's counterpart, for row zero. `side` matters: a partially staged file's staged half
@@ -56,7 +56,7 @@ export function useGitLog(repo: Ref<string>) {
     const workingFileDiff = (path: string, side: GitDiffSide): Promise<FileDiff> => api.sandbox.rpc.git.fileDiff({ repo: repo.value, path, side });
 
     /* A write action moves refs and may move HEAD and the worktree with them. This invalidates what THIS
-     * extension owns; every other surface converges on its own — the daemon's watcher pushes the worktree change
+     * extension owns; every other surface converges on its own, the daemon's watcher pushes the worktree change
      * to the app's Changes review and file tree, and its ref push (api.workspace.onDidChangeRefs, wired in
      * extension.ts) brings back anything keyed off the refs. Reaching into the app's cache keys from here is
      * exactly the coupling this extension exists to not have. */

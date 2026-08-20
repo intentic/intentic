@@ -19,7 +19,7 @@ import "./styles.css";
 
 // First: from here on, a startup crash wipes this origin's stored state and reloads once instead of leaving a
 // workspace only "clear site data" can fix (see selfHeal.ts). Then the two ordered steps a previous page may
-// have left for this one: the wipe it marked (awaited — every mirror below must find the deletes done), and
+// have left for this one: the wipe it marked (awaited, every mirror below must find the deletes done), and
 // the build-change drop of mirrors no restore gate covers (buildEpoch.ts).
 installSelfHeal();
 await purgeIfMarked();
@@ -28,7 +28,7 @@ dropOutdatedMirrors();
 initAnalytics();
 
 // Before anything mounts, so the spans of a slow first paint are in the ring buffer too. `__intenticPerf` in
-// the console is the whole interface — see composables/perf.ts.
+// the console is the whole interface, see composables/perf.ts.
 installPerfConsole();
 
 // Inside the native iOS shell only (a no-op everywhere else): the tap that launched the app is queued until a
@@ -41,7 +41,7 @@ installNotificationTaps(router);
 const app = createApp(App);
 // A render/lifecycle error in one component must never white-screen the shell or vanish without a trace: log
 // it with Vue's context (info names the hook, e.g. "render function") so it's diagnosable. The offending
-// subtree stops updating; the rest of the app lives on — unless this is still the startup window, where a
+// subtree stops updating; the rest of the app lives on, unless this is still the startup window, where a
 // render error is how a poisoned hydrated blob first bites, and self-heal turns it into a wipe + one reload.
 app.config.errorHandler = (err, _instance, info) => {
     console.error(`[vue] ${info}:`, err);

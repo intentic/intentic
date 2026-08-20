@@ -7,7 +7,7 @@ import { host } from "./host";
 
 /* THE RAIL BADGE, and the several things it is deliberately NOT.
  *
- * It is not a count of due chores. That number is a STATISTIC — it will be non-zero in every real repository
+ * It is not a count of due chores. That number is a STATISTIC, it will be non-zero in every real repository
  * every day forever, and the extension API is explicit about why that is a bug rather than information: a badge
  * "must mean something happened here that you don't already know about, never here is a statistic", because a
  * tile that is always lit teaches the eye to stop seeing the rail. This surface is the one most at risk of that,
@@ -18,8 +18,8 @@ import { host } from "./host";
  *
  * What it counts is chores whose EVIDENCE HAS CHANGED since the owner last looked at them: a new advisory landed,
  * a package appeared that nothing documents, a file entered the top of the hotspot ranking. That is an event, it
- * is addressed to the person seeing it, and it clears by LOOKING — opening the view acknowledges the evidence
- * currently on screen — rather than by finishing anything. The chores stay due, visibly, inside the panel; the
+ * is addressed to the person seeing it, and it clears by LOOKING, opening the view acknowledges the evidence
+ * currently on screen, rather than by finishing anything. The chores stay due, visibly, inside the panel; the
  * rail simply stops repeating itself.
  *
  * Three filters get us there, and they live in the chore book (unseenVerdicts) rather than here, because the
@@ -37,7 +37,7 @@ import { host } from "./host";
  * tomorrow's. */
 const seen = sandboxLedger(host, `${STATE_DIR}/records/chores/seen.json`);
 
-/* The tile's whole source. Its own timer rather than the view's query — a badge that only updated while you were
+/* The tile's whole source. Its own timer rather than the view's query, a badge that only updated while you were
  * already looking at Maintenance could never tell you anything you did not know, and nothing observes an
  * unmounted view, so neither the file push nor the panel's query can serve it (background.ts).
  *
@@ -63,7 +63,7 @@ export const maintenanceBadge = (): ViewBadge | undefined => {
     if (count === 0) {
         return undefined;
     }
-    /* `warning` only for a risk the owner is CARRYING RIGHT NOW — a live high or critical advisory, a runtime past
+    /* `warning` only for a risk the owner is CARRYING RIGHT NOW, a live high or critical advisory, a runtime past
      * its end-of-life date. Everything else stays `info`, including large and ugly numbers, because "there is a
      * lot of it" is not an emergency and a maintenance tile that reaches for warning routinely spends the one
      * signal that was worth having. `danger` is never used here: nothing in this book is BROKEN. */

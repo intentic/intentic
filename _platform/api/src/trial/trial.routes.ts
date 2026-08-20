@@ -8,38 +8,38 @@ import { createTrialLadder } from "./trial-ladder.js";
 import { createTrialPool, type Fetcher, poolRefused, trialEnabled } from "./trial-pool.js";
 import { recordServedModel, refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usage.js";
 
-/* THE FREE TRIAL, served as a model API — the one place the platform sits ON the command path, and the reason
+/* THE FREE TRIAL, served as a model API, the one place the platform sits ON the command path, and the reason
  * that sentence needed the word "one".
  *
  * Everything else here is identity and a stored URL: the browser drives the sandbox directly, and a platform
  * breach reads an address rather than a conversation. The trial cannot be built that way, because the whole
- * point is that the user has connected NO model account, so the only credential available is intentic's own —
+ * point is that the user has connected NO model account, so the only credential available is intentic's own,
  * and a credential handed to a tenant machine is a credential published. So these turns pass through, the
  * surfaces that offer the trial say exactly that in those words, and connecting any account takes the user off
  * this path for good.
  *
  * Shape: OpenAI-compatible, because that is the wire the sandbox already knows how to adopt (an `endpoint`
  * capability, re-served to the agent by the bundled translator). It buys a trial that needs no new turn path,
- * no new provider and no new adapter — the daemon points its existing endpoint machinery here and everything
+ * no new provider and no new adapter, the daemon points its existing endpoint machinery here and everything
  * downstream, catalog and picker included, works unchanged.
  *
- * Authenticated by the sandbox's connect token — the credential the daemon already holds and already presents
- * to /sandbox/announce — as a bearer, which is where an OpenAI-shaped client puts its API key. It resolves to
+ * Authenticated by the sandbox's connect token, the credential the daemon already holds and already presents
+ * to /sandbox/announce, as a bearer, which is where an OpenAI-shaped client puts its API key. It resolves to
  * the sandbox's OWNER, and the owner is who the allowance belongs to. */
 
-/* THE WHOLE CATALOG — one row, and `display_name` is what the picker renders, so the trial names itself rather
+/* THE WHOLE CATALOG, one row, and `display_name` is what the picker renders, so the trial names itself rather
  * than being labelled again in the client. `owned_by` names the trial rather than Google on purpose: what the
  * user is spending is intentic's allowance, and the surfaces that read this say so in those words. */
 const TRIAL_CATALOG = { object: `list`, data: [{ id: TRIAL_MODEL_ID, object: `model`, owned_by: `intentic-trial`, display_name: TRIAL_LABEL }] };
 
-/* THE MODEL FIELD IS OURS TO SET, not the caller's to choose — which is the whole bargain of a routed trial.
+/* THE MODEL FIELD IS OURS TO SET, not the caller's to choose, which is the whole bargain of a routed trial.
  *
  * The body arrives as text and is streamed to whichever rung of the ladder is being tried, so the id in it has
  * to be replaced per attempt. A body that is not JSON is passed through untouched: it is going to be refused by
  * the upstream either way, and the upstream's own complaint about it is more useful than ours.
  *
  * Whatever the caller put in `model` is discarded rather than honoured. The published catalog has exactly one
- * id, so a caller naming anything else is naming a model this trial does not offer — and one that names a real
+ * id, so a caller naming anything else is naming a model this trial does not offer, and one that names a real
  * Google id is asking to pick their own rung, which is the choice the ladder exists to take away. */
 const withModel = (body: string, model: string | undefined): string => {
     if (model === undefined) {
@@ -65,7 +65,7 @@ export interface TrialDeps {
 }
 
 // The bearer an OpenAI-shaped client sends. Also accepted on `x-intentic-connect`, which is what every other
-// sandbox-authenticated route on this platform uses — the daemon's own status poll speaks that dialect and
+// sandbox-authenticated route on this platform uses, the daemon's own status poll speaks that dialect and
 // should not have to pretend to be a model client.
 const connectToken = (authorization: string | undefined, header: string | undefined): string | undefined => {
     const bearer = authorization?.startsWith(`Bearer `) === true ? authorization.slice(`Bearer `.length).trim() : undefined;
@@ -105,12 +105,12 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
 
     /* THE MODEL LIST IS A CONSTANT NOW, and every hard thing about this route went away with the list.
      *
-     * It used to discover the upstream's catalog, filter it by capability, and publish the survivors — with a
+     * It used to discover the upstream's catalog, filter it by capability, and publish the survivors, with a
      * floor underneath, because Google's `/models` answers a fresh key with an EMPTY list while chat on that same
      * key works. Three failure modes lived in that: a picker with nothing in it, a picker full of rows that
      * cannot answer (the `generateContent` flag is declared by deep-research, gemma, lyria, robotics and
-     * computer-use models that all fail the first message), and — the one that produced the error people
-     * actually reported — a list that MOVED. The sandbox's translator writes its routing table from this
+     * computer-use models that all fail the first message), and, the one that produced the error people
+     * actually reported, a list that MOVED. The sandbox's translator writes its routing table from this
      * catalog at boot and on capability edits while the picker re-reads it every minute, so a model discovered
      * in between was offered and then refused with "unknown provider for model".
      *
@@ -128,7 +128,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
     });
 
     /* One trial message. The allowance is spent BEFORE the upstream call and refunded unless it returns a
-     * successful completion response, because the alternative — bill on success — cannot be made atomic across
+     * successful completion response, because the alternative, bill on success, cannot be made atomic across
      * a streamed response that may fail halfway, and a meter that can be raced is not a meter. */
     app.post(`/v1/chat/completions`, async (c) => {
         if (!trialEnabled(config)) {
@@ -160,7 +160,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
          * A quota window closed on the first rung therefore costs a user one refused request rather than their
          * message, which is the entire reason the picker no longer asks them to choose.
          *
-         * A turn NO rung served is refunded and answered in our own words — including the pool's own quota
+         * A turn NO rung served is refunded and answered in our own words, including the pool's own quota
          * ceiling, which used to ride through as upstream's 429. Two things were wrong with that: the account
          * was billed a message nobody answered, so a "12 left today" that had served eight was simply untrue;
          * and Google's refusal tells the reader to "check your plan and billing details", which belongs to
@@ -189,8 +189,8 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         if (!attempt.response.ok) {
             await refundTrialMessage(prisma, ownerId, at);
         }
-        /* Streamed straight through. The body is upstream's own — SSE frames for a streaming request, JSON for a
-         * plain one — and re-encoding it here would mean owning a wire format that is not ours and re-shipping
+        /* Streamed straight through. The body is upstream's own. SSE frames for a streaming request, JSON for a
+         * plain one, and re-encoding it here would mean owning a wire format that is not ours and re-shipping
          * this service every time it gains a field. The remaining-allowance count deliberately does NOT ride
          * along in it: the daemon reads that from /status, because a count buried in a stream the translator
          * re-encodes would arrive at the picker mangled or not at all.
@@ -200,7 +200,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
          * directly; the daemon cannot see it, since the translator between us does not forward response headers,
          * which is exactly why the fact is also written to the account's status. */
         /* Not awaited: the upstream's headers are in and the body is about to start flowing, so a database
-         * round trip here is delay on the user's first token — paid for a label. The write is non-throwing and
+         * round trip here is delay on the user's first token, paid for a label. The write is non-throwing and
          * the value is not read until the status poll that follows the turn, which is seconds away. */
         if (attempt.model !== undefined) {
             void recordServedModel(prisma, ownerId, at, attempt.model);

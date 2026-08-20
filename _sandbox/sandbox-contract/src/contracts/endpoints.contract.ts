@@ -2,12 +2,12 @@ import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { CapabilityIdParamSchema, ModelsSchema } from "../schemas.js";
 
-// An `endpoint` capability's picker catalog — the models the configured server itself publishes, read from its
+// An `endpoint` capability's picker catalog, the models the configured server itself publishes, read from its
 // own /v1/models. Every other provider's catalog is one fixed route because there is one of each; endpoints are
 // user-created and unbounded, so the id rides in the path. There is no seed floor and no static list: what a
 // model API serves is knowable only by asking it, and an empty answer is the honest report that we could not.
 
-/* The free trial's remaining allowance, on the endpoints contract because the trial IS an endpoint — the one
+/* The free trial's remaining allowance, on the endpoints contract because the trial IS an endpoint, the one
  * the daemon provisions rather than the user (agent-catalog.ts TRIAL_ENDPOINT_ID). It is a separate read from
  * the catalog above because it answers a different question and changes on a different clock: the model list is
  * a property of the upstream, while this is a property of the ACCOUNT and moves with every message sent.

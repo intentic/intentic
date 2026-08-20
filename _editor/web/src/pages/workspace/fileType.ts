@@ -1,17 +1,17 @@
 import type { ShikiLang } from "@intentic/ui/langs";
 
-/* THE CORE'S ANSWER TO "WHAT IS THIS FILE?" — and deliberately a small one.
+/* THE CORE'S ANSWER TO "WHAT IS THIS FILE?", and deliberately a small one.
  *
  * This module knows about TEXT: is a path source, prose, or opaque bytes, and which Shiki grammar colours it.
- * That is the app's own business — the workspace editor is Monaco plus the edit buffers plus the guarded save,
+ * That is the app's own business, the workspace editor is Monaco plus the edit buffers plus the guarded save,
  * and its language table is read by the chat's Read cards and the search rows too, none of which are viewers.
  *
- * Every OTHER format — a picture, a PDF, a spreadsheet, a recording — is a viewers EXTENSION's business, and
+ * Every OTHER format, a picture, a PDF, a spreadsheet, a recording, is a viewers EXTENSION's business, and
  * this file has no branch for any of them. They land in BINARY_EXTS, meaning "the core has nothing to show
  * for this"; the extension registry then overrides that per open file (see viewers/openFile.ts). Switch the
  * extension off and the honest fallback is exactly what this module already says: bytes, and a download.
  *
- * Pure, and no framework code — unit-testable in isolation. */
+ * Pure, and no framework code, unit-testable in isolation. */
 
 // `big-text` is not resolvable here: text over the editable cap renders windowed and read-only (BigTextView)
 // instead of as a buffer, and that decision needs the size the daemon reports with the first window. Like
@@ -20,7 +20,7 @@ export type TextMode = "code" | "markdown" | "binary" | "empty";
 
 export interface FileResolution {
     readonly mode: TextMode;
-    // Shiki language id, carried by both TEXT modes (`code`, `markdown`) — prose renders through the same editor
+    // Shiki language id, carried by both TEXT modes (`code`, `markdown`), prose renders through the same editor
     // under its Source toggle, so both need a grammar. undefined opens as plaintext (unknown extension, or a file
     // too big to tokenize) and is the only value `binary`/`empty` ever carry.
     readonly lang?: ShikiLang;
@@ -30,20 +30,20 @@ export interface FileResolution {
  *
  * RAW_MAX_BYTES matches the daemon's MAX_RAW_BYTES: /workspace/raw holds the whole answer in memory and 413s
  * above it, so a viewer fed by that route (a picture, a PDF, a .docx) pre-empts the refusal instead of letting
- * it arrive as a broken render. Nothing in THIS module gates on it any more — the cap belongs to the fetch
+ * it arrive as a broken render. Nothing in THIS module gates on it any more, the cap belongs to the fetch
  * kind, not the file type, and only viewers/openFile.ts knows which kind an open file will use. A `url` viewer
  * streams byte ranges off /workspace/media and has no ceiling at all. */
 export const RAW_MAX_BYTES = 25 * 1024 * 1024;
 /* Above this a text file opens READ-ONLY and WINDOWED (BigTextView) instead of as an editable buffer: the
  * editor holds the whole text plus a baseline to diff it against, and a save posts all of it back, none of
- * which a log wants. It is not a refusal — text always opens. Monaco itself is comfortable far above this
+ * which a log wants. It is not a refusal, text always opens. Monaco itself is comfortable far above this
  * (a 120MB, 1M-line model builds in ~150ms); the ceiling is what the daemon will serve in one window. */
 export const TEXT_EDIT_MAX_BYTES = 2_000_000;
 // Above this fetch the text but SKIP Shiki (plain <pre>): the JS-regex engine janks on huge/minified input.
 const HIGHLIGHT_MAX_BYTES = 512_000;
 
 // File extension → Shiki language id. ShikiLang is the grammar table itself (shikiLangs.ts), so an id we ship
-// no grammar for does not compile — it used to render as uncoloured plain text, which looks like a plain file.
+// no grammar for does not compile, it used to render as uncoloured plain text, which looks like a plain file.
 const EXT_LANG: Record<string, ShikiLang> = {
     ts: "typescript",
     mts: "typescript",
@@ -106,7 +106,7 @@ const EXT_LANG: Record<string, ShikiLang> = {
     // SVG is XML, and stays TEXT here on purpose. The viewers extension shows the picture; its Source toggle,
     // its diff, and its fallback when no extension is loaded are all markup in the editor.
     svg: "xml",
-    // Timestamps, levels and paths coloured like a terminal. Only under the highlight cap — the logs that most
+    // Timestamps, levels and paths coloured like a terminal. Only under the highlight cap, the logs that most
     // want it are the ones far too big for a tokenizer, and those open plain in the windowed viewer.
     log: "log",
     mk: "make",
@@ -117,13 +117,13 @@ const EXT_LANG: Record<string, ShikiLang> = {
 
 const MARKDOWN_EXTS = new Set(["md", "markdown", "mdx"]);
 
-/* Extensions the core will never try to read as text — the "no preview, here are the bytes" fallback.
+/* Extensions the core will never try to read as text, the "no preview, here are the bytes" fallback.
  *
  * This list is longer than it used to be because it now also holds the formats a VIEWERS EXTENSION renders:
  * pictures, PDFs, Office documents, audio and video. That is the point, not an omission. The core's answer for
  * a .png is honestly "opaque bytes"; the picture is drawn by an extension that claims the extension at runtime
  * and overrides this (viewers/openFile.ts). Listing them here is what makes switching that extension off
- * degrade to a download instead of to a screenful of mojibake — and what keeps a diff of one showing as bytes
+ * degrade to a download instead of to a screenful of mojibake, and what keeps a diff of one showing as bytes
  * (rendersAsBytes) whether or not any extension happens to be loaded.
  *
  * SVG is NOT here, and never should be: it is XML, it diffs by line, and with no viewers extension loaded the
@@ -201,7 +201,7 @@ const NAME_LANG: Record<string, ShikiLang> = {
     ".editorconfig": "ini",
     ".gitconfig": "ini",
     ".gitmodules": "ini",
-    // Glob-per-line like ignore files — comments and wildcards highlight correctly.
+    // Glob-per-line like ignore files, comments and wildcards highlight correctly.
     ".gitattributes": "gitignore",
     ".prettierrc": "json",
     ".babelrc": "json",
@@ -239,7 +239,7 @@ const langFor = (name: string, ext: string): ShikiLang | undefined => {
     return NAME_LANG[name] ?? EXT_LANG[ext];
 };
 
-// The Shiki lang id for a file PATH — the same extension/filename resolution the workspace code viewer applies
+// The Shiki lang id for a file PATH, the same extension/filename resolution the workspace code viewer applies
 // (langFor: extension table, well-known filenames, and the dockerfile/.env/ignore specials). Exposed so the
 // chat's Read tool cards color file contents from the same source of truth as the /workspace editor. Content-
 // based shebang detection stays out here: it needs the file bytes (see langFromShebang), which a card lacks.
@@ -275,7 +275,7 @@ const basename = (token: string): string => token.slice(token.lastIndexOf("/") +
 
 // The Shiki lang id implied by a `#!…` first line, or undefined when there's no shebang or its interpreter
 // isn't one we ship. Called AFTER the bytes are read (unlike resolveFile), only when the filename resolved no
-// language — so a known extension always wins, matching VSCode's precedence. Handles `#!/bin/bash`,
+// language, so a known extension always wins, matching VSCode's precedence. Handles `#!/bin/bash`,
 // `#!/usr/bin/env bash`, `#!/usr/bin/env -S bash -eu`, and version suffixes (`python3.11` → python). Cheap for
 // the overwhelmingly common no-shebang case: it bails on the first two bytes before scanning anything.
 export const langFromShebang = (content: string): ShikiLang | undefined => {
@@ -306,7 +306,7 @@ export const langFromShebang = (content: string): ShikiLang | undefined => {
 /* The Shiki lang id for a file whose REAL size is now known (the daemon reported it with the first window),
  * and whose bytes are in hand: the extension/filename table, then the shebang the way VSCode does it, and
  * nothing at all above the highlight cap. The one place the tokenizer decision is made once the guesswork is
- * over — resolveFile's `lang` is only a pre-warm hint, made before the read from a size that may be missing. */
+ * over, resolveFile's `lang` is only a pre-warm hint, made before the read from a size that may be missing. */
 export const highlightLangFor = (path: string, size: number, content: string): ShikiLang | undefined => {
     if (size > HIGHLIGHT_MAX_BYTES) {
         return undefined;
@@ -314,7 +314,7 @@ export const highlightLangFor = (path: string, size: number, content: string): S
     return codeLangForPath(path) ?? langFromShebang(content);
 };
 
-// Resolve how to render `path` given its byte size (undefined when unknown — the tree cap, or stat failed; we
+// Resolve how to render `path` given its byte size (undefined when unknown, the tree cap, or stat failed; we
 // then proceed optimistically and let the post-read NUL check / daemon 413 catch the rare bad case).
 export const resolveFile = (path: string, size: number | undefined): FileResolution => {
     const { name, ext } = nameExt(path);
@@ -329,27 +329,27 @@ export const resolveFile = (path: string, size: number | undefined): FileResolut
     if (BINARY_EXTS.has(ext)) {
         // Nothing to download and nothing for a viewer to render: an empty file of any binary format is a
         // statement about the file, not about the format, so it short-circuits before any of them. Text types
-        // do NOT — an empty .ts opens as the blank editable buffer it should be.
+        // do NOT, an empty .ts opens as the blank editable buffer it should be.
         return size === 0 ? { mode: "empty" } : { mode: "binary" };
     }
-    // Code or plain text — including unknown extensions and dotfiles, optimistically treated as text. No size
+    // Code or plain text, including unknown extensions and dotfiles, optimistically treated as text. No size
     // gate here: the SIZE the gate needs is the daemon's, which arrives with the first window (FileViewer), and
     // a resolution made from a tree entry that may be missing is exactly how an unbounded read used to slip
     // through. Text always resolves to text; how much of it opens, and whether it is editable, is decided there.
     return { mode: "code", lang };
 };
 
-// The render modes that are TEXT — the ones a line-by-line diff is the right tool for. (`empty` is unreachable
+// The render modes that are TEXT, the ones a line-by-line diff is the right tool for. (`empty` is unreachable
 // below, which passes no size; the only other mode is `binary`, and bytes is exactly what it means.)
 const TEXT_MODES: ReadonlySet<TextMode> = new Set<TextMode>(["code", "markdown"]);
 
 // Is a DIFF of this path one to show as bytes rather than as text? Two independent answers, and both are
 // needed:
 //   - the daemon read NUL bytes out of a file whose extension told us nothing (`binary` on the response), or
-//   - the path itself says there was never any text here — a .png, a .pdf, a .zip.
+//   - the path itself says there was never any text here, a .png, a .pdf, a .zip.
 // The second is what stops an image from falling into the "too large to diff" message. The daemon flags a side
 // over its 512 KiB text cap as `truncated` BEFORE it ever looks for NUL bytes, so a megabyte screenshot arrives
-// claiming to be an oversized text file. It isn't one, and /diff/raw serves it to 25 MiB — the size that
+// claiming to be an oversized text file. It isn't one, and /diff/raw serves it to 25 MiB, the size that
 // matters for showing a picture, not the size that matters for tokenizing source. `truncated` keeps its
 // meaning for what it actually describes: a genuinely huge TEXT file, which this leaves alone.
 export const rendersAsBytes = (path: string, binary: boolean | undefined): boolean =>

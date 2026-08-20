@@ -4,9 +4,9 @@ import { implement, ORPCError } from "@orpc/server";
 import { memoryContract } from "./contract.js";
 import { deleteMemoryFile, listMemoryFiles, memoryRoot, readMemoryFile, writeMemoryFile } from "./memory-files.js";
 
-/* ext-memory's backend half — the /memory routes that used to be daemon core, now served from the extension's
+/* ext-memory's backend half, the /memory routes that used to be daemon core, now served from the extension's
  * own namespace (/x/intentic.memory, prefix already stripped by the backend host). The extension builds its
- * router from its OWN contract (contract.ts) — the host only ever sees a fetch handler, so what speaks oRPC
+ * router from its OWN contract (contract.ts), the host only ever sees a fetch handler, so what speaks oRPC
  * here is this extension's choice, not the platform's. */
 
 export const activateServer = (api: ExtensionServerApi, _context: ExtensionServerContext): void => {

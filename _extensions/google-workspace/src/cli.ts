@@ -10,7 +10,7 @@ import { driveGroup } from "./services/drive.js";
 import { mailGroup } from "./services/mail.js";
 import { sheetsGroup } from "./services/sheets.js";
 
-/* `gw` — one command for the whole of Google Workspace, reached through bin/gw on the agent's PATH.
+/* `gw`, one command for the whole of Google Workspace, reached through bin/gw on the agent's PATH.
  *
  * The router is thin on purpose. Every decision that could be spread across commands is made once here:
  * which account (there may be several connected, and guessing is not acceptable), whether the account is
@@ -79,7 +79,7 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
         return 0;
     }
 
-    // The account this run acts as, chosen once — resolved lazily so a group's own help and its connectionless
+    // The account this run acts as, chosen once, resolved lazily so a group's own help and its connectionless
     // subcommands still work with nothing connected.
     const chosen = (): Connection => retarget(selectConnection(connections, flag(args, "account")), flag(args, "as"));
 
@@ -118,7 +118,7 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
 
     const connection = chosen();
     /* THE READ-ONLY REFUSAL, in one place. A read-only connection also holds narrower scopes, so Google would
-     * refuse this too — but it would refuse it as an authentication error, which reads like something broken
+     * refuse this too, but it would refuse it as an authentication error, which reads like something broken
      * rather than like the setting the owner chose. */
     if (command.writes === true && connection.access === "read") {
         out(`"${describe(connection)}" is connected read-only, so ${head} ${second} is not available.`);
@@ -130,7 +130,7 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
 };
 
 /* `gw … | head` closes the pipe under us, and node's default for a write to a closed pipe is an unhandled
- * 'error' event — a stack trace where the answer should be. Piping a listing into `head` is a completely
+ * 'error' event, a stack trace where the answer should be. Piping a listing into `head` is a completely
  * ordinary thing to do to this tool, so a broken pipe ends the command quietly instead. */
 let piped = false;
 process.stdout.on("error", (error: NodeJS.ErrnoException) => {

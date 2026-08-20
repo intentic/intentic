@@ -10,7 +10,7 @@ import { sessionUpdateOf } from "./translate.js";
  * AgentEvents into session/update notifications. Control flow the daemon models as side channels maps onto
  * ACP's one interactive primitive, request_permission: a plan frame becomes a "Review plan" tool call with
  * Approve/Keep-planning options (the claude-code-acp ExitPlanMode pattern), an AskUserQuestion frame becomes
- * one permission request per question (multiSelect collapses to a single choice — documented loss). Modes:
+ * one permission request per question (multiSelect collapses to a single choice, documented loss). Modes:
  * [code, plan] map to the daemon's per-turn permissionMode, which is exactly what the web sends too. */
 
 // The daemon constrains conversation ids (branch/filesystem safety); this always satisfies its regex.
@@ -72,7 +72,7 @@ const reviewPlan = async (
         ],
     });
     const approved = response.outcome.outcome === "selected" && response.outcome.optionId === "approve";
-    // Rejection feedback is canned — permission prompts carry no free text (documented loss; the daemon
+    // Rejection feedback is canned, permission prompts carry no free text (documented loss; the daemon
     // loops another planning turn on the same stream).
     // The reply names no posture because there is none to name: an approved plan executes with permissions
     // bypassed, which is exactly what this single-option card can promise.
@@ -165,7 +165,7 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
             protocolVersion: 1,
             agentInfo: { name: "intentic", version: options.version ?? "0.0.0" },
             agentCapabilities: {
-                // Only Claude transcripts are readable from the daemon's session store today — an honest,
+                // Only Claude transcripts are readable from the daemon's session store today, an honest,
                 // provider-conditional capability, not a lie.
                 loadSession: (configured()?.agent ?? "claude") === "claude",
                 promptCapabilities: { image: false, audio: false, embeddedContext: false },
@@ -221,13 +221,13 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                 conversationId: stored.conversationId,
                 cwd: params.cwd,
                 mode: "code",
-                // Resume only on the same provider — a switched INTENTIC_AGENT starts fresh (the daemon would
+                // Resume only on the same provider, a switched INTENTIC_AGENT starts fresh (the daemon would
                 // reject a foreign runtime's session id anyway; this fails cleanly earlier).
                 providerSessionId: stored.agent === config.agent ? stored.providerSessionId : undefined,
                 abort: undefined,
                 cancelled: false,
             });
-            // Replay the transcript (role/text only — tool calls are not persisted in the readable store) as
+            // Replay the transcript (role/text only, tool calls are not persisted in the readable store) as
             // message chunks BEFORE returning, per the spec.
             if (stored.providerSessionId !== undefined && stored.agent === "claude") {
                 const messages = await daemonFor(config)
@@ -259,7 +259,7 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                 return;
             }
             // Soft cancel, browser parity: abort the SSE fetch (the daemon turn may finish server-side; its
-            // idle reaping covers it) — a daemon hard-cancel route is the listed follow-up.
+            // idle reaping covers it), a daemon hard-cancel route is the listed follow-up.
             state.cancelled = true;
             state.abort?.abort();
         })

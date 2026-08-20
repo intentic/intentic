@@ -13,7 +13,7 @@ import { UsageError } from "../cli/args.js";
  * rather than an instant computed here; for the query parameters that must be absolute, the offset is worked
  * out from the zone with Intl. */
 
-// "+02:00" for a zone at a moment — DST included, because Intl knows and arithmetic does not.
+// "+02:00" for a zone at a moment. DST included, because Intl knows and arithmetic does not.
 export const offsetOf = (timeZone: string, at: Date): string => {
     const parts = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" }).formatToParts(at);
     const name = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT+00:00";
@@ -21,7 +21,7 @@ export const offsetOf = (timeZone: string, at: Date): string => {
     return offset === "" ? "+00:00" : offset;
 };
 
-// The calendar date at a moment, in a zone — "today" is a question only a zone can answer.
+// The calendar date at a moment, in a zone, "today" is a question only a zone can answer.
 export const dateIn = (timeZone: string, at: Date): string => new Intl.DateTimeFormat("en-CA", { timeZone }).format(at);
 
 const RELATIVE = /^([+-])(\d+)\s*(m|min|h|hour|hours|d|day|days|w|week|weeks)$/i;
@@ -43,7 +43,7 @@ const NAMED = /^(today|tomorrow|yesterday)(?:\s+(\d{2}:\d{2}(?::\d{2})?))?$/i;
 const ACCEPTED_WHEN =
     "accepted: `now`, `+2h` / `-30m` / `+3d` / `+1w`, `today 14:00`, `tomorrow`, `2026-08-12`, `2026-08-12 14:00`, or a full RFC-3339 timestamp";
 
-// What Google's event start/end object should be. `date` is an all-day event — a bare date means the whole
+// What Google's event start/end object should be. `date` is an all-day event, a bare date means the whole
 // day, which is what someone typing one means.
 export interface EventTime {
     readonly date?: string;
@@ -80,7 +80,7 @@ export const parseWhen = (text: string, now: Date, timeZone: string): EventTime 
     throw new UsageError(`"${text}" is not a time this understands — ${ACCEPTED_WHEN}`);
 };
 
-/* What an event ends at when nobody said: an hour later, or — for an all-day event — the next day, because
+/* What an event ends at when nobody said: an hour later, or, for an all-day event, the next day, because
  * Google's `end.date` is EXCLUSIVE and a start and end on the same date is a zero-length event it rejects.
  *
  * The naive case advances the WALL CLOCK by an hour rather than the instant: 14:00 in Berlin ends at 15:00 in
@@ -103,7 +103,7 @@ export const toInstant = (text: string, now: Date, timeZone: string): string => 
         return parsed.dateTime;
     }
     const naive = parsed.dateTime ?? `${parsed.date}T00:00:00`;
-    // The offset is taken at the naive time read as UTC — within a few hours of the real instant, which is
+    // The offset is taken at the naive time read as UTC, within a few hours of the real instant, which is
     // near enough to pick the right side of a DST boundary except for the hour it moves, and there is no
     // exact answer for that hour anyway.
     return `${naive}${offsetOf(timeZone, new Date(`${naive}Z`))}`;

@@ -1,7 +1,7 @@
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 
-/* The gateway's Slack connections — one Socket Mode socket plus one Web API client per configured app, alive
+/* The gateway's Slack connections, one Socket Mode socket plus one Web API client per configured app, alive
  * only while the daemon says an enabled slack listener automation exists. A module singleton map, like
  * ext-discord's: the reconcile loop and the listener both reach it directly.
  *

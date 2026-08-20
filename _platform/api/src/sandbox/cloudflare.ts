@@ -14,14 +14,14 @@ import { hostSshIdFromToken, portSlotsFromToken, sandboxIdFromToken } from "@int
 import { z } from "zod";
 
 // Request-scoped Cloudflare access for the setup screen's zone picker. The user's API token is used ONLY to
-// list the zones it can see, then dropped with the request — it is never persisted, logged, or stored. The
+// list the zones it can see, then dropped with the request, it is never persisted, logged, or stored. The
 // browser can't call Cloudflare directly (its API returns no CORS headers for a token'd request), so this
 // minimal server-side proxy stands in. Deliberately standalone: the platform must not depend on the sandbox's
-// @intentic/providers — the secret-free architecture keeps platform and sandbox code apart.
+// @intentic/providers, the secret-free architecture keeps platform and sandbox code apart.
 
 const BASE = "https://api.cloudflare.com/client/v4";
 
-// Cloudflare rejected the token — invalid/inactive, or missing the Zone:Read scope. The router maps this to a
+// Cloudflare rejected the token, invalid/inactive, or missing the Zone:Read scope. The router maps this to a
 // user-facing BAD_REQUEST so the setup screen can tell the user to fix the token. Any other failure (network,
 // unexpected response shape) propagates unchanged.
 export class CloudflareTokenError extends Error {}
@@ -40,7 +40,7 @@ class CloudflareApiError extends Error {
 }
 
 // `result` is left unknown so an error envelope (success:false, result:null) surfaces its `errors` rather than
-// failing the result-shape check first — validated as a zone array only after the success check passes.
+// failing the result-shape check first, validated as a zone array only after the success check passes.
 const envelopeSchema = z.object({
     success: z.boolean(),
     errors: z.array(z.object({ code: z.number(), message: z.string() })),
@@ -53,7 +53,7 @@ const zonesResultSchema = z.array(z.object({ name: z.string() }));
 // caller can present "fix your token" rather than a generic failure.
 // The platform keeps a self-contained Cloudflare REST client (zone listing here + tunnel provisioning below)
 // rather than importing @intentic/providers, so the thin platform API never pulls the engine's SSH/Docker deps.
-// The one thing that MUST agree with the CLI/daemon — the tunnel-id digest — is shared via
+// The one thing that MUST agree with the CLI/daemon, the tunnel-id digest, is shared via
 // @intentic/sandbox-contract/tunnel-ids (imported above), so only Cloudflare's own stable GET /zones shape is
 // duplicated, and only that needs keeping in step.
 export const listZoneNames = async (token: string): Promise<string[]> => {
@@ -105,13 +105,13 @@ const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>
         const detail = envelope.errors.map((error) => `${error.code} ${error.message}`).join("; ");
         const codes = envelope.errors.map((error) => error.code);
         /* THE ONE REFUSAL THAT IS THE OPERATOR'S TO FIX, NOT A MYSTERY. Every sandbox costs its zone a couple
-         * of DNS records, and a zone has a cap (a few hundred on the smaller plans) — so a deployment that has
+         * of DNS records, and a zone has a cap (a few hundred on the smaller plans), so a deployment that has
          * created and torn down many sandboxes eventually meets 81045, at which point NOTHING can be set up on
          * it: hosted machines, pasted commands and cloud machines all provision the same tunnel. Left as
          * Cloudflare's own words it reads as an intentic bug ("POST /zones/44823fc.../dns_records failed (HTTP
          * 400): 81045 Record quota exceeded"), and the person who can actually fix it is never told what to do.
          * The reap sweep (retention.ts) reclaims records from disconnected sandboxes, which is the other half
-         * of this and worth naming here — it is the answer for a zone full of test runs. */
+         * of this and worth naming here, it is the answer for a zone full of test runs. */
         if (codes.includes(81045)) {
             throw new CloudflareApiError(
                 `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota). Delete records you no longer need in the Cloudflare dashboard — sandbox-*/ssh-* entries whose sandbox is gone are the usual culprit and the daily reaper removes them once their tunnels disconnect — or move the zone to a plan with a higher limit.`,
@@ -147,7 +147,7 @@ const upsertCname = async (apiToken: string, zoneId: string, hostname: string, c
  *
  * Two records, both under intentic's own zone, both for one sandbox:
  *   • `local-<id>.<zone>` A → 127.0.0.1, UNPROXIED. Proxying would send it to Cloudflare, which is the round
- *     trip this whole path exists to avoid — and Cloudflare will not proxy a loopback origin anyway.
+ *     trip this whole path exists to avoid, and Cloudflare will not proxy a loopback origin anyway.
  *   • `_acme-challenge.local-<id>.<zone>` TXT, published for the length of one ACME order and removed after.
  *
  * The daemon drives its own issuance and holds the key; it relays here for these records ONLY, because on the
@@ -202,7 +202,7 @@ export const setAcmeChallenge = async (apiToken: string, zone: string, recordNam
 };
 
 // Resolve an intentic-owned zone name to its zone id + owning account id (Cloudflare returns the account with
-// each zone). Shared by provisionTunnel and the reaper — the account id is discovered here, never configured.
+// each zone). Shared by provisionTunnel and the reaper, the account id is discovered here, never configured.
 const resolveZone = async (apiToken: string, zone: string): Promise<{ zoneId: string; accountId: string }> => {
     const zones = await cfCall(
         apiToken,
@@ -263,9 +263,9 @@ const provisionTunnel = async (args: {
 // Provision the intentic-owned sandbox tunnel that exposes the sandbox daemon at `sandbox-<id>.<zone>` and the
 // container's sshd at `ssh-<id>.<zone>` (the transport the local Mutagen sync uses). `<id>` is the same stable
 // digest of the connection token the CLI + browser derive, so re-runs reuse the same tunnel/hostnames. Mirrors
-// createSandboxTunnel in the sandbox CLI, but runs on the platform with intentic's token — reimplemented with
+// createSandboxTunnel in the sandbox CLI, but runs on the platform with intentic's token, reimplemented with
 // direct REST here because the platform must not depend on @intentic/providers (see this file's header). No
-// preview wildcard — on the SHARED intentic zone a single `*.<zone>` record can't be per-user; instead
+// preview wildcard, on the SHARED intentic zone a single `*.<zone>` record can't be per-user; instead
 // ensurePreviewRoute mints a concrete `preview-<panel>-<id>.<zone>` route lazily when a panel starts.
 // Own-Cloudflare users get the wildcard on their own zone (createSandboxTunnel).
 // The 12-char digest of the connect token that names a sandbox's intentic tunnel. Delegates to the SHARED
@@ -277,7 +277,7 @@ const sandboxTunnelId = (connectToken: string): string => {
     return id;
 };
 
-// The in-container origin the sandbox preview proxy listens on — fixed like the daemon's :8787 and sshd's :22.
+// The in-container origin the sandbox preview proxy listens on, fixed like the daemon's :8787 and sshd's :22.
 // On the intentic-provided path the ingress is platform-owned, so a container-side PREVIEW_PORT override is
 // not honored here.
 const PREVIEW_SERVICE = `http://intentic-sandbox-workspace:${PREVIEW_PORT}`;
@@ -299,9 +299,9 @@ export const provisionSandboxTunnel = async (args: {
             { hostname: sshHostname(id, args.zone), service: "ssh://intentic-sandbox-workspace:22", comment: "intentic sandbox ssh tunnel" },
             // The whole port-forward slot pool, warm from provisioning: a port preview's latency is DNS
             // propagation on a freshly minted record, so the records are minted before the sandbox even boots
-            // (the pool provisions them long before a user claims the tunnel). Panels stay lazily minted —
-            // their names aren't known here — but the slot pool is finite and fixed by contract.
-            // Slot labels are derived from the connect token, not the letters a…h — the daemon derives the
+            // (the pool provisions them long before a user claims the tunnel). Panels stay lazily minted,
+            // their names aren't known here, but the slot pool is finite and fixed by contract.
+            // Slot labels are derived from the connect token, not the letters a…h, the daemon derives the
             // identical eight (portSlotsFromToken), so both sides name the same records without coordinating.
             ...portSlotsFromToken(args.connectToken).map((slot) => ({
                 hostname: portHostname(slot, id, args.zone),
@@ -313,7 +313,7 @@ export const provisionSandboxTunnel = async (args: {
     return { hostname, tunnelToken };
 };
 
-// Tear down a sandbox's intentic-owned tunnel + its CNAMEs (sandbox-<id>, ssh-<id>) — the destroy half of
+// Tear down a sandbox's intentic-owned tunnel + its CNAMEs (sandbox-<id>, ssh-<id>), the destroy half of
 // provisionSandboxTunnel, called when the sandbox row is deleted. Only intentic-provided tunnels are ever
 // passed here (the caller guards on the cached tunnelToken); own-Cloudflare tunnels belong to the user.
 // Idempotent: a tunnel already gone (e.g. reaped) just finds nothing to delete.
@@ -338,10 +338,10 @@ const tunnelConfigSchema = z.object({
 });
 
 // Ensure preview routes exist on the sandbox's intentic-owned tunnel for a batch of labels
-// (`preview-<panel>` / `port-<slot>` — see hostnames.ts): a proxied CNAME `<label>-<id>.<zone>` →
+// (`preview-<panel>` / `port-<slot>`, see hostnames.ts): a proxied CNAME `<label>-<id>.<zone>` →
 // <tunnelId>.cfargotunnel.com plus an ingress rule → the preview proxy, per label. Batched deliberately: the
 // daemon's boot sweep ensures every panel label + the whole port-slot pool in ONE call, so a warm re-ensure
-// costs a handful of Cloudflare calls regardless of label count — all missing ingress rules land in a single
+// costs a handful of Cloudflare calls regardless of label count, all missing ingress rules land in a single
 // config PUT, and one list of the CNAMEs already pointing at this tunnel decides which records need creating.
 // Idempotent; the per-hostname upsert repairs a half-failed earlier run. The PUT replaces the whole ingress
 // list (Cloudflare has no append), so the current config is read and merged; the daemon serializes its calls,
@@ -399,8 +399,8 @@ export const ensurePreviewRoutes = async (args: {
 
 // Provision the intentic-owned per-host SSH tunnel that exposes a deploy target's sshd at `ssh-<id>.<zone>`, for
 // sandboxes whose Cloudflare is intentic-provided (the user has no token that could create it). `<id>` digests
-// (connection token + host name) — the EXACT scheme createHostSshTunnel in the sandbox CLI uses on the
-// own-Cloudflare path — so each host gets its own tunnel and re-mints reuse it. The infra operator panel embeds
+// (connection token + host name), the EXACT scheme createHostSshTunnel in the sandbox CLI uses on the
+// own-Cloudflare path, so each host gets its own tunnel and re-mints reuse it. The infra operator panel embeds
 // the returned connector token + hostname in the connect-host one-liner in place of CF_TOKEN.
 export const provisionHostSshTunnel = async (args: {
     apiToken: string;
@@ -419,7 +419,7 @@ export const provisionHostSshTunnel = async (args: {
     return { hostname, tunnelToken };
 };
 
-// Only the platform's own bootstrap tunnels are reaped — engine/demo tunnels (git/deploy/app.<zone>) never
+// Only the platform's own bootstrap tunnels are reaped, engine/demo tunnels (git/deploy/app.<zone>) never
 // match this prefix, so the filter is the reaper's safety boundary.
 const REAPABLE_NAME = /^(sandbox|host-ssh)-/;
 
@@ -435,9 +435,9 @@ const tunnelSchema = z.object({
 
 // Every cfd_tunnel in the account (excluding soft-deleted). The cfd_tunnel list's result_info carries no
 // total_pages (unlike /zones), so paginate by page-size: keep going while a page comes back full, stop on the
-// first short page — the reaper exists precisely for accounts with more tunnels than one page holds.
+// first short page, the reaper exists precisely for accounts with more tunnels than one page holds.
 const PER_PAGE = 50;
-// Defensive cap: cfd_tunnel pagination has no total_pages, so we stop on the first short page — but a `page`-
+// Defensive cap: cfd_tunnel pagination has no total_pages, so we stop on the first short page, but a `page`-
 // ignoring API bug that kept returning full pages would otherwise sweep forever. 200 pages (10k tunnels) is far
 // above any real account; the reaper keeps the true count small.
 const MAX_TUNNEL_PAGES = 200;
@@ -477,7 +477,7 @@ const listTunnels = async (apiToken: string, accountId: string): Promise<z.infer
 };
 
 // Delete the dangling proxied CNAMEs (sandbox-<id>, ssh-<id>, one per port slot, one per preview panel) that
-// point at a reaped tunnel, found by content so we need no record of the hostnames — they all resolve to
+// point at a reaped tunnel, found by content so we need no record of the hostnames, they all resolve to
 // <tunnelId>.cfargotunnel.com. Concurrent: provisioning mints a record per PORT_SLOT, so a sandbox carries a
 // dozen-plus of them and sequencing the deletes made a removal take that many Cloudflare round-trips.
 const deleteTunnelDns = async (apiToken: string, zoneId: string, tunnelId: string): Promise<void> => {
@@ -496,10 +496,10 @@ const deleteTunnelDns = async (apiToken: string, zoneId: string, tunnelId: strin
     );
 };
 
-// Tear down one tunnel by id — the shared destroy primitive for deleteSandboxTunnel and the reaper. Clear the
+// Tear down one tunnel by id, the shared destroy primitive for deleteSandboxTunnel and the reaper. Clear the
 // connector registrations first: a just-stopped cloudflared can leave connections that still block the tunnel
 // delete (1022). Then delete the tunnel and its dangling CNAMEs. A genuinely-live connector re-registers, so
-// the tunnel delete may still 1022 — that propagates: deleteSandboxTunnel's router caller orphans it for the
+// the tunnel delete may still 1022, that propagates: deleteSandboxTunnel's router caller orphans it for the
 // reaper, and the reaper skips it so a later sweep collects it once it is truly down.
 const deleteTunnelById = async (apiToken: string, accountId: string, zoneId: string, tunnelId: string): Promise<void> => {
     await cfCall(apiToken, `/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/connections`, z.unknown(), {
@@ -514,11 +514,11 @@ const deleteTunnelById = async (apiToken: string, accountId: string, zoneId: str
 // Delete intentic-owned sandbox-*/host-ssh-* tunnels that have no live connector and have been idle past the
 // grace period, plus their CNAMEs. A reap candidate is any in-scope tunnel whose status is NOT healthy or
 // degraded (i.e. down, inactive, or null for one that never connected) AND whose last connector activity
-// (conns_active_at, or created_at when it never connected) is older than the cutoff — so a just-minted tunnel
+// (conns_active_at, or created_at when it never connected) is older than the cutoff, so a just-minted tunnel
 // whose connector hasn't started, and a live tunnel briefly down over a reboot (cloudflared runs --restart
 // unless-stopped), are both spared. Each delete is independent: a still-live connector that re-registered
 // between the list and the delete (1022) is skipped for a later sweep, and any other per-tunnel failure is
-// reported via onError and counted — never aborting the run, so one stuck tunnel can't block the rest or
+// reported via onError and counted, never aborting the run, so one stuck tunnel can't block the rest or
 // poison every future sweep. `exclude` names tunnels the caller vouches for: unclaimed,
 // they look exactly like idle orphans (never connected), so the caller passes their names to spare the pool.
 export const reapStaleTunnels = async (args: {
@@ -543,7 +543,7 @@ export const reapStaleTunnels = async (args: {
     let reaped = 0;
     let skipped = 0;
     let failed = 0;
-    // The names actually deleted — retention heals the rows behind them (nulling their cached tunnel columns
+    // The names actually deleted, retention heals the rows behind them (nulling their cached tunnel columns
     // arms the lazy re-provision), so this must report what HAPPENED, never what was merely attempted.
     const reapedNames: string[] = [];
     for (const tunnel of stale) {
@@ -557,7 +557,7 @@ export const reapStaleTunnels = async (args: {
             reaped += 1;
             reapedNames.push(tunnel.name);
         } catch (error) {
-            // A still-live connector re-registered between the list and the delete (1022) — not an orphan yet.
+            // A still-live connector re-registered between the list and the delete (1022), not an orphan yet.
             if (error instanceof CloudflareApiError && error.codes.includes(1022)) {
                 skipped += 1;
                 continue;
@@ -569,21 +569,21 @@ export const reapStaleTunnels = async (args: {
     return { scanned: tunnels.length, reaped, skipped, failed, reapedNames };
 };
 
-/* THE RECORD-LEVEL SWEEP — the tunnel reaper's blind spot, walked from the other side. That reaper starts
+/* THE RECORD-LEVEL SWEEP, the tunnel reaper's blind spot, walked from the other side. That reaper starts
  * from tunnels, so it can only ever delete records whose tunnel it just deleted; three kinds of stale record
  * are invisible to it and accumulate until the zone hits Cloudflare's per-zone cap (81045), at which point
- * NOTHING can be set up on the deployment — every lane provisions the same tunnel:
+ * NOTHING can be set up on the deployment, every lane provisions the same tunnel:
  *
- *   • dangling tunnel CNAMEs — the sandbox-, ssh-, port-slot, preview and public records whose
+ *   • dangling tunnel CNAMEs, the sandbox-, ssh-, port-slot, preview and public records whose
  *     `<tunnelId>.cfargotunnel.com` target no longer exists (a teardown that deleted the tunnel but died
  *     before the records, a quota-interrupted provision, hand-deleted tunnels);
- *   • `local-<id>` A records — the loopback-certificate names point at 127.0.0.1, not at a tunnel, so no
+ *   • `local-<id>` A records, the loopback-certificate names point at 127.0.0.1, not at a tunnel, so no
  *     tunnel teardown has ever cleaned one; every sandbox that used the local path leaked its record forever;
- *   • `_acme-challenge.local-<id>` TXTs — meant to live for one ACME order, left behind by a crashed one.
+ *   • `_acme-challenge.local-<id>` TXTs, meant to live for one ACME order, left behind by a crashed one.
  *
- * The verdicts come from the caller's DB truth (liveSandboxIds — every 12-hex id derivable from the rows'
+ * The verdicts come from the caller's DB truth (liveSandboxIds, every 12-hex id derivable from the rows'
  * token digests) plus the account's live tunnel list, both computed fresh in one sweep. Only name shapes this
- * platform mints are ever touched: anything else in the zone — the apex, mail, a hand-made record — is
+ * platform mints are ever touched: anything else in the zone, the apex, mail, a hand-made record, is
  * invisible to the filter by construction. `total` reports the zone's record count either way, because the
  * operator watching quota pressure needs the number before 81045 says it for them. */
 const RECORD_PAGE = 100;
@@ -618,7 +618,7 @@ export const reapOrphanDnsRecords = async (args: {
         if (!record.name.endsWith(zoneSuffix)) {
             return false;
         }
-        // A CNAME onto a tunnel that no longer exists is dangling whatever it is called — the content match
+        // A CNAME onto a tunnel that no longer exists is dangling whatever it is called, the content match
         // is the ownership proof (only this platform points names at cfargotunnel).
         const tunnelTarget = /^([0-9a-f-]{36})\.cfargotunnel\.com$/.exec(record.content);
         if (record.type === `CNAME` && tunnelTarget !== null) {

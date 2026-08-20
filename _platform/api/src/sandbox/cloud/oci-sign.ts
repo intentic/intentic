@@ -1,7 +1,7 @@
 import { createHash, createPrivateKey, createSign } from "node:crypto";
 import { CloudCredentialError } from "./common.js";
 
-/* OCI request signing (the draft-cavage HTTP Signature scheme Oracle's API mandates) in plain node:crypto —
+/* OCI request signing (the draft-cavage HTTP Signature scheme Oracle's API mandates) in plain node:crypto,
  * ~60 lines against an SDK dependency the platform must not grow (../cloudflare.ts stance). The scheme, per
  * Oracle's "Request Signatures" doc:
  *
@@ -13,7 +13,7 @@ import { CloudCredentialError } from "./common.js";
  *   signature      = base64(RSA-SHA256 over the signing string), carried in an Authorization header:
  *                    Signature version="1",keyId="…",algorithm="rsa-sha256",headers="…",signature="…"
  *
- * The credential is the console's "add API key" config snippet + the key PEM, parsed here — a malformed
+ * The credential is the console's "add API key" config snippet + the key PEM, parsed here, a malformed
  * paste must fail as a named CloudCredentialError at parse time, not as an opaque 401 later. */
 
 export interface OciCredential {
@@ -25,7 +25,7 @@ export interface OciCredential {
 }
 
 // The console snippet is INI-ish: `key=value` lines under an optional [DEFAULT] section, with a key_file
-// line pointing at a path on the user's machine — irrelevant here, the PEM is pasted separately.
+// line pointing at a path on the user's machine, irrelevant here, the PEM is pasted separately.
 export const parseOciConfig = (config: string, privateKeyPem: string): OciCredential => {
     const values = new Map<string, string>();
     for (const line of config.split(`\n`)) {
@@ -62,7 +62,7 @@ export const parseOciConfig = (config: string, privateKeyPem: string): OciCreden
     };
 };
 
-// The exact string that gets signed — its composition is the testable half of the scheme, so it is its own
+// The exact string that gets signed, its composition is the testable half of the scheme, so it is its own
 // export: one wrong space here is a 401 with no further diagnostics from Oracle.
 export const signingString = (headers: readonly (readonly [string, string])[]): string =>
     headers.map(([name, value]) => `${name}: ${value}`).join(`\n`);

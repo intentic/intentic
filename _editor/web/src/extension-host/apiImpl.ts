@@ -36,7 +36,7 @@ import { registerFileBindings } from "./fileBindings";
 import { recordSandboxCall } from "./sandboxUsage";
 
 /* The host's fulfillment of IntenticApi, one instance per activated extension. Every registration is gated on
- * the APPROVED manifest's declarations (views/commands/settings/processes) — the manifest the owner saw at
+ * the APPROVED manifest's declarations (views/commands/settings/processes), the manifest the owner saw at
  * install is the contract; a bundle can't quietly grow surface beyond it. All registrations are tracked on
  * context.subscriptions so deactivation can unwind them. */
 
@@ -47,12 +47,12 @@ export interface HostBindings {
     readonly capabilities: () => readonly CapabilityFacts[];
 }
 
-/* WHAT TO CALL A SELECTION — the one place a (provider, model, account) triple is turned into words for an
+/* WHAT TO CALL A SELECTION, the one place a (provider, model, account) triple is turned into words for an
  * extension, so `pick` and `describe` can never name the same pin two different ways.
  *
  * The account's name is its SIGN-IN IDENTITY where the provider reported one, because that is what the owner
  * recognises: three connections all labelled "Claude" say nothing, and the label is theirs to rename anyway. A
- * pinned id that matches no connected account is left unnamed rather than echoed back — a pin whose credential
+ * pinned id that matches no connected account is left unnamed rather than echoed back, a pin whose credential
  * has been disconnected is exactly what a caller needs to be able to notice. */
 const named = (provider: AgentProvider, model: string, account?: string, harness?: AgentHarness): PickedModel => {
     const connected = account === undefined ? undefined : accountsOf(provider).find((entry) => entry.id === account);
@@ -74,12 +74,12 @@ const named = (provider: AgentProvider, model: string, account?: string, harness
 // createExtensionApi for the same id therefore means the previous activation is being superseded (the dev
 // server hot-reloading the host chain, a reload after install/settings change). Retiring it here is what makes
 // `context.subscriptions` the deactivation path this file's header promises: without it the old activation's
-// views, viewers, commands and settings/workspace/theme watchers all stay live alongside the new ones — a
+// views, viewers, commands and settings/workspace/theme watchers all stay live alongside the new ones, a
 // second copy of every rail icon, and a listener per re-activation firing on stale state.
 const activations = new Map<string, readonly Disposable[]>();
 
 // Retire an extension's live activation. The disposables `track()` collected ARE its whole registration
-// surface — views, viewers, commands, file bindings, and the settings/workspace/theme watchers — so this
+// surface, views, viewers, commands, file bindings, and the settings/workspace/theme watchers, so this
 // unwinds exactly what activate() put in place. Used both to supersede a re-activation and to switch an
 // extension off from the Extensions tab without a page reload.
 export const deactivateExtension = (extensionId: string): void => {
@@ -94,10 +94,10 @@ export const deactivateExtension = (extensionId: string): void => {
  * Not the same thing as the loader's reconcile, which retires whatever is no longer `active` AFTER a load pass
  * has decided what runs. This runs BEFORE one, and it has to: the extensions a sandbox has installed, and which
  * of them its owner left switched on, are that sandbox's answer. Until the new box has been asked, every tile on
- * screen is the previous box's claim — and every timer still running is polling on its behalf. */
+ * screen is the previous box's claim, and every timer still running is polling on its behalf. */
 export const deactivateAllExtensions = (): void => {
-    // Iterating the live keys while `deactivateExtension` deletes from underneath is safe by specification —
-    // a Map iterator visits in insertion order and dropping the entry it is ON skips nothing after it — so
+    // Iterating the live keys while `deactivateExtension` deletes from underneath is safe by specification,
+    // a Map iterator visits in insertion order and dropping the entry it is ON skips nothing after it, so
     // there is no snapshot to take, and each id goes out through the one door that unwinds it.
     for (const extensionId of activations.keys()) {
         deactivateExtension(extensionId);
@@ -125,7 +125,7 @@ export const createExtensionApi = (
     const declaredSettings = contributes?.settings ?? [];
     const declaredProcesses = new Set((contributes?.processes ?? []).map((process) => process.name));
 
-    // The file→view bindings are DECLARATIVE — like settings and processes, there is no runtime register() call
+    // The file→view bindings are DECLARATIVE, like settings and processes, there is no runtime register() call
     // for the extension to make. Registering them here means they go live exactly when the host accepts the
     // extension and unwind with its other subscriptions, so the daemon's change push reaches precisely the
     // extensions that are actually running. See fileBindings.ts.
@@ -149,7 +149,7 @@ export const createExtensionApi = (
     };
 
     // The manifest's declared sandbox-route allowlist gates every door in api.sandbox: an undeclared
-    // method+path throws, so a bundle can only reach the daemon routes the owner approved at install — not the
+    // method+path throws, so a bundle can only reach the daemon routes the owner approved at install, not the
     // whole daemon.
     const sandboxPermissions = summary.manifest.permissions?.sandbox ?? [];
     /* The extension's OWN backend namespace (/x/<its id>/…) passes with no declaration and no usage record:
@@ -168,17 +168,17 @@ export const createExtensionApi = (
             );
         }
         // The gate has just decided which of the declared entries covers this call, and that answer is the only
-        // evidence anywhere about whether a permission is earned. Kept rather than discarded — see sandboxUsage.
+        // evidence anywhere about whether a permission is earned. Kept rather than discarded, see sandboxUsage.
         recordSandboxCall(summary.id, sandboxPermissions, method, path);
     };
 
     /* The same gate for a TYPED call. The contract turns the procedure the extension named into the method and
-     * concrete path it is about to request, and from there this is the check above, verbatim — one allowlist,
+     * concrete path it is about to request, and from there this is the check above, verbatim, one allowlist,
      * one usage record, whichever door the extension used.
      *
      * A procedure this build's contract does not declare is refused rather than waved through. It cannot happen
      * through the typed client (there would be nothing to call), so reaching it means the client was handed a
-     * hand-built path array — which is precisely the case that must not bypass the manifest. */
+     * hand-built path array, which is precisely the case that must not bypass the manifest. */
     const rpc = gatedSandboxRpc((procedure, input) => {
         const request = sandboxRequestFor(procedure, input);
         if (request === undefined) {
@@ -199,9 +199,9 @@ export const createExtensionApi = (
                 if (declared === undefined || declared.surface !== view.surface) {
                     throw new Error(`view "${view.id}" (${view.surface}) is not declared in the manifest's contributes.views`);
                 }
-                // The manifest's label is what the install dialog showed — it wins over the runtime value. So
+                // The manifest's label is what the install dialog showed, it wins over the runtime value. So
                 // does its badge permission: a view the owner never approved to badge simply loses the
-                // function, rather than the registration failing — the view itself was approved and still
+                // function, rather than the registration failing, the view itself was approved and still
                 // works, it just cannot interrupt from the rail.
                 const { badge, ...rest } = view;
                 return track(
@@ -237,7 +237,7 @@ export const createExtensionApi = (
                 if (declared === undefined) {
                     throw new Error(`document provider "${provider.id}" is not declared in the manifest's contributes.documents`);
                 }
-                // The family label is the manifest's, like a view's — it is what the install dialog showed. The
+                // The family label is the manifest's, like a view's, it is what the install dialog showed. The
                 // per-row wording stays with the provider, which is the only thing that knows what it found.
                 return track(
                     registerDocumentProvider({
@@ -249,7 +249,7 @@ export const createExtensionApi = (
                     }),
                 );
             },
-            // Scoped to this extension's OWN providers, and to a path the provider actually has an offer for —
+            // Scoped to this extension's OWN providers, and to a path the provider actually has an offer for,
             // the tab then carries the same title and glyph the tree row would have opened it with, rather than
             // a caller's second guess at them.
             open: (id, path) => {
@@ -267,7 +267,7 @@ export const createExtensionApi = (
                 if (declared === undefined) {
                     throw new Error(`command "${command}" is not declared in the manifest's contributes.commands`);
                 }
-                // Title/icon/keybinding/when all come from the approved manifest, never the runtime call — the
+                // Title/icon/keybinding/when all come from the approved manifest, never the runtime call, the
                 // install dialog is what the user consented to, so the global shortcut is bound only as
                 // declared, and only in the context the declaration named.
                 return track(
@@ -326,7 +326,7 @@ export const createExtensionApi = (
                 const base = useSandbox().daemonUrl.value;
                 return base === undefined || base === `` ? undefined : base;
             },
-            // The same optimistic default useRole makes (`owner` until the platform summary loads — loopback
+            // The same optimistic default useRole makes (`owner` until the platform summary loads, loopback
             // sandboxes never carry one), and for the same reason: this gates affordances, the daemon gates acts.
             role: () => useSandbox().active.value?.role ?? `owner`,
         },
@@ -338,12 +338,12 @@ export const createExtensionApi = (
                 return track({ dispose: () => stop() });
             },
             onDidChangeRefs: (listener) => track(onRefsChanged(listener)),
-            /* Opens the tab, then — on mobile only — navigates to it, because the mobile workspace has no tab
+            /* Opens the tab, then, on mobile only, navigates to it, because the mobile workspace has no tab
              * strip and renders whichever diff `?diff=` names. Same two steps as WorkspaceMobile's own
              * openDiffNav, which is what the app's Changes and History panels go through; an extension must not
              * end up with a diff that exists but is unreachable on a phone. */
             openDiff: (payload) => {
-                // An extension opening a diff is asking for a tab, not for a look — nothing here would know to
+                // An extension opening a diff is asking for a tab, not for a look, nothing here would know to
                 // promote the strip's preview slot afterwards.
                 useWorkspaceTabs().openDiff(payload, `keep`);
                 if (!useDevice().mobile.value) {
@@ -361,7 +361,7 @@ export const createExtensionApi = (
                 guardSandbox(route);
                 try {
                     const answer = WorkspaceFileSchema.parse(await sandboxJson(route));
-                    // Absent is the ordinary first state, not an error — see IntenticApi.workspace.file. The
+                    // Absent is the ordinary first state, not an error, see IntenticApi.workspace.file. The
                     // daemon says so in the body now, so most of what extensions read never reaches the catch.
                     return answer.present ? answer.content : undefined;
                 } catch {
@@ -377,7 +377,7 @@ export const createExtensionApi = (
                 }
                 try {
                     const parsed: unknown = JSON.parse(text);
-                    // Asserted, not validated — same contract as `sandbox.json<T>`: the caller names the shape it
+                    // Asserted, not validated, same contract as `sandbox.json<T>`: the caller names the shape it
                     // expects. What IS checked is that it is a record at all, since a bare array or scalar would
                     // make every property read on it undefined rather than obviously wrong.
                     return typeof parsed === `object` && parsed !== null && !Array.isArray(parsed) ? (parsed as T) : undefined;
@@ -408,7 +408,7 @@ export const createExtensionApi = (
             // Automation runs now carry stable conversation ids. Prefer the unified registry transcript and
             // retain the history-session fallback for extension callers opening an actual provider session.
             // Both roads are a SUMMONS (an extension panel is a surface outside the chat), so the chat showing
-            // the result may be any window's — agents.open broadcasts itself, the fallback broadcasts here.
+            // the result may be any window's, agents.open broadcasts itself, the fallback broadcasts here.
             openSession: (id) =>
                 void (async () => {
                     const agents = useAgents();
@@ -429,14 +429,14 @@ export const createExtensionApi = (
                         });
                     }
                 })(),
-            /* A new chat with the workflow badge already set — `startAgent` is the same call "New agent" makes,
+            /* A new chat with the workflow badge already set, `startAgent` is the same call "New agent" makes,
              * so the user lands in the one session-starting surface this product has, with the composer's
              * caret in it and the design named beside the effort control. Nothing is spent until they send. */
             composeWorkflow: (workflowId) => {
                 startAgent();
                 useChat().active.value.workflowId.value = workflowId;
             },
-            // The loop badge's half of the same handover — a new chat with the loop picked, waiting for the
+            // The loop badge's half of the same handover, a new chat with the loop picked, waiting for the
             // sentence that becomes its goal.
             composeLoop: (loopId) => {
                 startAgent();
@@ -445,7 +445,7 @@ export const createExtensionApi = (
         },
         /* The shell's own model picker, the default it opens on, and what to call a pin already saved. Nothing
          * here is gated on a manifest permission: the extension never learns a credential, never reaches a
-         * provider route, and cannot observe a catalog it wasn't shown — all it gets back is the selection the
+         * provider route, and cannot observe a catalog it wasn't shown, all it gets back is the selection the
          * user pointed at, plus the words for it. An account arrives as its opaque daemon id for the same reason,
          * which is also all the daemon needs to run on it. */
         models: {
@@ -453,7 +453,7 @@ export const createExtensionApi = (
              * the same settings. An extension's Fix button and one the shell draws are the same button, so the
              * day these two disagreed about which model a click spends, one of them would be lying to the user
              * about money. `named` still wraps the answer here because PickedModel carries one field the kit's
-             * structural AgentRunChoice does not — accountLabel, which only this side can look up. */
+             * structural AgentRunChoice does not, accountLabel, which only this side can look up. */
             agentRun: () => {
                 const choice = agentRunChoice();
                 return named(choice.provider as AgentProvider, choice.model);

@@ -8,7 +8,7 @@ import type { PrismaClient } from "@intentic-app/prisma";
 // session user (null when unauthenticated), and the request-scoped logger (correlated by requestId).
 //
 // `auth` and `headers` ride along for the one route that needs Better Auth itself rather than the resolved
-// user — the desktop handoff mints a one-time token FOR THE CALLER'S SESSION, which means handing Better Auth
+// user, the desktop handoff mints a one-time token FOR THE CALLER'S SESSION, which means handing Better Auth
 // the same headers this context was resolved from. `sessionHeaders` carries Better Auth's refreshed cookie
 // back through the oRPC response instead of updating the database while leaving the browser's cookie stale.
 export interface OrpcContext {

@@ -12,9 +12,9 @@ interface FileNode {
 }
 interface DirNode {
     readonly type: "dir";
-    // Display name — a joined chain ("sandbox / src") when folders were compacted.
+    // Display name, a joined chain ("sandbox / src") when folders were compacted.
     readonly name: string;
-    // Full root-relative dir path — the stable key for collapse state.
+    // Full root-relative dir path, the stable key for collapse state.
     readonly path: string;
     readonly children: readonly TreeNode[];
 }

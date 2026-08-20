@@ -11,7 +11,7 @@ import type { PrismaClient } from "@intentic-app/prisma";
 export type Auth = ReturnType<typeof createAuth>;
 
 // The clickwrap version stamped on each account at sign-up (the login page's "By continuing you agree…"
-// notice), sourced from @intentic/constants — the SAME value intentic.dev renders its documents under, so the
+// notice), sourced from @intentic/constants, the SAME value intentic.dev renders its documents under, so the
 // two can't drift (bump it once in @intentic/constants).
 const TERMS_VERSION = LEGAL_VERSION;
 
@@ -60,7 +60,7 @@ export const createAuth = (config: Config, prisma: PrismaClient) =>
                 },
                 // Trust boundary for Better Auth's built-in /update-user endpoint (Settings → profile): the browser
                 // sends { name, image } with image a small data URL, but nothing stops a raw client from PUTting
-                // megabytes — cap what may be persisted. Only fields present in THIS write are checked (an
+                // megabytes, cap what may be persisted. Only fields present in THIS write are checked (an
                 // emailVerified update rides the same hook with neither field).
                 update: {
                     before: async (user) => {
@@ -81,19 +81,19 @@ export const createAuth = (config: Config, prisma: PrismaClient) =>
         /* The one-time token plugin is how a sign-in crosses from the user's real browser into the desktop
          * app's webview (see the DesktopHandoff model). It is the library's own answer to "move this session
          * to another user agent": GET /one-time-token/generate mints one for the caller's session, POST
-         * /one-time-token/verify spends it and answers with the session cookie — so the webview obtains its
+         * /one-time-token/verify spends it and answers with the session cookie, so the webview obtains its
          * cookie through an ordinary HTTP round trip, and nothing hand-rolls a session or forges a cookie.
          * Three minutes by default, which is the right order for a link the app opens the instant it arrives. */
         plugins: [
             oneTimeToken(),
             /* ONE GOOGLE SIGN-IN FOR BOTH SIDES. The redirect flow above proves the user to THIS platform and
-             * leaves the browser holding nothing, so the sandbox — which authenticates the end user against
-             * Google itself, never against us — had to ask for Google a second time. People read that second
+             * leaves the browser holding nothing, so the sandbox, which authenticates the end user against
+             * Google itself, never against us, had to ask for Google a second time. People read that second
              * ask as a bug, and some leave at it.
              *
              * This endpoint takes the Google ID token the BROWSER minted (POST /api/auth/one-tap/callback)
              * and establishes the platform session from it. The browser keeps the same token for its sandbox,
-             * so one Google interaction now settles both. Audience is socialProviders.google.clientId — the
+             * so one Google interaction now settles both. Audience is socialProviders.google.clientId, the
              * same OAuth client the sandbox verifies against, which is what makes one token serve two
              * verifiers (see .env.example: one client, the SPA as origin, the API as redirect URI).
              *
@@ -103,15 +103,15 @@ export const createAuth = (config: Config, prisma: PrismaClient) =>
              * CONSUMER of that credential, never its issuer. The redirect flow stays as the fallback for any
              * browser that cannot mint one. */
             oneTap(),
-            /* THIS PLATFORM AS AN OAUTH AUTHORIZATION SERVER — what lets a piece of software the user installed
+            /* THIS PLATFORM AS AN OAUTH AUTHORIZATION SERVER, what lets a piece of software the user installed
              * (Claude Code, through the `intentic` plugin) act for them without holding a browser cookie, and
              * without a sandbox.
              *
              * Every metered route until now authenticated by a sandbox's connect token, which quietly made
              * "owns a machine" a precondition for buying and spending a membership. It never was one: a
              * membership is an account's, the credit meter is an account's, and the services catalog is the
-             * platform's. This plugin adds the missing principal — a bearer that names a user and nothing else
-             * — and pool.routes.ts `ownerOf` accepts it beside the connect token.
+             * platform's. This plugin adds the missing principal, a bearer that names a user and nothing else
+             *, and pool.routes.ts `ownerOf` accepts it beside the connect token.
              *
              * The plugin serves the whole discovery contract an MCP client expects
              * (/.well-known/oauth-authorization-server, protected-resource metadata, dynamic client
@@ -119,8 +119,8 @@ export const createAuth = (config: Config, prisma: PrismaClient) =>
              *
              * `loginPage` is where an unauthenticated authorize lands. NOT /login: that page's job is to open a
              * workspace, and it ends by pushing into the shell, which a person with no sandbox is bounced out
-             * of. /connect is the same Google sign-in wearing the right sentence — "connect Claude Code to
-             * intentic" — and it hands the browser straight back to the authorize URL it came from. For most
+             * of. /connect is the same Google sign-in wearing the right sentence, "connect Claude Code to
+             * intentic", and it hands the browser straight back to the authorize URL it came from. For most
              * people who arrive this way it is the first intentic screen they ever see. */
             mcp({ loginPage: `${config.webOrigin}/connect` }),
         ],

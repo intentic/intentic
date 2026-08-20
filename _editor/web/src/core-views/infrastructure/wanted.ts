@@ -1,6 +1,6 @@
 import type { Deployment, InventoryEntry, ResourceView } from "@intentic-app/api-contract";
 
-/* The apps the user wants, for the Infra "What you want" list — the union of three sources, keyed by app name:
+/* The apps the user wants, for the Infra "What you want" list, the union of three sources, keyed by app name:
  * declared (the i.want.app inventory entries in deploy.config.ts's managed region), planned (`deployment` nodes
  * in the resolved plan) and live (Komodo deployments). Status is the furthest stage reached: declared → planned
  * → live. Plan/deployment nodes are per-environment ("shop.production"), so they roll up to their app name; a

@@ -24,7 +24,7 @@ export const encryptSecret = (config: Config, value: string): string => {
 };
 
 export const decryptSecret = (config: Config, value: string): string => {
-    // Plaintext rows only exist when SECRETS_KEY is unset (dev) — fresh state, no migration path.
+    // Plaintext rows only exist when SECRETS_KEY is unset (dev), fresh state, no migration path.
     if (!value.startsWith(PREFIX)) {
         return value;
     }

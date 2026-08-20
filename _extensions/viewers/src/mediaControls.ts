@@ -1,4 +1,4 @@
-/* The player's pure parts — the bits of MediaViewer that are a function of a number or a keystroke and have no
+/* The player's pure parts, the bits of MediaViewer that are a function of a number or a keystroke and have no
  * business being inside a component. Unit-testable, and the reason the .vue file is all lifecycle. */
 
 // The playback-rate ladder, shared by the speed menu and the `,`/`.` shortcuts so the two can never disagree
@@ -22,7 +22,7 @@ export const seekTargets: Readonly<Record<string, number>> = {
  * padding, not precision) and keeps the fields aligned within a file, since the total is formatted the same
  * way and sits right beside the elapsed.
  *
- * A stream whose duration the container never declared arrives here as Infinity or NaN — the honest render of
+ * A stream whose duration the container never declared arrives here as Infinity or NaN, the honest render of
  * that is a dash, not "0:00", which would claim the file is empty. */
 const pad = (value: number): string => String(value).padStart(2, `0`);
 

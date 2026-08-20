@@ -2,10 +2,10 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { extensionRuntimeDir, STATE_DIR, WORKSPACE_ROOT } from "@intentic/sandbox-contract";
 
-/* WHERE THIS EXTENSION KEEPS ITS SCRATCH STATE — one hour of cached access token per connection, and the
+/* WHERE THIS EXTENSION KEEPS ITS SCRATCH STATE, one hour of cached access token per connection, and the
  * watcher's resume marks.
  *
- * The watcher is handed `INTENTIC_WORKSPACE` by the daemon; `gw` is not — it is spawned by the agent's shell,
+ * The watcher is handed `INTENTIC_WORKSPACE` by the daemon; `gw` is not, it is spawned by the agent's shell,
  * which only has a cwd. Walking up for the state dir is what makes both land in the same place, including
  * from an isolated turn's worktree, where the constant would be wrong. The constant is the last resort rather
  * than the first, for exactly that reason. */

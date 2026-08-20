@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import { linkEmail, type MailDelivery, sendMail } from "../mail.js";
 
 // The invite mail: an accept link for a sandbox somebody else owns, built from webOrigin. Everything that is
-// not the wording — Resend, the unconfigured-dev fallback, the frame around the words — belongs to mail.ts.
+// not the wording. Resend, the unconfigured-dev fallback, the frame around the words, belongs to mail.ts.
 //
 // The LINK is minted separately (`inviteLink`) because it outlives the mail: it is what the route hands back to
 // the owner, so an invite whose mail was declined or refused is still an invite they can pass on by hand.

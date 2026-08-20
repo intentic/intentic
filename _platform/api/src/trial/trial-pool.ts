@@ -4,7 +4,7 @@ import type { Config } from "../config.js";
 /* THE POOL OF INTENTIC'S OWN MODEL KEYS, and the rule for picking one that will actually answer.
  *
  * A free tier is sized for one developer. That is the whole problem this module exists for: a single Google AI
- * Studio key is a handful of requests a minute and a few thousand a day, which one launch-day thread exhausts —
+ * Studio key is a handful of requests a minute and a few thousand a day, which one launch-day thread exhausts,
  * and the user meets a 429 on the first message of a product they have not decided about yet. So the trial holds
  * several keys and moves to the next when one refuses.
  *
@@ -16,28 +16,28 @@ import type { Config } from "../config.js";
  *
  * THE SECOND DIMENSION IS THE MODEL, and it is what makes the trial's single published id work. A caller hands
  * this pool a LADDER of models (trial-ladder.ts) rather than one, and the walk takes the first rung that
- * answers — so a Flash quota window that has closed costs a user the latency of one refusal rather than their
+ * answers, so a Flash quota window that has closed costs a user the latency of one refusal rather than their
  * message. Quotas are metered per model upstream, so the two dimensions are genuinely independent and the
  * quarantine has to be keyed on both; see `bucket` below for what sidelining a whole key would have cost. */
 
 /* A response worth trying the NEXT key for: a key the upstream rejects (401/403), quota refusals (429), and the
- * upstream's own failures (5xx). Anything else — a malformed request, an unsupported model, a rejected prompt —
+ * upstream's own failures (5xx). Anything else, a malformed request, an unsupported model, a rejected prompt,
  * is about THIS request and would be refused identically by every key in the pool, so it comes back as-is rather
  * than burning the whole pool.
  *
  * Read after the pool has been walked, the same predicate answers a second question the caller needs: whether
- * NOBODY served the message. That is why it is exported — the allowance must not be spent on a turn the pool
+ * NOBODY served the message. That is why it is exported, the allowance must not be spent on a turn the pool
  * refused, and a user meeting intentic's quota ceiling has done nothing to be billed for. */
 export const poolRefused = (status: number): boolean => status === 401 || status === 403 || status === 429 || status >= 500;
 
 /* AN INLINE `#` COMMENT IS NOT PART OF THE VALUE, which the two settings below have to say themselves.
  *
- * TRIAL_MODELS reached a real deployment as the entire line an operator had been handed to paste — value,
- * padding and trailing note — and the picker showed `# optional allowlist; empty = whatever upstream serves`
+ * TRIAL_MODELS reached a real deployment as the entire line an operator had been handed to paste, value,
+ * padding and trailing note, and the picker showed `# optional allowlist; empty = whatever upstream serves`
  * as the name of the trial's only model: a row naming nothing, which no upstream would answer for. The env
  * file format has always meant that text as a comment, and it survives anyway, from both ends. The loader we
  * read `.env` through keeps everything after the `=` (its own document parser, used for editing and codegen,
- * drops the comment — this is the seam between them); and a value arriving through a compose `environment:`
+ * drops the comment, this is the seam between them); and a value arriving through a compose `environment:`
  * block, a Komodo stack or a plain `export` never passes a dotenv parser at all.
  *
  * So it comes off here, at the one place operator text turns into ids and credentials we act on. A value that
@@ -72,8 +72,8 @@ export type Fetcher = typeof fetch;
  *
  * The compatibility shim is OpenAI-shaped and reads an `Authorization: Bearer`. Google's OWN surface beside it
  * does not: handed a bearer it stops looking for an API key at all and answers 401 "Expected OAuth 2 access
- * token", which is the wrong answer to the right credential. Sending both headers does not paper over it — the
- * bearer wins and the 401 stands — so each surface is asked in its own dialect. */
+ * token", which is the wrong answer to the right credential. Sending both headers does not paper over it, the
+ * bearer wins and the 401 stands, so each surface is asked in its own dialect. */
 export type UpstreamAuth = "bearer" | "goog";
 
 const authHeaders = (auth: UpstreamAuth, key: string): Record<string, string> =>
@@ -85,7 +85,7 @@ export interface UpstreamAttempt {
     // describes intentic's pool, which is nobody else's business and is exactly the kind of detail that makes a
     // pool worth probing.
     readonly tried: number;
-    // Which model answered — the one fact about the walk the caller DOES get, because the user is entitled to
+    // Which model answered, the one fact about the walk the caller DOES get, because the user is entitled to
     // know what wrote their message back. Undefined for a request with no model dimension (the catalog reads).
     readonly model?: string;
 }
@@ -100,7 +100,7 @@ export interface TrialCall {
     readonly url?: string;
     readonly auth?: UpstreamAuth;
     readonly observeHealth?: boolean;
-    /* The candidate models, in preference order — each its own quota bucket upstream, and therefore its own
+    /* The candidate models, in preference order, each its own quota bucket upstream, and therefore its own
      * rung of the walk. Omitted (or empty) for a request with no model dimension, which is one attempt set
      * against the keys alone. */
     readonly models?: readonly string[];
@@ -143,7 +143,7 @@ const quarantineMs = (response: Response, now: number): number | undefined => {
     return response.status >= 500 ? FAILURE_QUARANTINE_MS : undefined;
 };
 
-/* WHAT A QUARANTINE IS ABOUT — a key AND the model it was refused for, not a key alone.
+/* WHAT A QUARANTINE IS ABOUT, a key AND the model it was refused for, not a key alone.
  *
  * Google meters each model separately per project: a 429 on `gemini-flash-latest` with key A says nothing
  * about `gemini-flash-lite-latest` with key A, and the whole point of a ladder is to reach for the second
@@ -152,7 +152,7 @@ const quarantineMs = (response: Response, now: number): number | undefined => {
  * exactly the moment the fallback rung existed to save it.
  *
  * A 401/403 is genuinely about the key rather than the model, so it briefly quarantines only the pair it was
- * observed on — the next model retries it, is refused identically, and quarantines that pair too. One
+ * observed on, the next model retries it, is refused identically, and quarantines that pair too. One
  * wasted attempt per model against a dead key, in exchange for never inferring a model-wide fact from a
  * model-scoped refusal. */
 const bucket = (key: string, model: string | undefined): string => `${key} ${model ?? ``}`;
@@ -231,13 +231,13 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
      * the one we would rather serve still had a working credential.
      *
      * The deadline spans the entire walk rather than each rung. A caller is waiting on one message, and two
-     * rungs of twenty seconds is a forty-second silence that ends in a refusal — worse than the fast refusal it
+     * rungs of twenty seconds is a forty-second silence that ends in a refusal, worse than the fast refusal it
      * was trying to avoid. Whatever the walk has reached when the clock runs out is what gets answered. */
     const call: TrialPool["call"] = async (path, init) => {
         const started = now();
         const deadline = started + POOL_DEADLINE_MS;
         const rotation = rotatedKeys();
-        // A request with no model dimension is one rung whose model is `undefined` — the same walk, one bucket.
+        // A request with no model dimension is one rung whose model is `undefined`, the same walk, one bucket.
         const candidates: readonly (string | undefined)[] = init.models === undefined || init.models.length === 0 ? [undefined] : init.models;
         let last: Response | undefined;
         let lastModel: string | undefined;

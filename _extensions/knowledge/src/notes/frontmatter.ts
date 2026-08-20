@@ -3,14 +3,14 @@
  * Deliberately not YAML. Three reasons, in order of how much they cost:
  *
  * 1. THE AGENT WRITES THESE FILES. Full YAML has a dozen ways to mean the same thing and several ways to mean
- *    something else entirely — `no` is false, `2026-08-09` is a Date, `1.0` is a number and `1.0.0` is a string,
+ *    something else entirely, `no` is false, `2026-08-09` is a Date, `1.0` is a number and `1.0.0` is a string,
  *    an unquoted `[[Ada]]` is a nested sequence. A knowledge note's fields are names of things, and a format
  *    that silently turns the name of a thing into a boolean is a format that loses facts.
  * 2. A MALFORMED HEADER MUST DEGRADE, NEVER THROW. This runs inside a render and inside a CLI the agent calls
  *    mid-task; a hand-edited note with one stray character must cost that note its chips, not the panel.
  * 3. It keeps the CLI and the backend bundles small and dependency-free.
  *
- * So: keys map to STRINGS, and every value is normalised to an array of them — one shape for the whole index,
+ * So: keys map to STRINGS, and every value is normalised to an array of them, one shape for the whole index,
  * so nothing downstream has to ask whether `tags` came back as a scalar or a list. What is understood:
  *
  *     type: person                     a scalar
@@ -19,9 +19,9 @@
  *     tags:                            a block list
  *       - colleague
  *       - math
- *     works_on: ["[[Intentic]]"]       links are ordinary strings — see note.ts for what makes one a relation
+ *     works_on: ["[[Intentic]]"]       links are ordinary strings, see note.ts for what makes one a relation
  *
- * Anything else in the header — a nested map, an anchor, a multi-line scalar — is SKIPPED rather than guessed
+ * Anything else in the header, a nested map, an anchor, a multi-line scalar, is SKIPPED rather than guessed
  * at, and `kb check` reports the keys it could not read so a note never fails silently. */
 
 // The `---` fenced header, at the very top of the file. \r\n tolerated: these files round-trip through editors.
@@ -30,11 +30,11 @@ const FRONTMATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 export interface Frontmatter {
     // Every key that parsed, in file order, each as a list (a scalar is a list of one).
     readonly fields: ReadonlyMap<string, readonly string[]>;
-    // Keys present in the header that this parser does not understand — surfaced by `kb check`, never thrown.
+    // Keys present in the header that this parser does not understand, surfaced by `kb check`, never thrown.
     readonly unreadable: readonly string[];
     // The note without its header. What gets rendered and what a body-link scan reads.
     readonly body: string;
-    // Whether there was a header at all — an empty one and a missing one are different things to report on.
+    // Whether there was a header at all, an empty one and a missing one are different things to report on.
     readonly present: boolean;
 }
 
@@ -46,7 +46,7 @@ const scalar = (raw: string): string => {
     return (quoted?.[1] ?? value).trim();
 };
 
-// The items of a flow list `[a, "b, still b", c]` — split on commas OUTSIDE quotes, so a quoted item may hold one.
+// The items of a flow list `[a, "b, still b", c]`, split on commas OUTSIDE quotes, so a quoted item may hold one.
 const flowItems = (inner: string): string[] => {
     const items: string[] = [];
     let current = "";
@@ -112,7 +112,7 @@ export const parseFrontmatter = (content: string): Frontmatter => {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i] ?? "";
         // A full-line comment or a blank. Anything indented at this point belongs to a key that has already
-        // consumed what it wanted (a block list) or to a shape this parser skipped — either way, not ours.
+        // consumed what it wanted (a block list) or to a shape this parser skipped, either way, not ours.
         if (line.trim() === "" || line.trimStart().startsWith("#") || /^[ \t]/.test(line)) {
             continue;
         }
@@ -158,8 +158,8 @@ export const parseFrontmatter = (content: string): Frontmatter => {
 };
 
 /* Write a header back. Used by `kb new` and `kb set`, so the shape the agent produces is the shape this parser
- * reads by construction rather than by the agent remembering it. Order is the caller's — a note reads better
- * with `type` first than alphabetically — and a value is quoted only when leaving it bare would change it.
+ * reads by construction rather than by the agent remembering it. Order is the caller's, a note reads better
+ * with `type` first than alphabetically, and a value is quoted only when leaving it bare would change it.
  *
  * The BODY is passed through untouched. An edit to one field must never reflow somebody's prose. */
 const needsQuotes = (value: string): boolean => value === "" || /^[[\-#&*!|>%@`'"]/.test(value) || /:\s|\s#|^\s|\s$/.test(value);
@@ -178,7 +178,7 @@ export const formatFrontmatter = (fields: ReadonlyMap<string, readonly string[]>
         lines.push(values.length === 1 ? `${key}: ${emit(values[0] ?? "")}` : `${key}: [${values.map(emit).join(", ")}]`);
     }
     // No blank line after the fence, and that is a contract rather than a preference: `parseFrontmatter` stops
-    // at the fence, so anything written past it IS body — and a writer that added a courtesy newline would make
+    // at the fence, so anything written past it IS body, and a writer that added a courtesy newline would make
     // every round trip through these two functions grow the note by one.
     return `---\n${lines.join("\n")}\n---\n${body.replace(/^\n+/, "")}`;
 };

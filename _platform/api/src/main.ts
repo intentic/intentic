@@ -15,7 +15,7 @@ import { startTracing } from "./tracing.js";
 // root .env populates process.env under Bun (it only auto-loads .env from cwd); in prod they're real env vars.
 const tracing = startTracing();
 
-// Bun is the API runtime: it executes this TypeScript (and the source-first workspace libs) directly — no
+// Bun is the API runtime: it executes this TypeScript (and the source-first workspace libs) directly, no
 // build step in dev. `bun --watch` restarts on change. Bun.serve is the native server; it takes Hono's
 // fetch handler as-is and terminates TLS itself in dev (prod runs plain http behind a TLS proxy).
 const config = loadConfig();
@@ -37,10 +37,10 @@ startRetention(prisma, config, logger);
 // The frozen month is what payouts settle on, and the only record of what was owed once the ledger rows behind
 // it age out. No-ops on a platform without a pool.
 startPoolCycle(prisma, config, logger);
-// Keeps warm hosted machines built ahead of demand (and drains them when the pool is off) — see hosted-pool.ts.
+// Keeps warm hosted machines built ahead of demand (and drains them when the pool is off), see hosted-pool.ts.
 startHostedPool(prisma, config, logger);
 // The demo service's row follows the POOL_DEMO_SERVICE flag: seeded/reactivated on, delisted off. Unawaited
-// and self-swallowing — a catalog short one demo row must never hold the platform's boot.
+// and self-swallowing, a catalog short one demo row must never hold the platform's boot.
 void seedDemoService(prisma, config).catch((error: unknown) => logger.warn({ err: error }, `pool: demo service seed failed`));
 const { app } = createApp(config, prisma, logger);
 
@@ -48,7 +48,7 @@ const { app } = createApp(config, prisma, logger);
  *
  * API_HTTPS_KEY/CERT win when set. Otherwise dev falls back to the pair `pnpm install` mints for this user,
  * because that pair no longer has a path anyone could write into a .env: it lives in this user's own data
- * directory, which differs per person and per OS. Two guards keep the fallback out of production — not being
+ * directory, which differs per person and per OS. Two guards keep the fallback out of production, not being
  * production, and the pair actually existing, which on a server it does not because nothing mints it there. */
 const devPair = (): { key: Buffer; cert: Buffer } | undefined => {
     if (process.env[`NODE_ENV`] === `production` || !existsSync(LEAF_KEY) || !existsSync(LEAF_CRT)) {

@@ -5,30 +5,30 @@ import type { ListenerPairing } from "@intentic/sandbox-contract";
 import type { Logger } from "@intentic/connector-runtime";
 import type { WaRawMessage } from "./types.js";
 
-/* The gateway's WhatsApp connections — one multi-device socket per configured capability, paired as a linked
+/* The gateway's WhatsApp connections, one multi-device socket per configured capability, paired as a linked
  * device and alive only while the daemon says an enabled whatsapp listener automation (or the CLI's connector)
  * exists. A module singleton map, like the other gateway extensions': the reconcile loop, the listener and the
  * control surface all reach it directly.
  *
  * THIS IS THE ONLY FILE THAT IMPORTS BAILEYS. Everything else in the package works on the structural types in
  * types.ts, which keeps the listener and painter testable while baileys is not yet installed, and keeps the
- * blast radius of a baileys major bump inside one file.
+ * scope of a baileys major bump to one file.
  *
- * The credential here is not a token — it is the SESSION the pairing ceremony mints, persisted as baileys'
+ * The credential here is not a token, it is the SESSION the pairing ceremony mints, persisted as baileys'
  * multi-file auth state under the session dir. That is why open() has two personalities: with a REGISTERED
  * session it resumes silently; otherwise it requests a PAIRING CODE for the configured phone number and
  * surfaces it (the gateway posts it in status, the capability card shows it), then sits in "pairing" until the
  * phone enters it. WhatsApp closes an unpaired socket after a while, so the recreate loop mints a fresh code
- * when that happens — the card always shows the current one, stamped with when it was minted.
+ * when that happens, the card always shows the current one, stamped with when it was minted.
  *
  * EVERY MOMENT OF THAT CEREMONY IS REPORTED, not just the ones holding a code. `pairing()` answers `waiting`
  * before the first code and again the instant a socket dies with one, `code` while one is live, and `failed`
  * with WhatsApp's own complaint when the number is refused. Publishing only codes is what let a phone that had
  * never linked read as connected: the daemon saw an absent code during the two seconds before the first one
- * arrived, decided nothing was outstanding, and the card went green — so the owner was navigated away from the
+ * arrived, decided nothing was outstanding, and the card went green, so the owner was navigated away from the
  * only screen that was ever going to show them the code. */
 
-// Reconnect backoff for ordinary closes (network blips, server restarts). Pairing-phase closes reuse it too —
+// Reconnect backoff for ordinary closes (network blips, server restarts). Pairing-phase closes reuse it too,
 // each recreate mints a fresh code, and hammering the pairing endpoint reads as abuse.
 const RETRY_MIN_MS = 2_000;
 const RETRY_MAX_MS = 60_000;
@@ -77,7 +77,7 @@ export interface OpenOptions {
     readonly log: Logger;
     readonly onMessage: (message: WaRawMessage) => void;
     // The session ended for good (the phone unlinked us, or the number was banned): the session dir is already
-    // wiped and the connection gone from the pool — the next reconcile starts a fresh pairing.
+    // wiped and the connection gone from the pool, the next reconcile starts a fresh pairing.
     readonly onLoggedOut: (detail: string) => void;
 }
 
@@ -85,7 +85,7 @@ export interface OpenOptions {
 const digitsOf = (phoneNumber: string): string => phoneNumber.replaceAll(/\D/g, "");
 
 // A no-op pino-shaped logger: baileys' default logs its internals to stdout, and a protocol trace is noise the
-// tmux capture doesn't need. Structural, cast at the boundary — pulling pino in for silence would be absurd.
+// tmux capture doesn't need. Structural, cast at the boundary, pulling pino in for silence would be absurd.
 const silentLogger = {
     level: "silent",
     child: (): object => silentLogger,
@@ -107,8 +107,8 @@ const extensionOf = (mimetype: string | undefined): string => {
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 
 // Whether a session dir holds a session worth resuming. Anything else there is the WRECKAGE OF AN UNFINISHED
-// CEREMONY — half-written noise keys and an ephemeral pairing key belonging to a code that died with the socket
-// that minted it — and resuming that instead of starting clean is how a re-add inherits a stranger's dead
+// CEREMONY, half-written noise keys and an ephemeral pairing key belonging to a code that died with the socket
+// that minted it, and resuming that instead of starting clean is how a re-add inherits a stranger's dead
 // handshake. A missing or unreadable file reads as "nothing to resume", which is exactly the safe answer.
 const sessionRegistered = async (sessionDir: string): Promise<boolean> => {
     const raw = await readFile(join(sessionDir, "creds.json"), "utf8").catch(() => undefined);
@@ -132,7 +132,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
     await mkdir(sessionDir, { recursive: true });
     const auth = await useMultiFileAuthState(sessionDir);
 
-    // The live socket the closures below act through — replaced by every recreate, so nothing may capture it.
+    // The live socket the closures below act through, replaced by every recreate, so nothing may capture it.
     let sock: ReturnType<typeof makeWASocket> | undefined;
     let phase: ConnectionPhase = "connecting";
     // Undefined only once the phone has linked; every other moment of the ceremony is one of the three states.
@@ -143,7 +143,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
     let backoff = RETRY_MIN_MS;
 
     // Recent raw messages by id (download needs the envelope to decrypt; replies quote it), and the chats this
-    // session has seen (WhatsApp has no on-demand chat list — groups come from the API, DMs from traffic).
+    // session has seen (WhatsApp has no on-demand chat list, groups come from the API, DMs from traffic).
     const rawCache = new Map<string, WaRawMessage>();
     const seenChats = new Map<string, { name: string; kind: "group" | "dm" }>();
 
@@ -183,7 +183,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
         });
         sock = socket;
         phase = auth.state.creds.registered ? "connecting" : "pairing";
-        // A fresh socket means a fresh code is coming — unless the last attempt was REFUSED, whose sentence is
+        // A fresh socket means a fresh code is coming, unless the last attempt was REFUSED, whose sentence is
         // the one thing on the card worth acting on and must not be flickered away by every retry behind it.
         if (phase === "pairing" && pairing?.state !== "failed") {
             pairing = { state: "waiting" };
@@ -192,7 +192,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
 
         socket.ev.on("creds.update", () => void auth.saveCreds());
         socket.ev.on("connection.update", (update) => {
-            // The qr field arriving is the socket saying "ready to pair" — the cue to ask for a phone-number
+            // The qr field arriving is the socket saying "ready to pair", the cue to ask for a phone-number
             // pairing code instead (we never render the QR; a code types into a phone, a QR needs a screen dance).
             if (update.qr !== undefined && !auth.state.creds.registered && !pairingRequested) {
                 pairingRequested = true;
@@ -226,7 +226,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
                 const reason = ((update.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode ??
                     0) as number;
                 if (reason === (DisconnectReason.loggedOut as number)) {
-                    // The phone unlinked us (or the number is gone). The session is dead evidence — wipe it so
+                    // The phone unlinked us (or the number is gone). The session is dead evidence, wipe it so
                     // the next reconcile starts a fresh pairing rather than resuming a corpse.
                     closed = true;
                     connections.delete(capabilityId);
@@ -236,13 +236,13 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
                     );
                     return;
                 }
-                // restartRequired (515) is the NORMAL close right after pairing succeeds — reconnect at once.
+                // restartRequired (515) is the NORMAL close right after pairing succeeds, reconnect at once.
                 const wait = reason === (DisconnectReason.restartRequired as number) ? 0 : backoff;
                 backoff = Math.min(backoff * 2, RETRY_MAX_MS);
                 phase = auth.state.creds.registered ? "connecting" : "pairing";
                 // A CODE DIES WITH THE SOCKET THAT MINTED IT, and the next one is up to a minute of backoff
                 // away. Left on the card it is worse than nothing: it reads as the live code, and the owner
-                // spends their attempt — and the walk through the phone's menus — typing something already dead.
+                // spends their attempt, and the walk through the phone's menus, typing something already dead.
                 if (phase === "pairing" && pairing?.state === "code") {
                     pairing = { state: "waiting" };
                 }
@@ -374,7 +374,7 @@ const mediaSlotOf = (raw: WaRawMessage): { name: string } | undefined => {
     return undefined;
 };
 
-// Drop the socket, keep the session — a reconcile close (automations gone, gateway shutdown). The next open
+// Drop the socket, keep the session, a reconcile close (automations gone, gateway shutdown). The next open
 // resumes without re-pairing.
 export const closeWhatsAppConnection = (capabilityId: string): void => {
     connections.delete(capabilityId);
@@ -382,7 +382,7 @@ export const closeWhatsAppConnection = (capabilityId: string): void => {
     closers.delete(capabilityId);
 };
 
-// Unlink and forget — the connector was REMOVED. Logout tells the phone to drop us from Linked devices; the
+// Unlink and forget, the connector was REMOVED. Logout tells the phone to drop us from Linked devices; the
 // session dir wipe makes a future re-add start a fresh pairing instead of resuming a stranger's session.
 export const forgetWhatsAppConnection = async (capabilityId: string, sessionDir: string, log: Logger): Promise<void> => {
     const closer = closers.get(capabilityId);

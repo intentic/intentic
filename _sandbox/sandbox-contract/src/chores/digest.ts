@@ -1,8 +1,8 @@
-/* THE EVIDENCE DIGEST — the one idea that turns a nagging panel into something you can live with.
+/* THE EVIDENCE DIGEST, the one idea that turns a nagging panel into something you can live with.
  *
  * A chore is due because of a measurement. Run the turn, and one of three things happens: the measurement moves
  * (the work landed), it stays put (the work is pending review, or the tool was wrong), or the tool reports
- * something else entirely next week. Only the first is "done", and none of them is answerable by a timestamp —
+ * something else entirely next week. Only the first is "done", and none of them is answerable by a timestamp,
  * "ran 3 days ago" cannot tell you whether it ran against THIS.
  *
  * So a run records a hash of the evidence that provoked it. The next verdict compares:
@@ -32,7 +32,7 @@ export const digestOf = (...parts: readonly (string | number)[]): string => {
 
 /* Buckets a count so that ordinary drift does not read as news. Twelve outdated packages becoming thirteen is not
  * a thing to interrupt someone about; twelve becoming forty is. Powers-of-two boundaries, so the bucket widens
- * with the number — the difference between 1 and 2 matters and the difference between 400 and 500 does not.
+ * with the number, the difference between 1 and 2 matters and the difference between 400 and 500 does not.
  *
  * This is the difference between a digest that changes on every poll (and therefore badges forever) and one that
  * changes when the situation does. Chores that count things digest the BUCKET; chores whose evidence is a set of

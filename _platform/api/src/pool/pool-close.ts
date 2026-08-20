@@ -5,7 +5,7 @@ import { isPremium } from "./pool-membership.js";
 import { computeMonth, type DonationAggregate, type ServiceAggregate } from "./pool-share.js";
 import type { StripeGateway } from "./pool-stripe.js";
 
-/* CLOSING A MONTH — turning a figure that moves into one that can be paid.
+/* CLOSING A MONTH, turning a figure that moves into one that can be paid.
  *
  * The public ledger recomputes itself from the donation and run rows on every read. That is right for a month
  * in progress and useless for settlement twice over: a number that changes cannot be agreed on, and the rows
@@ -39,11 +39,11 @@ export const monthWindow = (month: string): { from: Date; to: Date } => {
     return { from, to };
 };
 
-// The most recent month that is entirely in the past — the only one there is anything to close.
+// The most recent month that is entirely in the past, the only one there is anything to close.
 export const lastClosableMonth = (now: Date): string => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
 
-/* Fold every listing's earnings into one line per publisher. A publisher earning through both lanes — an
- * extension people install and a service they run — is owed one amount, not two rows that a payout would then
+/* Fold every listing's earnings into one line per publisher. A publisher earning through both lanes, an
+ * extension people install and a service they run, is owed one amount, not two rows that a payout would then
  * have to remember to add up. */
 const sharesOf = (
     extensions: readonly { extensionId: string; earningsCents: number; credits: number }[],
@@ -95,7 +95,7 @@ export const distribute = (total: number, shares: readonly Share[]): readonly nu
 export interface CloseOutcome {
     readonly month: string;
     readonly closed: boolean;
-    // Why nothing happened, when nothing did — logged, so a month that never closes is never silent.
+    // Why nothing happened, when nothing did, logged, so a month that never closes is never silent.
     readonly reason?: string;
     readonly statements?: number;
     readonly distributedCents?: number;
@@ -109,7 +109,7 @@ export interface CloseDeps {
     readonly now?: () => Date;
 }
 
-/* Close one month, once. Re-running is a no-op rather than a second close — the job ticks daily and a closed
+/* Close one month, once. Re-running is a no-op rather than a second close, the job ticks daily and a closed
  * month must never be rewritten, least of all with a member count or a share that has moved since. */
 export const closeMonth = async (month: string, { prisma, config, gateway, now = () => new Date() }: CloseDeps): Promise<CloseOutcome> => {
     const at = now();
@@ -157,14 +157,14 @@ export const closeMonth = async (month: string, { prisma, config, gateway, now =
         });
     }
     const members = memberships.filter((membership) => isPremium(membership)).length;
-    // Priced by the same function the live ledger uses — one arithmetic, so the frozen month and the open page
+    // Priced by the same function the live ledger uses, one arithmetic, so the frozen month and the open page
     // can never state different numbers for the same spend.
     const report = computeMonth(month, members, config, [...donationAggregates.values()], [...serviceAggregates.values()]);
     const shares = sharesOf(report.extensions, report.services);
 
     /* Money whose twelve months ran out, returned to the people still shipping. Only UNCLAIMED statements
      * expire: an amount owed to a creator who proved their name is owed until it is paid, however long that
-     * takes. And the sweep only happens into a month that HAS earners — with nobody to receive it the money
+     * takes. And the sweep only happens into a month that HAS earners, with nobody to receive it the money
      * would simply vanish, so it stays claimable and is swept by the next close that can distribute it. */
     const claimedPublishers = new Set((await prisma.publisherClaim.findMany({ select: { publisher: true } })).map((claim) => claim.publisher));
     const expired =
@@ -222,7 +222,7 @@ export const closeMonth = async (month: string, { prisma, config, gateway, now =
 
 /* The daily tick's work: close every month that is over and still open, oldest first. Catching up rather than
  * closing only last month matters because a platform that was down, or newly deployed, must not silently skip a
- * month — and each close is independent, so an unreadable Stripe month blocks itself and nothing else. */
+ * month, and each close is independent, so an unreadable Stripe month blocks itself and nothing else. */
 export const closeDueMonths = async (deps: CloseDeps, logger: Logger, horizonMonths = 13): Promise<readonly CloseOutcome[]> => {
     const at = (deps.now ?? (() => new Date()))();
     const outcomes: CloseOutcome[] = [];

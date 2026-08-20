@@ -9,13 +9,13 @@ import { shallowRef } from "vue";
  *
  * Why the tree asks per path instead of being handed a set: a provider's answer is a LOOKUP into state the
  * extension keeps (see DocumentProviderRegistration.detect), and the tree is the only thing that knows which rows
- * are on screen — a monorepo's listing is lazily loaded, so nobody can enumerate the paths up front. */
+ * are on screen, a monorepo's listing is lazily loaded, so nobody can enumerate the paths up front. */
 
 export interface RegisteredDocumentProvider {
-    // The owning extension's id — error attribution + manifest-gating key off this.
+    // The owning extension's id, error attribution + manifest-gating key off this.
     readonly owner: string;
     readonly id: string;
-    // The family's human name from the approved manifest ("Architecture") — what the tab strip's tooltip says
+    // The family's human name from the approved manifest ("Architecture"), what the tab strip's tooltip says
     // this document IS, beside the provider's own per-row title.
     readonly label: string;
     readonly detect: (path: string) => DocumentOffer | undefined;
@@ -37,7 +37,7 @@ export const registerDocumentProvider = (provider: RegisteredDocumentProvider): 
     };
 };
 
-// One provider's offer for a directory. A throwing detect() costs that provider its row and nothing else — the
+// One provider's offer for a directory. A throwing detect() costs that provider its row and nothing else, the
 // same containment the rail's detect() and badge() have, for the same reason: one broken extension must not blank
 // the file tree.
 export interface DocumentAt {
@@ -46,7 +46,7 @@ export interface DocumentAt {
 }
 
 // What the given directory (root-relative; "" is the workspace root) has to read, across every provider. Reads
-// the registry ref, so a caller inside a computed re-runs when an extension registers, disposes — or when the
+// the registry ref, so a caller inside a computed re-runs when an extension registers, disposes, or when the
 // provider's own state changes, since detect() is called here rather than cached.
 export const documentsAt = (path: string): readonly DocumentAt[] =>
     providers.value.flatMap((provider) => {
@@ -60,7 +60,7 @@ export const documentsAt = (path: string): readonly DocumentAt[] =>
     });
 
 // The provider a stored tab names, or undefined when nothing offers it any more (the extension was switched off
-// or uninstalled between page loads) — the tab then says so rather than rendering an empty frame.
+// or uninstalled between page loads), the tab then says so rather than rendering an empty frame.
 export const documentProvider = (owner: string, id: string): RegisteredDocumentProvider | undefined =>
     providers.value.find((provider) => provider.owner === owner && provider.id === id);
 

@@ -5,16 +5,16 @@
  *
  * `matchMedia` is the design system barrel's (useDevice), so any suite that touches @intentic/ui needs it
  * before its first import evaluates. matches:false everywhere keeps the device DESKTOP, the form factor whose
- * affordances the component suites assert. `ResizeObserver` is <AnchoredOverlay>'s — the overlay re-places on
+ * affordances the component suites assert. `ResizeObserver` is <AnchoredOverlay>'s, the overlay re-places on
  * its panel's own resize, and nothing in a test resizes, so observing is a no-op; without it arm() throws
  * inside a watcher, the panel renders un-armed, and the failure surfaces as "the menu row isn't there" three
  * assertions later. `window.env` is environments/environment.ts, which evaluates readEnvironment() at module
- * scope and throws when the deploy-time config script has not run — as it never has under vitest.
+ * scope and throws when the deploy-time config script has not run, as it never has under vitest.
  *
  * These were once copied into every suite that tripped over them: ninety files carrying the same fifteen
  * lines of preamble, each with a `vi.hoisted` wrapper and a deferred `await import()` to make the ordering
  * work. The ordering is this file's job. A suite that wants different values assigns them outright (see
- * useGoogleIdentity.desktop.test.ts) — `??=` here yields to nothing, because this runs first. */
+ * useGoogleIdentity.desktop.test.ts), `??=` here yields to nothing, because this runs first. */
 globalThis.matchMedia ??= ((query: string) => ({
     matches: false,
     media: query,

@@ -1,4 +1,4 @@
-// Platform UI/product catalogs: the add-form descriptors + card data the web renders. NOT wire contract —
+// Platform UI/product catalogs: the add-form descriptors + card data the web renders. NOT wire contract,
 // moved out of @intentic-app/api-contract so the contract holds only schemas. Daemon enums are imported.
 import { type CapabilityContribution, type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import type { CapabilityKind, ServiceKind } from "@intentic/sandbox-contract";
@@ -59,7 +59,7 @@ export const INVENTORY_SERVICES: readonly InventoryServiceDescriptor[] = [
         fields: [{ key: "domain", label: "Domain", kind: "text" }],
     },
     {
-        // No infisical slug in simple-icons — render the semantic lock glyph instead.
+        // No infisical slug in simple-icons, render the semantic lock glyph instead.
         service: "infisical",
         label: "Infisical",
         icon: "lock",
@@ -76,14 +76,14 @@ export interface AddCapabilityInput {
     readonly config: Record<string, string>;
 }
 
-/* The form field shape is `CapabilityField` from @intentic/extension-api — ONE definition for the fields a
+/* The form field shape is `CapabilityField` from @intentic/extension-api. ONE definition for the fields a
  * static card authors here and the fields an extension declares in its manifest, because the dialog renders
  * them with the same code and a second copy is a second thing to keep in step. `secret` withholds the value
  * from every echo, `value` pins a field the user never sees (a discriminator), `when` gates one field on the
- * answers already given (a condition string — see @intentic/base/when), and `multiline` matters: a single-line
+ * answers already given (a condition string, see @intentic/base/when), and `multiline` matters: a single-line
  * input strips the newlines out of a pasted PEM key. */
 
-// The logical section a card sits under in the "+" grid — a display grouping (by what it's for), not the
+// The logical section a card sits under in the "+" grid, a display grouping (by what it's for), not the
 // technical `kind`. `platform` cards unlock a new workspace area; the rest are connectors to existing tools.
 export type CapabilityCategory =
     "platform" | "code" | "observability" | "data" | "communication" | "business" | "machines" | "servers" | "deploy" | "extend";
@@ -97,7 +97,7 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "communication", label: "Communication", hint: "Let the agent read and send messages." },
     { id: "business", label: "Business & docs", hint: "Connect payments and knowledge bases." },
     // Distinct from Servers on purpose: a server is something the sandbox DIALS, a computer of yours is
-    // something that dials the sandbox — and the difference the user feels is that one of them is the machine
+    // something that dials the sandbox, and the difference the user feels is that one of them is the machine
     // they are sitting at.
     { id: "machines", label: "Your computers", hint: "Let the agent work on your own computer — run commands, handle files, see the screen." },
     { id: "servers", label: "Servers", hint: "Give the agent remote machines over SSH and private networks over VPN." },
@@ -105,13 +105,13 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
 ];
 
-// How to obtain the credential a card needs — surfaced beside the config form as a permanently open panel: the
+// How to obtain the credential a card needs, surfaced beside the config form as a permanently open panel: the
 // required-scopes line, the step-by-step, and a deep "Create a token ↗" link. A hosted provider uses an
 // absolute `url`; a self-hostable one builds the link from a config field's live value (`urlFromField` +
 // `path`), so it points at github.com or the user's own instance, and simply hides until that field holds an
 // http(s) URL.
 //
-// WRAP LITERALS IN `BACKTICKS` in `scopes` and `steps` — a scope name, a menu item, a hostname, a port, a
+// WRAP LITERALS IN `BACKTICKS` in `scopes` and `steps`, a scope name, a menu item, a hostname, a port, a
 // command. They render as chips, which is what lets a reader pick the value out of the sentence instead of
 // parsing it. Nothing else is markup, and unmatched backticks stay as typed.
 export interface CapabilityGuide {
@@ -120,7 +120,7 @@ export interface CapabilityGuide {
     readonly path?: string | undefined;
     // Overrides the default "Create a token" link label.
     readonly linkLabel?: string | undefined;
-    // The subtle "Scopes: …" line under the link — the permissions the token needs.
+    // The subtle "Scopes: …" line under the link, the permissions the token needs.
     readonly scopes?: string | undefined;
     // Ordered how-to-get-it steps, revealed in an InfoHint disclosure.
     readonly steps?: readonly string[] | undefined;
@@ -150,22 +150,22 @@ export interface CapabilityCatalogEntry {
     readonly description: string;
     readonly requires?: readonly CapabilityKind[] | undefined;
     readonly fields: readonly CapabilityField[];
-    // The paragraph, printed under the add-form — and searched from the catalog, so a card stays findable by
+    // The paragraph, printed under the add-form, and searched from the catalog, so a card stays findable by
     // words its one-line description no longer has room for.
     readonly hint?: string | undefined;
     readonly guide?: CapabilityGuide | undefined;
-    /* ONE PER SANDBOX — there is nothing to name and nothing to have two of (the Docker Engine is the machine's
+    /* ONE PER SANDBOX, there is nothing to name and nothing to have two of (the Docker Engine is the machine's
      * engine; a second entry would just be a second opinion about the same dockerd). Such a card drops the name
      * field, keeps the entry id, and opens PRE-FILLED FROM THE LIVE INSTANCE, so picking it again is editing
      * what is there rather than adding beside it.
      *
-     * Without this the default "add another connection" behaviour — right for two Discord bots, two databases —
+     * Without this the default "add another connection" behaviour, right for two Discord bots, two databases,
      * turns the obvious way to change an option into minting `docker-2`: two entries, two fragments, both baked
      * into one overlay, and a GPU switch that reads off on the card the user just set to on. */
     readonly singleton?: boolean | undefined;
 }
 
-// The permission switches every connected-computer card carries, identical across platforms — the grant is about
+// The permission switches every connected-computer card carries, identical across platforms, the grant is about
 // what the agent may DO, which does not vary by OS. Shared so the two cards can't drift into different defaults.
 const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
     {
@@ -272,7 +272,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         description: "Run containers — its own Engine + Compose.",
         singleton: true,
         /* The engine itself takes no configuring; these are the things a user chooses about it, in the two
-         * families DockerConfigSchema defines — and the `rebuild` chip is what tells them apart on sight,
+         * families DockerConfigSchema defines, and the `rebuild` chip is what tells them apart on sight,
          * because the first costs a rebuild and the rest cost a dockerd restart.
          *
          * `--privileged` is deliberately NOT a field: dockerd does not run without it, so a switch would offer
@@ -372,7 +372,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: "provider == 'wireguard'",
             },
 
-            // FortiGate SSL-VPN — the <sslvpn> connections in a FortiClient export. Import fills these in.
+            // FortiGate SSL-VPN, the <sslvpn> connections in a FortiClient export. Import fills these in.
             { key: "server", label: "Gateway", placeholder: "vpn.example.com", when: "provider == 'fortinet'" },
             { key: "port", label: "Port", default: "443", when: "provider == 'fortinet'" },
             { key: "username", label: "Username", when: "provider == 'fortinet'" },
@@ -392,7 +392,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: "provider == 'fortinet'",
             },
 
-            // IPsec — the <ipsecvpn> connections in a FortiClient export.
+            // IPsec, the <ipsecvpn> connections in a FortiClient export.
             { key: "server", label: "Gateway", placeholder: "vpn.example.com", when: "provider == 'ipsec'" },
             { key: "presharedKey", label: "Pre-shared key", secret: true, when: "provider == 'ipsec'" },
             {
@@ -451,7 +451,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             },
             // The split-vs-full tunnel decision, and the one ipsec setting whose wrong value has no symptom the
             // user can attribute: a gateway that doesn't route the internet accepts 0.0.0.0/0 and then drops
-            // everything else, so the sandbox — the agent's own connection included — goes quiet. Which is why
+            // everything else, so the sandbox, the agent's own connection included, goes quiet. Which is why
             // the hint states the consequence rather than the syntax.
             {
                 key: "routedNetworks",
@@ -535,7 +535,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         fields: [
             { key: "url", label: "Git URL", placeholder: "https://github.com/owner/extension" },
             // A full sha, not a branch: extension code runs trusted in your browser, so installs pin exactly
-            // the reviewed commit — updating is re-adding at a new sha.
+            // the reviewed commit, updating is re-adding at a new sha.
             { key: "ref", label: "Commit sha (full 40 characters)" },
             { key: "path", label: "Subdirectory", optional: true },
             { key: "token", label: "Access token", secret: true, optional: true },
@@ -550,19 +550,19 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
-    /* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE — the setup question asked once instead of twelve times.
+    /* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE, the setup question asked once instead of twelve times.
      * The identity owns a browser; you sign its email provider in yourself, once, in the live window (Google
-     * blocks automated logins — that one step staying human is what makes everything after it work), and the
+     * blocks automated logins, that one step staying human is what makes everything after it work), and the
      * platform accounts opened through it share that browser, which is what turns "Continue with Google" into
      * one click. The open-accounts switch is the consent that matters, so it is a field here with the warning
-     * on its face — off by default, per identity, never global. */
-    /* THE WALLET — the agent's ability to buy things on the open web, and the card that bounds it.
+     * on its face, off by default, per identity, never global. */
+    /* THE WALLET, the agent's ability to buy things on the open web, and the card that bounds it.
      *
      * One per sandbox (there is one owner and one balance; a second entry would be a second opinion about
      * the same money), and every field on it is a LIMIT rather than a credential: the signing key lives with
      * the platform's custody provider and never enters the container, so what the owner is deciding here is
      * exactly how much of their money an agent may move and how often it has to ask. Defaults are the
-     * conservative ones — every payment carded, small ceilings — because the safe posture must be the one a
+     * conservative ones, every payment carded, small ceilings, because the safe posture must be the one a
      * user gets by clicking through. */
     {
         id: "wallet",
@@ -667,7 +667,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         },
     },
     /* ONE CARD FOR EVERY MODEL API, wherever it runs. An Ollama on this machine, a vLLM on the GPU box, a
-     * LiteLLM gateway and OpenRouter are the same thing — a URL that serves models — and the only axis that
+     * LiteLLM gateway and OpenRouter are the same thing, a URL that serves models, and the only axis that
      * actually changes anything is which wire the server speaks. Splitting it into "local" and "remote" cards
      * would be two forms, two sets of copy and two ways to be wrong about one concept; the placeholder carries
      * the local case instead, because that is the one people don't realise already works. */
@@ -712,13 +712,13 @@ const isCapabilityCategory = (category: string): category is CapabilityCategory 
  * quietly weaken them. Two platform packs therefore cannot drift, and neither can a third-party one.
  *
  * The browser credentials are core for the sibling reason: which box a login form wants filled is the same
- * fact on every site, and they are what lets the AGENT connect the account itself — the daemon types the
+ * fact on every site, and they are what lets the AGENT connect the account itself, the daemon types the
  * stored values into the page (never showing the agent the password), so a site card that forgot to declare
  * them would be a site the agent cannot sign in to. Both optional: a profile signed in by hand needs neither. */
 const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
     { key: "username", label: "Username / email", optional: true },
     { key: "password", label: "Password", secret: true, optional: true },
-    /* Which identity this account is born from — core for the same reason the credentials are: whose browser an
+    /* Which identity this account is born from, core for the same reason the credentials are: whose browser an
      * account lives in is a fact about the sandbox, not about any site, and it is what makes "Continue with
      * Google" one click (the identity's session is right there in the shared profile). Declared without
      * `options`; the web narrows it to a picker over the identities that actually exist and hides it when none
@@ -732,7 +732,7 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
 ];
 const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };
 
-/* A contributed capability rendered as a catalog card — the "+" grid derives one card per entry from the
+/* A contributed capability rendered as a catalog card, the "+" grid derives one card per entry from the
  * ENABLED installed extensions (GET /extensions), so a card exists iff its capability is actually addable, and
  * the manifest is the single source of the card's name/logo/fields/guide (no static duplicate to drift). The
  * contribution's id becomes both the card id (the /capabilities/<id> slug) and the pinned discriminator the
@@ -751,7 +751,7 @@ export const contributionCard = (contribution: CapabilityContribution): Capabili
         fields: [
             ...(discriminator === undefined ? [] : [{ key: discriminator, label: "", value: contribution.id }]),
             ...contribution.fields,
-            // A card that declares one of the core keys itself keeps its own version — a duplicate key would
+            // A card that declares one of the core keys itself keeps its own version, a duplicate key would
             // render the same input twice and let the two answers race for one config slot.
             ...(CORE_FIELDS[contribution.kind] ?? []).filter((core) => !contribution.fields.some((field) => field.key === core.key)),
         ],
@@ -760,17 +760,17 @@ export const contributionCard = (contribution: CapabilityContribution): Capabili
     };
 };
 
-/* THE JOIN BETWEEN A CARD AND THE CONNECTIONS THAT CAME FROM IT — here rather than in the web because both
+/* THE JOIN BETWEEN A CARD AND THE CONNECTIONS THAT CAME FROM IT, here rather than in the web because both
  * sides ask it: the Capabilities grid joins each card to the live instances it is answerable for, and the
  * daemon's capability ask gate joins the card an agent requested to whatever is already connected. One
  * definition, or the two joins drift on exactly the multi-provider cards the discriminator exists for.
  *
- * Cards that share a `kind` are told apart by a discriminator field the card fixes — `provider` for the cli
+ * Cards that share a `kind` are told apart by a discriminator field the card fixes, `provider` for the cli
  * cards, `platform` for the browser cards (both map straight to the capability's config). The value is a
  * single fixed value, or the options for a multi-provider card (the SQL card owns postgres + mysql).
  * Single-card kinds (mcp/plugin/ssh/…) have no such field → undefined → every instance of the kind matches. */
 
-// The structural slice of a live connection the join reads — the daemon's manifest `Capability` and the
+// The structural slice of a live connection the join reads, the daemon's manifest `Capability` and the
 // wire's `CapabilitySummary` both carry it, so one signature serves both sides. `undefined` is admitted in
 // the values because the manifest's per-kind config shapes carry optional fields, and the join only ever
 // reads the discriminator key.

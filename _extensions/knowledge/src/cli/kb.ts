@@ -7,11 +7,11 @@ import { type Drift, VOCABULARY_PATH, VOCABULARY_TYPE } from "../notes/vocabular
 import { type Args, flag, flagAll, has, number, parseArgs } from "./args.js";
 import { linkFields, slugify, wikiLink } from "./note-shape.js";
 
-/* `kb` — the knowledge base on the AGENT's path (contributes.bin), and the half of this extension that gets
+/* `kb`, the knowledge base on the AGENT's path (contributes.bin), and the half of this extension that gets
  * used every turn rather than every so often.
  *
  * IT DRIVES THE SAME ENGINE THE PANEL DOES. One parser, one link resolver, one index, one set of tests over
- * them — so "what does the knowledge base say about Ada" has exactly one answer whether a person asked it or the agent
+ * them, so "what does the knowledge base say about Ada" has exactly one answer whether a person asked it or the agent
  * did. That is why this is built from the extension's TypeScript rather than hand-written as a second plain-ESM
  * implementation: a duplicated reader is a knowledge base that quietly disagrees with itself.
  *
@@ -64,7 +64,7 @@ const noteText = (note: ParsedNote, index: KnowledgeIndex, body: boolean): strin
         ...connections(note, index),
     ].join("\n");
 
-// The JSON shape of one note — the same facts the text form carries, for anything reading this with a program.
+// The JSON shape of one note, the same facts the text form carries, for anything reading this with a program.
 const noteJson = (note: ParsedNote, index: KnowledgeIndex): unknown => ({
     path: note.path,
     title: note.title,
@@ -183,7 +183,7 @@ const graphVerb = (run: Run, index: KnowledgeIndex): number => {
 const brokenLine = (link: BrokenLink): string => `  ${link.from} → [[${link.target}]]${link.relation === undefined ? "" : ` (${link.relation})`}`;
 const driftLine = (drift: Drift): string => `  ${drift.word}  ×${drift.uses}  ${drift.notes.join(" ")}`;
 
-// One named block of the report, or nothing at all when it is empty — so a clean knowledge base prints one line rather
+// One named block of the report, or nothing at all when it is empty, so a clean knowledge base prints one line rather
 // than seven headings with nothing under them.
 const section = (heading: string, lines: readonly string[]): string[] => (lines.length === 0 ? [] : ["", heading, ...lines]);
 
@@ -274,7 +274,7 @@ const newVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     return 0;
 };
 
-// Rewrite one header field in place. The body and every other field are untouched — an edit to a fact must
+// Rewrite one header field in place. The body and every other field are untouched, an edit to a fact must
 // never reflow somebody's prose or reorder the header they wrote.
 const writeField = async (run: Run, index: KnowledgeIndex, name: string, field: string, values: readonly string[]): Promise<number> => {
     const found = findNote(index, name);
@@ -316,7 +316,7 @@ const linkVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
         emit(run, found, `no note named "${found.missing}".`);
         return 1;
     }
-    // Added to what is already there, deduped — a relationship holds several things, and the common call is
+    // Added to what is already there, deduped, a relationship holds several things, and the common call is
     // "and this one too" rather than "replace them all" (that is what `kb set` is for).
     const wanted = targets.map((target) => wikiLink(index.resolve(target)?.title ?? target));
     const merged = [...new Set([...(found.fields.get(relation) ?? []), ...wanted])];
@@ -383,7 +383,7 @@ const main = async (): Promise<number> => {
     }
 };
 
-// A crash must still say which knowledge base and which verb, and must not look like "found nothing" (exit 1) — an
+// A crash must still say which knowledge base and which verb, and must not look like "found nothing" (exit 1), an
 // agent acts very differently on those two.
 main().then(
     (code) => {

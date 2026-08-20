@@ -3,7 +3,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { buildIndex, type KnowledgeIndex } from "./index-notes.js";
 import type { NoteFile } from "./note.js";
 
-/* THE KNOWLEDGE BASE ON DISK — the only file-touching module in this directory, so everything else stays pure and
+/* THE KNOWLEDGE BASE ON DISK, the only file-touching module in this directory, so everything else stays pure and
  * testable, and the browser half can import note/query types without dragging node:fs into the web bundle.
  *
  * Shared by the extension's BACKEND and by the `kb` CLI the agent runs. That sharing is the point: one reader,
@@ -12,7 +12,7 @@ import type { NoteFile } from "./note.js";
 // Where the notes live, relative to the workspace root, unless the owner points the setting elsewhere.
 export const DEFAULT_FOLDER = "knowledge";
 
-// Directories a knowledge base never keeps notes in — the editor's own state, a checkout, a dependency tree. Walked past
+// Directories a knowledge base never keeps notes in, the editor's own state, a checkout, a dependency tree. Walked past
 // rather than read: an Obsidian knowledge base synced in here carries a .obsidian/ full of JSON that is not knowledge.
 const SKIP_DIRS = new Set([".git", ".obsidian", ".trash", ".intentic", "node_modules", ".cache"]);
 
@@ -29,7 +29,7 @@ export const knowledgeRoot = (workspaceRoot: string, configured: string | undefi
 };
 
 // The owner's chosen folder, from the settings file the daemon keeps. Absent, unreadable or not this
-// extension's key all mean the same thing — the default — so a settings file that has never been written is
+// extension's key all mean the same thing, the default, so a settings file that has never been written is
 // silent rather than an error path.
 export const configuredFolder = async (workspaceRoot: string): Promise<string | undefined> => {
     try {
@@ -92,7 +92,7 @@ export const readNotes = async (root: string): Promise<NoteFile[]> => {
                         sizeBytes: info.size,
                     });
                 } catch {
-                    // Raced a delete, or is not readable — the knowledge base simply does not contain it this round.
+                    // Raced a delete, or is not readable, the knowledge base simply does not contain it this round.
                 }
             }),
         );

@@ -21,19 +21,19 @@ export interface ImapConnectorConfig {
     readonly mailbox?: string;
 }
 // A long outage on a busy inbox must not fetch a thousand bodies on reconnect: deliver the newest batch,
-// advance the watermark past the rest (logged) — the agent can still read the skipped ones over the skill.
+// advance the watermark past the rest (logged), the agent can still read the skipped ones over the skill.
 export const CATCH_UP_MAX = 50;
 
 export const mailboxOf = (config: ImapConnectorConfig): string => (config.mailbox === undefined || config.mailbox === "" ? "INBOX" : config.mailbox);
 
 // The connection identity: the reconcile loop stops and reopens a slot whose serialized config changed, so an
-// edited password or watched mailbox reconnects within one tick. Also the fatal-backoff key — an edited
+// edited password or watched mailbox reconnects within one tick. Also the fatal-backoff key, an edited
 // config clears its own backoff instantly (the discord gateway's by-token behavior).
 export const configKeyOf = (config: ImapConnectorConfig): string =>
     JSON.stringify([config.host, config.port, config.username, config.password, mailboxOf(config)]);
 
 // The accounts with enough config to try connecting (the shell already gates on an enabled imap listener
-// automation existing — no automations ⇒ it asks for nothing).
+// automation existing, no automations ⇒ it asks for nothing).
 export const desiredAccounts = (connectors: ReadonlyArray<ConnectorEntry<ImapConnectorConfig>>): ReadonlyArray<ConnectorEntry<ImapConnectorConfig>> =>
     connectors.filter(({ config }) => config.host !== "" && config.username !== "" && config.password !== "");
 
@@ -41,7 +41,7 @@ export const desiredAccounts = (connectors: ReadonlyArray<ConnectorEntry<ImapCon
 // can't help until the owner fixes the config, and providers lock accounts on repeated failed logins.
 export class FatalConnectionError extends Error {}
 
-// The client slice one catch-up pass reads — a seam so the pass is testable without a live ImapFlow.
+// The client slice one catch-up pass reads, a seam so the pass is testable without a live ImapFlow.
 export interface SyncSource {
     readonly search: (range: string) => Promise<number[] | false>;
     readonly fetch: (uid: number) => Promise<FetchMessageObject | false>;
@@ -56,14 +56,14 @@ export interface SyncOptions {
 }
 
 // One catch-up pass: everything above the watermark, oldest first, advancing (and persisting) the mark only
-// after each successful dispatch — a failure mid-pass aborts and the next event or reconnect retries from the
+// after each successful dispatch, a failure mid-pass aborts and the next event or reconnect retries from the
 // exact message that failed.
 export const syncNewMail = async (source: SyncSource, mark: { lastUid: number }, opts: SyncOptions): Promise<void> => {
     const found = await source.search(`${mark.lastUid + 1}:*`);
     if (found === false) {
         return;
     }
-    // `N:*` always matches the highest-UID message even when N exceeds it (RFC 3501) — drop seen uids.
+    // `N:*` always matches the highest-UID message even when N exceeds it (RFC 3501), drop seen uids.
     let pending = found.filter((uid) => uid > mark.lastUid).toSorted((a, b) => a - b);
     if (pending.length > CATCH_UP_MAX) {
         opts.warn({ capabilityId: opts.capabilityId, skipped: pending.length - CATCH_UP_MAX }, "imap catch-up capped to the newest messages");
@@ -72,7 +72,7 @@ export const syncNewMail = async (source: SyncSource, mark: { lastUid: number },
     for (const uid of pending) {
         const msg = await source.fetch(uid);
         if (msg === false) {
-            // Expunged between search and fetch — nothing to deliver; later uids still advance the mark.
+            // Expunged between search and fetch, nothing to deliver; later uids still advance the mark.
             continue;
         }
         await opts.dispatch(await opts.payloadOf(msg));
@@ -86,7 +86,7 @@ export interface ImapConnection {
     readonly stop: () => Promise<void>;
 }
 
-// Best-effort text of the (size-capped) raw MIME: mailparser's plain text, then stripped html, then nothing —
+// Best-effort text of the (size-capped) raw MIME: mailparser's plain text, then stripped html, then nothing,
 // truncated MIME can fail to parse, and an unreadable body must degrade to envelope-only content, not fail.
 const textOf = async (source: Buffer | undefined): Promise<string | undefined> => {
     if (source === undefined) {
@@ -115,7 +115,7 @@ export const openImapConnection = async (
         host: config.host,
         port,
         // Implicit TLS is universally the 993 convention; any other port starts plain and imapflow upgrades
-        // over STARTTLS when the server offers it — which also lets dev/test servers on odd ports connect.
+        // over STARTTLS when the server offers it, which also lets dev/test servers on odd ports connect.
         secure: port === 993,
         auth: { user: config.username, pass: config.password },
         logger: false,
@@ -153,7 +153,7 @@ export const openImapConnection = async (
     const mark = { lastUid: point.lastUid };
     if (point.baselined) {
         // First watch of this mailbox generation (fresh add, folder change, or a UIDVALIDITY reset): record
-        // the current end and dispatch nothing — the agent reacts to mail from now on, never to history.
+        // the current end and dispatch nothing, the agent reacts to mail from now on, never to history.
         await writeWatermark(path, { mailbox, uidValidity, lastUid: mark.lastUid });
     }
 
@@ -192,7 +192,7 @@ export const openImapConnection = async (
         );
 
     // Catch-up runs are serialized: an `exists` burst during a pass queues exactly one rerun, and a failed
-    // pass (network, daemon down) leaves the watermark where it was — the next event or reconnect retries.
+    // pass (network, daemon down) leaves the watermark where it was, the next event or reconnect retries.
     const sync = { running: false, queued: false };
     const runSync = (): void => {
         if (sync.running) {

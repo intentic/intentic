@@ -1,4 +1,4 @@
-/* The URL-query rules behind `api.route`, as pure functions — the same split `permissions.ts` uses: the host owns
+/* The URL-query rules behind `api.route`, as pure functions, the same split `permissions.ts` uses: the host owns
  * the router, this owns the rule, and the rule is testable without one.
  *
  * A view's internal navigation lives in the QUERY because the path is already spoken for: `/ext/:ext/:key?` has
@@ -11,7 +11,7 @@ export type RawQuery = Readonly<Record<string, string | readonly (string | null)
 /* Flatten a router query to the scalar record extensions read. A repeated key takes its FIRST value rather than
  * its last: a view's state is singular, and the first occurrence is the one a hand-written or shared link means.
  * A valueless key (`?draft`) reads as the empty string, which is falsy-ish for the caller to test but never
- * `undefined` — absent and present-but-empty are different answers. */
+ * `undefined`, absent and present-but-empty are different answers. */
 export const flattenQuery = (query: RawQuery): Record<string, string> => {
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(query)) {
@@ -25,7 +25,7 @@ export const flattenQuery = (query: RawQuery): Record<string, string> => {
     return out;
 };
 
-/* Merge a patch into the live query. `undefined` REMOVES its key — that is how a view says "I am no longer on a
+/* Merge a patch into the live query. `undefined` REMOVES its key, that is how a view says "I am no longer on a
  * page" without leaving `?doc=` behind, so the tidy URL is the one you get by default rather than one you have to
  * construct. Every key the patch does not mention is carried through untouched, which is the whole invariant:
  * a documentation view setting `doc` must not drop the terminal's or another view's parameters. */

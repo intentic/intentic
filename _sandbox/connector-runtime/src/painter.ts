@@ -6,7 +6,7 @@ export interface Painter {
     readonly end: () => void;
 }
 
-// The slice of a provider's message API a streaming painter needs — structural so tests pass a fake and the
+// The slice of a provider's message API a streaming painter needs, structural so tests pass a fake and the
 // painter stays decoupled from any SDK. `post` returns the handle `update` edits: Slack's string ts, Telegram's
 // numeric message_id, discord.js's Message object.
 export interface StreamPoster<THandle> {
@@ -23,12 +23,12 @@ export interface StreamTuning {
 
 /* A painter that renders the model's text into a channel as it streams: the reply grows in one message,
  * spilling into a new one every maxChars, repainted on a rate-limited timer and fully flushed on end().
- * Best-effort — a failed post/update reports via onError and kills the stream, because a lost live update must
+ * Best-effort, a failed post/update reports via onError and kills the stream, because a lost live update must
  * never crash the turn.
  *
  * One machine for the discord/slack/telegram painters, which were deliberately identical: the daemon drives
  * all of them through the same TurnStream contract, and the only real differences were the character ceiling,
- * the edit cadence, and the type of the handle a posted message is edited by — now parameters.
+ * the edit cadence, and the type of the handle a posted message is edited by, now parameters.
  * ponytail: hard character split (can cut mid-word) and no cap on message count; add a smarter boundary or a
  * cap only if real replies need it. */
 export const createStreamingPainter = <THandle>(poster: StreamPoster<THandle>, onError: (error: unknown) => void, tuning: StreamTuning): Painter => {
@@ -75,7 +75,7 @@ export const createStreamingPainter = <THandle>(poster: StreamPoster<THandle>, o
             onError(error);
         } finally {
             flushing = false;
-            // A reconcile that raced end() (started before ended flipped) can leave a tail unrendered — finish it.
+            // A reconcile that raced end() (started before ended flipped) can leave a tail unrendered, finish it.
             if (ended && !dead && renderedLen < buffer.length) {
                 void reconcile();
             }
@@ -109,11 +109,11 @@ export const createStreamingPainter = <THandle>(poster: StreamPoster<THandle>, o
 /* A painter that deliberately does NOT stream. The streaming painters grow a message with edits as the model
  * types; on WhatsApp a message being rewritten twice a second is exactly the automation fingerprint that gets
  * numbers flagged, and every edit wears a visible "edited" label. So this painter buffers the whole reply and
- * sends it ONCE on end() — the typing indicator (listener-owned) is what tells the chat something is coming.
+ * sends it ONCE on end(), the typing indicator (listener-owned) is what tells the chat something is coming.
  * Same Painter interface, different rendering policy: the daemon drives both through the identical TurnStream
  * contract and never knows the difference. maxChars is a safety net, not a pagination scheme.
  *
- * Best-effort — a failed send reports via onError and kills the painter, because a lost reply must never crash
+ * Best-effort, a failed send reports via onError and kills the painter, because a lost reply must never crash
  * the turn. */
 export const createBufferedPainter = (send: (text: string) => Promise<void>, onError: (error: unknown) => void, maxChars: number): Painter => {
     let buffer = "";
@@ -144,8 +144,8 @@ export const createBufferedPainter = (send: (text: string) => Promise<void>, onE
     };
 };
 
-/* What a chat is told when a turn is not going to answer it. The daemon has always known this — a run already
- * going, a guard that said no, a wake that died on a revoked credential — and hands the reason to the sink; the
+/* What a chat is told when a turn is not going to answer it. The daemon has always known this, a run already
+ * going, a guard that said no, a wake that died on a revoked credential, and hands the reason to the sink; the
  * gateways used to drop it on the floor, so the channel got typing dots that stopped and nothing else, which
  * reads as the bot ignoring you rather than as anything having gone wrong.
  *

@@ -3,7 +3,7 @@ import type { Config } from "../config.js";
 import { isPremium } from "./pool-membership.js";
 import { computeMonth, type DonationAggregate, type ServiceAggregate } from "./pool-share.js";
 
-/* THE PUBLIC LEDGER — the promise this whole system is built to make checkable, served to anyone with no login.
+/* THE PUBLIC LEDGER, the promise this whole system is built to make checkable, served to anyone with no login.
  *
  * It publishes two KINDS of month and never lets them be mistaken for each other. An OPEN month is computed
  * live from the ledger rows and its revenue is an estimate (members × price), because nobody can know what a
@@ -16,7 +16,7 @@ import { computeMonth, type DonationAggregate, type ServiceAggregate } from "./p
  * than left to be inferred.
  *
  * WHAT HAPPENED TO THE MONEY is published too, per closed month: paid, in flight, carried (owed to a creator
- * but not yet sent — under the minimum, or not yet due), unclaimed (owed to a publisher name nobody has proved
+ * but not yet sent, under the minimum, or not yet due), unclaimed (owed to a publisher name nobody has proved
  * yet) and expired (unclaimed past its window and returned to a later month's pool). Publishing only the total
  * earned would let "we pay 90%" hide an arbitrary amount of money that never actually reached anybody. */
 
@@ -50,7 +50,7 @@ export const buildLedger = async (prisma: PrismaClient, config: Config, at: Date
     const openMonth = monthShifted(at, 0);
     const [donations, runs, memberships, closedMonths, claims] = await Promise.all([
         prisma.donation.findMany({ where: { month: openMonth }, select: { extensionId: true, credits: true } }),
-        // Only served runs earn — a refunded run charged nobody and pays nobody.
+        // Only served runs earn, a refunded run charged nobody and pays nobody.
         prisma.serviceRun.findMany({
             where: { status: `ok`, createdAt: { gte: new Date(`${openMonth}-01T00:00:00.000Z`) } },
             select: { credits: true, service: { select: { slug: true, publisher: true } } },

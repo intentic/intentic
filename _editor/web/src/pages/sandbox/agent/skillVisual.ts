@@ -2,25 +2,25 @@ import type { CapabilitySummary, SkillOrigin, SkillSummary } from "@intentic-app
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { capabilityMark } from "../../capabilities/cards";
 
-/* THE MARK ON A SKILL ROW — what makes "Discord, GitHub, your Windows PC" legible from the left edge alone,
+/* THE MARK ON A SKILL ROW, what makes "Discord, GitHub, your Windows PC" legible from the left edge alone,
  * instead of thirteen identical grey glyphs down a column where twelve of them said `link`.
  *
  * The Skills list is the one surface where everything the agent carries sits together, so it is the longest list
  * in the hub and the one most often read by scanning ("which of these came with something I connected?"). Every
  * row of it was drawn with its ORIGIN's glyph, which means the column repeated six symbols over and over and
- * distinguished nothing inside a group — the eight connections were eight identical chain links. The environment
+ * distinguished nothing inside a group, the eight connections were eight identical chain links. The environment
  * tab had already solved exactly this (environmentVisual.ts), and this follows its shape: one <BrandMark>, a
  * ladder of tiers, and the glyph kept as what the brand is painted over rather than as the answer.
  *
- * THE TOP TIER IS NOT A TABLE — IT IS WHAT THE OWNER ALREADY DECLARED. A skill that came with an extension or a
+ * THE TOP TIER IS NOT A TABLE. IT IS WHAT THE OWNER ALREADY DECLARED. A skill that came with an extension or a
  * connection belongs to a thing that has a card, and that card's manifest already carries the mark the rest of
  * the app draws it with (the Extensions tab's rows, the Capabilities grid, the connections list). So this asks
  * that manifest rather than guessing from the skill's name: `linux` gets Tux because the Linux PC card says so,
  * and a Reddit account somebody named `reddit-work` still gets Reddit's mark, which no table keyed on a
  * user-typed name could ever manage.
  *
- * THE WORD TABLE IS THE SECOND TIER, and it is small on purpose. It exists for the rows with no owner to ask —
- * the baked tools and the skills the reader wrote themselves — where the name is all there is. A word is enough
+ * THE WORD TABLE IS THE SECOND TIER, and it is small on purpose. It exists for the rows with no owner to ask,
+ * the baked tools and the skills the reader wrote themselves, where the name is all there is. A word is enough
  * (`figma-export` → Figma) and whole names are not, for environmentVisual's reason: nobody spells these the same
  * way twice.
  *
@@ -39,13 +39,13 @@ export interface SkillVisual {
 
 /** What the list needs in hand to ask each skill's owner what it looks like. Both are already-cached reads. */
 export interface SkillSources {
-    /** The sandbox's connections — a capability skill's `owner` is one of these ids. */
+    /** The sandbox's connections, a capability skill's `owner` is one of these ids. */
     readonly capabilities: readonly CapabilitySummary[];
     /** The ENABLED extensions: their own manifests, and the capability cards they contribute. */
     readonly extensions: readonly ExtensionSummary[];
 }
 
-/* Brands, keyed by every word that should reach them. Slugs are verified against the CDN rather than guessed —
+/* Brands, keyed by every word that should reach them. Slugs are verified against the CDN rather than guessed,
  * a 404 costs a request and degrades to the glyph, which is survivable but is a hole in the column this exists
  * to fill. Slack and OpenAI are deliberately absent: neither is in that set, and both have a glyph in the app's
  * own icon vocabulary below. */
@@ -89,7 +89,7 @@ const LOGOS: Readonly<Record<string, string>> = {
     anthropic: `claude`,
 };
 
-// The kinds of work with no brand to borrow — a glyph per KIND, so the baked tools and a reader's own skills are
+// The kinds of work with no brand to borrow, a glyph per KIND, so the baked tools and a reader's own skills are
 // still told apart at a glance rather than sharing one box.
 const GLYPHS: Readonly<Record<string, string>> = {
     lsp: `code`,
@@ -124,7 +124,7 @@ const GLYPHS: Readonly<Record<string, string>> = {
 };
 
 /* The last tier: what KIND of thing put this skill in front of the agent. Reached only by a row whose owner
- * declared no mark and whose name says nothing — and it is still the answer for the one origin that has nothing
+ * declared no mark and whose name says nothing, and it is still the answer for the one origin that has nothing
  * else to say, a loose file nobody claims. */
 const ORIGIN_ICONS = {
     own: `pencil`,
@@ -146,17 +146,17 @@ const wordsOf = (text: string): string[] =>
         .split(/[\s._/-]+/u)
         .filter((word) => word !== ``);
 
-/* A mark as its OWNER declares it: either half may be missing, and the row's own tiers fill the gap — a card
+/* A mark as its OWNER declares it: either half may be missing, and the row's own tiers fill the gap, a card
  * with a brand and no glyph still needs something painted under the brand while it loads. A CONNECTION's owner
  * is the card it came from, which is the join the Capabilities view already makes to list a card's instances,
- * run backwards — shared with it (capabilityMark) rather than written twice. */
+ * run backwards, shared with it (capabilityMark) rather than written twice. */
 type Declared = { readonly logo?: string; readonly icon?: string } | undefined;
 
 const declares = (mark: { readonly logo?: string; readonly icon?: string }): Declared =>
     mark.logo === undefined && mark.icon === undefined ? undefined : mark;
 
 // What the thing that ships this skill is drawn as everywhere else in the app. Undefined when it declares
-// nothing, or when the list it lives in has not arrived yet — both are "ask the next tier", never a hole.
+// nothing, or when the list it lives in has not arrived yet, both are "ask the next tier", never a hole.
 const declaredMark = (skill: SkillSummary, sources: SkillSources): Declared => {
     if (skill.owner === undefined) {
         return undefined;
@@ -179,7 +179,7 @@ export const skillVisual = (skill: SkillSummary, sources: SkillSources): SkillVi
     if (declared !== undefined) {
         return { logo: declared.logo, icon: declared.icon ?? origin };
     }
-    // A glyph found early is remembered but does not stop the search — environmentVisual's rule: a brand further
+    // A glyph found early is remembered but does not stop the search, environmentVisual's rule: a brand further
     // down the words still wins the top tier, and the glyph it passed becomes what sits under it.
     let glyph: string | undefined;
     for (const word of [...wordsOf(skill.name), ...wordsOf(skill.owner ?? ``)]) {

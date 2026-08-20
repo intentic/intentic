@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
 
-/* THIS REPO'S UNCOMMITTED WORK — the top row of the graph.
+/* THIS REPO'S UNCOMMITTED WORK, the top row of the graph.
  *
  * The graph is the committed side of the real-git story and the Changes panel is the uncommitted side, and the
  * seam between them was a real gap: the newest thing in the repository was never the newest thing in the graph.
@@ -39,12 +39,12 @@ export function useWorking(repo: Ref<string>) {
     /* WHICH SIDE A ROW CAME FROM, resolved by object IDENTITY rather than by path.
      *
      * It has to be identity: a path can sit on two sides at once with different content (the classic partially
-     * staged file), and those are two genuinely different diffs — index-vs-HEAD and worktree-vs-index. A lookup
+     * staged file), and those are two genuinely different diffs, index-vs-HEAD and worktree-vs-index. A lookup
      * by path would have to pick one of them arbitrarily, and would show the user the wrong half half the time.
      * The same object reference only ever appears in one list, so this cannot be ambiguous.
      *
      * Carried as a lookup rather than merged onto each change so the changes stay exactly what the daemon sent
-     * — the file tree takes plain GitChanges, and copying every row to bolt a field on would both allocate per
+     *, the file tree takes plain GitChanges, and copying every row to bolt a field on would both allocate per
      * render and put a second spelling of the wire shape into circulation. */
     const sideOf = (change: GitChange): GitDiffSide => {
         const entry = mine.value;

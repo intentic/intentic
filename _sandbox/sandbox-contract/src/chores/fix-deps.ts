@@ -1,14 +1,14 @@
-/* THE FIX CHORE — the template for opting into dependency-breakage repair.
+/* THE FIX CHORE, the template for opting into dependency-breakage repair.
  *
  * The automations catalogue offers it as a recipe; nothing creates it until the owner picks that template.
  *
- * It wakes on `deps.broken` — the dependency verifier's edge event: a landed change drifted the installed
+ * It wakes on `deps.broken`, the dependency verifier's edge event: a landed change drifted the installed
  * dependencies, the daemon reinstalled them, ran the tree's own checks, and they came back red. The payload
  * is that event: `deps.project` is the project whose checks failed, `deps.command` the exact command that
  * judged it, `deps.exitCode` and `deps.logTail` what it said, and `deps.attempt` which consecutive red this
  * is since the last green.
  *
- * THE GUARD IS THE LOOP CAP, and it lives in guard shell — one visible, owner-editable line — rather than in
+ * THE GUARD IS THE LOOP CAP, and it lives in guard shell, one visible, owner-editable line, rather than in
  * daemon code, because whoever tunes "how many tries before a human looks" must be able to see the number.
  * Attempt 1 is the breakage, attempt 2 is one landed fix that still failed; past that the loop stops and the
  * standing red is the owner's to read (the activity feed has been narrating every step).

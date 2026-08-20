@@ -22,13 +22,13 @@ import { accountFromEvent, type StripeGateway, stripeGateway, subscriptionFromEv
 /* THE CREATOR POOL's sandbox-facing and public routes. The browser-facing half (membership state, checkout,
  * portal) rides the oRPC contract in pool.orpc.ts; what lives here is what a BROWSER SESSION cannot
  * authenticate: the daemon's ledger report and premium probe (connect-token auth, the trial's ownerOf
- * pattern), Stripe's webhook (signature auth), and the transparency read (public on purpose — an economy
+ * pattern), Stripe's webhook (signature auth), and the transparency read (public on purpose, an economy
  * whose numbers need a login is not the promise).
  *
  * Everything 404s while the pool is unconfigured, trial-style: a self-hosted platform that sells nothing
  * has nothing here, and saying so tersely beats explaining. */
 
-// Mirrors the contract's extension-id shape (publisher.name) — the ledger must not become a store of
+// Mirrors the contract's extension-id shape (publisher.name), the ledger must not become a store of
 // arbitrary strings somebody's daemon sent.
 const EXTENSION_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,120}$/;
 
@@ -50,7 +50,7 @@ export interface PoolDeps {
     readonly auth?: Auth;
     // Injectable so tests drive checkout/webhook flows without Stripe, like the trial pool's fetchFn.
     readonly gateway?: StripeGateway;
-    // Injectable so tests drive the service forward without a network — the trial pool's pattern.
+    // Injectable so tests drive the service forward without a network, the trial pool's pattern.
     readonly fetchFn?: typeof fetch;
     readonly now?: () => Date;
 }
@@ -61,11 +61,11 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
     // test config, most self-hosted ones) constructs nothing Stripe-shaped.
     const stripe = (): StripeGateway => gateway ?? stripeGateway(config.pool.stripeSecretKey, fetch, now);
 
-    /* WHOSE MEMBERSHIP PAYS — resolved from either of the two credentials that can name an account without a
+    /* WHOSE MEMBERSHIP PAYS, resolved from either of the two credentials that can name an account without a
      * browser session, because these routes serve two different kinds of caller.
      *
      * A SANDBOX presents its connect token. That was the only principal for as long as the pool existed, and
-     * it quietly made "owns a machine" a precondition for buying and spending a membership — which it never
+     * it quietly made "owns a machine" a precondition for buying and spending a membership, which it never
      * was. A membership is an account's, the meter is an account's, the catalog is the platform's.
      *
      * An MCP CLIENT (Claude Code, through the `intentic` plugin) presents an OAuth bearer this platform issued
@@ -86,16 +86,16 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
         if (auth === undefined || bearer === undefined || !bearer.toLowerCase().startsWith(`bearer `)) {
             return undefined;
         }
-        // Better Auth's own reader — it checks the token's expiry as well as its existence, and keeping that
+        // Better Auth's own reader, it checks the token's expiry as well as its existence, and keeping that
         // check on its side is what stops this from drifting away from how it issues them.
         const session = await auth.api.getMcpSession({ headers: new Headers({ authorization: bearer }) }).catch(() => null);
         return session?.userId ?? undefined;
     };
 
-    /* THE INSTALL DONATION — how a non-service premium extension gets paid, and the platform's ONLY signal
+    /* THE INSTALL DONATION, how a non-service premium extension gets paid, and the platform's ONLY signal
      * about one (no usage telemetry exists; the docs say so as a promise). The daemon calls this while a
      * premium install/update is being applied. Idempotent per (member, extension, month) by the unique key:
-     * a reinstall answers `donated: 0` and charges nothing, an update in a later month donates again — at
+     * a reinstall answers `donated: 0` and charges nothing, an update in a later month donates again, at
      * most twelve donations per install per year, which is also what bounds an update-spamming publisher.
      * The spend rides the same daily meter as service runs, with the same optimistic-then-refund discipline
      * and the same typed refusals, so every surface already knows how to say what happened. */
@@ -147,7 +147,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
         return c.json({ donated: amount, remaining: spend.remaining });
     });
 
-    // The daemon's premium probe — what gates enabling a premium extension. Spends nothing; polling is free.
+    // The daemon's premium probe, what gates enabling a premium extension. Spends nothing; polling is free.
     app.get(`/status`, async (c) => {
         if (!poolEnabled(config)) {
             return c.json({ error: `the creator pool is not enabled on this platform` }, 404);
@@ -159,7 +159,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
         return c.json({ premium: await premiumOf(prisma, config, ownerId) });
     });
 
-    /* The services catalog, plus where the caller's allowance stands — the read behind every "this run costs
+    /* The services catalog, plus where the caller's allowance stands, the read behind every "this run costs
      * N credits (M left today)" surface. Everyone with a sandbox sees the catalog (a non-member deciding
      * whether to join should see what membership buys); only a member gets a credit meter, because only a
      * member has one. */
@@ -174,7 +174,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
         return c.json(await readServiceCatalog(prisma, config, ownerId, now()));
     });
 
-    /* THE WANTED LIST's write — an agent that read the catalog and found nothing that answers files what it
+    /* THE WANTED LIST's write, an agent that read the catalog and found nothing that answers files what it
      * was looking for. The single most valuable demand signal the platform has, and the cheapest: no
      * membership required (a non-member's unmet need is future demand), nothing spent, nothing returned
      * about anyone. The owner column only feeds the daily cap; the public read (GET /catalog) aggregates by
@@ -183,8 +183,8 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
      *
      * `/wanted`, NOT `/services/wanted`: a static path under `/services/` would sit beside the dynamic
      * `/services/:slug/run`, which is exactly the static-inside-dynamic mix Hono's RegExpRouter cannot
-     * compile — SmartRouter then silently falls back for the WHOLE app, and the auth catch-all's pattern
-     * stops matching. The route's shape is load-bearing; app.test.ts pins the symptom (the one-tap mount). */
+     * compile. SmartRouter then silently falls back for the WHOLE app, and the auth catch-all's pattern
+     * stops matching. The route's shape matters; app.test.ts pins the symptom (the one-tap mount). */
     app.post(`/wanted`, async (c) => {
         if (!poolEnabled(config)) {
             return c.json({ error: `the creator pool is not enabled on this platform` }, 404);
@@ -207,14 +207,14 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
         return c.json({ recorded: true });
     });
 
-    /* ONE METERED RUN — the whole intermediary in one handler. Spend first (atomic, or two concurrent runs
+    /* ONE METERED RUN, the whole intermediary in one handler. Spend first (atomic, or two concurrent runs
      * race through the same headroom), forward signed, refund whatever did not serve. Two different
      * refusals with two different refunds:
      *   - insufficient credits → the optimistic increment is given back (unlike the trial's 1-message slot,
      *     an N-credit bite out of a refused attempt would eat real remaining allowance);
      *   - provider failure (5xx / timeout / dead socket) → full refund, and the run row says `refunded`, so
      *     a flaky service is visible in its own public numbers.
-     * A provider's 4xx is an ANSWER — the caller pays for it and reads it verbatim, because "your query was
+     * A provider's 4xx is an ANSWER, the caller pays for it and reads it verbatim, because "your query was
      * malformed" is the service serving exactly what was asked. */
     app.post(`/services/:slug/run`, async (c) => {
         if (!poolEnabled(config)) {
@@ -253,7 +253,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
             );
         }
         if (run.kind === `answered`) {
-            // The provider's own refusal (a 4xx) — a complete, PAID answer, relayed verbatim as ever.
+            // The provider's own refusal (a 4xx), a complete, PAID answer, relayed verbatim as ever.
             return c.newResponse(run.body, run.status as 200, {
                 "content-type": run.contentType,
                 // Advisory, like the trial's remaining-count header: any UI can show the meter without a second call.
@@ -261,7 +261,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
             });
         }
         /* The stream: every validated provider event relayed the moment it arrives, then the LEDGER's own last
-         * word — a `receipt` trailer this handler appends after the stream settles, because whether the run
+         * word, a `receipt` trailer this handler appends after the stream settles, because whether the run
          * served (and so whether the charge stood or was reversed) is only knowable at the end, when the
          * response's status line is long gone. The trailer is the platform speaking, never the provider. */
         const encoder = new TextEncoder();
@@ -294,7 +294,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
         return c.newResponse(relayed, 200, { "content-type": `application/x-ndjson` });
     });
 
-    /* The demo service's upstream (pool-demo.ts) — the platform answering its own forwarded calls, verifying
+    /* The demo service's upstream (pool-demo.ts), the platform answering its own forwarded calls, verifying
      * the signature exactly as a real provider must. Refusing an unsigned call is half the demo's value: it
      * shows the intermediary promise (only intentic can invoke a provider) actually holding. */
     app.post(`/demo/upstream`, async (c) => {
@@ -323,12 +323,12 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
         return c.newResponse(answer.stream, 200, { "content-type": `application/x-ndjson` });
     });
 
-    /* THE PUBLIC CATALOG — the live listings as anyone may read them, login-free like the ledger below. Two
+    /* THE PUBLIC CATALOG, the live listings as anyone may read them, login-free like the ledger below. Two
      * jobs the sandbox-authed catalog above cannot do: let a prospective member see what membership buys
-     * before they hold a sandbox, and let a prospective provider see what already exists — and how it
-     * behaves — before they build. Lifetime run counts ride along because "a flaky service is visible in its
+     * before they hold a sandbox, and let a prospective provider see what already exists, and how it
+     * behaves, before they build. Lifetime run counts ride along because "a flaky service is visible in its
      * own public numbers" is a promise that needs a public surface: served and refunded, from the same rows
-     * the ledger pays from. `sampleRequest` stays off — it is agent-facing documentation, and this is a
+     * the ledger pays from. `sampleRequest` stays off, it is agent-facing documentation, and this is a
      * browsing surface. */
     app.get(`/catalog`, async (c) => {
         if (!poolEnabled(config)) {
@@ -355,7 +355,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
         /* The wanted list, beside what exists: what agents looked for and did not find, grouped by
          * normalized text, counted by DISTINCT owners (one noisy sandbox is one voice), newest ask shown.
          * Read whole and reduced here rather than via groupBy because distinct-owner counting is one pass in
-         * code and two grouped queries in SQL — revisit if the window's row count ever makes that wrong. */
+         * code and two grouped queries in SQL, revisit if the window's row count ever makes that wrong. */
         const wantRows = await prisma.serviceWant.findMany({
             where: { createdAt: { gte: new Date(now().getTime() - WANT_WINDOW_DAYS * 86_400_000) } },
             select: { userId: true, text: true, normalized: true, createdAt: true },
@@ -378,7 +378,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
     });
 
     /* The public ledger (pool-ledger.ts): the month in progress computed live and marked open, then every
-     * closed month exactly as it was frozen. Public on purpose — an economy whose numbers need a login is not
+     * closed month exactly as it was frozen. Public on purpose, an economy whose numbers need a login is not
      * the promise. Member count on the OPEN month is today's snapshot, because the platform keeps no
      * membership history; a closed month's is the count recorded when it closed. */
     app.get(`/transparency`, async (c) => {
@@ -392,7 +392,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
     });
 
     /* Stripe's webhook. Signature-authenticated against the RAW body; a pool that is enabled but has no
-     * webhook secret refuses everything with 400 — that is a misconfiguration to surface, not to absorb.
+     * webhook secret refuses everything with 400, that is a misconfiguration to surface, not to absorb.
      * Unrecognized event types ack with 200 so Stripe stops retrying them. */
     app.post(`/webhook`, async (c) => {
         if (!poolEnabled(config)) {
@@ -425,7 +425,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
                 await applySubscription(prisma, subscription);
             }
         } else if (type === `account.updated`) {
-            // A creator's payout readiness changing — the fast path that keeps the settings screen right
+            // A creator's payout readiness changing, the fast path that keeps the settings screen right
             // without anyone looking at it. The creator surface also reads through to Stripe while an account
             // is unfinished, so neither this nor that is the only way the answer becomes true.
             const account = accountFromEvent(data.object);

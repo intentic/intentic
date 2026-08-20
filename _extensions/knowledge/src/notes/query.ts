@@ -2,11 +2,11 @@ import type { NoteEdge, KnowledgeIndex } from "./index-notes.js";
 import { factsOf, type ParsedNote } from "./note.js";
 import { wikiLinksIn } from "./wiki-links.js";
 
-/* ASKING THE KNOWLEDGE BASE THINGS — search, filter, and the neighbourhood around one note.
+/* ASKING THE KNOWLEDGE BASE THINGS, search, filter, and the neighbourhood around one note.
  *
  * The ranking is deliberately explainable rather than clever, and there is no second retrieval engine behind
  * it. A knowledge base is a few hundred short notes the owner or the agent WROTE, so what someone types is nearly always
- * the name of a thing they know is in there — and for that, "the note actually called that, then the note that
+ * the name of a thing they know is in there, and for that, "the note actually called that, then the note that
  * says it goes by that, then the notes that mention it" is both the best answer and the one a reader can
  * predict. Fuzzy prose search over the same folder is already a tool the agent has (`iq`), and pointing it here
  * costs nothing; duplicating it worse is what this deliberately does not do. */
@@ -15,7 +15,7 @@ export interface SearchFilters {
     readonly query?: string | undefined;
     readonly type?: string | undefined;
     readonly tag?: string | undefined;
-    // Notes that link to this one (by any relation) — "everything about the Intentic project".
+    // Notes that link to this one (by any relation), "everything about the Intentic project".
     readonly linkedTo?: string | undefined;
     readonly limit?: number | undefined;
 }
@@ -29,7 +29,7 @@ export interface SearchHit {
     // Why this note is in the answer, in one word, so a surprising hit explains itself: title, alias, tag,
     // type, field, or body.
     readonly matched: string;
-    // The evidence — the line the body matched on, or the fact that did. Absent for a name match, where the
+    // The evidence, the line the body matched on, or the fact that did. Absent for a name match, where the
     // title the reader is looking at IS the evidence.
     readonly snippet: string | undefined;
     readonly score: number;
@@ -45,13 +45,13 @@ const TITLE_PREFIX = 700;
 const TITLE_CONTAINS = 500;
 const TAG_OR_TYPE = 300;
 /* A note's plain facts are searchable, and they have to be: a header field is where a knowledge note keeps the
- * thing you would actually go looking by — an employer, a city, a version. Those words appear nowhere in the
+ * thing you would actually go looking by, an employer, a city, a version. Those words appear nowhere in the
  * prose, so a search that read only the body would answer "no such note" about a note that says it plainly. */
 const FIELD = 200;
 const BODY = 100;
 
 /* A matched line as EVIDENCE rather than as source. It is shown under a title in a narrow column, where
- * `**client-generated**` and `[[Checkout API]]` read as damage rather than as emphasis and a link — the markers
+ * `**client-generated**` and `[[Checkout API]]` read as damage rather than as emphasis and a link, the markers
  * mean something only to a renderer, and this is not one. The words are left exactly as written; only the
  * punctuation that was never meant to be read comes off. */
 const withoutWikiMarkers = (line: string): string => {
@@ -112,7 +112,7 @@ const scoreNote = (note: ParsedNote, needle: string): { score: number; matched: 
     }
     const { hits, line } = bodyHit(note, needle);
     // Capped: a note that says the word thirty times is more relevant than one that says it twice, and no more
-    // relevant than one that says it eight times — past that it is a long note, not a better answer.
+    // relevant than one that says it eight times, past that it is a long note, not a better answer.
     return hits === 0 ? undefined : { score: BODY + Math.min(hits, 8), matched: "body", snippet: line };
 };
 
@@ -131,7 +131,7 @@ export const search = (index: KnowledgeIndex, filters: SearchFilters): readonly 
         if (linked !== undefined && !linked.has(note.path)) {
             continue;
         }
-        // No words to match on means the filters ARE the query — every note that survives them, newest first.
+        // No words to match on means the filters ARE the query, every note that survives them, newest first.
         const scored = needle === "" ? { score: 0, matched: "all", snippet: undefined } : scoreNote(note, needle);
         if (scored === undefined) {
             continue;
@@ -159,7 +159,7 @@ export interface GraphNode {
     readonly path: string;
     readonly title: string;
     readonly type: string | undefined;
-    // How many steps from the focus note — what lets the picture fade the outer ring rather than draw it flat.
+    // How many steps from the focus note, what lets the picture fade the outer ring rather than draw it flat.
     readonly depth: number;
 }
 
@@ -174,7 +174,7 @@ export interface GraphView {
 
 const MAX_NODES = 60;
 
-/* Everything within `depth` steps of one note, links followed in BOTH directions — because "what is connected
+/* Everything within `depth` steps of one note, links followed in BOTH directions, because "what is connected
  * to this" does not care which note happens to hold the link. Breadth-first, so the cap cuts the far ring
  * rather than an arbitrary branch, and the first ring is always complete. */
 export const neighbourhood = (index: KnowledgeIndex, focus: string, depth: number): GraphView => {
@@ -210,7 +210,7 @@ export const neighbourhood = (index: KnowledgeIndex, focus: string, depth: numbe
             return { path, title: note?.title ?? path, type: note?.type, depth: depthOf };
         })
         .toSorted((a, b) => a.depth - b.depth || a.title.localeCompare(b.title));
-    // Only edges between notes that made the cut — an edge to a node nobody drew is a line into nothing.
+    // Only edges between notes that made the cut, an edge to a node nobody drew is a line into nothing.
     const edges = index.edges.filter((edge) => edge.to !== undefined && seen.has(edge.from) && seen.has(edge.to));
     return { focus: start.path, nodes, edges, omitted };
 };

@@ -1,4 +1,4 @@
-/* The two rules `kb new` and `kb link` apply on the caller's behalf — separated from the command itself so they
+/* The two rules `kb new` and `kb link` apply on the caller's behalf, separated from the command itself so they
  * can be tested without running a process, and so the command file stays a file that only ever runs. */
 
 /* `--link works_on=Intentic` → the header field `works_on: ["[[Intentic]]"]`.

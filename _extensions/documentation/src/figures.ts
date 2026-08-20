@@ -5,17 +5,17 @@ import type { DocIndex, DocIndexEntry, RepoDoc } from "./docModel.js";
  * Every figure on a package page is built here, from the derived index, and rendered above the prose. None of it
  * is authored, and that is the point: the layout this replaced had agents hand-writing line counts, file counts
  * and neighbour lists into `doc.md` as JSON fences. Those were 62% of the bytes in the document tree and the
- * single largest source of rot in it — a number typed into a page is wrong the next time anyone commits, and
+ * single largest source of rot in it, a number typed into a page is wrong the next time anyone commits, and
  * nothing about reviewing a page catches it.
  *
- * So the split the rest of this extension already draws — a script computes facts, a model authors judgement —
+ * So the split the rest of this extension already draws, a script computes facts, a model authors judgement,
  * finally reaches the figures too. An author writes a `dag` fence only for something the dependency graph cannot
  * say (a request's path, a state machine, an ordering), and those still render inline exactly where they are
  * written. Everything measurable is drawn from here and cannot go stale.
  *
  * The output is markdown, not components, because the page is already a <Markdown> render and the figure fences
  * are already a thing that renderer knows how to draw. Emitting text keeps this module pure and testable and
- * lets a figure fail the way any other fence does — as a code block, costing itself and not the page. */
+ * lets a figure fail the way any other fence does, as a code block, costing itself and not the page. */
 
 // Enough neighbours to show the shape, few enough to stay readable. A package everything depends on would
 // otherwise draw a diagram nobody can follow, and the title says exactly what was left out.
@@ -33,7 +33,7 @@ const accents = (repoDoc: RepoDoc | undefined): ReadonlyMap<string, string> => {
     return byDir;
 };
 
-// The last segment of a package dir. `_deploy/graph` is "graph" on a node label — the prefix is the same for every
+// The last segment of a package dir. `_deploy/graph` is "graph" on a node label, the prefix is the same for every
 // package in the group and spends width saying nothing.
 const leaf = (dir: string): string => dir.slice(dir.lastIndexOf(`/`) + 1);
 
@@ -76,7 +76,7 @@ const neighbourFigure = (dir: string, index: DocIndex, repoDoc: RepoDoc | undefi
 };
 
 // How big this package is next to the others in its component. Skipped when the component is unknown or has
-// nothing to compare against — a bar chart of one bar is a number wearing a costume.
+// nothing to compare against, a bar chart of one bar is a number wearing a costume.
 const sizeFigure = (entry: DocIndexEntry, index: DocIndex, repoDoc: RepoDoc | undefined): string | undefined => {
     const component = repoDoc?.components.find((candidate) => candidate.packages.includes(entry.dir));
     if (component === undefined) {
@@ -103,7 +103,7 @@ const sizeFigure = (entry: DocIndexEntry, index: DocIndex, repoDoc: RepoDoc | un
     ].join(`\n`);
 };
 
-/* Everything drawn above a package's prose, as one markdown string — or "" when the index has nothing to say
+/* Everything drawn above a package's prose, as one markdown string, or "" when the index has nothing to say
  * about this directory, which is the ordinary state of a page whose index has not been regenerated yet. The view
  * renders it as its own <Markdown>, so a malformed fence here cannot disturb the README below it. */
 export const packageFigures = (dir: string, index: DocIndex | undefined, repoDoc: RepoDoc | undefined): string => {

@@ -3,12 +3,12 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import type { MemoryFileEntry } from "../contract.js";
 
-/* The agent's persistent memory notes: <workspace>/.intentic/records/sessions/claude/projects/<project>/memory/*.md — MEMORY.md
+/* The agent's persistent memory notes: <workspace>/.intentic/records/sessions/claude/projects/<project>/memory/*.md. MEMORY.md
  * (the index) plus one markdown file per fact, written by the agent across sessions (~/.claude/projects is a
  * symlink to that tree). The tree's other contents are provider-native conversation state, denied by the
  * daemon's generic file API, so everything here is scoped hard: only `<project>/memory/**`
  * is ever listed, read, written, or deleted, and only .md files can be written. This runs in the extension's
- * BACKEND half (server.ts) with plain fs — full trust, same container, same rules as when it was core. */
+ * BACKEND half (server.ts) with plain fs, full trust, same container, same rules as when it was core. */
 
 export const memoryRoot = (workspaceRoot: string): string => join(workspaceRoot, `${STATE_DIR}/records/sessions/claude/projects`);
 
@@ -64,7 +64,7 @@ export const listMemoryFiles = async (root: string): Promise<MemoryFileEntry[]> 
                                 modifiedAt: Math.round(info.mtimeMs),
                             };
                         } catch {
-                            // Raced a delete — the file is simply gone.
+                            // Raced a delete, the file is simply gone.
                             return undefined;
                         }
                     }),

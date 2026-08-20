@@ -36,7 +36,7 @@ export const excerptOf = (text: string): string => {
 };
 
 // Crude but dependency-free text of an HTML-only message (mailparser only derives `text` when a text part
-// exists) — tags and style/script bodies out, whitespace collapsed. Triage quality, not fidelity.
+// exists), tags and style/script bodies out, whitespace collapsed. Triage quality, not fidelity.
 export const htmlText = (html: string): string =>
     html
         .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -52,7 +52,7 @@ export interface MailAttachment {
     readonly size?: number;
 }
 
-// Attachments come from the untruncated BODYSTRUCTURE, not from parsing the (size-capped) source — a large
+// Attachments come from the untruncated BODYSTRUCTURE, not from parsing the (size-capped) source, a large
 // message's attachments must still be listed even when its MIME didn't fully arrive. Inline-with-filename
 // parts (pasted images) count; unnamed body parts don't.
 export const attachmentsOf = (part: MailPart): MailAttachment[] => {
@@ -83,7 +83,7 @@ export const mailMessage = (input: MailMessageInput): ListenerMessage => {
     const address = from?.address ?? "unknown";
     const subject = input.envelope?.subject ?? "(no subject)";
     const attachments = input.bodyStructure === undefined ? [] : attachmentsOf(input.bodyStructure);
-    // "Addressed to me": the account address appears in To (not merely Cc) — powers the trigger's `mentioned`
+    // "Addressed to me": the account address appears in To (not merely Cc), powers the trigger's `mentioned`
     // filter. Only meaningful when the login is an address; host-style logins never set it.
     const mentioned =
         input.username.includes("@") && input.envelope?.to?.some((entry) => entry.address?.toLowerCase() === input.username.toLowerCase()) === true;
@@ -109,7 +109,7 @@ export const mailMessage = (input: MailMessageInput): ListenerMessage => {
     };
 };
 
-// Flags/expunge carry whatever the server actually reported — plain servers send only a sequence number, and
+// Flags/expunge carry whatever the server actually reported, plain servers send only a sequence number, and
 // no seq→uid map is kept (seq numbers shift after every expunge), so the payload never fabricates a uid.
 // These events have no human author; the account stands in.
 

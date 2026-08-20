@@ -1,7 +1,7 @@
 import { ref, watch, type Ref } from "vue";
 
 /* What the workspace search box remembers between searches (module-level singleton, persisted): the three
- * match switches every editor puts inside its search field — VSCode's Aa / ab / .* — plus how wide the search
+ * match switches every editor puts inside its search field. VSCode's Aa / ab / .*, plus how wide the search
  * looks, and which files it is asked of. Persisted because they are a habit, not a per-query choice: someone
  * who works in regexes wants regexes still on tomorrow, the way VSCode keeps them.
  *
@@ -12,11 +12,11 @@ const REGEX_KEY = `ui-workspace-search-regex`;
 const CASE_KEY = `ui-workspace-search-case`;
 const WORD_KEY = `ui-workspace-search-word`;
 // Widens BOTH the filename quick-open and the content search into node_modules and .gitignore'd paths (the
-// security floor still applies — secrets never surface). Off by default.
+// security floor still applies, secrets never surface). Off by default.
 const INCLUDE_IGNORED_KEY = `ui-workspace-include-ignored`;
 // VSCode's "files to include" box: comma-separated path globs (`package.json, src/**`), `!` on one to exclude
 // instead. Empty = the whole workspace. Narrows WITHIN what includeIgnored admitted, and the grammar is read
-// where both ends can share one reading of it (the contract's search-globs.ts) — the field carries the text.
+// where both ends can share one reading of it (the contract's search-globs.ts), the field carries the text.
 const INCLUDE_KEY = `ui-workspace-search-include`;
 
 // Storage may be unavailable (private mode); the in-memory refs still hold for the session.
@@ -36,7 +36,7 @@ const readText = (key: string): string => {
     }
 };
 
-/* One switch, seeded from storage and persisting every change — which is what makes it a plain ref every
+/* One switch, seeded from storage and persisting every change, which is what makes it a plain ref every
  * caller can flip directly, the way the rest of the persisted singletons work (useFileNesting,
  * useChangeGrouping, useExplorerStyle all say the same thing in their own comment).
  *
@@ -78,11 +78,11 @@ export function useSearchOptions() {
     return { useRegex, matchCase, wholeWord, includeIgnored, include };
 }
 
-/* The three match switches, in the order every editor puts them — shipped from here beside the state they
+/* The three match switches, in the order every editor puts them, shipped from here beside the state they
  * flip, because both search surfaces (the desktop field's inline row and the mobile row under it) were
  * writing the identical list of labels, tooltips and refs out by hand, and a third would have had to guess
  * whether the regex switch is `.*` or `re`. Same split as OS_OPTIONS: the descriptors are shared, the markup
- * is not — a 16px glyph inside a text field and a 32px touch target have nothing in common.
+ * is not, a 16px glyph inside a text field and a 32px touch target have nothing in common.
  *
  * Each row carries the REF, not a snapshot of it plus a function to flip it: the switch is the state, so a
  * caller reads `state.value` and assigns `state.value` like it would any other. */

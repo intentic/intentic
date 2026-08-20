@@ -10,7 +10,7 @@ import {
 } from "@intentic/sandbox-contract";
 
 /* The bridge's view of the sandbox daemon: the /agent SSE stream plus the decision/answer side channels and
- * the session store, every call carrying an `editor`-scoped control token (x-intentic-control — see the
+ * the session store, every call carrying an `editor`-scoped control token (x-intentic-control, see the
  * daemon's auth/grants.ts). A 401 surfaces as ACP auth_required so the editor re-runs the auth flow; a 403
  * names the scope violation, which for this bridge means the daemon's editor scope and this client have
  * drifted apart. Unknown frame kinds are skipped (forward compatibility: a newer daemon must not break an
@@ -18,7 +18,7 @@ import {
 
 export interface DaemonClient {
     readonly streamTurn: (turn: AgentTurn, signal: AbortSignal) => AsyncGenerator<AgentEvent>;
-    // Un-parks a turn waiting on any interactive card (plan / question / permission) — one route, one body.
+    // Un-parks a turn waiting on any interactive card (plan / question / permission), one route, one body.
     readonly postReply: (reply: AgentReply) => Promise<void>;
     readonly getSession: (id: string) => Promise<RestoredMessage[]>;
     // The auth probe (also `intentic-acp login`'s validation call).

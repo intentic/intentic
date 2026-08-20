@@ -6,16 +6,16 @@ import { openFailures } from "./ciStreaks";
  * The repo list arrives in the daemon's discovery order, which is alphabetical by workspace path and has nothing
  * to do with CI. On a real workspace that put four repositories which have never run a pipeline above the one
  * that runs them all day: the entire first screen of a monitoring board was four identical "No runs yet" cards,
- * and the failing run — the only thing anyone opens this page for — sat below the fold.
+ * and the failing run, the only thing anyone opens this page for, sat below the fold.
  *
  * So the order is HOW LOUDLY A REPOSITORY IS ASKING, and one asking nothing at all is not a card:
  *
- *   0 failing   a branch's last word is red — the one thing on this page that wants a person
+ *   0 failing   a branch's last word is red, the one thing on this page that wants a person
  *   1 running   something is in flight, so the answer is arriving
  *   2 warned    the webhook could not be registered (`hookWarning`). Nothing is red, but the board may be out of
- *               date — and this is also the usual reason a repository looks silent, so it outranks green.
+ *               date, and this is also the usual reason a repository looks silent, so it outranks green.
  *   3 settled   has runs, nothing red, nothing moving
- *   4 silent    no runs and nothing to say. A rail row rather than a section — see PipelinesView.
+ *   4 silent    no runs and nothing to say. A rail row rather than a section, see PipelinesView.
  *
  * Ties break on the newest run, so within a tier the board reads as a feed. Two silent repositories have no runs
  * to compare and fall back to their names, which is the alphabetical order the page used to have throughout. */
@@ -23,7 +23,7 @@ import { openFailures } from "./ciStreaks";
 export interface RepoStanding {
     readonly repo: CiRepo;
     readonly runs: readonly PipelineRun[];
-    // Branches whose last word is red, NOT failed runs — the edge-not-level rule the whole extension runs on
+    // Branches whose last word is red, NOT failed runs, the edge-not-level rule the whole extension runs on
     // (ciStreaks.ts). Three failures inside one breakage are one thing to fix, and the rail says "1".
     readonly failing: number;
     readonly running: number;
@@ -59,7 +59,7 @@ export const repoStandings = (repos: readonly CiRepo[], runs: readonly PipelineR
         .toSorted((a, b) => rank(a) - rank(b) || b.latest - a.latest || a.repo.repo.localeCompare(b.repo.repo));
 };
 
-/* What one repository's row says on hover — the full state, because the row itself shows a single number and a
+/* What one repository's row says on hover, the full state, because the row itself shows a single number and a
  * tint. Failing branches first, since that is the number the row is showing and the tooltip has to name it. */
 export const standingNote = (standing: RepoStanding): string =>
     [

@@ -9,7 +9,7 @@ import { EndBehaviorType, entersState, joinVoiceChannel, type VoiceConnection, V
 import { downloadFile } from "@huggingface/hub";
 import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
 // The Opus decoder for received voice. napi-rs, so the platform binding arrives as a prebuilt optional
-// dependency and nothing compiles on install — unlike @discordjs/opus, whose node-pre-gyp installer fetched and
+// dependency and nothing compiles on install, unlike @discordjs/opus, whose node-pre-gyp installer fetched and
 // untarred a binary at install time and needed a `tar` override to stay off a live advisory. Same class, same
 // `(sampleRate, channels)` constructor, same `decode(Buffer): Buffer`; decoded output matches the old binding to
 // within one 16-bit LSB (~110 dB SNR), which is libopus rounding and inaudible to whisper.
@@ -30,7 +30,7 @@ import type { DiscordConnectorConfig } from "./client.js";
  * whisper-cli is NOT in the base image: the discord connector's overlay fragment composes it in, so only sandboxes
  * that connect Discord carry it. A join detects the missing binary and points at the owner-run rebuild.
  *
- * A module singleton: one session per sandbox. ponytail — a map per channel if concurrent calls ever matter. */
+ * A module singleton: one session per sandbox. ponytail, a map per channel if concurrent calls ever matter. */
 
 const MODEL_REPO = "ggerganov/whisper.cpp";
 
@@ -51,20 +51,20 @@ const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfi
         return path;
     }
     ctx.log.info({ model: file }, "downloading whisper model (first voice session)");
-    // HF's CAS bridge 403s anonymous plain-HTTP fetches — downloadFile speaks the Xet protocol instead.
+    // HF's CAS bridge 403s anonymous plain-HTTP fetches, downloadFile speaks the Xet protocol instead.
     const blob = await downloadFile({ repo: MODEL_REPO, path: file });
     if (blob === null) {
         throw new Error(`whisper model download failed: ${MODEL_REPO} has no ${file}`);
     }
     await mkdir(dirname(path), { recursive: true });
-    // Stream straight to disk (up to ~1.5GB — never buffer it), landing BESIDE the model and only then taking
+    // Stream straight to disk (up to ~1.5GB, never buffer it), landing BESIDE the model and only then taking
     // its place: presence here is a bare stat, so a file growing in place is indistinguishable from a finished
-    // one — a torn download would look permanently present and every later join would feed whisper-cli a
+    // one, a torn download would look permanently present and every later join would feed whisper-cli a
     // half-written model. rename is atomic within the directory, so the model is either absent or whole. The
     // staged name is unique per attempt because the composer's own voice downloads into this same directory.
     const staged = `${path}.${randomUUID()}.part`;
     try {
-        // hub's web ReadableStream and the DOM lib's disagree on generics — same object at runtime.
+        // hub's web ReadableStream and the DOM lib's disagree on generics, same object at runtime.
         await pipeline(Readable.fromWeb(blob.stream() as import("node:stream/web").ReadableStream), createWriteStream(staged));
         await rename(staged, path);
     } catch (error) {
@@ -82,7 +82,7 @@ interface VoiceSession {
     readonly connection: VoiceConnection;
     readonly transcriber: Transcriber;
     readonly startedAt: number;
-    // Workspace-relative transcript path, fixed at join — the file exists from the first transcribed utterance.
+    // Workspace-relative transcript path, fixed at join, the file exists from the first transcribed utterance.
     readonly relPath: string;
     readonly participants: Set<string>;
     readonly speaking: Set<string>;
@@ -194,7 +194,7 @@ const endSession = async (s: VoiceSession, reason: string): Promise<string | und
     return relPath;
 };
 
-// The CLI-facing surface (human-readable strings — `discord-voice` prints them for the model to read).
+// The CLI-facing surface (human-readable strings, `discord-voice` prints them for the model to read).
 export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: DiscordConnectorConfig): Promise<string> => {
     if (session !== undefined) {
         return `Already in #${session.channel.name} — run \`discord-voice leave\` first.`;
@@ -233,11 +233,11 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
     const startedAt = Date.now();
     const stamp = new Date(startedAt).toISOString().replace(/[:.]/g, "-");
     const channelSlug = channel.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-");
-    // Under artifacts/ — a finished session's transcript is a durable output, the class that entry names.
+    // Under artifacts/, a finished session's transcript is a durable output, the class that entry names.
     const relPath = join(STATE_DIR, "records", "artifacts", "voice", `${stamp}-${channelSlug}.md`);
     const participants = new Set<string>();
     // Runs inside the transcriber queue after each utterance: rewrite the live transcript, then dispatch a
-    // voice_utterance event — the daemon's listener batcher debounces bursts into one automation wake.
+    // voice_utterance event, the daemon's listener batcher debounces bursts into one automation wake.
     const onLine = async (sorted: { at: number; line: string }[], newLine: string): Promise<void> => {
         await writeTranscript(ctx, relPath, channel.name, startedAt, participants, sorted);
         await ctx.daemon.dispatch({

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
-/* The sandbox's listening TCP ports, via the daemon's /ports routes — the generic complement to panels:
+/* The sandbox's listening TCP ports, via the daemon's /ports routes, the generic complement to panels:
  * anything run in a terminal (a turbo TUI's dev servers, an ad-hoc `python -m http.server`) shows up here,
  * and `forward` exposes one at its port-<slot> preview hostname. All daemon access goes through the host api.
  *
@@ -29,7 +29,7 @@ export function usePorts() {
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
     const forward = async (port: number): Promise<string | undefined> => {
         const result = await api.sandbox.json<PortForwardResult>(`/ports/forward`, jsonPost({ port }));
-        // The caller navigates on the returned previewUrl — the list refresh must not gate it (the poll
+        // The caller navigates on the returned previewUrl, the list refresh must not gate it (the poll
         // reconverges anyway), so fire-and-forget.
         void invalidate();
         return result.previewUrl;

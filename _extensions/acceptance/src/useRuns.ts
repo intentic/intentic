@@ -24,17 +24,17 @@ import { criteriaOf, type Story, targetKeyOf, titleOf } from "./stories";
  *
  * A test session is an ISOLATED fleet agent: `POST /agent` with a conversationId and `isolated: true` is what
  * creates one (agent.routes.ts registers a fleet entry for exactly that shape and no other). That is the whole
- * reason this extension owns no session machinery — the worktree, the live status, the cost, the transcript and
+ * reason this extension owns no session machinery, the worktree, the live status, the cost, the transcript and
  * the /agents/<id> page all already exist, and a run is just N of them started at once with a derived id.
  *
  * `bypassPermissions` because a test that parks on a permission card is a test that never finishes: nobody is
- * watching a fan-out of ten. The blast radius is bounded the way the fleet bounds it — each session is in its
- * own worktree — and the brief's first paragraph is "you are a tester, do not modify the source".
+ * watching a fan-out of ten. The scope is bounded the way the fleet bounds it (each session is in its
+ * own worktree) and the brief's first paragraph is "you are a tester, do not modify the source".
  *
  * Live status is JOINED, never stored: the conversation ids are derived from the run id, so `GET /agents`
  * filtered by prefix IS the state of every registered session. A refusal before registration is the one fact
  * the fleet cannot carry, so the manifest keeps it until Retry succeeds. The same roster join reaches one step
- * further for the live BROWSER — see `browsers` below. */
+ * further for the live BROWSER, see `browsers` below. */
 
 const POLL_MS = 3000;
 
@@ -68,7 +68,7 @@ export interface StoryOutcome {
 
 // The live Chromium one test session is driving, when there is one to watch.
 export interface LiveBrowser {
-    // The tmux-listed session name — what `api.terminal.open` is handed.
+    // The tmux-listed session name, what `api.terminal.open` is handed.
     readonly session: string;
     // The page it is on right now, straight off the daemon's listing.
     readonly url?: string | undefined;
@@ -76,12 +76,12 @@ export interface LiveBrowser {
 
 export interface StartRunInput {
     readonly stories: readonly Story[];
-    // The app under test per story GROUP — keyed by stories.ts targetKeyOf, so a repo serving a marketing site
+    // The app under test per story GROUP, keyed by stories.ts targetKeyOf, so a repo serving a marketing site
     // and a web app points each of their groups at its own server.
     readonly targets: Readonly<Record<string, string>>;
     // Each repo's docs/user-stories/.acceptance.md, keyed by repo name.
     readonly notes: Readonly<Record<string, string>>;
-    // The pair the header's chip resolved — the host names both, because a model id is only meaningful under the
+    // The pair the header's chip resolved, the host names both, because a model id is only meaningful under the
     // provider that vends it. An empty model is a real answer (an ACP agent owns its own): the daemon then falls
     // to the provider's catalog default, exactly as an unpinned composer turn does.
     readonly provider: string;
@@ -143,7 +143,7 @@ export function useRuns() {
      *
      * The join is two hops and neither may be guessed: the fleet roster gives a conversation's `sessionId`, and
      * `browserSessionName` (the contract's, shared with the daemon that NAMES the session) turns that into the
-     * listed name. It is checked against the live listing rather than derived and offered blind — a browser
+     * listed name. It is checked against the live listing rather than derived and offered blind, a browser
      * session exists only once the agent has made its first browser call, and a button that opens an empty view
      * teaches the user the feature is broken.
      *
@@ -157,7 +157,7 @@ export function useRuns() {
             Object.fromEntries(
                 BrowsersListSchema.parse(await api.sandbox.json(`/system/browsers`))
                     .sessions.filter((session) => session.running)
-                    // The page the agent is on right now — the same one its view opens onto.
+                    // The page the agent is on right now, the same one its view opens onto.
                     .map((session) => [session.name, session.pages.find((page) => page.active)?.url] as const),
             ),
     });
@@ -172,12 +172,12 @@ export function useRuns() {
         );
     });
 
-    /* WHAT EVERY RECENT RUN FOUND — the verdict of each story of the newest SCAN_RUNS runs, and nothing else.
+    /* WHAT EVERY RECENT RUN FOUND, the verdict of each story of the newest SCAN_RUNS runs, and nothing else.
      *
      * The list needs this, and so does every story row: "3 stories, 2 hours ago" does not say whether anything is
      * broken, and a stories list that cannot show where each promise currently stands is a list of intentions.
-     * Reading only the verdict (not the report, not the steps) is what makes that affordable — one small file per
-     * story — and the SCAN_RUNS bound is the same one the rail badge scans under, so the tile and the list can
+     * Reading only the verdict (not the report, not the steps) is what makes that affordable, one small file per
+     * story, and the SCAN_RUNS bound is the same one the rail badge scans under, so the tile and the list can
      * never disagree. Runs older than that carry no verdict here until one is opened, which is a read of exactly
      * the run someone is looking at. */
     const scanned = computed<readonly RunManifest[]>(() => (runsQuery.data.value ?? []).slice(0, SCAN_RUNS));
@@ -246,7 +246,7 @@ export function useRuns() {
 
     /* Start a run: write the manifest FIRST, then fan out the turns.
      *
-     * Order matters. The manifest is what makes a run discoverable — if a turn started before it existed and the
+     * Order matters. The manifest is what makes a run discoverable, if a turn started before it existed and the
      * browser closed in between, there would be a fleet agent with a derived id and nothing on disk saying which
      * stories it belonged to. A manifest with no turns behind it is the recoverable failure; the reverse is not. */
     const launch = async (manifest: RunManifest, story: RunManifest["stories"][number]): Promise<void> => {
@@ -262,7 +262,7 @@ export function useRuns() {
             conversationId: story.conversationId,
             isolated: true,
             permissionMode: `bypassPermissions`,
-            // Unattended like every surface-started run — but this one keeps a picker, because a run
+            // Unattended like every surface-started run, but this one keeps a picker, because a run
             // fans a whole session out PER STORY and the tier is therefore a per-run decision about
             // spend. An explicit model wins over the setting; an empty one lets it answer.
             unattended: true,
@@ -353,7 +353,7 @@ export function useRuns() {
 
     return {
         runs,
-        // Keyed by conversationId — the row asks `browsers[story.conversationId]` and shows a Watch button when
+        // Keyed by conversationId, the row asks `browsers[story.conversationId]` and shows a Watch button when
         // there is something to watch.
         browsers,
         // runId → slug → verdict, for the newest SCAN_RUNS runs. A runId that is absent was never read; a runId

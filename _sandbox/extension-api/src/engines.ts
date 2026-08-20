@@ -1,5 +1,5 @@
 // Minimal matcher for a manifest's `engines.intentic` range against the host's extension API version: an exact
-// version ("0.1.0") or a caret range ("^0.1", "^1", "^1.2.3"). Caret follows semver — same major at or above
+// version ("0.1.0") or a caret range ("^0.1", "^1", "^1.2.3"). Caret follows semver, same major at or above
 // the floor, and while the major is 0 the minor is breaking too. Anything unparseable fails closed: the loader
 // reports the extension incompatible rather than activating on a guess.
 

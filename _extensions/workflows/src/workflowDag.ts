@@ -8,12 +8,12 @@ import {
     type WorkflowStepState,
 } from "@intentic/sandbox-contract";
 
-/* THE GRAPH, as both the designer and the run view draw it — one derivation, two consumers, so what you author
+/* THE GRAPH, as both the designer and the run view draw it, one derivation, two consumers, so what you author
  * and what you watch can never be different pictures of the same workflow. That is the whole reason this is a
  * module and not two components' worth of computed properties: a designer whose preview lays out differently
  * from the run is worse than no preview at all, because you would trust it.
  *
- * The node payload carries everything a card renders. `run` is absent in the designer — that absence IS the
+ * The node payload carries everything a card renders. `run` is absent in the designer, that absence IS the
  * mode, and it is why one component can draw both.
  */
 
@@ -36,7 +36,7 @@ export interface StepTone {
 
 /* What each state looks like, and the two decisions in here that matter:
  *
- * `skipped` IS NOT AN ERROR COLOUR. A skipped step did nothing wrong — something upstream did — and painting a
+ * `skipped` IS NOT AN ERROR COLOUR. A skipped step did nothing wrong, something upstream did, and painting a
  * cascade of them red makes one failure look like nine. Muted, so the eye lands on the one red node.
  *
  * `stopped` IS NOT AN ERROR COLOUR EITHER. The user did that on purpose, and telling them off for it is how a
@@ -52,7 +52,7 @@ export const STEP_TONE: Record<WorkflowStepState, StepTone> = {
 };
 
 // The designer's own tone: a step that has never run has no state to show, so it reads as neutral rather than
-// as `pending` — "waiting" would be a lie about a workflow that is not going.
+// as `pending`, "waiting" would be a lie about a workflow that is not going.
 const DESIGN_TONE: StepTone = { icon: `sitemap`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `` };
 
 export const toneFor = (node: WorkflowNode): StepTone => (node.run === undefined ? DESIGN_TONE : STEP_TONE[node.run.state]);
@@ -66,7 +66,7 @@ export interface WorkflowDag {
  * tinted; without one, this is the designer's preview.
  *
  * A DANGLING `needs` IS DROPPED RATHER THAN DRAWN. The save route refuses those, but the designer renders on
- * every keystroke — including the keystroke halfway through renaming a step id, when half the edges point at a
+ * every keystroke, including the keystroke halfway through renaming a step id, when half the edges point at a
  * name that does not exist yet. Dropping them keeps the preview stable while you type; the fault list below
  * the canvas is what tells you about it.
  */
@@ -82,7 +82,7 @@ export const workflowDag = (workflow: Pick<Workflow, "steps">, run?: WorkflowRun
         },
         /* The node's hover text is the step's own goal, and ABSENT when it has none rather than filled in with
          * something else. A step that inherits is measured against the run's request, which the run bar above
-         * the graph is already showing — repeating it on every node would put the same sentence under all of
+         * the graph is already showing, repeating it on every node would put the same sentence under all of
          * them and say nothing about which node is which. `undefined` leaves the node with no tooltip, which is
          * the honest answer to "what is this step's own bar" when it has not set one. */
         ...(step.goal === undefined ? {} : { tooltip: step.goal }),
@@ -109,15 +109,15 @@ export const workflowDag = (workflow: Pick<Workflow, "steps">, run?: WorkflowRun
     return { nodes, edges };
 };
 
-/* THE GRAPH AS ONE COLUMN PER GENERATION — steps that wait on nothing, then everything they unblock.
+/* THE GRAPH AS ONE COLUMN PER GENERATION, steps that wait on nothing, then everything they unblock.
  *
  * NOT A SECOND PICTURE. The list card draws the real graph through DagGraph like everything else; what it needs
- * from here is the one measurement dagre's own output cannot give it before layout runs — how WIDE the widest
+ * from here is the one measurement dagre's own output cannot give it before layout runs, how WIDE the widest
  * rank is, which in an LR graph is what decides how tall the frame has to be, and whether a design has any
  * parallelism worth mentioning in words ("up to 2 at once").
  *
  * A CYCLE CANNOT HANG IT. Nothing being ready means every remaining step waits on another one, which the save
- * route refuses — but a template is authored by hand, and a page that spins forever over a typo is not a
+ * route refuses, but a template is authored by hand, and a page that spins forever over a typo is not a
  * trade worth taking. What is left goes in one last column.
  */
 export const workflowLayers = (steps: readonly WorkflowStep[]): WorkflowStep[][] => {
@@ -136,12 +136,12 @@ export const workflowLayers = (steps: readonly WorkflowStep[]): WorkflowStep[][]
     return layers;
 };
 
-/* One line under a node's title: who runs it, what it produces, and what gates it — in the fewest words that
+/* One line under a node's title: who runs it, what it produces, and what gates it, in the fewest words that
  * still say which.
  *
  * THE PROVIDER LEADS when a step pins one, and it is the only part of this line that is about the AGENT rather
- * than the work. It has to be on the card because there is one design where the model is the whole point — the
- * same brief built by two of them, side by side — and a graph that draws those two steps identically would be
+ * than the work. It has to be on the card because there is one design where the model is the whole point, the
+ * same brief built by two of them, side by side, and a graph that draws those two steps identically would be
  * hiding the only thing that differs between them. Absent for the ordinary step, which pins nothing.
  */
 export const stepSubtitle = (step: WorkflowStep): string => {

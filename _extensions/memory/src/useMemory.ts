@@ -4,7 +4,7 @@ import { MEMORY_BASE, type MemoryFile, type MemoryFileEntry, MemoryFileSchema, M
 import { host } from "./host";
 
 /* The agent's persistent memory notes, via this extension's OWN backend (src/server/) at its /x namespace:
- * every project's memory dir (MEMORY.md + one markdown file per fact), readable, editable, and deletable —
+ * every project's memory dir (MEMORY.md + one markdown file per fact), readable, editable, and deletable,
  * the owner's window into (and red pen over) what the agent carries across sessions. Plain polling; memory
  * changes at agent-turn cadence. All daemon access goes through the host api (auth + per-sandbox cache
  * scoping injected host-side); an extension's own namespace passes the gate with no permissions entry. */
@@ -46,7 +46,7 @@ export function useMemoryFile(selected: Ref<{ project: string; name: string } | 
 export function useMemoryMutations() {
     const api = host();
     const queryClient = useQueryClient();
-    // A write changes both the list (size/mtime) and the note body; a delete only the list — but invalidating
+    // A write changes both the list (size/mtime) and the note body; a delete only the list, but invalidating
     // the file-read cache too is free and keeps a re-created note from showing its deleted predecessor.
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: api.sandbox.key(`memory`) });
     const invalidateFile = (project: string, name: string): Promise<void> =>

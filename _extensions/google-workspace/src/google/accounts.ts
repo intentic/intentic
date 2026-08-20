@@ -2,12 +2,12 @@
  *
  * The daemon injects a cli capability's env vars suffixed with the instance id (cli-env.ts: `google` →
  * `GOOGLE_MODE_GOOGLE`, `work-gmail` → `GOOGLE_MODE_WORK_GMAIL`), which is what lets two Google accounts
- * coexist in one shell. So the set of connected accounts is not something to ask the daemon for — it is
+ * coexist in one shell. So the set of connected accounts is not something to ask the daemon for, it is
  * already here, and `GOOGLE_MODE_*` is the key that enumerates it.
  *
  * A HALF-FILLED CARD IS A CONNECTION WITH A PROBLEM, not an absent one. Dropping it would make `gw` answer
- * "no Google account is connected" to someone looking straight at their connected card, and the true answer —
- * "this one has no refresh token" — is the only one they can act on. */
+ * "no Google account is connected" to someone looking straight at their connected card, and the true answer,
+ * "this one has no refresh token", is the only one they can act on. */
 
 import { envSuffix } from "@intentic/sandbox-contract";
 
@@ -26,7 +26,7 @@ export interface Connection {
     readonly email: string;
     readonly access: AccessLevel;
     readonly mode: "user" | "domain";
-    // undefined when the card cannot authenticate — `problem` says why, in the owner's terms.
+    // undefined when the card cannot authenticate, `problem` says why, in the owner's terms.
     readonly credential: Credential | undefined;
     readonly problem: string | undefined;
 }
@@ -38,7 +38,7 @@ type Env = Record<string, string | undefined>;
 
 /* THE CARD'S SEVEN VALUES, whichever side they were read from. `gw` finds them in its environment (the daemon
  * suffixes each with the instance id); the watcher is handed them as a stored capability config over the
- * listener state route. Same card, same rules — so the rules are written against this rather than twice. */
+ * listener state route. Same card, same rules, so the rules are written against this rather than twice. */
 export interface CardFields {
     readonly mode: string;
     readonly email: string;
@@ -90,7 +90,7 @@ export const connectionOf = (name: string, fields: CardFields): Connection => {
     return {
         name,
         email: fields.email,
-        // `read` only when it was chosen; anything else reads as write, which is the card's own default — a
+        // `read` only when it was chosen; anything else reads as write, which is the card's own default, a
         // silent downgrade to read-only would look like a broken tool rather than a setting.
         access: fields.access === "read" ? "read" : "write",
         mode: domain ? "domain" : "user",
@@ -99,7 +99,7 @@ export const connectionOf = (name: string, fields: CardFields): Connection => {
     };
 };
 
-// The stored capability config, as the watcher receives it over the listener state route — the same seven
+// The stored capability config, as the watcher receives it over the listener state route, the same seven
 // values the daemon spread across the environment for `gw`, still in one object.
 export interface CardConfig {
     readonly mode?: string;

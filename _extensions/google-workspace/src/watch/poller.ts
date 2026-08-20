@@ -10,7 +10,7 @@ import { type Watermark, pruneAnnounced, readWatermark, watermarkPath, writeWate
 /* WATCHING A GOOGLE ACCOUNT, by polling.
  *
  * Gmail's push notifications go through Cloud Pub/Sub to a public HTTPS endpoint, which a sandbox does not
- * have and should not need one for. Polling is therefore not a shortcut here — it is the only mechanism
+ * have and should not need one for. Polling is therefore not a shortcut here, it is the only mechanism
  * available to a box that only makes outbound connections, and it is the same choice the Telegram gateway
  * makes for the same reason.
  *
@@ -18,7 +18,7 @@ import { type Watermark, pruneAnnounced, readWatermark, watermarkPath, writeWate
  * historyId", so a gateway that was down for an hour asks one question and gets the hour back; a
  * last-seen-timestamp would need a search, which is eventually consistent and would both miss and repeat.
  *
- * CALENDAR HAS NO CURSOR — nothing changes when a meeting starts, which is the moment worth waking for. So it
+ * CALENDAR HAS NO CURSOR, nothing changes when a meeting starts, which is the moment worth waking for. So it
  * is a window: list what starts in the next few minutes, and remember what has already been announced. */
 
 export interface WatcherOptions {
@@ -32,7 +32,7 @@ const CALENDAR_INTERVAL_MS = 120_000;
 // How far ahead a meeting is announced. Long enough to be useful, short enough that the answer arrives while
 // it is still actionable.
 const LOOKAHEAD_MS = 10 * 60_000;
-// Announced events are remembered for an hour past their start — comfortably longer than any window that
+// Announced events are remembered for an hour past their start, comfortably longer than any window that
 // could surface them again.
 const ANNOUNCED_KEEP_MS = 60 * 60_000;
 const EXCERPT = 600;
@@ -60,7 +60,7 @@ interface WatchedEvent {
 }
 
 // The new INBOX messages since a cursor, and the cursor to store next. A 404 means Gmail has aged the cursor
-// out (it keeps roughly a week) — the only correct move is to re-baseline, which the caller does.
+// out (it keeps roughly a week), the only correct move is to re-baseline, which the caller does.
 export const newMessageIds = (pages: readonly HistoryPage[]): string[] => {
     const ids = new Set<string>();
     for (const page of pages) {
@@ -76,7 +76,7 @@ export const newMessageIds = (pages: readonly HistoryPage[]): string[] => {
     return [...ids];
 };
 
-// Whether this account is an actual addressee rather than one of fifty on a list — the "addressed directly to
+// Whether this account is an actual addressee rather than one of fifty on a list, the "addressed directly to
 // you" filter the automation editor offers.
 export const addressedTo = (email: string, to: string): boolean =>
     to
@@ -263,7 +263,7 @@ export const startWatcher = (
         setInterval(() => void tick("mail", pollMail), options.mailIntervalMs ?? MAIL_INTERVAL_MS),
         setInterval(() => void tick("calendar", pollCalendar), options.calendarIntervalMs ?? CALENDAR_INTERVAL_MS),
     ];
-    // The first pass runs at once rather than after a minute — a connection added mid-conversation should
+    // The first pass runs at once rather than after a minute, a connection added mid-conversation should
     // start watching now, and the baseline it takes is what makes the first real tick meaningful.
     void tick("mail", pollMail);
     void tick("calendar", pollCalendar);

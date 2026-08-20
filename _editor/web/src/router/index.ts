@@ -34,7 +34,7 @@ const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved> => {
     return current ? { user: current } : { redirect: `/login` };
 };
 
-// Signed in, with a user in hand — and hydrate the query cache from IndexedDB (per-user buster) before any
+// Signed in, with a user in hand, and hydrate the query cache from IndexedDB (per-user buster) before any
 // route mounts, so a reload paints the last-known workspace instead of blocking on the daemon.
 const requireAuth = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
     const resolved = await resolveUser(to);
@@ -54,7 +54,7 @@ const requireSession = async (to: RouteLocationNormalized): Promise<boolean | Ro
 };
 
 /* GOOGLE FIRST, SESSION SECOND. Minting the ID token needs nothing from the platform, so letting it wait for
- * the session round trip — and then for this page's own chunk to arrive, and then for it to mount — is dead
+ * the session round trip, and then for this page's own chunk to arrive, and then for it to mount, is dead
  * time charged to the one screen whose entire content is a person waiting for Google to appear. Synchronous:
  * it returns in the same tick, and the awaited guard after it runs against a prompt already in flight.
  *
@@ -67,13 +67,13 @@ const startGoogleMint = (to: RouteLocationNormalized): true => {
     return true;
 };
 
-// Gate the workspace shell on having a workspace to open — setupGate.ts owns the predicate and the reasoning.
+// Gate the workspace shell on having a workspace to open, setupGate.ts owns the predicate and the reasoning.
 const requireSetup = async (): Promise<boolean | RouteLocationRaw> => {
     const { list } = useSandbox();
     return setupRedirect(await list()) ?? true;
 };
 
-// Menu and Terminal are full-screen tabs only on the mobile shell — the desktop shell docks the terminal and
+// Menu and Terminal are full-screen tabs only on the mobile shell, the desktop shell docks the terminal and
 // puts the menu's contents on the rail, so a desktop hit lands on the workspace instead.
 const mobileOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? true : `/workspace`);
 
@@ -81,18 +81,18 @@ const mobileOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ?
 // (an agent's conversation IS its chat surface there), so a mobile hit lands on the fleet those live behind.
 const desktopOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? `/agents` : true);
 
-/* NAVIGATION NEVER WAITS — the in-shell routes below register through asyncView rather than as bare lazy
+/* NAVIGATION NEVER WAITS, the in-shell routes below register through asyncView rather than as bare lazy
  * imports, because vue-router completes a navigation only once a route-level `() => import(…)` has resolved:
  * the click froze for as long as the chunk download took, charged to whichever destination was heaviest.
  * asyncView's wrapper is synchronous, so the view flips in the same tick; the code arrives behind an outline
  * (components/asyncView.ts owns the mechanism and the failure path, router/prefetch.ts pulls the chunks at
  * idle so the outline is a cold-network-only event).
  *
- * The entry-point routes — login, setup handoffs, the invite landing, the shell record itself — stay as bare
+ * The entry-point routes, login, setup handoffs, the invite landing, the shell record itself, stay as bare
  * lazy imports on purpose: they are first paints, not transitions away from a view the user is looking at, so
  * there is nothing on screen for them to un-freeze.
  *
- * An index-and-body page gets the outline of its own shape, wearing its REAL title and description — static
+ * An index-and-body page gets the outline of its own shape, wearing its REAL title and description, static
  * strings this table already knows. Full-bleed surfaces (workspace, chat, terminals, the fleets) get none:
  * their honest placeholder is the shell's own background, and each draws its inner skeletons once mounted. */
 const hubOutline = (title: string, description: string, railRows: number): FunctionalComponent => {
@@ -125,7 +125,7 @@ const routes: RouteRecordRaw[] = [
     },
     {
         // …and the other end, opened INSIDE the app's webview: redeem the handoff, which is what puts the
-        // session cookie in this webview's jar. Unguarded on purpose — the whole point is that there is no
+        // session cookie in this webview's jar. Unguarded on purpose, the whole point is that there is no
         // session here yet.
         path: `/desktop-auth/complete`,
         name: `desktop-auth-complete`,
@@ -152,14 +152,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
             /* WHERE SETUP LETS GO OF THE USER: mobile lands on the agent fleet, desktop on the workspace (its
-             * chat is docked) — the workspace is where the code is, where getting code IN is offered, and
+             * chat is docked), the workspace is where the code is, where getting code IN is offered, and
              * where the docked chat is already sitting to be typed at. */
             {
                 path: ``,
                 redirect: () => (useDevice().mobile.value ? `/agents` : `/workspace`),
             },
             // Full-screen chat: the rail-docked chat's whole surface (pages/ChatArea.vue lends it the slot,
-            // and standing here is what makes the rail the chat's home — useLayout.chatHome). An area rather
+            // and standing here is what makes the rail the chat's home, useLayout.chatHome). An area rather
             // than a layout switch, so the rail, the back button and a reload all already know how to enter
             // and leave it.
             {
@@ -170,7 +170,7 @@ const routes: RouteRecordRaw[] = [
                 component: asyncView(() => import(`../pages/ChatArea.vue`)),
             },
             // The live app preview: the preview panel's full-window home (pages/PreviewArea.vue lends it the
-            // slot, exactly the chat area's arrangement). Desktop only — the mobile shell mounts no poppable
+            // slot, exactly the chat area's arrangement). Desktop only, the mobile shell mounts no poppable
             // panels, and a phone opens the preview URL itself.
             {
                 path: `preview`,
@@ -201,7 +201,7 @@ const routes: RouteRecordRaw[] = [
                 path: `capabilities/:card?`,
                 name: `capabilities`,
                 meta: { title: `Capabilities` },
-                // The title and description mirror the page's own (pages/Capabilities.vue, its catalog copy) —
+                // The title and description mirror the page's own (pages/Capabilities.vue, its catalog copy),
                 // static strings, so the outline wears the real heading in the first frame.
                 component: asyncView(
                     () => import(`../pages/Capabilities.vue`),
@@ -243,8 +243,8 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: `Browsers` },
                 component: asyncView(() => import(`../pages/Browsers.vue`)),
             },
-            // Same shape and same reason as the browsers above: the id is in the URL so a reload — or the chat
-            // card's link — reopens the same agent, and the bare path shows whichever is most recently active.
+            // Same shape and same reason as the browsers above: the id is in the URL so a reload, or the chat
+            // card's link, reopens the same agent, and the bare path shows whichever is most recently active.
             { path: `subagents/:id?`, name: `subagents`, meta: { title: `Subagents` }, component: asyncView(() => import(`../pages/Subagents.vue`)) },
             { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../pages/ExtensionHost.vue`)) },
             {
@@ -260,7 +260,7 @@ const routes: RouteRecordRaw[] = [
         ],
     },
     {
-        // Public invite-accept landing (the emailed link). No guard — the invitee may be logged out or on the
+        // Public invite-accept landing (the emailed link). No guard, the invitee may be logged out or on the
         // wrong Google account; the page drives sign-in as the invited address, then flips the pending grant.
         path: `/invite/:token`,
         name: `invite`,
@@ -275,7 +275,7 @@ const routes: RouteRecordRaw[] = [
      *
      * DELIBERATELY OUTSIDE THE SHELL, and that placement is the entire point rather than a layout preference.
      * Every route under `/` is guarded by requireSetup, which redirects anyone whose sandboxes have never
-     * phoned home to /setup — so the membership tab, the only buying surface this product had, was unreachable
+     * phoned home to /setup, so the membership tab, the only buying surface this product had, was unreachable
      * by exactly the people most likely to want to buy one. A membership was always an account's rather than a
      * machine's; this is where that stops being a claim.
      *
@@ -297,7 +297,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import(`../pages/Join.vue`),
     },
     {
-        /* The spend gate's wall. The ONLY place a parked service run becomes an approved one — and the reason
+        /* The spend gate's wall. The ONLY place a parked service run becomes an approved one, and the reason
          * an agent outside a sandbox can be handed a spending catalogue at all, since nothing it says about
          * consent is read anywhere and the run re-reads what this page wrote. */
         path: `/approve/:id`,
@@ -305,11 +305,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: `Approve a run` },
         component: () => import(`../pages/ApproveRun.vue`),
     },
-    /* THE KIT, ON ONE PAGE — dev only, and unguarded on purpose: it needs no session, no sandbox and no
+    /* THE KIT, ON ONE PAGE, dev only, and unguarded on purpose: it needs no session, no sandbox and no
      * repository, so it opens in any state the app can be in. `import.meta.env.DEV` is a compile-time constant,
      * so the route and its whole component graph vanish from a production build rather than shipping behind a
-     * check. It exists because the drift this app kept growing — thirteen dialog widths, two red boxes, four
-     * captions off the type scale — is invisible in a file and obvious the moment the variants are in a row. */
+     * check. It exists because the drift this app kept growing, thirteen dialog widths, two red boxes, four
+     * captions off the type scale, is invisible in a file and obvious the moment the variants are in a row. */
     ...(import.meta.env.DEV
         ? [{ path: `/kit`, name: `kit`, meta: { title: `Design kit` }, component: () => import(`../pages/DesignKit.vue`) } satisfies RouteRecordRaw]
         : []),
@@ -317,7 +317,7 @@ const routes: RouteRecordRaw[] = [
 ];
 
 export const router = createRouter({
-    /* The build's own base, not vue-router's default. Its default is a `<base href>` element or `/` — it never
+    /* The build's own base, not vue-router's default. Its default is a `<base href>` element or `/`, it never
      * looks at Vite's, so an app built under a path prefix routed as if it were at the root: every path resolved
      * one level up from where its own bundle lives. `/` for this app, which is why nothing here changes; the
      * interactive demo (@intentic-dev/demo) builds the same source under `/demo/` and is what surfaced it. */
@@ -327,7 +327,7 @@ export const router = createRouter({
 
 /* The stale-window recovery's ROUTER half (staleChunk.ts owns the shared detection and the one-reload guard;
  * asyncView owns the other half, for the in-shell views whose failures no router hook can see). This backstop
- * covers what still loads at route level — login, the auth handoffs, the invite landing, the workspace shell
+ * covers what still loads at route level, login, the auth handoffs, the invite landing, the workspace shell
  * itself: a dead chunk there rejects the navigation, and the answer is the reload the user would eventually
  * perform by hand, landed on the route they asked for rather than the one they were leaving. */
 router.onError((error, to) => {
@@ -336,7 +336,7 @@ router.onError((error, to) => {
     }
 });
 
-/* The reload guard is NOT cleared here anymore. It used to be — "a navigation landed" was proof the window's
+/* The reload guard is NOT cleared here anymore. It used to be, "a navigation landed" was proof the window's
  * chunks exist, because a navigation could not land without its chunk. asyncView broke that implication on
  * purpose: every in-shell navigation lands instantly, chunk or no chunk, so clearing on arrival would re-arm
  * the guard between the reload and the retry and turn a genuinely broken deploy into a reload loop. The clear

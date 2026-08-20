@@ -2,7 +2,7 @@ import { ACCESS_COST, accessFor, modelsFor, PROVIDERS } from "./agent-catalog.js
 import { compareCheapestFirst, familyOf, tierRankOf } from "./model-order.js";
 import type { AgentProvider } from "./schemas.js";
 
-/* THE QUICK MODEL — the cheap, fast model a small automatic job spends instead of the frontier model the chat
+/* THE QUICK MODEL, the cheap, fast model a small automatic job spends instead of the frontier model the chat
  * runs on. Today that is the commit message written when an agent's work lands; anything else of that shape (a
  * branch name, a PR description) reads the same answer, which is the reason this is a `quickModel` setting
  * rather than a commit-message one.
@@ -11,11 +11,11 @@ import type { AgentProvider } from "./schemas.js";
  * failure: the account it names spends its allowance on the chat all morning, and every job for the rest of the
  * day fails on a limit while three other connected providers sit idle. So the setting is a LIST
  * read top to bottom, the resolver hands back the whole ladder, and the daemon walks it until one answers.
- * Nothing here decides WHICH failures are worth stepping over — that is the daemon's, since only it has run
- * the call — this side only says what the running order is.
+ * Nothing here decides WHICH failures are worth stepping over, that is the daemon's, since only it has run
+ * the call, this side only says what the running order is.
  *
  * The rule lives in the contract because BOTH sides need the same answer for different jobs: the daemon runs
- * the model, and the browser has to NAME it — in the settings row's "Auto (…)" label — before anything has been
+ * the model, and the browser has to NAME it, in the settings row's "Auto (…)" label, before anything has been
  * run. Two implementations would drift precisely where it matters most, since a label promising Haiku while the
  * daemon bills Opus is worse than no label.
  *
@@ -27,14 +27,14 @@ import type { AgentProvider } from "./schemas.js";
 
 /* One provider's standing in the decision: whether a turn on it can be sent at all, and what its catalog holds.
  *
- * ACP agents are deliberately not expressible here — an ACP row's model id is empty because the agent owns its
+ * ACP agents are deliberately not expressible here, an ACP row's model id is empty because the agent owns its
  * own model, so there is no cheap rung to point it at. `endpoint/<id>` providers ARE, and have to be: their
  * models appear in the same picker the settings row builds its options from, so a pin naming one has to hold
  * rather than fall silently back to Auto and spend an account the user was deliberately steering away from. */
 export interface QuickModelSource {
     // AgentProvider, not NativeProvider: an endpoint's id is user-created and cannot be in a fixed union. Auto's
-    // ranking degrades gracefully for one — costOf falls to the metered rung and an id with no tier word is
-    // UNRANKED, which is genuine last place — so an endpoint effectively only wins Auto when nothing else is
+    // ranking degrades gracefully for one, costOf falls to the metered rung and an id with no tier word is
+    // UNRANKED, which is genuine last place, so an endpoint effectively only wins Auto when nothing else is
     // connected, while a PIN on one holds. Both are the right answers: what a turn on someone's own model server
     // costs is not a fact this repo can know, so it is not one Auto should be asserting.
     readonly provider: AgentProvider;
@@ -67,13 +67,13 @@ export const parsePinned = (pinned: string): QuickModelChoice | undefined => {
 
 /* A pin as a person reads it: the catalog's own label for the id, or the id itself for one the static catalog
  * has not caught up with (the picker offers a custom-id escape hatch, so this is a real case rather than a
- * defensive branch). Beside parsePinned because the two are always wanted together — by any surface that has to
+ * defensive branch). Beside parsePinned because the two are always wanted together, by any surface that has to
  * name what a click is about to spend BEFORE it spends it, and the two loudest of those are extensions that
  * share no other code with each other. */
 export const pinnedModelLabel = (choice: QuickModelChoice): string =>
     modelsFor(choice.provider).find((option) => option.value === choice.model)?.label ?? choice.model;
 
-// The cheapest row a provider publishes — its whole catalog read from the cheap end. Undefined for a catalog
+// The cheapest row a provider publishes, its whole catalog read from the cheap end. Undefined for a catalog
 // that hasn't loaded yet, which is a real state: every provider serves a floor, but only once something has
 // asked it.
 const cheapestOf = (source: QuickModelSource): string | undefined => source.models.toSorted(compareCheapestFirst)[0];
@@ -83,28 +83,28 @@ const cheapestOf = (source: QuickModelSource): string | undefined => source.mode
 // so the row is the provider's base line rather than its budget one.
 const tierOf = (model: string): number => tierRankOf(familyOf(model));
 
-// PROVIDERS order, as the final tiebreak. Arbitrary, but the SAME arbitrary answer on every read — the property
+// PROVIDERS order, as the final tiebreak. Arbitrary, but the SAME arbitrary answer on every read, the property
 // compareUnrankedModelIds exists to guarantee, and the one a default actually needs. An endpoint is in no fixed
 // list, so it reads -1 and leads the tiebreak; unreachable in practice, since it can never tie on cost.
 const providerOrder = (provider: AgentProvider): number => PROVIDERS.findIndex((entry) => entry.value === provider);
 
 // How much a call on this provider costs at the margin. Every native provider declares an access kind; an
-// endpoint declares none, and takes the metered rung — the conservative reading of a model API whose bill this
+// endpoint declares none, and takes the metered rung, the conservative reading of a model API whose bill this
 // repo cannot see, which keeps Auto from reaching for someone's paid gateway on its own initiative.
 const costOf = (provider: AgentProvider): number => {
     const access = accessFor(provider);
     return access === undefined ? ACCESS_COST.key : ACCESS_COST[access.kind];
 };
 
-/* AUTO — every connected provider's cheapest row, best-first, as a ladder rather than a winner.
+/* AUTO, every connected provider's cheapest row, best-first, as a ladder rather than a winner.
  *
  * Ranked on TIER FIRST, then cost. That order is the point of the feature: the helper exists to not be the
  * frontier model, so a free flagship is still the wrong tool, while a free Haiku-class row and a subscription
  * Haiku-class row differ only in whose quota they spend. Cost then breaks that tie towards the channel the user
- * is not paying per token for — and against the one they are.
+ * is not paying per token for, and against the one they are.
  *
  * The whole ladder, not just its head, because the same ranking that picks the best answer also states the best
- * SECOND answer — and a sandbox with three accounts connected should not lose its commit messages for six hours
+ * SECOND answer, and a sandbox with three accounts connected should not lose its commit messages for six hours
  * because one of them is spent. */
 const autoLadder = (sources: readonly QuickModelSource[]): readonly QuickModelChoice[] =>
     sources
@@ -144,7 +144,7 @@ export const resolveQuickModels = (sources: readonly QuickModelSource[], pinned:
         const choice = parsePinned(key);
         return choice === undefined || !ready.has(choice.provider) ? [] : [choice];
     });
-    // The same model twice would spend two attempts proving the same account is out — a real state, since the
+    // The same model twice would spend two attempts proving the same account is out, a real state, since the
     // list is edited by hand and Auto's ladder can rank a provider the user has also pinned.
     const chain = [...new Map(requested.map((choice) => [quickModelKey(choice), choice])).values()];
     return chain.length > 0 ? chain : autoLadder(sources);

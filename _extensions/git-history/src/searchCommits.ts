@@ -4,7 +4,7 @@ import type { GitCommit } from "@intentic/sandbox-contract";
  *
  * The rule, which is git-go's and worth keeping: EVERY word the reader typed must match SOMEWHERE, but any field
  * may be the somewhere. So "auth fix" finds a commit whose subject says "fix" and whose author is Auth-somebody,
- * and typing more words always narrows. The alternative — one field, all words — fails the way people actually
+ * and typing more words always narrows. The alternative, one field, all words, fails the way people actually
  * search a log, which is by remembering a fragment of one thing and a fragment of another.
  *
  * Accents and punctuation are stripped from both sides before comparing, so "resume" finds "résumé" and

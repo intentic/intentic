@@ -5,7 +5,7 @@ import { z } from "zod";
 import { OutputFieldsSchema } from "./output-fields.js";
 
 // All request/response wire schemas for the sandbox daemon. Inputs that carry a `{param}` in their route path
-// (repo / id / name) merge the path param into the same flat object — oRPC fills the path placeholder from the
+// (repo / id / name) merge the path param into the same flat object, oRPC fills the path placeholder from the
 // matching key and routes the rest to the body (POST/PUT) or query (GET).
 
 // ---- shared ----
@@ -20,7 +20,7 @@ export const OkSchema = z.object({ ok: z.literal(true) });
 // enforces these as route floors (auth/role-floor.ts); the platform's invite records mirror them.
 export const MemberRoleSchema = z.enum(["viewer", "collaborator", "maintainer", "owner"]);
 export type MemberRole = z.infer<typeof MemberRoleSchema>;
-// The roles an invite can grant — everything but `owner`, which is bound at first sign-in, never granted.
+// The roles an invite can grant, everything but `owner`, which is bound at first sign-in, never granted.
 export const GrantedRoleSchema = z.enum(["viewer", "collaborator", "maintainer"]);
 export type GrantedRole = z.infer<typeof GrantedRoleSchema>;
 
@@ -29,21 +29,21 @@ export type GrantedRole = z.infer<typeof GrantedRoleSchema>;
 const MEMBER_ROLE_RANK: Record<MemberRole, number> = { viewer: 0, collaborator: 1, maintainer: 2, owner: 3 };
 export const roleAtLeast = (role: MemberRole, floor: MemberRole): boolean => MEMBER_ROLE_RANK[role] >= MEMBER_ROLE_RANK[floor];
 
-// Which repo a git route targets: "root" (the /work workspace repo) or a repo id — the repo's root-relative
+// Which repo a git route targets: "root" (the /work workspace repo) or a repo id, the repo's root-relative
 // dir, which may be nested ("clients/foo"; URL-encoded in the path param). Kept as a bare string on the wire
-// (not an enum) so an unknown repo is a handler-thrown NOT_FOUND — matching the daemon's prior 404 — rather
+// (not an enum) so an unknown repo is a handler-thrown NOT_FOUND, matching the daemon's prior 404, rather
 // than an input-validation rejection.
 export const RepoParamSchema = z.object({ repo: z.string() });
 
 // ---- agent ----
 
-// The agent runtimes the daemon can serve — the vocabulary every surface that picks an agent shares (chat
+// The agent runtimes the daemon can serve, the vocabulary every surface that picks an agent shares (chat
 // turns, automations). The NATIVE providers have dedicated adapters (and their ids are reserved); an
 // `endpoint/<id>` value names an installed `endpoint`-kind capability (a model API the user pointed us at,
 // see EndpointConfigSchema); any other value is the id of an installed `agent`-kind capability served over
 // ACP (Agent Client Protocol).
 // Kept as a bare string on the wire (not an enum) so an unknown id is a clean error frame from the agent
-// route — the same bet RepoParamSchema makes — and adding an ACP agent needs no contract change.
+// route, the same bet RepoParamSchema makes, and adding an ACP agent needs no contract change.
 export const NATIVE_PROVIDERS = ["claude", "codex", "grok", "kimi", "gemini"] as const;
 export type NativeProvider = (typeof NATIVE_PROVIDERS)[number];
 export const AgentProviderSchema = z.string().min(1);
@@ -51,7 +51,7 @@ export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 
 // The provider naming a catalog in the one route every native provider shares (providers.contract.ts). An ENUM
 // rather than the bare-string schema above, and deliberately so: the open vocabulary exists because an ACP agent
-// or an endpoint can be added without a contract change, but neither has a daemon-held catalog — this route's
+// or an endpoint can be added without a contract change, but neither has a daemon-held catalog, this route's
 // subjects are exactly the five the daemon keeps one for. Closing it here is what makes an unknown id a 400 from
 // the contract instead of a registry lookup that reads back `undefined` and serves an empty list.
 export const NativeProviderParamSchema = z.object({ provider: z.enum(NATIVE_PROVIDERS) });
@@ -67,8 +67,8 @@ export const RepoBaseSchema = z.object({ repo: z.string(), base: z.string().min(
 export type RepoBase = z.infer<typeof RepoBaseSchema>;
 
 // What the user is looking at in the editor, attached to a turn only when they explicitly opt in (the
-// composer chip — off by default). The daemon folds it into the prompt as a context note, so deictic
-// prompts ("fix this") resolve without an @-mention. Selection is bounded — it's context, not an upload.
+// composer chip, off by default). The daemon folds it into the prompt as a context note, so deictic
+// prompts ("fix this") resolve without an @-mention. Selection is bounded, it's context, not an upload.
 export const EditorContextSchema = z.object({
     // Workspace-relative path of the file open in the editor.
     file: z.string().min(1),
@@ -81,11 +81,11 @@ export const EditorContextSchema = z.object({
 export type EditorContext = z.infer<typeof EditorContextSchema>;
 
 // The client-minted stable conversation identity. Constrained because isolated conversations also use it in
-// branch names (agent/<id>) and filesystem paths — the regex is the injection guard. Shared by turn + attach,
+// branch names (agent/<id>) and filesystem paths, the regex is the injection guard. Shared by turn + attach,
 // and by the workspace scope (WorkspaceScopeSchema), which names a conversation to read a file tree AS.
 export const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 
-// A manifest entry id (capabilities + automations + personas) — also the `mcp__<id>__…` server name for mcp
+// A manifest entry id (capabilities + automations + personas), also the `mcp__<id>__…` server name for mcp
 // capabilities, so it's a safe identifier. Up here beside the other id primitives because a turn names a
 // persona by one (AgentTurnSchema.actsAs), hundreds of lines above the manifest section that consumes it.
 const entryId = z
@@ -96,7 +96,7 @@ const entryId = z
 
 // Where a conversation came from when nobody typed it into the browser: an automation wake carrying a message
 // from OUTSIDE the sandbox (a Discord mention, a web-chat visitor, a webhook). Such a wake runs as an ordinary
-// isolated conversation — registry entry, worktree, chat tab, land flow — and this is the only thing that
+// isolated conversation, registry entry, worktree, chat tab, land flow, and this is the only thing that
 // distinguishes it on the surface: the card's provenance line and the reason its first prompt is not the
 // user's. Set daemon-side by the dispatcher that received the message; the browser never sends one.
 export const AgentOriginSchema = z.object({
@@ -105,14 +105,14 @@ export const AgentOriginSchema = z.object({
     // The listener provider that received the message ("discord", "webchat", …) or "webhook" for an event
     // trigger. An open string for the same reason Trigger.provider is: sources are extension-declared.
     provider: z.string(),
-    // The external thread it arrived on — a Discord channel id, a widget conversation id. Absent for webhooks.
+    // The external thread it arrived on, a Discord channel id, a widget conversation id. Absent for webhooks.
     channelId: z.string().optional(),
     // Who sent it, as the source names them.
     author: z.string().optional(),
 });
 export type AgentOrigin = z.infer<typeof AgentOriginSchema>;
 
-/* The class of thing asking to START a session — the admission policy's key space. Derived daemon-side from
+/* The class of thing asking to START a session, the admission policy's key space. Derived daemon-side from
  * the automation's trigger (guard/actions.ts wakeSourceOf) or named by the door itself (the workflow release
  * gate); never sent by a client. Chat and loops are absent deliberately: both begin with the owner's own
  * click, and holding the owner's work in their own queue is a queue entry that says nothing (the same argument
@@ -124,12 +124,12 @@ export type WakeSource = z.infer<typeof WakeSourceSchema>;
 export const AdmissionRuleSchema = z.enum(["allow", "hold", "deny"]);
 export type AdmissionRule = z.infer<typeof AdmissionRuleSchema>;
 
-/* WHAT KIND OF THING A SHELL COMMAND IS — the command gate's key space, the second layer under the admission
+/* WHAT KIND OF THING A SHELL COMMAND IS, the command gate's key space, the second layer under the admission
  * floor above. The floor decides whether a session may START; these decide whether one PARTICULAR command
  * inside a running session may go ahead, which is the only question left once the agent is already working.
  *
  * Five, chosen for one property: everything in them is hard or impossible to take back, so a person seeing it
- * once beats an audit trail read afterwards. Everything else an agent runs — builds, tests, greps, edits — is
+ * once beats an audit trail read afterwards. Everything else an agent runs, builds, tests, greps, edits, is
  * recoverable in a container that is itself disposable, and gating it would be friction bought with nothing. */
 export const CommandClassSchema = z.enum([
     // Rewrites or discards committed work: force-push, hard reset, force-delete a branch, clean -f, filter-branch.
@@ -140,16 +140,16 @@ export const CommandClassSchema = z.enum([
     "secrets.access",
     // Publishes outward and irreversibly: npm/pnpm/yarn/cargo publish, gh release create, docker push.
     "package.publish",
-    // curl/wget to a non-local address — the general exfiltration channel under the per-provider actionRules.
+    // curl/wget to a non-local address, the general exfiltration channel under the per-provider actionRules.
     "network.outbound",
 ]);
 export type CommandClass = z.infer<typeof CommandClassSchema>;
 
-/* THE ADMISSION FLOOR — the workspace-wide rule per wake source, consulted by the session.start guard on every
+/* THE ADMISSION FLOOR, the workspace-wide rule per wake source, consulted by the session.start guard on every
  * outside-driven wake. Per-automation `requireApproval` / `holdForSeconds` remain the per-object override; the
  * floor composes with them most-restrictive-wins, so "hold every webchat session" needs no edit to each
  * automation. `workflow` is allow|deny only: the release gate answers a CI runner holding a connection with a
- * deadline, so a hold there is indistinguishable from a timeout — deny is the honest refusal. */
+ * deadline, so a hold there is indistinguishable from a timeout, deny is the honest refusal. */
 export const AdmissionPolicySchema = z.object({
     schedule: AdmissionRuleSchema.default("allow"),
     event: AdmissionRuleSchema.default("allow"),
@@ -160,19 +160,19 @@ export const AdmissionPolicySchema = z.object({
 });
 export type AdmissionPolicy = z.infer<typeof AdmissionPolicySchema>;
 
-// How tool calls are gated — the Claude Agent SDK's PermissionMode, narrowed to the four the composer offers
+// How tool calls are gated, the Claude Agent SDK's PermissionMode, narrowed to the four the composer offers
 // (the SDK also has 'dontAsk'/'auto', which have no UI here). The user picks one per turn AND the agent can
 // move itself between them mid-turn, so this is both a turn input and the payload of the `mode` frame.
 export const PermissionModeSchema = z.enum(["default", "acceptEdits", "plan", "bypassPermissions"]);
 export type PermissionMode = z.infer<typeof PermissionModeSchema>;
 
-/* WHERE A CONVERSATION WAS CUT FROM — the durable half of a fork, carried on the registry entry so both ends
+/* WHERE A CONVERSATION WAS CUT FROM, the durable half of a fork, carried on the registry entry so both ends
  * can find each other. `index` is the message the cut sat above in the SOURCE, which is what lets the source's
  * transcript put the mark back in the right gap. */
 export const ForkedFromSchema = z.object({
     conversationId: ConversationIdSchema,
     index: z.number().int().nonnegative(),
-    // Which files this fork opened on — the half of the choice that used to be silent, kept so the fork can
+    // Which files this fork opened on, the half of the choice that used to be silent, kept so the fork can
     // still say it tomorrow rather than only in the seconds after the click.
     files: z.enum(["then", "now"]),
 });
@@ -181,7 +181,7 @@ export type ForkedFrom = z.infer<typeof ForkedFromSchema>;
 export const AgentTurnSchema = z
     .object({
         prompt: z.string(),
-        // The client's display title for the conversation — seeds a FRESH registry entry (so a renamed draft's
+        // The client's display title for the conversation, seeds a FRESH registry entry (so a renamed draft's
         // first turn keeps its user-chosen title); an existing entry's title always wins.
         title: z.string().max(80).optional(),
         // Workspace-relative paths of files the user attached, already uploaded via /workspace/upload
@@ -190,17 +190,17 @@ export const AgentTurnSchema = z
         attachments: z.array(z.string().min(1)).max(20).optional(),
         // Which provider (model + account) serves the turn; absent = claude. A sessionId only resumes on the
         // provider that minted it (Claude Code sessions vs Codex threads vs Grok/OpenCode sessions are separate
-        // stores) — a mid-conversation provider/account/harness switch sends `history` instead of resuming.
+        // stores), a mid-conversation provider/account/harness switch sends `history` instead of resuming.
         agent: AgentProviderSchema.optional(),
         // Which harness (agentic loop) runs the turn, orthogonal to the provider above. Absent = "native": each
         // provider on its own runtime (Claude Code SDK / Codex CLI / opencode) with its subscription OAuth.
-        // "claude-code" forces the Claude Code Agent SDK loop for ANY provider — codex/grok then drive their model
+        // "claude-code" forces the Claude Code Agent SDK loop for ANY provider, codex/grok then drive their model
         // through the sandbox's bundled Anthropic↔OpenAI translator, which needs that provider's API key (its
         // subscription OAuth can't reach a gateway). For the claude provider the two are identical.
         harness: AgentHarnessSchema.optional(),
         // Which connected account of that provider serves the turn; absent = the provider's first account.
         account: z.string().optional(),
-        /* WHICH PERSONA THE TURN SHOWS THE OUTSIDE WORLD — a PersonaSchema id, deliberately NOT the `account`
+        /* WHICH PERSONA THE TURN SHOWS THE OUTSIDE WORLD, a PersonaSchema id, deliberately NOT the `account`
          * directly above it. The two words are one letter apart in meaning and a world apart in consequence:
          * `account` is which subscription PAYS for the turn, `actsAs` is whose name is on what the turn posts.
          * Naming both "account" is how someone eventually pins a nightly job to the right billing and the wrong
@@ -217,7 +217,7 @@ export const AgentTurnSchema = z
         // retire sessions). Keys the fleet registry entry and turn run, plus the worktree when isolated.
         conversationId: ConversationIdSchema.optional(),
         // When true, the turn runs in the conversation's isolated git worktree (created lazily on first use)
-        // instead of the shared /work tree — the parallel-agents mode. Requires conversationId.
+        // instead of the shared /work tree, the parallel-agents mode. Requires conversationId.
         isolated: z.boolean().optional(),
         /* Pin a NEW isolated conversation's worktree composition to these repository commits. Daemon-owned:
          * ordinary chats omit it and keep rebasing onto the current workspace; a workflow supplies the one
@@ -230,22 +230,22 @@ export const AgentTurnSchema = z
         autoLand: z.boolean().optional(),
         // Set ONLY by the daemon's own automation dispatchers: this turn opens a conversation on behalf of an
         // outside message rather than a user. Recorded on the registry entry so the fleet can say where the
-        // agent came from. Requires conversationId — there is nothing to record it on otherwise.
+        // agent came from. Requires conversationId, there is nothing to record it on otherwise.
         origin: AgentOriginSchema.optional(),
         // No `history` field: a turn that switched provider/account/harness carries no transcript up the wire.
         // The daemon seeds the replacement session from its OWN record of the conversation, which is keyed by
         // conversationId and outlives every session (sessions/turn-transcript.ts → handoffHistory).
-        /* WHERE A FORK WAS CUT FROM, on its first turn — the one case the daemon cannot work out for itself,
+        /* WHERE A FORK WAS CUT FROM, on its first turn, the one case the daemon cannot work out for itself,
          * because a fork is a NEW conversation whose record is empty and the cut is a gesture only the client
          * saw. `keep` counts the source's RECORD rows to copy, not its bubbles (see the web transcript's
          * recordedRows). The daemon copies that prefix into the new conversation's record before the turn runs,
          * after which a fork is an ordinary conversation: it seeds like any other and reads back in full.
-         * Requires conversationId — the fork it describes IS that conversation.
+         * Requires conversationId, the fork it describes IS that conversation.
          *
          * `files` is the half the user actually chooses between, and the half that used to be silent. "now"
          * inherits the workspace as it stands (the fork is a fresh line of conversation over today's files);
          * "then" puts the fork on the files as they were AT THE CUT, which it can only do in a checkout of its
-         * own — so it implies `isolated`, and the daemon resolves the cut's per-repo commits from the source's
+         * own, so it implies `isolated`, and the daemon resolves the cut's per-repo commits from the source's
          * own turn anchors rather than trusting the client with shas. A "then" fork of a conversation that has
          * no anchor at that index falls back to "now" and says so on the turn, because silently starting from
          * the wrong files is the failure this whole field exists to prevent. */
@@ -258,11 +258,11 @@ export const AgentTurnSchema = z
             .optional(),
         // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
         model: z.string().optional(),
-        /* NOBODY PICKED A MODEL FOR THIS TURN — a surface started it (Fix with agent, a Maintenance chore, a
+        /* NOBODY PICKED A MODEL FOR THIS TURN, a surface started it (Fix with agent, a Maintenance chore, a
          * Documentation or Acceptance run, the fix a failed pre-push check proposes) rather than a person at a
          * composer. That is the whole distinction the flag carries, and it is why it cannot be inferred: a chat
          * turn ALSO arrives with no `model` whenever the live catalog hasn't loaded yet, and the two want
-         * opposite defaults — the chat wants the provider's own catalog default, an unattended run wants the
+         * opposite defaults, the chat wants the provider's own catalog default, an unattended run wants the
          * tier its owner chose for work that spends money while they are not watching.
          *
          * The daemon fills `agent`/`model`/`effort` from agentRunModels/agentRunEffort for any turn that says
@@ -271,12 +271,12 @@ export const AgentTurnSchema = z
          * for that run alone, and Acceptance picks per run because it fans a session out per story. Either way
          * the pick is the user's, made a second ago. */
         unattended: z.boolean().optional(),
-        /* OUTSIDE CONTENT CAUSED THIS TURN, and what to call the source — "discord", "webchat", whichever
+        /* OUTSIDE CONTENT CAUSED THIS TURN, and what to call the source, "discord", "webchat", whichever
          * listener provider carried the message. Set by the dispatchers that wake an agent on somebody else's
          * words; absent for a turn the owner started, a schedule, or a workspace event.
          *
          * It is the birth half of the turn's taint (guard/turn-taint.ts). The other half marks itself as the
-         * turn works — a fetched page, a foreign MCP server's answer — and together they are what the command
+         * turn works, a fetched page, a foreign MCP server's answer, and together they are what the command
          * gate reads before letting a command read credential material unasked. Distinct from `unattended`,
          * which is about whether anyone is WATCHING: a Front Desk wake is both, an owner asking the agent to read
          * a web page is neither, and each flag governs a different decision. */
@@ -286,15 +286,15 @@ export const AgentTurnSchema = z
         // 'acceptEdits' auto-accepts file edits; 'bypassPermissions' runs everything. The agent can move
         // itself between modes mid-turn (EnterPlanMode/ExitPlanMode), which rides back as a `mode` frame.
         permissionMode: PermissionModeSchema.optional(),
-        /* Narrows the turn to these tool names (the SDK option of the same name — not to be confused with the
+        /* Narrows the turn to these tool names (the SDK option of the same name, not to be confused with the
          * daemon's MCP `tools`, which are servers). Absent ⇒ every tool the runtime has, which is what an
          * owner-driven chat wants. Set by the automation dispatchers from Automation.allowedTools: a wake driven
          * by an OUTSIDE message runs bypassPermissions like any other automation turn, so for a public Front Desk
-         * this list is the actual boundary — prompt wording is advice, an empty toolbox is not. */
+         * this list is the actual boundary, prompt wording is advice, an empty toolbox is not. */
         allowedTools: z.array(z.string().min(1)).optional(),
         effort: z.string().optional(),
         thinking: z.boolean().optional(),
-        /* Ask the harness to serve this turn at fast speed — the same tokens at a higher rate, for a higher
+        /* Ask the harness to serve this turn at fast speed, the same tokens at a higher rate, for a higher
          * per-token price. A REQUEST, never a promise: the harness answers it against the plan, the model and
          * the endpoint, and reports what it actually did on the `fast_mode` frame. Absent/false ⇒ standard
          * speed, which is also what a runtime that doesn't declare the capability gets (turn-plan drops it).
@@ -321,20 +321,20 @@ export const AgentTurnSchema = z
     .refine((turn) => turn.forkOf === undefined || turn.conversationId !== undefined, {
         message: "forkOf requires conversationId",
     })
-    // A fork that wants the files as they were needs a checkout of its own to put them in — the shared tree is
+    // A fork that wants the files as they were needs a checkout of its own to put them in, the shared tree is
     // everyone else's too, and rolling it back under them is what `files: "then"` must never mean.
     .refine((turn) => turn.forkOf?.files !== "then" || turn.isolated === true, {
         message: 'forkOf.files "then" requires isolated',
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
 
-/* A MODEL CHOSEN FOR ONE SURFACE-STARTED RUN — what the caret on the shared run button (<AgentRunButton>) sends
+/* A MODEL CHOSEN FOR ONE SURFACE-STARTED RUN, what the caret on the shared run button (<AgentRunButton>) sends
  * along with the click that starts it.
  *
  * Shared rather than re-declared per route because every surface that starts an agent for the user now carries
  * that caret, and they must all mean the same thing by it: the pair rides onto the turn as `agent`/`model`, and
  * the daemon's own fill step then leaves it alone (turn-resume.ts fills only what is absent). ABSENT is the
- * ordinary case and the one to keep cheap — nobody touched the caret, so `agentRunModels` answers.
+ * ordinary case and the one to keep cheap, nobody touched the caret, so `agentRunModels` answers.
  *
  * Both halves or neither, because a model id is only meaningful to the provider that vends it: half a pick
  * would send a Codex model id to Claude. Routes that accept this pass it through verbatim; a model this build
@@ -343,7 +343,7 @@ export const AgentRunPickSchema = z.object({ agent: z.string().min(1), model: z.
 export type AgentRunPick = z.infer<typeof AgentRunPickSchema>;
 
 // POST /agent's ack: the daemon-minted id of the detached turn run it started. The turn executes daemon-side
-// regardless of any client connection; every window — the initiator included — renders it via /agent/attach.
+// regardless of any client connection; every window, the initiator included, renders it via /agent/attach.
 export const StartedTurnSchema = z.object({ run: z.string() });
 export type StartedTurn = z.infer<typeof StartedTurnSchema>;
 
@@ -364,14 +364,14 @@ export type AttachTurn = z.infer<typeof AttachTurnSchema>;
  *
  * A loop is an ATTRIBUTE OF A CONVERSATION, not a new kind of object. It drives ordinary turns on an ordinary
  * fleet agent, which is what makes the worktree, the cost ledger, the transcript, the /agents card and the Stop
- * button work on it without a line of new code — the same bet the acceptance extension makes when it derives
+ * button work on it without a line of new code, the same bet the acceptance extension makes when it derives
  * conversation ids instead of owning session machinery.
  */
 
 // How the next iteration meets its context, and the single most consequential field here.
 //
 // `fresh` is the canonical Ralph and the default: each iteration is a NEW provider session against the SAME
-// worktree, so the filesystem — not the transcript — is the memory. Immune to context rot, so iteration 20 reads
+// worktree, so the filesystem, not the transcript, is the memory. Immune to context rot, so iteration 20 reads
 // the tree as clearly as iteration 1, and it costs a re-read each time. The loop keeps a progress file for it
 // (see LOOP_DIR) precisely because nothing else carries forward.
 //
@@ -382,16 +382,16 @@ export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 export const LoopContextSchema = z.enum(["fresh", "continue"]);
 export type LoopContext = z.infer<typeof LoopContextSchema>;
 
-/* WHAT THE LOOP PRODUCES — asked separately from what ends it, because they are separate questions and
+/* WHAT THE LOOP PRODUCES, asked separately from what ends it, because they are separate questions and
  * conflating them is what makes a chain of sessions impossible to build.
  *
- * `none` — the loop produces nothing but its work. The classic "make the suite green": what it leaves behind
+ * `none`, the loop produces nothing but its work. The classic "make the suite green": what it leaves behind
  *   is a green suite, and asking it to also file a report is asking it to spend a turn on paperwork.
- * `claim` — the iteration writes `{done, reason, evidence?}`. Prose, but STRUCTURED prose: `done` is a boolean
- *   the daemon reads rather than a sentence it has to interpret. Self-assessment, so advisory by construction —
+ * `claim`, the iteration writes `{done, reason, evidence?}`. Prose, but STRUCTURED prose: `done` is a boolean
+ *   the daemon reads rather than a sentence it has to interpret. Self-assessment, so advisory by construction,
  *   it exists because plenty of goals have no command that can check them ("the README explains the auth
  *   flow"), not because a model's word for it is worth much.
- * `json` — the iteration writes `{done, reason, data}` where `data` matches a declared field list. This is the
+ * `json`, the iteration writes `{done, reason, data}` where `data` matches a declared field list. This is the
  *   one that makes a step's output usable as the next step's input: a paragraph mentioning three files cannot
  *   be fed to anything, `{files: [...]}` can.
  *
@@ -404,7 +404,7 @@ export const LoopOutputSchema = z.discriminatedUnion("kind", [
 ]);
 export type LoopOutput = z.infer<typeof LoopOutputSchema>;
 
-/* WHAT ELSE HAS TO BE TRUE — checks that are not the worker's own word, ANDed with the output above.
+/* WHAT ELSE HAS TO BE TRUE, checks that are not the worker's own word, ANDed with the output above.
  *
  * `command` is a shell one-liner run in the conversation's tree; exit 0 ⇒ satisfied. Deterministic, free, and
  * the only signal here whose answer does not come from a model. It is the automation `guard` with the sign
@@ -423,7 +423,7 @@ export const LoopCheckSchema = z.discriminatedUnion("kind", [
 ]);
 export type LoopCheck = z.infer<typeof LoopCheckSchema>;
 
-/* THE VERDICT FILE an iteration writes — one shape for all three output kinds, because the loop reads it the
+/* THE VERDICT FILE an iteration writes, one shape for all three output kinds, because the loop reads it the
  * same way whatever was declared and only the validation of `data` differs.
  *
  * It is a FILE rather than a sentence in the reply for the reason every structured output in this codebase is
@@ -433,7 +433,7 @@ export type LoopCheck = z.infer<typeof LoopCheckSchema>;
 export const LoopDocumentSchema = z.object({
     // Whether the goal is met NOW. The loop's own reading of this is the whole point of the file.
     done: z.boolean(),
-    // One line: why it is or is not met. The single most-read string in the feature — it is what the next
+    // One line: why it is or is not met. The single most-read string in the feature, it is what the next
     // iteration reads first and what the history row shows.
     reason: z.string(),
     // What the iteration checked to know that. Optional because a model with nothing to point at should say so
@@ -449,7 +449,7 @@ export type LoopDocument = z.infer<typeof LoopDocumentSchema>;
 const LOOP_ITERATIONS_MAX = 50;
 
 export const LoopSchema = z.object({
-    // The conversation the loop drives — its fleet card, its worktree, its transcript.
+    // The conversation the loop drives, its fleet card, its worktree, its transcript.
     conversationId: ConversationIdSchema,
     // What "done" means, in the user's words. Rides into every iteration's prompt (and into the judge's
     // question) so the model is told the goal it is being measured against rather than left to infer it.
@@ -472,8 +472,8 @@ export const LoopSchema = z.object({
      *
      * The guard that matters most in practice, and the one whose absence is expensive. The failure mode of a
      * loop is not runaway success, it is an agent that re-reads the same three files, restates the same plan,
-     * declares more work remains, and does that eleven times. Nothing about that is an error — every turn
-     * succeeds — so only "the tree did not move" catches it. */
+     * declares more work remains, and does that eleven times. Nothing about that is an error, every turn
+     * succeeds, so only "the tree did not move" catches it. */
     stallLimit: z.number().int().min(1),
     // Whether the iterations run in the conversation's own worktree or on the shared tree. Recorded on the loop
     // rather than read off the conversation because a loop can OPEN one, and because it decides where the stop
@@ -486,10 +486,10 @@ export const LoopSchema = z.object({
     harness: AgentHarnessSchema.optional(),
     account: z.string().optional(),
     model: z.string().optional(),
-    // Which persona the iterations act as (AgentTurnSchema.actsAs — read its note for why this is not spelled
+    // Which persona the iterations act as (AgentTurnSchema.actsAs, read its note for why this is not spelled
     // `account`). The fourth passthrough an automation carries, and it matters here for the automation's
     // reason: every iteration is unattended, and an unattended turn with no persona reaches no logged-in
-    // account at all — pinning a card is the one way a loop gets hands.
+    // account at all, pinning a card is the one way a loop gets hands.
     actsAs: entryId.optional(),
     // A workflow persists these on its underlying loop so restart recovery cannot silently change the checkout
     // or let a candidate inherit the sandbox's global auto-land posture on a later iteration.
@@ -501,47 +501,47 @@ export type Loop = z.infer<typeof LoopSchema>;
 // Can this loop ever end on its own terms? A loop with nothing to produce and nothing to check runs to its
 // iteration ceiling and reports `exhausted`, having been unable to succeed from the moment it was configured.
 // A predicate rather than a schema refinement because two routes want it as one, at different moments: `start`
-// refuses an ad-hoc loop, and `saveDesign` refuses a SAVED one — which is the more valuable of the two, since a
+// refuses an ad-hoc loop, and `saveDesign` refuses a SAVED one, which is the more valuable of the two, since a
 // saved loop that cannot converge is a trap everyone who picks it afterwards pays a full run to discover.
 export const loopCanConverge = (loop: Pick<Loop, "output" | "checks">): boolean => loop.output.kind !== "none" || loop.checks.length > 0;
 
 /* Where a loop keeps what it must not lose between iterations: <workspace>/.intentic/records/artifacts/loops/<conversationId>/.
  *
- * Under `.intentic` for the reason the acceptance runs are — it is outside every repo and bound back SHARED
+ * Under `.intentic` for the reason the acceptance runs are, it is outside every repo and bound back SHARED
  * into an isolated turn's worktree, so the agent writes and the browser reads the same tree, with nothing to
  * land and no git noise. `progress.md` is the loop's memory in `fresh` mode and its audit trail in `continue`
  * mode; `iteration-<n>.json` is the verdict a `claim` stop reads. */
 export const LOOP_DIR = `${STATE_DIR}/records/artifacts/loops`;
 
 // Why an iteration ended, which is not the same question as how the LOOP ended. `continue` is the ordinary
-// "not done yet"; `error` is a turn that surfaced an error frame, which does NOT end the loop by itself — a
+// "not done yet"; `error` is a turn that surfaced an error frame, which does NOT end the loop by itself, a
 // failing turn is often exactly what the next iteration is supposed to fix.
 export const LoopIterationSchema = z.object({
     n: z.number().int().min(1),
     at: z.number(),
     outcome: z.enum(["continue", "done", "error"]),
-    // The stop check's own words — the guard's output tail, the claim's reason, the judge's verdict. What the
+    // The stop check's own words, the guard's output tail, the claim's reason, the judge's verdict. What the
     // run history is actually read for: "why did it keep going" and "why did it stop".
     detail: z.string().optional(),
     costUsd: z.number().optional(),
     // Whether the tree moved this iteration. Feeds the stall detector, and is worth showing per row: three
     // unchanged iterations in a history is the shape of a loop that is not working.
     changed: z.boolean(),
-    // The provider session this iteration ran on — the door from a history row to a readable transcript.
+    // The provider session this iteration ran on, the door from a history row to a readable transcript.
     sessionId: z.string().optional(),
 });
 export type LoopIteration = z.infer<typeof LoopIterationSchema>;
 
 /* How a loop ended, and every one of these is a distinct thing to tell the user.
  *
- * `done` — the stop condition was met. The only success.
- * `exhausted` — maxIterations ran out with the goal unmet.
- * `stalled` — stallLimit consecutive iterations changed nothing. Reported apart from `exhausted` because the
+ * `done`, the stop condition was met. The only success.
+ * `exhausted`, maxIterations ran out with the goal unmet.
+ * `stalled`, stallLimit consecutive iterations changed nothing. Reported apart from `exhausted` because the
  *   remedy is different: exhausted says "give it more room", stalled says "it is not making progress and more
  *   room will not help".
- * `overspent` — maxSpendUsd was reached.
- * `stopped` — the user pressed Stop.
- * `error` — the loop itself failed (not a turn inside it; see LoopIteration.outcome).
+ * `overspent`, maxSpendUsd was reached.
+ * `stopped`, the user pressed Stop.
+ * `error`, the loop itself failed (not a turn inside it; see LoopIteration.outcome).
  */
 export const LoopStateSchema = z.enum(["running", "done", "exhausted", "stalled", "overspent", "stopped", "error"]);
 export type LoopState = z.infer<typeof LoopStateSchema>;
@@ -554,7 +554,7 @@ export const LoopRecordSchema = LoopSchema.extend({
      * marked `running` at boot is exactly one the daemon died under, which is the same trick turn-journal.ts
      * plays with its files and needs no second store to play it.
      *
-     * Counted, not just flagged, for the reason the turn journal counts its attempts — a loop whose iteration
+     * Counted, not just flagged, for the reason the turn journal counts its attempts, a loop whose iteration
      * reliably kills the daemon (an OOM in a test it keeps running) would otherwise be resurrected on every
      * boot forever, and the container is recreated on every sandbox update. */
     resumed: z.number().int().min(0),
@@ -571,23 +571,23 @@ export const LoopIdParamSchema = z.object({ conversationId: ConversationIdSchema
 /* ---- saved loops: the machinery, kept; the job, typed fresh each time ----
  *
  * A SAVED LOOP IS A LOOP WITH ITS GOAL TAKEN OUT, and that subtraction is the whole idea. Everything a loop
- * needs besides "what are we doing" is the same every time somebody sets one up — end on `pnpm test`, fresh
- * context, eight rounds, five dollars, stop after two idle ones — and every one of those was being retyped, in
+ * needs besides "what are we doing" is the same every time somebody sets one up, end on `pnpm test`, fresh
+ * context, eight rounds, five dollars, stop after two idle ones, and every one of those was being retyped, in
  * a modal, before any work could begin. The goal is the only field that is genuinely new each time, and it is
  * the one field the user has ALREADY WRITTEN: it is sitting in the composer.
  *
  * So this holds the machinery and the composer holds the job, which makes a loop the same gesture as a
- * workflow — pick the shape, type the request, send. `WorkflowSchema` and this are deliberately siblings: both
+ * workflow, pick the shape, type the request, send. `WorkflowSchema` and this are deliberately siblings: both
  * are designs, both are picked from the composer, both leave the sentence to the message. What a workflow
  * spreads across sessions, a loop repeats in one.
  *
  * NO `conversationId` AND NO `isolated`, unlike the Loop this becomes. Both are facts about the agent the loop
- * is aimed at, decided at the moment of sending and unknowable when the design is written — a saved loop that
+ * is aimed at, decided at the moment of sending and unknowable when the design is written, a saved loop that
  * remembered a conversation would be a loop that could only ever be run once.
  */
 export const LoopDesignSchema = z.object({
     id: entryId,
-    // What it is called on the composer badge and in the picker — so it has to survive being read at pill width.
+    // What it is called on the composer badge and in the picker, so it has to survive being read at pill width.
     name: z.string().min(1).max(60),
     // One line: what this loop is FOR. Optional, because a well-named loop has already said it.
     description: z.string().max(280).optional(),
@@ -606,12 +606,12 @@ export const LoopDesignSchema = z.object({
 export type LoopDesign = z.infer<typeof LoopDesignSchema>;
 
 export const LoopDesignsListSchema = z.object({ designs: z.array(LoopDesignSchema) });
-// Create and update on one route with the intent spelled out, exactly as a workflow saves — so an id collision
+// Create and update on one route with the intent spelled out, exactly as a workflow saves, so an id collision
 // cannot silently turn "new loop" into "replace the one you had".
 export const LoopDesignSaveSchema = z.object({ design: LoopDesignSchema, create: z.boolean() });
 export const LoopDesignIdParamSchema = z.object({ id: entryId });
 
-/* The design, aimed at an agent — the one conversion in the feature, kept here so the composer and anything
+/* The design, aimed at an agent, the one conversion in the feature, kept here so the composer and anything
  * else that starts a saved loop cannot disagree about what a saved loop MEANS. The goal is the message the user
  * typed; `isolated` is a fact about the agent it is aimed at. */
 export const loopFromDesign = (design: LoopDesign, aim: { conversationId: string; goal: string; isolated: boolean }): Loop => ({
@@ -627,7 +627,7 @@ export const loopFromDesign = (design: LoopDesign, aim: { conversationId: string
     isolated: aim.isolated,
 });
 
-/* HOW A SAVED LOOP ENDS, IN ONE LINE — the sentence under its name in the picker and on its card, computed
+/* HOW A SAVED LOOP ENDS, IN ONE LINE, the sentence under its name in the picker and on its card, computed
  * rather than stored so the two can never describe the same loop differently. Ordered as it is read: the bar it
  * has to clear first, then how far it may go trying. */
 export const loopDesignLine = (design: LoopDesign): string => {
@@ -652,39 +652,39 @@ export const loopDesignLine = (design: LoopDesign): string => {
 // surface shows both through the same status/activity/cost lifecycle.
 
 // idle/running/awaiting are the turn lifecycle (awaiting = paused on a plan approval or question); ready /
-// landed / conflict are outcomes of the land flow — `ready` is a clean completion whose delta stayed on the
+// landed / conflict are outcomes of the land flow, `ready` is a clean completion whose delta stayed on the
 // agent's branch because auto-land is off (the user lands it deliberately, from the review panel or the card);
 // error is a terminal turn failure surfaced on the card.
 //
 // `interrupted` is the turn that never got to report ANY of those: the daemon died under it (a container
-// rebuild, a crash, an OOM kill), taking the provider process and the whole runtime half of the fleet — status,
-// attention flags, the park a question raised — with it. It exists because the alternative is worse than
+// rebuild, a crash, an OOM kill), taking the provider process and the whole runtime half of the fleet, status,
+// attention flags, the park a question raised, with it. It exists because the alternative is worse than
 // unlabelled: without it such a turn rehydrates as `idle`, which is the resting status of a turn that finished
 // CLEANLY, so the board files a killed agent under Finished and the question it was holding disappears with the
-// process that asked it. See agents-store.ts — this is the status a live turn leaves on disk.
+// process that asked it. See agents-store.ts, this is the status a live turn leaves on disk.
 //
 /* `stopping` and `stopped` are the two halves of a user's Stop, and they exist because a hard-cancel is NOT
  * instant: /agent/stop aborts the provider and then waits for the turn's generator to unwind (worktree and
  * registry cleanup), which is seconds of real time. For that whole window the runtime half still said
- * `running`, so every surface kept its spinner turning on a turn the user had already killed — and then the
+ * `running`, so every surface kept its spinner turning on a turn the user had already killed, and then the
  * card jumped to a settled state out of nowhere. `stopping` is what the daemon knows the instant the abort
  * lands, published immediately so the press has a visible result; `stopped` is where the turn comes to rest.
  *
  * `stopped` is deliberately its own value rather than `interrupted` or `error`. Not `error`, which is what a
- * stopped turn used to report (every provider adapter surfaces the abort's unwind as an error frame) — a card
+ * stopped turn used to report (every provider adapter surfaces the abort's unwind as an error frame), a card
  * accusing the user's own deliberate press of being a failure. Not `interrupted` either: that one means the
  * daemon died under the turn, and a boot pass may re-run it, which is precisely what must never happen to a
  * turn a person chose to end. */
 /* `resuming` is the same argument as `stopping`, made about the other end of a turn's life: the turn was killed
  * by something the daemon is ALREADY undoing (a rotated credential being re-minted, a provider outage being
- * waited out — turn-resume.ts), so it has stopped without having ended. The gap is real time — a few seconds for
- * a re-mint, minutes for an outage's backoff — and for that whole window the turn reported the resting `idle`,
+ * waited out, turn-resume.ts), so it has stopped without having ended. The gap is real time, a few seconds for
+ * a re-mint, minutes for an outage's backoff, and for that whole window the turn reported the resting `idle`,
  * which the board reads as finished. So a 401 that nobody caused and nobody has to fix filed the card under
  * Finished and then pulled it back into Active a moment later, which is the fleet contradicting itself in front
  * of the user about work that never stopped being in progress.
  *
  * Never persisted (see PersistedAgentStatusSchema): what is coming back is remembered in the daemon's memory
- * alone, and a daemon that dies mid-wait takes the resume with it — so the card falls back to the ending its
+ * alone, and a daemon that dies mid-wait takes the resume with it, so the card falls back to the ending its
  * killed turn actually wrote and reads as finished, which by then is true. Nothing is left to bring it back. */
 export const AgentStatusSchema = z.enum([
     "idle",
@@ -707,71 +707,71 @@ export const AgentActivitySchema = z.object({
     todo: z.string().optional(),
 });
 export type AgentActivity = z.infer<typeof AgentActivitySchema>;
-// Which "needs you" flags are raised — the fleet badge aggregates these across all agents.
+// Which "needs you" flags are raised, the fleet badge aggregates these across all agents.
 export const AgentAttentionSchema = z.object({
     plan: z.boolean(),
     question: z.boolean(),
     permission: z.boolean(),
-    // A priced service run parked on the owner's click (platform/service-offer.ts) — the one card where
+    // A priced service run parked on the owner's click (platform/service-offer.ts), the one card where
     // waiting costs the agent its whole call, so the lane says "spend approval" rather than a generic pause.
     service: z.boolean(),
-    // A missing capability parked on the owner's setup (capabilities/capability-offer.ts) — the agent is
+    // A missing capability parked on the owner's setup (capabilities/capability-offer.ts), the agent is
     // waiting for something to be connected, so the lane can say "setup needed" rather than a generic pause.
     capability: z.boolean(),
     conflict: z.boolean(),
 });
 export type AgentAttention = z.infer<typeof AgentAttentionSchema>;
 
-/* WHAT A LANDING IS CALLED — the commit message drafted from the landed diff (agents/landed-subject.ts), and
+/* WHAT A LANDING IS CALLED, the commit message drafted from the landed diff (agents/landed-subject.ts), and
  * the whole of it: a subject, and the two trailer sentences a repo that keeps a changelog gets.
  *
  * ONE SHAPE, TWO CARRIERS, and that is the reason it is a schema of its own rather than three fields written
- * out twice. The same sentence reaches the Changes panel down two roads — the fleet roster, which is live and
- * drops archived agents, and the review, which is a rescan and outlives the card (OriginAgent) — so the panel
+ * out twice. The same sentence reaches the Changes panel down two roads, the fleet roster, which is live and
+ * drops archived agents, and the review, which is a rescan and outlives the card (OriginAgent), so the panel
  * takes whichever answers first and must not care which one did. Two hand-kept copies of these three fields
  * would be two things to keep in step, and the one that drifted would be the one nobody was looking at.
  *
  * THE PARTS STAY APART. A subject is one bounded line everywhere it is stored and shown; the notes are
  * sentences for the people who read a release. Flattening them into one string would produce a run-on subject
- * in the commit box and a truncated note in the changelog, so they are joined only at the moment of the fill —
+ * in the commit box and a truncated note in the changelog, so they are joined only at the moment of the fill,
  * where they become a commit message with its trailers and nowhere before it. */
 export const LandedMessageSchema = z.object({
-    /* WHAT THIS AGENT'S LANDED WORK DID, as a commit subject — written from the landed diff when the work
+    /* WHAT THIS AGENT'S LANDED WORK DID, as a commit subject, written from the landed diff when the work
      * arrived, which is why it can say what a title cannot.
      *
      * A title names the ASK, and it is written once, from the opening prompt, a second into the first turn. A
      * conversation that opens "audit the review panel" and then spends four turns fixing what the audit found
-     * still answers to "Review panel · audit" — a good name for the session and a wrong subject for the
+     * still answers to "Review panel · audit", a good name for the session and a wrong subject for the
      * commit. This is read off the code instead, so it describes the change the user is about to record. */
     subject: z.string(),
-    /* THE SAME LANDING, SAID TO A USER — the `Release-Note:` sentence the chip files in under the subject, for
+    /* THE SAME LANDING, SAID TO A USER, the `Release-Note:` sentence the chip files in under the subject, for
      * a repo that keeps a changelog (SandboxSettings.changelogRepos).
      *
      * Usually absent, and that is the design: most landings change nothing a user would notice, and the model
      * is told to omit the note for those rather than to invent one. */
     note: z.string().optional(),
-    /* WHAT THE SAME LANDING TAKES AWAY — the `Breaking-Note:` sentence, filed as its own trailer so the
+    /* WHAT THE SAME LANDING TAKES AWAY, the `Breaking-Note:` sentence, filed as its own trailer so the
      * release harvest can put it under "Breaking changes" and the update card can warn with it before the
      * update rather than after. Nearly always absent: the model is told a breaking note is for removals only,
-     * and to omit it when in doubt — except when the landing shrinks a wire-contract lock, where the sentence
+     * and to omit it when in doubt, except when the landing shrinks a wire-contract lock, where the sentence
      * is REQUIRED and mechanically guaranteed (the daemon's git/contract-shrink.ts) rather than judged. */
     breaking: z.string().optional(),
 });
 export type LandedMessage = z.infer<typeof LandedMessageSchema>;
 
-/* ONE MODEL'S TURN IN THE DRAFTING WALK — asked, and what became of the ask. The quick-model chain tries the
+/* ONE MODEL'S TURN IN THE DRAFTING WALK, asked, and what became of the ask. The quick-model chain tries the
  * connected models in order (agent/quick-model.ts), and each rung ends one of four ways:
- *   asking   — in flight right now; `ms` absent because it is still being spent.
- *   answered — it wrote the sentence, in `ms`.
- *   refused  — it failed or declined, in `ms`, with its own words in `reason`.
- *   skipped  — not asked at all: it refused within the last few minutes and the walk stepped over it, with the
+ *   asking  , in flight right now; `ms` absent because it is still being spent.
+ *   answered, it wrote the sentence, in `ms`.
+ *   refused , it failed or declined, in `ms`, with its own words in `reason`.
+ *   skipped , not asked at all: it refused within the last few minutes and the walk stepped over it, with the
  *              reason it gave back then. Skipping is the memo working, and it reads as such.
  * The steps arrive in the order they were spent, so the list IS the timeline. */
 export const LandedMessageStepSchema = z.object({
     provider: z.string().min(1),
     model: z.string().min(1),
     status: z.enum(["asking", "answered", "refused", "skipped"]),
-    // When this rung started being asked, ms since epoch — what an in-flight step's ticking "12s…" is measured
+    // When this rung started being asked, ms since epoch, what an in-flight step's ticking "12s…" is measured
     // from, client-side, without a frame per second. Absent for `skipped`, which cost no time at all.
     at: z.number().optional(),
     ms: z.number().optional(),
@@ -779,16 +779,16 @@ export const LandedMessageStepSchema = z.object({
 });
 export type LandedMessageStep = z.infer<typeof LandedMessageStepSchema>;
 
-/* THE FULL ACCOUNT OF ONE LANDING'S COMMIT MESSAGE BEING DRAFTED — everything a user waiting at the commit box
+/* THE FULL ACCOUNT OF ONE LANDING'S COMMIT MESSAGE BEING DRAFTED, everything a user waiting at the commit box
  * is owed: that the draft started, which models have been asked, how each one went, and how it ended.
  *
- * `outcome` is absent while the draft is RUNNING, which is what "a sentence is on its way" now means — the
+ * `outcome` is absent while the draft is RUNNING, which is what "a sentence is on its way" now means, the
  * boolean flag this replaces could say only that, and nothing else this schema carries. Ended, it is:
- *   written — the sentence is on the card (`landedMessage`) and in the box; the steps say who wrote it.
- *   failed  — nothing usable came back. The steps carry each model's own words; `reason` is the one-line
+ *   written, the sentence is on the card (`landedMessage`) and in the box; the steps say who wrote it.
+ *   failed , nothing usable came back. The steps carry each model's own words; `reason` is the one-line
  *             account for the surfaces with a single line to spend (an answer that was itself a refusal
  *             sentence, or the whole chain spent).
- * An empty `steps` with no outcome is the moment before the first model is asked — the diff is being read. */
+ * An empty `steps` with no outcome is the moment before the first model is asked, the diff is being read. */
 export const LandedMessageDraftSchema = z.object({
     startedAt: z.number(),
     steps: z.array(LandedMessageStepSchema),
@@ -805,20 +805,20 @@ export const AgentSummarySchema = z.object({
     // First prompt, sanitized to one bounded line.
     title: z.string().optional(),
     status: AgentStatusSchema,
-    /* WHY THE LAST TURN FAILED — the sentence it died on, carried beside the `error` status because that word
+    /* WHY THE LAST TURN FAILED, the sentence it died on, carried beside the `error` status because that word
      * on its own is not an answer. A session refused on its first request (an organization with Claude Code
      * switched off, a spent allowance, a model the endpoint has never heard of) reached every surface as a grey
      * "error" and a link into the transcript, so the one place the reason existed was the dead conversation
-     * itself — which is exactly where an unattended run, started from a fan-out nobody is watching, is least
+     * itself, which is exactly where an unattended run, started from a fan-out nobody is watching, is least
      * likely to be read. Absent unless the last turn ended in failure, and cleared the moment it runs again. */
     failure: z.string().optional(),
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
-    // What the agent's last turn ran with — the model, its reasoning effort, whether extended thinking was on,
+    // What the agent's last turn ran with, the model, its reasoning effort, whether extended thinking was on,
     // and whether fast speed was asked for. Recorded per agent because they are facts about THIS conversation: a
     // client opening it seeds its composer from them, rather than from whatever that browser last picked in some
     // other tab. Absent for an agent whose turns predate the record (model has always been kept; the rest are
-    // newer). `fast` is what was REQUESTED, not what was served — the served answer belongs to a turn and rides
+    // newer). `fast` is what was REQUESTED, not what was served, the served answer belongs to a turn and rides
     // its `fast_mode` frame, while this is the composer's memory of the user's own choice.
     model: z.string().optional(),
     effort: z.string().optional(),
@@ -827,17 +827,17 @@ export const AgentSummarySchema = z.object({
     account: z.string().optional(),
     // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
     branch: z.string().optional(),
-    // This agent's own answer to "land automatically at turn completion?" — an explicit per-agent override of
+    // This agent's own answer to "land automatically at turn completion?", an explicit per-agent override of
     // the sandbox-wide `autoLand` setting. ABSENT ⇒ inherit, which is the common case and the one that keeps
     // the global toggle meaningful: an agent that never expressed an opinion follows the sandbox wherever it
     // is pointed next. Written by `agents.autoLand`; the UI shows the EFFECTIVE value (this ?? the setting).
     autoLand: z.boolean().optional(),
-    /* This agent's own answer to "re-run my turn when the model provider was what failed?" — the same
+    /* This agent's own answer to "re-run my turn when the model provider was what failed?", the same
      * two-level shape as `autoLand` above, and here for a sharper reason than symmetry.
      *
      * The press that writes this is offered INSIDE one conversation, at the moment that conversation's turn
      * died, and what a person means by it is "finish THIS piece of work". It used to write the sandbox-wide
-     * setting, so one impatient click at 2 a.m. quietly armed every agent on the board — a blast radius
+     * setting, so one impatient click at 2 a.m. quietly armed every agent on the board, a scope
      * nothing on screen had asked about. So the chat's offer writes this, the settings toggle writes the
      * default, and the two stay honestly different things.
      *
@@ -845,22 +845,22 @@ export const AgentSummarySchema = z.object({
      * never expressed an opinion follows the sandbox wherever it is pointed next. Written by
      * `agents.resumeAfterOutage`; every surface shows the EFFECTIVE value (this ?? the setting). */
     resumeAfterOutage: z.boolean().optional(),
-    // A collaborator asked for this agent's work to be landed (agents.requestLand) — collaborators may drive
+    // A collaborator asked for this agent's work to be landed (agents.requestLand), collaborators may drive
     // agents but not merge into the main tree, so the ask rides the summary where every maintainer's board
     // sees it. Cleared by the land or discard that answers it. Absent ⇒ nobody is waiting.
     landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
     // Present when the conversation was opened by an outside message rather than by the user (see
-    // AgentOriginSchema) — the card's provenance line. Absent ⇒ the user started it.
+    // AgentOriginSchema), the card's provenance line. Absent ⇒ the user started it.
     origin: AgentOriginSchema.optional(),
     /* Where this conversation was cut from, when it was cut from another. Recorded once, from the fork's very
-     * first turn, and never cleared — it is the relationship, not a pending state.
+     * first turn, and never cleared, it is the relationship, not a pending state.
      *
      * It rides the SUMMARY rather than living in the client's tabs because a fork and its source are two chats
      * that are obviously related and, without this, had no way to say how: the link has to survive closing
-     * either tab and reopening it from history, and it has to be readable from the OTHER side — the source's
+     * either tab and reopening it from history, and it has to be readable from the OTHER side, the source's
      * own transcript marks its cut points by looking for the conversations that name it. */
     forkedFrom: ForkedFromSchema.optional(),
-    // The ROOT repo's short base sha — the checkout moment's display identity. Per-repo bases stay
+    // The ROOT repo's short base sha, the checkout moment's display identity. Per-repo bases stay
     // daemon-internal (agents.diff already reports against them).
     base: z.string().optional(),
     costUsd: z.number().optional(),
@@ -869,49 +869,49 @@ export const AgentSummarySchema = z.object({
     contextTokens: z.number().optional(),
     contextWindow: z.number().optional(),
     activity: AgentActivitySchema.optional(),
-    /* THE WHOLE STORY OF THIS LANDING'S COMMIT MESSAGE BEING WRITTEN — present from the moment the land starts
+    /* THE WHOLE STORY OF THIS LANDING'S COMMIT MESSAGE BEING WRITTEN, present from the moment the land starts
      * the draft, updated on every transition, and kept after it ends until the next land replaces it.
      *
      * This used to be one boolean ("a model is writing"), and a boolean is exactly one fact short of every
      * question the wait raises: WHICH model, for how long, what refused and in what words, what finally
-     * answered. All of that was known in the daemon and thrown away at the door — a first-pinned model that
+     * answered. All of that was known in the daemon and thrown away at the door, a first-pinned model that
      * burned 58 seconds refusing on every landing had to be caught by watching CLI processes by hand, because
      * nothing on any screen could have shown it.
      *
      * Runtime only: nothing about it is persisted, so a daemon restart forgets it. That is correct rather than
-     * lossy — a restart also killed the draft it would have been describing. */
+     * lossy, a restart also killed the draft it would have been describing. */
     landedMessageDraft: LandedMessageDraftSchema.optional(),
-    /* AND THE SENTENCE ITSELF, once the flag above clears — what this agent's landed work is called, for the
+    /* AND THE SENTENCE ITSELF, once the flag above clears, what this agent's landed work is called, for the
      * Changes panel's "From" chip to file into the commit box.
      *
      * IT RIDES THE ROSTER because the roster is the channel that is already live for it. The review carries the
-     * same fact (OriginAgent.subject) and has to, for an archived agent whose lines are still in the tree — but
+     * same fact (OriginAgent.subject) and has to, for an archived agent whose lines are still in the tree, but
      * the review is a workspace-wide rescan, coalesced daemon-side and refetched only when something asks, and
      * this sentence arrives ALONE, seconds after the work it describes, with nothing else moving. Every link in
      * that chain has to hold for a message that exists to become a message the user can see, and when one of
-     * them doesn't, the box stays empty with nothing to say why — while the flag above, which travels on THIS
+     * them doesn't, the box stays empty with nothing to say why, while the flag above, which travels on THIS
      * frame, has already told them a sentence was coming.
      *
      * So the fact goes where the promise went. Same push, same instant: the frame that ends `landedMessageDraft`
      * is the frame that carries the answer, which is also what makes "your commit message is ready" honest.
      *
      * Absent for every agent that has not landed, and for a landing nothing could be written about. Replaced
-     * wholesale by the next land — the claim grows and so does the sentence about it. */
+     * wholesale by the next land, the claim grows and so does the sentence about it. */
     landedMessage: LandedMessageSchema.optional(),
     // Present while a turn runs: its start, ms since epoch.
     startedAt: z.number().optional(),
     updatedAt: z.number(),
-    // When the agent was last OPENED, ms since epoch — the unread badge's reference point (`updatedAt >
+    // When the agent was last OPENED, ms since epoch, the unread badge's reference point (`updatedAt >
     // seenAt` ⇒ the agent has done something you haven't looked at). Absent ⇒ never opened. Daemon-side on
     // purpose: read state is a fact about the WORK, not about one browser profile, so clearing site data or
     // picking up the phone must not resurrect every badge.
     seenAt: z.number().optional(),
     attention: AgentAttentionSchema,
-    // Completed turns and lifetime tool calls — the card's msgs/tools counters.
+    // Completed turns and lifetime tool calls, the card's msgs/tools counters.
     turns: z.number().optional(),
     toolUses: z.number().optional(),
     /* The agents THIS agent started (SubagentSessionSchema), live and lifetime. Absent ⇒ it has never delegated,
-     * which is most agents — so the card's chip appears on content rather than reading "0" down the board.
+     * which is most agents, so the card's chip appears on content rather than reading "0" down the board.
      *
      * THE TWO HALVES COME FROM DIFFERENT PLACES, and have to: `running` is read off the live subagent registry,
      * which sweeps a child five minutes after it reports and remembers nothing across a restart, while `total`
@@ -920,21 +920,21 @@ export const AgentSummarySchema = z.object({
      *
      * It earns a place on a card because a fleet card is the answer to "what is this agent up to", and an agent
      * running five children looked exactly like an agent running none: the work was real, the spend was real, and
-     * the board said nothing. The tokens are NOT folded into the parent's cost — a child's spend is its own, and
+     * the board said nothing. The tokens are NOT folded into the parent's cost, a child's spend is its own, and
      * the Subagents area is where it is attributed. */
     subagents: z.object({ running: z.number(), total: z.number() }).optional(),
-    // The agent's cumulative output (base → branch tip across every repo), refreshed on each land —
+    // The agent's cumulative output (base → branch tip across every repo), refreshed on each land,
     // the card's "12 files · +412 −96" readout. Independent of what has landed.
     diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
-    /* HOW MUCH OF WHAT THIS AGENT LANDED IS STILL IN YOUR WORKING TREE — present only when some of it ISN'T.
+    /* HOW MUCH OF WHAT THIS AGENT LANDED IS STILL IN YOUR WORKING TREE, present only when some of it ISN'T.
      *
      * A land applies its delta to the main tree as uncommitted changes, so the user can discard it there like
      * any other change, and every other reading on this card is measured between commits and cannot see that
      * happen (landed-presence.ts). Left unsaid, the card goes on wearing a landed chip and the session menu
-     * goes on saying "Already in your workspace" over a tree that no longer holds it — and the next land
+     * goes on saying "Already in your workspace" over a tree that no longer holds it, and the next land
      * carries only the NEW delta, dropping turn 2 onto a tree missing turn 1.
      *
-     * `present` counts the landed paths still there: dirty, or committed into history — a commit is the
+     * `present` counts the landed paths still there: dirty, or committed into history, a commit is the
      * strongest form of still-there, which is why this cannot be folded into the Changes panel's own
      * attribution, where a commit is what ENDS the agent's claim (origins.ts).
      *
@@ -942,7 +942,7 @@ export const AgentSummarySchema = z.object({
      * exactly where it left it both say nothing. Its PRESENCE is the signal, which is what keeps the board
      * from spending a line per card on the ordinary case. */
     landedPresence: z.object({ landed: z.number(), present: z.number() }).optional(),
-    /* The loop driving this conversation, when one is (or was) — "iteration 3/12, until the suite is green".
+    /* The loop driving this conversation, when one is (or was), "iteration 3/12, until the suite is green".
      *
      * PROJECTED onto the card rather than fetched beside it, and that is the whole reason a loop needed no
      * surface of its own: a looping agent is an agent, so the board's status, spend, unread badge and Stop
@@ -954,11 +954,11 @@ export const AgentSummarySchema = z.object({
     loop: z
         .object({ state: LoopStateSchema, iteration: z.number().int().min(0), maxIterations: z.number().int().min(1), goal: z.string() })
         .optional(),
-    /* The workflow run this conversation is a step of — "Ship the feature · step 3 of 4 · Review the change".
+    /* The workflow run this conversation is a step of, "Ship the feature · step 3 of 4 · Review the change".
      *
      * Projected for the same reason the loop above is, and it answers a question only the board can be asked. A
      * run of four `fresh` steps IS four conversations, so it arrives on the board as four unrelated cards that
-     * started a few minutes apart — the work reads as four people who happen to be busy rather than as one job
+     * started a few minutes apart, the work reads as four people who happen to be busy rather than as one job
      * with a shape. Naming the run on each card is what makes them one block, and `runId` is what lets the board
      * order them together and link every one of them at the run's own graph.
      *
@@ -967,8 +967,8 @@ export const AgentSummarySchema = z.object({
      * sibling advanced. How the run as a whole is going is the run page's job, and how THIS step is going is
      * already the card's status and the loop line above.
      *
-     * `step` moves within one conversation when steps are chained with `continue` — they share it, which is the
-     * point of chaining — so this says which one is on it NOW.
+     * `step` moves within one conversation when steps are chained with `continue`, they share it, which is the
+     * point of chaining, so this says which one is on it NOW.
      *
      * Absent ⇒ an ordinary conversation. */
     workflow: z
@@ -980,14 +980,14 @@ export const AgentSummarySchema = z.object({
             total: z.number().int().min(1),
         })
         .optional(),
-    // When the agent was ARCHIVED (ms epoch) — off the board, but nothing lost: its checkout was retired
+    // When the agent was ARCHIVED (ms epoch), off the board, but nothing lost: its checkout was retired
     // (worktree removed) while the agent/<id> branch, the transcript, and every counter stayed. Absent ⇒ live
     // on the board. Archived agents are excluded from the roster the fleet renders; `agents.archived` lists
     // them, `agents.unarchive` brings one back, and the next turn re-attaches its worktree from the branch.
     archivedAt: z.number().optional(),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
-// AgentsListSchema lives further down, after AutomationApprovalSchema — the fleet list carries the held wakes,
+// AgentsListSchema lives further down, after AutomationApprovalSchema, the fleet list carries the held wakes,
 // and zod declaration order forces the ride-along to be declared first.
 export const AgentIdSchema = z.object({ id: z.string().min(1) });
 // archive's input: the agents to take off the board. Absent `ids` ⇒ every finished agent that is archivable
@@ -996,28 +996,28 @@ export const AgentArchiveSchema = z.object({ ids: z.array(z.string().min(1)).max
 export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(500) });
 // What actually MOVED, and deliberately NOT the roster afterwards. Two archives in flight at once each finish
 // holding a full-roster snapshot from a different instant, so a client that swapped one in wholesale would let
-// the slower response resurrect what the faster one just filed away — a delta composes where a snapshot races.
+// the slower response resurrect what the faster one just filed away, a delta composes where a snapshot races.
 // Whole summaries rather than ids because the receiving side has to SHOW them (the archive list, and the agent
 // detail page addressed by id); the ids "Undo" needs come off them for free.
-// The agents an archive/unarchive actually moved, plus the registry revision that applied the move — the
+// The agents an archive/unarchive actually moved, plus the registry revision that applied the move, the
 // browser holds its optimistic add/remove of exactly these ids until it sees a roster at or past `rev`.
 export const AgentsMovedSchema = z.object({ moved: z.array(AgentSummarySchema), rev: z.number() });
 export type AgentsMoved = z.infer<typeof AgentsMovedSchema>;
-// What a purge actually deleted. Ids, not summaries: these agents no longer exist anywhere — there is nothing
+// What a purge actually deleted. Ids, not summaries: these agents no longer exist anywhere, there is nothing
 // left to show and nothing to put back, so the only thing the caller can do with the answer is drop those rows
 // and count them. No revision either: archived agents are already off the broadcast roster (see `list`), so a
 // purge changes nothing the board's pending-move machinery has to hold a card against.
 export const AgentsRemovedSchema = z.object({ removed: z.array(z.string()) });
 export type AgentsRemoved = z.infer<typeof AgentsRemovedSchema>;
-/* Search the fleet by what was SAID in it — the board's filter (and the popped-out rail's).
+/* Search the fleet by what was SAID in it, the board's filter (and the popped-out rail's).
  *
  * Both sides of the conversation, and nothing else: the user's own prompts and the agent's chat bubbles. What
- * an agent ANSWERED is half of what a chat is remembered by — the name it found, the file it named, the number
- * it reported — and a filter that could not reach it sent people back to opening chats one at a time.
+ * an agent ANSWERED is half of what a chat is remembered by, the name it found, the file it named, the number
+ * it reported, and a filter that could not reach it sent people back to opening chats one at a time.
  *
  * What stays out is everything that is not speech: extended thinking, tool calls and their output, and the
  * daemon's own protocol (preambles, attachment notes). That is the line the old user-only rule was really
- * drawing — tool output alone names nearly every identifier in the workspace, so matching it returns most of
+ * drawing, tool output alone names nearly every identifier in the workspace, so matching it returns most of
  * the board and the filter stops filtering. Prose is a fraction of a transcript and reads like a sentence
  * someone wrote, which is why it can be searched when a diff dump cannot.
  *
@@ -1025,7 +1025,7 @@ export type AgentsRemoved = z.infer<typeof AgentsRemovedSchema>;
  *
  * Two chars minimum: below that every agent matches and the scan is pure cost.
  *
- * `caseSensitive` is the field's Aa switch — the same name and the same default as the workspace search's, so
+ * `caseSensitive` is the field's Aa switch, the same name and the same default as the workspace search's, so
  * one word means one thing across the daemon's search routes. Off is case-INSENSITIVE rather than smart case:
  * a filter that quietly changed rule when a capital was typed would make the switch beside it a lie.
  */
@@ -1033,8 +1033,8 @@ export const AgentSearchQuerySchema = z.object({ query: z.string().trim().min(2)
 /* WHY a row survived the filter: the matched line, windowed around the hit, and which side of the conversation
  * said it. A result that matches for a reason the reader cannot see is worse than no filter at all.
  *
- * `speaker` rides WITH the text rather than beside it because the two are never separately true — every line is
- * someone's — and because the words alone stopped being self-identifying the moment agent prose became
+ * `speaker` rides WITH the text rather than beside it because the two are never separately true, every line is
+ * someone's, and because the words alone stopped being self-identifying the moment agent prose became
  * matchable: "landAgent lives in laneDrop.ts" under a card reads as something the user typed until the row
  * says otherwise.
  */
@@ -1043,7 +1043,7 @@ export type Speaker = z.infer<typeof SpeakerSchema>;
 export const MatchSnippetSchema = z.object({ text: z.string(), speaker: SpeakerSchema });
 export type MatchSnippet = z.infer<typeof MatchSnippetSchema>;
 // One matching agent, and the evidence for it. `snippet` is absent when the match is the TITLE, which the card
-// already shows — repeating it underneath is noise where evidence was wanted.
+// already shows, repeating it underneath is noise where evidence was wanted.
 export const AgentMatchSchema = z.object({ id: z.string(), snippet: MatchSnippetSchema.optional() });
 export type AgentMatch = z.infer<typeof AgentMatchSchema>;
 // `scanned` is how many agents the daemon actually read prompts for, so the board can say when a query saw
@@ -1054,31 +1054,31 @@ export type AgentSearchResult = z.infer<typeof AgentSearchResultSchema>;
 export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
 /* place's input: words the user writes INTO the transcript wearing the agent's voice (see agentsContract.place).
  * Bounded well above anything a person types by hand and just above the handoff's per-message render cap
- * (runtime-history's MESSAGE_CHAR_CAP) — a placed line longer than that would reach the agent truncated, which
+ * (runtime-history's MESSAGE_CHAR_CAP), a placed line longer than that would reach the agent truncated, which
  * silently breaks "it thinks these are its own words". Better to refuse at the door with a reason. */
 export const AgentPlaceSchema = z.object({ id: z.string().min(1), text: z.string().trim().min(1).max(8_000) });
 // autoLand's input: this agent's own land-at-completion posture. `null` CLEARS the override back to "inherit
-// the sandbox setting" — the browser sends it whenever the user toggles back to what the global already says,
+// the sandbox setting", the browser sends it whenever the user toggles back to what the global already says,
 // so agents don't accumulate frozen overrides that quietly stop following the global toggle.
 export const AgentAutoLandSchema = z.object({ id: z.string().min(1), autoLand: z.boolean().nullable() });
 // resumeAfterOutage's input: this ONE conversation's answer to a provider outage. `null` clears the override
-// back to "inherit the sandbox setting" — sent whenever the user toggles back to what the global already says,
+// back to "inherit the sandbox setting", sent whenever the user toggles back to what the global already says,
 // on the same reasoning as autoLand's null: an agent holding a frozen copy of a default has quietly stopped
 // following it, and nothing on screen would say so.
 export const AgentResumeAfterOutageSchema = z.object({ id: z.string().min(1), resumeAfterOutage: z.boolean().nullable() });
 export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });
 /* WHY a path would not land. The distinction is the whole difference between an actionable report and a dead
  * end, because the three have nothing in common but their symptom:
- *   `workspace` — you have uncommitted edits on that path. Yours is the copy at risk; commit or stash it.
- *   `diverged`  — the main tree's COMMITTED content moved under the agent since it branched. Nothing of
+ *   `workspace`, you have uncommitted edits on that path. Yours is the copy at risk; commit or stash it.
+ *   `diverged` , the main tree's COMMITTED content moved under the agent since it branched. Nothing of
  *                 yours is at risk; the agent's delta is simply written against an older file.
- *   `binary`    — git cannot three-way merge the file at all, so no automatic resolution exists.
+ *   `binary`   , git cannot three-way merge the file at all, so no automatic resolution exists.
  * The old report named only the first, which is the rarest of the three. */
 export const LandConflictReasonSchema = z.enum(["workspace", "diverged", "binary"]);
 export type LandConflictReason = z.infer<typeof LandConflictReasonSchema>;
 export const LandConflictPathSchema = z.object({ path: z.string(), reason: LandConflictReasonSchema });
 
-/* land's outcome, per repo of the composition. `paths` is the set that genuinely failed to apply — NOT the
+/* land's outcome, per repo of the composition. `paths` is the set that genuinely failed to apply. NOT the
  * whole delta, which is what the first version reported whenever it could not pin the cause down, turning
  * four real conflicts into a wall of fourteen. `clean` counts what would land regardless, so the UI can say
  * how much is being held back by how little, and offer to take it. An empty `paths` with `clean: 0` is the
@@ -1087,7 +1087,7 @@ export const LandConflictSchema = z.object({
     repo: z.string(),
     paths: z.array(LandConflictPathSchema),
     clean: z.number(),
-    // The branch the user's checkout is on — the thing the agent has to rebase onto. Carried because only the
+    // The branch the user's checkout is on, the thing the agent has to rebase onto. Carried because only the
     // daemon can see it: an isolated turn's worktree is mounted over the agent's whole view, so the resolution
     // errand could otherwise only tell it to go and read the name off `git worktree list`. Absent on a detached
     // HEAD or a vanished checkout, where there is no name to give.
@@ -1096,14 +1096,14 @@ export const LandConflictSchema = z.object({
 export type LandConflict = z.infer<typeof LandConflictSchema>;
 
 // land's outcome; landed only when every repo with changes applied cleanly. Conflicted repos keep their
-// worktree state — nothing is lost, and "Land now" stays available. `resolving` is populated only by a
+// worktree state, nothing is lost, and "Land now" stays available. `resolving` is populated only by a
 // `merge` land: the paths written into the workspace carrying conflict markers, which the user finishes by
 // hand in their own editor exactly as they would any merge.
 export const LandResultSchema = z.object({
     landed: z.boolean(),
     conflicts: z.array(LandConflictSchema).optional(),
     resolving: z.array(z.object({ repo: z.string(), paths: z.array(z.string()) })).optional(),
-    // A `measure` outcome with an outstanding delta: nothing was applied and nothing failed — the work is
+    // A `measure` outcome with an outstanding delta: nothing was applied and nothing failed, the work is
     // waiting on the branch for a deliberate Land. `landed: false` alone can't say that (it means refusal).
     held: z.boolean().optional(),
 });
@@ -1111,39 +1111,39 @@ export type LandResult = z.infer<typeof LandResultSchema>;
 
 /* land's input. `check` is the safe default and the historical behaviour: the delta is applied only if ALL of
  * it applies, so a refusal leaves the workspace byte-identical. `merge` is the escape hatch the conflict
- * report offers — a three-way apply that lands every clean path and leaves the rest with conflict markers to
+ * report offers, a three-way apply that lands every clean path and leaves the rest with conflict markers to
  * resolve in place. It is opt-in because it WRITES on failure, which is the one thing `check` promises not
- * to do. `measure` is the auto-land-off mode: everything a land does EXCEPT touching the main tree — the
+ * to do. `measure` is the auto-land-off mode: everything a land does EXCEPT touching the main tree, the
  * provenance commit onto agent/<id>, the cumulative diffstat, and the bookkeeping for work that reached the
- * main line by another road — so a held agent's card stays as current as a landed one's while its delta waits
+ * main line by another road, so a held agent's card stays as current as a landed one's while its delta waits
  * on the branch for a deliberate Land. */
 export const LandModeSchema = z.enum(["check", "merge", "measure"]);
 export type LandMode = z.infer<typeof LandModeSchema>;
-/* WHICH RUNG OF AN AGENT'S HISTORY A READING — or a land — STARTS AT.
+/* WHICH RUNG OF AN AGENT'S HISTORY A READING, or a land. STARTS AT.
  *
- *   outstanding — only what has not landed yet, measured from the last landed tip. The default, and what a
+ *   outstanding, only what has not landed yet, measured from the last landed tip. The default, and what a
  *                 land carries: a second land applies only what the agent has done since the first.
- *   cumulative  — the agent's WHOLE output, from where its branch left the main line. What the review lists
+ *   cumulative , the agent's WHOLE output, from where its branch left the main line. What the review lists
  *                 (landed work stays inspectable), and what "Land again" applies.
  *
  * A CUMULATIVE LAND IS NOT A DOUBLE APPLICATION. It is the way back when a land's work was discarded from the
- * workspace: the outstanding span is empty then — every sha says the work landed, because it did — so only a
+ * workspace: the outstanding span is empty then, every sha says the work landed, because it did, so only a
  * reading from the base can still see the part that is missing. Paths the tree already holds drop out of it
  * per file, by the same reverse probe that keeps work which reached main by another road out of a conflict
  * report (land.ts, classifyDelta), so what actually applies is exactly what is gone. */
 export const AgentSpanSchema = z.enum(["cumulative", "outstanding"]);
 export type AgentSpan = z.infer<typeof AgentSpanSchema>;
-/* LAND WHILE THE AGENT IS STILL WRITING — the user's deliberate override of the turn guard, and the only
+/* LAND WHILE THE AGENT IS STILL WRITING, the user's deliberate override of the turn guard, and the only
  * input here that is about WHEN a land may run rather than what it carries.
  *
  * A land snapshots the agent's checkout, so mid-turn it can catch work half-done: one leg of a rename, three
  * files of a five-file change. The guard exists for that, and it stays the default. What makes the override
- * defensible rather than reckless is that neither half of the damage is permanent — a land arrives as
+ * defensible rather than reckless is that neither half of the damage is permanent, a land arrives as
  * UNCOMMITTED changes the user reviews before committing, and the rest of the turn lands on top of it at
  * completion like any other incremental land. So a premature land is a mess the user can see and one the next
  * land repairs, which is a thing to warn about; it is not a thing to forbid.
  *
- * It does NOT cover a turn PARKED on a question or a permission card — nothing is being written there, so that
+ * It does NOT cover a turn PARKED on a question or a permission card, nothing is being written there, so that
  * land needs no override and takes none (agents.routes.ts). This flag means "yes, mid-write, I know". */
 export const AgentLandSchema = z.object({
     id: z.string().min(1),
@@ -1156,7 +1156,7 @@ export const AgentLandSchema = z.object({
 
 // The providers whose model can run UNDER the Claude Code harness through the bundled translator (CLIProxyAPI),
 // which holds their SUBSCRIPTION OAuth and re-serves it behind an Anthropic endpoint. The `claude` provider is
-// absent — native Anthropic OAuth serves it directly, without the translator. Codex, Grok and Gemini also have a
+// absent, native Anthropic OAuth serves it directly, without the translator. Codex, Grok and Gemini also have a
 // native runtime and so carry the harness axis; Kimi is routed-only, so its turns always use Claude Code.
 //
 // Gemini is in BOTH camps and that is not a contradiction: its native runtime (OpenCode) reaches Google through
@@ -1168,13 +1168,13 @@ export type KeyedProvider = z.infer<typeof KeyedProviderSchema>;
 // ---- plan-limit usage ----
 // Declared ABOVE both account shapes because both carry it: headroom is one idea in this product, not a Claude
 // idea that other providers imitate. A native account (OauthAccount) and a routed subscription
-// (TranslatorAccount) differ in who holds the credential and how the reading is taken — never in what a
-// reading IS — so every surface that draws a percentage reads this one type and no other.
+// (TranslatorAccount) differ in who holds the credential and how the reading is taken, never in what a
+// reading IS, so every surface that draws a percentage reads this one type and no other.
 
 // One plan-limit pool. `kind` is the provider's own key ('five_hour' | 'seven_day' | 'seven_day_opus' |
 // 'seven_day_sonnet' | 'model:Fable' | …) rather than an enum we'd have to keep in step with the provider: an
 // unrecognised pool is shown under its raw key, which is far better than being silently folded into a
-// neighbour. `label` is the provider's OWN display name where it supplies one (the per-model buckets do) — it
+// neighbour. `label` is the provider's OWN display name where it supplies one (the per-model buckets do), it
 // wins over anything we'd infer, because the model names in a plan's limits are the provider's to rename.
 // `resetsAt` is epoch SECONDS (matching the SDK's frame).
 export const UsageWindowSchema = z.object({
@@ -1193,24 +1193,24 @@ export type UsageWindow = z.infer<typeof UsageWindowSchema>;
 //
 // Within one window utilization only climbs, so an un-reset window stays a valid FLOOR however old it is; past
 // its `resetsAt` it describes a pool that no longer exists and the store drops it. `measuredAt` is epoch MS
-// (matching connectedAt) — deliberately a different unit from the windows' seconds.
+// (matching connectedAt), deliberately a different unit from the windows' seconds.
 export const AccountUsageSchema = z.object({
     windows: z.array(UsageWindowSchema),
     measuredAt: z.number(),
 });
 export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 
-/* THE LAST TIME A PROVIDER ACTUALLY REFUSED A TURN — the other half of "can I run on this", and the half no
+/* THE LAST TIME A PROVIDER ACTUALLY REFUSED A TURN, the other half of "can I run on this", and the half no
  * meter can supply.
  *
  * A snapshot above is POLLED and therefore always a floor: read at turn end (Claude) or on a five-minute sweep
  * (the routed subscriptions), and account-wide, so every other client on the plan spends the same pools without
- * this sandbox hearing about it. A refusal is the opposite kind of fact — observed, exact, and timestamped by
+ * this sandbox hearing about it. A refusal is the opposite kind of fact, observed, exact, and timestamped by
  * the only event that proves the plan said no. Between them they answer a question neither can alone: a green
  * meter beside "refused a turn 4 minutes ago" means the reading is stale, not that the account has room.
  *
  * Keyed by PROVIDER rather than by account, because that is the resolution the daemon honestly has. A native
- * Claude turn knows which account served it and names it; a routed turn does not — CLIProxyAPI picks the auth
+ * Claude turn knows which account served it and names it; a routed turn does not. CLIProxyAPI picks the auth
  * file itself and only refuses once every credential it holds is cooling down, which makes the refusal a fact
  * about the provider in the first place.
  *
@@ -1219,19 +1219,19 @@ export type AccountUsage = z.infer<typeof AccountUsageSchema>;
  * which the CLI prints under "Failed to authenticate" and the stream codes as a refused credential. Sending
  * someone to reconnect a perfectly good account is the cost of believing the code over the sentence. */
 export const ProviderRefusalSchema = z.object({
-    // Epoch MS, matching AccountUsage.measuredAt — the two are read side by side.
+    // Epoch MS, matching AccountUsage.measuredAt, the two are read side by side.
     at: z.number(),
     /* Three ways a plan says no, kept apart because WHAT ANSWERS EACH is different and a screen that conflates
      * them tells the user to do the wrong thing. A spent allowance is answered by a later reading with room in
-     * it; a refused credential by the account being read at all through it; and an entitlement refusal — an
-     * organization that has turned Claude Code off for this seat — by NOTHING either of those can produce. Its
+     * it; a refused credential by the account being read at all through it; and an entitlement refusal, an
+     * organization that has turned Claude Code off for this seat, by NOTHING either of those can produce. Its
      * token authenticates and its usage endpoint answers with real pools the whole time it cannot run a turn,
      * so filing it as `auth` let the very next quota sweep dismiss it and leave a full green ring over an
      * account that refused everything asked of it. Only a turn that actually runs settles this one. */
     kind: z.enum(["limit", "auth", "entitlement"]),
     // The provider's own sentence, verbatim. It is the only part that says WHICH pool or WHICH credential.
     message: z.string(),
-    // The account that was serving, when the daemon knows it (native turns only — see above).
+    // The account that was serving, when the daemon knows it (native turns only, see above).
     account: z.string().optional(),
 });
 export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
@@ -1239,19 +1239,19 @@ export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
 export const ProviderRefusalsSchema = z.object({ refusals: z.record(z.string(), ProviderRefusalSchema) });
 export type ProviderRefusals = z.infer<typeof ProviderRefusalsSchema>;
 
-// One connected subscription in the translator. `name` is CLIProxyAPI's auth-file name — the stable store key a
-// disconnect addresses — and `label` the sign-in identity it reported (the account email, else the file name).
+// One connected subscription in the translator. `name` is CLIProxyAPI's auth-file name, the stable store key a
+// disconnect addresses, and `label` the sign-in identity it reported (the account email, else the file name).
 export const TranslatorAccountSchema = z.object({
     name: z.string(),
     label: z.string(),
     // The same headroom an OauthAccount carries, on the same field, for the same reason: the account rows are
-    // one list to the reader. Optional because a provider whose quota this sandbox cannot read (Grok) —
-    // or one that did not answer — must still render as the connected account it is, with a dot instead of a
+    // one list to the reader. Optional because a provider whose quota this sandbox cannot read (Grok),
+    // or one that did not answer, must still render as the connected account it is, with a dot instead of a
     // ring.
     usage: AccountUsageSchema.optional(),
 });
 export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
-// Which routed-provider subscriptions are connected in the translator, per provider — a LIST per provider, not
+// Which routed-provider subscriptions are connected in the translator, per provider, a LIST per provider, not
 // a flag: CLIProxyAPI holds any number of auth files per provider side by side and balances requests across
 // them, so connecting a second ChatGPT or Google account is more headroom, and each is disconnectable on its
 // own. Drives the account rows in Sandbox ▸ Agent.
@@ -1263,14 +1263,14 @@ export const TranslatorAccountsSchema = z.object({
 });
 export type TranslatorAccounts = z.infer<typeof TranslatorAccountsSchema>;
 
-// The side-channel body that un-parks a turn waiting on the user. Every interactive card — plan approval,
-// clarifying questions, a per-tool permission prompt — parks on the SAME registry keyed by `requestId`, so
+// The side-channel body that un-parks a turn waiting on the user. Every interactive card, plan approval,
+// clarifying questions, a per-tool permission prompt, parks on the SAME registry keyed by `requestId`, so
 // one route resolves all three; the `kind` says which card answered and carries its payload.
 export const AgentReplySchema = z.discriminatedUnion("kind", [
     // ExitPlanMode approval. Approving carries NO posture: an approved plan executes under bypassPermissions,
     // set on the SDK session by the gate that raised the card. The container is the isolation boundary, so a
     // plan the user has read and approved is exactly the point where per-tool prompts stop earning their
-    // interruption — landing anywhere else means approving a plan to run `git log` and then being asked whether
+    // interruption, landing anywhere else means approving a plan to run `git log` and then being asked whether
     // `git log` may run. Rejection feedback loops back into the model as the denial reason.
     z.object({
         kind: z.literal("plan"),
@@ -1295,10 +1295,10 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         decision: z.enum(["once", "always", "deny"]),
         feedback: z.string().optional(),
     }),
-    // A browser help request (the agent parked mid-sign-in on something only a person can clear — a captcha, a
+    // A browser help request (the agent parked mid-sign-in on something only a person can clear, a captcha, a
     // password it does not hold). `helped: true` is "done, hand back": the user took control of the agent's
     // browser, fixed the step, and the turn continues from the page as they left it. `helped: false` is "can't
-    // help now" — the agent is told so and moves on rather than waiting forever. `note` rides back to the model
+    // help now", the agent is told so and moves on rather than waiting forever. `note` rides back to the model
     // either way ("typed the password, don't touch the remember-me box").
     z.object({
         kind: z.literal("browser_help"),
@@ -1306,7 +1306,7 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         helped: z.boolean(),
         note: z.string().optional(),
     }),
-    // A terminal help request — the same two answers as the browser's, for a command parked at a prompt only a
+    // A terminal help request, the same two answers as the browser's, for a command parked at a prompt only a
     // person can answer. `helped: true` is "typed it, carry on"; false is "can't right now". `note` rides back
     // either way, and on `helped` the daemon adds what the pane SAYS to the tool result: the user answering the
     // prompt is exactly the moment the agent cannot see, and it would otherwise have to ask them how it went.
@@ -1316,25 +1316,25 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         helped: z.boolean(),
         note: z.string().optional(),
     }),
-    // A premium service run's yes or no. The click is the ONLY way the spend can happen — the daemon holds the
-    // agent's run request parked until this settles it (platform/service-offer.ts) — so `approve` carries no
+    // A premium service run's yes or no. The click is the ONLY way the spend can happen, the daemon holds the
+    // agent's run request parked until this settles it (platform/service-offer.ts), so `approve` carries no
     // qualifiers: one true releases exactly one run, and anything else charges nothing.
     z.object({
         kind: z.literal("service_offer"),
         requestId: z.string().min(1),
         approve: z.boolean(),
     }),
-    // A missing-capability ask's yes or no. `connect: true` is "I'll set it up" — it opens the card's setup
+    // A missing-capability ask's yes or no. `connect: true` is "I'll set it up", it opens the card's setup
     // and keeps the agent's request parked while the daemon watches for the connection to come live
     // (capabilities/capability-offer.ts); false tells the agent to continue without it. The click decides
-    // only the WATCHING: nothing is connected by the reply itself — the setup is the owner's own flow.
+    // only the WATCHING: nothing is connected by the reply itself, the setup is the owner's own flow.
     z.object({
         kind: z.literal("capability_offer"),
         requestId: z.string().min(1),
         connect: z.boolean(),
     }),
-    // A USDC payment's yes or no. The click is the ONLY way the money can move — the daemon holds the agent's
-    // `wallet fetch` parked until this settles it (wallet/payment-offer.ts) — so `approve` carries no
+    // A USDC payment's yes or no. The click is the ONLY way the money can move, the daemon holds the agent's
+    // `wallet fetch` parked until this settles it (wallet/payment-offer.ts), so `approve` carries no
     // qualifiers: one true releases exactly one payment, and anything else spends nothing.
     z.object({
         kind: z.literal("payment_offer"),
@@ -1344,7 +1344,7 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
 ]);
 export type AgentReply = z.infer<typeof AgentReplySchema>;
 // Steering: a user message delivered INTO the running turn (injected between tool calls, Claude Code style),
-// keyed by the conversation whose turn is in flight. NOT_FOUND when no steerable turn is running — the client
+// keyed by the conversation whose turn is in flight. NOT_FOUND when no steerable turn is running, the client
 // then holds the message in its queue and sends it as the next turn instead. Carries everything a turn's own
 // prompt can carry (files, the editor-context chip), because "add more while it works" is worth nothing if it
 // only takes bare text: the daemon folds the same notes into the injected message that a fresh turn gets.
@@ -1359,12 +1359,12 @@ export const SteerSchema = z
     .refine((steer) => steer.text.trim().length > 0 || (steer.attachments?.length ?? 0) > 0, {
         message: "text or attachments required",
     });
-// True cancel for the conversation's in-flight turn — aborts the agent daemon-side, unlike closing the
+// True cancel for the conversation's in-flight turn, aborts the agent daemon-side, unlike closing the
 // /agent fetch (which sends no cancel frame).
 export const StopTurnSchema = z.object({ conversationId: z.string().min(1) });
 
 // ---- claude rate-limit gate ----
-// The GATE signal: whether the provider is letting turns through right now, and — when it is refusing — which
+// The GATE signal: whether the provider is letting turns through right now, and, when it is refusing, which
 // window is binding and when it lifts. This is the SDK's rate_limit_event, mapped one-to-one, and it is only
 // ever about the CURRENT moment. It is deliberately NOT the thing the headroom displays read: the event names a
 // single window (whichever the CLI considered binding), which is how "weekly 1%" ended up standing in for an
@@ -1391,28 +1391,28 @@ export type FastModeState = z.infer<typeof FastModeStateSchema>;
 // flow (start → poll): the browser signs in at verificationUri and enters userCode; the daemon polls until done.
 // A sandbox can hold several accounts per provider side by side: `id` is the daemon-minted store key, `label`
 // the user's display name (auto-filled from the sign-in identity where the token carries one). Tokens never
-// ride this shape — connection status is existence in the list.
+// ride this shape, connection status is existence in the list.
 
 export const OauthAccountSchema = z.object({
     id: z.string(),
     label: z.string(),
-    // WHO this account signs in as, in the provider's own words — Anthropic returns the email and the
+    // WHO this account signs in as, in the provider's own words. Anthropic returns the email and the
     // organization alongside the tokens, so a connection can name itself instead of arriving as a second row
     // called "Claude". Kept BESIDE `label` rather than folded into it: the label is the user's to rename, and a
     // renamed account still has to be able to say whose it is. Absent when the provider tells us nothing (a
-    // pasted API key carries no identity) — which is exactly when renaming is the only answer, so every
+    // pasted API key carries no identity), which is exactly when renaming is the only answer, so every
     // sandbox-owned account can be renamed.
     email: z.string().optional(),
     organization: z.string().optional(),
     scope: z.string().optional(),
     connectedAt: z.number(), // epoch ms
     // Set only when the account's stored credential can no longer be refreshed (revoked/expired refresh token)
-    // — the user must reconnect. Absent ⇒ healthy or not-yet-probed; `detail` carries the reason for the UI.
+    //, the user must reconnect. Absent ⇒ healthy or not-yet-probed; `detail` carries the reason for the UI.
     // Provider-agnostic; only Codex probes it today (Claude refreshes on-demand, Grok's tokens are OpenCode's).
     needsReauth: z.boolean().optional(),
     detail: z.string().optional(),
     // The account's last known subscription-usage snapshot, so the picker can show what's left on each account
-    // before the user commits a turn to one. Absent until a reading exists for it — an unmeasured account reads
+    // before the user commits a turn to one. Absent until a reading exists for it, an unmeasured account reads
     // as unknown, never 0%. Claude is the provider that fills it here, because its stream reports the windows;
     // the routed subscriptions carry the identical field on TranslatorAccount, filled by a pulled reading.
     usage: AccountUsageSchema.optional(),
@@ -1421,8 +1421,8 @@ export type OauthAccount = z.infer<typeof OauthAccountSchema>;
 export const OauthAccountListSchema = z.object({ accounts: z.array(OauthAccountSchema) });
 export type OauthAccountList = z.infer<typeof OauthAccountListSchema>;
 /* RE-MEASURE THIS PROVIDER'S PLAN LIMITS BEFORE ANSWERING, rather than serving whatever reading is current
- * enough by the daemon's own bound. Every ordinary read of the list wants that bound — it is what keeps a page
- * load off the upstream quota endpoint — but a person who has just changed something about the account
+ * enough by the daemon's own bound. Every ordinary read of the list wants that bound, it is what keeps a page
+ * load off the upstream quota endpoint, but a person who has just changed something about the account
  * (a seat downgraded, a plan swapped, another device's spend) is asking precisely whether the reading they can
  * see is still true, and an answer from the last minute cannot tell them. Read off the query string, so the
  * caller says it as `?force=1`. */
@@ -1443,13 +1443,13 @@ export const OauthExchangeSchema = z.object({
 });
 export const AuthorizeChallengeSchema = z.object({ authorizeUrl: z.string(), verifier: z.string(), state: z.string() });
 // xAI Grok (via OpenCode) uses subscription OAuth via the headless device-code method. `start` returns the
-// `url` the user opens (xAI's verification_uri_complete, which pre-fills the code) and `code` — the same
+// `url` the user opens (xAI's verification_uri_complete, which pre-fills the code) and `code`, the same
 // one-time code, surfaced so the card matches x.ai exactly. There is no paste-back: OpenCode polls to
 // completion and the UI polls `/grok/accounts`.
-// ponytail: OpenCode holds one xAI auth per data dir, so Grok stays single-account — the list is 0 or 1. Per
+// ponytail: OpenCode holds one xAI auth per data dir, so Grok stays single-account, the list is 0 or 1. Per
 // account would need an OpenCode server per data dir; add when there's demand.
 // A device-code login start: the verification URL + the one-time code the user enters there. The native Grok
-// flow (via OpenCode) — see TranslatorStartSchema for the routed-provider connect, which adds `state`.
+// flow (via OpenCode), see TranslatorStartSchema for the routed-provider connect, which adds `state`.
 export const DeviceStartSchema = z.object({ url: z.string(), code: z.string() });
 // A routed-provider subscription login start (codex/grok/kimi/gemini via CLIProxyAPI). Device flows poll to
 // completion after the user approves upstream; redirect flows need the browser's landing URL pasted back. The
@@ -1461,7 +1461,7 @@ export const TranslatorStartSchema = z.object({
     flow: z.enum(["device", "redirect"]),
 });
 // The paste-back half of a redirect login: the URL the provider sent the browser to, carrying the grant as
-// ?code=&state=. `state` ties it to the handshake that issued it — the translator rejects a mismatch.
+// ?code=&state=. `state` ties it to the handshake that issued it, the translator rejects a mismatch.
 export const TranslatorCompleteSchema = z.object({
     provider: KeyedProviderSchema,
     redirectUrl: z.string().min(1),
@@ -1469,15 +1469,15 @@ export const TranslatorCompleteSchema = z.object({
 });
 // A provider's model catalog, resolved daemon-side from live discovery with a persisted last-known-good list and
 // a seed floor (Grok via opencode.ts xaiModels, Codex via codex-models.ts, Claude via the Agent SDK's
-// supportedModels) — never empty, so the picker is never blank. `label` is the provider's display name; `default`
+// supportedModels), never empty, so the picker is never blank. `label` is the provider's display name; `default`
 // is the model a fresh chat on that provider seeds (always present). Served by the one catalog route every
 // provider shares. `efforts` is the reasoning-effort tiers the model accepts (Claude reports them per model);
 // empty ⇒ the client's default tiers.
 //
-// EVERY field here is provider-reported — nothing about a model is curated in this repo, so a new release or a
+// EVERY field here is provider-reported, nothing about a model is curated in this repo, so a new release or a
 // renamed family flows to the UI with no code change. Providers differ in how much they publish: the Claude
 // Agent SDK reports a display name, a capability description, effort tiers, and capability flags, while the
-// Some OpenAI-compatible /v1/models endpoints report ids only — those rows render label-only, and that absence
+// Some OpenAI-compatible /v1/models endpoints report ids only, those rows render label-only, and that absence
 // is the honest answer rather than something to paper over with a hand-written table.
 //
 // ORDER IS MEANINGFUL: `models` arrives in the provider's own preference order, which is what the picker sorts
@@ -1502,7 +1502,7 @@ export const SessionSummarySchema = z.object({
     title: z.string(),
     updatedAt: z.number(),
     // Why a searched session matched: the line the query hit, windowed around it, and who said it. Absent on an
-    // unfiltered list, and on a match the title already shows — a snippet repeating the row's own heading is
+    // unfiltered list, and on a match the title already shows, a snippet repeating the row's own heading is
     // noise, not evidence. See AgentMatchSchema for the same field on the fleet's side.
     snippet: MatchSnippetSchema.optional(),
 });
@@ -1513,26 +1513,26 @@ export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySch
 
 // Which prompt the agent is, before this turn composes anything on top. Two built-in bases and an escape
 // hatch: Intentic's own (the default), Claude Code's preset, or the owner's text. Declared out here rather
-// than inline in the settings object because both sides of the wire branch on it — the daemon to build the
+// than inline in the settings object because both sides of the wire branch on it, the daemon to build the
 // turn, the browser to decide which base it can show you.
 export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
 export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
-// The two bases a user can READ and fork — "custom" is excluded because there is nothing to fetch: it is
+// The two bases a user can READ and fork, "custom" is excluded because there is nothing to fetch: it is
 // whatever they have already typed into the settings field.
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
 
 /* ---- rules: "at this moment, if this is true, do this" ------------------------------------------------------
  *
  * The one table behind every standing instruction the owner gives the sandbox about its own work. It replaces
- * three settings that were the same idea built three ways — ask for proof before a turn ends, run a command
- * before a push, hold or release finished work — and the point of replacing them is that a FOURTH is now a row
+ * three settings that were the same idea built three ways, ask for proof before a turn ends, run a command
+ * before a push, hold or release finished work, and the point of replacing them is that a FOURTH is now a row
  * in this table rather than a release.
  *
  * The moments are named to sit in one family with WorkspaceEventKind (`turn.settled`, `agent.landed`), because
  * chores already wake on those and folding them into this table later must not mean renaming what users wrote.
  */
 
-// WHERE a rule can stand. Three, and each is a place the daemon already stopped to make a decision — this
+// WHERE a rule can stand. Three, and each is a place the daemon already stopped to make a decision, this
 // names those decisions rather than inventing new ones.
 export const RuleMomentSchema = z.enum([
     // The assistant is about to stop. A rule here can send it back to work, which is the only moment that can.
@@ -1544,16 +1544,16 @@ export const RuleMomentSchema = z.enum([
 ]);
 export type RuleMoment = z.infer<typeof RuleMomentSchema>;
 
-/* WHAT A RULE DOES. Four shapes, and the split is load-bearing rather than tidy: the three settings this table
+/* WHAT A RULE DOES. Four shapes, and the split is functional rather than tidy: the three settings this table
  * replaces need three DIFFERENT ones, which is the evidence that a single "run this command" table would have
  * mangled at least two of them.
  *
- *   command — run a shell command; its exit code is the verdict. What the pre-push check always was.
- *   instruct — say something to the assistant, so it acts before it finishes.
- *   verdict — allow or hold the thing that is about to happen. The vocabulary the permission rules already
+ *   command, run a shell command; its exit code is the verdict. What the pre-push check always was.
+ *   instruct, say something to the assistant, so it acts before it finishes.
+ *   verdict, allow or hold the thing that is about to happen. The vocabulary the permission rules already
  *             speak, and the honest shape of "land finished work automatically": nothing extra RUNS at that
  *             moment, a pass that always runs is told which way to go.
- *   builtin — invoke a named daemon behaviour. The escape hatch that keeps this table from having to express
+ *   builtin, invoke a named daemon behaviour. The escape hatch that keeps this table from having to express
  *             machinery it has no business expressing: the proof ledger behind "verify before finishing"
  *             tracks what a turn edited against what it ran, which is not a shell command and never will be.
  */
@@ -1575,8 +1575,8 @@ export const RuleActionSchema = z.discriminatedUnion("kind", [
 ]);
 export type RuleAction = z.infer<typeof RuleActionSchema>;
 
-// WHEN a rule narrows. Three keys, chosen because they cover the two things people reach for on day one —
-// "only this repo" and "don't bother for a docs-only change" — without opening a query language. Every key
+// WHEN a rule narrows. Three keys, chosen because they cover the two things people reach for on day one,
+// "only this repo" and "don't bother for a docs-only change", without opening a query language. Every key
 // absent ⇒ the rule always matches at its moment, which is what the three replaced settings each did.
 export const RuleConditionSchema = z.object({
     // A workspace repo id, or "root". Absent ⇒ any.
@@ -1592,7 +1592,7 @@ export type RuleCondition = z.infer<typeof RuleConditionSchema>;
  * the last-fired store is keyed by, so it survives a relabel.
  *
  * WHICH ACTIONS FIT WHICH MOMENT is checked here rather than left to the consumer, because the alternative is
- * a rule that saves cleanly and then quietly does nothing — the failure mode a settings screen can least
+ * a rule that saves cleanly and then quietly does nothing, the failure mode a settings screen can least
  * afford. A verdict at `turn.ending` has nothing to decide; a command at `agent.finished` has no defined place
  * in the landing pass and would be a promise this stage cannot keep. */
 const MOMENT_ACTIONS: Record<RuleMoment, readonly RuleAction["kind"][]> = {
@@ -1616,29 +1616,29 @@ export const RuleSchema = z
     });
 export type Rule = z.infer<typeof RuleSchema>;
 
-// When a rule last did something, keyed by rule id — read by the settings list so a rule nobody has seen fire
+// When a rule last did something, keyed by rule id, read by the settings list so a rule nobody has seen fire
 // in three weeks is visible as such. Kept out of the settings object on purpose: a firing is not an edit, and
 // writing the owner's config on every push would make every run a settings save.
 export const RuleFiringsSchema = z.record(z.string(), z.number());
 export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
 
-/* WHERE A SKILL CAME FROM — the fact that decides everything else about its row.
+/* WHERE A SKILL CAME FROM, the fact that decides everything else about its row.
  *
  * A skill is inert text the agent reads, and this sandbox grows them from seven directions at once: the daemon
  * writes one per baked tool and one per core feature that has a cheatsheet, connecting a tool or a machine
  * writes one for that connection, the owner writes their own, a persona carries its own in its kit, an
  * installed extension ships some inside its checkout, and a plugin capability clones a repo full of them.
- * Nothing used to LIST the result, which is the whole gap this vocabulary closes — "what does my agent know
+ * Nothing used to LIST the result, which is the whole gap this vocabulary closes, "what does my agent know
  * right now" had no answer on screen, and a skill spends the agent's attention whether or not anyone remembers
  * adding it.
  *
- *   builtin      this image ships it — a baked tool's cheatsheet, or a core feature's
+ *   builtin      this image ships it, a baked tool's cheatsheet, or a core feature's
  *   own          the owner wrote it (.intentic/config/skills/), and only these are editable here
  *   capability   something connected brought it: a CLI tool, a machine, a browser account, a VPN
  *   extension    an installed extension ships it inside its checkout
  *   plugin       a plugin capability cloned a repo that holds it
  *   persona      one card's own kit carries it, and only turns wearing that card ever see it
- *   dropped      it is simply sitting in the loaded folder — put there by hand, or by the agent itself
+ *   dropped      it is simply sitting in the loaded folder, put there by hand, or by the agent itself
  *
  * `persona` is the one origin that is not on for everybody, which is why it needs its own word rather than
  * being filed under `own`: it says "the agent knows this when it is wearing that card", and a list that showed
@@ -1653,7 +1653,7 @@ export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
 export const SkillOriginSchema = z.enum(["builtin", "own", "capability", "extension", "plugin", "persona", "dropped"]);
 export type SkillOrigin = z.infer<typeof SkillOriginSchema>;
 
-/* A skill's own name — the directory it lives in and the word the agent invokes it by. Same slug shape the SDK's
+/* A skill's own name, the directory it lives in and the word the agent invokes it by. Same slug shape the SDK's
  * loader accepts, checked here so a bad name is a refused save rather than a skill that silently never loads. */
 export const SkillNameSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "a skill name is lowercase letters, digits and dashes");
 
@@ -1663,19 +1663,19 @@ export const SkillSummarySchema = z.object({
      * because two plugins may each ship a `review` and the list has to be able to tell them apart. */
     id: z.string(),
     name: z.string(),
-    // The frontmatter line the agent routes on — empty when a shipped skill declares none, which is worth
+    // The frontmatter line the agent routes on, empty when a shipped skill declares none, which is worth
     // showing as the blank it is rather than papering over: a skill with no description is rarely picked.
     description: z.string(),
     origin: SkillOriginSchema,
-    // Who ships it, as the row names it — an extension's title, a plugin capability's id, a setting's name.
+    // Who ships it, as the row names it, an extension's title, a plugin capability's id, a setting's name.
     owner: z.string().optional(),
     enabled: z.boolean(),
     /* Whether THIS surface can switch it. True only for the skills the settings `skills` list governs (baked
      * tools and the owner's own): everything else is on because its extension, its plugin or another setting is,
-     * and a switch here that silently did nothing would be worse than no switch at all — the row names its
+     * and a switch here that silently did nothing would be worse than no switch at all, the row names its
      * owner instead. */
     switchable: z.boolean(),
-    // Whether the owner may rewrite the text here. Their own skills only — a shipped one is its author's, and
+    // Whether the owner may rewrite the text here. Their own skills only, a shipped one is its author's, and
     // editing it in place would be undone the next time the thing that ships it reconciles.
     editable: z.boolean(),
     /* Whether it can be deleted from this surface. Wider than `editable` by exactly one case: a skill someone
@@ -1693,15 +1693,15 @@ export const SkillsListSchema = z.array(SkillSummarySchema);
 export const SkillBodySchema = z.object({
     id: z.string(),
     name: z.string(),
-    // Everything after the frontmatter — the instructions themselves, as written.
+    // Everything after the frontmatter, the instructions themselves, as written.
     body: z.string(),
 });
 export type SkillBody = z.infer<typeof SkillBodySchema>;
 
 export const SkillIdSchema = z.object({ id: z.string().min(1) });
 
-/* A skill the owner writes. Three fields because a skill IS three things — what it is called, when to reach for
- * it, and what to do — and the daemon assembles the frontmatter from the first two so a saved skill can never
+/* A skill the owner writes. Three fields because a skill IS three things, what it is called, when to reach for
+ * it, and what to do, and the daemon assembles the frontmatter from the first two so a saved skill can never
  * be one the loader skips over. `description` is required for the reason above: it is the only part the model
  * reads before deciding whether to open the rest. */
 export const SkillDraftSchema = z.object({
@@ -1713,52 +1713,52 @@ export type SkillDraft = z.infer<typeof SkillDraftSchema>;
 
 export const SkillRemoveSchema = z.object({ name: SkillNameSchema });
 
-// Small user-owned config the /settings routes edit and streamAgent reads — all opt-in booleans the owner
+// Small user-owned config the /settings routes edit and streamAgent reads, all opt-in booleans the owner
 // toggles in the UI (so each can be A/B benchmarked):
-//   stableSystemPrompt — keeps the system prompt byte-stable across turns (the delegation note rides the user
+//   stableSystemPrompt, keeps the system prompt byte-stable across turns (the delegation note rides the user
 //                        message instead of the preset `append`) so the provider prompt cache survives.
-//   skills            — names of baked-tool skills to load into .agents/skills so the agent reaches for them
-//                        (e.g. "lsp" — TS rename + diagnostics over the language service); a name absent ⇒ its
+//   skills           , names of baked-tool skills to load into .agents/skills so the agent reaches for them
+//                        (e.g. "lsp". TS rename + diagnostics over the language service); a name absent ⇒ its
 //                        skill file isn't written, so the agent doesn't reach for it. Data-driven: a new baked
 //                        tool is one daemon-side registry entry, not a new settings field.
-//   hashlineEdits     — swaps the native Read/Edit/Write for hash-anchored edits on the Claude path (stale-file
+//   hashlineEdits    , swaps the native Read/Edit/Write for hash-anchored edits on the Claude path (stale-file
 //                        guard + fewer output tokens); off ⇒ the native file tools.
-//   terseOutput       — appends a concise-response steer to the end of the system prompt (a stable suffix, so it
+//   terseOutput      , appends a concise-response steer to the end of the system prompt (a stable suffix, so it
 //                        composes with stableSystemPrompt) to cut the model's OWN output tokens.
-//   systemPromptMode  — which base the agent's prompt is: "intentic" (default), "claude", or "custom".
-//   systemPrompt      — the owner's own prompt text, used only by "custom" mode, where it is the ENTIRE system
-//                        prompt and nothing the daemon would otherwise append rides with it — see its own note.
-//   iqSearch          — loads the image-baked iq Claude Code plugin (skill + SessionStart nudge) so the agent
+//   systemPromptMode , which base the agent's prompt is: "intentic" (default), "claude", or "custom".
+//   systemPrompt     , the owner's own prompt text, used only by "custom" mode, where it is the ENTIRE system
+//                        prompt and nothing the daemon would otherwise append rides with it, see its own note.
+//   iqSearch         , loads the image-baked iq Claude Code plugin (skill + SessionStart nudge) so the agent
 //                        prefers the iq CLI over grep/find/Glob; off ⇒ plugin not loaded, native search tools
 //                        only. Opt-in (default off); the browser Search box uses iq regardless.
-//   iqSearchHoldout   — conversation-level measurement control for iqSearch (UsageTurn.iqSearchArm). The arm
+//   iqSearchHoldout  , conversation-level measurement control for iqSearch (UsageTurn.iqSearchArm). The arm
 //                        stays fixed because teaching already loaded into a session cannot be removed next turn.
-//   workspaceMap      — computes an AREA index of the project a run starts in and prepends it to the
+//   workspaceMap     , computes an AREA index of the project a run starts in and prepends it to the
 //                        conversation's opening message, so the turn does not have to buy its own orientation
 //                        with a directory listing. Generated from the filesystem every time, never stored.
-//   outputCleaners    — the Bash output-cleaner spec (agent-output-filter): "off" = filter disabled (default),
+//   outputCleaners   , the Bash output-cleaner spec (agent-output-filter): "off" = filter disabled (default),
 //                        "" = all cleaners on, else an iq-style allow-list / default-minus
 //                        spec ("git,pnpm" = only those; "-cap" = all except). Threaded to the filter via env.
-//   outputHoldout     — measurement control: a fraction [0,1] of Bash commands whose output bypasses cleaning
+//   outputHoldout    , measurement control: a fraction [0,1] of Bash commands whose output bypasses cleaning
 //                        (recorded raw as `heldOut`), so the savings report compares a real cleaned-vs-raw
 //                        population instead of an estimate. 0 = no holdout (default).
-//   rules             — the standing "at this moment, if this is true, do this" table (RuleSchema): what proves
+//   rules            , the standing "at this moment, if this is true, do this" table (RuleSchema): what proves
 //                        a turn's work, what runs before a push, whether finished work lands by itself. Empty
 //                        (the default) means none of those happen, which is the shape a fresh sandbox has.
-//   automationFailureLimit — consecutive `error` runs after which an automation is disabled rather than left
+//   automationFailureLimit, consecutive `error` runs after which an automation is disabled rather than left
 //                        firing forever; 0 (default) ⇒ never.
-//   subagentsAtOnce / subagentsPerTurn / subagentDepth — the harness's own ceilings on delegation, raised or
+//   subagentsAtOnce / subagentsPerTurn / subagentDepth, the harness's own ceilings on delegation, raised or
 //                        lowered from one place; each defaults to what the CLI enforces on its own.
-// The booleans default off, outputCleaners defaults "off" (cleaning off) and outputHoldout 0 — a fresh sandbox
+// The booleans default off, outputCleaners defaults "off" (cleaning off) and outputHoldout 0, a fresh sandbox
 // starts with cleaning and iq off until the owner enables them. `skills` is the exception and defaults to the
 // baked tools worth having on: a skill file is the ONLY thing that tells the agent a baked binary exists, and
-// with the list empty `lsp` went used once in 866 sessions — not declined, never learned about.
+// with the list empty `lsp` went used once in 866 sessions, not declined, never learned about.
 //
 // Every field carries that default IN THE SCHEMA, so a settings object written before a field existed still
-// parses — the absent key reads as its default. That is not a compatibility layer, it is the seam this shape
+// parses, the absent key reads as its default. That is not a compatibility layer, it is the seam this shape
 // spans: the browser ships with the platform while the daemon ships inside the user's sandbox image, so a web
 // build is routinely NEWER than the daemon answering it. Requiring the key instead makes the whole settings
-// surface fail to parse the moment a toggle is added — which reaches the user as a page of switches that are
+// surface fail to parse the moment a toggle is added, which reaches the user as a page of switches that are
 // silently dead, not as an error. It also means an older on-disk manifest keeps the owner's other picks rather
 // than being discarded whole.
 
@@ -1767,7 +1767,7 @@ export const SandboxSettingsSchema = z.object({
     skills: z.array(z.string()).default(["lsp"]),
     hashlineEdits: z.boolean().default(false),
     terseOutput: z.boolean().default(false),
-    /* Measurement control for the terse steer, at TURN level — the same trick `outputHoldout` plays over
+    /* Measurement control for the terse steer, at TURN level, the same trick `outputHoldout` plays over
      * commands, one layer up. A fraction [0,1] of otherwise-eligible turns run WITHOUT the steer and record
      * which arm they ran on (UsageTurn.terse), so the savings report can compare two real populations.
      *
@@ -1775,26 +1775,26 @@ export const SandboxSettingsSchema = z.object({
      * event, a turn cannot be re-run to see what it would have said unsteered. 0 ⇒ no measurement (every
      * eligible turn is steered), which is the default because the control costs the very tokens it measures. */
     terseHoldout: z.number().min(0).max(1).default(0),
-    /* WHICH SYSTEM PROMPT THE AGENT RUNS ON — the base, before anything this turn composes.
+    /* WHICH SYSTEM PROMPT THE AGENT RUNS ON, the base, before anything this turn composes.
      *
-     *   intentic — Intentic's own prompt, tuned for this harness (intentic-prompt.ts). The default.
-     *   claude   — Claude Code's preset, as shipped in the CLI this sandbox runs. Not a copy stored here, so
+     *   intentic. Intentic's own prompt, tuned for this harness (intentic-prompt.ts). The default.
+     *   claude  . Claude Code's preset, as shipped in the CLI this sandbox runs. Not a copy stored here, so
      *              picking it tracks whatever the installed CLI's prompt is rather than freezing at a snapshot.
-     *   custom   — `systemPrompt` below, and nothing else at all.
+     *   custom  , `systemPrompt` below, and nothing else at all.
      *
      * The first two are peers: both get the harness's own guidance appended (the AskUserQuestion/plan blocks
      * the chat's cards need, the checklist guidance behind the todo panel, the browser-tool guidance), plus the
-     * delegation note and the terse steer. `custom` is the one that does not, by the owner's explicit choice —
+     * delegation note and the terse steer. `custom` is the one that does not, by the owner's explicit choice,
      * see the field below. */
     systemPromptMode: SystemPromptModeSchema.default("intentic"),
     /* The owner's own prompt, used only when `systemPromptMode` is "custom". Then it is the ENTIRE system
-     * prompt: both built-in bases are gone and so is everything the daemon would otherwise append — the widget
+     * prompt: both built-in bases are gone and so is everything the daemon would otherwise append, the widget
      * guidance the chat's cards are driven by, and the terse-output steer (whose toggle goes inert). That is
      * the price of total control, and the UI states it at the moment of the edit rather than letting the
      * widgets go quietly dark. Only the cross-provider delegation note survives, because it has a home outside
      * the system prompt already (the user-message preamble stableSystemPrompt puts it in).
      *
-     * Cap is roomy — the bases it stands in for are ~6.8k characters — but finite, because every turn pays it. */
+     * Cap is roomy, the bases it stands in for are ~6.8k characters, but finite, because every turn pays it. */
     systemPrompt: z.string().max(20000).default(""),
     iqSearch: z.boolean().default(false),
     /* Measurement control for the iq search teaching, at CONVERSATION level. A fraction [0,1] of conversations
@@ -1802,11 +1802,11 @@ export const SandboxSettingsSchema = z.object({
      * a valid control here: once the teaching enters a provider session, withholding it from the next request
      * does not make the model forget it. 0 ⇒ no measurement and every conversation receives the teaching. */
     iqSearchHoldout: z.number().min(0).max(1).default(0),
-    /* THE MAP THE TURN OPENS WITH — which areas the project a run starts in has, one derived line on what each
+    /* THE MAP THE TURN OPENS WITH, which areas the project a run starts in has, one derived line on what each
      * is for, and where the run is standing among them (agent/workspace-map.ts).
      *
-     * It answers the question every first turn has whatever it was asked — "what is this and where am I in
-     * it" — which across a hundred sessions of this workspace was being bought with a directory listing in two
+     * It answers the question every first turn has whatever it was asked, "what is this and where am I in
+     * it", which across a hundred sessions of this workspace was being bought with a directory listing in two
      * turns out of five, and with ~5.3k tokens of tool results before the job was touched.
      *
      * ROOTED AT THE RUN'S STARTING FOLDER rather than at the workspace: a persona's start folder, an isolated
@@ -1817,11 +1817,11 @@ export const SandboxSettingsSchema = z.object({
      * REGENERATED, NEVER STORED, which is the whole reason it is a mechanism rather than a paragraph in the
      * system prompt or a hand-written CLAUDE.md: in the ten days that motivated it this repo's two busiest
      * top-level directories stopped existing, and every written-down copy of the layout was wrong by the end of
-     * the window. Off by default — it spends its tokens on the opening message of every conversation. */
+     * the window. Off by default, it spends its tokens on the opening message of every conversation. */
     workspaceMap: z.boolean().default(false),
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),
-    /* The models behind the small automatic jobs that are not a conversation — today the commit message
+    /* The models behind the small automatic jobs that are not a conversation, today the commit message
      * written when an agent's work lands. An ORDERED list of `${provider}:${modelId}`, tried top to bottom, or
      * EMPTY for Auto.
      *
@@ -1832,16 +1832,16 @@ export const SandboxSettingsSchema = z.object({
      *
      * Empty is the default and still the interesting case: Auto is resolved from whatever accounts are
      * connected at the moment it is read (resolveQuickModels), so it can never name a provider this sandbox has
-     * no credential for, it improves by itself when one is added, and it is a ladder too — the cheapest rung of
+     * no credential for, it improves by itself when one is added, and it is a ladder too, the cheapest rung of
      * every connected provider, best first. Storing resolved ids here instead would go stale exactly like a
      * pinned model does. */
     quickModel: z.array(z.string()).max(10).default([]),
-    /* WHICH REPOS KEEP A CHANGELOG — the repos whose commits carry a `Release-Note:` trailer, written by the
+    /* WHICH REPOS KEEP A CHANGELOG, the repos whose commits carry a `Release-Note:` trailer, written by the
      * same quick model that drafts the subject (git/commit-message.ts) and harvested at release time.
      *
      * A LIST OF REPOS RATHER THAN A FLAG, and EMPTY BY DEFAULT, because this daemon runs on the user's repos
      * rather than on ours. The commit drafter's one standing rule is that house style is INFERRED, never
-     * prescribed — it reads the last handful of subjects and matches them, so a repo that spells its commits
+     * prescribed, it reads the last handful of subjects and matches them, so a repo that spells its commits
      * some other way is never argued with. A note trailer is the one thing that cannot be inferred that way: a
      * repo which has never written one gives the model nothing to copy, so asking for it has to be somebody's
      * explicit decision. Empty means every repo behaves exactly as it did before this existed.
@@ -1850,7 +1850,7 @@ export const SandboxSettingsSchema = z.object({
      * several repos and a commit can span them: the trailer is written when the commit touches a repo that
      * asked for one, and a repo that did not ask never gets a line it has to explain to its reviewers. */
     changelogRepos: z.array(z.string()).max(50).default([]),
-    /* WHAT AN AGENT RUN OPENS ON — the tier above quickModel, and the answer for every turn a SURFACE starts
+    /* WHAT AN AGENT RUN OPENS ON, the tier above quickModel, and the answer for every turn a SURFACE starts
      * rather than a person at a composer: Fix with agent on a pipeline or a deployment, a Maintenance chore, a
      * Documentation or Acceptance run, the fix a failed pre-push check proposes. An ORDERED list of
      * `${provider}:${model}` (quickModelKey) plus the reasoning effort beside it; EMPTY ⇒ whatever the chat
@@ -1861,14 +1861,14 @@ export const SandboxSettingsSchema = z.object({
      * in the sandbox then fails on a credential the user cannot see from the row they pressed. Written in order,
      * the next one down catches it (turn-resume.ts walks it).
      *
-     * PINNED, NOT DERIVED — the deliberate difference from quickModel one line above, and the reason these are
+     * PINNED, NOT DERIVED, the deliberate difference from quickModel one line above, and the reason these are
      * two settings rather than one. A quick helper exists to stay OFF the frontier tier, so cheapest-connected
      * is the right automatic answer and an empty list resolves to Auto. An agent run has to read a failing
      * suite, or a container log, or a story, and repair the thing: the tier is a judgement about how much the
      * job is worth, nothing here can make it, and a wrong guess is billed in whole sessions rather than in
      * tokens. So an empty list here resolves to NOTHING and the composer's own pick answers instead.
      *
-     * The daemon applies this to any turn flagged `unattended` that names no model of its own — one rule, so a
+     * The daemon applies this to any turn flagged `unattended` that names no model of its own, one rule, so a
      * surface added tomorrow inherits it by saying what it is instead of re-deriving where models come from. A
      * surface MAY still name one (the shared run button's caret, Acceptance's per-run pick), and that wins. */
     agentRunModels: z.array(z.string()).max(10).default([]),
@@ -1885,13 +1885,13 @@ export const SandboxSettingsSchema = z.object({
      * A DEFAULT, not the whole answer: any one conversation may override it (AgentSummarySchema
      * .resumeAfterOutage), and the chat's own offer at the moment of failure writes THAT rather than this.
      * This toggle is the standing policy for every agent that has not said otherwise, which is why it lives in
-     * settings and is not reachable by a single press from inside one chat — flipping how the whole board
+     * settings and is not reachable by a single press from inside one chat, flipping how the whole board
      * behaves should be a thing somebody went to do.
      *
      * OFF by default, on the same reasoning that keeps a spent usage limit out of this pair entirely: a resume
      * re-runs a turn the user sent once, on their own allowance, and only they can say whether the turn was
      * worth paying for twice. Starting off costs nothing, because the failed turn is remembered whatever the
-     * toggle says (recordOutageFailure) — the failure frame reports an "available" resume and the chat's offer
+     * toggle says (recordOutageFailure), the failure frame reports an "available" resume and the chat's offer
      * arms that very turn the moment it is armed for that conversation. Worth turning ON for a sandbox whose
      * turns mostly have nobody in the room (automation wakes, Discord, webhooks), which is the case no browser
      * could rescue and the case a per-conversation press cannot reach. */
@@ -1900,25 +1900,25 @@ export const SandboxSettingsSchema = z.object({
      * every in-flight turn; the boot pass in agent/turn-resume.ts re-runs what survived). OFF by default, like
      * the outage resume above and for the same reason: a boot that re-runs turns spends the user's allowance on
      * work they are not watching, and edits the workspace while they are still waiting for the sandbox to come
-     * back. Worth turning on for the case it was built for — the container is recreated on every update, every
+     * back. Worth turning on for the case it was built for, the container is recreated on every update, every
      * environment approval and every dev-sandbox.sh swap, so approving the Dockerfile change an agent asked for
      * otherwise costs the run that asked for it.
      *
      * OFF still records the interruption: the fleet card reads `interrupted` (see AgentStatusSchema) and an
-     * automation's row shows an `interrupted` run — nothing is re-run, but nothing is silently lost either. */
+     * automation's row shows an `interrupted` run, nothing is re-run, but nothing is silently lost either. */
     autoResumeOnRestart: z.boolean().default(false),
-    /* THE RULE TABLE — every standing instruction the owner gives the sandbox about its own work: ask for
+    /* THE RULE TABLE, every standing instruction the owner gives the sandbox about its own work: ask for
      * proof before a turn ends, run a command before a push, hold or release finished work, and whatever they
      * add next. See RuleSchema for the shape and for why the four action kinds are four.
      *
      * EMPTY IS THE DEFAULT, and it is exactly the behaviour a fresh sandbox had when these were three separate
      * flags: no proof is asked for, no command runs at a push, and finished work waits on its branch. That is
-     * not a coincidence to preserve by hand — each of those defaults is what "no rule matched" means at its
+     * not a coincidence to preserve by hand, each of those defaults is what "no rule matched" means at its
      * moment, so the empty table IS the old default rather than a reconstruction of it.
      *
      * Rules live here, in the owner's own settings, rather than in the workspace: a rule can hold work back and
      * gate a push, so the first version answers to the person whose sandbox it is and to nobody else. Repo-
-     * committed and extension-contributed rules are worth having and are deliberately not here yet — they need
+     * committed and extension-contributed rules are worth having and are deliberately not here yet, they need
      * the question of what a rule from somewhere else may WIDEN answered first. */
     rules: z.array(RuleSchema).max(50).default([]),
     /* STOP AN AUTOMATION THAT ONLY EVER FAILS. After this many consecutive `error` runs the scheduler disables
@@ -1928,37 +1928,37 @@ export const SandboxSettingsSchema = z.object({
      * Off by default because quarantining edits the USER'S OWN configuration, and the failure it reacts to is
      * not always the automation's fault: an hourly poll against an API having a bad afternoon is broken for
      * three fires and fine on the fourth, and a job disabled at 3 a.m. is one nobody re-enables until they
-     * notice it stopped. So the mechanism exists for the case it is unambiguously right for — a misconfigured
-     * job burning a turn's worth of tokens on every tick — and the owner is the one who decides their
+     * notice it stopped. So the mechanism exists for the case it is unambiguously right for, a misconfigured
+     * job burning a turn's worth of tokens on every tick, and the owner is the one who decides their
      * automations are the kind that should be stopped rather than retried.
      *
      * Only `error` counts. A `skipped` run is a guard doing its job, and an `interrupted` one means the daemon
-     * died mid-fire, which says nothing about the automation — counting either would quarantine healthy jobs. */
+     * died mid-fire, which says nothing about the automation, counting either would quarantine healthy jobs. */
     automationFailureLimit: z.number().min(0).max(20).default(0),
-    /* WHO MAY START A SESSION WITHOUT YOU — the admission floor, per wake source (see AdmissionPolicySchema).
+    /* WHO MAY START A SESSION WITHOUT YOU, the admission floor, per wake source (see AdmissionPolicySchema).
      * Defaults all-allow, so a fresh sandbox behaves exactly as before the floor existed and the per-automation
      * `requireApproval` stays the way most owners meet holds. */
     admission: AdmissionPolicySchema.prefault({}),
-    /* THE SNIFFER'S RULEBOOK — verdicts for in-turn actions the outbound gate classifies, keyed by
+    /* THE SNIFFER'S RULEBOOK, verdicts for in-turn actions the outbound gate classifies, keyed by
      * `<provider>.<type>` ("discord.message.send") with `<provider>.*` as the per-provider wildcard; exact key
-     * wins. An action with no rule is allowed — the empty default wires no hook at all, so an unconfigured
+     * wins. An action with no rule is allowed, the empty default wires no hook at all, so an unconfigured
      * workspace pays nothing. "hold" cannot park a running turn (nobody may be there to answer); it refuses the
      * live call and points the agent at the drafts outbox, which IS the held form of a send. */
     actionRules: z.record(z.string(), AdmissionRuleSchema).default({}),
-    /* THE COMMAND GATE'S RULEBOOK — a verdict per CommandClass, for shell commands the agent runs itself. This
+    /* THE COMMAND GATE'S RULEBOOK, a verdict per CommandClass, for shell commands the agent runs itself. This
      * is the layer that still applies once a session is already running: the admission floor above decides who
      * may wake the agent, and after that every command it types is inside one already-admitted session.
      *
      * "hold" means what it says here, unlike in actionRules: the gate raises a permission card and the command
-     * waits for a real answer, in EVERY posture — hooks fire under bypassPermissions, where the card machinery
+     * waits for a real answer, in EVERY posture, hooks fire under bypassPermissions, where the card machinery
      * on its own never would. An UNATTENDED turn has nobody to answer, so a hold there refuses instead and says
      * why; that is the honest form of "ask me" when there is no me.
      *
-     * An unlisted class is allowed, and an empty rulebook wires no hook at all — an owner who has never opened
+     * An unlisted class is allowed, and an empty rulebook wires no hook at all, an owner who has never opened
      * this pays nothing for it. Keys are the CommandClass enum, so a typo is a settings error rather than a rule
      * that silently never matches. */
     commandRules: z.partialRecord(CommandClassSchema, AdmissionRuleSchema).default({}),
-    /* HOW MUCH AN AGENT MAY DELEGATE — the three ceilings the Claude Code harness enforces on its own Agent
+    /* HOW MUCH AN AGENT MAY DELEGATE, the three ceilings the Claude Code harness enforces on its own Agent
      * tool, surfaced here because their defaults are tuned for a laptop and this is a container the owner sized.
      *
      * They are three settings rather than one because they stop different things, and a fan-out that clears one
@@ -1968,7 +1968,7 @@ export const SandboxSettingsSchema = z.object({
      * as the same wall in a new place.
      *
      * Each default is what the CLI does with no env set, so a sandbox that has never opened this group behaves
-     * exactly as it always did — these are not our numbers, they are the harness's, restated so they can move.
+     * exactly as it always did, these are not our numbers, they are the harness's, restated so they can move.
      * The ceilings are ours: an agent is told to stop and NOT retry when it hits one, so the cost of a number
      * set too high is a real fleet of models running at once, and the cost of one set too low is a wall.
      *
@@ -1978,7 +1978,7 @@ export const SandboxSettingsSchema = z.object({
     subagentsAtOnce: z.number().min(1).max(200).default(20),
     subagentsPerTurn: z.number().min(1).max(2000).default(200),
     // Depth 1 = an agent may delegate, but its children may not. The CLI's own default is 3, and it is the one
-    // of the three whose runaway case is unbounded rather than merely wide — each level multiplies the last.
+    // of the three whose runaway case is unbounded rather than merely wide, each level multiplies the last.
     subagentDepth: z.number().min(1).max(10).default(3),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
@@ -1998,26 +1998,26 @@ export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
  * TWO FAMILIES, deliberately never one list of bars. They are measured differently, and a chart that ranks
  * them side by side claims a confidence and a denominator that only one of them has:
  *
- *   input  — shell output the cleaners trimmed before the model ever saw it. Both sides of the comparison come
+ *   input , shell output the cleaners trimmed before the model ever saw it. Both sides of the comparison come
  *            off the SAME command (raw in, emitted out), so the counterfactual is observed rather than
  *            estimated: exact, per command, no sample size to argue about.
- *   output — the model's own tokens under the terse steer. There is no second run of the same turn to compare
+ *   output, the model's own tokens under the terse steer. There is no second run of the same turn to compare
  *            against, so the only honest number is an experiment: a turn-level holdout, an n per arm, and a
  *            margin. It is absent entirely until both arms are large enough for the delta to mean anything.
  *
- * The two are also in different units of value — a saved tool-output token is saved again on every later
- * request of that conversation, an output token is saved once but costs several times as much — which is the
+ * The two are also in different units of value, a saved tool-output token is saved again on every later
+ * request of that conversation, an output token is saved once but costs several times as much, which is the
  * other reason they are separate sections with separate totals rather than one number.
  */
 
 // One mechanism's realized saving, biggest first. `savedTokens` is what THIS stage removed from what reached
-// it in pipeline order — sequential attribution, which is why the stages sum exactly to raw − emitted and can
+// it in pipeline order, sequential attribution, which is why the stages sum exactly to raw − emitted and can
 // be drawn as one stacked bar. It is NOT "what turning this cleaner off would cost you": the cap downstream
 // would have eaten some of the same lines. `commands` is how many commands the stage ran on. Negative for the
-// `footer` stage, which adds the retrieval pointer back — a cost on the same ledger as what it bought.
+// `footer` stage, which adds the retrieval pointer back, a cost on the same ledger as what it bought.
 export const SavingsStageSchema = z.object({ id: z.string(), commands: z.number(), savedTokens: z.number() });
 
-// What the cleaners saved on the way in, aggregated from historyRoot/logs/filter-stats.jsonl — one row per
+// What the cleaners saved on the way in, aggregated from historyRoot/logs/filter-stats.jsonl, one row per
 // agent Bash command, written by agent-output-filter. Every number here is windowed on the ledger's own
 // calendar (the UTC day each command ran), so the reader's date range and the figures above it agree.
 export const InputSavingsSchema = z.object({
@@ -2030,11 +2030,11 @@ export const InputSavingsSchema = z.object({
     savedPct: z.number(),
     // Per-stage attribution, biggest first.
     perCleaner: z.array(SavingsStageSchema),
-    // The measured control — commands the holdout left raw — against the cleaned population. A real saved-%
+    // The measured control, commands the holdout left raw, against the cleaned population. A real saved-%
     // for the pipeline as a whole rather than an estimate, and the only whole-pipeline counterfactual there is.
     holdout: z.object({ cleaned: z.number(), heldOut: z.number(), measuredSavedPct: z.number().optional() }),
     /* High-volume commands that matched no cleaner: where the next handler is worth writing. GROUPED by the
-     * command text — `commands` is how many times it ran and `tokens` their total — because the question this
+     * command text, `commands` is how many times it ran and `tokens` their total, because the question this
      * list is read for is "what is worth a handler", and a handler is worth writing for a command that costs
      * 5k twenty times over, not for the single 60k outlier that happened to sort first. */
     gaps: z.array(z.object({ command: z.string(), commands: z.number(), tokens: z.number() })),
@@ -2046,13 +2046,13 @@ export type InputSavings = z.infer<typeof InputSavingsSchema>;
 export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() });
 
 /* ONE METRIC'S READING of a turn-level experiment: the two arms, and whatever the arithmetic over them will
- * stand behind. An experiment can carry several — see TurnExperimentSchema.
+ * stand behind. An experiment can carry several, see TurnExperimentSchema.
  *
  * `metric` says what `mean` counts and what `deltaPct` is a delta in, and choosing it is most of the work.
- *   proseChars      — the terse steer: the thing it steers, and the only part of the model's output that
+ *   proseChars     , the terse steer: the thing it steers, and the only part of the model's output that
  *                     responds to being asked to be brief (UsageTurn.proseChars has why output tokens cannot).
- *   searchCalls     — the search teaching: the searches a turn ran, which the teaching directly changes.
- *   openingSearches — the same, narrower: the searches before the turn first touched a file.
+ *   searchCalls    , the search teaching: the searches a turn ran, which the teaching directly changes.
+ *   openingSearches, the same, narrower: the searches before the turn first touched a file.
  * Search mechanisms must not be judged on COST. Cost is a whole turn's work, a search mechanism moves one part
  * of it, and the part sits inside the noise of the rest exactly as the steer's effect once sat inside its
  * tool-call arguments. */
@@ -2065,12 +2065,12 @@ export const TurnMetricReadingSchema = z.object({
      * holding the spread where it sits today.
      *
      * It is aimed at a FIXED resolution rather than at today's delta on purpose. Sized against the observed
-     * effect it reported fourteen more turns for an experiment that had gone nine days without resolving — an
+     * effect it reported fourteen more turns for an experiment that had gone nine days without resolving, an
      * estimate divided by noise inherits the noise and promises an answer next week indefinitely. Against a
      * fixed target the same ledger asks for a few hundred, which is the fact the reader needs: this holdout is
      * not close, and waiting is not the move.
      *
-     * An order-of-magnitude figure, and it reads as one — the point is telling "a few more days" apart from
+     * An order-of-magnitude figure, and it reads as one, the point is telling "a few more days" apart from
      * "not at this holdout", which is a decision, where "measuring…" forever is not.
      *
      * Absent ⇒ nothing to wait for: the arms are under `minTurns`, the delta is published, or the resolution is
@@ -2078,33 +2078,33 @@ export const TurnMetricReadingSchema = z.object({
     controlTurnsNeeded: z.number().optional(),
     /* THE RESOLUTION, present as soon as both arms clear `minTurns`: ± percentage points at 95% (Welch,
      * unequal variances and unequal arms). Present even when the delta below is withheld, because "whatever
-     * this mechanism does, it is smaller than ±35 points" is a true and useful thing to be told — it is the
+     * this mechanism does, it is smaller than ±35 points" is a true and useful thing to be told, it is the
      * reading that says to keep collecting rather than to act. */
     marginPct: z.number().optional(),
     /* THE CLAIM, present only once there is one. Both together, and only when the margin does NOT span zero.
      *
      * A schema that can't express a half-measured experiment is how a 34%-that-becomes-8%-tomorrow never
-     * reaches the screen — and clearing `minTurns` turned out not to be enough to buy that. The terse steer
+     * reaches the screen, and clearing `minTurns` turned out not to be enough to buy that. The terse steer
      * crossed its thirtieth control turn and immediately reported +31.2% ± 35.1pp: a confidence interval
      * running from −3.4% to +66.7%, which is to say no effect was measured at all, rendered as an alarming
      * number pointing the wrong way. Thirty turns is where the normal approximation starts to hold, not where
      * this much per-turn spread resolves an effect; requiring the interval to exclude zero is the same
      * withhold-until-it-means-something rule applied to the thing that actually decides whether it does.
-     *   deltaPct — change in the metric's mean per turn under the mechanism; negative is a saving.
-     *   saved    — what the delta is worth over the turns that actually ran with it, in this window, in the
+     *   deltaPct, change in the metric's mean per turn under the mechanism; negative is a saving.
+     *   saved   , what the delta is worth over the turns that actually ran with it, in this window, in the
      *              metric's own unit (characters, or searches). */
     deltaPct: z.number().optional(),
     saved: z.number().optional(),
 });
 export type TurnMetricReading = z.infer<typeof TurnMetricReadingSchema>;
 
-/* A turn-level A/B — the one shape both of this sandbox's turn experiments report in, because they differ in
+/* A turn-level A/B, the one shape both of this sandbox's turn experiments report in, because they differ in
  * nothing but which flag flips and what the turns are judged on. Only turns the mechanism was ELIGIBLE for are
  * counted: a turn under a custom system prompt drops the terse steer along with everything else the daemon
  * appends, so it belongs to neither arm.
  *
- * ONE COIN FLIP, SEVERAL READINGS. `metrics` is a list because the search teaching is judged on two — the
- * searches a turn ran, and the ones it ran before touching a file — and they are two readings of the SAME
+ * ONE COIN FLIP, SEVERAL READINGS. `metrics` is a list because the search teaching is judged on two, the
+ * searches a turn ran, and the ones it ran before touching a file, and they are two readings of the SAME
  * experiment, not two experiments. Splitting them into separate entries would duplicate the arm assignment and
  * let a screen show a turn count on one that disagrees with the other. Headline first: the screens read
  * `metrics[0]` for the big number and the rest as supporting lines. */
@@ -2112,7 +2112,7 @@ export const TurnExperimentSchema = z.object({
     // A head and a tail rather than a plain array, because an experiment judged on nothing is not an experiment:
     // the screens take the first reading for their headline and stack the rest under it, and this is what makes
     // "there is always a headline" a fact the type carries instead of a check every screen repeats. (`.nonempty()`
-    // would not do it — in zod 4 it adds a min-length rule and leaves the inferred type a plain array.)
+    // would not do it, in zod 4 it adds a min-length rule and leaves the inferred type a plain array.)
     metrics: z.tuple([TurnMetricReadingSchema], TurnMetricReadingSchema),
     // Turns per arm before a delta is reported at all. Carried on the wire so the screen's "measuring…" state
     // counts toward the daemon's real threshold instead of a number the browser guessed. Shared by every
@@ -2127,7 +2127,7 @@ export const TurnExperimentSchema = z.object({
 });
 export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
 
-// `output`/`search` are absent when that experiment isn't running at all (its flag off, or no holdout set) — a
+// `output`/`search` are absent when that experiment isn't running at all (its flag off, or no holdout set), a
 // section that isn't there reads as "not measured", which is the truth, while zeros would read as "measured,
 // worth nothing".
 export const SavingsReportSchema = z.object({
@@ -2143,7 +2143,7 @@ export const IntenticRunSchema = z.object({ args: z.array(z.string()) });
 
 // ---- git ----
 
-// What a commit records — three shapes, each a real git spelling. The last two are for the case where nothing
+// What a commit records, three shapes, each a real git spelling. The last two are for the case where nothing
 // is staged yet and the caller has said what to stage; they are alternatives, and a caller sends at most one:
 //   absent      ⇒ commit whatever is staged (plain `git commit`)
 //   all: true   ⇒ stage every change in the repo, then commit (`commit -a`; VSCode's "stage all and commit")
@@ -2152,7 +2152,7 @@ export const IntenticRunSchema = z.object({ args: z.array(z.string()) });
 // `paths` is emphatically NOT `commit --only`. The index IS git's mechanism for choosing what a commit
 // contains, so a second path-selection channel alongside it could only disagree with it: a partial commit over
 // a half-staged file records the WORKTREE content while the row the user picked showed the INDEX content. This
-// stages and then records the whole index, which is why it is safe — and why it also survives a merge, where
+// stages and then records the whole index, which is why it is safe, and why it also survives a merge, where
 // git refuses a partial commit outright (and refuses it only AFTER moving the index).
 export const CommitSchema = RepoParamSchema.extend({
     message: z.string().min(1),
@@ -2167,16 +2167,16 @@ export const DiscardSchema = RepoParamSchema.extend({
 export const GitStageSchema = RepoParamSchema.extend({ paths: z.array(z.string().min(1)).max(500) });
 // `branch` defaults to the checked-out one. There is deliberately no "set upstream" flag: the daemon publishes
 // (`push -u`) exactly when the branch has no upstream yet, which is never destructive and is the only way the
-// result is coherent — see pushBranch.
+// result is coherent, see pushBranch.
 export const PushSchema = RepoParamSchema.extend({ branch: z.string().min(1).optional() });
 export const GitFileQuerySchema = RepoParamSchema.extend({ path: z.string().min(1) });
 export const GitFileWriteSchema = RepoParamSchema.extend({ path: z.string().min(1), content: z.string() });
-// Which of the working tree's diffs to open — the same split the Changes panel lists under. A path that is
+// Which of the working tree's diffs to open, the same split the Changes panel lists under. A path that is
 // staged AND edited again has genuinely different diffs, so the side is required rather than defaulted: a
 // caller that doesn't say which one it means doesn't know what it is showing.
 //   staged     ⇒ index vs HEAD      (what a bare `git commit` would record)
 //   unstaged   ⇒ worktree vs index  (untracked ⇒ no before side)
-//   conflicted ⇒ HEAD vs worktree   (what you had vs what the merge left, markers included — an unmerged path
+//   conflicted ⇒ HEAD vs worktree   (what you had vs what the merge left, markers included, an unmerged path
 //                                    has no stage 0, so the index is not a side it can be diffed against)
 export const GitDiffSideSchema = z.enum(["staged", "unstaged", "conflicted"]);
 export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
@@ -2191,7 +2191,7 @@ export const GitFileSchema = z.object({ path: z.string(), content: z.string() })
 export const RepoPathsSchema = z.object({ repo: z.string().min(1), paths: z.array(z.string().min(1)).max(500).optional() });
 export type RepoPaths = z.infer<typeof RepoPathsSchema>;
 
-// One change to a file — an uncommitted working-tree change (status vs HEAD, untracked included), an agent
+// One change to a file, an uncommitted working-tree change (status vs HEAD, untracked included), an agent
 // worktree's delta vs its base, or a file in a commit. `additions`/`deletions` are the numstat line counts,
 // undefined for a binary file (git reports "-"/"-") or an untracked file (no HEAD blob to diff against).
 export const GitChangeSchema = z.object({
@@ -2199,7 +2199,7 @@ export const GitChangeSchema = z.object({
     path: z.string(),
     // "conflicted" is git's unmerged state (`U`), and it is not a kind of modification: the index holds "ours"
     // and "theirs" at stages 2/3 with NO stage 0, so there is nothing a commit could record for this path and
-    // git refuses to commit while one exists. It belongs to neither side — see RepoChanges.conflicted.
+    // git refuses to commit while one exists. It belongs to neither side, see RepoChanges.conflicted.
     status: z.enum(["added", "modified", "deleted", "renamed", "type-changed", "conflicted"]),
     from: z.string().optional(),
     additions: z.number().optional(),
@@ -2210,11 +2210,11 @@ export type GitChange = z.infer<typeof GitChangeSchema>;
 // Where a repo's checked-out branch stands against its remote. Every field is optional-or-zero because every
 // one of them is legitimately absent in a healthy repo: no remote configured yet, a branch created locally and
 // never pushed, a detached HEAD. `ahead` = commits only we have; `behind` = commits only the upstream has,
-// which is meaningful only as of the last fetch — the panel's Fetch button is what refreshes it.
+// which is meaningful only as of the last fetch, the panel's Fetch button is what refreshes it.
 export const GitRemoteStateSchema = z.object({
     // The remote this branch pushes to: its OWN remote when it tracks one, else the first `git remote` lists
-    // (where a never-pushed branch would publish). Those differ in a fork — `origin` and `upstream` both
-    // configured — and pushing to the wrong one succeeds while leaving `ahead` stuck. Absent ⇒ no remote.
+    // (where a never-pushed branch would publish). Those differ in a fork, `origin` and `upstream` both
+    // configured, and pushing to the wrong one succeeds while leaving `ahead` stuck. Absent ⇒ no remote.
     remote: z.string().optional(),
     // The checked-out branch; absent on a detached HEAD or an unborn repo.
     branch: z.string().optional(),
@@ -2225,7 +2225,7 @@ export const GitRemoteStateSchema = z.object({
 });
 export type GitRemoteState = z.infer<typeof GitRemoteStateSchema>;
 
-// A ref name (branch/tag), validated structurally — git enforces the rest of ref-name legality itself.
+// A ref name (branch/tag), validated structurally, git enforces the rest of ref-name legality itself.
 const RefNameSchema = z
     .string()
     .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/)
@@ -2238,13 +2238,13 @@ export const GitBranchSchema = z.object({
     upstream: z.string().optional(),
     ahead: z.number(),
     behind: z.number(),
-    // The configured upstream no longer exists on the remote (a merged PR's deleted branch) — distinct from
+    // The configured upstream no longer exists on the remote (a merged PR's deleted branch), distinct from
     // "no upstream", and the signal that this local branch is safe to delete.
     gone: z.boolean().optional(),
     at: z.number(),
 });
 export type GitBranch = z.infer<typeof GitBranchSchema>;
-/* One REMOTE-TRACKING branch — somebody else's tip, as this repo last saw it.
+/* One REMOTE-TRACKING branch, somebody else's tip, as this repo last saw it.
  *
  * A separate shape from GitBranch rather than the same one with optional fields, because the two genuinely
  * differ: a remote-tracking branch has no upstream of its own and no ahead/behind, and giving it those fields
@@ -2264,12 +2264,12 @@ export const GitBranchCreateAtSchema = RepoParamSchema.extend({
 // `force` is the deliberate retry after git refuses to drop an unmerged branch.
 export const GitBranchDeleteSchema = RepoParamSchema.extend({ name: RefNameSchema, force: z.boolean().optional() });
 
-/* THE OPERATION A REPO IS HALTED IN THE MIDDLE OF — a merge, rebase, cherry-pick or revert that stopped on a
+/* THE OPERATION A REPO IS HALTED IN THE MIDDLE OF, a merge, rebase, cherry-pick or revert that stopped on a
  * conflict and was never finished or aborted.
  *
  * Every verb the daemon runs itself aborts cleanly on failure, so this is never something the UI started. It is
  * what an agent or a user left behind in a terminal, and it is a state git refuses to do almost anything else
- * from — so a surface listing the conflicted files without naming it leaves the reader with no way out.
+ * from, so a surface listing the conflicted files without naming it leaves the reader with no way out.
  * Absent means the worktree is not mid-anything. */
 export const GitOperationSchema = z.enum(["merge", "rebase", "cherry-pick", "revert"]);
 export type GitOperation = z.infer<typeof GitOperationSchema>;
@@ -2281,7 +2281,7 @@ export const RepoChangesSchema = z.object({
     repo: z.string(),
     // Absent on an unborn HEAD (a repo initialized but never committed).
     branch: z.string().optional(),
-    // Unmerged paths — a merge, rebase, cherry-pick or pull that git could not finish. First, because until
+    // Unmerged paths, a merge, rebase, cherry-pick or pull that git could not finish. First, because until
     // they are resolved nothing else in this repo can be committed at all: git refuses outright. Held apart
     // from the two sides rather than listed in them, because "staged or not" is not a question an unmerged path
     // has an answer to. Staging one (`git add`) is exactly how you tell git it is resolved.
@@ -2292,13 +2292,13 @@ export const RepoChangesSchema = z.object({
      * which is every repo almost all of the time. */
     operation: GitOperationSchema.optional(),
     // The two sides git actually models, kept apart because a path can appear on BOTH with different statuses
-    // (a staged edit that was then edited again — the classic `MM`). `staged` is index-vs-HEAD: exactly what a
+    // (a staged edit that was then edited again, the classic `MM`). `staged` is index-vs-HEAD: exactly what a
     // bare `git commit` would record. `unstaged` is worktree-vs-index plus untracked files. Each side's
     // additions/deletions describe the diff it is listed under, never a conflation of the two.
     staged: z.array(GitChangeSchema),
     unstaged: z.array(GitChangeSchema),
     // How many changes were CUT from the two sides above (conflicts are never cut). A cloned monorepo or a
-    // mass delete carries six-figure change lists — a payload no panel can render and no browser should hold —
+    // mass delete carries six-figure change lists, a payload no panel can render and no browser should hold,
     // so past the daemon's per-repo budget the lists arrive truncated and this carries the dropped count, which
     // the panel adds to its badges and states under the group. Absent ⇒ the lists are complete.
     truncated: z.number().optional(),
@@ -2318,10 +2318,10 @@ export const RepoChangesSchema = z.object({
 });
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
 
-// WHO AN ORIGIN ID IS — the display identity of one agent named in `origins`, carried BY THE RESPONSE rather
+// WHO AN ORIGIN ID IS, the display identity of one agent named in `origins`, carried BY THE RESPONSE rather
 // than looked up in the client's fleet roster. The roster is the LIVE board and deliberately drops archived
 // agents (AgentsRegistry.list), while a landing outlives the agent that made it: archiving a finished agent
-// does not commit its lines, so the very common case — land, archive the card, review at leisure — is exactly
+// does not commit its lines, so the very common case, land, archive the card, review at leisure, is exactly
 // the one a roster lookup cannot answer, and the panel fell back to "Agent 1a2b3c" with a generic icon for it.
 // The daemon reads attribution and identity from the same registry in the same pass, so it is the one place
 // they cannot disagree. Per response, not per repo: one agent commonly lands into several.
@@ -2329,12 +2329,12 @@ export const OriginAgentSchema = z.object({
     // Absent for an entry that never got a title (a turn that failed before one was derived).
     title: z.string().optional(),
     provider: AgentProviderSchema,
-    /* WHAT THE LANDED WORK DID — the same drafted message the agent's own card carries (LandedMessage), on the
+    /* WHAT THE LANDED WORK DID, the same drafted message the agent's own card carries (LandedMessage), on the
      * road that outlives the card. The panel reads the roster's copy first and this one when the roster has no
      * entry left to read, which is the case this whole schema exists for: an archived agent's lines are still
      * in the tree, and the sentence about them has to be too.
      *
-     * Absent for a landing nothing was written about, and — for the seconds after a land — for one whose
+     * Absent for a landing nothing was written about, and, for the seconds after a land, for one whose
      * sentence is still being drafted. Those two are told apart by `landedMessageDraft` on the agent's card, and
      * neither has a title-shaped fallback: guessing a subject from the ask is exactly the habit this replaced,
      * so a chip with no message files nothing and simply filters. */
@@ -2347,11 +2347,11 @@ export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 export const GitChangesSchema = z.object({
     repos: z.array(RepoChangesSchema),
     // Keyed by agent id; covers every id any repo's `origins` names, and only those. Absent when nothing in
-    // the review is attributable. An id can still be missing from it — the retention sweep can retire an
-    // entry whose landed lines are somehow still uncommitted — and the panel keeps its id-shaped fallback for
+    // the review is attributable. An id can still be missing from it, the retention sweep can retire an
+    // entry whose landed lines are somehow still uncommitted, and the panel keeps its id-shaped fallback for
     // exactly that, rather than dropping the chip and re-attributing the file to the user.
     originAgents: z.record(z.string(), OriginAgentSchema).optional(),
-    /* WHICH REPOS HAVE A COMMIT RUNNING RIGHT NOW — the daemon's answer, not the browser's.
+    /* WHICH REPOS HAVE A COMMIT RUNNING RIGHT NOW, the daemon's answer, not the browser's.
      *
      * A commit is one request that outlives the tab that fired it. Reload the page mid-commit and that tab's
      * "a git action is running" flag went with it: the button re-armed itself over rows the commit was already
@@ -2367,7 +2367,7 @@ export const GitChangesSchema = z.object({
 });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 
-/* WHAT THE COMMIT LEFT BEHIND — the committed repo's review row, re-read inside the same repo lock that made
+/* WHAT THE COMMIT LEFT BEHIND, the committed repo's review row, re-read inside the same repo lock that made
  * the commit, so the panel replaces that repo's rows from THIS answer instead of asking for a fresh
  * workspace-wide scan afterwards.
  *
@@ -2375,7 +2375,7 @@ export type GitChanges = z.infer<typeof GitChangesSchema>;
  * for every repo including the ones the commit never touched) and the user sat watching the rows they had just
  * committed until it returned. The commit itself is milliseconds of git; the wait was this.
  *
- * `changes` ABSENT means the repo has nothing the panel would show any more — the same inclusion rule the scan
+ * `changes` ABSENT means the repo has nothing the panel would show any more, the same inclusion rule the scan
  * applies, decided in the same place, so a repo the scan would have dropped drops here too. `originAgents`
  * covers the ids this repo's `origins` names and only those, on GitChangesSchema's terms; the panel merges it
  * over what it already holds rather than replacing, since the other repos' rows still name their own agents. */
@@ -2388,7 +2388,7 @@ export type CommitResult = z.infer<typeof CommitResultSchema>;
 
 /* One module a changed file can be grouped under in the review panels: a repo-relative dir ("_editor/web", or ""
  * for a repo that is itself one package) and the name its package.json declares. Distinct from
- * WorkspacePackage, which is the DEPENDENCY graph's node — that one is pnpm's view of the workspace and carries
+ * WorkspacePackage, which is the DEPENDENCY graph's node, that one is pnpm's view of the workspace and carries
  * the grouping axis its diagram colours by; this one is a filesystem fact about where a path lives.
  *
  * Stated HERE, above both readings of it, because there are two trees a review can be of and each groups by its
@@ -2405,12 +2405,12 @@ export type WorkspaceModules = z.infer<typeof WorkspaceModulesSchema>;
 // One file an agent touched, plus whether that change is ALREADY in the main tree. The review lists the
 // agent's CUMULATIVE output (base → worktree), not just the not-yet-landed remainder, because landing is not
 // the end of the review: a clean turn auto-lands within milliseconds, and a list scoped to the remainder shows
-// the user an empty panel for work they never got to look at. `landed` is what still separates the two — the
+// the user an empty panel for work they never got to look at. `landed` is what still separates the two, the
 // remainder is what "Land now" would apply, and the panel filters on exactly this flag.
 export const AgentChangeSchema = GitChangeSchema.extend({ landed: z.boolean() });
 export type AgentChange = z.infer<typeof AgentChangeSchema>;
 
-// An agent conversation-worktree's delta vs its recorded base — deliberately NOT RepoChanges. There is no index
+// An agent conversation-worktree's delta vs its recorded base, deliberately NOT RepoChanges. There is no index
 // side to speak of here: the question a fleet review answers is "what did this agent write", which is one flat
 // set. Sharing the working-tree shape would have forced a meaningless empty `staged` on every
 // row and invited the panel to render a staging affordance that cannot work on a worktree the user never checks out.
@@ -2422,17 +2422,17 @@ export const AgentRepoChangesSchema = z.object({
      * the workspace's Changes panel does. It rides the changes rather than being fetched beside them, because
      * an agent works in a worktree the main tree cannot see: a package the agent has just created exists only
      * there, so the workspace-wide read (/workspace/modules) does not know its name and every one of its files
-     * — which for a new package is all of them — fell into the unnamed "loose in this repo" bucket.
+     *, which for a new package is all of them, fell into the unnamed "loose in this repo" bucket.
      *
      * Same read, same instant, same tree as the rows it groups: that is what stops the two from disagreeing. */
     modules: z.array(WorkspaceModuleSchema),
 });
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
-/* The review, plus WHY the last land refused — because a conflict is discovered by the daemon (a clean turn
+/* The review, plus WHY the last land refused, because a conflict is discovered by the daemon (a clean turn
  * auto-lands the moment it finishes) and acted on in the browser, possibly hours later, on a surface the user
  * reaches by clicking the card's "Resolve conflict". Carrying the report only in the land RESPONSE meant the
  * one path that opens the review already knowing there is a conflict was the one path that could not show it:
- * the panel opened with an empty report, no explanation, and no merge affordance — a dead end at the exact
+ * the panel opened with an empty report, no explanation, and no merge affordance, a dead end at the exact
  * moment the UI had promised something to resolve. It rides the review because that is the surface that
  * resolves it, and it refreshes with it: every land invalidates this query, so the report is never staler
  * than the last attempt. */
@@ -2467,23 +2467,23 @@ export const GitLogSchema = z.object({
     branch: z.string().optional(),
     commits: z.array(GitCommitSchema),
     // Whether a further page exists behind this one. The daemon learns it by asking git for one commit more than
-    // it returns — see commitLog. It is also what stops the oldest row of a page from being drawn as a ROOT
+    // it returns, see commitLog. It is also what stops the oldest row of a page from being drawn as a ROOT
     // commit, which is how a truncated history used to claim it began where the page happened to stop.
     hasMore: z.boolean(),
 });
 export type GitLog = z.infer<typeof GitLogSchema>;
 export const GitLogQuerySchema = RepoParamSchema.extend({
     limit: z.coerce.number().int().positive().max(2000).optional(),
-    // How many newer commits to step over — the page cursor. Paged rather than one big read because a large
+    // How many newer commits to step over, the page cursor. Paged rather than one big read because a large
     // repository's log is tens of thousands of rows, and every one of them costs a zod validation, a wire
     // payload and a lane computation before anything is drawn.
     skip: z.coerce.number().int().nonnegative().max(1_000_000).optional(),
 });
-// Every real git repo under /work as root-relative dir ids ("root" is implicit — the /work repo itself).
+// Every real git repo under /work as root-relative dir ids ("root" is implicit, the /work repo itself).
 export const GitReposSchema = z.object({ repos: z.array(z.string()) });
 export type GitRepos = z.infer<typeof GitReposSchema>;
 
-/* WHERE EACH WORKSPACE REPO LIVES ONLINE — one entry per repo that has a parseable remote, as the host and the
+/* WHERE EACH WORKSPACE REPO LIVES ONLINE, one entry per repo that has a parseable remote, as the host and the
  * `owner/name` project it names. Separate from `repos` above rather than folded into it because that route is
  * on the file tree's hot path and this costs a `git remote -v` per repo; a caller that wants to recognise a
  * workspace repo in somebody else's list (the publisher claim does exactly that) asks for it deliberately.
@@ -2495,7 +2495,7 @@ export type GitRemoteRepo = z.infer<typeof GitRemoteRepoSchema>;
 export const GitRemoteReposSchema = z.object({ repos: z.array(GitRemoteRepoSchema) });
 export type GitRemoteRepos = z.infer<typeof GitRemoteReposSchema>;
 
-/* PUT ONE FILE ON THE DEFAULT BRANCH AND PUBLISH IT — write, commit that path alone, push, in one call.
+/* PUT ONE FILE ON THE DEFAULT BRANCH AND PUBLISH IT, write, commit that path alone, push, in one call.
  *
  * One route rather than three because the interesting states are the ones BETWEEN the steps: a file written but
  * not committed, or committed but not pushed, is a repo the user now has to clean up by hand, and a browser
@@ -2507,7 +2507,7 @@ export type GitRemoteRepos = z.infer<typeof GitRemoteReposSchema>;
 export const GitPublishFileSchema = RepoParamSchema.extend({ path: z.string().min(1), content: z.string(), message: z.string().min(1) });
 
 /* HOW FAR THE PUBLISH GOT, in the terms the screen has to explain it in. `ok` is "the file is on the default
- * branch of the remote" and nothing less — the only state that makes a public read of it succeed.
+ * branch of the remote" and nothing less, the only state that makes a public read of it succeed.
  *
  * The three steps are reported SEPARATELY because every boundary between them is a state a user can be left
  * in and would otherwise have to discover: a file written but not committed, a commit that exists locally but
@@ -2529,7 +2529,7 @@ export const GitPublishFileResultSchema = z.object({
 export type GitPublishFileResult = z.infer<typeof GitPublishFileResultSchema>;
 
 export const GitCommitDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema });
-// A commit's changed files (vs its first parent; a root commit vs the empty tree) — the graph's detail tree
+// A commit's changed files (vs its first parent; a root commit vs the empty tree), the graph's detail tree
 // renders these (line stats included) and reuses the diff UI on click. Just GitChanges: the line stats live on
 // GitChange now, so working-tree and commit files share one shape.
 export const GitCommitDiffSchema = z.object({ files: z.array(GitChangeSchema) });
@@ -2539,13 +2539,13 @@ export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSch
 // and tag just add a ref (HEAD + worktree untouched, no checkpoint). Sequence ops (revert / cherry-pick /
 // merge / rebase / drop) add or replay commits and are auto-checkpointed daemon-side; a conflict aborts and
 // reports `ok:false` (an expected outcome, not a throw). Checkout and reset move HEAD (reset --hard discards
-// the worktree) — also auto-checkpointed. A `{repo, sha}` names the target commit for every commit-scoped
+// the worktree), also auto-checkpointed. A `{repo, sha}` names the target commit for every commit-scoped
 // action; a ref name (branch/tag) is validated structurally, git enforces the rest of ref-name legality
 // (RefNameSchema is declared above, with the branch schemas that first use it).
 export const GitBranchCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
 export const GitTagCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
 export const GitCheckoutSchema = RepoParamSchema.extend({ ref: RefNameSchema });
-// Deleting a tag locally, and — when a remote is named — on that remote too. The remote half is best-effort: a
+// Deleting a tag locally, and, when a remote is named, on that remote too. The remote half is best-effort: a
 // tag that was never pushed must not make deleting the local one report a failure.
 export const GitTagDeleteSchema = RepoParamSchema.extend({ name: RefNameSchema, remote: RefNameSchema.optional() });
 // Publishing ONE tag, named explicitly so it never drags every other unpushed tag along with it.
@@ -2555,7 +2555,7 @@ export const GitCommitActionSchema = RepoParamSchema.extend({ sha: ShaSchema });
 export const GitActionResultSchema = z.object({ ok: z.boolean(), reason: z.string().optional() });
 export type GitActionResult = z.infer<typeof GitActionResultSchema>;
 
-/* THE STASH — work set aside without committing it, and the one part of a repository's real state the workspace
+/* THE STASH, work set aside without committing it, and the one part of a repository's real state the workspace
  * used to be blind to entirely. A `git stash` in a terminal made the agent's (or the user's) work vanish from
  * every surface here.
  *
@@ -2563,7 +2563,7 @@ export type GitActionResult = z.infer<typeof GitActionResultSchema>;
  * untracked tree when `-u` was used). What it does not have is a place in any branch's ancestry, so the graph
  * hangs it off the commit it was taken on rather than flowing it down a lane.
  *
- * `ref` (`stash@{0}`) is the handle every verb takes, and it is POSITIONAL — dropping one renumbers the rest, so
+ * `ref` (`stash@{0}`) is the handle every verb takes, and it is POSITIONAL, dropping one renumbers the rest, so
  * a caller must re-read the list after any mutation rather than holding an index across it. */
 export const StashEntrySchema = z.object({
     ref: z.string(),
@@ -2628,12 +2628,12 @@ export const SnapshotSchema = z.object({
     // Committer time, ms since epoch.
     at: z.number(),
     trigger: SnapshotTriggerSchema,
-    // Human-readable checkpoint label — the turn's prompt for "turn" snapshots; absent otherwise.
+    // Human-readable checkpoint label, the turn's prompt for "turn" snapshots; absent otherwise.
     label: z.string().optional(),
 });
 export type Snapshot = z.infer<typeof SnapshotSchema>;
 
-/* WHICH CONVERSATION MESSAGE A TURN ANSWERS — carried alongside the turn so its pre-turn checkpoint can be
+/* WHICH CONVERSATION MESSAGE A TURN ANSWERS, carried alongside the turn so its pre-turn checkpoint can be
  * filed under it (see the sandbox's agent/turn-anchors.ts). `index` is the transcript position the turn began
  * at, which is also how many messages a rewind to it keeps. */
 export interface SnapshotTurn {
@@ -2642,11 +2642,11 @@ export interface SnapshotTurn {
 }
 export const SnapshotsListSchema = z.object({ snapshots: z.array(SnapshotSchema) });
 
-/* REWIND — go back to a message and carry on from there. Restores the workspace to that turn's checkpoint,
+/* REWIND, go back to a message and carry on from there. Restores the workspace to that turn's checkpoint,
  * drops every message after it, and forgets the provider session so the next turn opens a fresh one.
  *
  * `index` is the transcript position of the user message being rewound TO, which is also how many messages
- * survive — rewinding to the first message of a conversation keeps none of it and restores the workspace to
+ * survive, rewinding to the first message of a conversation keeps none of it and restores the workspace to
  * before it ran. */
 export const RewindTurnSchema = z.object({
     conversationId: z.string().min(1),
@@ -2655,9 +2655,9 @@ export const RewindTurnSchema = z.object({
 export const RewindResultSchema = z.object({
     /* The checkpoint the workspace was restored to, for the History timeline to select. Absent when the
      * conversation works in a checkout of its own: that rewind moved the conversation's own branch, which the
-     * workspace timeline does not carry — there is no row there to select. */
+     * workspace timeline does not carry, there is no row there to select. */
     snapshot: z.string().optional(),
-    // Messages dropped from the transcript — what the client removes from its own bubbles.
+    // Messages dropped from the transcript, what the client removes from its own bubbles.
     dropped: z.number().int().nonnegative(),
 });
 export type RewindResult = z.infer<typeof RewindResultSchema>;
@@ -2675,7 +2675,7 @@ export const SnapshotFileDiffQuerySchema = z.object({
     scope: z.string().min(1),
     path: z.string().min(1),
 });
-// Both sides of a file diff — a snapshot vs its parent, or a working tree vs HEAD; an absent side means the
+// Both sides of a file diff, a snapshot vs its parent, or a working tree vs HEAD; an absent side means the
 // file was added/deleted. Binary or oversized content is flagged instead of shipped.
 export const FileDiffSchema = z.object({
     before: z.string().optional(),
@@ -2687,11 +2687,11 @@ export type FileDiff = z.infer<typeof FileDiffSchema>;
 
 // ---- workspace tree + files ----
 
-/* WHOSE COPY OF THE WORKSPACE A READ MEANS — the half of a file address that used to be implicit, and wrong.
+/* WHOSE COPY OF THE WORKSPACE A READ MEANS, the half of a file address that used to be implicit, and wrong.
  *
  * There is not one workspace. There is the shared /work tree, and there is one private checkout per isolated
  * conversation, each holding files that conversation created and versions of files it edited. Every workspace
- * read route named a PATH and nothing else, so it could only ever answer from the shared tree — and an agent
+ * read route named a PATH and nothing else, so it could only ever answer from the shared tree, and an agent
  * that had just written `docs/plan.md` in its own checkout described a file the viewer could not open, while
  * an agent that had EDITED a file got something worse: the shared version, same path, different text, with
  * nothing to say so.
@@ -2712,22 +2712,22 @@ export type WorkspaceScope = z.infer<typeof WorkspaceScopeSchema>;
  * file route.
  *
  * Recursive, and the type is declared rather than inferred. Zod's getter form does infer one, but it collapses
- * to `{}` below the first level of nesting — so `entry.children[0].name` type-checked as an index-signature
+ * to `{}` below the first level of nesting, so `entry.children[0].name` type-checked as an index-signature
  * read on both sides of the wire, and the tree walker's own suite was reading a `hidden` field off entries
  * that has never existed there without the compiler minding. The interface is the contract; the schema
  * validates against it, and z.ZodType makes a divergence between the two an error here. */
 /* A SYMLINK, as the tree reports one. Present only on entries that are links; `type` beside it is the type of
  * whatever the link POINTS AT, so a link to a directory expands and a link to a file opens, exactly like the
- * real thing (the model VSCode uses — its FileType carries SymbolicLink as a bit alongside File/Directory,
+ * real thing (the model VSCode uses, its FileType carries SymbolicLink as a bit alongside File/Directory,
  * precisely so every consumer can keep asking "file or folder?").
  *
- * `to` is the link's own text, verbatim — `../../.agents/skills/discord`, not the resolved path. That is what
+ * `to` is the link's own text, verbatim, `../../.agents/skills/discord`, not the resolved path. That is what
  * the row shows on hover, because it is what the person who made the link wrote and what they would edit.
  *
  * `state` is absent for the ordinary case: it resolves, and it resolves to somewhere inside the workspace.
- *   - "broken" — nothing at the other end. Listed anyway, because a dangling link is a fact about the
+ *   - "broken", nothing at the other end. Listed anyway, because a dangling link is a fact about the
  *     workspace worth seeing rather than an entry to hide.
- *   - "outside" — it resolves to bytes outside the workspace. The daemon will not read, list or descend
+ *   - "outside", it resolves to bytes outside the workspace. The daemon will not read, list or descend
  *     through it (workspace-files.ts realWithin), so the row is shown and refused, like a locked one. */
 export interface WorkspaceLink {
     readonly to: string;
@@ -2745,9 +2745,9 @@ export interface WorkspaceTreeEntry {
     readonly size?: number | undefined;
     // Ignored-by-tooling (node_modules, .git, .gitignore'd paths, browser profiles): the client grays the row.
     readonly ignored?: boolean | undefined;
-    // Set when this entry is a symlink — `type` above is then its TARGET's type. See WorkspaceLink.
+    // Set when this entry is a symlink, `type` above is then its TARGET's type. See WorkspaceLink.
     readonly link?: WorkspaceLink | undefined;
-    // A DIR without `children` was listed but not descended into — because it's ignored, or because the walk's
+    // A DIR without `children` was listed but not descended into, because it's ignored, or because the walk's
     // breadth-first budget stopped above it. Either way the client lazy-loads it via /workspace/children on
     // expand, so "not loaded yet" and "empty directory" (`children: []`) stay distinguishable.
     readonly children?: readonly WorkspaceTreeEntry[] | undefined;
@@ -2770,7 +2770,7 @@ export const WorkspaceTreeSchema = z.object({
     hidden: z.number(),
 });
 export type WorkspaceTree = z.infer<typeof WorkspaceTreeSchema>;
-// Lazy-load one directory's children — for a dir the tree walk listed but didn't descend into. Child dirs again
+// Lazy-load one directory's children, for a dir the tree walk listed but didn't descend into. Child dirs again
 // carry no `children`, so they lazy-load on their own expand. `hidden` = how many entries the cap cut (0 = all
 // listed).
 export const WorkspaceChildrenQuerySchema = WorkspaceScopeSchema.extend({ path: z.string().min(1) });
@@ -2780,17 +2780,17 @@ export const WorkspaceChildrenSchema = z.object({
 });
 export type WorkspaceChildren = z.infer<typeof WorkspaceChildrenSchema>;
 // Write routes (delete) and the read they mirror. No scope: a conversation's own checkout is READ-ONLY through
-// the file API — see workspaceRootFor for why the refusal lives daemon-side rather than in each screen.
+// the file API, see workspaceRootFor for why the refusal lives daemon-side rather than in each screen.
 export const WorkspaceFileQuerySchema = z.object({ path: z.string().min(1) });
 export const WorkspaceMediaTicketQuerySchema = WorkspaceScopeSchema.extend({ path: z.string().min(1) });
 /* The credential a <video>/<audio> element carries to GET /workspace/media, which is the one workspace route a
  * browser cannot put a header on. Minted here, over the ordinary bearer-authenticated contract, and scoped to
- * the single FILE it was asked for — the resolved one, so a ticket minted against a conversation's checkout
+ * the single FILE it was asked for, the resolved one, so a ticket minted against a conversation's checkout
  * buys that file and not its shared-tree namesake (see auth/media-tickets.ts for why scope rather than
  * single-use is what bounds it). `expiresAt` is epoch ms so a player can tell a dead ticket from a dead file. */
 export const WorkspaceMediaTicketSchema = z.object({ ticket: z.string(), expiresAt: z.number() });
 /* A text read is a read of a WINDOW: `offset` is the byte to start at (negative reads that many bytes from the
- * END, which is what following a growing log means — the tail's offset isn't knowable until the size is), and
+ * END, which is what following a growing log means, the tail's offset isn't knowable until the size is), and
  * `limit` how many bytes to serve. The daemon clamps `limit` to its own cap, so an omitted or oversized one is
  * the cap rather than the file. Coerced: these arrive as query strings. */
 export const WorkspaceFileReadQuerySchema = WorkspaceScopeSchema.extend({
@@ -2808,16 +2808,16 @@ export const WorkspaceFilePresentSchema = z.object({
     offset: z.number(),
     bytes: z.number(),
     // Which tree answered. Always true when no `agent` was asked for; true DESPITE one when that conversation's
-    // checkout doesn't carry the path (see scopedTarget — its checkout is not a superset of /work), which is
+    // checkout doesn't carry the path (see scopedTarget, its checkout is not a superset of /work), which is
     // the one case the reader has to be told about rather than left to assume.
     shared: z.boolean(),
 });
-/* NOTHING TO READ AT THAT PATH — an ANSWER, not a failure, which is the whole reason this branch exists.
+/* NOTHING TO READ AT THAT PATH, an ANSWER, not a failure, which is the whole reason this branch exists.
  *
  * Most reads in this product are "read it if it is there": the file each extension keeps of what its badge has
  * already shown, a repo's documentation index, a run's result, a directory's own UI document. Absent is their
  * ordinary FIRST state, and every one of them already treats it as a value. Answering those with a 404 made the
- * browser log a failed request per read — around a dozen red lines on every page load, none of which meant
+ * browser log a failed request per read, around a dozen red lines on every page load, none of which meant
  * anything was wrong, and none of which a `catch` can suppress: the log happens in the network stack before any
  * JavaScript sees the response.
  *
@@ -2826,8 +2826,8 @@ export const WorkspaceFilePresentSchema = z.object({
 export const WorkspaceFileAbsentSchema = z.object({ present: z.literal(false), path: z.string() });
 export const WorkspaceFileSchema = z.discriminatedUnion("present", [WorkspaceFilePresentSchema, WorkspaceFileAbsentSchema]);
 // Resolve a file reference an agent (or a compiler, or a terminal) NAMED to the workspace path it means. Prose
-// paths are routinely partial — a model that has been discussing `_editor/web/src` writes
-// `pages/workspace/Foo.vue` — so a clickable mention has to be matched as a path SUFFIX against the real tree,
+// paths are routinely partial, a model that has been discussing `_editor/web/src` writes
+// `pages/workspace/Foo.vue`, so a clickable mention has to be matched as a path SUFFIX against the real tree,
 // not read as root-relative. `path` is absent when nothing in the workspace ends in that reference.
 export const WorkspaceResolveQuerySchema = WorkspaceScopeSchema.extend({ path: z.string().min(1).max(512) });
 export const WorkspaceResolveSchema = z.object({ path: z.string().optional() });
@@ -2836,7 +2836,7 @@ export const WorkspaceResolveSchema = z.object({ path: z.string().optional() });
 export const WorkspaceDirSchema = z.object({ path: z.string().min(1) });
 export const WorkspaceMoveSchema = z.object({ from: z.string().min(1), to: z.string().min(1) });
 // Deterministic (no-LLM) classification of the dropped workspace: each repo dir and loose file sorted into one
-// coarse bucket. Read-only — the browser turns it into a proposed layout and applies the accepted moves via the
+// coarse bucket. Read-only, the browser turns it into a proposed layout and applies the accepted moves via the
 // existing /workspace/move route. `reason` records the winning signal (magic:<mime>, ext:<ext>,
 // repository:<marker>, text-content, unknown) so the proposal is explainable.
 export const WorkspaceBucketSchema = z.enum(["repositories", "documents", "media", "archives", "other"]);
@@ -2847,27 +2847,27 @@ export const WorkspaceClassificationSchema = z.object({
 export type WorkspaceClassification = z.infer<typeof WorkspaceClassificationSchema>;
 // ---- workspace search ----
 
-// The workspace-search wire shape — shared by the daemon's /workspace/search route and the web client.
+// The workspace-search wire shape, shared by the daemon's /workspace/search route and the web client.
 // (Implementation detail, not part of the contract: the daemon backs this route with a resident in-process iq
 // engine; the engine is interchangeable behind this shape.) Groups are relevance-ranked (best first, never path
 // order); each hit carries the match-reason tags the fused engines contributed, and the char spans within `text`
 // that matched, so clients highlight without re-finding the needle.
 export const WorkspaceSearchQuerySchema = z.object({
     query: z.string().min(2).max(512),
-    // Search verbs only — anchor/git verbs (outline, context, log, who, …) are CLI-only surface. Natural language
+    // Search verbs only, anchor/git verbs (outline, context, log, who, …) are CLI-only surface. Natural language
     // has no verb of its own: `q` classifies the query and answers it semantically when the words call for it.
     mode: z.enum(["q", "find", "files", "def", "refs", "sym", "ast"]).optional(),
     includeIgnored: z.stringbool().optional(),
-    // How `find` reads the query — the three switches every editor's search box has (VSCode: Aa, ab, .*).
+    // How `find` reads the query, the three switches every editor's search box has (VSCode: Aa, ab, .*).
     // `literal` treats it as fixed text instead of a regex; `caseSensitive` off means case-INSENSITIVE, not
     // ripgrep's smart case.
     literal: z.stringbool().optional(),
     word: z.stringbool().optional(),
     caseSensitive: z.stringbool().optional(),
-    // Which FILES the query is asked of, in VSCode's files-to-include grammar — as TYPED, because the reading
+    // Which FILES the query is asked of, in VSCode's files-to-include grammar, as TYPED, because the reading
     // of it is shared (search-globs.ts) rather than each end guessing: comma-separated patterns, each matched
     // at any depth unless `./` anchors it, a leading `!` excluding instead. Distinct from `includeIgnored`,
-    // which decides whether the ignored layers are searched at all — this narrows within what that admitted.
+    // which decides whether the ignored layers are searched at all, this narrows within what that admitted.
     include: z.string().max(512).optional(),
     limit: z.coerce.number().int().positive().optional(),
     after: z.string().optional(),
@@ -2882,11 +2882,11 @@ export type WorkspaceSearchSpan = z.infer<typeof WorkspaceSearchSpanSchema>;
 export const WorkspaceSearchHitSchema = z.object({
     line: z.number(),
     text: z.string(),
-    // Every matched span in `text`, in order — a text search marks all of them, the way an editor does. Empty
+    // Every matched span in `text`, in order, a text search marks all of them, the way an editor does. Empty
     // where the LINE is the match and no span of it is (a semantic or definition hit reports none).
     spans: z.array(WorkspaceSearchSpanSchema),
     tags: z.array(WorkspaceSearchTagSchema),
-    // Enclosing symbol ("createWidget (fn)") — parent-document context so the reader often needs no follow-up.
+    // Enclosing symbol ("createWidget (fn)"), parent-document context so the reader often needs no follow-up.
     context: z.string().optional(),
 });
 export type WorkspaceSearchHit = z.infer<typeof WorkspaceSearchHitSchema>;
@@ -2894,7 +2894,7 @@ export const WorkspaceSearchGroupSchema = z.object({
     path: z.string(),
     score: z.number(),
     hits: z.array(WorkspaceSearchHitSchema),
-    // This file had more matching lines than the engine keeps per file, so `hits` is a floor — a panel showing a
+    // This file had more matching lines than the engine keeps per file, so `hits` is a floor, a panel showing a
     // per-file count has to say "50+" rather than "50".
     capped: z.boolean().optional(),
 });
@@ -2913,7 +2913,7 @@ export type WorkspaceSearchFreshness = z.infer<typeof WorkspaceSearchFreshnessSc
 export const WorkspaceSearchResultSchema = z.object({
     mode: z.string(),
     total: z.number(),
-    // Files the query matched in total, which `groups` reports only for the page it carries — the count a
+    // Files the query matched in total, which `groups` reports only for the page it carries, the count a
     // results panel puts beside the hit total ("218 results in 61 files").
     files: z.number(),
     shown: z.number(),
@@ -2921,17 +2921,17 @@ export const WorkspaceSearchResultSchema = z.object({
     freshness: WorkspaceSearchFreshnessSchema,
     truncated: z.boolean(),
     // `total` is a FLOOR: at least one file had more matches than the engine keeps per file. Distinct from
-    // `truncated`, which is about this PAGE — a result can be complete on the page and still count partially.
+    // `truncated`, which is about this PAGE, a result can be complete on the page and still count partially.
     partial: z.boolean().optional(),
     cursor: z.string().optional(),
     hint: z.string().optional(),
-    // What the engine did with the query that the query did not ask for — a pattern rerun as literal text
+    // What the engine did with the query that the query did not ask for, a pattern rerun as literal text
     // because it is not valid regex, grep-style escapes rewritten, a language filter that matched no files. The
     // text surface has always printed this above the results; a JSON caller could not see it at all.
     note: z.string().optional(),
     // Code-graph neighbors of the top hits (definition anchors + the strongest caller of each).
     related: z.array(z.string()).optional(),
-    // Ranked `path:line` anchors that placed but were NOT shown, best first — the answer often sits at rank 5–13,
+    // Ranked `path:line` anchors that placed but were NOT shown, best first, the answer often sits at rank 5–13,
     // behind groups the budget spent itself on. The text surface has always printed this map; a JSON caller could
     // not see it, so it had to page through `cursor` to learn what the terminal was told up front.
     candidates: z.array(z.string()).optional(),
@@ -2946,20 +2946,20 @@ export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
 // `hotspots` (churn × complexity) and `map` (PageRank over the import graph) verbs rank, as figures a panel can
 // plot instead of lines a terminal prints.
 //
-// Every field is a COUNT that can be recounted in the files themselves — commits, branch points, exported
+// Every field is a COUNT that can be recounted in the files themselves, commits, branch points, exported
 // symbols. Deliberately no composite "maintainability grade": those aren't comparable across projects and can't
 // be checked, and a repo-health surface that launders counts into a letter is worse than none.
 // How many hotspot files and key modules a report carries when the caller names no limit. A leaderboard, not an
 // inventory: past a screenful the ranking stops being the point, and the reader should be reading the files.
 export const HEALTH_LIMIT = 20;
 export const WorkspaceHealthQuerySchema = z.object({
-    // "root" (the /work repo) or a nested repo's root-relative dir — the same {repo} ids the git routes take.
+    // "root" (the /work repo) or a nested repo's root-relative dir, the same {repo} ids the git routes take.
     repo: z.string().min(1),
     // Churn window (2d, 12h, 1w, 3m). Absent = all of history, which is what a hotspot ranking wants by default.
     since: z.string().max(16).optional(),
     limit: z.coerce.number().int().positive().max(200).optional(),
 });
-// One file that is BOTH churning and tangled. `score` is the product the ranking sorts by — carried explicitly
+// One file that is BOTH churning and tangled. `score` is the product the ranking sorts by, carried explicitly
 // so the panel plots the number it ranks by rather than recomputing it.
 export const WorkspaceHotspotSchema = z.object({
     path: z.string(),
@@ -2972,7 +2972,7 @@ export const WorkspaceHotspotSchema = z.object({
     latestMs: z.number(),
 });
 export type WorkspaceHotspot = z.infer<typeof WorkspaceHotspotSchema>;
-// A file of the import graph's ranked skeleton — order IS the rank, so no rank number rides along.
+// A file of the import graph's ranked skeleton, order IS the rank, so no rank number rides along.
 export const WorkspaceKeyModuleSchema = z.object({ path: z.string(), exports: z.number() });
 export type WorkspaceKeyModule = z.infer<typeof WorkspaceKeyModuleSchema>;
 export const WorkspaceHealthSchema = z.object({
@@ -2982,7 +2982,7 @@ export const WorkspaceHealthSchema = z.object({
         symbols: z.number(),
         // Summed branch points across the scoped files.
         complexity: z.number(),
-        // How many files qualify as hotspots at all — the lists below are capped, this is not.
+        // How many files qualify as hotspots at all, the lists below are capped, this is not.
         hotspots: z.number(),
     }),
     hotspots: z.array(WorkspaceHotspotSchema),
@@ -2995,12 +2995,12 @@ export type WorkspaceHealth = z.infer<typeof WorkspaceHealthSchema>;
 // ---- workspace setup (dependency readiness) ----
 
 // One project under /work and whether its dependencies are actually installed. A drop omits node_modules/.venv
-// on purpose, so a freshly imported project is present-but-unusable until this says "ready" — the import UI,
+// on purpose, so a freshly imported project is present-but-unusable until this says "ready", the import UI,
 // the agent's post-edit type-check, and the agent's turn context all gate on it.
 // `dir` is root-relative ("" = the workspace root itself); `manager` is the real binary (pnpm/npm/uv/…);
 // `evidence` is the file that decided it ("pnpm-lock.yaml"), so the UI can show WHY, not just what.
-// state: ready | installing | needs-setup | unsupported (manager absent from this sandbox — `manager` names it)
-//      | stale — installed ONCE and since outgrown: the manifests declare dependencies that are not on disk,
+// state: ready | installing | needs-setup | unsupported (manager absent from this sandbox, `manager` names it)
+//      | stale, installed ONCE and since outgrown: the manifests declare dependencies that are not on disk,
 //        which is what an agent leaves behind when it adds one and does not install it. Same command fixes it,
 //        so `missing` (how many names cannot resolve) is what separates the two in the UI's wording.
 export const ProjectSetupSchema = z.object({
@@ -3016,13 +3016,13 @@ export type ProjectSetup = z.infer<typeof ProjectSetupSchema>;
 export const WorkspaceSetupSchema = z.object({ projects: z.array(ProjectSetupSchema) });
 export type WorkspaceSetup = z.infer<typeof WorkspaceSetupSchema>;
 // Install these projects' dependencies. Dirs already ready, already installing, or whose manager is missing are
-// skipped server-side, so a stale client list can't spawn redundant installs — `started` is what actually ran.
+// skipped server-side, so a stale client list can't spawn redundant installs, `started` is what actually ran.
 export const WorkspaceInstallSchema = z.object({ dirs: z.array(z.string().max(500)).min(1).max(50) });
 export const WorkspaceInstallResultSchema = z.object({ queued: z.array(z.string()) });
 
 // ---- workspace repos ----
 
-// Every discovered repo's id (root-relative dir under /work), sorted — roles included.
+// Every discovered repo's id (root-relative dir under /work), sorted, roles included.
 export const ReposListSchema = z.object({ repos: z.array(z.string()) });
 export const CloneRepoSchema = z.object({ name: z.string().min(1), cloneUrl: z.string().min(1), branch: z.string().optional() });
 export const CloneResultSchema = z.object({ name: z.string(), path: z.string() });
@@ -3072,9 +3072,9 @@ export type TemplatesList = z.infer<typeof TemplatesListSchema>;
 
 // One app instance currently in a monorepo, with its own preview dev server + live status (started/stopped
 // from the apps extension). `app` is the user-chosen instance name (the _apps/ dir); `kind` is what sort of
-// app it is — the manifest key it was scaffolded from (api/web/landing), else the framework detected from its
+// app it is, the manifest key it was scaffolded from (api/web/landing), else the framework detected from its
 // dependencies (astro/next/…), and absent when it was discovered purely by its `dev` script. previewUrl is
-// https://preview-<repo>--<app>-<sandboxId>.<zone> (absent on loopback — no zone or no connect token).
+// https://preview-<repo>--<app>-<sandboxId>.<zone> (absent on loopback, no zone or no connect token).
 export const RepoAppSchema = z.object({
     app: z.string(),
     kind: z.string().optional(),
@@ -3093,7 +3093,7 @@ export type WorkspacePackage = z.infer<typeof WorkspacePackageSchema>;
 export const WorkspaceDepTypeSchema = z.enum(["prod", "dev", "peer"]);
 export type WorkspaceDepType = z.infer<typeof WorkspaceDepTypeSchema>;
 // A workspace-internal dependency edge: `from` DEPENDS ON `to` (from's package.json lists to), typed by which
-// dependency block declared it. Pure data — layout/direction is the client's concern.
+// dependency block declared it. Pure data, layout/direction is the client's concern.
 export const WorkspaceDepEdgeSchema = z.object({ from: z.string(), to: z.string(), type: WorkspaceDepTypeSchema });
 export type WorkspaceDepEdge = z.infer<typeof WorkspaceDepEdgeSchema>;
 export const WorkspaceGraphSchema = z.object({ packages: z.array(WorkspacePackageSchema), edges: z.array(WorkspaceDepEdgeSchema) });
@@ -3140,7 +3140,7 @@ export const ServiceEntrySchema = z.object({
     on: z.string(),
     expose: z.string(),
 });
-// i.want.app — a deployable app built from source. Single production environment on `main`; `values.domain` is
+// i.want.app, a deployable app built from source. Single production environment on `main`; `values.domain` is
 // where it's exposed. Multi-env/teams/use wiring is hand-authored outside the managed region.
 export const AppEntrySchema = z.object({
     kind: z.literal("app"),
@@ -3170,7 +3170,7 @@ export const EnrollHostInputSchema = z.object({
     via: z.enum(["direct", "cloudflared"]).default("cloudflared"),
     sshKey: z.string().min(1),
     cfToken: z.string().optional(),
-    // The zone the connect script resolved alongside cfToken — recorded on the i.have.cloudflare entry so
+    // The zone the connect script resolved alongside cfToken, recorded on the i.have.cloudflare entry so
     // resolve validates against it (no re-discovery) and the Add-service dialog offers `<subdomain>.<zone>`.
     cfZone: z.string().optional(),
 });
@@ -3179,7 +3179,7 @@ export type EnrollHostInput = z.infer<typeof EnrollHostInputSchema>;
 // ---- capabilities: the sandbox's unified capability manifest (.intentic/config/capabilities.json) ----
 // Everything a user adds to a sandbox is a capability with an idempotent apply + a status check. The manifest is
 // the source of truth for what's active; `mcp`-kind entries also feed the agent's MCP servers each turn. DevOps
-// is the capability that scaffolds the intent/desired-state repos — until it's active the sandbox is empty.
+// is the capability that scaffolds the intent/desired-state repos, until it's active the sandbox is empty.
 
 export const CapabilityKindSchema = z.enum([
     "devops",
@@ -3216,13 +3216,13 @@ export const ServiceConfigSchema = z.object({
 // connectors are `cli` capabilities instead (see below), not integrations.
 // Closed, unlike a `cli` provider: this becomes an `i.have.<provider>` entry in deploy.config.ts, and the
 // desired-state resolver only knows the providers in InventoryProviderSchema. So an integration card is NOT
-// extension-contributable — the vocabulary belongs to the deploy engine, not to a manifest.
+// extension-contributable, the vocabulary belongs to the deploy engine, not to a manifest.
 export const IntegrationConfigSchema = z.object({ provider: z.literal("stripe") });
 // A `cli` capability gives the AGENT an authenticated command-line tool (not a deployed-app credential like
 // `integration`): the credential + any non-secret URL are stored here and injected into the agent's env each
 // turn (see cliEnvOf), and an .agents/skills/<id> cheatsheet teaches the agent to use it via curl. The provider
 // data (fields, env, skill, image fragment) is DATA in an installed extension's `contributes.capabilities`, not
-// a per-provider schema arm — so the config is `provider` + arbitrary string fields, validated against the
+// a per-provider schema arm, so the config is `provider` + arbitrary string fields, validated against the
 // card's declared fields at add-time (see the sandbox's capabilities/contributions.ts) rather than by this schema.
 export const CliConfigSchema = z.object({ provider: z.string().min(1) }).catchall(z.string());
 // A Claude Code plugin from a git repo. The daemon only owns the checkout; the Agent SDK's plugin loader reads
@@ -3239,9 +3239,9 @@ export const PluginConfigSchema = z.object({
         .optional(),
     token: z.string().min(1).optional(),
 });
-// An intentic extension from a git repo (an intentic-extension.json checkout — UI bundle + agent contributions
+// An intentic extension from a git repo (an intentic-extension.json checkout. UI bundle + agent contributions
 // + processes). Unlike `plugin`, `ref` is a REQUIRED full commit sha: extension code runs trusted in the
-// owner's browser, so the owner approves exactly the code that runs — pin by construction, updates are explicit
+// owner's browser, so the owner approves exactly the code that runs, pin by construction, updates are explicit
 // re-adds at a new sha. `path`/`token` as in PluginConfigSchema.
 export const ExtensionConfigSchema = z.object({
     url: z.url(),
@@ -3253,14 +3253,14 @@ export const ExtensionConfigSchema = z.object({
         .optional(),
     token: z.string().min(1).optional(),
     /* The registry row's tier, copied onto the install by the browse pre-fill. `premium` is what the daemon's
-     * two pool duties key off: installing (or updating) donates the owner's credits to the publisher — the
-     * gate the apply passes through — and enabling needs the owner's membership. An absent tier means free,
+     * two pool duties key off: installing (or updating) donates the owner's credits to the publisher, the
+     * gate the apply passes through, and enabling needs the owner's membership. An absent tier means free,
      * donates nothing, and asks for nothing; NO usage is metered or reported either way. Self-declared rather
      * than verified against the registry (the daemon is the owner's own machine; a stripped marker skips a
-     * donation the owner was choosing to make, which cheats the creator once — and is exactly the honesty the
+     * donation the owner was choosing to make, which cheats the creator once, and is exactly the honesty the
      * open-source posture accepts and the docs state). */
     tier: z.enum(["free", "premium"]).optional(),
-    /* The registry this install's row lives in, copied on by the browse pre-fill like `tier` — what the update
+    /* The registry this install's row lives in, copied on by the browse pre-fill like `tier`, what the update
      * check compares the pinned sha against and reads advisories from. Absent (a hand-typed git install) falls
      * back to the official registry: if the extension is listed there, its updates and its blocked-markings
      * concern this owner exactly as much as anyone's. */
@@ -3268,7 +3268,7 @@ export const ExtensionConfigSchema = z.object({
 });
 // A remote machine the AGENT can reach over SSH. One capability = one machine; the id is its ssh-config Host
 // alias, so the agent runs `ssh <id> "…"`. The handler writes a per-machine config block + a 0600 key/password
-// file under ~/.ssh (see the ssh handler), so — unlike `cli` — nothing is injected into the agent's env, and
+// file under ~/.ssh (see the ssh handler), so, unlike `cli`, nothing is injected into the agent's env, and
 // several machines never collide. Discriminated by auth so exactly one credential shape is required.
 export const SshConfigSchema = z.discriminatedUnion("auth", [
     z.object({
@@ -3289,28 +3289,28 @@ export const SshConfigSchema = z.discriminatedUnion("auth", [
 // ---- vpn ----
 // A VPN the agent's traffic rides. One capability = one tunnel, discriminated by `provider` so a new protocol
 // is a new arm (plus a driver in the daemon's vpn/), never a reinterpretation of an existing field:
-//   wireguard — a pasted .conf, brought up with wg-quick.
-//   fortinet  — a FortiGate SSL-VPN (what FortiClient's <sslvpn> connections speak), dialled with openconnect
+//   wireguard, a pasted .conf, brought up with wg-quick.
+//   fortinet , a FortiGate SSL-VPN (what FortiClient's <sslvpn> connections speak), dialled with openconnect
 //               --protocol=fortinet. openconnect is the client rather than openfortivpn because it routes over
 //               tun instead of pppd: it needs exactly the tun + NET_ADMIN grant this kind already carries, and
-//               no /dev/ppp device (which the runtime allowlist does not — and should not — include).
-//   ipsec     — an IKEv1/IKEv2 tunnel with a pre-shared key and optional XAuth (FortiClient's <ipsecvpn>
+//               no /dev/ppp device (which the runtime allowlist does not, and should not, include).
+//   ipsec    , an IKEv1/IKEv2 tunnel with a pre-shared key and optional XAuth (FortiClient's <ipsecvpn>
 //               connections), run by strongSwan. `aggressive` mirrors FortiClient's dial-up default.
 // Connecting is NOT a config field: connect/disconnect are live operations (see vpn.contract.ts) that both the
 // user and the agent drive, so a stored tunnel's up/down state is read from the OS, never from the manifest.
-// `autoConnect` is the only persisted intent — whether the daemon dials this tunnel again on boot.
+// `autoConnect` is the only persisted intent, whether the daemon dials this tunnel again on boot.
 export const VpnProviderSchema = z.enum(["wireguard", "fortinet", "ipsec"]);
 export type VpnProvider = z.infer<typeof VpnProviderSchema>;
 
 const autoConnect = z.enum(["on", "off"]).default("on");
 
 // FortiClient wraps every stored credential in its own "EncX <hex>" (older builds: "Enc <hex>") encryption,
-// keyed to the machine that exported the config — it is NOT recoverable from the file. Pasting one is an easy
+// keyed to the machine that exported the config, it is NOT recoverable from the file. Pasting one is an easy
 // mistake to make, because in the XML it sits exactly where the credential belongs, and the failure it causes
 // is unreadable: phase 1 negotiates fine and IKE then reports "calculated HASH does not match HASH payload",
 // which says nothing about where the bad value came from. Rejecting it here turns that into a sentence at the
-// point of entry. (The FortiClient importer already drops these — this catches a hand-paste.)
-// Exported so the add form can flag it inline on blur instead of only on a rejected round-trip — one
+// point of entry. (The FortiClient importer already drops these, this catches a hand-paste.)
+// Exported so the add form can flag it inline on blur instead of only on a rejected round-trip, one
 // definition of what "this is ciphertext, not a credential" means, shared by the browser and the daemon.
 export const isForticlientCiphertext = (value: string): boolean => /^Enc[X]?\s+[0-9A-Fa-f]{8,}$/.test(value.trim());
 
@@ -3321,7 +3321,7 @@ const notForticlientCiphertext = <T extends z.ZodType<string>>(field: T, label: 
 
 export const WireguardVpnConfigSchema = z.object({
     provider: z.literal("wireguard"),
-    // The pasted .conf ([Interface] + [Peer]) — it holds the private key, so it's this arm's secret field.
+    // The pasted .conf ([Interface] + [Peer]), it holds the private key, so it's this arm's secret field.
     config: z.string().min(1),
     autoConnect,
 });
@@ -3343,16 +3343,16 @@ export const IpsecVpnConfigSchema = z.object({
     provider: z.literal("ipsec"),
     server: z.string().min(1),
     presharedKey: notForticlientCiphertext(z.string().min(1), "pre-shared key"),
-    // The local IKE identity (FortiClient's <localid>) — dial-up FortiGates key their phase-1 selection off it.
+    // The local IKE identity (FortiClient's <localid>), dial-up FortiGates key their phase-1 selection off it.
     localId: z.string().min(1).optional(),
     remoteId: z.string().min(1).optional(),
-    // XAuth (FortiClient's <xauth>) — absent for PSK-only tunnels.
+    // XAuth (FortiClient's <xauth>), absent for PSK-only tunnels.
     username: z.string().min(1).optional(),
     password: notForticlientCiphertext(z.string().min(1), "XAuth password").optional(),
     ikeVersion: z.enum(["1", "2"]).default("1"),
     // Perfect Forward Secrecy for phase 2. Must match the gateway EXACTLY: it decides whether a KE payload is
     // sent in quick mode, and a mismatch fails with NO_PROPOSAL_CHOSEN only after phase 1 and XAuth have
-    // succeeded — which reads like anything but a phase 2 problem. FortiClient stores it as <pfs> under
+    // succeeded, which reads like anything but a phase 2 problem. FortiClient stores it as <pfs> under
     // <ipsec_settings> and defaults it on, so that is the default here too.
     pfs: z.enum(["on", "off"]).default("on"),
     // The Diffie-Hellman group, as FortiClient numbers them. ONE field for both phases on purpose: in IKEv1
@@ -3362,18 +3362,18 @@ export const IpsecVpnConfigSchema = z.object({
     // it is <dhgroup> under <ipsec_settings> in an export.
     dhGroup: z.enum(["2", "5", "14", "15", "16", "19", "20"]).default("14"),
     // IKEv1 aggressive mode: insecure by construction, and exactly what FortiGate dial-up with a group PSK
-    // requires — hence opt-in per connection rather than a global strongSwan setting.
+    // requires, hence opt-in per connection rather than a global strongSwan setting.
     aggressive: z.enum(["on", "off"]).default("on"),
-    // WHICH networks ride the tunnel — strongSwan's rightsubnet, the traffic selector this client offers in
+    // WHICH networks ride the tunnel, strongSwan's rightsubnet, the traffic selector this client offers in
     // quick mode. The single most consequential setting on an ipsec tunnel, and the one with no visible symptom
     // until it is wrong: 0.0.0.0/0 offers the gateway EVERYTHING the sandbox sends, including the sandbox's own
     // outbound connection to the model endpoint. A gateway that routes only its own networks accepts that
-    // selector, assigns a virtual IP, and then black-holes the rest — so the agent goes silent mid-turn, which
+    // selector, assigns a virtual IP, and then black-holes the rest, so the agent goes silent mid-turn, which
     // reads as the agent breaking rather than as a VPN setting. Narrowing this to the networks actually behind
     // the gateway (10.0.0.0/8,192.168.0.0/16) fixes it with nothing lost: the gateway is asked for less, not for
     // something different, and it needs no change of its own to accept that.
     // Comma-separated because strongSwan takes a list; under IKEv1 each entry is its own CHILD_SA, which not
-    // every gateway will negotiate — a list that dials as one entry is a gateway limit, not a config error.
+    // every gateway will negotiate, a list that dials as one entry is a gateway limit, not a config error.
     // The DEFAULT STAYS 0.0.0.0/0: narrowing it for everyone would cut existing tunnels off from networks they
     // reach today, and a full tunnel is right whenever the gateway does route the internet.
     routedNetworks: z
@@ -3393,15 +3393,15 @@ export const IpsecVpnConfigSchema = z.object({
     autoConnect,
 });
 export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnConfigSchema, FortinetVpnConfigSchema, IpsecVpnConfigSchema]);
-/* What is OPTIONAL about the in-sandbox Docker Engine. The engine itself takes no configuring — the capability
- * either runs dockerd or it doesn't — so this holds only what a user chooses, and the bar for landing here is
+/* What is OPTIONAL about the in-sandbox Docker Engine. The engine itself takes no configuring, the capability
+ * either runs dockerd or it doesn't, so this holds only what a user chooses, and the bar for landing here is
  * that the sandbox works without it. (`--privileged` therefore is not here and never will be: dockerd does not
  * run without it, so a switch would offer a broken sandbox as a choice.)
  *
  * TWO FAMILIES, and which one an option belongs to is the most consequential thing about it, because it is the
  * difference between a five-second change and a five-minute one:
  *
- *   IMAGE (`gpu`) — rides the environment overlay. Changing it recomposes the Dockerfile, so it costs an
+ *   IMAGE (`gpu`), rides the environment overlay. Changing it recomposes the Dockerfile, so it costs an
  *     owner-approved rebuild and a container recreate. Only `fragment()` may read these.
  *   ENGINE (everything below it) — /etc/docker/daemon.json, which dockerd reads at start. Changing one
  *     rewrites the file and restarts dockerd: no rebuild, no new image, but it DOES stop whatever containers
@@ -3412,24 +3412,24 @@ export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnCon
  * do nothing. The card badges the difference per field (CapabilityField.rebuild).
  *
  * Flat rather than nested, and "on"/"off" rather than booleans, because the capability form carries a flat
- * bag of strings — one spelling of a two-state config across the manifest (the vpn's pfs/aggressive) beats a
+ * bag of strings, one spelling of a two-state config across the manifest (the vpn's pfs/aggressive) beats a
  * second one for the same shape. */
 export const DockerConfigSchema = z.object({
     gpu: z.enum(["on", "off"]).default("off"),
     /* A pull-through cache or mirror, for a slow, metered or air-gapped link. The nested engine starts with an
      * empty image store, so the first `docker compose up` in a workspace pulls everything from scratch. */
     registryMirror: z.url().optional(),
-    // Registries reachable over plain http or with a self-signed certificate — a LAN registry, or the one a
+    // Registries reachable over plain http or with a self-signed certificate, a LAN registry, or the one a
     // homelab runs beside the sandbox. Space- or comma-separated host:port entries.
     insecureRegistries: z.string().optional(),
     /* The subnet the nested engine carves its container networks out of. Docker's default (172.17/16 and the
      * 172.16/12 pools around it) is the single most common collision with a corporate VPN or a homelab LAN,
      * and the failure it produces is unusually cruel: the sandbox keeps working, dockerd keeps working, and
-     * exactly the internal hosts the user was reaching for become unreachable — routed into a bridge instead
+     * exactly the internal hosts the user was reaching for become unreachable, routed into a bridge instead
      * of down the tunnel. One CIDR, and the pool is carved from it. */
     addressPool: z.string().optional(),
 });
-// A logged-in browser session the AGENT drives via Playwright MCP tools — for social platforms whose APIs can't
+// A logged-in browser session the AGENT drives via Playwright MCP tools, for social platforms whose APIs can't
 // cover "all the actions" (X reads are paywalled; X community-join and YouTube community-posts have no API). The
 // session lives in a persisted Chromium profile under .intentic/local/browser/<id>, established through the guided-login
 // WebSocket (/system/browser-login) or by the agent signing in itself. Chromium itself rides this kind's
@@ -3437,7 +3437,7 @@ export const DockerConfigSchema = z.object({
 //
 // ONE CAPABILITY = ONE ACCOUNT, not one platform: several entries may name the same `platform` (reddit-work and
 // reddit-personal), and the ID is what the profile, the login, the passkey and the agent's tool prefix are all
-// keyed by — so each account signs in separately and is disconnected on its own.
+// keyed by, so each account signs in separately and is disconnected on its own.
 //
 // `platform` is an OPEN slug, not an enum, for the reason `cli`'s `provider` is: a platform is a card, a login URL
 // and a skill in an installed extension's `contributes.capabilities`, so the set of them is not a fact this
@@ -3445,24 +3445,24 @@ export const DockerConfigSchema = z.object({
 //
 // `username`/`password` are the account's SIGN-IN CREDENTIALS, on every card rather than declared per platform
 // (which box a login form wants filled is the same fact everywhere). Both optional: a profile that signed in by
-// hand needs neither, and the password is the entry's SECRET — stored so the daemon can type it into the page on
+// hand needs neither, and the password is the entry's SECRET, stored so the daemon can type it into the page on
 // the agent's behalf (the accounts tools), never so the agent can read it. When the agent signs UP it has the
 // daemon generate and store one here, so the credential outlives the profile's cookies.
 //
 // `catchall`, the `cli` precedent, for the card that carries no site at all: a GENERIC browser session, where the
 // page to open and what the account is for are answered on the form instead of pinned in a manifest. A site card
-// pins its URLs and declares no fields; the generic one declares fields and pins nothing — one kind, because
+// pins its URLs and declares no fields; the generic one declares fields and pins nothing, one kind, because
 // nothing downstream of the URLs differs. Which other keys are legal is the CARD's business, checked against its
 // declared fields at add-time (validateContributionConfig), not this schema's.
 //
 // `identity` names the identity capability this account was born from (or was filed under): the account then
-// lives INSIDE that identity's browser — one profile, one set of cookies — which is what makes "Continue with
+// lives INSIDE that identity's browser, one profile, one set of cookies, which is what makes "Continue with
 // Google" one click instead of a second Google login the platform would block. Absent ⇒ the account keeps its
 // own private profile, exactly as every hand-connected account always has.
 //
 // `purpose` and `openedAt` are the ACCOUNT's own history, core for the same reason `identity` is: what this
 // account was opened for and when are facts about the sandbox's own past, not about any site, and a site card
-// that declared no fields (every one of them — a pinned-URL card declares none) could not carry them otherwise.
+// that declared no fields (every one of them, a pinned-URL card declares none) could not carry them otherwise.
 // They are what makes the roster answerable months later, when "do we already have an account here" is asked by
 // a session that was not the one that signed up. Both optional: an account the owner connected by hand has no
 // signup story to tell, and an empty purpose is better than a fabricated one.
@@ -3473,19 +3473,19 @@ export const BrowserConfigSchema = z
         password: z.string().optional(),
         identity: z.string().optional(),
         purpose: z.string().optional(),
-        // ISO-8601 date, stamped when the agent opens the account — absent for one connected by hand.
+        // ISO-8601 date, stamped when the agent opens the account, absent for one connected by hand.
         openedAt: z.string().optional(),
     })
     .catchall(z.string());
-/* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE — the container platform accounts are born from, and the answer
+/* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE, the container platform accounts are born from, and the answer
  * to "who is this sandbox on the internet" being twelve separate logins today.
  *
  * WHAT IT OWNS IS A BROWSER. An identity is one persisted Chromium profile the way a person's own browser is
- * one: Google signed in once (by the OWNER's hand, in the guided window — automated Google logins are exactly
+ * one: Google signed in once (by the OWNER's hand, in the guided window, automated Google logins are exactly
  * what Google blocks), and every account born from it sharing those cookies, so a platform's "Continue with
  * Google" is a click rather than an email round-trip. Browser accounts join it by naming it in their `identity`
  * field; accounts that name no identity keep their own private profile, which is how work and personal stay two
- * containers — two identities, not one profile with a flag.
+ * containers, two identities, not one profile with a flag.
  *
  * WHY A CAPABILITY AND NOT A PERSONA: this card holds SECRETS (an email password the daemon types but never
  * shows) and a live profile's identity, and the personas file is committed to git precisely because it holds
@@ -3493,14 +3493,14 @@ export const BrowserConfigSchema = z
  * as. A persona may point at accounts that live inside an identity, and neither card needs to know the other
  * exists.
  *
- * `email` is the identity itself — what signup forms get typed into their username box, and how the guided
+ * `email` is the identity itself, what signup forms get typed into their username box, and how the guided
  * login knows where to start (gmail.com ⇒ accounts.google.com; `loginUrl` overrides for any other provider).
  * `password` is the entry's SECRET, the browser-config precedent: typed by the daemon, never readable.
- * `mailbox` names a connected mail capability (imap, google) the narrow code tool reads — the agent asks for
+ * `mailbox` names a connected mail capability (imap, google) the narrow code tool reads, the agent asks for
  * "the latest code from this site" and gets six digits, not an inbox.
  * `openAccounts` is THE consent switch, off by default and a select rather than a boolean (the host-scope
- * precedent — form values arrive as strings): automated signup is against most platforms' terms, so minting
- * accounts unattended is an explicit, per-identity, informed choice — never a silent global default. */
+ * precedent, form values arrive as strings): automated signup is against most platforms' terms, so minting
+ * accounts unattended is an explicit, per-identity, informed choice, never a silent global default. */
 export const IdentityConfigSchema = z.object({
     email: z.string().min(3),
     password: z.string().optional(),
@@ -3509,19 +3509,19 @@ export const IdentityConfigSchema = z.object({
     openAccounts: z.enum(["on", "off"]).default("off"),
 });
 export type IdentityConfig = z.infer<typeof IdentityConfigSchema>;
-/* A connected COMPUTER of the user's own — the inverse of `ssh`, which reaches a server the sandbox can dial.
+/* A connected COMPUTER of the user's own, the inverse of `ssh`, which reaches a server the sandbox can dial.
  * A machine behind NAT can't be dialled, so it dials US: the @intentic/host agent (installed by a one-liner,
  * enrolled with a single-use pairing token) holds one outbound WebSocket to this daemon and serves an MCP tool
- * surface — shell, files, screenshots — from the far end. The daemon tunnels the agent's JSON-RPC over it and
+ * surface, shell, files, screenshots, from the far end. The daemon tunnels the agent's JSON-RPC over it and
  * never implements a tool itself, so the machine's capabilities evolve with ITS binary, not with a daemon release.
  *
  * One capability = one machine. The id is the machine's name and namespaces its tools (mcp__laptop__run_command),
- * so several connected machines never collide — the `ssh` precedent. `platform` splits the SKILL pack: a Windows
+ * so several connected machines never collide, the `ssh` precedent. `platform` splits the SKILL pack: a Windows
  * machine is taught PowerShell and a Linux one systemd/D-Bus, and neither carries the other's noise.
  *
  * SCOPES ARE THE GRANT, and they are enforced ON THE MACHINE, never here: the daemon pushes them down on every
- * connect, and the agent refuses out-of-scope calls itself. So a sandbox that is compromised — or an agent talked
- * into it by something it read on the internet — still cannot exceed what the owner ticked. `roots` bounds file
+ * connect, and the agent refuses out-of-scope calls itself. So a sandbox that is compromised, or an agent talked
+ * into it by something it read on the internet, still cannot exceed what the owner ticked. `roots` bounds file
  * reads AND writes to a set of directories (empty ⇒ the user's home).
  *
  * Like a browser `platform`, this is an OPEN slug: an OS is a card plus a skill pack in an installed extension's
@@ -3536,18 +3536,18 @@ export const HostScopesSchema = z.object({
     write: hostScope.default("off"),
     // Capture the screen. Off ⇒ screenshot refuses, and the agent is told so rather than getting a black frame.
     screen: hostScope.default("on"),
-    /* Move the pointer, click, type and scroll — GUI work, for the things with no command-line way in. Its own
+    /* Move the pointer, click, type and scroll. GUI work, for the things with no command-line way in. Its own
      * switch rather than part of `screen` because looking and touching are not the same permission: a screenshot
      * is bounded by what is on the display, while one click can confirm a dialog nobody read. Default off, like
-     * `write`, and for the same reason — a user who has not thought about it should not discover the agent has
+     * `write`, and for the same reason, a user who has not thought about it should not discover the agent has
      * been driving their desktop. */
     control: hostScope.default("off"),
-    /* Start, stop and restart the Intentic sandboxes running on this machine — the grant that makes one sandbox
+    /* Start, stop and restart the Intentic sandboxes running on this machine, the grant that makes one sandbox
      * the machine's supervisor. Its own switch rather than a use of `shell` because it is NARROWER: a user can
      * hand an agent the sandbox fleet without handing it a shell, and the fleet operations are named rather than
      * whatever a model improvises with docker. Default off, like every switch that changes the machine. */
     sandboxes: hostScope.default("off"),
-    /* Remove a sandbox from this machine — its container, its network, and the named volumes holding its /work
+    /* Remove a sandbox from this machine, its container, its network, and the named volumes holding its /work
      * and /history. Its own switch rather than part of `sandboxes` because the two differ in the only way that
      * matters here: everything `sandboxes` grants is undone by doing it again, and this is undone by nothing.
      * A user who delegated "restart my sandboxes when they wedge" did not thereby agree to lose one. */
@@ -3559,8 +3559,8 @@ export type HostScopes = z.infer<typeof HostScopesSchema>;
 export const HostConfigSchema = HostScopesSchema.extend({ platform: z.string().min(1) });
 // An ACP (Agent Client Protocol) agent served as a chat provider: the daemon spawns `command` as a long-lived
 // subprocess speaking JSON-RPC over stdio, and the capability id becomes the provider id in the chat picker
-// (see AgentProviderSchema). `command` is split on whitespace — no shell quoting. `env` is a pasted KEY=VALUE
-// block (one per line); credentials ride here, so the whole block is the secret field (echoed as hasSecret) —
+// (see AgentProviderSchema). `command` is split on whitespace, no shell quoting. `env` is a pasted KEY=VALUE
+// block (one per line); credentials ride here, so the whole block is the secret field (echoed as hasSecret),
 // the vpn-conf precedent. `loginCommand` is an interactive login the user completes in a visible terminal
 // (device-code flows); the agent persists credentials in its own store inside the container. `name` is the
 // picker's display label; absent = the id.
@@ -3571,22 +3571,22 @@ export const AcpAgentConfigSchema = z.object({
     loginCommand: z.string().min(1).optional(),
 });
 
-/* A MODEL API THE USER POINTED US AT — one shape for every server that serves models over HTTP, whether it runs
+/* A MODEL API THE USER POINTED US AT, one shape for every server that serves models over HTTP, whether it runs
  * beside this container or in another datacentre. There is deliberately NO local/remote axis: an Ollama on the
  * docker host, a vLLM on the GPU box down the hall, a LiteLLM gateway and OpenRouter differ only in the URL, and
  * inventing a distinction would mean two code paths, two cards and two sets of bugs for one concept.
  *
  * `protocol` is the only real fork, and it is about the WIRE, not about where the server lives:
- *   openai    — the endpoint speaks OpenAI /v1/chat/completions (Ollama, vLLM, llama.cpp, LM Studio, TGI,
+ *   openai   , the endpoint speaks OpenAI /v1/chat/completions (Ollama, vLLM, llama.cpp, LM Studio, TGI,
  *               OpenRouter, most gateways). The Claude Code harness speaks only the Anthropic Messages API, so
  *               these are re-served through the bundled translator, which is already in the image for exactly
  *               this job (agent/translator.ts). The user's key stays in the translator's config on /history and
- *               never reaches the harness — it gets the loopback bearer instead.
- *   anthropic — the endpoint already speaks the Anthropic Messages API (LiteLLM's /v1/messages, a Bedrock or
+ *               never reaches the harness, it gets the loopback bearer instead.
+ *   anthropic, the endpoint already speaks the Anthropic Messages API (LiteLLM's /v1/messages, a Bedrock or
  *               Vertex router, a corporate Anthropic gateway). Nothing to translate: the harness is pointed
  *               straight at it with the user's own key.
  *
- * `headers` is a pasted `Name: value` block, one per line — the extra headers gateways ask for (a tenant id, a
+ * `headers` is a pasted `Name: value` block, one per line, the extra headers gateways ask for (a tenant id, a
  * routing hint). The key is the secret field; the header block is not, because it is where non-credential
  * routing metadata lives and hiding it would make a misrouted endpoint undiagnosable. */
 export const EndpointProtocolSchema = z.enum(["openai", "anthropic"]);
@@ -3600,10 +3600,10 @@ export const EndpointConfigSchema = z.object({
     apiKey: z.string().optional(),
     headers: z.string().optional(),
 });
-/* THE SANDBOX WALLET — a USDC balance the agent can spend on x402-payable endpoints, under owner policy.
+/* THE SANDBOX WALLET, a USDC balance the agent can spend on x402-payable endpoints, under owner policy.
  *
  * WHAT IS DELIBERATELY NOT HERE IS A KEY. The signing key lives with the PLATFORM (one wallet per owner,
- * reached with the connect token the agent's grant never covers) — the container filesystem is explicitly not
+ * reached with the connect token the agent's grant never covers), the container filesystem is explicitly not
  * a boundary in this codebase's threat model (see the daemon's secret-vault.ts header), so the key does not
  * enter the container at all. `address` is the wallet's PUBLIC address, written back by the handler's apply
  * from the platform's answer, never typed by anyone: it is where the owner sends USDC, and everything the
@@ -3611,7 +3611,7 @@ export const EndpointConfigSchema = z.object({
  *
  * POLICY IS THE OWNER'S DELEGATION, and its defaults are the conservative ones: every payment raises an
  * approval card (`autoApproveUnderUsd: "0"`), bounded per payment and per UTC day. The daemon enforces it at
- * the route AND the platform re-validates at the signer — the daemon's check is UX, the signer's is the
+ * the route AND the platform re-validates at the signer, the daemon's check is UX, the signer's is the
  * guarantee, so a compromised container can at worst request what the owner already permitted. Amounts are
  * DECIMAL STRINGS, never floats: the daemon does its arithmetic in the token's atomic units (USDC has six
  * decimals), and a float here would be a rounding bug wearing a type.
@@ -3624,9 +3624,9 @@ export const WalletNetworkSchema = z.enum(["eip155:8453", "eip155:84532"]);
 export type WalletNetwork = z.infer<typeof WalletNetworkSchema>;
 export const WalletConfigSchema = z.object({
     // The chain payments settle on, CAIP-2. Base mainnet, or Base Sepolia for test mode (faucet USDC, the
-    // whole flow — cards, ledger, receipts — with zero real money).
+    // whole flow, cards, ledger, receipts, with zero real money).
     network: WalletNetworkSchema.default("eip155:8453"),
-    // The wallet's public address — the platform's answer at apply time, never a form field.
+    // The wallet's public address, the platform's answer at apply time, never a form field.
     address: z.string().optional(),
     // Hard per-payment ceiling: over it the route refuses without raising a card.
     perPaymentMaxUsd: usdAmount.default("1.00"),
@@ -3658,7 +3658,7 @@ export type EndpointConfig = z.infer<typeof EndpointConfigSchema>;
 
 export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("devops"), config: z.object({}) }),
-    // A pnpm+turbo monorepo the user scaffolds as its own repo; the `id` is the repo name. No config — apps are
+    // A pnpm+turbo monorepo the user scaffolds as its own repo; the `id` is the repo name. No config, apps are
     // added into it afterwards from its operator panel.
     z.object({ id: entryId, kind: z.literal("monorepo"), config: z.object({}) }),
     z.object({ id: entryId, kind: z.literal("mcp"), config: McpConfigSchema }),
@@ -3674,39 +3674,39 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     // The in-sandbox Docker Engine (baked into the base image, dormant by default). Its `--privileged` runtime
     // directive is not in the config and never will be: dockerd does not work without it (see the handler's
     // isPrivileged), so a switch there would offer a broken sandbox as a choice. What IS optional lives in
-    // DockerConfigSchema. No remove — the engine's state (/var/lib/docker) and whatever runs on it make a
+    // DockerConfigSchema. No remove, the engine's state (/var/lib/docker) and whatever runs on it make a
     // silent de-privilege more destructive than useful.
     z.object({ id: entryId, kind: z.literal("docker"), config: DockerConfigSchema }),
     z.object({ id: entryId, kind: z.literal("browser"), config: BrowserConfigSchema }),
-    // One email identity the sandbox acts as online — the browser-owning container accounts are born from
+    // One email identity the sandbox acts as online, the browser-owning container accounts are born from
     // (IdentityConfigSchema). Browser entries join it via their `identity` field.
     z.object({ id: entryId, kind: z.literal("identity"), config: IdentityConfigSchema }),
     z.object({ id: entryId, kind: z.literal("host"), config: HostConfigSchema }),
     z.object({ id: entryId, kind: z.literal("agent"), config: AcpAgentConfigSchema }),
-    // A model API (EndpointConfigSchema). The id becomes `endpoint/<id>` in the chat picker — the `agent` kind's
+    // A model API (EndpointConfigSchema). The id becomes `endpoint/<id>` in the chat picker, the `agent` kind's
     // precedent, with the prefix because these two are the only capability kinds that mint providers and they
     // want opposite ability records (an ACP agent owns its own loop; an endpoint runs the full Claude Code one).
     z.object({ id: entryId, kind: z.literal("endpoint"), config: EndpointConfigSchema }),
-    // The sandbox's USDC wallet (WalletConfigSchema) — one per sandbox; the key never enters the container.
+    // The sandbox's USDC wallet (WalletConfigSchema), one per sandbox; the key never enters the container.
     z.object({ id: entryId, kind: z.literal("wallet"), config: WalletConfigSchema }),
 ]);
 export type Capability = z.infer<typeof CapabilitySchema>;
 
-/* A NAMED PERSONA THE SANDBOX SHOWS THE OUTSIDE WORLD — "work-reddit", "the studio account" — and the layer
+/* A NAMED PERSONA THE SANDBOX SHOWS THE OUTSIDE WORLD, "work-reddit", "the studio account", and the layer
  * that decides which connected accounts a given turn may act through.
  *
  * IT ANSWERS FOUR QUESTIONS AND NO MORE: who it speaks as, what it may do, where it works, and what it is told.
- * Making one is then a name, a few accounts, some switches and — only if you want one — a prompt. That is the
+ * Making one is then a name, a few accounts, some switches and, only if you want one, a prompt. That is the
  * whole of what an owner is deciding, and short enough that they finish.
  *
  *   NO PUBLISH-OR-DRAFT SWITCH. It read as a lock and was a sentence: it asked the turn to route outward things
  *   through the approvals queue and could not stop it posting. The queue is the mechanism, and a control whose
- *   label promises more than it delivers is worse than no control — it is the one an owner trusts.
+ *   label promises more than it delivers is worse than no control, it is the one an owner trusts.
  *
  *   THE FOURTH QUESTION IS THE SYSTEM PROMPT, NOT A TONE NOTE, and the difference is why the field that used to
  *   sit here was removed and this one is not it. What was removed was a paragraph on how a persona WRITES:
  *   optional, answered by almost nobody, and shaping nothing a person could see afterwards. `systemPromptMode`
- *   is the same setting the sandbox has, asked per card — it replaces the whole prompt, and with the kit folder
+ *   is the same setting the sandbox has, asked per card, it replaces the whole prompt, and with the kit folder
  *   beside it (persona-kit.ts) a card can carry its own skills and tools too. That is a persona being a working
  *   posture rather than a label, and it shows: a release-notes writer and a code reviewer are two prompts, not
  *   two adjectives.
@@ -3714,34 +3714,34 @@ export type Capability = z.infer<typeof CapabilitySchema>;
  * THE CARD AND THE KEYS ARE DELIBERATELY SEPARATE. This is the card: a name, the accounts it speaks for, what a
  * session wearing it may do, where it works. It carries NO credential, which is what lets it be the one thing under
  * .intentic that is committed and reviewed like the workspace's instructions are (see personas-store.ts for
- * the exclude carve-out that makes that true). The keys — the logged-in browser profile, its cookies, its
- * passkey — stay where they already are: private to the sandbox, never exported without an explicit opt-in. So a
+ * the exclude carve-out that makes that true). The keys, the logged-in browser profile, its cookies, its
+ * passkey, stay where they already are: private to the sandbox, never exported without an explicit opt-in. So a
  * cloned workspace arrives listing its personas, each visibly unconnected, waiting for one sign-in apiece.
  *
  * WHAT IT IS NOT is a security boundary. A chat still reaches every connected account by default (that is the
- * owner's chosen posture — a chat has a human in the room), and an agent with a shell can reach a token whatever
+ * owner's chosen posture, a chat has a human in the room), and an agent with a shell can reach a token whatever
  * this file says. What it prevents is the mistake this codebase already names as the one that cannot be undone:
- * a post from the wrong account. Where nobody is watching — an unattended wake — it is a real fence, because
+ * a post from the wrong account. Where nobody is watching, an unattended wake, it is a real fence, because
  * there the resolver's default is NOTHING rather than everything (see turnPersona in personas.ts). */
-/* WHAT A PERSONA MAY DO — the shelves, one switch each, and the half of the card that bounds the turn rather
+/* WHAT A PERSONA MAY DO, the shelves, one switch each, and the half of the card that bounds the turn rather
  * than the account it speaks for.
  *
  * SHELVES, NOT TOOL NAMES. Every field here is a phrase a person decides about ("run commands", "read the
  * web"), never the name of a tool. Tool names drift with every runtime upgrade, one power answers to several of
- * them, and a connector is not a tool at all — it is a shell command plus a credential. Naming the shelf means
+ * them, and a connector is not a tool at all, it is a shell command plus a credential. Naming the shelf means
  * a tool added next month lands inside an answer the owner already gave, and a card written today still means
  * what it said after the SDK renames something.
  *
  * TWO STRENGTHS, AND THE DIFFERENCE IS VISIBLE FROM HERE. Everything capability-shaped (`connectors`,
- * `computers`, `mcp`, and the accounts in `capabilities`) is enforced by ABSENCE — the credential is never
- * injected, the server never mounted, the browser never launched — which is the same mechanism the account
+ * `computers`, `mcp`, and the accounts in `capabilities`) is enforced by ABSENCE, the credential is never
+ * injected, the server never mounted, the browser never launched, which is the same mechanism the account
  * filter already uses and needs no cooperation from the model. The plain switches are enforced by taking the
  * tools out of the turn's context, which holds for every tool the harness owns and cannot reach a program the
  * agent runs for itself.
  *
  * WHICH IS WHY `shell` IS THE ONE THAT DECIDES. A session with a shell can read a credential this card never
  * granted it, so switching it off is what turns the rest of these into a fence; leaving it on leaves them a
- * strong default. The card's own UI says so at the switch — see PersonaForm.vue — because a limit that is
+ * strong default. The card's own UI says so at the switch, see PersonaForm.vue, because a limit that is
  * weaker than it looks is worse than no limit at all.
  *
  * PERMISSIVE BY DEFAULT, deliberately, and the opposite of the account rule directly below it. An unrepeatable
@@ -3755,24 +3755,24 @@ export const PersonaPowersSchema = z.object({
     // this is the switch the others' strength depends on.
     shell: z.boolean().default(true),
     /* The JS execution backend (AgentCapabilities.execution): the model writes a script instead of a command
-     * line, run in a permission-fenced Node subprocess. Its fence is REAL where the shell's is not — reads and
-     * writes follow the `files` answer, and it can start no other program unless `shell` is also on — with one
+     * line, run in a permission-fenced Node subprocess. Its fence is REAL where the shell's is not, reads and
+     * writes follow the `files` answer, and it can start no other program unless `shell` is also on, with one
      * stated gap: the fence cannot cut the network, so a script can fetch whatever `web` says. */
     code: z.boolean().default(true),
     // Fetch a page, run a search.
     web: z.boolean().default(true),
-    // The credential-free browser. The SIGNED-IN browsers are `capabilities` below — a different question, and
+    // The credential-free browser. The SIGNED-IN browsers are `capabilities` below, a different question, and
     // the reason this one is safe to leave on: it holds nobody's account.
     browser: z.boolean().default(true),
     // Spawn sub-agents and run workflows.
     delegate: z.boolean().default(true),
     /* Change the sandbox itself: its settings and manifests, and the public outbox that publishes a file to
-     * anyone with the link. Enforced as a refusal on the paths that carry those, not as a tool switch — there
+     * anyone with the link. Enforced as a refusal on the paths that carry those, not as a tool switch, there
      * is no "install a capability" tool to take away, only files that mean it. */
     sandbox: z.boolean().default(true),
     /* The connected accounts and services this persona may reach, BY ID. Absent means every one of them, which
      * is what a card that has never thought about it should get; an empty list means none. That tri-state is the
-     * whole reason these are optional rather than defaulted arrays — "all" and "none" are both real answers and
+     * whole reason these are optional rather than defaulted arrays, "all" and "none" are both real answers and
      * an empty default could only spell one of them. */
     connectors: z.array(entryId).max(100).optional(),
     computers: z.array(entryId).max(50).optional(),
@@ -3780,16 +3780,16 @@ export const PersonaPowersSchema = z.object({
 });
 export type PersonaPowers = z.infer<typeof PersonaPowersSchema>;
 
-/* WHERE A PERSONA WORKS — the third question after who it is and what it may do.
+/* WHERE A PERSONA WORKS, the third question after who it is and what it may do.
  *
  * `folders` is the one field here that promises less than it looks like it promises, and the card says so where
  * it is set: it is enforced by refusing file tool calls that point outside, which stops a misread instruction
  * and an honest mistake, and does not stop a shell. The workspace-wide fence is the container. */
-/* WHERE A SESSION WEARING THIS CARD WORKS — the folder it opens in, and the folders its file tools may touch.
+/* WHERE A SESSION WEARING THIS CARD WORKS, the folder it opens in, and the folders its file tools may touch.
  *
  * There is no placement field, and that is a decision rather than an omission. A card used to be able to ask
  * for the SHARED tree instead of its own copy; every surface already defaults to a private worktree
- * (conversation.ts), so the setting existed only to opt out of the isolation that makes parallel work safe —
+ * (conversation.ts), so the setting existed only to opt out of the isolation that makes parallel work safe,
  * expressed in three words ("whatever started it", "its own copy", "the shared workspace") that a reader had no
  * way to choose between. A persona starts where it is told and works in its own copy. */
 export const PersonaWorkspaceSchema = z.object({
@@ -3804,15 +3804,15 @@ export const PersonaSchema = z.object({
     id: entryId,
     // What the owner calls it in the composer chip. Absent ⇒ surfaces read the id, which is already human-chosen.
     label: z.string().max(60).optional(),
-    /* The capability ids this persona acts THROUGH — the logged-in browser accounts (and, later, the credential
+    /* The capability ids this persona acts THROUGH, the logged-in browser accounts (and, later, the credential
      * connectors) that are its hands. Ids rather than platforms, because "two accounts of one site" is the whole
      * problem: `reddit-work` and `reddit-personal` are two capabilities and exactly one of them belongs here.
      *
-     * An id naming a capability that isn't connected is not an error — it is a card describing an account this
+     * An id naming a capability that isn't connected is not an error, it is a card describing an account this
      * sandbox has yet to sign into, which is precisely what a freshly cloned workspace looks like. */
     capabilities: z.array(entryId).max(50),
     /* Which workspace repos prefer this persona, so a chat opened on a project starts with the right chip already
-     * selected. A PREFERENCE, not a fence — the owner's chosen chat default is still "every account" — and it
+     * selected. A PREFERENCE, not a fence, the owner's chosen chat default is still "every account", and it
      * lives on the card rather than in each project's own config so that one account named by three repos stays
      * one definition instead of three that drift. */
     repos: z.array(z.string().min(1)).max(50).optional(),
@@ -3820,7 +3820,7 @@ export const PersonaSchema = z.object({
     // workspace, so a card written before these existed keeps behaving exactly as it did.
     powers: PersonaPowersSchema.optional(),
     workspace: PersonaWorkspaceSchema.optional(),
-    /* WHICH SYSTEM PROMPT A SESSION WEARING THIS CARD RUNS ON — the same three bases the sandbox chooses
+    /* WHICH SYSTEM PROMPT A SESSION WEARING THIS CARD RUNS ON, the same three bases the sandbox chooses
      * between, asked per card. ABSENT is the fourth answer and the default: follow the sandbox, which is what
      * every card meant before this field existed and what almost every card will go on meaning.
      *
@@ -3830,7 +3830,7 @@ export const PersonaSchema = z.object({
      * THE TEXT IS NOT HERE. Under "custom" it is `PROMPT.md` in the card's own kit folder
      * (personas/persona-kit.ts), for two reasons that point the same way: a system prompt is prose, and prose
      * belongs in a file where it diffs line by line rather than as one escaped string inside a record nobody
-     * writes by hand — and the kit is already where that persona's skills and tools live, so there is one folder
+     * writes by hand, and the kit is already where that persona's skills and tools live, so there is one folder
      * to look in rather than a field here and a directory there.
      *
      * "custom" with no PROMPT.md written yet falls back to the sandbox's answer rather than running the turn on
@@ -3840,21 +3840,21 @@ export const PersonaSchema = z.object({
 });
 export type Persona = z.infer<typeof PersonaSchema>;
 
-/* THE ONE CARD ID THE PRODUCT NAMES ITSELF — the read-only persona a public web chat answers through.
+/* THE ONE CARD ID THE PRODUCT NAMES ITSELF, the read-only persona a public web chat answers through.
  *
  * Nothing else is stock: a fresh workspace has no personas at all, and every card on the Personas page is one
  * the owner wrote. This id is the exception because a Front Desk is driven by a stranger with nobody watching, so
- * it is the one wake whose bounds cannot be left to the prompt's wording — the daemon writes the card the moment
+ * it is the one wake whose bounds cannot be left to the prompt's wording, the daemon writes the card the moment
  * a Front Desk is saved (personas/front-desk.ts) and the automations form fills a blank Front Desk persona with it.
  *
  * It lives HERE because those two are in different packages and must agree exactly. A literal in each would
  * drift into a Front Desk pinned to a card nobody creates, and turnPersona answers a missing card by denying
- * everything — a public chat that cannot even read, which is safe and useless.
+ * everything, a public chat that cannot even read, which is safe and useless.
  *
  * It is FRONT DESK and not "visitor": the card is who answers the people who arrive, not the person arriving. */
 export const FRONT_DESK_PERSONA = "front-desk";
 
-/* HOW BOUNDED A CARD IS, in one phrase — for the row badge on the Personas page and for the sentence under the
+/* HOW BOUNDED A CARD IS, in one phrase, for the row badge on the Personas page and for the sentence under the
  * automations composer's persona picker.
  *
  * It lives in the contract rather than in either surface because those two are in different packages and would
@@ -3864,7 +3864,7 @@ export const FRONT_DESK_PERSONA = "front-desk";
  *
  * TWO NAMED SHAPES AND THEN A COUNT. "Read-only" and "no shell" are the two people actually reach for, so they
  * get words; everything else gets a number, because listing four switched-off shelves in a badge produces a line
- * nobody reads and buries the one fact that matters — that this card is limited at all. */
+ * nobody reads and buries the one fact that matters, that this card is limited at all. */
 export const personaBounds = (persona: Persona): string => {
     const powers = persona.powers;
     if (powers === undefined) {
@@ -3895,18 +3895,18 @@ export const PersonaIdParamSchema = z.object({ id: entryId });
 /* Every persona, plus which of the accounts they name this sandbox is actually signed into. The second half is
  * what makes the list honest on a freshly cloned workspace: every card is present and most of them cannot act
  * yet, and a surface that showed only the cards would present a persona that is one login away from working as
- * though it already did. Ids the manifest has no capability for at all are `connected: false` too — a card may
+ * though it already did. Ids the manifest has no capability for at all are `connected: false` too, a card may
  * name an account nobody has added here. */
 export const PersonasListSchema = z.object({
     personas: z.array(PersonaSchema),
     connected: z.array(z.string()),
 });
 
-/* A PERSONA'S KIT, as one read — the prompt it runs on and the skills it carries.
+/* A PERSONA'S KIT, as one read, the prompt it runs on and the skills it carries.
  *
  * ONE ROUTE FOR BOTH because they are one folder and one screen: the card's editor draws them together, and two
  * requests to render one section is two chances for it to arrive half-drawn. The skills come back as name and
- * description only, for the same reason the sandbox's own skill list does — a body runs to thousands of words
+ * description only, for the same reason the sandbox's own skill list does, a body runs to thousands of words
  * and a group of one-line rows should not cost a hundred kilobytes to draw.
  *
  * An empty prompt is a card with no PROMPT.md, which is every card until somebody writes one. It is "" rather
@@ -3920,11 +3920,11 @@ export type PersonaKit = z.infer<typeof PersonaKitSchema>;
 export const PersonaPromptSchema = PersonaIdParamSchema.extend({ prompt: z.string().max(20000) });
 export const PersonaSkillSchema = PersonaIdParamSchema.extend(SkillDraftSchema.shape);
 export const PersonaSkillNameSchema = PersonaIdParamSchema.extend({ name: SkillNameSchema });
-// One kit skill's instructions, for editing it — the same split the sandbox's own skills make between a listing
+// One kit skill's instructions, for editing it, the same split the sandbox's own skills make between a listing
 // and a body, and for the same reason.
 export const PersonaSkillBodySchema = z.object({ name: z.string(), description: z.string(), body: z.string() });
 
-/* `code` is a credential the owner has to TYPE SOMEWHERE ELSE to finish this connection — WhatsApp's
+/* `code` is a credential the owner has to TYPE SOMEWHERE ELSE to finish this connection. WhatsApp's
  * link-a-device code, typed into the phone. It is not part of `detail` because the card does not merely print
  * it: it sets it in a size you can read across a desk, next to a copy button, and replaces it in place when the
  * provider mints a new one. A sentence with a code buried in it cannot be any of those things. */
@@ -3936,7 +3936,7 @@ export const CapabilityStatusSchema = z.object({
 export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
 /* The list row: manifest entry + live status. Secrets are never returned (an mcp token becomes hasToken).
  *
- * `secrets` NAMES them without carrying them — the config keys this connection is actually holding a credential
+ * `secrets` NAMES them without carrying them, the config keys this connection is actually holding a credential
  * under. It is what makes an edit form possible at all: `config` is everything the browser may see, so a form
  * seeded from it alone cannot tell "this tunnel has a pre-shared key I'm not allowed to show you" from "this
  * tunnel has no pre-shared key", and both render as an empty required box. Saving one then wipes the
@@ -3944,7 +3944,7 @@ export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
  *
  * Keys, never values, and never a boolean per known field: the set is derived from what the entry stores, so a
  * field the user left blank is absent and a card that gained a credential since is present. The form reads it as
- * "show dots, and let blank mean keep" (VAULTED — capability-secrets.ts). */
+ * "show dots, and let blank mean keep" (VAULTED, capability-secrets.ts). */
 export const CapabilitySummarySchema = z.object({
     id: z.string(),
     kind: CapabilityKindSchema,
@@ -3954,21 +3954,21 @@ export const CapabilitySummarySchema = z.object({
     // fail the whole list parse against a sandbox predating this, taking the page down to hide some dots.
     secrets: z.array(z.string()).default([]),
 });
-/* A capability the WORKSPACE asks for but the manifest doesn't carry — derived from what is checked out under
+/* A capability the WORKSPACE asks for but the manifest doesn't carry, derived from what is checked out under
  * /work, not from anything the user configured. It exists because the failures it prevents are illegible: a
  * compose-backed dev database (`pnpm db:up`) dies on a missing /var/run/docker.sock, and nothing on that error
  * points at the one-time privileged rebuild that fixes it; a workspace full of GitHub repos gets an agent that
  * cannot read one issue until somebody thinks to go looking for the card.
  *
  * KEYED BY CATALOG CARD, NOT BY KIND, because github, gitlab, komodo and every other connector share the single
- * `cli` kind — a kind cannot say which card to open, and matching on one badged all of them at once.
+ * `cli` kind, a kind cannot say which card to open, and matching on one badged all of them at once.
  *
- * WHAT IS STORED IS WHAT WAS SEEN. `evidence` is the artifact itself — a workspace-relative path, a git remote —
+ * WHAT IS STORED IS WHAT WAS SEEN. `evidence` is the artifact itself, a workspace-relative path, a git remote,
  * rendered verbatim so the claim is checkable rather than believed, and `reason` is the same claim in the user's
  * words with the evidence NOT repeated into it. A recommendation is re-derived on every read rather than
  * remembered, so one whose evidence has since moved simply stops being made.
  *
- * `prefill` is the non-secret config the scan could read (a self-hosted instance url, a Komodo core) — it fills
+ * `prefill` is the non-secret config the scan could read (a self-hosted instance url, a Komodo core), it fills
  * the card's form so the user supplies only the credential. Secrets are NEVER in here, even when one is sitting
  * in a checked-in file: the flow points at such a file as evidence, it does not absorb what is in it. */
 export const CapabilityRecommendationSchema = z.object({
@@ -3981,12 +3981,12 @@ export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSc
 export const CapabilitiesListSchema = z.object({
     capabilities: z.array(CapabilitySummarySchema),
     // Defaulted for the daemon-older-than-browser seam: the platform's web app talks to whichever sandbox
-    // version the user has, and a required field here would fail the parse — taking the whole Capabilities page
+    // version the user has, and a required field here would fail the parse, taking the whole Capabilities page
     // down on every sandbox predating this route, to hide a badge.
     recommendations: z.array(CapabilityRecommendationSchema).default([]),
 });
 export const CapabilityIdParamSchema = z.object({ id: z.string() });
-/* One capability's config VERBATIM — secrets included — for the connection route (capabilities.connection).
+/* One capability's config VERBATIM, secrets included, for the connection route (capabilities.connection).
  * The one read on this surface that does not echo secrets as hasToken booleans, which is exactly why it is
  * never served to a browser: its handler refuses any caller with a member identity, leaving only the daemon's
  * header grants (an extension backend's minted token, which must declare the route in permissions.daemon).
@@ -3999,15 +3999,15 @@ export const CapabilityConnectionSchema = z.object({
 export type CapabilityConnection = z.infer<typeof CapabilityConnectionSchema>;
 // DELETE /capabilities/recommendations/{card}: the user said this one is not wanted. The EVIDENCE it was
 // declined against is recorded daemon-side rather than sent, so the client cannot dismiss a claim other than the
-// one it was shown — and so the recommendation comes back by itself when the workspace changes under it.
+// one it was shown, and so the recommendation comes back by itself when the workspace changes under it.
 export const CapabilityCardParamSchema = z.object({ card: z.string() });
 // POST /capabilities/{id}/secret body: replace just the capability's secret field (its key is per-kind, see the
-// sandbox's secretField) and re-run its idempotent apply — the /secrets page's edit path.
+// sandbox's secretField) and re-run its idempotent apply, the /secrets page's edit path.
 export const CapabilitySecretInputSchema = z.object({ id: z.string(), value: z.string().min(1) });
 /* POST /capabilities/{id}/rename body: the name this connection should answer to from now on.
  *
- * A capability's id IS the agent's handle for it — its skill file, its tool prefix, its env suffix, the alias
- * `ssh <name>` resolves — so renaming one is a migration and not a label edit. The shape of a name is therefore
+ * A capability's id IS the agent's handle for it, its skill file, its tool prefix, its env suffix, the alias
+ * `ssh <name>` resolves, so renaming one is a migration and not a label edit. The shape of a name is therefore
  * the same rule the add form enforces, spelled here because the daemon is the gate: letters and digits to start,
  * then hyphens and underscores. Which KINDS may be renamed at all is the handler's own answer (capability.ts
  * `rename`), not something a schema can say. */
@@ -4022,7 +4022,7 @@ export const CapabilityRenameSchema = z.object({
 // POST /capabilities/{id}/login response: the interactive tmux session running the agent's loginCommand,
 // which the web surfaces in the terminal panel for the user to complete the sign-in.
 export const CapabilityLoginSchema = z.object({ session: z.string() });
-// GET /capabilities/{id}/otp response: one freshly minted TOTP code off the capability's stored seed — what the
+// GET /capabilities/{id}/otp response: one freshly minted TOTP code off the capability's stored seed, what the
 // in-sandbox `otp` command prints. The seed itself never crosses; secondsRemaining is the caller's cue to
 // re-mint rather than submit a code about to die.
 export const CapabilityOtpSchema = z.object({ code: z.string(), secondsRemaining: z.number() });
@@ -4037,20 +4037,20 @@ export const CapabilityOtpSchema = z.object({ code: z.string(), secondsRemaining
 // reconnects). It is the difference between an agent guessing what is on the box and knowing: the SKILL pack
 // tells it HOW to drive Windows, this tells it WHICH Windows this is.
 export const HostFactsSchema = z.object({
-    // The OS's own name for itself — "Windows 11 Pro 24H2", "Ubuntu 24.04.1 LTS".
+    // The OS's own name for itself, "Windows 11 Pro 24H2", "Ubuntu 24.04.1 LTS".
     os: z.string(),
     arch: z.string(),
     // The shell run_command actually spawns, so the agent writes for the right one from its first command.
     shell: z.string(),
     // The machine's home directory, and the default root when the capability declares none.
     home: z.string(),
-    // Roots in force right now (the capability's `roots`, or [home]) — the agent sees its own boundary.
+    // Roots in force right now (the capability's `roots`, or [home]), the agent sees its own boundary.
     roots: z.array(z.string()),
 });
 export type HostFacts = z.infer<typeof HostFactsSchema>;
 
 export const HostSummarySchema = z.object({
-    // The capability id — the machine's name, and the prefix of its tools (mcp__<id>__run_command).
+    // The capability id, the machine's name, and the prefix of its tools (mcp__<id>__run_command).
     id: z.string(),
     platform: z.string().min(1),
     online: z.boolean(),
@@ -4058,7 +4058,7 @@ export const HostSummarySchema = z.object({
     // a tool. Absent until the machine has connected once.
     version: z.string().optional(),
     // Epoch ms of the last time this machine held a socket. Absent ⇒ it has not connected since this daemon
-    // booted — liveness is a fact about a socket, so a restart forgets it rather than claiming stale uptime.
+    // booted, liveness is a fact about a socket, so a restart forgets it rather than claiming stale uptime.
     lastSeen: z.number().optional(),
     facts: HostFactsSchema.optional(),
 });
@@ -4067,7 +4067,7 @@ export const HostsListSchema = z.object({ hosts: z.array(HostSummarySchema) });
 
 // ---- vpn: live tunnel state + connect/disconnect ----
 // The manifest says which VPNs EXIST; this says which are UP right now. Every field is read back from the OS
-// (wg show / ip / openconnect's pidfile / swanctl), never remembered by the daemon — so a tunnel the agent
+// (wg show / ip / openconnect's pidfile / swanctl), never remembered by the daemon, so a tunnel the agent
 // dropped from a shell and one the UI dropped read identically, and a daemon restart loses nothing.
 
 export const VpnStateSchema = z.enum([
@@ -4075,7 +4075,7 @@ export const VpnStateSchema = z.enum([
     "connected",
     // Dialling: openconnect authenticated but the interface has no address yet, or strongSwan is negotiating.
     "connecting",
-    // Configured and idle — the normal resting state for a tunnel nobody asked for.
+    // Configured and idle, the normal resting state for a tunnel nobody asked for.
     "disconnected",
     // The tunnel's client isn't installed yet: the capability's image fragment needs an owner-run rebuild.
     "unavailable",
@@ -4088,18 +4088,18 @@ export const VpnLinkSchema = z.object({
     id: z.string(),
     provider: VpnProviderSchema,
     state: VpnStateSchema,
-    // The gateway this tunnel dials — host:port for fortinet, the [Peer] endpoint for wireguard, the IKE peer
+    // The gateway this tunnel dials, host:port for fortinet, the [Peer] endpoint for wireguard, the IKE peer
     // for ipsec. Display only; never a secret.
     gateway: z.string().optional(),
     // The tun/wg interface carrying the tunnel, once it exists.
     interface: z.string().optional(),
-    // The address the gateway assigned this sandbox — the single most useful "am I on the VPN?" fact.
+    // The address the gateway assigned this sandbox, the single most useful "am I on the VPN?" fact.
     address: z.string().optional(),
     // The CIDRs routed into the tunnel ("0.0.0.0/0" = full tunnel). Empty until the link is up.
     routes: z.array(z.string()).default([]),
     // DNS servers the tunnel pushed, when it pushed any.
     dns: z.array(z.string()).default([]),
-    // Epoch ms the link came up — the UI renders "connected 14m ago". Absent unless connected.
+    // Epoch ms the link came up, the UI renders "connected 14m ago". Absent unless connected.
     since: z.number().optional(),
     // Whether the daemon re-dials this tunnel on boot (the manifest's autoConnect).
     autoConnect: z.boolean(),
@@ -4109,14 +4109,14 @@ export const VpnLinkSchema = z.object({
 export type VpnLink = z.infer<typeof VpnLinkSchema>;
 export const VpnListSchema = z.object({ links: z.array(VpnLinkSchema) });
 
-// POST /vpn/{id}/connect body. `otp` is a one-time 2FA code, supplied per dial and NEVER stored — a FortiGate
+// POST /vpn/{id}/connect body. `otp` is a one-time 2FA code, supplied per dial and NEVER stored, a FortiGate
 // with token auth rejects the dial without it, and the daemon surfaces that as a retry-with-a-code error.
 export const VpnConnectInputSchema = z.object({ id: z.string(), otp: z.string().min(1).optional() });
 export const VpnIdParamSchema = z.object({ id: z.string() });
 
 // POST /vpn/import-forticlient: parse an exported FortiClient configuration (the XML FortiClient writes from
 // File → Settings → Backup) into addable connections. Credentials in that file are wrapped in FortiClient's
-// proprietary "EncX …" encryption, which is NOT reversible here — so a parsed connection carries the endpoint
+// proprietary "EncX …" encryption, which is NOT reversible here, so a parsed connection carries the endpoint
 // and, when it was stored in the clear, the username; the password is always typed by the user afterwards.
 export const ForticlientImportInputSchema = z.object({ xml: z.string().min(1) });
 export const ForticlientConnectionSchema = z.object({
@@ -4133,7 +4133,7 @@ export const ForticlientConnectionSchema = z.object({
     // ipsec-only, and only when the file stored them in the clear.
     localId: z.string().optional(),
     aggressive: z.boolean().optional(),
-    // Phase-2 settings, read from <ipsec_settings> — the pair that decides whether quick mode can succeed.
+    // Phase-2 settings, read from <ipsec_settings>, the pair that decides whether quick mode can succeed.
     pfs: z.boolean().optional(),
     dhGroup: z.string().optional(),
     // What the user still has to supply for this connection to dial (always at least the password).
@@ -4142,21 +4142,21 @@ export const ForticlientConnectionSchema = z.object({
 export type ForticlientConnection = z.infer<typeof ForticlientConnectionSchema>;
 export const ForticlientImportSchema = z.object({ connections: z.array(ForticlientConnectionSchema) });
 
-// Browse an extension/plugin registry (a git repo with .claude-plugin/marketplace.json — see
+// Browse an extension/plugin registry (a git repo with .claude-plugin/marketplace.json, see
 // @intentic/registry for the format). POST so the optional token for a private registry never rides a URL or
 // an access log.
 export const MarketplaceRequestSchema = z.object({ url: z.url(), token: z.string().min(1).optional() });
-// The rows are RegistryEntry — the curated decision joined to the resolved pointer and the scanner's upstream
+// The rows are RegistryEntry, the curated decision joined to the resolved pointer and the scanner's upstream
 // facts, exactly as the site's gallery renders them, so browsing in the app and browsing the web show one list.
 export const MarketplaceSchema = z.object({ name: z.string(), plugins: z.array(RegistryEntrySchema) });
 export type Marketplace = z.infer<typeof MarketplaceSchema>;
 
 // ---- extensions: installed extension-kind capabilities resolved to their manifests ----
-// What the web extension host boots from: each row is an extension capability whose checkout still parses —
+// What the web extension host boots from: each row is an extension capability whose checkout still parses,
 // the approved manifest (contribution declarations), and the checked-out commit (the code identity; the bundle
 // route's ETag). A rotted checkout is skipped here; its capability row still shows status.
 // The routing handle: a git-installed extension uses its capability entry id; an image-baked one has no
-// capability entry and is addressed by the manifest-derived publisher.name — hence the dot in the pattern.
+// capability entry and is addressed by the manifest-derived publisher.name, hence the dot in the pattern.
 const extensionId = z
     .string()
     .min(1)
@@ -4165,9 +4165,9 @@ const extensionId = z
 
 // ---- extension updates: what the registry check found, and what the owner decided to do about such findings ----
 
-// The owner's per-extension update posture. `updates` is the ladder: `notify` (badge and wait — the default),
+// The owner's per-extension update posture. `updates` is the ladder: `notify` (badge and wait, the default),
 // `agent` (the discovery also prepares an agent diff-read of the new sha), `auto` (apply unattended, but only
-// a verified listing whose powers didn't grow, health-watched with auto-revert — anything less falls back to
+// a verified listing whose powers didn't grow, health-watched with auto-revert, anything less falls back to
 // notify). `advisories` is separate because its safe direction is the opposite: disabling runs no new code, so
 // `auto-disable` is the default and `notify` is the opt-out.
 export const ExtensionUpdatePolicySchema = z.object({
@@ -4176,7 +4176,7 @@ export const ExtensionUpdatePolicySchema = z.object({
 });
 export type ExtensionUpdatePolicy = z.infer<typeof ExtensionUpdatePolicySchema>;
 
-// A newer sha the registry lists for an installed extension — the "update available" badge's substance. The
+// A newer sha the registry lists for an installed extension, the "update available" badge's substance. The
 // pointer (url/path) rides along because updating follows the ROW as it stands now, not the install as it was.
 export const ExtensionUpdateSchema = z.object({
     ref: z.string(),
@@ -4184,12 +4184,12 @@ export const ExtensionUpdateSchema = z.object({
     url: z.string(),
     path: z.string().optional(),
     trust: z.enum(["verified", "listed"]),
-    // The listing says this release fixes a security problem in earlier ones — the badge goes loud, because
+    // The listing says this release fixes a security problem in earlier ones, the badge goes loud, because
     // here the OLD version is the dangerous one.
     securityFix: z.boolean().optional(),
     registry: z.string(),
     at: z.string(),
-    // Why the auto rung refused this one and fell back to notify ("powers grew", "not verified") — the card
+    // Why the auto rung refused this one and fell back to notify ("powers grew", "not verified"), the card
     // leads with it so the owner knows the click is theirs for a reason.
     needsReview: z.string().optional(),
     // The agent-prepared rung's work: the conversation where the owner's agent already read the diff between
@@ -4199,7 +4199,7 @@ export const ExtensionUpdateSchema = z.object({
 export type ExtensionUpdate = z.infer<typeof ExtensionUpdateSchema>;
 
 // The registry blocked this installed extension's listing. Delisting protects people browsing; this record is
-// for the person already running it — the reason verbatim, and whether the daemon already pulled the switch.
+// for the person already running it, the reason verbatim, and whether the daemon already pulled the switch.
 export const ExtensionAdvisorySchema = z.object({
     reason: z.string(),
     registry: z.string(),
@@ -4210,7 +4210,7 @@ export type ExtensionAdvisory = z.infer<typeof ExtensionAdvisorySchema>;
 
 // The post-update watch: validation catches broken, not wrong, so for a minute after a swap the daemon checks
 // that what the new version declared actually came up (autoStart processes running, backend activated).
-// `fromRef` is the sha the kept-previous checkout holds — what a revert returns to.
+// `fromRef` is the sha the kept-previous checkout holds, what a revert returns to.
 export const ExtensionHealthSchema = z.object({
     state: z.enum(["watching", "healthy", "unhealthy"]),
     detail: z.string().optional(),
@@ -4222,13 +4222,13 @@ export const ExtensionHealthSchema = z.object({
 });
 export type ExtensionHealth = z.infer<typeof ExtensionHealthSchema>;
 
-// The mechanical comparison of two manifests' declared reach (extension-manifest's diffPowers) — plain
+// The mechanical comparison of two manifests' declared reach (extension-manifest's diffPowers), plain
 // sentences, so the update dialog renders exactly what approval is being asked to cover.
 export const PowersDiffSchema = z.object({ added: z.array(z.string()), removed: z.array(z.string()), unchanged: z.array(z.string()) });
 export type PowersDiff = z.infer<typeof PowersDiffSchema>;
 
 // What an owner reads before clicking Update: the offered sha's manifest folded to the version story, the
-// engines verdict, and the powers diff against the installed manifest. `ref` optional on the way in — absent
+// engines verdict, and the powers diff against the installed manifest. `ref` optional on the way in, absent
 // means "the update the check recorded", which is the only caller most of the time.
 export const ExtensionUpdateActionSchema = z.object({
     id: extensionId,
@@ -4259,18 +4259,18 @@ export const ExtensionSummarySchema = z.object({
     id: extensionId,
     manifest: ExtensionManifestSchema,
     commit: z.string(),
-    /* Where the code comes from — which is also what the web varies per row: `builtin` (image-baked, no git
+    /* Where the code comes from, which is also what the web varies per row: `builtin` (image-baked, no git
      * checkout, not removable) hides the uninstall affordance, `installed` (a git capability) shows the pinned
-     * commit, `workspace` (a directory under .intentic/config/workspace-extensions/, created and edited in place —
+     * commit, `workspace` (a directory under .intentic/config/workspace-extensions/, created and edited in place,
      * typically by an agent) is "uninstalled" by deleting its directory. */
     source: z.enum(["builtin", "installed", "workspace"]),
-    // The owner's switch (.intentic/config/extension-enablement.json). A disabled extension is still listed — that's
-    // what makes it switchable back on — but the daemon wires none of its contributions up and the web host
+    // The owner's switch (.intentic/config/extension-enablement.json). A disabled extension is still listed, that's
+    // what makes it switchable back on, but the daemon wires none of its contributions up and the web host
     // doesn't activate it.
     enabled: z.boolean(),
-    /* THE SWITCH IS FIXED ON — this extension is the only control surface for an engine the daemon runs
+    /* THE SWITCH IS FIXED ON, this extension is the only control surface for an engine the daemon runs
      * regardless. The automations scheduler fires turns on a clock whether or not anything draws them, and
-     * hiding the one page that can see, stop or approve those fires would not stop the spend — it would only
+     * hiding the one page that can see, stop or approve those fires would not stop the spend, it would only
      * remove the owner's ability to notice it. So the daemon refuses the flip, and the tab draws the switch as
      * fixed with this fact as the reason.
      *
@@ -4286,8 +4286,8 @@ export const ExtensionSummarySchema = z.object({
     usage: z.record(z.string(), z.object({ calls: z.number().int().nonnegative(), last: z.string() })).optional(),
     /* The BACKEND half's state, present only for an extension whose manifest ships a `server` bundle: what the
      * daemon's backend host reports for it (running / an activation error with its message), or what only the
-     * daemon can know (absent — the code is not in this image; incompatible — its engines exclude this daemon;
-     * starting/stopped — the host itself is between states). The tab renders it beside the row so a backend
+     * daemon can know (absent, the code is not in this image; incompatible, its engines exclude this daemon;
+     * starting/stopped, the host itself is between states). The tab renders it beside the row so a backend
      * that failed to activate is a sentence, not a namespace that 404s. */
     backend: z
         .object({
@@ -4295,7 +4295,7 @@ export const ExtensionSummarySchema = z.object({
             detail: z.string().optional(),
         })
         .optional(),
-    /* The update lifecycle, present only where it can exist — a git-installed extension. `update` is the badge,
+    /* The update lifecycle, present only where it can exist, a git-installed extension. `update` is the badge,
      * `advisory` the alarm, `health` the after-the-click watch, `previous` the way back (the kept one-back
      * checkout's sha), `updatePolicy` the owner's standing answer. A builtin updates with the image and a
      * workspace one is live-edited, so all five stay absent for them. */
@@ -4308,18 +4308,18 @@ export const ExtensionSummarySchema = z.object({
 export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
 // A workspace-extension directory that failed to enumerate, and why. Its only feedback channel: there is no
 // install moment to reject a bad manifest, so the parse failure (or id collision) rides the list instead of
-// silently dropping the row — the Extensions tab renders it, and an authoring agent reads it off GET /extensions.
+// silently dropping the row, the Extensions tab renders it, and an authoring agent reads it off GET /extensions.
 export const InvalidWorkspaceExtensionSchema = z.object({ dir: z.string(), error: z.string() });
 export type InvalidWorkspaceExtension = z.infer<typeof InvalidWorkspaceExtensionSchema>;
 export const ExtensionsListSchema = z.object({
     extensions: z.array(ExtensionSummarySchema),
     invalid: z.array(InvalidWorkspaceExtensionSchema),
-    // When the registry comparison last ran — absent until the first check completes. Serving it on the list is
+    // When the registry comparison last ran, absent until the first check completes. Serving it on the list is
     // what lets the tab say "checked an hour ago" instead of presenting staleness as certainty.
     updatesCheckedAt: z.string().optional(),
 });
 // The extension's contributes.settings values, persisted daemon-side (.intentic/config/extension-settings.json) keyed
-// by the manifest-derived extension id — the checkout stays pristine, so a re-clone update never loses them.
+// by the manifest-derived extension id, the checkout stays pristine, so a re-clone update never loses them.
 // Secret-marked values are stripped from `settings`; `secretsSet` lists the secret keys that DO hold a value,
 // so the UI renders "•••• (set)" without ever receiving the secret back.
 export const ExtensionSettingsSchema = z.object({
@@ -4332,10 +4332,10 @@ export const ExtensionSettingsInputSchema = z.object({
     settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 // Flip one extension on or off. Persisted by publisher.name (like settings), so the choice outlives the
-// checkout; the daemon's immediate half of the flip — declared processes — converges in the same handler.
+// checkout; the daemon's immediate half of the flip, declared processes, converges in the same handler.
 export const ExtensionEnabledInputSchema = z.object({ id: z.string(), enabled: z.boolean() });
 /* Create a workspace extension: the identity, and deliberately nothing else. What gets written is the daemon's
- * decision, not a form the author fills in — the point of the action is that a running extension exists a second
+ * decision, not a form the author fills in, the point of the action is that a running extension exists a second
  * after it is asked for, and shaping it happens by editing the files it wrote (or by asking an agent to). The two
  * slugs are the same shape the manifest schema demands, checked again here because `name` becomes a directory. */
 export const WorkspaceExtensionCreateSchema = z.object({
@@ -4344,12 +4344,12 @@ export const WorkspaceExtensionCreateSchema = z.object({
 });
 // Where it landed. `dir` is workspace-root-relative so the caller can name the files it should open next.
 export const WorkspaceExtensionCreatedSchema = z.object({ id: z.string(), dir: z.string() });
-/* A batch of calls the host observed against this extension's declared routes — entry → how many since the last
+/* A batch of calls the host observed against this extension's declared routes, entry → how many since the last
  * report. Counts rather than events, and declared entries rather than concrete paths, because the question the
  * ledger answers is "is this permission earned?": a finer record would be a log of what the owner was doing,
  * indexed by extension, which is not a thing this product should be accumulating to answer it. */
 export const ExtensionUsageInputSchema = z.object({ id: z.string(), used: z.record(z.string(), z.number().int().positive()) });
-// One declared background process (contributes.processes) — status/start/stop, addressed by the capability
+// One declared background process (contributes.processes), status/start/stop, addressed by the capability
 // entry id + the manifest's process name. Undeclared names are NOT_FOUND, the manifest-honesty rule again.
 export const ExtensionProcessParamSchema = z.object({ id: z.string(), name: z.string() });
 export const ExtensionProcessStatusSchema = z.object({
@@ -4366,40 +4366,40 @@ export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema
 // then runs one agent turn with the prompt. The manifest is user config; run history is daemon-recorded.
 
 // `schedule` fires on its cron; `event` fires when an external system POSTs /automations/{id}/fire?token=…
-// (a plain Hono route — webhook bodies are arbitrary). The token is the webhook's own auth (senders can't do
-// Google ID tokens): optional on input — the daemon generates one on upsert — and always present in stored and
+// (a plain Hono route, webhook bodies are arbitrary). The token is the webhook's own auth (senders can't do
+// Google ID tokens): optional on input, the daemon generates one on upsert, and always present in stored and
 // listed automations, so the owner's UI can render the copyable URL.
 // `listener` fires from a realtime source's connection to the provider (an extension's gateway process holds
-// it, e.g. Discord) — no cron, no token, never reachable via /fire. channelId narrows to one channel; absent ⇒
+// it, e.g. Discord), no cron, no token, never reachable via /fire. channelId narrows to one channel; absent ⇒
 // every channel the bot can read. eventType narrows to one kind of event (a Discord message, a live voice
 // utterance batch, or a finished voice transcript); absent ⇒ all event kinds the source emits. mentioned
 // narrows message events to those that @mention one of the workspace's bots or reply to a bot's message;
-// absent ⇒ all messages. `provider` and `eventType` are open strings — a realtime source is now extension-
+// absent ⇒ all messages. `provider` and `eventType` are open strings, a realtime source is now extension-
 // declared (contributes.listener), so the daemon validates a listener trigger at upsert against `webchat` ∪ the
 // installed extensions' declared providers/events rather than a hardcoded enum here.
 // `webchat` is the exception: it has no gateway. An embeddable widget POSTs a visitor's message to
 // /webchat/<id>/message and the agent's reply streams back over SSE. Its address is the public automation id, so
-// allowedOrigins (the widget's embed sites) + a per-conversation rate limit are its abuse boundary — no secret
+// allowedOrigins (the widget's embed sites) + a per-conversation rate limit are its abuse boundary, no secret
 // token can live in a browser.
 // `ci` is the other gateway-less source: the daemon's own pipeline receiver (ci/events.ts) dispatches it from a
 // provider webhook, or from the REST poller on a sandbox whose hooks could not be registered. Its channelId is
-// the workspace repo, and `branch` is its SECOND narrowing axis — a fleet pushes a branch per agent, so a
+// the workspace repo, and `branch` is its SECOND narrowing axis, a fleet pushes a branch per agent, so a
 // pipeline trigger that can only say "this repo" says "every agent's every failure".
-// `workspace` fires from the sandbox's OWN codebase instead of the outside world — see WorkspaceEventKindSchema.
+// `workspace` fires from the sandbox's OWN codebase instead of the outside world, see WorkspaceEventKindSchema.
 
 // What the daemon emits as the fleet works, and what a `workspace` trigger names. These are the events a code
 // CHORE runs on (continuous review, post-land checks): the daemon is both producer and consumer, so unlike
-// `event` there is no token and no route — nothing outside the sandbox can reach them.
+// `event` there is no token and no route, nothing outside the sandbox can reach them.
 //
 // The two OVERLAP on the common path: a clean turn auto-lands, firing both. A chore should name exactly one.
 // `turn.settled` fires once per isolated turn whatever its outcome, so it also covers the errored and
-// conflicted turns most worth a second pair of eyes, and it fires while the user is still looking at the diff —
+// conflicted turns most worth a second pair of eyes, and it fires while the user is still looking at the diff,
 // before they decide to land. `agent.landed` fires only when work actually reached the main tree, including an
 // explicit Land from the review panel long after the turn ended.
 //
 // The `deps.*` pair fires from the dependency verifier (workspace/verify-deps.ts) rather than a turn: after a
 // land drifts dependencies, the daemon installs them and runs the tree's own checks, and these are that chain's
-// EDGES — `deps.broken` when the checks go red after a landed change, `deps.fixed` when a later land turns them
+// EDGES, `deps.broken` when the checks go red after a landed change, `deps.fixed` when a later land turns them
 // green again. Edges, not states, on the ci-events precedent (pipeline_broken): a tree that is red and stays
 // red emits nothing, so a fix chore is woken by the breakage, never by the standing colour.
 export const WorkspaceEventKindSchema = z.enum(["turn.settled", "agent.landed", "deps.broken", "deps.fixed"]);
@@ -4408,7 +4408,7 @@ export type WorkspaceEventKind = z.infer<typeof WorkspaceEventKindSchema>;
 // The payload a workspace-triggered wake carries: one JSON object, in $AUTOMATION_PAYLOAD for the guard and
 // appended to the prompt for the turn.
 //
-// `repos` names the change to look at as an OPEN span — `git -C <dir> diff <from>`, with no upper bound. Each
+// `repos` names the change to look at as an OPEN span, `git -C <dir> diff <from>`, with no upper bound. Each
 // `from` is where that repo stood before the turn (its last landed tip, or the base it branched from); the
 // other end is deliberately the working tree rather than a sha, because a turn that ERRORED left its work
 // uncommitted in the worktree and a commit-to-commit span would report it as nothing at all. `dir` is that
@@ -4422,13 +4422,13 @@ export const WorkspaceEventSchema = z.object({
     agentId: z.string(),
     title: z.string().optional(),
     branch: z.string(),
-    // `ready` is a clean turn whose delta was HELD on the branch (auto-land off) — for a chore, the moment
+    // `ready` is a clean turn whose delta was HELD on the branch (auto-land off), for a chore, the moment
     // before the user's deliberate Land, which is exactly when a pre-land review wants to run.
     outcome: z.enum(["landed", "conflict", "ready", "idle", "error"]),
     repos: z.array(z.object({ repo: z.string(), from: z.string(), dir: z.string() })),
     /* The `deps.*` events' own facts, absent on every turn-borne event. What a fix chore needs to start
      * without rediscovering it: which project broke, the exact command that judged it, how it exited, and the
-     * tail of its output — bounded, because the payload rides a prompt and a guard's environment, and the full
+     * tail of its output, bounded, because the payload rides a prompt and a guard's environment, and the full
      * log is one attach away in the project's `--verify` terminal panel. `attempt` counts consecutive red
      * verifies since the last green, so a guard can cap retries in one visible line of shell. */
     deps: z
@@ -4462,17 +4462,17 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
 ]);
 export type Trigger = z.infer<typeof TriggerSchema>;
 
-/* The Front Desk widget's settings — everything about the embeddable chat that isn't the automation's prompt.
+/* The Front Desk widget's settings, everything about the embeddable chat that isn't the automation's prompt.
  * Present only on `webchat` listener automations; the trigger keeps `allowedOrigins` because that one is the
  * admission gate the message route reads, not a rendering choice.
  *
  * Split deliberately into what the WIDGET may read (title/greeting/accent/position/access/googleClientId/
- * turnstileSiteKey — all public by construction, they ship to a stranger's browser) and what only the daemon
+ * turnstileSiteKey, all public by construction, they ship to a stranger's browser) and what only the daemon
  * may read (turnstileSecret). GET /webchat/<id>/config serves the first group by naming it, never by omitting
  * the second: a field added here is invisible to the widget until it is listed there. */
 export const WebchatConfigSchema = z.object({
     // `public` admits anyone; `google` refuses a message that carries no verifiable Google ID token. Absent ⇒
-    // public — a Front Desk with no access setting is the anonymous support box it looks like.
+    // public, a Front Desk with no access setting is the anonymous support box it looks like.
     access: z.enum(["public", "google"]).optional(),
     // Ask an anonymous visitor for a display name before the first message. Cosmetic: the name is typed, so it
     // reaches the model as untrusted `displayName`, never as identity.
@@ -4505,7 +4505,7 @@ export const WebchatConfigSchema = z.object({
      * caps one visitor thread for its lifetime.
      *
      * `dailyMessageMax` absent ⇒ WEBCHAT_DAILY_MAX_DEFAULT, not uncapped. Every message here is an agent turn
-     * billed to the owner, and the per-minute window bounds the RATE without bounding the DAY — twenty a minute,
+     * billed to the owner, and the per-minute window bounds the RATE without bounding the DAY, twenty a minute,
      * sustained, is tens of thousands of turns before anyone notices. A Front Desk nobody configured should not be
      * able to spend that, so the safe number is the one you get for free and the owner raises it deliberately.
      * `conversationMessageMax` stays optional-means-uncapped: it is per visitor thread, which the daily ceiling
@@ -4531,11 +4531,11 @@ export const WEBCHAT_DAILY_MAX_DEFAULT = 200;
 /* ---- the widget wire: three shapes GET /webchat/<id>/config, GET …/challenge and POST …/message speak ----
  *
  * They live here, beside the stored config they derive from, because the Front Desk widget is a SECOND client of
- * this daemon — a bundle running on a stranger's page — and the reason this package exists is that both ends of
+ * this daemon, a bundle running on a stranger's page, and the reason this package exists is that both ends of
  * a wire read one definition. The widget imports these as types only (`import type`), so zod never reaches a
  * visitor's browser. */
 
-// What the widget is told about itself. Fully RESOLVED — every default is applied daemon-side, so the widget
+// What the widget is told about itself. Fully RESOLVED, every default is applied daemon-side, so the widget
 // carries no fallback logic and one place decides what an unset field means. Everything here is public by
 // construction: it ships to any browser that can reach the endpoint from an allowed origin.
 export const WebchatPublicConfigSchema = z.object({
@@ -4559,13 +4559,13 @@ export type WebchatPublicConfig = z.infer<typeof WebchatPublicConfigSchema>;
 export const WebchatChallengeSchema = z.object({ salt: z.string(), difficulty: z.number().int().positive() });
 export type WebchatChallenge = z.infer<typeof WebchatChallengeSchema>;
 
-// One visitor message. `conversationId` is the widget's own localStorage id — it threads the visitor's messages
+// One visitor message. `conversationId` is the widget's own localStorage id, it threads the visitor's messages
 // into ONE sandbox conversation, so it is the thread key, not a secret (anyone can mint one; the origin
 // allowlist, the challenge and the rate limit are the gate).
 export const WebchatMessageSchema = z.object({
     conversationId: z.string().min(1).max(200),
     content: z.string().min(1),
-    // What the visitor TYPED as their name. Never identity — it reaches the model tagged as unverified, and a
+    // What the visitor TYPED as their name. Never identity, it reaches the model tagged as unverified, and a
     // signed-in visitor's verified name comes from the ID token instead.
     displayName: z.string().max(200).optional(),
     // A Google ID token from the site's own client id, verified daemon-side against Google's JWKS.
@@ -4573,7 +4573,7 @@ export const WebchatMessageSchema = z.object({
     // The anti-bot answer, whichever kind the config asked for. Checked once per conversation, not per message.
     turnstileToken: z.string().optional(),
     powNonce: z.string().optional(),
-    // The widget's own transcript, sent ONLY on the first message of a thread — after that the sandbox
+    // The widget's own transcript, sent ONLY on the first message of a thread, after that the sandbox
     // conversation resumes and carries its own context.
     history: z
         .array(z.object({ author: z.string().optional(), content: z.string() }))
@@ -4588,14 +4588,14 @@ export const AutomationSchema = z.object({
     // Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
     guard: z.string().min(1).optional(),
     prompt: z.string().min(1),
-    // The Front Desk widget's settings — `webchat` listener automations only, ignored on every other trigger.
+    // The Front Desk widget's settings, `webchat` listener automations only, ignored on every other trigger.
     webchat: WebchatConfigSchema.optional(),
-    /* NARROW THIS ONE JOB FURTHER than the persona it runs as — raw tool names, and the escape hatch under the
+    /* NARROW THIS ONE JOB FURTHER than the persona it runs as, raw tool names, and the escape hatch under the
      * shelves rather than the way anyone is expected to answer this question.
      *
      * The persona (`actsAs` below) is where a session's toolbox is decided now, because the answer is worth
      * reusing: the same bounds apply to the chat, the workflow and the Front Desk that name the same card. This
-     * stays for the job that needs LESS than its persona allows — and only less, which is a rule the composer
+     * stays for the job that needs LESS than its persona allows, and only less, which is a rule the composer
      * enforces rather than a convention: an edit here can never hand back a shelf the persona switched off. */
     allowedTools: z.array(z.string().min(1)).optional(),
     // Which provider adapter serves the wake; absent ⇒ claude. Same dispatch as a chat turn (AgentTurnSchema.agent).
@@ -4604,17 +4604,17 @@ export const AutomationSchema = z.object({
      * as for a chat turn (AgentTurnSchema.account).
      *
      * An automation needs this more than a chat does, and for a reason a chat never meets: nobody is watching.
-     * A sandbox holds several accounts side by side, and when the first one is out of headroom — or belongs to
-     * an organization that has disabled the plan — every fire of every automation errors against it until a
+     * A sandbox holds several accounts side by side, and when the first one is out of headroom, or belongs to
+     * an organization that has disabled the plan, every fire of every automation errors against it until a
      * human happens to read the row. Pinning the wake to an account that can actually run is the difference
      * between "my nightly sweep is quiet" and a Front Desk that turns visitors away all day. */
     account: z.string().optional(),
-    /* WHICH FACE THE WAKE SHOWS THE OUTSIDE WORLD (AgentTurnSchema.actsAs — read its note for why this is not
+    /* WHICH FACE THE WAKE SHOWS THE OUTSIDE WORLD (AgentTurnSchema.actsAs, read its note for why this is not
      * spelled `account`, which is the field directly above and means who PAYS).
      *
      * Absent ⇒ the wake reaches NO logged-in account at all. That is the one place this whole layer stops being
      * a convenience and becomes a boundary, and it is deliberately the strictest default in the schema: an
-     * automation fires with nobody at the composer, on a prompt that — for a Front Desk — a stranger helped write.
+     * automation fires with nobody at the composer, on a prompt that, for a Front Desk, a stranger helped write.
      * `allowedTools` above already carries this exact reasoning for tools; an unrepeatable public post deserves
      * it at least as much. An automation that genuinely means "post as us" says so, once, in a field a reviewer
      * can see. */
@@ -4623,16 +4623,16 @@ export const AutomationSchema = z.object({
     harness: AgentHarnessSchema.optional(),
     // Which model the wake runs on (see agent-catalog.ts modelsFor); absent ⇒ the provider's default.
     model: z.string().optional(),
-    // When true, a fire doesn't wake the agent — it's held in the approvals queue until the owner approves.
+    // When true, a fire doesn't wake the agent, it's held in the approvals queue until the owner approves.
     requireApproval: z.boolean().optional(),
     /* The middle ground between firing instantly and requiring a click: the fire is held in the same approvals
-     * queue, visibly, and the daemon runs it ITSELF once the hold has elapsed AND no agent turn is live — the
+     * queue, visibly, and the daemon runs it ITSELF once the hold has elapsed AND no agent turn is live, the
      * owner's window to cancel or start it early, with silence as consent. What a fix chore wants: time to see
      * "checks broke, a fix is about to start" without a standing decision to make. `requireApproval` wins when
-     * both are set — an explicit "ask me" must never quietly become "unless I'm slow". */
+     * both are set, an explicit "ask me" must never quietly become "unless I'm slow". */
     holdForSeconds: z.number().optional(),
     // A code CHORE: maintenance of THIS codebase rather than a reaction to the outside world. Purely a
-    // classification — the daemon fires a chore exactly like any other automation — but it cannot be derived
+    // classification, the daemon fires a chore exactly like any other automation, but it cannot be derived
     // from the trigger, which is why it is stored: a nightly `pnpm audit` sweep and a nightly Stripe poll are
     // both `schedule`, and belong on different shelves. Absent ⇒ an ordinary automation.
     chore: z.boolean().optional(),
@@ -4648,34 +4648,34 @@ export const AutomationApprovalSchema = z.object({
     automationId: z.string(),
     // The event/listener payload the wake would have carried; absent for schedule triggers.
     payload: z.string().optional(),
-    // The provenance + title the held wake would have opened its conversation with — snapshotted alongside the
+    // The provenance + title the held wake would have opened its conversation with, snapshotted alongside the
     // payload so an approved external wake surfaces on the fleet exactly as an auto one would have.
     origin: AgentOriginSchema.optional(),
     title: z.string().optional(),
-    /* The CONTINUING THREAD this wake belonged to, when it had one — the conversation the dispatcher had
+    /* The CONTINUING THREAD this wake belonged to, when it had one, the conversation the dispatcher had
      * already opened for it and the provider session that conversation last ran on.
      *
      * Snapshotted for the same reason the payload is, and it is the half that was missing: without it an
      * approved wake fell through to minting a fresh conversation, so a Front Desk visitor's chat became one card
-     * per approved message instead of the single thread the dispatcher had opened for them — a second worktree
+     * per approved message instead of the single thread the dispatcher had opened for them, a second worktree
      * each time, and an agent that met the visitor again on every turn. Absent for a schedule or a webhook,
      * which own no thread. */
     conversationId: z.string().optional(),
     sessionId: z.string().optional(),
     createdAt: z.number(),
-    /* Epoch ms after which the daemon may run this wake itself (a `holdForSeconds` hold) — the countdown the
+    /* Epoch ms after which the daemon may run this wake itself (a `holdForSeconds` hold), the countdown the
      * row renders, and the deadline the scheduler's tick checks against. Absent on a `requireApproval` hold,
      * which only the owner may release. */
     autoRunAt: z.number().optional(),
 });
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
 
-// `rev` is the registry revision this roster was read at — a counter the daemon bumps on every registry change.
+// `rev` is the registry revision this roster was read at, a counter the daemon bumps on every registry change.
 // It is what makes the browser's optimistic writes safe: the fleet is published as full snapshots (last frame
 // wins), so without an ordering stamp a roster READ before a mutation but delivered after it silently puts the
 // mutated agents back. The browser drops any roster older than the newest it has applied, and holds its own
 // pending change until a roster at or past the revision that applied it arrives. See useAgents.ts.
-// `held` is the approvals queue projected onto the board — the wakes waiting at the door, so "needs you" sits
+// `held` is the approvals queue projected onto the board, the wakes waiting at the door, so "needs you" sits
 // beside "running" instead of in a page nobody opens. Defaulted so an older daemon's roster still parses.
 export const AgentsListSchema = z.object({
     agents: z.array(AgentSummarySchema),
@@ -4692,7 +4692,7 @@ export const AutomationRunSchema = z.object({
     // skipped = the guard said no; error = the guard passed but the agent turn surfaced an error; interrupted =
     // the daemon died mid-wake, so the run reached no outcome of its own (see agent/turn-journal.ts). Without
     // that last one an interrupted fire records NOTHING and simply vanishes from the row's history, which reads
-    // as "it never fired" — the one reading a 3 a.m. automation must not be given.
+    // as "it never fired", the one reading a 3 a.m. automation must not be given.
     outcome: z.enum(["completed", "skipped", "error", "interrupted"]),
     detail: z.string().optional(),
     // The stable conversation opened by the wake, so the row can open the provider-neutral agent transcript.
@@ -4714,8 +4714,8 @@ export const AutomationEnabledInputSchema = z.object({ id: z.string(), enabled: 
 /* ---- the automation catalogue: everything that can wake an agent here, and what to start from ----
  *
  * ONE ANSWER TO ONE QUESTION, and that is the whole reason it exists. The composer used to carry a hand-written
- * list of every source and every template — CI, Komodo, Sentry, Stripe, email, the website widget, the chore
- * book — while the daemon's upsert carried a SECOND hand-written list of the providers it would accept. Two
+ * list of every source and every template. CI, Komodo, Sentry, Stripe, email, the website widget, the chore
+ * book, while the daemon's upsert carried a SECOND hand-written list of the providers it would accept. Two
  * lists, edited in different packages, disagreeing was a matter of time; and every area that gained something
  * worth waking on had to edit the automations surface to say so, which is the dependency pointing backwards.
  *
@@ -4723,14 +4723,14 @@ export const AutomationEnabledInputSchema = z.object({ id: z.string(), enabled: 
  * composer draws whatever comes back and knows the name of nothing; `upsert` validates against the same merge.
  * An area gains a trigger by declaring it, and the surface it appears on does not change.
  *
- * WHERE A SOURCE IS DECLARED IS WHERE ITS EVENTS COME FROM — `webchat` and `ci` are the daemon's own (it holds
+ * WHERE A SOURCE IS DECLARED IS WHERE ITS EVENTS COME FROM, `webchat` and `ci` are the daemon's own (it holds
  * the widget endpoint and the pipeline webhook receiver), every other one belongs to the extension whose
  * gateway or backend dispatches it.
  *
  * A TEMPLATE SITS BESIDE THE SOURCE IT FIRES ON, because the source's starter and the template's prompt
  * describe the same payload, and one payload described in two packages is two descriptions to keep in step. A
  * template on the generic `event` webhook has no source to sit beside, so it goes with the pack carrying the
- * capability card it names — which is the same pack the user connected to make it work at all. */
+ * capability card it names, which is the same pack the user connected to make it work at all. */
 
 // A source's per-source narrowing field, as the generic editor draws it. Absent ⇒ the editor offers no such
 // filter rather than inventing one the provider has no meaning for.
@@ -4740,18 +4740,18 @@ export const TriggerSourceSchema = z.object({
     // The slug a listener trigger fires on (Trigger.provider).
     provider: z.string().min(1),
     label: z.string().min(1),
-    // Simple-icons slug, or an app glyph — the same logo/icon split a capability card and an extension mark draw.
+    // Simple-icons slug, or an app glyph, the same logo/icon split a capability card and an extension mark draw.
     logo: z.string().min(1).optional(),
     icon: z.string().min(1).optional(),
     events: z.array(z.object({ value: z.string().min(1), label: z.string().min(1) })),
     channel: TriggerFieldSchema,
-    // A SECOND narrowing axis, for sources whose events carry one — `ci` narrows by git ref as well as by repo.
+    // A SECOND narrowing axis, for sources whose events carry one, `ci` narrows by git ref as well as by repo.
     branchField: TriggerFieldSchema.optional(),
     // Only sources whose `message` events distinguish addressed messages set this; absent ⇒ no mention-only filter.
     mentionLabel: z.string().min(1).optional(),
     // The provider owns the payload vocabulary, so it owns the first prompt that explains that payload.
     starterPrompt: z.string().min(1).optional(),
-    /* Capability providers that make this source WORK — any one of them connected is enough (a CI trigger rides
+    /* Capability providers that make this source WORK, any one of them connected is enough (a CI trigger rides
      * github or gitlab). Empty ⇒ nothing to connect, the source is usable as it stands. Availability is computed
      * in the browser rather than served, because the browser's capability facts are pushed live and a served
      * boolean would be stale between polls. */
@@ -4765,9 +4765,9 @@ export type TriggerSource = z.infer<typeof TriggerSourceSchema>;
 
 /* HOW A TEMPLATE IS OFFERED. Absent ⇒ it lives in the create dialog's gallery, where you go once you know what
  * you want. The two named forms are for what a user would never think to go looking for:
- *   create    — a shelf card on the page that makes the automation in one click, switched off, ready to read.
+ *   create   , a shelf card on the page that makes the automation in one click, switched off, ready to read.
  *               The chores are all of these: upkeep nobody opens an automations page hunting for.
- *   configure — a shelf card that opens the dialog PREFILLED, for a template that cannot work unconfigured (a
+ *   configure, a shelf card that opens the dialog PREFILLED, for a template that cannot work unconfigured (a
  *               Front Desk with no allowed sites admits nobody, and a row that silently does nothing is worse
  *               than a form). */
 export const TemplateOfferSchema = z.enum(["create", "configure"]);
@@ -4786,7 +4786,7 @@ export const AutomationTemplateSchema = z.object({
     // Prefills the countdown hold: each fire waits this long, visibly and cancellably, before starting itself.
     holdForSeconds: z.number().int().positive().optional(),
     prompt: z.string().min(1),
-    // The card's disclosure under the title — "instant", "checks every 5 min", "skips changes under 20 lines".
+    // The card's disclosure under the title, "instant", "checks every 5 min", "skips changes under 20 lines".
     note: z.string().min(1).optional(),
     // Post-save instructions: where to paste the webhook URL this automation just minted.
     setup: z.string().min(1).optional(),
@@ -4794,7 +4794,7 @@ export const AutomationTemplateSchema = z.object({
     // trigger beside it for context.
     description: z.string().min(1).optional(),
     offer: TemplateOfferSchema.optional(),
-    /* WHETHER THE AUTOMATION THIS MAKES WATCHES THIS CODEBASE — the flag the created record stores, which is
+    /* WHETHER THE AUTOMATION THIS MAKES WATCHES THIS CODEBASE, the flag the created record stores, which is
      * what puts its row on the chores shelf rather than among the integrations.
      *
      * Carried rather than inferred from the trigger, because a nightly dependency sweep and a nightly Stripe
@@ -4813,7 +4813,7 @@ export type AutomationCatalog = z.infer<typeof AutomationCatalogSchema>;
 /* THE THIRD DRIVER. An automation answers "run this at 3am", a loop answers "run this until it is done", and a
  * workflow answers "run these, in this order, each handing its result to the next".
  *
- * IT IS A GRAPH OF LOOPS, and that is the whole implementation. A step is not a new kind of execution — it is
+ * IT IS A GRAPH OF LOOPS, and that is the whole implementation. A step is not a new kind of execution, it is
  * a Loop with a declared output and a place in a dependency graph, driven on a conversation of its own. So
  * every step gets the fleet card, the worktree, the transcript, the cost ledger, the Stop button, the stall
  * detector and the spend ceiling without a line of new code, and this file's job is only to say what the steps
@@ -4834,17 +4834,17 @@ const StepIdSchema = z
     .max(24)
     .regex(/^[a-z0-9][a-z0-9-]*$/);
 
-/* HOW A STEP MEETS ITS PREDECESSOR — the fork the whole feature turns on, and the one the user has to choose
+/* HOW A STEP MEETS ITS PREDECESSOR, the fork the whole feature turns on, and the one the user has to choose
  * because neither answer is right twice in a row.
  *
  * `fresh` opens a NEW conversation: its own fleet card, its own session, its own worktree when the run is
  * isolated. What it knows about the step before it is exactly what that step declared as output. This is the
- * only honest way to run a review, an audit or a second opinion — a session that spent nine turns arguing for
+ * only honest way to run a review, an audit or a second opinion, a session that spent nine turns arguing for
  * an approach is the worst available judge of whether that approach worked, and the fix is not a better prompt,
  * it is a different session.
  *
  * `continue` sends the next prompt into the SAME conversation. The model keeps everything it learned, the
- * prefix stays cached, and — when the run is isolated — the work stays in one worktree on one branch, which is
+ * prefix stays cached, and, when the run is isolated, the work stays in one worktree on one branch, which is
  * the only way a chain like implement → test → document can build on itself at all. Requires exactly one
  * predecessor: two upstream sessions cannot both be continued into one.
  */
@@ -4857,13 +4857,13 @@ const WORKFLOW_STEPS_MAX = 24;
 
 export const WorkflowStepSchema = z.object({
     id: StepIdSchema,
-    // What the node says on the graph. Short — the prompt is where the detail goes.
+    // What the node says on the graph. Short, the prompt is where the detail goes.
     title: z.string().min(1).max(60),
     /* What "done" means for this step, in the user's words. Put to the judge, and restated to the model unless
      * its instruction already carries it (loop-brief); it is the sentence the step is measured against.
      *
      * ABSENT ⇒ THE RUN'S OWN REQUEST IS THE GOAL, which is the ordinary case and not the exotic one. A saved
-     * workflow is a SHAPE — "two models on one task" — and for most of its steps the thing being asked for is
+     * workflow is a SHAPE, "two models on one task", and for most of its steps the thing being asked for is
      * whatever the person typed this time. Writing a goal here as well means saying the same thing twice and
      * keeping the two in agreement forever; leaving it out means the step is measured against the request,
      * which is what anyone would have written anyway. Declare one only where the step's bar is genuinely its
@@ -4877,7 +4877,7 @@ export const WorkflowStepSchema = z.object({
      * briefForStep). That is the default because the framing is not free: every heading between the reader's
      * sentence and the model is a chance for the model to answer the frame instead of the question, and a step
      * whose whole job is "do what was asked" has nothing to add to it. A step that DOES declare a prompt is
-     * saying it has a job of its own — review this, merge those — and gets the full brief, request included.
+     * saying it has a job of its own, review this, merge those, and gets the full brief, request included.
      */
     prompt: z.string().min(1).optional(),
     // The steps that must finish before this one starts. Empty ⇒ a root, started when the run starts. The
@@ -4886,7 +4886,7 @@ export const WorkflowStepSchema = z.object({
     handoff: WorkflowHandoffSchema,
     output: LoopOutputSchema,
     checks: z.array(LoopCheckSchema),
-    // How the step's own ITERATIONS meet each other — the Ralph question, one level down from `handoff`. A
+    // How the step's own ITERATIONS meet each other, the Ralph question, one level down from `handoff`. A
     // long-running step wants `fresh` (no context rot); a short refine-this step wants `continue`.
     context: LoopContextSchema,
     /* Iteration/stall limits remain scheduler backstops rather than form questions. Spend is different: it is
@@ -4897,26 +4897,26 @@ export const WorkflowStepSchema = z.object({
     harness: AgentHarnessSchema.optional(),
     account: z.string().optional(),
     model: z.string().optional(),
-    /* Which persona the step acts as — the same field a chat turn and an automation carry (AgentTurnSchema.
+    /* Which persona the step acts as, the same field a chat turn and an automation carry (AgentTurnSchema.
      * actsAs), because a step IS an unattended turn under the loop machinery. Unpinned, a step keeps the
      * strict unattended default: full tools, no logged-in accounts. Pinning a card is how a gated release
-     * check gets a voice, a folder scope, or the one Reddit it is allowed to post from — a decision the owner
+     * check gets a voice, a folder scope, or the one Reddit it is allowed to post from, a decision the owner
      * already wrote down once, on the card. */
     actsAs: entryId.optional(),
 });
 export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
 
-/* THE GATE — how a finished run becomes a release decision, and how a machine with no identity asks for one.
+/* THE GATE, how a finished run becomes a release decision, and how a machine with no identity asks for one.
  *
  * A workflow is a DESIGN; a gate is a PROMISE ABOUT ITS RESULT, and keeping the two separable is the whole
- * point. What a run does — how many sessions, whether they drive a browser, which repos they touch — stays the
+ * point. What a run does, how many sessions, whether they drive a browser, which repos they touch, stays the
  * graph's business, because the value of running a release check this way is that the check is a workflow like
  * any other: an acceptance sweep today, a security review or a performance budget next month, with nothing
  * here ever learning what any of them are.
  *
  * So a gate reads exactly one thing: a named FIELD off a named STEP's declared output (output-fields.ts). That
- * field already exists for precisely the reason this needs it — a declared field is the one part of a session's
- * answer that was VALIDATED rather than parsed back out of the prose the model was talking to a person in —
+ * field already exists for precisely the reason this needs it, a declared field is the one part of a session's
+ * answer that was VALIDATED rather than parsed back out of the prose the model was talking to a person in,
  * and pointing at one is the entire rule.
  */
 export const WorkflowGateSchema = z.object({
@@ -4924,7 +4924,7 @@ export const WorkflowGateSchema = z.object({
     // nothing requires that, and a one-step workflow naming its only step is the common small case.
     step: StepIdSchema,
     // Which of that step's declared fields is read. Checked against what the step actually declares when the
-    // workflow is saved — a gate pointed at a field nobody writes answers `blocked` on every run, forever.
+    // workflow is saved, a gate pointed at a field nobody writes answers `blocked` on every run, forever.
     field: z.string().min(1),
     /* The values of that field that mean SHIP IT. Everything else fails the gate.
      *
@@ -4950,18 +4950,18 @@ export type WorkflowGate = z.infer<typeof WorkflowGateSchema>;
  * rather than count. Twenty is a busy day of merges and a script's first minute. */
 export const GATE_DAILY_MAX_DEFAULT = 20;
 
-/* What a gate answers a pipeline, and the three-way split is load-bearing.
+/* What a gate answers a pipeline, and the three-way split matters.
  *
  * `blocked` exists for the same reason acceptance's verdict has one: "we could not reach a judgment" is not
  * "the product is broken". A gate that reported them the same way would go red for its own outages, and a team
- * that cannot tell the two apart turns the gate off — so `blocked` is meant to be the honest answer far more
+ * that cannot tell the two apart turns the gate off, so `blocked` is meant to be the honest answer far more
  * often than it is the convenient one. It maps to a NEUTRAL pipeline exit, never a failed build.
  */
 export const GateOutcomeSchema = z.enum(["pass", "fail", "blocked"]);
 export type GateOutcome = z.infer<typeof GateOutcomeSchema>;
 
 // What the gate route answers with. `value` is the field as the step actually wrote it, absent when the gate
-// never got one to read — which is every `blocked` that is not a disagreement about the value.
+// never got one to read, which is every `blocked` that is not a disagreement about the value.
 export const GateVerdictSchema = z.object({
     outcome: GateOutcomeSchema,
     // One line: why. Realistically the only part of this a pipeline log will ever show.
@@ -4979,7 +4979,7 @@ export const WorkflowSchema = z.object({
     // Present ⇒ this design can be run by a machine and answers a release decision. Absent ⇒ an ordinary
     // workflow, started by a person from the workflows page, with no public door onto it at all.
     gate: WorkflowGateSchema.optional(),
-    /* EVERY STEP RUNS IN ITS OWN WORKTREE, always, with no toggle — the same thing an isolated agent session
+    /* EVERY STEP RUNS IN ITS OWN WORKTREE, always, with no toggle, the same thing an isolated agent session
      * does, which is what every session in this product already is.
      *
      * It was a per-workflow choice between worktrees and the shared /work tree, and the shared side never
@@ -4989,13 +4989,13 @@ export const WorkflowSchema = z.object({
      * subtle trap is not a setting, it is a mistake waiting for somebody to make it.
      */
     // How many steps may run at once. Bounded because a fan-out of twelve is twelve provider sessions, twelve
-    // worktrees and twelve times the burn rate — and because the machine this runs on is one machine.
+    // worktrees and twelve times the burn rate, and because the machine this runs on is one machine.
     maxParallel: z.number().int().min(1).max(8),
 });
 export type Workflow = z.infer<typeof WorkflowSchema>;
 
-// The rules a graph has to clear before it can be saved or run — the acyclic `needs`, the once-only
-// continuation — are in workflow-faults.ts, because they are about the graph rather than about any field here.
+// The rules a graph has to clear before it can be saved or run, the acyclic `needs`, the once-only
+// continuation, are in workflow-faults.ts, because they are about the graph rather than about any field here.
 
 /* How one step ended. `skipped` is the one that carries information the others cannot: it means the step never
  * ran because something it waited for did not finish, which is why a failed workflow shows one red node and a
@@ -5007,14 +5007,14 @@ export type WorkflowStepState = z.infer<typeof WorkflowStepStateSchema>;
 export const WorkflowStepRunSchema = z.object({
     stepId: StepIdSchema,
     state: WorkflowStepStateSchema,
-    // The conversation this step ran on — derived, and the door from a node on the graph to a real transcript.
+    // The conversation this step ran on, derived, and the door from a node on the graph to a real transcript.
     // Shared with the predecessor when the handoff is `continue`, which is what makes those steps one card.
     conversationId: z.string(),
     startedAt: z.number().optional(),
     endedAt: z.number().optional(),
     iterations: z.number().int().min(0),
     costUsd: z.number().optional(),
-    // How the step's LOOP ended — `exhausted` and `stalled` both land as a `failed` step, and the difference
+    // How the step's LOOP ended, `exhausted` and `stalled` both land as a `failed` step, and the difference
     // between them is the difference between "give it more room" and "more room will not help".
     loopState: LoopStateSchema.optional(),
     detail: z.string().optional(),
@@ -5046,12 +5046,12 @@ export const WorkflowRunSchema = z.object({
      * these exact commits, even if main moves while a wide fan-out is still opening worktrees. Handoffs use the
      * same bases in their diff commands, so provenance works in nested repositories as well as at root. */
     repos: z.array(RepoBaseSchema).min(1).max(50),
-    /* WHAT THIS RUN WAS ASKED TO DO — the sentence the user typed when they started it, handed to every step
+    /* WHAT THIS RUN WAS ASKED TO DO, the sentence the user typed when they started it, handed to every step
      * on top of its own prompt. Absent for a run started from the workflows page, which has no composer.
      *
      * It is what makes one saved design worth keeping: "two models, one task" is a SHAPE, and the task is
      * different every time. Without this the only way to point a workflow at today's job is to open the
-     * designer and retype a step's prompt, which means the design and the request are the same document —
+     * designer and retype a step's prompt, which means the design and the request are the same document,
      * and editing a graph to ask a question is not something anybody does twice.
      *
      * Snapshotted on the run beside the workflow, and for the same reason: the run has to stay readable, and
@@ -5061,18 +5061,18 @@ export const WorkflowRunSchema = z.object({
     state: WorkflowRunStateSchema,
     startedAt: z.number(),
     endedAt: z.number().optional(),
-    // How many daemon boots have picked this run back up — the same counter, and the same reason, as a loop's.
+    // How many daemon boots have picked this run back up, the same counter, and the same reason, as a loop's.
     resumed: z.number().int().min(0),
     detail: z.string().optional(),
     // One entry per step, in the workflow's own order. Written at start with every step `pending`, so the graph
     // is complete from the first frame and a node's absence never has to mean two things.
     steps: z.array(WorkflowStepRunSchema),
-    /* When the run was ARCHIVED (ms epoch) — off the board, exactly as an agent's `archivedAt` takes a card off
+    /* When the run was ARCHIVED (ms epoch), off the board, exactly as an agent's `archivedAt` takes a card off
      * it, and the same promise: the run record stays readable in the history and every step's branch,
      * transcript and counters are untouched. Absent ⇒ live on the board.
      *
      * A RUN AND ITS STEPS ARCHIVE AS ONE, which is the whole reason this field exists rather than the record
-     * simply being dropped. A run's steps have no card of their own — the run's row is what stands for them —
+     * simply being dropped. A run's steps have no card of their own, the run's row is what stands for them,
      * so deleting the record was releasing five loose conversations back onto the board at the moment the user
      * said they were finished with the job. Archiving the run archives its sessions with it and unarchiving
      * brings both back, so "done with this" means the same thing for a workflow as it does for an agent. */
@@ -5089,7 +5089,7 @@ export const WorkflowRunsListSchema = z.object({ runs: z.array(WorkflowRunSchema
 export const WorkflowIdParamSchema = z.object({ id: z.string() });
 export const WorkflowRunIdParamSchema = z.object({ runId: z.string() });
 /* Starting a run: which design, and what to point it at. The request is optional because the workflows page
- * starts runs with no composer to read one from — a design whose steps already say what they want is complete
+ * starts runs with no composer to read one from, a design whose steps already say what they want is complete
  * on its own, and only a design written as a shape needs today's sentence. */
 export const WorkflowRunStartSchema = WorkflowIdParamSchema.extend({ request: z.string().min(1).max(20_000).optional() });
 
@@ -5102,46 +5102,46 @@ export const WorkflowSaveSchema = z.object({ workflow: WorkflowSchema, create: z
 // The daemon maps each workspace repo to the CI project behind its remote (a connected github/gitlab
 // capability supplies the token), registers a webhook so completed pipelines dispatch `ci` listener
 // automations instantly, and serves the Pipelines rail view from a webhook-freshened cache backfilled over the
-// same REST clients. `host` names WHICH provider API serves a repo; the listener provider is always `ci` — one
+// same REST clients. `host` names WHICH provider API serves a repo; the listener provider is always `ci`, one
 // automation covers both hosts because the repo, not the vendor, is what a trigger narrows to.
 
 export const CiHostSchema = z.enum(["github", "gitlab"]);
 export type CiHost = z.infer<typeof CiHostSchema>;
 
 // Terminal-or-not over both vendors' vocabularies: github's status+conclusion pair and gitlab's single status
-// both collapse onto these five. `running` covers everything non-terminal (queued, manual, preparing …) — the
+// both collapse onto these five. `running` covers everything non-terminal (queued, manual, preparing …), the
 // view only needs "still moving" vs the three ways it stopped.
 export const PipelineStatusSchema = z.enum(["running", "success", "failed", "canceled", "skipped"]);
 export type PipelineStatus = z.infer<typeof PipelineStatusSchema>;
 
 export const PipelineRunSchema = z.object({
-    // The workspace repo dir (the panels `repo` convention) — the join key back to the tree and to triggers.
+    // The workspace repo dir (the panels `repo` convention), the join key back to the tree and to triggers.
     repo: z.string(),
     host: CiHostSchema,
     // owner/name (github) or the full project path (gitlab).
     project: z.string(),
-    // The vendor's numeric run/pipeline id — what rerun/cancel address.
+    // The vendor's numeric run/pipeline id, what rerun/cancel address.
     runId: z.number(),
     // The run's headline: github's display_title (the commit subject, or the PR title when a PR triggered it),
     // gitlab's pipeline name or the head commit's subject. Absent ⇒ the view falls back to ref@sha.
     title: z.string().optional(),
-    // Who the vendor credits for the run — the actor who set it off, matching what both vendors' own UIs
+    // Who the vendor credits for the run, the actor who set it off, matching what both vendors' own UIs
     // show. The avatar is a vendor-hosted URL; absent ⇒ the view draws the author's initials instead.
     authorName: z.string().optional(),
     authorAvatarUrl: z.string().optional(),
     // What set the run off, in the vendor's own vocabulary: gitlab's pipeline `source` (push, schedule,
     // merge_request_event, web, api, trigger…) or github's `event` (push, pull_request, schedule,
-    // workflow_dispatch…). Left raw rather than flattened into a shared enum — the vendor's word is the
+    // workflow_dispatch…). Left raw rather than flattened into a shared enum, the vendor's word is the
     // precise one, and the view only calls it out when it isn't the everyday push.
     trigger: z.string().optional(),
     branch: z.string(),
     sha: z.string(),
     status: PipelineStatusSchema,
-    // The vendor's run page — the deep link out.
+    // The vendor's run page, the deep link out.
     url: z.string(),
     createdAt: z.number(),
     durationSeconds: z.number().optional(),
-    // Names of the failed jobs — fetched only for failed runs (one extra call), so a wake or a view names what broke.
+    // Names of the failed jobs, fetched only for failed runs (one extra call), so a wake or a view names what broke.
     failedJobs: z.array(z.string()).optional(),
 });
 export type PipelineRun = z.infer<typeof PipelineRunSchema>;
@@ -5150,12 +5150,12 @@ export type PipelineRun = z.infer<typeof PipelineRunSchema>;
  * endpoint stays cheap. Both GitHub Actions jobs and GitLab CI jobs normalize onto these fields.
  *
  * HOW THE VIEW LEARNS THE RUN'S SHAPE, in descending order of truth:
- *   1. `needs` — the dependencies the pipeline itself declares. The real graph, and the only one that can say
+ *   1. `needs`, the dependencies the pipeline itself declares. The real graph, and the only one that can say
  *      a job waited on THIS one rather than on everything before it. Neither vendor's jobs API returns it, so
  *      it is read out of the pipeline definition (github: workflowGraph.ts) and is absent whenever that could
- *      not be resolved — a private workflow file, a deleted one, a name no declared job matches.
- *   2. `stage` — GitLab's native sequential grouping, returned by its jobs API and used verbatim.
- *   3. The timestamps — the last resort, and GitHub's before `needs` existed: overlapping runtimes ⇒ the jobs
+ *      not be resolved, a private workflow file, a deleted one, a name no declared job matches.
+ *   2. `stage`. GitLab's native sequential grouping, returned by its jobs API and used verbatim.
+ *   3. The timestamps, the last resort, and GitHub's before `needs` existed: overlapping runtimes ⇒ the jobs
  *      ran in parallel. Honest about when things happened, silent about what actually gated what.
  * Both timestamps are epoch ms; absent while a job is still queued. */
 export const PipelineJobSchema = z.object({
@@ -5163,12 +5163,12 @@ export const PipelineJobSchema = z.object({
     status: PipelineStatusSchema,
     stage: z.string().optional(),
     // Names of jobs IN THIS RUN that this one declared it waits on. Absent ⇒ nothing was resolved and the view
-    // must fall back; an empty array is the different, load-bearing claim that this job is a root.
+    // must fall back; an empty array is the different, meaningful claim that this job is a root.
     needs: z.array(z.string()).optional(),
     startedAt: z.number().optional(),
     finishedAt: z.number().optional(),
     durationSeconds: z.number().optional(),
-    // The job's page on its host — the shortest path from "this step failed" to the log that says why.
+    // The job's page on its host, the shortest path from "this step failed" to the log that says why.
     webUrl: z.string().optional(),
 });
 export type PipelineJob = z.infer<typeof PipelineJobSchema>;
@@ -5180,7 +5180,7 @@ export type CiJobsResponse = z.infer<typeof CiJobsResponseSchema>;
 
 // One mapped repo's CI wiring state. `hookWarning` is the manual-setup story when webhook registration was
 // refused (token scope, role) or impossible (no public URL): what happened plus the target URL + secret to
-// paste into the repo's webhook settings — the git-access sshRegistrationWarning pattern.
+// paste into the repo's webhook settings, the git-access sshRegistrationWarning pattern.
 export const CiRepoSchema = z.object({
     repo: z.string(),
     host: CiHostSchema,
@@ -5191,7 +5191,7 @@ export const CiRepoSchema = z.object({
 });
 export type CiRepo = z.infer<typeof CiRepoSchema>;
 
-/* How often the daemon polls a repo whose webhook could NOT be registered (ci/poller.ts) — the fallback that
+/* How often the daemon polls a repo whose webhook could NOT be registered (ci/poller.ts), the fallback that
  * keeps a `ci` automation firing on a sandbox with no public URL or a token without hook scope.
  *
  * Here rather than beside the poller because both ends need the number: the daemon to run on it, and the
@@ -5205,7 +5205,7 @@ export const CiRunsResponseSchema = z.object({
     // Newest first, across all mapped repos.
     runs: z.array(PipelineRunSchema),
     // When the owner last opened the pipelines view. Rides the runs response so the rail can decide what is
-    // NEW without a second call — a breakage older than this has already been seen and must not badge again.
+    // NEW without a second call, a breakage older than this has already been seen and must not badge again.
     // Absent ⇒ never opened, so everything counts as unseen.
     seenAt: z.number().optional(),
 });
@@ -5232,12 +5232,12 @@ export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
 /* ---- the pre-push check: the workspace's own answer to "would this push go red" ----
  *
  * WHERE THIS SITS. A fleet of 5-20 agents lands work into the main tree, the user reviews and commits it by
- * parts, pushes, and CI answers minutes later. The check front-runs that answer at the push itself — the last
+ * parts, pushes, and CI answers minutes later. The check front-runs that answer at the push itself, the last
  * moment before the work leaves the machine, and the first moment at which what will be pushed is finally
  * settled.
  *
  * WHY THE PUSH AND NOT THE LAND, which is where this used to run. A post-land verdict is about a tree that
- * keeps moving: the user commits by parts, another agent lands, an edit arrives — so the verdict spent its life
+ * keeps moving: the user commits by parts, another agent lands, an edit arrives, so the verdict spent its life
  * either stale or being recomputed, and needed a content fingerprint, a staleness rule and a badge to say which.
  * All of that machinery existed to answer a question the push asks for free, because at the push there is
  * exactly one artifact and the user is standing in front of it waiting.
@@ -5248,14 +5248,14 @@ export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
 
 /* Where a run is.
  *
- *   idle      — nothing has run in this daemon's life, or the last run was cleared.
- *   running   — the check is live. Its output is the terminal's (`session`), not this object's.
- *   passed    — exited 0. The push goes.
- *   failed    — exited non-zero, or was killed by prepushTimeoutMs (`timedOut`). The state a fix answers.
- *   error     — the check could not run at all: the command was not spawnable. NOT a fix-able failure, because
- *               there is nothing wrong with the code — the command is misconfigured, and saying "tests failed"
+ *   idle     , nothing has run in this daemon's life, or the last run was cleared.
+ *   running  , the check is live. Its output is the terminal's (`session`), not this object's.
+ *   passed   , exited 0. The push goes.
+ *   failed   , exited non-zero, or was killed by prepushTimeoutMs (`timedOut`). The state a fix answers.
+ *   error    , the check could not run at all: the command was not spawnable. NOT a fix-able failure, because
+ *               there is nothing wrong with the code, the command is misconfigured, and saying "tests failed"
  *               would send an agent hunting a bug that isn't there.
- *   cancelled — the user stopped the run.
+ *   cancelled, the user stopped the run.
  */
 export const PrepushStatusSchema = z.enum(["idle", "running", "passed", "failed", "error", "cancelled"]);
 export type PrepushStatus = z.infer<typeof PrepushStatusSchema>;
@@ -5269,13 +5269,13 @@ export const PrepushRunSchema = z.object({
     finishedAt: z.number().optional(),
     exitCode: z.number().optional(),
     timedOut: z.boolean().optional(),
-    /* The tmux session the suite runs in, for the browser to open the terminals panel on — the check is a
+    /* The tmux session the suite runs in, for the browser to open the terminals panel on, the check is a
      * visible terminal like every other shell command the daemon runs on a click (terminal/terminal-run.ts), so
      * WATCHING it is not this object's job and never was. Absent where the sandbox has no tmux wrapper (local
      * dev): the runner falls back to an invisible shell, and a name nothing can attach to would send the browser
      * after a tab that is never going to be listed. */
     session: z.string().optional(),
-    /* What the fix proposal quotes, and its only reader — tail-capped (PREPUSH_OUTPUT_BYTES) so a prompt seeded
+    /* What the fix proposal quotes, and its only reader, tail-capped (PREPUSH_OUTPUT_BYTES) so a prompt seeded
      * from a red run stays about fixing rather than scrolling. The TAIL, not the head: a suite's verdict and its
      * failure summary are at the end. PLAIN TEXT, not what the terminal received: the suite's colour codes and
      * redrawn progress lines are resolved away (terminal/plain-text.ts) before the cap, so a quoted tail reads
@@ -5286,8 +5286,8 @@ export const PrepushRunSchema = z.object({
 export type PrepushRun = z.infer<typeof PrepushRunSchema>;
 
 // ---- drafts: agent-proposed posts awaiting owner approval (.intentic/config/drafts/<id>.json) ----
-// One JSON file per draft. The AGENT creates drafts with its normal file tools — it can't call daemon routes,
-// the same split as the environment proposal — while the daemon edits/deletes them on the owner's behalf, so
+// One JSON file per draft. The AGENT creates drafts with its normal file tools, it can't call daemon routes,
+// the same split as the environment proposal, while the daemon edits/deletes them on the owner's behalf, so
 // the two writers never share a file. The id IS the filename (entryId charset ⇒ path-safe); the body never
 // carries it. Posting is the agent's job too (there is no typed publish path): a "publish approved drafts"
 // automation wakes the agent for due drafts, which posts via the platform skills and flips the status.
@@ -5298,14 +5298,14 @@ export type DraftStatus = z.infer<typeof DraftStatusSchema>;
 // The on-disk file body. proposed (agent) → approved (owner) → posting (publisher, set BEFORE acting so a dead
 // turn can't double-post) → posted | failed. Reject = delete the file; retry = re-approve a failed draft.
 export const DraftSchema = z.object({
-    // Which skill posts it: "x" | "reddit" | "youtube" | "discord" | … — a bare string so new platforms need
+    // Which skill posts it: "x" | "reddit" | "youtube" | "discord" | …, a bare string so new platforms need
     // no contract change; an unknown platform simply fails at posting time.
     platform: z.string().min(1),
-    /* WHOSE NAME THIS GOES OUT UNDER — a PersonaSchema id, handed to the publish turn as AgentTurnSchema.actsAs.
+    /* WHOSE NAME THIS GOES OUT UNDER, a PersonaSchema id, handed to the publish turn as AgentTurnSchema.actsAs.
      * Required in practice for every platform outside DIRECT_PUBLISH_PLATFORMS, and the reason is the whole
      * shape of turnPersona: publishing through a browser needs a logged-in account, and an UNATTENDED turn that
      * names no persona is denied every account there is. Without this field the publisher could only wake such a
-     * turn — one structurally unable to reach the login the post needs, which read from inside the turn as "this
+     * turn, one structurally unable to reach the login the post needs, which read from inside the turn as "this
      * account is not connected" and cost two approved posts before anyone traced it back here.
      *
      * A PERSONA RATHER THAN AN ACCOUNT ID, because that is the vocabulary the rest of the system already speaks:
@@ -5313,21 +5313,21 @@ export const DraftSchema = z.object({
      * write this file's own status back. Naming the account directly would invent a second way to say the same
      * thing, and the two would disagree the first time a card's accounts changed.
      *
-     * The daemon never guesses it. One site can be connected several times over — five Reddit logins here — and
+     * The daemon never guesses it. One site can be connected several times over, five Reddit logins here, and
      * picking for the owner means picking wrong in public, with no undo. A draft that needs a turn and names
      * nobody is failed with that sentence instead of sent. */
     actsAs: entryId.optional(),
     content: z.string().min(1),
     // Reddit posts / YouTube uploads need one.
     title: z.string().optional(),
-    /* Where on the platform: subreddit / Discord channel id / community — OR the URL of the thing this draft
+    /* Where on the platform: subreddit / Discord channel id / community. OR the URL of the thing this draft
      * replies to. A URL target means the draft is a reply, and on reddit the difference between a thread's
      * address and one comment's permalink is the difference between talking to the room and answering the
      * person: the publisher opens exactly this and replies where it lands. */
     target: z.string().optional(),
     // Workspace-relative attachment paths, e.g. ".intentic/config/drafts/media/chart.png".
     media: z.array(z.string()).optional(),
-    // Suggested post time (epoch ms, the at/nextRun convention). Optional — the agent may propose without a
+    // Suggested post time (epoch ms, the at/nextRun convention). Optional, the agent may propose without a
     // date and the owner sets one at approval; an approved draft with no date posts as soon as it's picked up.
     scheduledAt: z.number().optional(),
     // Agent-written files only need platform + content; status defaults, the rest are optional, so a
@@ -5335,7 +5335,7 @@ export const DraftSchema = z.object({
     status: DraftStatusSchema.default("proposed"),
     createdAt: z.number().optional(),
     // When sending STARTED, stamped with status "posting". The publisher needs it to tell a send that is under
-    // way from one whose run died mid-flight, and those two are indistinguishable from the due time — a post
+    // way from one whose run died mid-flight, and those two are indistinguishable from the due time, a post
     // scheduled for last week is not a post that has been sending since last week.
     postingAt: z.number().optional(),
     postedAt: z.number().optional(),
@@ -5351,7 +5351,7 @@ export type Draft = z.infer<typeof DraftSchema>;
 // The list row / upsert input: the file body plus its filename id.
 export const DraftSummarySchema = DraftSchema.extend({ id: entryId });
 export type DraftSummary = z.infer<typeof DraftSummarySchema>;
-// `invalid` = filenames that failed to parse. Agent-written files are a trust boundary — without this a typo'd
+// `invalid` = filenames that failed to parse. Agent-written files are a trust boundary, without this a typo'd
 // draft would silently never post.
 export const DraftsListSchema = z.object({ drafts: z.array(DraftSummarySchema), invalid: z.array(z.string()) });
 export type DraftsList = z.infer<typeof DraftsListSchema>;
@@ -5361,7 +5361,7 @@ export const DraftIdParamSchema = z.object({ id: entryId });
 // ---- panels: per-repository dev servers + the content facts extensions detect on ----
 // Every discovered git repo under /work is one list row: its runnable-panel runtime status (a `dev` script at
 // operator/ or the repo root; the daemon runs it, auto-assigns a free port, and the preview proxy routes
-// preview-<panelKey>-<sandboxId>.<zone> to it) PLUS content facts — evidence the web app's extensions run their
+// preview-<panelKey>-<sandboxId>.<zone> to it) PLUS content facts, evidence the web app's extensions run their
 // detect() over, computed daemon-side in one pass so the browser never scans /work file-by-file.
 
 export const PanelSummarySchema = z.object({
@@ -5370,22 +5370,22 @@ export const PanelSummarySchema = z.object({
     // Whether the repo ships a runnable dev server (a package.json `dev` script at operator/ or the root).
     hasPanel: z.boolean(),
     running: z.boolean(),
-    // Whether anything this repo owns is answering — see `servers`. Not the same question as `running`: a panel
+    // Whether anything this repo owns is answering, see `servers`. Not the same question as `running`: a panel
     // whose install is still going is running and not yet healthy, and a dev server someone started in their own
     // terminal is healthy without the daemon running it.
     healthy: z.boolean(),
     // The dev server's OS-assigned port; absent when not running. What the daemon TOLD the repo to bind (the
-    // preview proxy forwards it) — `servers` is what the repo actually bound, which for a repo that pins its own
+    // preview proxy forwards it), `servers` is what the repo actually bound, which for a repo that pins its own
     // ports is a different number entirely.
     port: z.number().optional(),
     // Every dev server the repo is really serving, discovered from the sandbox's listening sockets and probed for
     // the scheme each speaks (a Vite on a committed dev cert serves https). One entry for the ordinary repo; a
-    // monorepo whose `dev` fans out across packages has one per app, which is why `dir` is here — `_editor/web` vs
+    // monorepo whose `dev` fans out across packages has one per app, which is why `dir` is here, `_editor/web` vs
     // `_site/site` is the only thing that tells them apart. Empty when nothing answers.
     //
     // `session` is the terminal it is running in: the panel's own when the daemon started it, the user's when
     // they ran it by hand, and ABSENT when nothing in the sandbox owns it. That last case is the one worth
-    // designing for — the repo is plainly answering, and no terminal here can show, stop or restart it.
+    // designing for, the repo is plainly answering, and no terminal here can show, stop or restart it.
     servers: z.array(z.object({ url: z.string(), dir: z.string().optional(), session: z.string().optional() })),
     // https://preview-<repo>-<sandboxId>.<zone>; absent when the sandbox has no zone or connect token (loopback/tests).
     previewUrl: z.string().optional(),
@@ -5395,7 +5395,7 @@ export const PanelSummarySchema = z.object({
     // the first resolve), .intentic/ui/index.html (a sandboxed directory UI), pnpm-workspace.yaml +
     // turbo.json (a pnpm+turbo monorepo), vitest evidence (a root vitest.config.ts, or "vitest" in the
     // root manifest / workspace catalog), docs/user-stories (a directory of stories an agent can test
-    // against the running app — the one fact here that says nothing about the repo's language), and
+    // against the running app, the one fact here that says nothing about the repo's language), and
     // docs/architecture (the repo carries generated architecture documentation).
     deployConfig: z.boolean(),
     desiredState: z.boolean(),
@@ -5413,22 +5413,22 @@ export const PanelRepoParamSchema = z.object({ repo: z.string() });
 
 // ---- ports: every listening TCP socket in the sandbox + explicit port forwarding ----
 // Anything run in a terminal (a turbo TUI fanning out dev servers, `python -m http.server`, an agent's ad-hoc
-// process) binds ports the daemon never assigned — the panel machinery can't see them. The /ports routes are
+// process) binds ports the daemon never assigned, the panel machinery can't see them. The /ports routes are
 // the generic complement: `list` reports the live listeners (procfs scan, on demand), `forward` makes one
-// reachable at port-<slot>-<sandboxId>.<zone> through the preview proxy. Forwarding is an explicit gesture —
+// reachable at port-<slot>-<sandboxId>.<zone> through the preview proxy. Forwarding is an explicit gesture,
 // previews are public, so nothing is exposed until the owner (or an agent acting for them) asks.
 
 export const PortSummarySchema = z.object({
     port: z.number(),
-    // The loopback address the listener actually answers at inside the sandbox — a `localhost` bind can land
+    // The loopback address the listener actually answers at inside the sandbox, a `localhost` bind can land
     // on ::1 only (Vite). The preview proxy and the desktop mirror (Mutagen forward) both dial this.
     host: z.enum(["127.0.0.1", "::1"]),
     // Whether the proxy can actually reach the listener at `host`. False for a bind to a loopback alias like
-    // Docker's embedded DNS (127.0.0.11), which answers only at its own address, not 127.0.0.1 — such rows are
+    // Docker's embedded DNS (127.0.0.11), which answers only at its own address, not 127.0.0.1, such rows are
     // listed for transparency but the Ports view hides Preview and forwarding them is refused.
     forwardable: z.boolean(),
     // Which bucket the Ports view files it under: `workspace` = user-run (dev servers in repos, terminal
-    // processes, published container ports) — the previewable set; `system` = the sandbox's own machinery
+    // processes, published container ports), the previewable set; `system` = the sandbox's own machinery
     // (agent runtimes, translator, dockerd, sshd), listed for transparency but nobody previews it.
     kind: z.enum(["workspace", "system"]),
     // The owning process, resolved from procfs; absent when no /proc/*/fd entry matched the socket's inode.
@@ -5439,7 +5439,7 @@ export const PortSummarySchema = z.object({
     command: z.string().optional(),
     // The process working directory (how the UI attributes a port to a repo).
     cwd: z.string().optional(),
-    // The tmux session the listener descends from — the terminal to watch it in or stop it from. Absent when
+    // The tmux session the listener descends from, the terminal to watch it in or stop it from. Absent when
     // nothing in its ancestry is a pane (a daemon-managed runtime, a published container's docker-proxy), which
     // is the honest "you cannot reach this from here" rather than a terminal that would open onto nothing.
     session: z.string().optional(),
@@ -5452,35 +5452,35 @@ export const PortsListSchema = z.object({ ports: z.array(PortSummarySchema) });
 export type PortsList = z.infer<typeof PortsListSchema>;
 
 export const PortParamSchema = z.object({ port: z.number().int().min(1).max(65535) });
-// `previewUrl` is absent on a loopback/no-tunnel sandbox — the slot is mapped, but no public hostname exists.
+// `previewUrl` is absent on a loopback/no-tunnel sandbox, the slot is mapped, but no public hostname exists.
 export const PortForwardResultSchema = z.object({ previewUrl: z.string().optional() });
 export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 
 // ---- computers: what ONE of the user's own machines is running ----
 /* The other end of desktop sync, stated as a fact instead of a claim.
  *
- * Everything here already existed — as `intentic-sync status` output on a terminal nobody running the desktop app
+ * Everything here already existed, as `intentic-sync status` output on a terminal nobody running the desktop app
  * has open, and as `docker ps` rows only the desktop app could see. Three surfaces each held a third of it: the
  * desktop app knew the containers and nothing about sync, the Desktop sync card knew an enrollment record and
  * printed "Manage: intentic-sync status" for the rest, and the folder a machine syncs into was known to neither
  * (SYNC_DIR is local agent state; the daemon is never told it). This is that one shape, so the same report can
  * be produced by the agent, read by the daemon, and rendered by one component in both apps.
  *
- * The producer is `intentic-sync status --json` in every carrier — the desktop app spawns it, the mirror watcher
+ * The producer is `intentic-sync status --json` in every carrier, the desktop app spawns it, the mirror watcher
  * posts it, a `host` capability runs it over run_command. One producer is what keeps the three from drifting,
  * the same argument as the desktop app spawning connect.sh rather than reimplementing it.
  *
- * WHO FILLS WHAT is the disclosure rule, made structural. The agent reports only what it uniquely knows — its
- * own pairings, folders, ports, watcher — and NEVER `sandboxes`: enumerating a machine's other containers to one
+ * WHO FILLS WHAT is the disclosure rule, made structural. The agent reports only what it uniquely knows, its
+ * own pairings, folders, ports, watcher, and NEVER `sandboxes`: enumerating a machine's other containers to one
  * of them is the leak this design exists to avoid, and a sync agent has no business doing it anyway. The docker
  * half is supplied by whoever is READING (the desktop app from its own `docker ps`, the daemon from a
  * `host`-capability one), which is also the only side that has a reason to be trusted with it.
  *
  * What remains is scoping: a report reaching a sandbox carries that sandbox's pairing, not its siblings', and a
- * `mirror` enrollment — a collaborator's own laptop — drops `localDir` with it. So a member who mirrors one
+ * `mirror` enrollment, a collaborator's own laptop, drops `localDir` with it. So a member who mirrors one
  * dev-server port does not hand the sandbox's owner a map of their machine. */
 
-// One sandbox container on the machine — the docker half, filled in by the reader, never by the sync agent.
+// One sandbox container on the machine, the docker half, filled in by the reader, never by the sync agent.
 export const MachineSandboxSchema = z.object({
     slug: z.string(),
     container: z.string(),
@@ -5488,19 +5488,19 @@ export const MachineSandboxSchema = z.object({
     name: z.string().optional(),
     running: z.boolean(),
     image: z.string(),
-    // Absent when the sandbox has no cloudflared sidecar AT ALL (reached over the user's own proxy) — which is
+    // Absent when the sandbox has no cloudflared sidecar AT ALL (reached over the user's own proxy), which is
     // not the same fact as a sidecar that is down, and must not render as one.
     tunnelRunning: z.boolean().optional(),
 });
 export type MachineSandbox = z.infer<typeof MachineSandboxSchema>;
 
-/* ONE OPERATION ON ONE SANDBOX ON ONE MACHINE — the Computers view's buttons, and the only thing that changes a
+/* ONE OPERATION ON ONE SANDBOX ON ONE MACHINE, the Computers view's buttons, and the only thing that changes a
  * machine's fleet from a browser.
  *
  * All nine ops travel one route because they are one decision to the person clicking, however differently they
  * behave underneath: three are a docker call that returns in a second, four run the `ic` flow for minutes, one
  * deletes, and one only reads. Splitting them by duration would put the same button on two doors and give the
- * view two shapes to render. So every op answers as a STREAM of lines ending in a result — the fast ones simply
+ * view two shapes to render. So every op answers as a STREAM of lines ending in a result, the fast ones simply
  * have little to say, and `logs` is the case where the lines ARE the answer.
  *
  * `prepare` is the one that changes nothing on purpose: it downloads and builds the next update and stops
@@ -5519,19 +5519,19 @@ export type MachineSandboxOp = z.infer<typeof MachineSandboxOpSchema>;
 export const MachineSandboxFlowSchema = z.object({
     op: MachineSandboxOpSchema,
     slug: z.string().min(1),
-    // The approved overlay's sha256 — required by `rebuild` and meaningless to the rest. It is the trust anchor:
+    // The approved overlay's sha256, required by `rebuild` and meaningless to the rest. It is the trust anchor:
     // only content that still hashes to what the owner reviewed is ever built.
     hash: z.string().optional(),
 });
 export type MachineSandboxFlow = z.infer<typeof MachineSandboxFlowSchema>;
 
-// The same input plus which machine it is for — the browser's half, since the daemon reaches the machine by id.
+// The same input plus which machine it is for, the browser's half, since the daemon reaches the machine by id.
 export const MachineSandboxFlowInputSchema = MachineSandboxFlowSchema.extend({ id: z.string().min(1) });
 export type MachineSandboxFlowInput = z.infer<typeof MachineSandboxFlowInputSchema>;
 
 /* What a running operation says, in the one line shape every streamed flow in this product already uses
  * (IntenticLineSchema, which the browser's reader parses): `line` as the machine prints it, then exactly one
- * terminal frame — `result` when it worked, `error` when it did not, carrying the machine's own words either
+ * terminal frame, `result` when it worked, `error` when it did not, carrying the machine's own words either
  * way rather than a code this side invented. */
 export const MachineFlowLineSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("line"), text: z.string() }),
@@ -5545,7 +5545,7 @@ export type MachineFlowLine = z.infer<typeof MachineFlowLineSchema>;
 export const MachinePairingSchema = z.object({
     sandboxId: z.string(),
     mode: z.enum(["sync", "mirror"]),
-    // Set only for mode "sync", and only for the sandbox being reported to — see the redaction note above.
+    // Set only for mode "sync", and only for the sandbox being reported to, see the redaction note above.
     localDir: z.string().optional(),
     // Mutagen's own word for what the session is doing ("watching", "scanning", "transitioning", "halted-…").
     // Carried verbatim rather than mapped to a traffic light: the halted states name their own cause, and a UI
@@ -5555,7 +5555,7 @@ export const MachinePairingSchema = z.object({
     // product surfaces these, so a file edited on both ends stays stuck until someone runs the CLI.
     conflicts: z.number().int().nonnegative().optional(),
     paused: z.boolean().optional(),
-    /* The SECOND session's word — the one-way mirror carrying the sandbox's state dir down (sync's backupSpec).
+    /* The SECOND session's word, the one-way mirror carrying the sandbox's state dir down (sync's backupSpec).
      * Reported separately rather than folded into the status above, because the two fail independently and mean
      * different things: the first going quiet stops the owner's edits moving, the second going quiet stops their
      * personas, skills, automations, drafts and transcripts from surviving the sandbox. A backup that is not
@@ -5571,10 +5571,10 @@ export type MachinePairing = z.infer<typeof MachinePairingSchema>;
 export const MachinePortStateSchema = z.enum([
     // Forwarded: the sandbox's listener answers on this machine's localhost at the same number.
     "mirrored",
-    // Another PAIRED SANDBOX got there first (first paired wins) — `heldBy` names it, because "busy on this
+    // Another PAIRED SANDBOX got there first (first paired wins), `heldBy` names it, because "busy on this
     // machine" sends people hunting for a process that does not exist.
     "held-by-sandbox",
-    // Something else on this computer already binds the port — a local dev server, another tool. Not ours to
+    // Something else on this computer already binds the port, a local dev server, another tool. Not ours to
     // name, and not ours to take.
     "busy",
 ]);
@@ -5582,7 +5582,7 @@ export const MachinePortStateSchema = z.enum([
 export const MachinePortSchema = z.object({
     port: z.number().int().min(1).max(65535),
     host: z.enum(["127.0.0.1", "::1"]),
-    // The sandbox serving the port — whose /ports listed it, not whoever ended up holding the local bind.
+    // The sandbox serving the port, whose /ports listed it, not whoever ended up holding the local bind.
     sandboxId: z.string(),
     state: MachinePortStateSchema,
     // Set only for "held-by-sandbox": the sandbox id that owns the local bind instead.
@@ -5598,10 +5598,10 @@ export type MachinePort = z.infer<typeof MachinePortSchema>;
 export const MachineWatcherSchema = z.object({
     running: z.boolean(),
     pid: z.number().int().optional(),
-    /* When the watcher last FINISHED a pass — the field that makes `running` mean something. The agent holds its
+    /* When the watcher last FINISHED a pass, the field that makes `running` mean something. The agent holds its
      * SSH transport listeners on its own event loop, so a failure that escapes the loop leaves a process that is
      * alive and a loop that is gone: pid present, unit "active", mirroring and the git bridge stopped. Absent
-     * means the agent has not reported one (too old to stamp, or its first pass has not landed) — which is not
+     * means the agent has not reported one (too old to stamp, or its first pass has not landed), which is not
      * the same as stalled, and readers must not treat it as either state. */
     lastTickAt: z.number().optional(),
 });
@@ -5609,7 +5609,7 @@ export type MachineWatcher = z.infer<typeof MachineWatcherSchema>;
 
 /* How long a watcher may go without finishing a pass before "running" stops being the honest word for it. Its
  * loop polls every 5s and its slowest step is bounded by two 10s network timeouts per pairing, so a minute is
- * several passes of slack — the same yardstick the Computers view already ages a whole report by.
+ * several passes of slack, the same yardstick the Computers view already ages a whole report by.
  *
  * The rule lives HERE, next to the field, because the terminal and the browser both answer this question and a
  * machine that is "running" in one and "stalled" in the other is worse than either answer alone. */
@@ -5619,13 +5619,13 @@ export const watcherStalled = (watcher: MachineWatcher, now: number): boolean =>
     watcher.running && watcher.lastTickAt !== undefined && now - watcher.lastTickAt > WATCHER_STALL_AFTER_MS;
 
 export const MachineReportSchema = z.object({
-    /* The OS hostname, and the JOIN KEY. A machine can arrive here two ways at once — volunteered by its sync
-     * agent, and read through its `host` capability — and those two know it by different names (the enrolled
+    /* The OS hostname, and the JOIN KEY. A machine can arrive here two ways at once, volunteered by its sync
+     * agent, and read through its `host` capability, and those two know it by different names (the enrolled
      * key's comment vs. the capability id the user typed). The hostname is the one thing both can state about
      * the same box, so it is what dedupes them into a single row. */
     hostname: z.string(),
     os: z.string(),
-    // Which of this machine's agents are installed, and at what version — a machine running an old build is
+    // Which of this machine's agents are installed, and at what version, a machine running an old build is
     // visible rather than mysteriously lacking a field. Same argument as HostSummary.version. `host` is filled
     // by the daemon at merge time (it already knows it from the socket), not by the sync agent, which would have
     // to go reading another agent's config to guess at it.
@@ -5636,7 +5636,7 @@ export const MachineReportSchema = z.object({
     pairings: z.array(MachinePairingSchema),
     ports: z.array(MachinePortSchema),
     watcher: MachineWatcherSchema,
-    // When the machine took this reading — NOT when the daemon received it. A report is a snapshot from a box
+    // When the machine took this reading. NOT when the daemon received it. A report is a snapshot from a box
     // that may since have gone to sleep, and the UI ages it against this rather than presenting it as now.
     capturedAt: z.number(),
 });
@@ -5647,10 +5647,10 @@ export type MachineReport = z.infer<typeof MachineReportSchema>;
 export const ComputerGapSchema = z.enum([
     // A host capability that is enrolled but has no socket right now. Laptops sleep; this is not a fault.
     "offline",
-    // Connected, but "Run commands" is switched off on its capability card — so the daemon may not ask it
+    // Connected, but "Run commands" is switched off on its capability card, so the daemon may not ask it
     // anything. The one gap the user can close in a single click, and the UI says which switch.
     "scope-off",
-    // Reachable, asked, but has no `intentic-sync` on it — so nothing knows about folders or mirrored ports there.
+    // Reachable, asked, but has no `intentic-sync` on it, so nothing knows about folders or mirrored ports there.
     "no-agent",
     // A sync-enrolled machine that has not posted a report yet: either it just enrolled, or its agent predates
     // machine reports. Distinct from "no-agent" because the agent IS there and the folders ARE syncing.
@@ -5658,37 +5658,37 @@ export const ComputerGapSchema = z.enum([
 ]);
 export type ComputerGap = z.infer<typeof ComputerGapSchema>;
 
-/* ONE COMPUTER, however the sandbox happens to be able to see it — and it may be both ways at once.
+/* ONE COMPUTER, however the sandbox happens to be able to see it, and it may be both ways at once.
  *
  * A machine reaches a sandbox through two independent doors: a desktop-sync enrollment (which volunteers its own
- * report) and a `host` capability (which the daemon can ask). They know the same box by different names — the
- * enrolled ssh key's comment vs. the capability id the user typed — so the two are reconciled on the `hostname`
+ * report) and a `host` capability (which the daemon can ask). They know the same box by different names, the
+ * enrolled ssh key's comment vs. the capability id the user typed, so the two are reconciled on the `hostname`
  * their reports agree on, and left as separate rows when there is nothing to reconcile them by. Guessing that two
  * differently-named machines are the same one would merge two people's laptops on a shared sandbox. */
 export const ComputerSchema = z.object({
     // Stable row key: the reported hostname when either door produced one, else the name that door knows it by.
     key: z.string(),
-    // What to call it on screen — the user's own name for the machine wherever one exists.
+    // What to call it on screen, the user's own name for the machine wherever one exists.
     label: z.string(),
     // Whether a desktop-sync enrollment exists for this machine (it syncs files and/or mirrors ports).
     syncEnrolled: z.boolean(),
     // The host capability's id, when this machine is also a connected computer. Absent otherwise.
     hostId: z.string().optional(),
-    // Host-capability liveness. Absent when there is no host capability — which is NOT the same as offline.
+    // Host-capability liveness. Absent when there is no host capability, which is NOT the same as offline.
     online: z.boolean().optional(),
-    /* WHAT THE COMPUTER IS, as distinct from how it is reachable — the half a row used to leave out entirely,
+    /* WHAT THE COMPUTER IS, as distinct from how it is reachable, the half a row used to leave out entirely,
      * so a Windows laptop and a Linux desktop were two identical lines of text with different names on them.
      *
      * It is carried BESIDE the report rather than inside it because the rows that need it most are the ones with
      * no report: a connected computer with no sync agent, or one that is asleep, still knows its own OS. Nothing
      * here depends on an agent being installed, and the daemon has held all of it since the machine connected.
      *
-     * `platform` is the slug this side classifies the machine by — the host capability's own card ("windows",
+     * `platform` is the slug this side classifies the machine by, the host capability's own card ("windows",
      * "linux"), or the platform token a sync report carries, normalised to the same words. `facts` is the
      * machine's connect-time description of ITSELF, which is what says which Windows and which shell. */
     platform: z.string().optional(),
     facts: HostFactsSchema.optional(),
-    // The host agent's version and when the machine last held a socket — how a connected computer AGES. An old
+    // The host agent's version and when the machine last held a socket, how a connected computer AGES. An old
     // agent explains a row that lacks something newer machines have, and "last seen" is the one honest thing an
     // offline row can still say about itself.
     hostAgent: z.string().optional(),
@@ -5699,13 +5699,13 @@ export const ComputerSchema = z.object({
 export type Computer = z.infer<typeof ComputerSchema>;
 export const ComputersListSchema = z.object({ computers: z.array(ComputerSchema) });
 
-// GET /system/sync — the enrollment state the Desktop sync card is built on, plus what each enrolled machine has
+// GET /system/sync, the enrollment state the Desktop sync card is built on, plus what each enrolled machine has
 // said about itself. `machines` is optional because a daemon predating machine reports omits it, and an SPA is
 // routinely newer than the daemon it is pointed at during a rolling update.
 export const SyncStatusSchema = z.object({
     enrolled: z.boolean(),
     /* Whether this sandbox can do desktop sync at all. It used to be the SSH hostname the laptop would dial, and
-     * its absence meant "this sandbox's reachability can't carry SSH" — true of every sandbox on the platform's
+     * its absence meant "this sandbox's reachability can't carry SSH", true of every sandbox on the platform's
      * own fabric, which is what made sync fail on the default path. The transport rides the daemon's own HTTPS
      * surface now, so a sandbox that can answer this read can also sync. Kept as a field rather than assumed,
      * because the card branches on it and a daemon too old to say is one that should not be offered sync. */
@@ -5720,7 +5720,7 @@ export type SyncStatus = z.infer<typeof SyncStatusSchema>;
 
 // ---- public: the workspace outbox ----
 // The mirror image of the reference shelf. Files under the workspace's `public/` directory are served as static
-// files at public-<slot>-<sandboxId>.<zone>, with no auth in front of them — the process-free half of preview
+// files at public-<slot>-<sandboxId>.<zone>, with no auth in front of them, the process-free half of preview
 // (a panel needs a running dev server; a file needs nothing). The directory's existence is the switch: it is
 // absent until something is published and removed again when the last file leaves, so "publishing is off" is
 // the resting state rather than a flag someone has to remember to set back.
@@ -5732,14 +5732,14 @@ export const PublicFileSchema = z.object({
     modifiedAt: z.number(),
     // The file's public URL. Absent when the sandbox has no tunnel, or when a guard refuses this file.
     url: z.string().optional(),
-    // Why a file sitting in the outbox is NOT served — a hidden name, a credential-shaped name, contents that
+    // Why a file sitting in the outbox is NOT served, a hidden name, a credential-shaped name, contents that
     // match a known token format, or sheer size. The publisher reads it here; a stranger requesting the same
     // file only ever gets the same 404 every other miss returns, so this list can't be probed from outside.
     blocked: z.string().optional(),
 });
 export type PublicFile = z.infer<typeof PublicFileSchema>;
 
-// `url` is the outbox root — the base every file's URL hangs off, and what the view shows as "your public
+// `url` is the outbox root, the base every file's URL hangs off, and what the view shows as "your public
 // address". Absent on a loopback/no-tunnel sandbox, which has nowhere to publish to.
 export const PublicListSchema = z.object({ url: z.string().optional(), files: z.array(PublicFileSchema) });
 export type PublicList = z.infer<typeof PublicListSchema>;
@@ -5747,26 +5747,26 @@ export type PublicList = z.infer<typeof PublicListSchema>;
 // A WORKSPACE-relative path (the space the file tree speaks) to copy into the outbox. A copy, not a move: the
 // repo a build output came from must not lose it because someone shared it.
 export const PublishSchema = z.object({ path: z.string().min(1) });
-// An OUTBOX-relative path to withdraw — the path space PublicFile.path speaks, not the workspace's.
+// An OUTBOX-relative path to withdraw, the path space PublicFile.path speaks, not the workspace's.
 export const UnpublishSchema = z.object({ path: z.string().min(1) });
 export const PublishResultSchema = z.object({ path: z.string(), url: z.string().optional() });
 export type PublishResult = z.infer<typeof PublishResultSchema>;
 
 // ---- share: a conversation published as a page ----
 /* The outbox holds FILES; a conversation is not one, so sharing it means RENDERING it into one. The result is
- * an ordinary published page under the same `public-<slot>` hostname, with the same guards in front of it —
+ * an ordinary published page under the same `public-<slot>` hostname, with the same guards in front of it,
  * which is the whole reason this rides the outbox rather than inventing a second public surface with its own
  * auth story to get wrong.
  *
  * A share is a SNAPSHOT, not a window. The page holds the conversation as it read at the moment of sharing and
- * does not move again until the owner re-takes it, because the alternative — a link that keeps publishing
- * whatever is said next — makes every later turn a disclosure the user did not consciously make. `sharedAt`
- * is therefore load-bearing on the row: it dates what the recipient can actually see. */
+ * does not move again until the owner re-takes it, because the alternative, a link that keeps publishing
+ * whatever is said next, makes every later turn a disclosure the user did not consciously make. `sharedAt`
+ * is therefore relied on by the row: it dates what the recipient can actually see. */
 
 /* HOW MUCH OF A CONVERSATION TRAVELS, decided per share rather than by a setting, because the two answers suit
- * genuinely different acts. `messages` is the two speakers' words and nothing else — what you send a friend to
+ * genuinely different acts. `messages` is the two speakers' words and nothing else, what you send a friend to
  * show what the thing said. `everything` adds the agent's work (its tool cards, the diffs of what it edited,
- * the pictures it took) and its thinking — what you send a colleague to show HOW it got there, and which
+ * the pictures it took) and its thinking, what you send a colleague to show HOW it got there, and which
  * necessarily publishes the code and command output that appear in those cards.
  *
  * Two levels, not a set of switches: every extra toggle is another thing to get wrong about a link that cannot
@@ -5781,17 +5781,17 @@ export const SharedConversationSchema = z.object({
      * at a glance, which is the opposite of what should name a page whose only protection is that its address
      * is not enumerable. Minted per share, so re-sharing the same conversation twice yields two links. */
     id: z.string(),
-    // Which conversation the snapshot was taken from — what Update re-reads, and what the chat matches against
+    // Which conversation the snapshot was taken from, what Update re-reads, and what the chat matches against
     // to know it already has a share.
     conversationId: z.string(),
     title: z.string(),
     detail: ShareDetailSchema,
-    // When the snapshot was taken (epoch ms). A share is frozen, so this dates what a recipient can see —
+    // When the snapshot was taken (epoch ms). A share is frozen, so this dates what a recipient can see,
     // not when the conversation happened.
     sharedAt: z.number(),
     // How many messages the snapshot holds, so a row can say how much is behind the link without opening it.
     messages: z.number(),
-    // The page's public URL. Absent on a sandbox with no tunnel, which has nowhere to publish to — the same
+    // The page's public URL. Absent on a sandbox with no tunnel, which has nowhere to publish to, the same
     // rule (and the same cause) as PublicFile.url.
     url: z.string().optional(),
 });
@@ -5808,14 +5808,14 @@ export const ShareCreateSchema = z.object({
     title: z.string().min(1).max(80),
     detail: ShareDetailSchema,
 });
-// Re-take an existing share's snapshot, keeping its id — and therefore its link, which has already been sent.
+// Re-take an existing share's snapshot, keeping its id, and therefore its link, which has already been sent.
 export const ShareUpdateSchema = z.object({ id: z.string().min(1) });
 export const ShareRemoveSchema = z.object({ id: z.string().min(1) });
 
 // ---- terminal ----
 // EVERY live surface in the sandbox the web app's ONE global panel can show. Mostly tmux sessions (the
 // interactive I/O is the /system/terminal WebSocket, not oRPC), plus the agent's browser, which is not a
-// terminal at all — no more than a `process` row is — but IS the same question: what is running right now,
+// terminal at all, no more than a `process` row is, but IS the same question: what is running right now,
 // and can I look at it? One list, because the panel that answers that question is one panel.
 //
 // `shell` = a web-* session the user opened (numbered pill),
@@ -5824,7 +5824,7 @@ export const ShareRemoveSchema = z.object({ id: z.string().min(1) });
 // Bash commands run in (live-watchable, AI-marked in the UI; running:false once every window is a finished
 // command's dead pane, which is what lets the panel sweep it), `job` = a job-* session the daemon's terminal
 // runner executes user-triggered flows in (capability adds, infra check), `process` = a managed background
-// process riding a panel session (an extension's declared processes, dockerd) — surfaced in the panel's
+// process riding a panel session (an extension's declared processes, dockerd), surfaced in the panel's
 // background-processes popover with read-only log views, never as a killable tab; running is the actual
 // process (a lingering shell after a crash reads false). A process row that maps to an installed extension's
 // declared process carries extensionId+processName, the address for its /extensions start/stop routes. The
@@ -5836,7 +5836,7 @@ export const ShareRemoveSchema = z.object({ id: z.string().min(1) });
 // `activityAt` (epoch ms of the session's last output) and `exitCode` (the LAST window's exit status, absent
 // while that pane still lives) describe a session beyond "it exists": the panel's work popover orders its live
 // rows by the one and dates them off it, and the daemon's retention sweep ages sessions out by the same clock.
-// 0 is "tmux didn't say" — treated as unknown by both, never as 1970.
+// 0 is "tmux didn't say", treated as unknown by both, never as 1970.
 export const TerminalSessionSchema = z.object({
     name: z.string(),
     label: z.string().optional(),
@@ -5844,17 +5844,17 @@ export const TerminalSessionSchema = z.object({
     running: z.boolean(),
     activityAt: z.number(),
     exitCode: z.number().optional(),
-    /* WHAT THIS SESSION IS RUNNING RIGHT NOW — `pane_current_command` of its live pane — and ABSENT when it is
+    /* WHAT THIS SESSION IS RUNNING RIGHT NOW, `pane_current_command` of its live pane, and ABSENT when it is
      * sitting at its shell prompt. Not a second spelling of `running`: that field says whether a session is a
      * live thing at all (and for a `web-*` shell it is unconditionally true, prompt or build), whereas this one
      * says whether anything is HAPPENING in it. Killing a terminal is final, so the panel confirms on this
-     * field before its × ends a session that has work in it, and names the command in the question — see the
+     * field before its × ends a session that has work in it, and names the command in the question, see the
      * daemon's `foreground` (system/system.routes.ts) for why a word rather than a flag. */
     command: z.string().optional(),
     extensionId: z.string().optional(),
     processName: z.string().optional(),
-    // The agent has parked on a command that stopped for a PERSON — an OTP prompt, a security-key touch, a
-    // confirm it cannot answer — and is waiting at this session's live pane. `message` is its own account of
+    // The agent has parked on a command that stopped for a PERSON, an OTP prompt, a security-key touch, a
+    // confirm it cannot answer, and is waiting at this session's live pane. `message` is its own account of
     // what it needs. The terminal panel renders it as a banner over that session's tab (where the prompt the
     // user has to answer already is) and its buttons settle the parked card through `POST /agent/reply` with
     // `requestId`, exactly as the chat card does. The same shape as a browser's `help` below, on purpose: the
@@ -5868,7 +5868,7 @@ export const TerminalNameParamSchema = z.object({ name: z.string() });
 // One session's PANE HISTORY as plain text. This route exists because the browser cannot reach it any other
 // way: a tmux client runs on the ALTERNATE screen, which has no scrollback of its own, so what the wheel moves
 // through lives in tmux on the far side of the socket and never enters the xterm buffer the page could select.
-// `lines` is how far back to ask for — tmux clamps it to the history it actually has, and `truncated` says the
+// `lines` is how far back to ask for, tmux clamps it to the history it actually has, and `truncated` says the
 // answer stopped at the request rather than at the beginning.
 export const TerminalScrollbackQuerySchema = z.object({
     name: z.string(),
@@ -5889,7 +5889,7 @@ export type TerminalScrollback = z.infer<typeof TerminalScrollbackSchema>;
  * /system/browser-view WebSocket. It lists apart from the terminals because it is shaped differently in the one
  * way that decides a UI: a terminal is ONE stream of bytes, while a browser holds SEVERAL pages at once and the
  * question "what is the agent looking at?" only has an answer if the wire carries all of them. So `pages` is the
- * point of this schema — the view renders them as a tab strip and binds the screencast to whichever the user
+ * point of this schema, the view renders them as a tab strip and binds the screencast to whichever the user
  * picks, and `active` is the one the agent itself last touched (what the view follows until the user says
  * otherwise).
  *
@@ -5900,26 +5900,26 @@ export const BrowserPageSchema = z.object({
     // The page's own title. Absent mid-navigation, which is exactly when a tab still needs to render.
     title: z.string().optional(),
     url: z.string(),
-    // The page the agent last drove — on a finished session, the one it ended on. Exactly one page has it.
+    // The page the agent last drove, on a finished session, the one it ended on. Exactly one page has it.
     active: z.boolean(),
 });
 export const BrowserSessionSchema = z.object({
     name: z.string(),
     // The pill's text: the active page's title, else its host, else which browser this is.
     label: z.string(),
-    // Which MCP server drives it: `web` (the credential-free browser) or a logged-in capability's id — the
+    // Which MCP server drives it: `web` (the credential-free browser) or a logged-in capability's id, the
     // difference between a throwaway page and one signed in as the user, which is worth saying out loud.
     server: z.string(),
     // False once that Chromium is gone (the turn ended, the agent closed it, it crashed). A finished session
-    // still lists for a while, with the pages it had — the record of where the agent went.
+    // still lists for a while, with the pages it had, the record of where the agent went.
     running: z.boolean(),
     activityAt: z.number(),
     // When that Chromium went away, for the "closed 20m ago" line a finished session leads with. Absent while
-    // running, which is the same fact as `running` — but the view needs the timestamp, not just the flag.
+    // running, which is the same fact as `running`, but the view needs the timestamp, not just the flag.
     finishedAt: z.number().optional(),
     // The agent has hit something only a person can clear (a captcha, a password it does not hold, a phone
     // check) and is PARKED on it: `message` is its own account of what it needs, in the user's language. The
-    // Browsers view renders it as a banner over the live stage — where "Take control" already is — and its
+    // Browsers view renders it as a banner over the live stage, where "Take control" already is, and its
     // buttons settle the parked card through `POST /agent/reply` with `requestId`, exactly as the chat card
     // does; the field clears when the waiter settles, never by direct edit. Present only while open.
     help: z.object({ requestId: z.string(), message: z.string(), requestedAt: z.number() }).optional(),
@@ -5933,23 +5933,23 @@ export const BrowserNameParamSchema = z.object({ name: z.string() });
 
 /* ---- subagents: the agents an agent starts ----
  *
- * The third thing a turn spawns that the operator can be shown, after its shell and its browser — and the only
+ * The third thing a turn spawns that the operator can be shown, after its shell and its browser, and the only
  * one that is itself an agent. Two kinds land in this one list, because from outside they are the same fact
  * (another agent, working, that you did not start):
- *   • `subagent` — the SDK's Agent/Task tool. The daemon learns of it from the SubagentStart/SubagentStop hooks
+ *   • `subagent`, the SDK's Agent/Task tool. The daemon learns of it from the SubagentStart/SubagentStop hooks
  *     and the task_* stream messages, joined on `toolUseId`.
- *   • `codex` / `grok` — a CLI the agent drove from its own Bash (agent/delegation.ts). Detected in the Bash
+ *   • `codex` / `grok`, a CLI the agent drove from its own Bash (agent/delegation.ts). Detected in the Bash
  *     PreToolUse hook, bound to its thread/session id from the command's output.
  *
- * `id` IS THE SPAWNING TOOL CALL'S id — the Agent card's, or the Bash card's for a delegation. It is the one key
+ * `id` IS THE SPAWNING TOOL CALL'S id, the Agent card's, or the Bash card's for a delegation. It is the one key
  * every source already carries (the SDK's subagent meta, its task_* messages, and the `parentToolUseId` the
  * client nests inner frames under), so nothing has to be correlated: a card links to its subagent with the id it
  * already has, and the subagent points back at the card the same way. The ids the transcripts are actually READ
- * with — the SDK's agent id, a Codex thread, an OpenCode session — stay daemon-side, because no surface asks a
+ * with, the SDK's agent id, a Codex thread, an OpenCode session, stay daemon-side, because no surface asks a
  * question they answer.
  *
  * WHAT A KIND CHANGES, and it is only ever the live view: a subagent has no process of its own to look at, so
- * watching it means reading its transcript. A delegation runs in a tmux window, so it has both — `terminal`
+ * watching it means reading its transcript. A delegation runs in a tmux window, so it has both, `terminal`
  * names it, and the card keeps its existing "Watch in terminal" beside the transcript door. */
 export const SubagentKindSchema = z.enum(["subagent", "codex", "grok"]);
 export type SubagentKind = z.infer<typeof SubagentKindSchema>;
@@ -5958,7 +5958,7 @@ export type SubagentKind = z.infer<typeof SubagentKindSchema>;
 // (SDKTaskUpdatedMessage.patch.status) rather than AgentStatus: this is not a fleet card's lifecycle (no
 // draft/landed/conflict), and mapping the two would invent states neither side reports. `blocked` is the one
 // addition the SDK never says: it comes from a delegated CLI's own signals (a Codex PermissionRequest hook, an
-// OpenCode permission ask — agent/delegation-signals.ts), and it exists because "the child needs an answer" is
+// OpenCode permission ask, agent/delegation-signals.ts), and it exists because "the child needs an answer" is
 // the one live state a parent or an operator acts on differently from "the child is working".
 export const SubagentStatusSchema = z.enum(["pending", "running", "blocked", "completed", "failed", "killed", "paused"]);
 export type SubagentStatus = z.infer<typeof SubagentStatusSchema>;
@@ -5966,7 +5966,7 @@ export type SubagentStatus = z.infer<typeof SubagentStatusSchema>;
 export const SubagentSessionSchema = z.object({
     id: z.string(),
     kind: SubagentKindSchema,
-    // The conversation whose turn spawned this — what the area groups its rows by, and the way back to the chat
+    // The conversation whose turn spawned this, what the area groups its rows by, and the way back to the chat
     // the card lives in.
     conversationId: z.string(),
     // What it is and what it was asked to do: the subagent type (`Explore`, `general-purpose`) or the delegated
@@ -5979,7 +5979,7 @@ export const SubagentSessionSchema = z.object({
     // itself delegate, and a flat list that cannot say so reads as though the turn started all of them.
     spawnDepth: z.number().optional(),
     // Backgrounded: the parent went on working instead of waiting for it. This is the whole reason the list
-    // exists — a backgrounded child used to be invisible until its result landed, sometimes minutes later.
+    // exists, a backgrounded child used to be invisible until its result landed, sometimes minutes later.
     background: z.boolean().optional(),
     status: SubagentStatusSchema,
     startedAt: z.number(),
@@ -5990,7 +5990,7 @@ export const SubagentSessionSchema = z.object({
     tokens: z.number().optional(),
     toolUses: z.number().optional(),
     lastTool: z.string().optional(),
-    // Its report — the last assistant message (SubagentStop) or the task summary. The answer to "what did it
+    // Its report, the last assistant message (SubagentStop) or the task summary. The answer to "what did it
     // conclude?" without opening the transcript, which is the question a finished child is read for.
     summary: z.string().optional(),
     error: z.string().optional(),
@@ -6005,11 +6005,11 @@ export const SubagentIdParamSchema = z.object({ id: z.string() });
 
 // ---- environment: the overlay Dockerfile extending the sandbox image ----
 // The approved file is DAEMON-COMPOSED: pinned FROM + capability fragments + the owner-approved custom section.
-// The agent drafts one file per thing it needs (.intentic/config/environment.d/<tool>.Dockerfile — custom-section
+// The agent drafts one file per thing it needs (.intentic/config/environment.d/<tool>.Dockerfile, custom-section
 // content only, no FROM) with its normal file tools, and the daemon folds those into the single proposal file
 // (.intentic/config/environment.Dockerfile) the owner reads. The owner approves it in the browser, which stores it as
 // the custom file and recomposes the approved artifact whose sha256 the rebuild executor pins. Both composed
-// files are written only when the composition CHANGES — see writeComposed, and the read loop it exists to end.
+// files are written only when the composition CHANGES, see writeComposed, and the read loop it exists to end.
 // Status is derived, never stored:
 // applied = sha256(approved) === appliedHash; pending rebuild = approved present but hashes differ; proposed =
 // proposal present with a hash different from custom's.
@@ -6022,7 +6022,7 @@ export const EnvironmentSchema = z.object({
     approved: environmentFileSchema.optional(),
     // sha256 of the overlay the running container was built from (SANDBOX_ENVIRONMENT_HASH); absent = stock image.
     appliedHash: z.string().optional(),
-    // config.sandbox.name — the UI derives the rebuild one-liner's slug from it.
+    // config.sandbox.name, the UI derives the rebuild one-liner's slug from it.
     container: z.string().optional(),
 });
 export type Environment = z.infer<typeof EnvironmentSchema>;
@@ -6031,15 +6031,15 @@ export const EnvironmentApproveSchema = z.object({ hash: z.string().min(1) });
 /* ---- environment CONTENTS: what the sandbox has, as opposed to how it was built ----
  *
  * The overlay above answers "what was added on top, and do you approve it?". Nobody opens the Environment tab
- * asking that — they ask "can this sandbox compile my Rust app / transcode a video / drive a browser?", and a
+ * asking that, they ask "can this sandbox compile my Rust app / transcode a video / drive a browser?", and a
  * build recipe is a bad answer to it: it is install plumbing, it names packages rather than abilities, and it is
  * only the DELTA, so an inventory read off it alone would claim a sandbox has ffmpeg and no Node.
  *
  * So this is a second read of the same sandbox, and its authority is different in a way that matters: NAMES,
  * GROUPING and RATIONALE come from the recipe (which is where the agent wrote them), while PRESENCE and VERSION
  * come from asking the environment itself. That split is what makes it honest. A version is never parsed out of
- * an install line — half the entries pin nothing, and a pinned number is a lie the moment something is approved
- * but not yet rebuilt — so an item whose tools cannot be probed carries no version at all rather than a guess.
+ * an install line, half the entries pin nothing, and a pinned number is a lie the moment something is approved
+ * but not yet rebuilt, so an item whose tools cannot be probed carries no version at all rather than a guess.
  * And presence is OBSERVED, which is what makes per-item state exact without diffing anything: an item the
  * recipe contains and the probe cannot find is precisely one that arrives with the next rebuild.
  */
@@ -6053,13 +6053,13 @@ const environmentToolSchema = z.object({
 
 export const EnvironmentItemSchema = z.object({
     id: z.string(),
-    // The block's own name — how the thing is referred to, not the packages it happens to install.
+    // The block's own name, how the thing is referred to, not the packages it happens to install.
     name: z.string(),
     /* WHY IT IS HERE, which is also whether the reader may remove it: `custom` is what an agent asked for and the
      * owner approved for this workspace, `capability` is the cost of a capability they turned on, `base` comes
      * with every sandbox and is nobody's decision. */
     origin: z.enum(["custom", "capability", "base"]),
-    // Which capability/extension/pack pulled it in — the answer to "why do I have this?" for an origin the
+    // Which capability/extension/pack pulled it in, the answer to "why do I have this?" for an origin the
     // reader did not choose item by item.
     originLabel: z.string().optional(),
     // Observed, not inferred: `active` means the probe found it, `after-rebuild` that the recipe has it and the
@@ -6070,12 +6070,12 @@ export const EnvironmentItemSchema = z.object({
     // How many further packages the block installs that are not commands anyone runs (libraries, headers). A
     // count rather than a list: eleven rows of `libssl-dev` is noise, "+11 packages" is the same fact.
     extras: z.number().optional(),
-    // One standalone line, from the block's opening comment — the part everyone reads.
+    // One standalone line, from the block's opening comment, the part everyone reads.
     purpose: z.string().optional(),
     /* That comment in full, as prose, absent when the line above already is the whole of it. NOT the remainder
      * after the line: `purpose` is a summary of this (a parenthetical dropped, an over-long sentence cut back to
-     * its claim), so the two overlap by design and it is the reader's view that picks one. Long — the rationale
-     * for a toolchain runs to paragraphs — so it lives behind a disclosure rather than on the row. */
+     * its claim), so the two overlap by design and it is the reader's view that picks one. Long, the rationale
+     * for a toolchain runs to paragraphs, so it lives behind a disclosure rather than on the row. */
     detail: z.string().optional(),
     // The block's own instruction lines, for the reader who wants to see exactly what runs.
     commands: z.string().optional(),
@@ -6090,7 +6090,7 @@ export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
  * repo's real git dir, the fleet registry, the ledgers), the CONTAINER (the built overlay image plus the env
  * the run contract replays) and the AI-provider credential root. A bundle carries the first two, declared entry
  * by entry in WORKSPACE_STATE_FILES / HISTORY_STATE_FILES. It cannot carry the other two, and the honest
- * consequence is that an import ends in a REPORT rather than a claim of equivalence — the container has no
+ * consequence is that an import ends in a REPORT rather than a claim of equivalence, the container has no
  * docker socket, so only the host can rebuild the image the overlay describes.
  */
 
@@ -6121,10 +6121,10 @@ export const BundleManifestSchema = z.object({
 export type BundleManifest = z.infer<typeof BundleManifestSchema>;
 
 // What a restore actually did. `needsAction` is the part that matters: the environment rebuild command, the
-// credentials to re-enter, the logins to redo — each one a thing the target cannot do for itself.
+// credentials to re-enter, the logins to redo, each one a thing the target cannot do for itself.
 export const ImportReportSchema = z.object({
     restored: z.object({ workspaceFiles: z.number(), historyFiles: z.number(), repos: z.array(z.string()), bytes: z.number() }),
-    // Entries the bundle carried that this daemon refused to write (an identity file, an escaping path) — empty
+    // Entries the bundle carried that this daemon refused to write (an identity file, an escaping path), empty
     // for any bundle a matching exporter produced, and a tamper signal when it is not.
     refused: z.array(z.string()),
     needsAction: z.array(z.object({ subject: z.string(), detail: z.string() })),
@@ -6135,19 +6135,19 @@ export type ImportReport = z.infer<typeof ImportReportSchema>;
  *
  * A different crossing than a bundle restore, and deliberately a different surface: a bundle is our own format,
  * re-derived entry by entry against the state manifests, while a migration reads a directory some OTHER
- * program laid out (`~/.hermes`) and TRANSLATES it into native things — skills, automations, capabilities,
+ * program laid out (`~/.hermes`) and TRANSLATES it into native things, skills, automations, capabilities,
  * merged memory. Nothing foreign is executed or copied verbatim into daemon state; every item lands through the
  * same write paths the settings/skills/automations/capabilities surfaces use, which is what keeps an imported
  * setup editable and deletable in the ordinary UI the day after (docs/assistant-import-design.md).
  *
  * The flow is PREVIEW-FIRST, mirroring what these tools' own `migrate` commands taught their users to expect:
  * `plan` parses the uploaded archive into an itemized checklist and holds the upload in memory under a token;
- * `apply` names the ticked item ids and the token. The plan is RE-DERIVED from the held archive at apply — the
+ * `apply` names the ticked item ids and the token. The plan is RE-DERIVED from the held archive at apply, the
  * wire plan is a rendering for the owner, never the input the write trusts (restore.ts's rule, kept). */
 export const MigrationSourceSchema = z.enum(["hermes", "openclaw"]);
 export type MigrationSource = z.infer<typeof MigrationSourceSchema>;
 
-// What an item becomes here, not what it was there — the apply loop dispatches on this, and the checklist
+// What an item becomes here, not what it was there, the apply loop dispatches on this, and the checklist
 // groups by it so the owner reads "3 skills, 2 automations" rather than a foreign directory listing.
 export const MigrationTargetSchema = z.enum(["memory", "skill", "automation", "capability", "secret", "file"]);
 export type MigrationTarget = z.infer<typeof MigrationTargetSchema>;
@@ -6157,14 +6157,14 @@ export const MigrationItemSchema = z.object({
     // the same items when the plan is re-derived at apply.
     id: z.string(),
     target: MigrationTargetSchema,
-    // The checklist line, plain words: "Skill — weather", "Nightly digest (9:00 every day)".
+    // The checklist line, plain words: "Skill, weather", "Nightly digest (9:00 every day)".
     label: z.string(),
     detail: z.string().optional(),
-    /* The default tick. False marks the items the owner should read before taking — a server URL that points at
+    /* The default tick. False marks the items the owner should read before taking, a server URL that points at
      * localhost on the OLD machine, an .env key that looks like tuning rather than a credential. They still
      * import fine when ticked; the flag is the adapter's judgment, not a gate. */
     recommended: z.boolean(),
-    // Names of the secrets this item would store (never values — values stay in the held archive until apply,
+    // Names of the secrets this item would store (never values, values stay in the held archive until apply,
     // and only move when the apply says includeSecrets). Empty for items that carry none.
     secrets: z.array(z.string()),
 });
@@ -6177,37 +6177,37 @@ export const MigrationPlanSchema = z.object({
     // Names the held upload for the apply call. Minted per plan; a new upload replaces the held one.
     token: z.string(),
     items: z.array(MigrationItemSchema),
-    // What the adapter saw and will not move — sessions, logs, pairing state — listed rather than silent.
+    // What the adapter saw and will not move, sessions, logs, pairing state, listed rather than silent.
     refused: z.array(z.string()),
-    // What is already known not to move mechanically (channels to reconnect, a model to pick) — the same
+    // What is already known not to move mechanically (channels to reconnect, a model to pick), the same
     // honesty ImportReportSchema carries, surfaced at PREVIEW time so the owner ticks with open eyes.
     needsAction: z.array(MigrationNeedsActionSchema),
 });
 export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;
 
-/* One of the owner's own computers, as an import SOURCE — the answer to "where is my setup" that needs no
+/* One of the owner's own computers, as an import SOURCE, the answer to "where is my setup" that needs no
  * packing at all. Read on the card's first render for every enrolled machine, so the offer appears before the
  * owner has read a single instruction.
  *
- * `found` absent means "connected, and nothing to import here" — which is a real answer worth rendering
+ * `found` absent means "connected, and nothing to import here", which is a real answer worth rendering
  * quietly, not an error: the machine may simply be a different one from the machine the assistant runs on. */
 export const MigrationHostSchema = z.object({
     id: z.string(),
     online: z.boolean(),
     found: MigrationSourceSchema.optional(),
-    // Why this machine cannot be read right now, when it cannot — offline, or its own refusal, in its words.
+    // Why this machine cannot be read right now, when it cannot, offline, or its own refusal, in its words.
     detail: z.string().optional(),
 });
 export const MigrationHostsSchema = z.object({ hosts: z.array(MigrationHostSchema) });
 export type MigrationHost = z.infer<typeof MigrationHostSchema>;
 
 // Read the setup off a connected computer instead of an upload. Answers with a plan, exactly as the upload
-// route does — everything after this point is identical whichever door the setup came through.
+// route does, everything after this point is identical whichever door the setup came through.
 export const MigrationScanSchema = z.object({ host: z.string().min(1) });
 
 export const MigrationApplySchema = z.object({
     token: z.string(),
-    // The ticked item ids. Ids the re-derived plan does not contain are ignored rather than erroring — the
+    // The ticked item ids. Ids the re-derived plan does not contain are ignored rather than erroring, the
     // archive is the truth, and a stale checklist must not block the items that still exist.
     items: z.array(z.string()),
     // The owner's explicit consent to move credential VALUES (mirrors the bundle export's `?secrets=`, and the
@@ -6219,7 +6219,7 @@ export type MigrationApply = z.infer<typeof MigrationApplySchema>;
 
 export const MigrationReportSchema = z.object({
     applied: z.array(z.object({ id: z.string(), target: MigrationTargetSchema, label: z.string() })),
-    // Items that were ticked and did not land, each with the reason — a full disk, an env store that needs
+    // Items that were ticked and did not land, each with the reason, a full disk, an env store that needs
     // DevOps active. Distinct from `refused`, which is the class of things never attempted.
     failed: z.array(z.object({ id: z.string(), label: z.string(), error: z.string() })),
     refused: z.array(z.string()),
@@ -6227,7 +6227,7 @@ export const MigrationReportSchema = z.object({
 });
 export type MigrationReport = z.infer<typeof MigrationReportSchema>;
 
-/* One export sitting in the daemon's export directory — the ARTIFACT a bundle is, rather than the request that
+/* One export sitting in the daemon's export directory, the ARTIFACT a bundle is, rather than the request that
  * produced it. Packing takes minutes over a real workspace, so tying it to a response made it a property of one
  * browser tab: a refresh abandoned the work and left nothing to come back to. It is a file now, and every field
  * below is read off that file rather than remembered anywhere.
@@ -6235,7 +6235,7 @@ export type MigrationReport = z.infer<typeof MigrationReportSchema>;
  * `status` is derived from the extension (.part / .tar.gz / .failed) and `bytes` is the file's own size, which
  * is what makes a live pack's progress free to report. */
 export const BundleExportSchema = z.object({
-    // The finished bundle's filename, which is the id in every route — and, once downloaded, the name the owner
+    // The finished bundle's filename, which is the id in every route, and, once downloaded, the name the owner
     // sees on disk. Carries its own timestamp and a `-with-secrets` marker so it stays self-describing there.
     name: z.string(),
     status: z.enum(["packing", "ready", "failed"]),
@@ -6253,7 +6253,7 @@ export const BundleExportsSchema = z.object({ exports: z.array(BundleExportSchem
 // ---- secrets: user-supplied env-var secrets the daemon writes to desired-state/.env ----
 // The web posts a Cloudflare token / GitHub PAT / another-host SSH key straight to the sandbox daemon (never
 // through the platform); `apply` reloads .env each run so a new secret is picked up with NO restart. `list`
-// returns KEYS ONLY — the values never leave the sandbox; `reveal` is the one deliberate, owner-only exception.
+// returns KEYS ONLY, the values never leave the sandbox; `reveal` is the one deliberate, owner-only exception.
 export const SecretSetSchema = z.object({
     key: z
         .string()
@@ -6267,10 +6267,10 @@ export const SecretRevealSchema = z.object({ value: z.string() });
 
 // One entry per secret the sandbox knows about, across every store: intent env secrets and intentic-generated
 // passwords (from the desired-state repo), capability credentials, and AI-provider accounts. Values never ride
-// this shape — `revealable` says whether `reveal` can return one (everything but provider accounts).
+// this shape, `revealable` says whether `reveal` can return one (everything but provider accounts).
 export const SecretInventoryEntrySchema = z.object({
     // Env-var key for env|generated; `<provider>:<accountId>` for provider entries; capability instance id
-    // otherwise. Unique within the inventory — several accounts of one provider each get their own entry.
+    // otherwise. Unique within the inventory, several accounts of one provider each get their own entry.
     key: z.string(),
     kind: z.enum(["env", "generated", "capability", "provider"]),
     // Display name for provider entries: "<ProviderName> · <accountLabel>". Absent on env/generated entries.
@@ -6278,12 +6278,12 @@ export const SecretInventoryEntrySchema = z.object({
     status: z.enum(["missing", "set", "connected"]),
     // The artifact resources referencing this secret ({$secret} refs); [] for capability/provider entries.
     requiredBy: z.array(z.object({ resourceId: z.string(), type: z.string() })),
-    // Human-readable provenance, e.g. "desired-state/.env" — the UI's "where does this live" line.
+    // Human-readable provenance, e.g. "desired-state/.env", the UI's "where does this live" line.
     storedAt: z.string(),
     revealable: z.boolean(),
     // Forgejo Actions replication state, present only after adopt on env|generated entries.
     ci: z.object({ synced: z.boolean(), pushedAt: z.string().optional() }).optional(),
-    /* The newest row of the use ledger that concerns this entry — when the agent last SPENT it, on which lane
+    /* The newest row of the use ledger that concerns this entry, when the agent last SPENT it, on which lane
      * (a shell command, a JS run's script, a browser field), and where it went (the head of the command or
      * script, or the page's host). Names and destinations only, never values. Absent while a secret has never
      * been used, which most never are. */
@@ -6297,8 +6297,8 @@ export const SecretInventorySchema = z.object({ entries: z.array(SecretInventory
 // version: what this daemon runs (baked). latest/updateAvailable: the daemon compares its version to the
 // latest published `stable` release so the web can offer a non-blocking update (see system/version-check.ts).
 /* Whether an agent runtime can serve a turn right now, probed off the turn path (see the sandbox's
- * agent/adapter-health.ts). "unknown" is a real answer — a probe that could not run must not read as
- * "unavailable" and grey out a provider the user can in fact use — so surfaces treat it as
+ * agent/adapter-health.ts). "unknown" is a real answer, a probe that could not run must not read as
+ * "unavailable" and grey out a provider the user can in fact use, so surfaces treat it as
  * available-but-unverified rather than as a soft no. */
 export const AdapterHealthSchema = z.object({
     state: z.enum(["ready", "unavailable", "unknown"]),
@@ -6314,7 +6314,7 @@ export type AdapterHealthReport = z.infer<typeof AdapterHealthSchema>;
  * the environment recipe take the overwhelming majority of the wall clock, and the sandbox is up and serving
  * through both of them. Only the cutover is downtime, and it is seconds.
  *
- * The daemon cannot know any of this by itself — it holds no host Docker socket — so `ic sandbox prepare`
+ * The daemon cannot know any of this by itself, it holds no host Docker socket, so `ic sandbox prepare`
  * tells it, on the machine that runs the container. That is the whole reason this exists: without it, the
  * update card had to quote the download as if it were an outage, and "a few minutes, this page loses the
  * sandbox" is a completely different decision from "about half a minute".
@@ -6323,12 +6323,12 @@ export type AdapterHealthReport = z.infer<typeof AdapterHealthSchema>;
  * re-derives every one of these facts from the host-side record and refuses the fast path if any has drifted. */
 export const StagedUpdateSchema = z.object({
     // The version the staged image reports about itself. Absent when the image would not say (an older build,
-    // a probe that failed), which reads as "ready, version unknown" — never as nothing being ready.
+    // a probe that failed), which reads as "ready, version unknown", never as nothing being ready.
     version: z.string().optional(),
     // The release channel it was staged FROM, which is not necessarily the one this sandbox follows: preparing
     // a beta build is not moving onto beta.
     channel: z.string(),
-    // When it finished downloading, epoch ms — what answers "is this still the update I am being offered?"
+    // When it finished downloading, epoch ms, what answers "is this still the update I am being offered?"
     at: z.number(),
 });
 export type StagedUpdate = z.infer<typeof StagedUpdateSchema>;
@@ -6340,20 +6340,20 @@ export const InfoSchema = z.object({
     latest: z.string().optional(),
     updateAvailable: z.boolean().optional(),
     // Keyed by AgentCapabilities.runtime. Absent until the first background sweep lands, which reads the same
-    // as every entry being "unknown" — one of the two cannot go stale, so the daemon sends the absence.
+    // as every entry being "unknown", one of the two cannot go stale, so the daemon sends the absence.
     runtimes: z.record(z.string(), AdapterHealthSchema).optional(),
     /* Which release channel this sandbox follows (`stable` unless it was moved), and the base image the last
-     * swap replaced — both set on the container by the host script that performed the swap, since neither is
+     * swap replaced, both set on the container by the host script that performed the swap, since neither is
      * knowable from inside afterwards. `previousImage` is what a rollback returns to; absent means there is
      * nothing to go back to and no rollback is offered. */
     channel: z.string().optional(),
     previousImage: z.string().optional(),
-    /* WHAT IS IN THE UPDATE, in the words of the people it is for — the user-facing lines from every release
+    /* WHAT IS IN THE UPDATE, in the words of the people it is for, the user-facing lines from every release
      * between `version` and `latest`, newest first (platform/release-notes.ts reads them off the published
      * GitHub Releases).
      *
-     * The update card's other half. It could always say an update exists and what taking it costs — recreating
-     * the container interrupts every agent mid-turn — and never what the update was worth, which left the
+     * The update card's other half. It could always say an update exists and what taking it costs, recreating
+     * the container interrupts every agent mid-turn, and never what the update was worth, which left the
      * decision it asks for with nothing on one side of it.
      *
      * Absent, or empty, whenever there is nothing to say: the notes cache is cold, GitHub is unreachable, or
@@ -6363,7 +6363,7 @@ export const InfoSchema = z.object({
     // How many further notes the gap holds beyond the ones sent, for a sandbox that has been left alone a long
     // time. Absent or 0 ⇒ `updateNotes` is the whole of it.
     moreUpdateNotes: z.number().optional(),
-    /* WHAT THE UPDATE TAKES AWAY — the "Breaking changes" lines from every release in the same gap, uncapped
+    /* WHAT THE UPDATE TAKES AWAY, the "Breaking changes" lines from every release in the same gap, uncapped
      * (a warning that fell off a truncated list is a breaking update taken unwarned). Their presence is what
      * turns the update card from an offer into a warning that asks to be read before it hands over the
      * command. Absent for the overwhelming majority of updates, which break nothing. */
@@ -6377,17 +6377,17 @@ export type Info = z.infer<typeof InfoSchema>;
 /* WHAT THE DAEMON COULD NOT READ IN ITS OWN STATE FILES.
  *
  * Every manifest under `.intentic/` is read through a schema and falls back when that schema says no, which
- * keeps the daemon up and — until this route — ended there. A settings file with one bad character read as
+ * keeps the daemon up and, until this route, ended there. A settings file with one bad character read as
  * every setting at its default, a misspelled flag was stripped in silence, and a skipped capability said so
  * only in the daemon log. All three look identical from a browser: the feature is simply off.
  *
  * `kind` is what to do about it, which is why it is not just a message:
- *   unreadable   — the whole file is being ignored. Everything in it is at its default.
- *   unknownKey   — one key this build does not know. Only that key is ignored, and `suggestion` carries the
+ *   unreadable  , the whole file is being ignored. Everything in it is at its default.
+ *   unknownKey  , one key this build does not know. Only that key is ignored, and `suggestion` carries the
  *                  name it was probably meant to be, when one is close enough to guess honestly.
- *   invalidEntry — one entry of a list was skipped. The rest of the file is unaffected.
+ *   invalidEntry, one entry of a list was skipped. The rest of the file is unaffected.
  *
- * Reported per file rather than as one flat list because the file is the unit a person fixes — and only for the
+ * Reported per file rather than as one flat list because the file is the unit a person fixes, and only for the
  * files a person CAN fix (REPORTED_MANIFEST_PATHS in workspace-state.ts). A daemon-written ledger that stops
  * matching a tightened schema is not a repair job to hand the owner; it recovers on its own next write. */
 export const ManifestProblemSchema = z.object({
@@ -6405,13 +6405,13 @@ export type ManifestProblemReport = z.infer<typeof ManifestProblemReportSchema>;
 export const ManifestProblemsSchema = z.array(ManifestProblemReportSchema);
 
 // A daemon-minted session (system.session): the steady-state browser credential, exchanged for a verified
-// Google ID token so Google UI is a sign-in moment instead of an hourly renewal. `expiresAt` is epoch ms —
+// Google ID token so Google UI is a sign-in moment instead of an hourly renewal. `expiresAt` is epoch ms,
 // the browser renews ahead of it without parsing the token; `email` is who the daemon verified.
 export const DaemonSessionSchema = z.object({ token: z.string(), expiresAt: z.number(), email: z.string() });
 export type DaemonSession = z.infer<typeof DaemonSessionSchema>;
 
 // ---- activity: the activity audit log (historyRoot/activity.jsonl) ----
-// One provider-agnostic event per agent↔provider interaction, appended by the daemon only (never the agent —
+// One provider-agnostic event per agent↔provider interaction, appended by the daemon only (never the agent,
 // the log lives under historyRoot, outside /work, so the agent can't read or rewrite its own trail). Discord
 // is the first source; other cli providers reuse the same shape.
 
@@ -6421,7 +6421,7 @@ export const ActivityEventSchema = z.object({
     at: z.number(),
     // "discord", …; absent on provider-less system events (a cron automation.run).
     provider: z.string().optional(),
-    // Which provider account handled the turn — the attribution key for per-account usage totals. Absent on
+    // Which provider account handled the turn, the attribution key for per-account usage totals. Absent on
     // provider-less events and turns that ran on the provider's default account.
     account: z.string().optional(),
     direction: z.enum(["in", "out", "system"]),
@@ -6429,7 +6429,7 @@ export const ActivityEventSchema = z.object({
     // out: message.send | reaction.add | messages.read | api.call (unclassified provider endpoint)
     // system: gateway.login_failed | dispatch.failed | voice.session_started | voice.session_ended | automation.run
     //         | turn.started | turn.plan | turn.error | turn.completed (agent turn lifecycle; provider = claude/codex)
-    //         | rule.blocked_push | rule.held_work | rule.continued_turn (a rule DID something — see RuleSchema.
+    //         | rule.blocked_push | rule.held_work | rule.continued_turn (a rule DID something, see RuleSchema.
     //           Only the three outcomes a person would otherwise have no explanation for: a push that did not
     //           go, work that did not arrive, a turn that did not end. A rule that ran and passed says nothing,
     //           because a feed that logs every green check is one the eye learns to skip.)
@@ -6442,21 +6442,21 @@ export const ActivityEventSchema = z.object({
     // Outbound HTTP method + endpoint path (tokens ride headers, never URLs).
     method: z.string().optional(),
     endpoint: z.string().optional(),
-    // The agent turn that made/handled it — the join key between an inbound wake and its outbound calls.
+    // The agent turn that made/handled it, the join key between an inbound wake and its outbound calls.
     sessionId: z.string().optional(),
     /* ONE TURN'S EVENTS, TIED TOGETHER. A turn writes four lifecycle events plus one per outbound provider call,
-     * and read as five rows they say one thing five times — so the feed groups on this instead. It cannot be
+     * and read as five rows they say one thing five times, so the feed groups on this instead. It cannot be
      * sessionId: the runtime does not mint one until the stream's first frame, which is AFTER turn.started, so
      * the very event carrying the prompt is the one that could never be joined. Minted by the turn itself. */
     turnId: z.string().optional(),
     // The stable conversation the turn belongs to. Outlives sessionId, which a provider/account/harness switch
-    // retires mid-conversation — so this, not sessionId, is what "the same agent" means across a feed.
+    // retires mid-conversation, so this, not sessionId, is what "the same agent" means across a feed.
     conversationId: z.string().optional(),
     // The conversation's display title as it stood when the event was written. Denormalised on purpose: the
     // registry entry it came from is prunable and renameable, and an audit row must still read as words years
-    // later. Absent on the first event of a fresh conversation — the auto-namer has not run yet.
+    // later. Absent on the first event of a fresh conversation, the auto-namer has not run yet.
     title: z.string().optional(),
-    // What woke the conversation from outside, when something did (see AgentOriginSchema) — the feed's "who
+    // What woke the conversation from outside, when something did (see AgentOriginSchema), the feed's "who
     // called me" attribution, and how a turn is filed under Discord rather than under the runtime that served it.
     origin: AgentOriginSchema.optional(),
     automationIds: z.array(z.string()).optional(),
@@ -6470,14 +6470,14 @@ export type ActivityEvent = z.infer<typeof ActivityEventSchema>;
 export const ActivityQuerySchema = z.object({
     provider: z.string().optional(),
     limit: z.coerce.number().min(1).max(500).default(100),
-    // `at` cursor, exclusive — newest-first paging.
+    // `at` cursor, exclusive, newest-first paging.
     before: z.coerce.number().optional(),
 });
 export type ActivityQuery = z.infer<typeof ActivityQuerySchema>;
 export const ActivityListSchema = z.object({ events: z.array(ActivityEventSchema) });
 
 // Live connection health, probed per provider capability (not stored): gateway state from the client pool
-// (idle = the gateway is up but has no enabled listener automation to connect for — distinct from a
+// (idle = the gateway is up but has no enabled listener automation to connect for, distinct from a
 // connection that should be up but isn't; pairing = the socket is up but the credential is a ceremony nobody
 // has finished, which no amount of waiting fixes), lastError from the newest system-error event in the log.
 export const ActivityConnectionSchema = z.object({
@@ -6496,14 +6496,14 @@ export type ActivityStatus = z.infer<typeof ActivityStatusSchema>;
 // ---- usage: the durable spend ledger ----
 // One row per attributed turn, appended at turn end and NEVER pruned. This exists because the activity log
 // can't answer a money question: it prunes to its most recent entries, so a month's spend is unanswerable and
-// — worse for a cost readout — the totals SHRINK as newer turns evict older ones. The ledger keeps the raw
+//, worse for a cost readout, the totals SHRINK as newer turns evict older ones. The ledger keeps the raw
 // per-turn facts and the rollup projects them on read, so a new grouping (by day, by model, by conversation)
 // needs no new storage and no migration.
 export const UsageTurnSchema = z.object({
     // Epoch ms at turn end. Kept alongside `day` so a future timezone-aware rollup is a pure change over data
     // already on disk.
     at: z.number(),
-    // The UTC calendar day (YYYY-MM-DD) `at` fell in — precomputed so a rollup never re-derives a timezone.
+    // The UTC calendar day (YYYY-MM-DD) `at` fell in, precomputed so a rollup never re-derives a timezone.
     day: z.string(),
     provider: z.string(),
     // Absent on an env-token turn, which has no account to attribute to (same rule as the activity log).
@@ -6524,7 +6524,7 @@ export const UsageTurnSchema = z.object({
     cacheCreationTokens: z.number(),
     costUsd: z.number(),
     durationMs: z.number(),
-    /* Which arm of the terse experiment this turn ran on (settings.terseHoldout) — the only record of it, and
+    /* Which arm of the terse experiment this turn ran on (settings.terseHoldout), the only record of it, and
      * the reason the savings report can say what the steer is worth instead of guessing.
      *
      * ABSENT means "not part of the experiment", not "off": a turn under a custom system prompt drops the
@@ -6540,45 +6540,45 @@ export const UsageTurnSchema = z.object({
     // Hash of the plugin nudge + skill body used for this arm. Control turns carry it too, so a report can keep
     // both sides of one treatment revision together and exclude older wording after an upgrade.
     iqSearchCohort: z.string().optional(),
-    /* Characters of the model's own PROSE this turn — the `delta` frames only, so no tool-call arguments and no
+    /* Characters of the model's own PROSE this turn, the `delta` frames only, so no tool-call arguments and no
      * thinking. What the terse steer is judged on, and the reason it can be judged at all.
      *
      * `outputTokens` cannot serve: measured over a day of real turns it is 91.6% tool-call arguments (an Edit's
      * old_string and new_string, a Write's whole file body) and 7.8% prose. The steer moves prose. So a fifth
-     * off the model's narration moves the total by 1.6% — against a margin of ±35 points, which is to say the
+     * off the model's narration moves the total by 1.6%, against a margin of ±35 points, which is to say the
      * experiment was structurally unable to see its own treatment, and the number it printed instead was
      * whichever arm happened to draw the bigger tasks.
      *
-     * CHARACTERS, not tokens, because the provider bills a total and never breaks it down — a token figure here
+     * CHARACTERS, not tokens, because the provider bills a total and never breaks it down, a token figure here
      * would be chars÷4 wearing a unit it had not earned. For a comparison of two arms the constant cancels
      * anyway, and the honest unit is the one actually counted.
      *
      * Absent ⇒ the turn predates this being measured; `armOf` drops it from the population rather than reading
      * it as a silent turn. */
     proseChars: z.number().optional(),
-    /* SEARCHES THIS TURN RAN — every tool call that went looking for code, the dedicated search tools and the
+    /* SEARCHES THIS TURN RAN, every tool call that went looking for code, the dedicated search tools and the
      * CLI searches alike (isSearchCall owns the rule; `iq q` is Bash and would otherwise not be counted at all).
      * What the search teaching is judged on, and the same correction `proseChars` is to the terse steer.
      *
      * COST PER TURN CANNOT SERVE: cost is a whole turn's worth of work, a search mechanism touches one part of
-     * it, and the part lives inside the noise of the rest — exactly the shape that made output tokens unable to
+     * it, and the part lives inside the noise of the rest, exactly the shape that made output tokens unable to
      * see the steer. Nine days of a since-removed retrieval experiment proved it with an interval from −2.9% to
      * +56.9%, driven entirely by which arm had drawn the bigger jobs.
      *
      * Searches are what the mechanism acts on directly. Turns that never search stay in the population at zero
-     * rather than being filtered out — they dilute both arms equally, while selecting on "did it search" would
+     * rather than being filtered out, they dilute both arms equally, while selecting on "did it search" would
      * select on the treatment itself.
      *
      * Absent ⇒ the turn predates this being measured; `armOf` drops it rather than reading it as a turn that
      * searched nothing. */
     searchCalls: z.number().optional(),
-    /* …and how many of them came BEFORE the turn first opened or changed a file — the orientation burst. A turn
+    /* …and how many of them came BEFORE the turn first opened or changed a file, the orientation burst. A turn
      * that already knows where to look starts working; one that doesn't goes hunting first.
      *
      * The narrower of the two readings and the less confounded: `searchCalls` still grows with the size of the
      * job, while the walk up to the first file is roughly the same act whatever the job turns out to be.
      *
-     * A turn that never reads or edits counts all of its searches here — it never arrived, so all of it was
+     * A turn that never reads or edits counts all of its searches here, it never arrived, so all of it was
      * orientation. Dropping those instead would select the population by an OUTCOME the treatment moves, which
      * is the one bias an arm-based reading cannot absorb.
      *
@@ -6587,13 +6587,13 @@ export const UsageTurnSchema = z.object({
 });
 export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 
-// The ledger grouped by day × provider × account × model × harness × conversation — the finest grouping any
+// The ledger grouped by day × provider × account × model × harness × conversation, the finest grouping any
 // dashboard panel needs, and a handful of rows per active day instead of one per turn, so a year of history is
 // well under a MB over the tunnel. Every panel (spend per day, cost by model, cost by agent, cache hit rate) is
 // a projection of these.
 // The conversation is in the KEY, not merely along for the ride, because cost-by-agent has to answer within the
 // same window as every other panel on the screen. The fleet registry also carries a per-agent total, but only a
-// cumulative, all-time one — reading it beside a "last 7 days" filter would print an all-time number under a
+// cumulative, all-time one, reading it beside a "last 7 days" filter would print an all-time number under a
 // windowed heading, which is the shrinking-totals bug wearing a different hat.
 export const UsageRollupRowSchema = z.object({
     day: z.string(),
@@ -6624,7 +6624,7 @@ export const UsageRollupSchema = z.object({ rows: z.array(UsageRollupRowSchema) 
 // ---- usage: per-account token/cost totals ----
 // The account picker's headroom readout, folded from the ledger above (all-time, not a log window), grouped by
 // provider+account. `account` is the attribution key, so env-token turns are excluded rather than pooled under
-// a blank id — an unattributed turn belongs to no account's total.
+// a blank id, an unattributed turn belongs to no account's total.
 export const UsageAccountSchema = z.object({
     provider: z.string(),
     account: z.string(),
@@ -6640,7 +6640,7 @@ export const UsageSummarySchema = z.object({ accounts: z.array(UsageAccountSchem
 
 // ---- logs: daemon-owned debug logs (historyRoot/logs) ----
 // Terminal pipe-pane captures (terminals/), intentic CLI run logs (intentic-runs/), and the daemon's own pino
-// file (daemon.log) — written by the daemon/tmux only, under historyRoot so the agent can't rewrite them.
+// file (daemon.log), written by the daemon/tmux only, under historyRoot so the agent can't rewrite them.
 
 export const LogFileEntrySchema = z.object({
     // Path relative to the logs root, e.g. "terminals/web-1-%0.log" or "daemon.log".
@@ -6653,7 +6653,7 @@ export type LogFileEntry = z.infer<typeof LogFileEntrySchema>;
 export const LogsListSchema = z.object({ files: z.array(LogFileEntrySchema) });
 
 // `name` rides the query (log names contain slashes, which don't fit a path segment); `bytes` is the tail
-// size — the newest bytes win when the file is larger.
+// size, the newest bytes win when the file is larger.
 export const LogReadQuerySchema = z.object({
     name: z.string().min(1),
     bytes: z.coerce.number().min(1).max(1_048_576).default(65_536),
@@ -6668,7 +6668,7 @@ export const LogReadSchema = z.object({
 export type LogRead = z.infer<typeof LogReadSchema>;
 
 // A tab's self-report of what it is looking at, keyed by its /events connection's clientId. Full replace,
-// not a merge — an absent field means "cleared", so a tab leaving a file drops the path with the same report.
+// not a merge, an absent field means "cleared", so a tab leaving a file drops the path with the same report.
 export const PresenceReportSchema = z.object({
     clientId: z.string(),
     idle: z.boolean(),
@@ -6685,13 +6685,13 @@ export type PresenceReport = z.infer<typeof PresenceReportSchema>;
 //            browser's push service and the daemon sends to it directly, end-to-end encrypted.
 //   relay    a native app install (the iOS shell), whose OS push service (APNs) only accepts sends from
 //            the app's vendor. The daemon posts plain JSON to the platform's push relay, which holds the
-//            vendor credential and forwards. The payload transits the relay readable — the price of Apple
-//            requiring the vendor in the loop — which is why the channel records WHERE to post (`url`)
+//            vendor credential and forwards. The payload transits the relay readable, the price of Apple
+//            requiring the vendor in the loop, which is why the channel records WHERE to post (`url`)
 //            rather than the daemon knowing any platform by name.
 // Channels live here and not on the platform because the daemon is on the command path: the platform would
 // have to be told about every turn to be useful.
 
-// A browser's PushSubscription, in the exact shape `web-push` consumes — the browser produces it via
+// A browser's PushSubscription, in the exact shape `web-push` consumes, the browser produces it via
 // PushManager.subscribe() and the client posts it back verbatim, so the daemon never reshapes it.
 export const WebPushChannelSchema = z.object({
     kind: z.literal("webpush"),
@@ -6705,11 +6705,11 @@ export const WebPushChannelSchema = z.object({
 export type WebPushChannel = z.infer<typeof WebPushChannelSchema>;
 
 // A native install, addressed through a push relay. `secret` is the send capability the relay minted at
-// registration — the daemon proves it may notify this device by presenting it; the relay never learns which
+// registration, the daemon proves it may notify this device by presenting it; the relay never learns which
 // sandbox is calling. `deviceId` doubles as the channel's identity (see channelId below).
 export const RelayChannelSchema = z.object({
     kind: z.literal("relay"),
-    // The absolute URL the daemon POSTs a send to — minted by the relay at registration, stored verbatim.
+    // The absolute URL the daemon POSTs a send to, minted by the relay at registration, stored verbatim.
     url: z.url(),
     deviceId: z.string().min(1),
     secret: z.string().min(1),
@@ -6720,15 +6720,15 @@ export const PushChannelSchema = z.discriminatedUnion("kind", [WebPushChannelSch
 export type PushChannel = z.infer<typeof PushChannelSchema>;
 
 // The one identity every push route speaks: subscribe upserts by it, unsubscribe and the config probe name
-// devices by it. Shape-derived so the daemon and the web app can never disagree about what identifies a row —
+// devices by it. Shape-derived so the daemon and the web app can never disagree about what identifies a row,
 // a browser is its push endpoint, a native install is the deviceId its relay registration minted.
 export const channelId = (channel: PushChannel): string => (channel.kind === "webpush" ? channel.endpoint : channel.deviceId);
 
 // What the service worker renders. `url` is the in-app route the notification opens (the click handler
-// focuses an existing tab there rather than spawning a new one); `tag` collapses repeats — a second
+// focuses an existing tab there rather than spawning a new one); `tag` collapses repeats, a second
 // "waiting on you" for the same conversation REPLACES the first instead of stacking. Push payloads are
 // capped by the push services themselves (~4KB after encryption), which is why nothing here carries a
-// transcript or a diff — the notification is a pointer back into the workspace, not a delivery mechanism
+// transcript or a diff, the notification is a pointer back into the workspace, not a delivery mechanism
 // for content.
 export const PushNotificationSchema = z.object({
     title: z.string().min(1),
@@ -6742,7 +6742,7 @@ export const PushNotificationSchema = z.object({
 export type PushNotification = z.infer<typeof PushNotificationSchema>;
 
 // The VAPID public key a browser needs to subscribe (native shells ignore it), plus whether the asking
-// device's channel is already known — so the settings toggle can render its true state instead of trusting
+// device's channel is already known, so the settings toggle can render its true state instead of trusting
 // the device's permission alone (a granted permission with no daemon-side row would notify nothing).
 export const PushConfigSchema = z.object({ publicKey: z.string(), subscribed: z.boolean() });
 export const PushChannelIdSchema = z.object({ id: z.string().min(1) });
@@ -6758,16 +6758,16 @@ export type PushTest = z.infer<typeof PushTestSchema>;
 
 // ---- maintenance: the standing evidence a chore is decided from ----
 
-/* THE DAEMON SERVES FACTS; THE BROWSER DECIDES. Everything below is measurement — what a tool reported, what the
+/* THE DAEMON SERVES FACTS; THE BROWSER DECIDES. Everything below is measurement, what a tool reported, what the
  * manifests say, when a chore last ran. Not one field here says "you should do something", and that is the whole
  * boundary: which chore is DUE is computed by @intentic/sandbox-contract/chores, which both the Maintenance view and its rail
  * badge run, so the number on the tile and the reason in the panel can never disagree. Put the verdict on the wire
  * instead and a daemon one image behind would be quietly arguing with the browser about what needs doing.
  *
  * The split inside the evidence is by COST, not by subject:
- *   probes   subprocesses (pnpm outdated, pnpm audit, knip, jscpd) — minutes, so they are cached on disk with a
+ *   probes   subprocesses (pnpm outdated, pnpm audit, knip, jscpd), minutes, so they are cached on disk with a
  *            TTL and refreshed by a background runner. A route hit never waits on one.
- *   signals  things the daemon already knows — the resident iq index's health ranking, the package manifests it
+ *   signals  things the daemon already knows, the resident iq index's health ranking, the package manifests it
  *            reads for the dependency graph, its own node version. Recomputed per request; all of it is cheap. */
 
 export const PROBE_IDS = ["outdated", "audit", "knip", "jscpd", "ui", "bundle"] as const;
@@ -6781,7 +6781,7 @@ export const OutdatedPackageSchema = z.object({
     current: z.string(),
     latest: z.string(),
     kind: z.enum(["major", "minor", "patch"]),
-    // "dependencies" / "devDependencies" / "optionalDependencies" — a dev-only major is a different risk.
+    // "dependencies" / "devDependencies" / "optionalDependencies", a dev-only major is a different risk.
     section: z.string(),
 });
 export type OutdatedPackage = z.infer<typeof OutdatedPackageSchema>;
@@ -6816,7 +6816,7 @@ export const DeadCodeSchema = z.object({
 export type DeadCode = z.infer<typeof DeadCodeSchema>;
 
 // jscpd's headline plus the biggest clones. `percentage` is of scanned lines, which is the figure a threshold is
-// worth setting against — a clone COUNT grows with the repo and would mean something different every quarter.
+// worth setting against, a clone COUNT grows with the repo and would mean something different every quarter.
 export const DuplicationSchema = z.object({
     percentage: z.number(),
     clones: z.number().int().nonnegative(),
@@ -6832,7 +6832,7 @@ export type Duplication = z.infer<typeof DuplicationSchema>;
  * "Checkout.vue · 11 hard-coded values" than by eleven class attributes, and a file path is an identity a digest
  * can be built from while a class string is not. */
 export const UiScanSchema = z.object({
-    // Framework-shaped source files — tests, stories and generated output excluded. The inventory that makes a
+    // Framework-shaped source files, tests, stories and generated output excluded. The inventory that makes a
     // duplication finding a COMPONENT duplication finding rather than a generic one.
     components: z.array(z.string()),
     // Where the design system was routed around, and how often in each file.
@@ -6845,8 +6845,8 @@ export const UiScanSchema = z.object({
 export type UiScan = z.infer<typeof UiScanSchema>;
 
 /* WHAT THE LAST BUILD ACTUALLY PRODUCED. Measured from the build output already on disk, never by running the
- * build: a maintenance probe that mutates the owner's working tree — and `dist/` appearing in their `git status`
- * is exactly that — is a worse surprise than a measurement that is sometimes a commit behind. It also means this
+ * build: a maintenance probe that mutates the owner's working tree, and `dist/` appearing in their `git status`
+ * is exactly that, is a worse surprise than a measurement that is sometimes a commit behind. It also means this
  * never needs the env vars, secrets or network a real production build would.
  *
  * Gzip alongside raw because gzip is what crosses the wire, and the ratio between them is the difference between
@@ -6862,11 +6862,11 @@ export type Bundle = z.infer<typeof BundleSchema>;
 
 /* One probe's cached result. The three states are deliberately distinct, because a panel that collapses them
  * lies about the most important case:
- *   ok           the tool ran and reported. `facts` carries its findings — including "nothing found", which is
+ *   ok           the tool ran and reported. `facts` carries its findings, including "nothing found", which is
  *                a real answer and the one that keeps a chore quiet.
  *   unavailable  the tool is not part of this repo (knip is not a devDependency, there is no lockfile to audit).
  *                Not a failure and not evidence of health: the chore renders as unmeasured, and can never badge.
- *   failed       the tool ran and broke — a network-less audit, a jscpd that ran out of memory. Says so, with
+ *   failed       the tool ran and broke, a network-less audit, a jscpd that ran out of memory. Says so, with
  *                the tail of what it printed, rather than reading as "clean".
  * Merging `unavailable` into `ok`-with-zeros is how a maintenance surface ends up reporting a green repository
  * it has never actually measured. */
@@ -6874,7 +6874,7 @@ export const ProbeStateSchema = z.enum(["ok", "unavailable", "failed"]);
 export type ProbeState = z.infer<typeof ProbeStateSchema>;
 
 // The findings, discriminated by which probe produced them. Absent while the probe has never completed, and on
-// `unavailable`/`failed` — a reader must go through `state` to reach facts, so there is no shape in which a
+// `unavailable`/`failed`, a reader must go through `state` to reach facts, so there is no shape in which a
 // missing measurement can be mistaken for a zero.
 export const ProbeFactsSchema = z.discriminatedUnion("id", [
     z.object({ id: z.literal("outdated"), packages: z.array(OutdatedPackageSchema) }),
@@ -6889,28 +6889,28 @@ export type ProbeFacts = z.infer<typeof ProbeFactsSchema>;
 export const ProbeResultSchema = z.object({
     id: ProbeIdSchema,
     state: ProbeStateSchema,
-    // When the probe last COMPLETED — the age the panel shows, and what the runner's TTL is measured from.
+    // When the probe last COMPLETED, the age the panel shows, and what the runner's TTL is measured from.
     ranAt: z.number(),
     // How long it took. Shown because a seven-minute jscpd is why the tier-2 refresh is weekly, and a reader
     // deciding whether to force a refresh deserves to know what they are asking for.
     tookMs: z.number().int().nonnegative(),
     facts: ProbeFactsSchema.optional(),
-    // On `failed`, how it broke — a bounded quote of the tool's own output, never a summary of it. On
+    // On `failed`, how it broke, a bounded quote of the tool's own output, never a summary of it. On
     // `unavailable`, what is missing, in the probe spec's own words ("no lockfile"): there is no tool output to
-    // quote when the tool never ran, and the alternative — a sentence built from the probe's name — would have an
+    // quote when the tool never ran, and the alternative, a sentence built from the probe's name, would have an
     // unmeasured probe claiming there is nothing to measure.
     reason: z.string().optional(),
 });
 export type ProbeResult = z.infer<typeof ProbeResultSchema>;
 
-// One workspace package as its manifest declares it — what the daemon already reads to build the dependency
+// One workspace package as its manifest declares it, what the daemon already reads to build the dependency
 // graph, carried through so chores can reason about the repo's own shape without a probe. `documented` is the
 // one derived field: whether <dir>/README.md exists, a stat per package. A package's architecture document IS
 // its README in this workspace, which is what makes that a stat on the package itself rather than a lookup.
 export const ChorePackageSchema = z.object({
     dir: z.string(),
     name: z.string(),
-    // The manifest's `engines` map, verbatim — the runtime chore compares it against what the daemon is running.
+    // The manifest's `engines` map, verbatim, the runtime chore compares it against what the daemon is running.
     engines: z.record(z.string(), z.string()).optional(),
     dependencies: z.array(z.string()),
     devDependencies: z.array(z.string()),
@@ -6919,23 +6919,23 @@ export const ChorePackageSchema = z.object({
 export type ChorePackage = z.infer<typeof ChorePackageSchema>;
 
 /* The cheap half of the evidence: what the daemon knows without starting anything. `hotspots` and `keyModules`
- * are the same rankings GET /workspace/health serves, capped tighter — a chore only ever asks whether a file has
+ * are the same rankings GET /workspace/health serves, capped tighter, a chore only ever asks whether a file has
  * ENTERED the top of the ranking, so a leaderboard is enough and a full report per repo per poll is not. */
-/* WHAT THIS REPOSITORY IS MADE OF — the facts that decide whether a chore is a QUESTION worth asking of it at
+/* WHAT THIS REPOSITORY IS MADE OF, the facts that decide whether a chore is a QUESTION worth asking of it at
  * all, as opposed to whether the answer happens to be yes.
  *
  * The distinction is the difference between a maintenance surface that reads as attentive and one that reads as
  * generic. "Re-read the documentation against the code" in a repository with no documentation is not a chore
- * that is currently clear — it is a chore that will never make sense here, and showing it teaches the owner that
+ * that is currently clear, it is a chore that will never make sense here, and showing it teaches the owner that
  * this list was written by someone who had not looked. Same for a Docker chore with no Dockerfile, or a CI chore
  * with no pipeline.
  *
  * These are all paths, deliberately: presence of a FILE is checkable, cheap, and cannot be argued with, which is
  * the same evidence-over-identity rule the extension activation facts follow. Every field is a list rather than a
- * boolean where the paths themselves are worth showing — a chore that says "not applicable: no Dockerfile" is
+ * boolean where the paths themselves are worth showing, a chore that says "not applicable: no Dockerfile" is
  * useful, and one that says "3 Dockerfiles: ./Dockerfile, _editor/web/Dockerfile, …" is more so. */
 export const ChoreShapeSchema = z.object({
-    // The repository MAP, when one exists (docs/architecture/*.md), capped — the count is what matters, and the
+    // The repository MAP, when one exists (docs/architecture/*.md), capped, the count is what matters, and the
     // drift survey needs to know there is something to re-read. Package pages are READMEs and are counted per
     // package by `ChorePackage.documented`; a repo with a map has been through the documentation flow at all,
     // which is the question this gate actually asks.
@@ -6943,22 +6943,22 @@ export const ChoreShapeSchema = z.object({
     dockerfiles: z.array(z.string()),
     // CI pipeline definitions: .github/workflows/*.yml, .gitlab-ci.yml, and the other single-file conventions.
     ci: z.array(z.string()),
-    // Whether dependencies are resolved to a lockfile — what makes an audit mean anything.
+    // Whether dependencies are resolved to a lockfile, what makes an audit mean anything.
     lockfile: z.boolean(),
     // A package.json at the repo root. The gate for every chore whose subject is the JavaScript dependency tree:
     // a Rust or Go repository has no majors to be behind on and no engines field to be pinned by, and offering it
     // those chores would be this surface guessing at what it is looking at.
     packageManifest: z.boolean(),
-    /* EVERY DEPENDENCY NAME DECLARED ANYWHERE IN THE REPO — the root manifest's blocks unioned with every
+    /* EVERY DEPENDENCY NAME DECLARED ANYWHERE IN THE REPO, the root manifest's blocks unioned with every
      * workspace package's, sorted and deduplicated.
      *
      * It is here rather than derived from `packages` because `packages` is EMPTY for a repository that is not a
-     * pnpm workspace, and the repositories these names exist to recognise — a Vite app, a Next app, an Angular
-     * CLI project — are overwhelmingly single-package. A framework gate built on `packages` would be dark in
+     * pnpm workspace, and the repositories these names exist to recognise, a Vite app, a Next app, an Angular
+     * CLI project, are overwhelmingly single-package. A framework gate built on `packages` would be dark in
      * exactly the repositories it was written for, silently, which is the worst way for a gate to be wrong.
      *
      * NAMES, not a `framework: "react"` verdict. Which names amount to "this is a React app" is a product
-     * decision, and product decisions live in the chore book that ships with the browser — a daemon baked into an
+     * decision, and product decisions live in the chore book that ships with the browser, a daemon baked into an
      * image months ago must not be the thing that decides Svelte is not a UI framework. */
     deps: z.array(z.string()),
 });
@@ -6976,15 +6976,15 @@ export const ChoreSignalsSchema = z.object({
 });
 export type ChoreSignals = z.infer<typeof ChoreSignalsSchema>;
 
-// What a finished chore turn left behind — written by the agent, read back to decide whether the chore is still
-// due. `clean` is the load-bearing one: an agent that looked and found the tool's findings to be false positives
+// What a finished chore turn left behind, written by the agent, read back to decide whether the chore is still
+// due. `clean` is the important one: an agent that looked and found the tool's findings to be false positives
 // must be able to say so, or the next poll starts the same turn again forever.
 export const ChoreOutcomeSchema = z.enum(["acted", "reported", "clean"]);
 export type ChoreOutcome = z.infer<typeof ChoreOutcomeSchema>;
 
 /* One chore's history in one repo. The DIGEST is what makes this a debounce rather than a suppression: it is a
  * hash of the evidence that was standing when the turn ran, so a chore whose evidence has since changed is due
- * again on its own merits while one whose evidence is unchanged stays quiet — with the run still visible in the
+ * again on its own merits while one whose evidence is unchanged stays quiet, with the run still visible in the
  * panel, saying when it ran and what it concluded. Nothing here can hide a chore from the view; it only decides
  * whether the rail is allowed to speak. */
 export const ChoreLedgerEntrySchema = z.object({
@@ -6994,19 +6994,19 @@ export const ChoreLedgerEntrySchema = z.object({
     runId: z.string(),
     outcome: ChoreOutcomeSchema,
     digest: z.string(),
-    // Set by the owner from the panel — the chore stays visible and stays out of the badge until this passes.
+    // Set by the owner from the panel, the chore stays visible and stays out of the badge until this passes.
     // Distinct from opting out, which is the absence of the chore from `enabled` in the sandbox's settings.
     snoozedUntil: z.number().optional(),
 });
 export type ChoreLedgerEntry = z.infer<typeof ChoreLedgerEntrySchema>;
 
 /* A measurement that is HAPPENING, as opposed to one that has happened. The probe cache can only ever describe
- * finished work — `ranAt` is the completion stamp — so a surface reading it alone has no way to say "we are
+ * finished work, `ranAt` is the completion stamp, so a surface reading it alone has no way to say "we are
  * measuring this right now", and the panel's re-measure button spent its whole life looking like it did nothing:
  * the request is an ack, the sweep takes minutes, and every visible fact on the row went on describing the
  * measurement it was replacing.
  *
- * `startedAt` is when the probe actually began, absent while it is still waiting behind another one — the runner
+ * `startedAt` is when the probe actually began, absent while it is still waiting behind another one, the runner
  * has ONE lane across the whole sandbox, so "queued" is a real and common state, and a reader told "measuring"
  * about a probe that has not started is being lied to about how long it has left. */
 export const RunningProbeSchema = z.object({
@@ -7018,7 +7018,7 @@ export const RunningProbeSchema = z.object({
 });
 export type RunningProbe = z.infer<typeof RunningProbeSchema>;
 
-// GET /chores — every discovered repo's standing evidence, plus the ledger, in one read. One route rather than
+// GET /chores, every discovered repo's standing evidence, plus the ledger, in one read. One route rather than
 // one per repo because the rail badge scans ALL of them on a timer, and N requests a minute to answer "is
 // anything due" is the kind of poll that shows up in a battery graph.
 export const ChoresReportSchema = z.object({
@@ -7035,10 +7035,10 @@ export const ChoresReportSchema = z.object({
 });
 export type ChoresReport = z.infer<typeof ChoresReportSchema>;
 
-// POST /chores/probe — force one probe to re-run now, ahead of its TTL. Returns immediately; the runner does the
+// POST /chores/probe, force one probe to re-run now, ahead of its TTL. Returns immediately; the runner does the
 // work and the next GET /chores carries the result, the same shape the panel already polls.
 export const ChoreProbeRequestSchema = z.object({ repo: z.string().min(1), id: ProbeIdSchema });
-// POST /chores/ledger — record a run, or snooze. Written daemon-side rather than by the browser so a chore turn
+// POST /chores/ledger, record a run, or snooze. Written daemon-side rather than by the browser so a chore turn
 // started from anywhere (the panel, an automation, the agent itself) lands in one ledger.
 export const ChoreLedgerWriteSchema = ChoreLedgerEntrySchema;
 

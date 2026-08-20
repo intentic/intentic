@@ -5,7 +5,7 @@ import { z } from "zod";
 
 /* Bridge configuration: where the sandbox is and which credential/agent to use. Environment wins (the
  * editor's agent_servers env block / the ACP env_var auth method); the config file written by
- * `intentic-acp login` is the fallback — under the same ~/.intentic/<agent> home every local agent uses. The
+ * `intentic-acp login` is the fallback, under the same ~/.intentic/<agent> home every local agent uses. The
  * session map persists ACP-session → daemon-conversation identities so editors can resume across bridge restarts. */
 
 const CONFIG_DIR = agentHome("acp").dir;
@@ -54,7 +54,7 @@ export const writeConfig = (config: { url: string; token: string; agent?: string
 };
 
 // ACP session id → the daemon-side identity behind it. `agent` is recorded so a provider switch never
-// resumes a foreign runtime's session (the daemon would reject it anyway — this fails cleanly earlier).
+// resumes a foreign runtime's session (the daemon would reject it anyway, this fails cleanly earlier).
 const SessionMapSchema = z.record(z.string(), z.object({ conversationId: z.string(), agent: z.string(), providerSessionId: z.string().optional() }));
 export type SessionMap = z.infer<typeof SessionMapSchema>;
 

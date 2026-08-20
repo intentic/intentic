@@ -1,10 +1,10 @@
-/* The slice of a WhatsApp message this extension reads, structurally — NOT baileys' generated proto types.
+/* The slice of a WhatsApp message this extension reads, structurally. NOT baileys' generated proto types.
  * Shared by client.ts (which casts real protos to it at the boundary) and listener.ts (which normalizes it),
  * and deliberately import-free: everything except client.ts stays testable without baileys installed, because
  * the sandbox installs a new package's dependencies only after the turn that adds them.
  *
  * WhatsApp wraps a message's real content in protocol envelopes (disappearing chats, view-once) and splits the
- * "what was written" across per-kind fields — unwrapping and reading those is listener.ts's job; this file just
+ * "what was written" across per-kind fields, unwrapping and reading those is listener.ts's job; this file just
  * names the fields it does that with. */
 
 export interface WaContextInfo {
@@ -29,7 +29,7 @@ export interface WaMessageContent {
     readonly stickerMessage?: { readonly mimetype?: string };
     readonly locationMessage?: { readonly degreesLatitude?: number; readonly degreesLongitude?: number; readonly name?: string };
     readonly contactMessage?: { readonly displayName?: string };
-    // Envelope kinds: the real content sits one level down (or, for protocolMessage, there is none — edits,
+    // Envelope kinds: the real content sits one level down (or, for protocolMessage, there is none, edits,
     // deletes and sync notices are bookkeeping, not messages).
     readonly ephemeralMessage?: { readonly message?: WaMessageContent };
     readonly viewOnceMessage?: { readonly message?: WaMessageContent };

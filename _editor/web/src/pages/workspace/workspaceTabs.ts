@@ -5,12 +5,12 @@ import type { DiffPayload } from "@intentic/extension-api";
  * useWorkspaceTabs owns the list + active id; FileTabs.vue renders it; the Changes and History panels emit
  * diff payloads that Workspace.vue turns into diff tabs. A `directory` tab is a repository's management surface
  * (DirectoryOperator); a `health` tab is one repo's codebase-health report (CodebaseHealth.vue). A `document` tab is the open-ended
- * one: whatever an extension's document provider has to say about a DIRECTORY — its architecture page, its git
- * history — rendered by that provider beside the code it explains rather than in a routed area away from it;
+ * one: whatever an extension's document provider has to say about a DIRECTORY, its architecture page, its git
+ * history, rendered by that provider beside the code it explains rather than in a routed area away from it;
  * see core-views/documentRegistry.ts. */
 
 // A jump to a line in the open file (a content-search match). `seq` makes every jump a fresh identity, so
-// re-clicking the SAME hit after scrolling away still re-reveals — a bare line number couldn't re-fire.
+// re-clicking the SAME hit after scrolling away still re-reveals, a bare line number couldn't re-fire.
 export interface LineJump {
     readonly line: number;
     readonly seq: number;
@@ -18,7 +18,7 @@ export interface LineJump {
 
 export type WorkspaceTab =
     | { readonly kind: "file"; readonly id: string; readonly path: string }
-    // Everything a diff payload carries except the two fields that only exist to BUILD the identity — `id` is
+    // Everything a diff payload carries except the two fields that only exist to BUILD the identity, `id` is
     // what `key` + `scope` + `path` resolve to (see diffTabId), so keeping them beside it would be two spellings
     // of the same fact.
     | ({ readonly kind: "diff"; readonly id: string } & Omit<DiffPayload, "key" | "scope">)
@@ -33,26 +33,26 @@ export type WorkspaceTab =
           // The directory the document explains, root-relative ("" = the workspace root).
           readonly path: string;
           // The strip draws itself from these rather than from the provider, so a restored tab has a name and a
-          // glyph before its extension has activated — and still has them if that extension never comes back.
+          // glyph before its extension has activated, and still has them if that extension never comes back.
           readonly title: string;
           readonly icon: string;
       };
 
 export const diffTabId = (key: string, scope: string, path: string): string => `diff:${key}:${scope}/${path}`;
 
-/* How an open treats the strip — decided by the GESTURE, not by the caller's opinion of the file.
+/* How an open treats the strip, decided by the GESTURE, not by the caller's opinion of the file.
  *
  * `preview` is the strip's single transient slot (VSCode's italic tab), for a look-at-this: a click in the
  * explorer, a search hit, a row in Changes. The NEXT preview takes its place, so reading through twenty files
  * leaves one tab behind instead of twenty nobody meant to keep.
  *
- * `keep` is an ordinary tab — the user asked for THIS file and it stays until they close it. Three gestures ask:
+ * `keep` is an ordinary tab, the user asked for THIS file and it stays until they close it. Three gestures ask:
  * a double-click (on the row or on the tab), the tab menu's Keep Open, and typing into a previewed file. So does
- * every arrival from outside the explorer — a deep link, a file mention in the chat, Quick Open — because none of
+ * every arrival from outside the explorer, a deep link, a file mention in the chat, Quick Open, because none of
  * those is browsing, and VSCode keeps those too. */
 export type OpenMode = "keep" | "preview";
 
-// Where a newly opened tab lands. One that is already open is refreshed in place — a diff's content moves on
+// Where a newly opened tab lands. One that is already open is refreshed in place, a diff's content moves on
 // between two looks, and re-opening must never stack a second tab for the same id. Otherwise it takes the
 // position of the tab it replaces (the outgoing preview, so the slot stays put), or the end of the strip.
 export const placeTab = (tabs: readonly WorkspaceTab[], tab: WorkspaceTab, replaceId: string | null): readonly WorkspaceTab[] => {
@@ -66,7 +66,7 @@ export const placeTab = (tabs: readonly WorkspaceTab[], tab: WorkspaceTab, repla
 
 // Close a set of tabs (single ×, "Close Others", "Close to the Right", "Close All"). Drops the closed tabs, reports
 // which file paths need their edit buffer forgotten, and only re-picks the active tab when it was one of the closed
-// ones — falling back to the last remaining tab (VSCode behaviour), or null when nothing is left.
+// ones, falling back to the last remaining tab (VSCode behaviour), or null when nothing is left.
 export const closeTabs = (
     tabs: readonly WorkspaceTab[],
     activeId: string | null,

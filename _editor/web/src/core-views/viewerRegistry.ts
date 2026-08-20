@@ -8,7 +8,7 @@ import { shallowRef } from "vue";
  * no-Pinia convention), the same shape as the view registry. */
 
 export interface RegisteredViewer {
-    // The owning extension's id — error attribution + manifest-gating key off this.
+    // The owning extension's id, error attribution + manifest-gating key off this.
     readonly owner: string;
     readonly id: string;
     // Bare file extensions (no dot) this viewer handles, from its manifest.

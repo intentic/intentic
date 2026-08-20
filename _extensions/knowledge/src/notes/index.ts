@@ -1,9 +1,9 @@
-/* THE KNOWLEDGE ENGINE AS A SECOND ENTRY POINT — everything in this directory that touches no filesystem.
+/* THE KNOWLEDGE ENGINE AS A SECOND ENTRY POINT, everything in this directory that touches no filesystem.
  *
  * It exists for the callers that have to ANSWER for a knowledge base without one behind them: the demo fixture, which
  * serves this extension's namespace in a browser with no sandbox at all. That fixture could have hand-authored
  * its backlinks, its graph and its counts, and would then be a second implementation of the interesting half of
- * this extension — showing visitors behaviour the product does not actually have. Instead it builds a real
+ * this extension, showing visitors behaviour the product does not actually have. Instead it builds a real
  * index over real note text and gets the real answers.
  *
  * Kept OUT of the package's main entry deliberately. The app bundles that entry as a namespace object it cannot

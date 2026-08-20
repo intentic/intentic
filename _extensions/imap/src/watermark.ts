@@ -4,7 +4,7 @@ import { extensionRuntimeDir } from "@intentic/sandbox-contract";
 
 // The per-account resume state: the highest UID already dispatched for one capability instance's watched
 // mailbox. Persisted as a small JSON file so mail that arrived while the gateway (or the whole sandbox) was
-// down is dispatched on reconnect instead of lost — the catch-up is the whole point of keeping it on disk.
+// down is dispatched on reconnect instead of lost, the catch-up is the whole point of keeping it on disk.
 // uidValidity is a string because imapflow reports it as a bigint, which JSON can't hold.
 export interface Watermark {
     readonly mailbox: string;
@@ -18,7 +18,7 @@ export interface Watermark {
 export const watermarkPath = (workspaceRoot: string, capabilityId: string): string =>
     join(workspaceRoot, extensionRuntimeDir("imap"), `${capabilityId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
 
-// Missing or corrupt file reads as "no watermark" — the caller re-baselines; a broken file must never crash
+// Missing or corrupt file reads as "no watermark", the caller re-baselines; a broken file must never crash
 // the gateway or replay history.
 export const readWatermark = async (path: string): Promise<Watermark | undefined> => {
     let raw: string;
@@ -47,7 +47,7 @@ export const writeWatermark = async (path: string, mark: Watermark): Promise<voi
 };
 
 // Where to resume for a freshly opened mailbox. A UIDVALIDITY change means every stored UID is meaningless
-// (the server renumbered), and a changed watched mailbox means the stored UIDs belong to another folder — both
+// (the server renumbered), and a changed watched mailbox means the stored UIDs belong to another folder, both
 // re-baseline at the current end of the mailbox and dispatch nothing, so a reset can never flood the agent
 // with the whole mailbox history. `uidNext` is the server's next-to-assign UID at open time.
 export const resumePoint = (

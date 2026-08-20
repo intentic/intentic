@@ -5,12 +5,12 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { createApp, createMachine, createVolume, deleteApp, flySandboxRole, getMachine, listAppNames, startMachine, updateMachine } from "./fly.js";
 
-/* The hosted lane's orchestration — what the routes call, over the fly.ts client. One machine + one volume in
+/* The hosted lane's orchestration, what the routes call, over the fly.ts client. One machine + one volume in
  * one app per sandbox; the app name is derived from the sandbox's 12-hex tunnel id, so the Fly console, the
  * sandbox-<id> hostname the user sees, and the reaper's prefix match all tell the same story.
  *
  * Reachability stays Cloudflare end to end: the machine env carries the tunnel's connector token and the
- * daemon's announce is the only "it's up" signal — the platform never probes or dials a machine, it only
+ * daemon's announce is the only "it's up" signal, the platform never probes or dials a machine, it only
  * flips power. That is the hosted trust trade in one line: power and existence are the platform's, the
  * command path stays browser → daemon. */
 
@@ -25,13 +25,13 @@ const hostedAppName = (config: Config, sandboxId: string, connectToken: string):
 
 export interface HostedProvisionArgs {
     readonly sandboxId: string;
-    // Decrypted by the route (the row stores them encrypted) — this module never touches crypto.
+    // Decrypted by the route (the row stores them encrypted), this module never touches crypto.
     readonly connectToken: string;
     // The sandbox's reachability grant on the self-hosted hub (zrok-provision.ts): the account token the box
     // enables with, the namespace its names live under, its derived address, and the hub as the box dials it.
     readonly grant: { accountToken: string; namespaceToken: string; hostname: string; apiEndpoint: string };
     readonly ownerEmail: string;
-    // Decided by the route from the caller's country (region.ts), because only the request knows it — a
+    // Decided by the route from the caller's country (region.ts), because only the request knows it, a
     // European user's machine and volume are both created here, which is what makes the residency promise
     // in the privacy policy true rather than aspirational.
     readonly region: string;
@@ -45,7 +45,7 @@ export interface HostedProvisionArgs {
  * first-bind trust story (only this Google identity may claim ownership) is origin-independent too.
  *
  * The metadata stamp rides on that same "one composer" property: whatever the machine was a second ago, a
- * machine holding this config is somebody's sandbox and says so to Fly — which is the only way to read a
+ * machine holding this config is somebody's sandbox and says so to Fly, which is the only way to read a
  * pool-born app's true state, since its name will say `pool` forever (fly.ts). The sandbox ID and not the
  * owner's address: metadata is casually visible provider-side, and the ID joins to the platform's own rows. */
 const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string) => ({
@@ -73,18 +73,18 @@ const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineN
 
 /* Claim a warm machine for this sandbox, or answer undefined and let the cold path build one. The pool row
  * is won by a guarded update (`ready` → `claimed`), so two simultaneous claims can never brand the same
- * machine; the winner writes the sandbox's real config into it (identity in, no-op boot override out — one
+ * machine; the winner writes the sandbox's real config into it (identity in, no-op boot override out, one
  * `hostedMachineConfig`, so pool-born and built-to-order machines cannot drift), starts it, and commits the
  * hand-off in one transaction: the HostedMachine row appears and the pool row disappears together, so no
  * crash leaves a machine that is both claimable and somebody's.
  *
  * Region is a hard filter, not a preference: an EEA caller may only ever claim an EEA machine, or the privacy
- * policy's residency promise breaks. `wokeAt` opens the hour meter here, at claim — the pool's own no-op boot
+ * policy's residency promise breaks. `wokeAt` opens the hour meter here, at claim, the pool's own no-op boot
  * was the platform's cost, not this user's.
  *
  * Every failure is caught and answered as a miss: the pool is an accelerator, and a reader who pressed the
  * button is owed a machine, not an explanation of why the fast path stumbled. A row won and then stranded
- * (update or start failed) stays `claimed` with its app intact for the reconcile job to collect — it must not
+ * (update or start failed) stays `claimed` with its app intact for the reconcile job to collect, it must not
  * go back to `ready`, because a half-branded machine already carries this sandbox's tokens. */
 const claimPoolMachine = async (
     prisma: PrismaClient,
@@ -130,13 +130,13 @@ const claimPoolMachine = async (
     return undefined;
 };
 
-/* Create the machine — from the warm pool when one is waiting (seconds: the image is already on its host),
+/* Create the machine, from the warm pool when one is waiting (seconds: the image is already on its host),
  * built to order otherwise (minutes: app → volume → machine, image pulled on first boot). Either way the row
- * is stamped last and the env is the same contract vocabulary every connect flow sets — composed here rather
+ * is stamped last and the env is the same contract vocabulary every connect flow sets, composed here rather
  * than claimed by a script, because there is no script: the machine's first boot IS the sandbox, and the
  * daemon's announce narrates it exactly like a pasted run's.
  *
- * A cold-path failure after the app exists deletes the app again (best-effort) so a retry starts clean — and
+ * A cold-path failure after the app exists deletes the app again (best-effort) so a retry starts clean, and
  * anything this cleanup misses is an app with no HostedMachine row, which is precisely what the reaper
  * deletes. A pool claim that fails falls through to the cold path: the reader asked for a machine, not for a
  * pool hit. */
@@ -162,7 +162,7 @@ export const provisionHosted = async (
             config: hostedMachineConfig(config, args, appName, volumeId),
         });
         // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
-        // so the free lane's clock starts here rather than at the first wake — which is the only version that
+        // so the free lane's clock starts here rather than at the first wake, which is the only version that
         // does not hand out an uncounted first session to everyone who ever provisions one.
         await prisma.hostedMachine.create({ data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, wokeAt: new Date() } });
         return { appName, region };
@@ -175,7 +175,7 @@ export const provisionHosted = async (
 };
 
 // Power on a (probably) stopped machine. Idempotent by reading the state on refusal: Fly answers an error for
-// a machine that is already started/starting, and that answer IS success here — the browser's daemon probe is
+// a machine that is already started/starting, and that answer IS success here, the browser's daemon probe is
 // what decides when the sandbox is actually back.
 const LIVE_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
 export const wakeHosted = async (config: Config, hosted: { appName: string; machineId: string }): Promise<void> => {
@@ -212,8 +212,8 @@ export const refreshHosted = async (
 // Tear the whole app down (machines + volume ride with it). 404-tolerant by fly.ts's contract.
 export const destroyHosted = async (config: Config, appName: string): Promise<void> => deleteApp(config.hosted.flyApiToken, appName);
 
-/* The daily reconcile (retention.ts): every OUR-prefix app in the org whose row — HostedMachine for a
- * sandbox's machine, HostedPoolMachine for a warm one still waiting — is gone gets destroyed:
+/* The daily reconcile (retention.ts): every OUR-prefix app in the org whose row. HostedMachine for a
+ * sandbox's machine, HostedPoolMachine for a warm one still waiting, is gone gets destroyed:
  * failed-provision leftovers, delete-flow teardowns that lost their race, anything half-made. The DB row is
  * the single source of "this app should exist": rows are created only after the machine is, and deleted only
  * when the machine's story ends, so an app without one is never a machine somebody is working in. Apps

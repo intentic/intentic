@@ -1,7 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { nestSiblings } from "./fileNesting";
 
-/* What has to be OPEN for a path to have a row of its own in the explorer — the arithmetic behind "reveal the
+/* What has to be OPEN for a path to have a row of its own in the explorer, the arithmetic behind "reveal the
  * file the user is looking at" (WorkspaceTree's reveal watch).
  *
  * A path arrives from outside the tree: a reload or shared link (the URL carries the open file), the quick-open
@@ -17,7 +17,7 @@ export const ancestorDirs = (path: string): string[] => {
 
 // The paths to expand, given the entries of the path's OWN directory. With file nesting on, a folded file has
 // no row until the sibling that folds it (the directory's package.json) is expanded, so that sibling counts as
-// an ancestor too — otherwise revealing a lock file would open every folder above it and still show nothing.
+// an ancestor too, otherwise revealing a lock file would open every folder above it and still show nothing.
 export const revealTargets = (path: string, siblings: readonly WorkspaceTreeEntry[], nesting: boolean): string[] => {
     const dirs = ancestorDirs(path);
     if (!nesting) {

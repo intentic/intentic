@@ -2,7 +2,7 @@ import type { IconName, StatusVariant } from "@intentic/extension-ui";
 import type { PipelineStatus } from "@intentic/sandbox-contract";
 
 /* Every way a pipeline status is drawn, in one table. Runs, stages and jobs share the status enum, so they
- * share these tones — a failed job's card, its stage circle and its run's edge stripe are the same red by
+ * share these tones, a failed job's card, its stage circle and its run's edge stripe are the same red by
  * construction rather than by three matching ternary chains. Class strings are spelled out in full because
  * Tailwind scans source text: `text-${tone}` would never reach the stylesheet. */
 
@@ -12,7 +12,7 @@ export interface StatusTone {
     readonly spin: boolean;
     readonly label: string;
     readonly variant: StatusVariant;
-    // Foreground only — glyphs and text.
+    // Foreground only, glyphs and text.
     readonly text: string;
     // The inline stage circle: border + fill + glyph.
     readonly circle: string;
@@ -82,7 +82,7 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
     },
 };
 
-// A run's trigger, humanized. Push is every repo's overwhelming default, so it earns no chip — only the
+// A run's trigger, humanized. Push is every repo's overwhelming default, so it earns no chip, only the
 // unusual origins are worth a reader's attention. Unknown vendor words pass through as-is rather than being
 // dropped: a trigger we haven't seen is exactly the one worth showing.
 const TRIGGER_LABEL: Record<string, string> = {

@@ -19,7 +19,7 @@ import * as workflows from "@intentic/ext-workflows";
 
 /* The first-party extensions whose CODE is compiled into this bundle, keyed by the id the daemon lists them
  * under. Each is a real in-repo extension package (its own intentic-extension.json + activate) activated
- * through the SAME manifest-gated createExtensionApi path as a git-installed bundle — the only difference is
+ * through the SAME manifest-gated createExtensionApi path as a git-installed bundle, the only difference is
  * that its module is statically imported here instead of blob-loaded from the daemon.
  *
  * Their MANIFESTS ship baked into the sandbox image (Dockerfile), so `GET /extensions` enumerates them

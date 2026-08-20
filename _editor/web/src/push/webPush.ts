@@ -1,14 +1,14 @@
 import type { PushChannel } from "@intentic/sandbox-contract";
 import type { Minted, PushDriver } from "./driver.js";
 
-/* Web push, from the browser's side — the transport for every real browser, including the Android TWA
+/* Web push, from the browser's side, the transport for every real browser, including the Android TWA
  * (which IS Chrome). The subscription is per-BROWSER: the endpoint belongs to this browser's push service,
  * and its id is that endpoint. */
 
 const SW_URL = `/sw.js`;
 
 // Push wants the VAPID key as raw bytes; the daemon serves it base64url (the form web-push generates).
-// Typed as Uint8Array<ArrayBuffer> because applicationServerKey requires a non-shared buffer — the default
+// Typed as Uint8Array<ArrayBuffer> because applicationServerKey requires a non-shared buffer, the default
 // Uint8Array's ArrayBufferLike admits SharedArrayBuffer, which the DOM type rejects.
 const decodeKey = (base64Url: string): Uint8Array<ArrayBuffer> => {
     const padded = base64Url.padEnd(base64Url.length + ((4 - (base64Url.length % 4)) % 4), `=`);
@@ -33,7 +33,7 @@ const boundTo = (subscription: PushSubscription, publicKey: string): boolean => 
 };
 
 // Brave exposes this and nothing else does. It ships with Google's push service disabled, and since web push
-// has no other transport, subscribing cannot succeed until that setting is on — worth detecting, because the
+// has no other transport, subscribing cannot succeed until that setting is on, worth detecting, because the
 // fix is a specific toggle we can name instead of a shrug.
 const isBrave = async (): Promise<boolean> => {
     const { brave } = navigator as Navigator & { brave?: { isBrave: () => Promise<boolean> } };
@@ -43,7 +43,7 @@ const isBrave = async (): Promise<boolean> => {
 /* Why subscribing gets its own diagnosis: it fails independently of the permission the user just granted, and
  * the browser's own message for it ("Registration failed - push service error") names nothing anyone can act
  * on. Worse, it surfaces on a page about this sandbox, so it reads as "the sandbox broke" when the daemon was
- * never involved — the browser could not register with its push service at all. */
+ * never involved, the browser could not register with its push service at all. */
 const pushServiceAdvice = async (): Promise<string> =>
     (await isBrave())
         ? `Brave ships with push messaging turned off. Enable "Use Google services for push messaging" in brave://settings/privacy, restart Brave, then try again.`
@@ -51,13 +51,13 @@ const pushServiceAdvice = async (): Promise<string> =>
 
 const registration = async (): Promise<ServiceWorkerRegistration> => navigator.serviceWorker.register(SW_URL);
 
-// What the browser currently holds, if anything. Distinct from what the DAEMON holds — the two can disagree
+// What the browser currently holds, if anything. Distinct from what the DAEMON holds, the two can disagree
 // (a sandbox reset drops the server row while the browser subscription lives on), and the composable's
 // refresh is what reconciles them.
 const localSubscription = async (): Promise<PushSubscription | null> => (await registration()).pushManager.getSubscription();
 
-// Reuse an existing subscription where possible — re-subscribing mints a new endpoint and orphans the old
-// row — but ONLY when it is still bound to the daemon's key; dropping a mismatched one and minting fresh is
+// Reuse an existing subscription where possible, re-subscribing mints a new endpoint and orphans the old
+// row, but ONLY when it is still bound to the daemon's key; dropping a mismatched one and minting fresh is
 // the only repair (see PushDriver.currentId on why).
 const subscribe = async (manager: PushManager, publicKey: string): Promise<PushSubscription> => {
     const existing = await manager.getSubscription();
@@ -68,7 +68,7 @@ const subscribe = async (manager: PushManager, publicKey: string): Promise<PushS
         await existing.unsubscribe();
     }
     try {
-        // `userVisibleOnly` is mandatory in Chrome — silent push is not permitted.
+        // `userVisibleOnly` is mandatory in Chrome, silent push is not permitted.
         return await manager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(publicKey) });
     } catch (cause) {
         throw new Error(await pushServiceAdvice(), { cause });
@@ -76,7 +76,7 @@ const subscribe = async (manager: PushManager, publicKey: string): Promise<PushS
 };
 
 const mint = async (publicKey: () => Promise<string>): Promise<Minted> => {
-    // Permission FIRST — the prompt must spend the user's click, not a network round-trip's leftovers.
+    // Permission FIRST, the prompt must spend the user's click, not a network round-trip's leftovers.
     const permission = await Notification.requestPermission();
     if (permission !== `granted`) {
         return { outcome: permission === `denied` ? `denied` : `dismissed` };

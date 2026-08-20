@@ -1,9 +1,9 @@
-/* Reading a daemon SSE/ndjson stream — the transport half of `sandbox.request().body`. The daemon emits SSE
+/* Reading a daemon SSE/ndjson stream, the transport half of `sandbox.request().body`. The daemon emits SSE
  * frames (blank-line separated, each a `data: <JSON>` line, an oRPC event-iterator failure as `event: error`),
  * so consuming a streamed apply/plan/provision means reframing + JSON-parsing. Pure (ReadableStream in, async
- * records out), no deps — extensions bundle it; the shim path never touches it. */
+ * records out), no deps, extensions bundle it; the shim path never touches it. */
 
-// A silent daemon — one that accepts the stream then sends nothing and never closes — would park reader.read()
+// A silent daemon, one that accepts the stream then sends nothing and never closes, would park reader.read()
 // forever, hanging the consumer. A live daemon heartbeats (≤1s) over the stream, so no bytes for this long means
 // the connection is dead: cancel the reader and end the generator instead of waiting indefinitely.
 const SSE_IDLE_MS = 120_000;

@@ -1,11 +1,11 @@
 import type { Activation, ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { bindHost } from "./host";
 
-/* ext-apps activation: bind the host handle, then register two directory views. "Apps" — one tile per repo,
+/* ext-apps activation: bind the host handle, then register two directory views. "Apps", one tile per repo,
  * two shapes: a pnpm+turbo monorepo (except the intent/infrastructure repo, which surfaces as Infrastructure)
  * claims its repo with props.monorepo; any other repo with vitest evidence gets a tests-only tile whose `repo`
  * rides in props so it stays auxiliary and never claims the repo (an auxiliary view sits beside a repo's main
- * surface rather than subsuming it). "Dependencies" — the monorepo's workspace package graph, on the same
+ * surface rather than subsuming it). "Dependencies", the monorepo's workspace package graph, on the same
  * monorepo predicate, surfacing as the segmented tab next to Apps. Live previewing is the shell's own Preview
  * area, not a view here. */
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {

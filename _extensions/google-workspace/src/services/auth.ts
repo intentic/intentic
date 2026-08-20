@@ -28,7 +28,7 @@ const consentUrl = (clientId: string, port: number, scopes: readonly string[]): 
     }).toString()}`;
 
 // A pasted `http://127.0.0.1:9004/?code=…&scope=…` is what an owner who approved in their OWN browser has in
-// front of them — the redirect failed to connect, but the address bar holds the answer. Both that and a bare
+// front of them, the redirect failed to connect, but the address bar holds the answer. Both that and a bare
 // code are accepted, because which one arrives depends on whose browser it was.
 const codeFrom = (input: string): string => {
     const value = input.trim();

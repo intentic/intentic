@@ -10,7 +10,7 @@ import { repoLinks } from "./komodo-repos.js";
 import { fileKomodoStore, komodoStorePath } from "./komodo-store.js";
 import { plainText } from "./plain-text.js";
 
-/* The Deployments rail view's whole backend, over one connected `komodo` capability — ext-deployments' server
+/* The Deployments rail view's whole backend, over one connected `komodo` capability, ext-deployments' server
  * half, moved out of the daemon core. The credential still never reaches a browser: the backend reads it
  * through the daemon's connection route (declared in permissions.daemon, refused to any signed-in caller) and
  * dials Komodo from inside the sandbox, so the view's calls carry no key in either direction.
@@ -46,7 +46,7 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
 
 /* Which Komodo operation each action means, per resource kind. Stacks and deployments have parallel but
  * differently-named operations and differently-named params, which is exactly the kind of detail that should
- * exist once. `pull` is the only composite: pull the newest image, THEN deploy it — the routine version bump
+ * exist once. `pull` is the only composite: pull the newest image, THEN deploy it, the routine version bump
  * that is four clicks in Komodo's own UI, as one. */
 const OPERATIONS = {
     deployment: {
@@ -173,7 +173,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
         action: i.action.handler(async ({ input }) => {
             const [connection, resource] = await resolve(input.capability, input.kind, input.id);
             const client = komodoClient(connection, fetchFn);
-            // `pull` is two operations and they must run in order — a parallel pull+deploy would race the
+            // `pull` is two operations and they must run in order, a parallel pull+deploy would race the
             // image it is meant to be deploying.
             // Komodo addresses a deployment by `deployment` and a stack by `stack`, each accepting id or name.
             for (const operation of OPERATIONS[input.kind][input.action]) {
@@ -193,7 +193,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
                 .logs(input.kind, resource.name, LOG_TAIL)
                 .catch(() => ({ stdout: "", stderr: "" }));
             // A container's log is written for a terminal (an app's colour, a progress line rewriting itself), so
-            // it is reduced to plain text before the cap — the budget then buys failure, not escape codes.
+            // it is reduced to plain text before the cap, the budget then buys failure, not escape codes.
             const tail = plainText(`${log.stdout}\n${log.stderr}`).trim().slice(-FIX_LOG_BYTES);
             const where = resource.server === undefined ? "" : ` on ${resource.server}`;
             const prompt = [
@@ -203,10 +203,10 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
                 ...(tail !== "" ? [`--- container log tail ---\n${tail}`] : []),
             ].join("\n\n");
             const conversationId = mintFixConversationId(resource.name, Date.now());
-            /* POST /agent — the same detached-run boundary the core route used to reach in-process, now as the
+            /* POST /agent, the same detached-run boundary the core route used to reach in-process, now as the
              * declared daemon call it always morally was. Registering on the run map is what gives the fix an
              * ordinary fleet card the UI can navigate to; `unattended` lets the sandbox's agent-run list answer
-             * for a click nobody chose a model for — unless they did, using the caret beside the button, in
+             * for a click nobody chose a model for, unless they did, using the caret beside the button, in
              * which case the pair rides on here and the daemon's fill step leaves it alone. */
             await api.daemon
                 .json(`/agent`, {

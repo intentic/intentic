@@ -2,13 +2,13 @@
  *
  * The daemon injects a cli capability's env vars suffixed with the instance id (cli-env.ts: `obsidian` →
  * `OBSIDIAN_URL_OBSIDIAN`, `work-vault` → `OBSIDIAN_URL_WORK_VAULT`), which is what lets two vaults coexist in
- * one shell. So the set of connected vaults is not something to ask the daemon for — it is already here, and
+ * one shell. So the set of connected vaults is not something to ask the daemon for, it is already here, and
  * `OBSIDIAN_URL_*` is the key that enumerates it. The google-workspace connector reads its accounts the same
  * way, for the same reason.
  *
  * A HALF-FILLED CARD IS A CONNECTION WITH A PROBLEM, not an absent one. Dropping it would make `obsidian`
- * answer "no vault is connected" to someone looking straight at their connected card, and the true answer —
- * "this one has no API key" — is the only one they can act on. */
+ * answer "no vault is connected" to someone looking straight at their connected card, and the true answer,
+ * "this one has no API key", is the only one they can act on. */
 
 // The leaf module, not the barrel: the barrel is the whole wire contract, and importing it here put every oRPC
 // route and the zod that types them into a CLI that needs one naming rule — 29 kB of `kb` next to 376 kB of
@@ -22,12 +22,12 @@ export interface VaultConnection {
     // No trailing slash, so every path in rest.ts is built by plain concatenation.
     readonly url: string;
     readonly apiKey: string;
-    // The card's write switch. Off means this CLI refuses every verb that changes the vault — the owner's own
+    // The card's write switch. Off means this CLI refuses every verb that changes the vault, the owner's own
     // notes are not something an agent gets to edit because it happened to be able to reach them.
     readonly write: boolean;
     // Vault folder new notes are written into. "" is the vault root.
     readonly folder: string;
-    // undefined when the card can be used — `problem` says why not, in the owner's terms.
+    // undefined when the card can be used, `problem` says why not, in the owner's terms.
     readonly problem: string | undefined;
 }
 
@@ -86,7 +86,7 @@ export const vaultConnections = (env: Env): readonly VaultConnection[] => {
     return found.toSorted((a, b) => a.name.localeCompare(b.name));
 };
 
-/* The one this command is for. A single connection needs no naming — which is the whole case for most people —
+/* The one this command is for. A single connection needs no naming, which is the whole case for most people,
  * and two do, because guessing between somebody's personal and work vaults is a wrong answer that looks right. */
 export const selectVault = (
     connections: readonly VaultConnection[],

@@ -15,8 +15,8 @@ import { runWatch } from "./pool-watch.js";
  * unclosed through a deploy has to close by itself afterwards. Every tick asks the same two questions, so the
  * answer is right whether it was last asked yesterday or in March.
  *
- * Close and pay share ONE lock, in that order, on purpose. They are two halves of the same cycle — paying reads
- * what closing wrote — and a payout run overlapping a close on another replica would be reasoning about a month
+ * Close and pay share ONE lock, in that order, on purpose. They are two halves of the same cycle, paying reads
+ * what closing wrote, and a payout run overlapping a close on another replica would be reasoning about a month
  * still being written. Exclusivity matters more sharply here than for the other jobs: two closes would write two
  * sets of statements, and two payout runs would race for the same ones.
  *
@@ -41,13 +41,13 @@ export const startPoolCycle = (prisma: PrismaClient, config: Config, logger: Log
         try {
             await runPayoutsLogged(deps, logger);
         } catch (error) {
-            // Individual payment failures are handled inside the run — they stay pending and retry under their
+            // Individual payment failures are handled inside the run, they stay pending and retry under their
             // own key. This catches only a failure of the run itself.
             logger.error({ err: error }, `pool: payout run failed`);
         }
         try {
             /* Gate 4 of open admission (pool-watch.ts): graduate, trip, canary. Guarded separately and run
-             * last because it is the only half that reaches OUT — a provider's endpoint hanging must not be
+             * last because it is the only half that reaches OUT, a provider's endpoint hanging must not be
              * able to stop a month closing or a creator being paid. It shares the cycle's lock because two
              * replicas probing the same listings would double every provider's canary bill. */
             await runWatch({ prisma, config }, logger);

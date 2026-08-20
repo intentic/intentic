@@ -1,18 +1,18 @@
 import type { PrismaClient } from "@intentic-app/prisma";
 
-/* THE SPEND GATE, OFF-SANDBOX — the same wall as the daemon's approval card (sandbox
+/* THE SPEND GATE, OFF-SANDBOX, the same wall as the daemon's approval card (sandbox
  * platform/service-offer.ts), rebuilt for a caller that has no daemon, no conversation and no held connection.
  *
  * In a sandbox the gate is a live object: the agent's CLI call parks inside the daemon, a card goes up in the
  * owner's turn, and the held socket IS the waiter. None of that survives the trip to a stranger's laptop. An
- * MCP client asks, gets told to open a URL, and comes back LATER — after a browser round trip, possibly in a
+ * MCP client asks, gets told to open a URL, and comes back LATER, after a browser round trip, possibly in a
  * different process, certainly across a stateless HTTP boundary. So the offer has to be written down, and once
  * it is written down the row is the grant.
  *
  * THE ONE RULE THAT MAKES THIS A GATE AND NOT A PROMPT: `pending` → `approved` happens only in `settle`, which
  * is reachable only from the approval page under the owner's own browser session (pool.orpc.ts). The MCP
- * client's elicitation answer is never read as consent and never touches this table — the run calls `consume`,
- * which re-reads the row. That is deliberate and load-bearing: Claude Code ships an `Elicitation` hook that can
+ * client's elicitation answer is never read as consent and never touches this table, the run calls `consume`,
+ * which re-reads the row. That is deliberate and required: Claude Code ships an `Elicitation` hook that can
  * auto-answer elicitation dialogs without showing them, and a user who configures one must not thereby be
  * spending. A hook that auto-confirms buys a `consume` that finds nothing approved.
  *
@@ -22,13 +22,13 @@ import type { PrismaClient } from "@intentic-app/prisma";
  * `already_spent`. */
 
 // How long an unanswered offer stands. The sandbox's card holds a live connection for ten minutes; this holds
-// a row for the same span, for the same reason — long enough for someone who stepped away, short enough that
+// a row for the same span, for the same reason, long enough for someone who stepped away, short enough that
 // an abandoned ask cannot be approved into a charge tomorrow.
 export const OFFER_TTL_MS = 10 * 60_000;
 
 /* How long a YES stays spendable after it is given. In a sandbox this question cannot arise: the daemon is
  * holding the socket, so the click and the run are the same instant, and a click nobody is waiting behind
- * settles a card that already died. Here they are separated by a browser round trip and a client's retry —
+ * settles a card that already died. Here they are separated by a browser round trip and a client's retry,
  * which is usually seconds, but nothing in the protocol says it has to be.
  *
  * So an approval gets a clock of its own. Generous next to the retry it exists for, and short next to
@@ -36,7 +36,7 @@ export const OFFER_TTL_MS = 10 * 60_000;
  * spend NOW, and a grant that outlived the conversation it belonged to is not one anybody would recognise. */
 export const GRANT_TTL_MS = 15 * 60_000;
 
-// The agent's why, capped — one line of rationale is the card's design, not a second request body. Same number
+// The agent's why, capped, one line of rationale is the card's design, not a second request body. Same number
 // as the sandbox CLI's, so the two surfaces show the same amount of it.
 export const WHY_MAX = 280;
 
@@ -87,7 +87,7 @@ export const createOffer = async (
 
 /* How long a SETTLED offer keeps answering for an identical request. Only the protocol's own retry needs to
  * land on it: "you declined this" has to be said once rather than becoming a fresh card the instant the client
- * asks again. Short on purpose — an owner who says "go on then" two minutes later is asking a new question and
+ * asks again. Short on purpose, an owner who says "go on then" two minutes later is asking a new question and
  * deserves a new card, which is exactly what a sandbox gives them. */
 const SETTLED_GRACE_MS = 2 * 60_000;
 
@@ -96,7 +96,7 @@ const SETTLED_GRACE_MS = 2 * 60_000;
  * The elicitation dance is: tool call → "open this URL" → the user does something in a browser → the CLIENT
  * RETRIES THE SAME TOOL CALL. The retry carries the same arguments and nothing else useful; there is no
  * continuation to thread, and pinning one to a connection would break the moment the api restarts or a second
- * replica answers. So the offer is found the way it was made — by (owner, service, exact request body) — and
+ * replica answers. So the offer is found the way it was made, by (owner, service, exact request body), and
  * the newest row wins.
  *
  * That gives the right behaviour in all four cases that matter, with no state anywhere:
@@ -119,7 +119,7 @@ export const findRecentOffer = async (
             request: input.request,
             OR: [
                 { status: `pending` },
-                // An approval only counts while it is still spendable — past its grant window it is not a
+                // An approval only counts while it is still spendable, past its grant window it is not a
                 // licence the retry may quietly use, and consumeGrant would refuse it anyway.
                 { status: `approved`, decidedAt: { gt: new Date(now.getTime() - GRANT_TTL_MS) } },
                 { status: { in: [`declined`, `expired`] }, decidedAt: { gt: new Date(now.getTime() - SETTLED_GRACE_MS) } },
@@ -132,7 +132,7 @@ export const findRecentOffer = async (
 };
 
 /* An offer as its owner may read it. Scoped to `userId` on purpose: an offer id is a cuid in a URL, and the
- * page it opens shows a request body the agent composed — which can carry anything the task was about. Only
+ * page it opens shows a request body the agent composed, which can carry anything the task was about. Only
  * the account that asked may see it.
  *
  * An expired row reads as `expired` rather than `pending` without being written, so a page opened late says
@@ -201,11 +201,11 @@ export type GrantOutcome =
     | { readonly kind: `already_spent` }
     | { readonly kind: `unknown` };
 
-/* SPEND THE GRANT — called by the run, once, immediately before the money moves.
+/* SPEND THE GRANT, called by the run, once, immediately before the money moves.
  *
  * This is where the port's honesty lives. The MCP client told us the user consented; that claim is not read
  * here and is not read anywhere. What is read is the row the OWNER's browser wrote. A client that lies, a hook
- * that auto-answers, a model that retries hopefully — all of them land on `pending` and get a sentence back. */
+ * that auto-answers, a model that retries hopefully, all of them land on `pending` and get a sentence back. */
 export const consumeGrant = async (prisma: PrismaClient, id: string, userId: string, now: Date): Promise<GrantOutcome> => {
     const offer = await prisma.serviceOffer.findFirst({
         where: { id, userId },
@@ -240,7 +240,7 @@ export const consumeGrant = async (prisma: PrismaClient, id: string, userId: str
 };
 
 // Sweep: mark the abandoned ones so the table's `pending` rows always mean "somebody might still click". Not a
-// correctness requirement — every reader above already treats a lapsed row as expired — but a table that tells
+// correctness requirement, every reader above already treats a lapsed row as expired, but a table that tells
 // the truth at rest is worth the one statement.
 export const expireOffers = async (prisma: PrismaClient, now: Date): Promise<number> => {
     const swept = await prisma.serviceOffer.updateMany({ where: { status: `pending`, expiresAt: { lte: now } }, data: { status: `expired` } });

@@ -2,7 +2,7 @@ import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import type { DaemonClient } from "../daemon-client.js";
 
 /* An in-memory DaemonClient double: scenario-driven canned AgentEvent streams per prompt keyword, recording
- * every reply post — the bridge under test is the real one (real SDK JSON-RPC via in-process app
+ * every reply post, the bridge under test is the real one (real SDK JSON-RPC via in-process app
  * composition); only the HTTP layer is faked. The HTTP layer itself (SSE framing, auth statuses) has its own
  * test over a real node:http server in daemon-client.test.ts. */
 

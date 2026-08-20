@@ -1,6 +1,6 @@
 /* Which file a NAMED reference means. A path written in prose is only loosely anchored to the workspace: an
  * agent that has been working in `_editor/web/src` writes `pages/workspace/Foo.vue`, and a turn running in an
- * isolated worktree prints `/history/worktrees/<id>/_editor/web/src/foo.ts` — neither is the workspace-relative
+ * isolated worktree prints `/history/worktrees/<id>/_editor/web/src/foo.ts`, neither is the workspace-relative
  * path the file routes speak, but both END in it.
  *
  * So a reference is resolved by matching progressively shorter TAILS of it against the real tree. The rules
@@ -32,17 +32,17 @@ export const referenceTails = (raw: string, root: string): readonly string[] => 
     return tails;
 };
 
-// The paths that genuinely END in `tail` on a segment boundary, best first — the shared ranking both matchers
+// The paths that genuinely END in `tail` on a segment boundary, best first, the shared ranking both matchers
 // return their candidates in. Shallowest wins: `pages/Foo.vue` means the app's page, not the copy six
-// directories down in a fixture tree. (The daemon's glob is anchored only at the string level — `**/pages/x.vue`
-// also matches `mypages/x.vue` — so the boundary is enforced here rather than by the pattern.)
+// directories down in a fixture tree. (The daemon's glob is anchored only at the string level, `**/pages/x.vue`
+// also matches `mypages/x.vue`, so the boundary is enforced here rather than by the pattern.)
 export const rankRefCandidates = (tail: string, paths: readonly string[]): readonly string[] =>
     paths
         .filter((path) => path === tail || path.endsWith(`/${tail}`))
         .toSorted((a, b) => a.split(`/`).length - b.split(`/`).length || a.length - b.length || (a < b ? -1 : 1))
         .slice(0, MAX_REF_CANDIDATES);
 
-/* IS THIS FILE TEST CODE — the one classification rule for every surface that splits a diff into "the
+/* IS THIS FILE TEST CODE, the one classification rule for every surface that splits a diff into "the
  * change" and "the proof". The agent review header answers "how much of this is tests?" with it; anything
  * else that wants the split (fleet cards, commit summaries) must use this same predicate, because two
  * classifiers that disagree turn the readout into a lie the user can't detect.
@@ -50,7 +50,7 @@ export const rankRefCandidates = (tail: string, paths: readonly string[]): reado
  * Convention-based, matching what this monorepo (and the ecosystems it scaffolds) actually writes: a
  * `.test.` / `.spec.` filename in any extension, a `__tests__` / `__fixtures__` directory anywhere on the
  * path, an `e2e-harness`, or a test-runner config. Deliberately NOT "anything containing 'test'": a
- * `testimonials/` page or a `latest.ts` is product code, and a false "tests" tag is worse than a missed one —
+ * `testimonials/` page or a `latest.ts` is product code, and a false "tests" tag is worse than a missed one,
  * it tells a reviewer not to look. */
 const TEST_DIRS = new Set([`__tests__`, `__fixtures__`, `__mocks__`, `__snapshots__`]);
 const TEST_FILE =

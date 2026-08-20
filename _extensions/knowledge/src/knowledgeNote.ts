@@ -1,5 +1,5 @@
 /* What a note looks like in the browser: the wiki links in its prose turned into things you can click, and the
- * small vocabulary of colour the list and the pane share. Pure apart from the DOM the decorator is handed —
+ * small vocabulary of colour the list and the pane share. Pure apart from the DOM the decorator is handed,
  * unit-tested in knowledgeNote.test.ts. */
 
 // `[[target]]` / `[[target|what to call it]]`. The same syntax the knowledge base engine reads, and the same one the
@@ -8,20 +8,20 @@ const WIKI_LINK = /\[\[([^\][|]+)(?:\|([^\]]+))?\]\]/g;
 
 /* Turn every `[[link]]` in the rendered prose into an anchor the view can act on.
  *
- * RESOLUTION IS NOT REDONE HERE. The backend already resolved every link this note holds — by path, filename,
- * title and alias — and handed the answers over with the note. A second resolver in the browser would be a
+ * RESOLUTION IS NOT REDONE HERE. The backend already resolved every link this note holds, by path, filename,
+ * title and alias, and handed the answers over with the note. A second resolver in the browser would be a
  * second set of rules to disagree with the first, and it would have only the note's own text to work from,
  * which is not enough to know that `[[Ada]]` is an alias of someone. So the caller passes the lookup it was
- * given, and a target that isn't in it is a note nobody has written — drawn as such rather than as a link that
+ * given, and a target that isn't in it is a note nobody has written, drawn as such rather than as a link that
  * goes nowhere when clicked.
  *
  * Anchors carry `data-kb` rather than an href, because the destination is a selection inside this view and not
  * a URL a browser could visit; one delegated listener on the prose turns a click into a selection. This runs on
- * the sanitized fragment (the markdown pipeline's contract) and only ever authors its own markup — anchor text
+ * the sanitized fragment (the markdown pipeline's contract) and only ever authors its own markup, anchor text
  * is written as a text node, never as HTML. */
 export const linkifyNoteRefs = (fragment: DocumentFragment, resolve: (target: string) => string | undefined): void => {
     // Collected before rewriting: replacing a text node mid-walk invalidates the walker's position. Text inside
-    // a link or a code span is left alone — a wiki link there is either already a link or deliberately literal,
+    // a link or a code span is left alone, a wiki link there is either already a link or deliberately literal,
     // which is how the vocabulary note documents the syntax without every example becoming a link.
     const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
     const pending: Text[] = [];
@@ -47,7 +47,7 @@ export const linkifyNoteRefs = (fragment: DocumentFragment, resolve: (target: st
             const anchor = document.createElement(`a`);
             anchor.append(match[2]?.trim() ?? target);
             if (path === undefined) {
-                // A link to a note nobody has written yet is ordinary and deliberate — the knowledge base's own to-do
+                // A link to a note nobody has written yet is ordinary and deliberate, the knowledge base's own to-do
                 // list. It reads as unfinished rather than as broken, and it is not clickable, because there is
                 // nothing on the other side of it.
                 anchor.className = `text-subtle underline decoration-dotted underline-offset-2`;
@@ -66,7 +66,7 @@ export const linkifyNoteRefs = (fragment: DocumentFragment, resolve: (target: st
 
 /* ONE COLOUR PER KIND, decided from the word itself rather than from a table.
  *
- * A table would have to be written for a vocabulary that belongs to the knowledge base, not to this app — every owner
+ * A table would have to be written for a vocabulary that belongs to the knowledge base, not to this app, every owner
  * has different kinds, and an unlisted one would fall to grey while its neighbours were coloured, which reads
  * as "this one is somehow lesser". Hashing the word means every kind gets a colour, the same colour every time,
  * for free; what the colour MEANS is only ever "same as that other one", which is the whole job here. */

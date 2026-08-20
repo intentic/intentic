@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 // Audio + whisper primitives for the voice session: PCM downsampling, WAV framing, whisper-cli transcription,
 // and a serialized transcriber queue. Pure of Discord and of the daemon, so they unit-test in isolation.
 
-// Utterances shorter than this are dropped unheard — sub-quarter-second blips (key clicks, coughs) only feed
+// Utterances shorter than this are dropped unheard, sub-quarter-second blips (key clicks, coughs) only feed
 // whisper hallucinations. 48kHz stereo s16le = 192,000 bytes/s.
 export const MIN_UTTERANCE_BYTES = 48_000;
 const TRANSCRIBE_TIMEOUT_MS = 120_000;
@@ -16,7 +16,7 @@ const TRANSCRIBE_TIMEOUT_MS = 120_000;
 export type ExecFn = (command: string, args: string[], options: { timeout: number }) => Promise<{ stdout: string }>;
 const defaultExec: ExecFn = promisify(execFile);
 
-// The message the model reads when whisper isn't provisioned — it routes the agent to the pending rebuild
+// The message the model reads when whisper isn't provisioned, it routes the agent to the pending rebuild
 // instead of a doomed retry loop (or a needless overlay proposal: the fragment is already composed).
 export const WHISPER_MISSING =
     "whisper-cli isn't installed in this sandbox yet. It's part of the environment overlay that was composed when " +
@@ -34,7 +34,7 @@ export const whisperCliMissing = async (exec: ExecFn = defaultExec): Promise<boo
 };
 
 // 48kHz stereo s16le → 16kHz mono s16le: average each group of 3 stereo frames (6 samples) into one.
-// ponytail: naive decimation without a low-pass — fine for speech; swap in a real resampler if quality nags.
+// ponytail: naive decimation without a low-pass, fine for speech; swap in a real resampler if quality nags.
 export const to16kMonoPcm = (stereo48k: Buffer): Buffer => {
     const outFrames = Math.floor(stereo48k.length / 12);
     const out = Buffer.alloc(outFrames * 2);
@@ -48,7 +48,7 @@ export const to16kMonoPcm = (stereo48k: Buffer): Buffer => {
     return out;
 };
 
-// Minimal RIFF/WAVE header for 16kHz mono s16le — what whisper-cli expects.
+// Minimal RIFF/WAVE header for 16kHz mono s16le, what whisper-cli expects.
 export const wavOf = (pcm16kMono: Buffer): Buffer => {
     const header = Buffer.alloc(44);
     header.write("RIFF", 0);
@@ -91,7 +91,7 @@ export interface Transcriber {
     readonly transcribed: () => number;
 }
 
-// One whisper-cli run at a time — transcription is CPU-bound and the sandbox is small; utterances queue.
+// One whisper-cli run at a time, transcription is CPU-bound and the sandbox is small; utterances queue.
 // `onLine` runs inside the queue after each transcribed line (live file write + utterance dispatch); its
 // failures land in onError like a whisper failure would.
 export const createTranscriber = (
@@ -111,7 +111,7 @@ export const createTranscriber = (
                     const wavPath = join(tmpdir(), `intentic-utterance-${randomUUID()}.wav`);
                     await writeFile(wavPath, wavOf(to16kMonoPcm(pcm)));
                     try {
-                        // whisper-cli defaults to -l en, silently mangling other languages — always pass one.
+                        // whisper-cli defaults to -l en, silently mangling other languages, always pass one.
                         const { stdout } = await exec(
                             "whisper-cli",
                             ["-m", modelPath, "-f", wavPath, "-l", language, "--no-timestamps", "--no-prints"],

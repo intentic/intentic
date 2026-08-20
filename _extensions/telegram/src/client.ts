@@ -1,9 +1,9 @@
-/* The gateway's Telegram connections — one long-polling loop plus one Bot API caller per configured bot, alive
+/* The gateway's Telegram connections, one long-polling loop plus one Bot API caller per configured bot, alive
  * only while the daemon says an enabled telegram listener automation exists. A module singleton map, like
  * ext-slack's and ext-discord's: the reconcile loop and the listener both reach it directly.
  *
  * There is no SDK here on purpose. The Bot API is HTTPS + JSON with one envelope shape, and the whole
- * connection is `getUpdates` in a loop — an OUTBOUND call, so Telegram needs no public URL to reach the agent
+ * connection is `getUpdates` in a loop, an OUTBOUND call, so Telegram needs no public URL to reach the agent
  * and there is no request signature to verify. A dependency would buy us a thin wrapper over `fetch` and cost a
  * deploy tree; what this file adds instead is the pool, the identity probe, the poll loop's error taxonomy, and
  * turning a rejection into a sentence the owner can act on. */
@@ -15,7 +15,7 @@ const POLL_TIMEOUT_S = 50;
 // Backoff after a transient poll failure (network blip, 5xx, a 429 with no retry_after), doubling to the cap.
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
-// Only the update kinds this gateway turns into agent turns — asking for fewer keeps edits, reactions, join
+// Only the update kinds this gateway turns into agent turns, asking for fewer keeps edits, reactions, join
 // notices and inline queries out of the loop entirely rather than filtering them after the fact.
 const ALLOWED_UPDATES = ["message", "channel_post"];
 
@@ -30,7 +30,7 @@ export interface TelegramUser {
 
 export interface TelegramChat {
     readonly id: number;
-    // "private" | "group" | "supergroup" | "channel" — an open string, since Telegram adds kinds.
+    // "private" | "group" | "supergroup" | "channel", an open string, since Telegram adds kinds.
     readonly type: string;
     readonly title?: string;
     readonly username?: string;
@@ -70,7 +70,7 @@ export interface TelegramConnection {
     // instead of waking on them.
     readonly selfId: number;
     readonly username: string;
-    // Start the long-poll loop. `onFatal` fires once, for the failures a retry can never fix — the connection
+    // Start the long-poll loop. `onFatal` fires once, for the failures a retry can never fix, the connection
     // has already removed itself from the pool by then, so the caller's job is to report, not to clean up.
     readonly listen: (onUpdate: (update: TelegramUpdate) => void, onFatal: (error: Error) => void) => void;
 }
@@ -135,7 +135,7 @@ const callWith = async <T>(botToken: string, method: string, body: object | unde
 /* Which API rejections are worth pausing the token for. 401/403/404 are a dead or wrong token. 409 is the one
  * that is a CONFIGURATION clash rather than a credential: Telegram allows exactly one reader per bot, so either
  * a webhook is registered (someone wired this bot to a server) or a second poller is running. We refuse to
- * `deleteWebhook` our way out of that — it would silently break whatever else the owner pointed this bot at. */
+ * `deleteWebhook` our way out of that, it would silently break whatever else the owner pointed this bot at. */
 const fatalMessage = (error: TelegramApiError): string | undefined => {
     if (error.code === 401 || error.code === 404) {
         return `Telegram rejected the bot token (${error.description}) — paste a fresh token from @BotFather on the Telegram capability`;
@@ -150,7 +150,7 @@ const fatalMessage = (error: TelegramApiError): string | undefined => {
 };
 
 export const openTelegramConnection = async (botToken: string): Promise<TelegramConnection> => {
-    // The two calls that make a connection. Both reject on failure — a transient one leaves the gateway to
+    // The two calls that make a connection. Both reject on failure, a transient one leaves the gateway to
     // retry on its next reconcile, and a fatal one names what the owner has to fix.
     const connectCall = async <T>(method: string, body?: object): Promise<T> =>
         callWith<T>(botToken, method, body, undefined).catch((error: unknown) => {
@@ -165,16 +165,16 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
 
     /* Start from NOW, not from the backlog. Telegram queues undelivered updates for 24 hours, so a gateway that
      * simply polled from zero after a restart would wake an agent for every message sent while the sandbox was
-     * asleep — a day of chatter answered at once, hours late. Reading the queue's tail (`offset: -1`) tells us
+     * asleep, a day of chatter answered at once, hours late. Reading the queue's tail (`offset: -1`) tells us
      * where the end is; the next poll confirms everything up to it, which discards the rest. Discord and Slack
-     * behave this way because their sockets have no backlog at all; here it has to be chosen — which is why a
+     * behave this way because their sockets have no backlog at all; here it has to be chosen, which is why a
      * failure here fails the whole connect rather than falling through to a poll that would replay the day. */
     const tail = await connectCall<TelegramUpdate[]>("getUpdates", { offset: -1, timeout: 0 });
     const last = tail.at(-1);
     let offset = last === undefined ? undefined : last.update_id + 1;
 
     // Aborts the in-flight long poll on close. Without it a 50s held request outlives the connection it belongs
-    // to, and the reconnect that follows a token edit collides with it — which Telegram answers as a 409.
+    // to, and the reconnect that follows a token edit collides with it, which Telegram answers as a 409.
     const aborter = new AbortController();
     let closed = false;
 
@@ -187,7 +187,7 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
             let backoff = RETRY_MIN_MS;
             const loop = async (): Promise<void> => {
                 for (;;) {
-                    // `closed` flips from the closer registered below, which is another task's turn to run —
+                    // `closed` flips from the closer registered below, which is another task's turn to run,
                     // hence the re-read each pass rather than a loop condition.
                     if (closed) {
                         return;

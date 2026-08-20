@@ -5,14 +5,14 @@ import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
 import { LIVE_STATUSES, probeFailure, probeService, type ServiceStatus } from "./pool-admission.js";
 
-/* THE WATCH — gate 4, and the only one that never finishes.
+/* THE WATCH, gate 4, and the only one that never finishes.
  *
  * A service has no code to audit, so behaviour is its entire artifact and the whole of its ongoing review.
  * Three mechanisms, every threshold published as config, none of them requiring a person:
  *
  *   GRADUATION  a probation listing that has served enough runs cleanly loses its price ceiling and its badge.
  *   TRIPWIRE    any live listing whose recent refund rate is too high is suspended on the spot. "Refunded"
- *               already means the platform proved it did not answer, so this is not a judgment call — it is
+ *               already means the platform proved it did not answer, so this is not a judgment call, it is
  *               a count of times the provider failed to serve something a member had approved.
  *   CANARY      a re-probe of listings that have gone quiet, so a service that silently died stops being
  *               offered before a member finds out by clicking. Consecutive failures suspend it.
@@ -24,7 +24,7 @@ import { LIVE_STATUSES, probeFailure, probeService, type ServiceStatus } from ".
  * A suspension is not a deletion: the row, its runs and its earnings stay, the reason is recorded in the
  * provider's own words-facing sentence, and a fixed endpoint can re-publish into probation. */
 
-// A live service that has actually served recently needs no canary — real traffic is a better liveness proof
+// A live service that has actually served recently needs no canary, real traffic is a better liveness proof
 // than a synthetic call, and the probe costs the PROVIDER real upstream money every time it runs.
 const CANARY_QUIET_MS = 24 * 60 * 60 * 1000;
 
@@ -32,13 +32,13 @@ export type WatchAction = `keep` | `graduate` | `suspend`;
 
 export interface WatchInput {
     readonly status: ServiceStatus;
-    // The most recent runs, newest first, as their ledger status — the tripwire's whole evidence.
+    // The most recent runs, newest first, as their ledger status, the tripwire's whole evidence.
     readonly recent: readonly string[];
-    // Every run this listing has ever served (status `ok`) — the graduation counter.
+    // Every run this listing has ever served (status `ok`), the graduation counter.
     readonly servedTotal: number;
 }
 
-/* The behavioural decision, as a pure function of counted rows — so the thresholds can be tested against
+/* The behavioural decision, as a pure function of counted rows, so the thresholds can be tested against
  * every boundary without a database, and so the rule a provider reads on the site is the rule that runs.
  *
  * The tripwire needs a FULL window before it fires. Judging a listing on its first three runs would delist a

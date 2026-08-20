@@ -1,6 +1,6 @@
 /* The structured schedule the automations dialog edits instead of raw cron. `cronOf` composes the wire cron
  * string; `parseCron` inverts it for exactly the shapes the builder can produce (plus dow ranges like 1-5) and
- * falls back to freq "custom" carrying the raw string for anything else — so cron syntax only ever surfaces in
+ * falls back to freq "custom" carrying the raw string for anything else, so cron syntax only ever surfaces in
  * the explicit Custom mode. `scheduleLabel` renders the human badge for the automations list. */
 
 export type ScheduleFreq = `minutes` | `hourly` | `daily` | `weekly` | `monthly` | `custom`;
@@ -144,8 +144,8 @@ const ordinal = (day: number): string => {
     return `${day}th`;
 };
 
-// The list's two time COLUMNS. Both stay narrow enough to align down the page — the exact timestamp rides the
-// tooltip — which is why neither is the kit's `timeAgo`: that one falls back to a full date and time past a
+// The list's two time COLUMNS. Both stay narrow enough to align down the page, the exact timestamp rides the
+// tooltip, which is why neither is the kit's `timeAgo`: that one falls back to a full date and time past a
 // day, and three of those in a column is the end of scanning it.
 const MINUTES_PER_DAY = 60 * 24;
 
@@ -165,7 +165,7 @@ export const since = (at: number): string => {
 };
 
 /** How long until the next fire: "due", "in 5m", "in 3h", "in 2d". A nextRun that has just slipped into the
- *  past reads as "due" rather than as a miss — the daemon's scheduler picks changes up on a poll, so being a
+ *  past reads as "due" rather than as a miss, the daemon's scheduler picks changes up on a poll, so being a
  *  few seconds behind the clock is its normal state. */
 export const nextIn = (at: number): string => {
     const minutes = Math.round((at - Date.now()) / 60_000);

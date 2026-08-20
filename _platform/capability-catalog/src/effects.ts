@@ -1,7 +1,7 @@
 import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 
-/* What adding a capability DOES to the sandbox, as data — the structured counterpart of the handlers' side
+/* What adding a capability DOES to the sandbox, as data, the structured counterpart of the handlers' side
  * effects (the sandbox's capabilities/handlers/*), rendered by the web as the "This will add to your sandbox"
  * panel before an add and as per-instance effect strips after. Derived, not declared per card: config-dependent
  * effects (a plugin's clone URL, the SQL card's engine-dependent client image) and contribution/extension-declared
@@ -11,11 +11,11 @@ import type { CapabilityKind } from "@intentic/sandbox-contract";
  *
  * IN THE CATALOG, not in the wire contract, though it lived there first. Nothing on the wire carries an effect:
  * only the browser computes them, and it computes them from the same per-kind facts the cards next door already
- * declare. Keeping it here means a kind's user-facing story — its card, its fields, and what adding it does — is
+ * declare. Keeping it here means a kind's user-facing story, its card, its fields, and what adding it does, is
  * one package to open, and the contract holds only what actually crosses a socket.
  *
  * A TABLE, not a switch, for the same reason the cards are a list: this is per-kind data. `Record<CapabilityKind,
- * …>` keeps the compiler's demand that every kind answer — the exhaustiveness a switch bought — while making a
+ * …>` keeps the compiler's demand that every kind answer, the exhaustiveness a switch bought, while making a
  * new kind one entry rather than an arm spliced into a hundred-line function. */
 
 export type CapabilityEffect =
@@ -28,10 +28,10 @@ export type CapabilityEffect =
     | { readonly kind: "secret"; readonly exposure: "agent-env" | "disk" }
     // Git-clones a repo into .intentic/records/plugins|extensions/<id>. `url` absent until the form field is filled.
     | { readonly kind: "clone"; readonly url?: string | undefined }
-    // Bakes a Dockerfile fragment into the sandbox image overlay — needs a one-time owner rebuild.
+    // Bakes a Dockerfile fragment into the sandbox image overlay, needs a one-time owner rebuild.
     | { readonly kind: "image" }
     // The baked fragment carries a privileged runtime directive: "net-admin" (vpn NET_ADMIN + tun) or
-    // "privileged" (docker — the full --privileged run its dockerd needs).
+    // "privileged" (docker, the full --privileged run its dockerd needs).
     | { readonly kind: "runtime"; readonly level: "net-admin" | "privileged" }
     /* The host's GPUs, passed into the sandbox (docker's gpu option). Its own member rather than a third
      * `runtime` level because what it costs is not a privilege inside the container but a resource OUTSIDE it:
@@ -40,7 +40,7 @@ export type CapabilityEffect =
      * assume the polite thing was happening; this member exists so the panel can say the impolite one. */
     | { readonly kind: "gpu" }
     /* Settings applied by RESTARTING a long-running process rather than by rebuilding anything (docker's
-     * engine options → /etc/docker/daemon.json → dockerd). The good news is the cheap half — no rebuild — and
+     * engine options → /etc/docker/daemon.json → dockerd). The good news is the cheap half, no rebuild, and
      * saying only that would be the misleading half: a restart takes every container the agent had running
      * down with it. Named so the panel can put both halves in one line. */
     | { readonly kind: "restart"; readonly process: string }
@@ -52,39 +52,39 @@ export type CapabilityEffect =
     | { readonly kind: "scaffold"; readonly repos: readonly string[] }
     // Writes a managed deploy.config.ts entry; `provisions` = also runs the infra apply job now (service).
     | { readonly kind: "deploy"; readonly provisions: boolean }
-    // Extension code runs inside the app with the owner's session — the owner-only trust decision.
+    // Extension code runs inside the app with the owner's session, the owner-only trust decision.
     | { readonly kind: "trusted-code" }
-    // Keeps a logged-in Chromium profile under .intentic/local/browser/<id> that the agent drives — one per connected
+    // Keeps a logged-in Chromium profile under .intentic/local/browser/<id> that the agent drives, one per connected
     // ACCOUNT, so `platform` here is what the profile is a profile OF, not what it is keyed by.
     | { readonly kind: "profile"; readonly platform: string }
-    // Gives the agent hands on a computer the user OWNS — the most consequential effect in this union, so it
+    // Gives the agent hands on a computer the user OWNS, the most consequential effect in this union, so it
     // spells out the grant rather than naming a mechanism. `grants` is the scopes ticked on the card, in the
     // machine's own words; the machine's agent enforces exactly these and refuses the rest.
     | { readonly kind: "machine"; readonly platform: string; readonly grants: readonly string[] }
     // Sends this sandbox's turns to a model API the user configured. Its own member rather than a variant of an
     // existing one because nothing else in this union describes where a conversation GOES, and that is the whole
-    // consequence of adding an endpoint: no file is written, no process runs, no image changes — the prompts,
+    // consequence of adding an endpoint: no file is written, no process runs, no image changes, the prompts,
     // file contents and command output of every turn on it simply leave for that URL. `url` is named because a
     // typo'd host is exactly the mistake this disclosure exists to catch before it is made.
     | { readonly kind: "endpoint"; readonly url: string }
-    /* Lets the agent spend REAL MONEY — the wallet card, and the only effect in this union whose consequence
+    /* Lets the agent spend REAL MONEY, the wallet card, and the only effect in this union whose consequence
      * is measured in dollars. Its own member for the `machine` reason: nothing else here describes value
      * leaving the owner's control, and a user reading "stores a credential" would not learn the thing that
      * actually matters. The two numbers are the ceilings the signer enforces (per payment, per UTC day), and
      * `carded` says whether every payment stops for a click or a band of them settles on the owner's
-     * standing delegation — which is the difference between "it asks" and "it asks sometimes", and exactly
+     * standing delegation, which is the difference between "it asks" and "it asks sometimes", and exactly
      * what a person deciding this needs on the row. */
     | { readonly kind: "spend"; readonly perPaymentUsd: string; readonly dailyUsd: string; readonly carded: boolean };
 
 export interface CapabilityEffectInput {
     readonly kind: CapabilityKind;
-    // The instance name — the skill name for cli/browser, the repo name for monorepo.
+    // The instance name, the skill name for cli/browser, the repo name for monorepo.
     readonly id?: string | undefined;
     // Live form values, or a CapabilitySummary's secret-stripped config echo (hasToken/hasSecret booleans).
     readonly config: Record<string, string | number | boolean | undefined>;
-    // The card's contribution — the source of truth for its secret/fragment declarations (cli/browser/host).
+    // The card's contribution, the source of truth for its secret/fragment declarations (cli/browser/host).
     readonly contribution?: CapabilityContribution | undefined;
-    // An installed extension's manifest — resolves its process/image contributions (unknowable before install).
+    // An installed extension's manifest, resolves its process/image contributions (unknowable before install).
     readonly manifest?: ExtensionManifest | undefined;
 }
 
@@ -92,7 +92,7 @@ const filled = (value: string | number | boolean | undefined): boolean => typeof
 // A token either typed into the form (`token`) or echoed as present on an installed instance (`hasToken`).
 const hasToken = (config: CapabilityEffectInput["config"]): boolean => filled(config["token"]) || config["hasToken"] === true;
 const cloneUrl = (config: CapabilityEffectInput["config"]): string | undefined => (filled(config["url"]) ? String(config["url"]) : undefined);
-// A typed-in address as the site a person would name — undefined until it is a whole http(s) URL, which is most
+// A typed-in address as the site a person would name, undefined until it is a whole http(s) URL, which is most
 // of the time while someone is still typing one, so the row this feeds falls back rather than flickering.
 const host = (value: string | number | boolean | undefined): string | undefined => {
     if (!filled(value)) {
@@ -105,7 +105,7 @@ const host = (value: string | number | boolean | undefined): string | undefined 
         return undefined;
     }
 };
-// The docker config keys that live in daemon.json rather than the image (DockerConfigSchema's engine family) —
+// The docker config keys that live in daemon.json rather than the image (DockerConfigSchema's engine family),
 // setting any of them is what makes an apply bounce dockerd.
 const ENGINE_OPTIONS = ["registryMirror", "insecureRegistries", "addressPool"] as const;
 
@@ -123,7 +123,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
     integration: () => [{ kind: "deploy", provisions: false }],
     cli: (input) => {
         // Without the contribution (extensions query pending / sandbox unreachable) fall back to the echoed
-        // hasSecret — which the web also synthesizes from the card's own secret-marked fields, so the secret row
+        // hasSecret, which the web also synthesizes from the card's own secret-marked fields, so the secret row
         // never waits on /extensions. The image row does wait: a connector's fragment (postgres/mysql clients,
         // discord's whisper) is spec data with no static counterpart on the card.
         const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }];
@@ -163,7 +163,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         { kind: "skill", name: "ssh" },
     ],
     vpn: () => [{ kind: "secret", exposure: "disk" }, { kind: "skill", name: "vpn" }, { kind: "image" }, { kind: "runtime", level: "net-admin" }],
-    // The engine is baked into the base image — the "image" effect here is the overlay rebuild that applies the
+    // The engine is baked into the base image, the "image" effect here is the overlay rebuild that applies the
     // fragment's --privileged directive, not new tooling. The gpu option adds real tooling (the container
     // toolkit) and the claim on the host's GPUs; it is the one part of this card the user chose.
     docker: (input) => [
@@ -171,7 +171,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         { kind: "runtime", level: "privileged" },
         ...(input.config["gpu"] === "on" || input.config["gpu"] === true ? [{ kind: "gpu" } as const] : []),
         // The engine family (DockerConfigSchema): any of them set means the apply rewrites daemon.json and
-        // bounces dockerd. Config-derived like every other conditional effect here — the panel shows it while
+        // bounces dockerd. Config-derived like every other conditional effect here, the panel shows it while
         // the user is still typing the value that causes it.
         ...(ENGINE_OPTIONS.some((key) => filled(input.config[key])) ? [{ kind: "restart", process: "dockerd" } as const] : []),
         { kind: "process", names: ["dockerd"] },
@@ -180,14 +180,14 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }, { kind: "image" }];
         /* WHICH SITE the stored session belongs to. A site card's `platform` slug IS the site (reddit, npmjs), but
          * the generic session's is the card ("website") and would disclose "keeps a logged-in website browser
-         * profile" — true of nothing in particular, on the row where the user decides whether to store a session
+         * profile", true of nothing in particular, on the row where the user decides whether to store a session
          * and a passkey at all. So the address they typed wins, read down to its host: the row names the site
          * being connected while they are still typing it. */
         const site = host(input.config["homeUrl"]) ?? host(input.config["loginUrl"]) ?? input.config["platform"];
         if (typeof site === "string" && site !== "") {
             effects.push({ kind: "profile", platform: site });
         }
-        // The account's stored password — typed into the site by the daemon on the agent's behalf, never shown
+        // The account's stored password, typed into the site by the daemon on the agent's behalf, never shown
         // to the agent. A form value while adding, hasPassword off a stored entry's masked echo.
         if (filled(input.config["password"]) || input.config["hasPassword"] === true) {
             effects.push({ kind: "secret", exposure: "disk" });
@@ -196,14 +196,14 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
     },
     identity: (input) => {
         const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }, { kind: "image" }];
-        /* The standing consequence of an identity is its BROWSER — one profile the accounts born from it share,
+        /* The standing consequence of an identity is its BROWSER, one profile the accounts born from it share,
          * signed into the email's own provider. Named by the address's domain (gmail.com), which is the site the
          * profile actually holds a session for; the email's local part is the user's own name and stays off the
          * disclosure row. */
         const email = filled(input.config["email"]) ? String(input.config["email"]) : "";
         const domain = email.includes("@") ? email.slice(email.indexOf("@") + 1) : "";
         effects.push({ kind: "profile", platform: domain === "" ? "email" : domain });
-        // The identity's stored email password — typed by the daemon on the agent's behalf, never shown to it.
+        // The identity's stored email password, typed by the daemon on the agent's behalf, never shown to it.
         if (filled(input.config["password"]) || input.config["hasPassword"] === true) {
             effects.push({ kind: "secret", exposure: "disk" });
         }
@@ -225,7 +225,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
     endpoint: (input) => {
         // The destination is the effect; a key is the ordinary second one. Deliberately no `image` or `process`
         // row: the endpoint rides the translator that is already in the image and already running, so adding one
-        // needs no rebuild and starts nothing — which is worth the panel NOT claiming.
+        // needs no rebuild and starts nothing, which is worth the panel NOT claiming.
         const effects: CapabilityEffect[] = [{ kind: "endpoint", url: filled(input.config["baseUrl"]) ? String(input.config["baseUrl"]) : "" }];
         if (filled(input.config["apiKey"]) || input.config["hasSecret"] === true) {
             effects.push({ kind: "secret", exposure: "disk" });

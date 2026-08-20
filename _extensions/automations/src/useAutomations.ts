@@ -12,7 +12,7 @@ import { host } from "./host";
 /* The sandbox's automations manifest (.intentic/config/automations.json), read/written via the daemon's /automations
  * routes. `save` upserts by id; `setEnabled` has its own narrow route so switching a row cannot discard fields;
  * the daemon's
- * scheduler picks changes up on its next poll — nothing to provision, so no streamed apply. `pending` is the
+ * scheduler picks changes up on its next poll, nothing to provision, so no streamed apply. `pending` is the
  * owner's approval queue: a `requireApproval` automation holds each fire there instead of waking; `approve`
  * runs the held wake, `reject` drops it. All daemon access goes through the host api. */
 
@@ -21,7 +21,7 @@ import { host } from "./host";
 const RUN_SETTLE_POLL_MS = 5_000;
 
 // The event automation's webhook URL (with its daemon-minted token) for pasting into GitHub/Sentry/monitor
-// settings — rendered by both the list rows and the create dialog's done screen.
+// settings, rendered by both the list rows and the create dialog's done screen.
 export const webhookUrl = (automation: AutomationSummary): string | undefined => {
     const base = host().sandbox.origin();
     if (automation.trigger.kind !== `event` || base === undefined) {
@@ -31,7 +31,7 @@ export const webhookUrl = (automation: AutomationSummary): string | undefined =>
 };
 
 /* The one line a customer pastes into their site to put a Front Desk on it. The daemon's own origin serves both
- * the bundle and the routes it talks to, so the snippet needs no second address and no key — the automation id
+ * the bundle and the routes it talks to, so the snippet needs no second address and no key, the automation id
  * is the whole address, and the origin allowlist below it is what decides who may use it. */
 export const embedSnippet = (automation: AutomationSummary): string | undefined => {
     const base = host().sandbox.origin();
@@ -41,7 +41,7 @@ export const embedSnippet = (automation: AutomationSummary): string | undefined 
     return `<script src="${base}/webchat/widget.js" data-automation="${automation.id}" defer></script>`;
 };
 
-/* Which sites have actually loaded a Front Desk's widget — the answer to "did the snippet land?", which nothing
+/* Which sites have actually loaded a Front Desk's widget, the answer to "did the snippet land?", which nothing
  * else in the app can give: a working Front Desk nobody has written to and one that was never pasted both show an
  * empty run history. Polled rather than pushed, and only while the install panel is open (`enabled`), because
  * the one minute after pasting a snippet is the entire window in which this changes for anyone. */
@@ -124,7 +124,7 @@ export function useAutomations() {
         onSuccess: invalidate,
     });
     /* Fire one now, without waiting for its cron / forging its webhook / provoking a Discord mention. The daemon
-     * acks immediately and runs the turn detached, so success here means "it started", not "it finished" — the run
+     * acks immediately and runs the turn detached, so success here means "it started", not "it finished", the run
      * row is where the outcome lands. Hence the two invalidations: one now for the fire, one a few seconds later
      * for the outcome, since a wake that takes minutes has no push to announce it into this page. */
     const run = useMutation({

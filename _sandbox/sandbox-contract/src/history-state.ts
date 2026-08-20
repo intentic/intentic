@@ -1,14 +1,14 @@
 import type { StateFile } from "./state-portability.js";
 
-/* WHAT LIVES ON /history — the second half of the daemon's state, and the half nothing declared until an
+/* WHAT LIVES ON /history, the second half of the daemon's state, and the half nothing declared until an
  * export had to reason about it.
  *
  * `WORKSPACE_STATE_FILES` covers `<workspace>/.intentic/`, which is where the manifests live. It is not where
- * the machinery lives. Every repo's REAL git dir is here (a repo's in-tree `.git` is a pointer file — see
+ * the machinery lives. Every repo's REAL git dir is here (a repo's in-tree `.git` is a pointer file, see
  * git/repo-git-dirs.ts for the invariant that forces it), and so are the fleet registry, the turn journal, the
  * ledgers, the checkpoint scopes and the isolated agents' checkouts. A "workspace export" that took `/work`
- * alone would carry a tree of repos with dangling gitdir pointers — every git command in the restored sandbox
- * answering `fatal: not a git repository` — and an empty agent board.
+ * alone would carry a tree of repos with dangling gitdir pointers, every git command in the restored sandbox
+ * answering `fatal: not a git repository`, and an empty agent board.
  *
  * The two tables stay separate rather than becoming one keyed by volume, because they answer different
  * questions. A `.intentic` entry also declares which browser QUERY it makes stale, since the file watcher
@@ -17,7 +17,7 @@ import type { StateFile } from "./state-portability.js";
  * imported rather than duplicated.
  *
  * `history-state-coverage.test.ts` fails when a daemon store builds a `/history` path this list doesn't carry, in both
- * directions — the same shape-recognizing guard that covers the workspace table.
+ * directions, the same shape-recognizing guard that covers the workspace table.
  */
 
 // Paths are historyRoot-relative, forward-slash, matched by PREFIX; a directory entry keeps its trailing slash
@@ -27,7 +27,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
 
     /* THE ONE THAT MAKES A BUNDLE A WORKSPACE. Every repo's real git dir, including the /work root's own
      * ("root"), keyed by URI-encoded repo id. Carrying the working tree without this hands the target files
-     * whose `.git` points at a path that does not exist there — which is not a degraded repo but a broken one,
+     * whose `.git` points at a path that does not exist there, which is not a degraded repo but a broken one,
      * and it takes the Changes review, the diff, land and every agent branch with it. The agent BRANCHES live
      * in here too, which is what lets the checkouts below be left out. */
     { path: "gits/", portability: "carry" },
@@ -38,7 +38,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "agents.json", portability: "carry" },
     { path: "turns/", portability: "carry" },
     { path: "transcripts/", portability: "carry" },
-    // What each message can be put back to — a workspace checkpoint, or an isolated conversation's own commits.
+    // What each message can be put back to, a workspace checkpoint, or an isolated conversation's own commits.
     // Carried WITH the transcripts and the scopes above, because it is the join between them: without it a
     // restored conversation reads back whole and offers no way back into it, even though both the messages and
     // the states they name travelled.
@@ -48,7 +48,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
      * Carried, and it is the entry with the most to say for itself: the PAGES live in the workspace's outbox
      * (`public/`), so they travel with `/work` whatever this says. Leaving the index behind would restore a
      * sandbox that is still serving somebody's conversation on the internet with nothing in the app that knows
-     * it — no row, no link, and no way to stop sharing short of deleting files by hand. The index is what makes
+     * it, no row, no link, and no way to stop sharing short of deleting files by hand. The index is what makes
      * a published page withdrawable, so it goes wherever the pages go. */
     { path: "shares.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },
@@ -58,7 +58,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // Explicit first-time dependency setup requests. Carrying the worklist preserves the owner's decision when
     // an export interrupts the queue before its terminal starts; fulfilled entries remove themselves.
     { path: "dependency-requests.json", portability: "carry" },
-    // The deploy engine's own ledgers — a run's events and the check results the Pipelines view reads back.
+    // The deploy engine's own ledgers, a run's events and the check results the Pipelines view reads back.
     { path: "apply-events.ndjson", portability: "carry" },
     { path: "check-events/", portability: "carry" },
 
@@ -68,7 +68,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
      *
      * A conversation's worktree is a full checkout of the monorepo per agent (plus its overlay upper dir), and
      * there can be a hundred of them. None of it is unique: the branch it holds is in `gits/` above, and the
-     * registry entry naming it travels in agents.json — so an imported conversation arrives in exactly the
+     * registry entry naming it travels in agents.json, so an imported conversation arrives in exactly the
      * shape the system already has a name for. `attached()` reports its checkout as absent, the board renders
      * it, and the next turn's `ensure()` re-creates it from the recorded composition, which is the same path an
      * archived agent takes when it runs again. The boot sweep's `git worktree prune` clears the stale admin
@@ -84,7 +84,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: ".isolation-probe", portability: "derived" },
     /* The finished bundles themselves. `derived` is doing real work here rather than describing leftovers: an
      * export that carried the export directory would pack every previous bundle into the new one, and the next
-     * export would pack THAT — each one a multiple of the last. Living on this volume is the other half of the
+     * export would pack THAT, each one a multiple of the last. Living on this volume is the other half of the
      * same guard; under `/work` the file would also be watched, indexed by iq, and snapshotted into history. */
     { path: "exports/", portability: "derived" },
 
@@ -107,7 +107,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     /* ---- identity: what binds this sandbox to its owner, its browsers and its host ---- */
 
     /* Signs every browser session cookie. Carrying it would let a bundle's holder mint sessions against the
-     * target — an export becomes a credential — and the target minting its own costs exactly one sign-in. */
+     * target, an export becomes a credential, and the target minting its own costs exactly one sign-in. */
     { path: "session-secret", portability: "identity", note: "Sign in again — the target signs its own sessions." },
     {
         path: "browser-access-disabled",

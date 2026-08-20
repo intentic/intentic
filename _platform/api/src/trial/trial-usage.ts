@@ -7,7 +7,7 @@ import type { Config } from "../config.js";
  * model endpoint survivable. A fingerprint-capped pool is farmable by clearing cookies; an account-capped one
  * costs an attacker a fresh Google account per allowance, which is the difference between a free pool and a
  * free-for-all. It also costs the honest user nothing, because everyone who reaches a sandbox has already
- * signed in — there is no extra step to add.
+ * signed in, there is no extra step to add.
  *
  * The account is reached from the sandbox's connect token, which is the credential the daemon already holds and
  * already presents to /sandbox/announce. So a trial request proves "I am a sandbox intentic issued", and the
@@ -18,7 +18,7 @@ import type { Config } from "../config.js";
 // is a client-chosen second allowance.
 const trialDay = (now: Date): string => now.toISOString().slice(0, 10);
 
-// When the current allowance resets — the next UTC midnight, as an ISO stamp the browser can render in local
+// When the current allowance resets, the next UTC midnight, as an ISO stamp the browser can render in local
 // time. Derived from `now` rather than read from the row, so it is answerable before a user has spent anything.
 const trialResetsAt = (now: Date): string => {
     const next = new Date(now);
@@ -27,7 +27,7 @@ const trialResetsAt = (now: Date): string => {
 };
 
 export interface TrialStatus {
-    // Messages per UTC day for one account — the configured allowance, restated so a caller never has to guess.
+    // Messages per UTC day for one account, the configured allowance, restated so a caller never has to guess.
     readonly allowance: number;
     readonly used: number;
     readonly remaining: number;
@@ -37,7 +37,7 @@ export interface TrialStatus {
     readonly servedModel?: string;
 }
 
-// What this account has left today, WITHOUT spending anything — the read the daemon polls so the model picker
+// What this account has left today, WITHOUT spending anything, the read the daemon polls so the model picker
 // can badge the trial with a real number instead of a promise. A user who has never used the trial has no row,
 // which is not an error: it is a full allowance.
 export const trialStatus = async (prisma: PrismaClient, config: Config, userId: string, now: Date): Promise<TrialStatus> => {
@@ -53,7 +53,7 @@ export const trialStatus = async (prisma: PrismaClient, config: Config, userId: 
     };
 };
 
-/* WHICH REAL MODEL ANSWERED, written after the fact — the trial publishes one synthetic id and routes behind
+/* WHICH REAL MODEL ANSWERED, written after the fact, the trial publishes one synthetic id and routes behind
  * it, so this is the only record of what a given answer actually ran on.
  *
  * A second write rather than part of the spend, because the spend has to happen BEFORE the upstream call (it is
@@ -61,12 +61,12 @@ export const trialStatus = async (prisma: PrismaClient, config: Config, userId: 
  * a dozen messages per account per day.
  *
  * Non-throwing: a status line is worth nothing next to the answer the user is waiting for, and the row can
- * legitimately be gone by now — a refund on a refused turn races the day rolling over. */
+ * legitimately be gone by now, a refund on a refused turn races the day rolling over. */
 export const recordServedModel = async (prisma: PrismaClient, userId: string, now: Date, model: string): Promise<void> => {
     await prisma.trialUsage.update({ where: { userId_day: { userId, day: trialDay(now) } }, data: { lastModel: model } }).catch(() => undefined);
 };
 
-/* SPEND ONE MESSAGE, or refuse — one statement, because the check and the increment must not be two.
+/* SPEND ONE MESSAGE, or refuse, one statement, because the check and the increment must not be two.
  *
  * Read-then-write is the obvious shape and the wrong one: two turns starting together both read `11 used`, both
  * decide there is room, and both write `12`, so the allowance leaks one message per concurrent pair. The upsert
@@ -94,7 +94,7 @@ export const spendTrialMessage = async (
     return { allowance, used, remaining: Math.max(0, allowance - used), resetsAt: trialResetsAt(now), allowed: used <= allowance };
 };
 
-// Give a refused message back. The spend is deliberately optimistic — it has to be, to stay atomic — so an
+// Give a refused message back. The spend is deliberately optimistic, it has to be, to stay atomic, so an
 // upstream that never answered would otherwise bill the user for a turn they did not get. Floored at zero, since
 // a refund can race a reset and a negative allowance would read as a bonus.
 export const refundTrialMessage = async (prisma: PrismaClient, userId: string, now: Date): Promise<void> => {

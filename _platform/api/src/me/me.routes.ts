@@ -8,7 +8,7 @@ const os = implement(apiContract).$context<OrpcContext>();
 export const meRoutes = {
     get: os.me.get.handler(({ context }) => context.user),
     // GDPR data export: every personal-data row the platform holds for the caller, as downloadable JSON.
-    // Credentials are deliberately excluded — session tokens, OAuth tokens, sandbox connect tokens and
+    // Credentials are deliberately excluded, session tokens, OAuth tokens, sandbox connect tokens and
     // setup payloads are secrets, not personal data.
     export: os.me.export.handler(async ({ context }) => {
         const user = requireUser(context);

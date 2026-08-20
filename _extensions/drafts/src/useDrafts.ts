@@ -5,7 +5,7 @@ import { host } from "./host";
 
 /* The sandbox's post-drafts queue (.intentic/config/drafts/, one file per draft), read/written via the daemon's
  * /drafts routes. The AGENT creates drafts with its file tools (taught by the daemon's drafts skill); this is
- * the OWNER's side — `save` upserts by id (approve/edit/retry are all a re-post with a field changed), `remove`
+ * the OWNER's side, `save` upserts by id (approve/edit/retry are all a re-post with a field changed), `remove`
  * rejects. The publish automation's guard re-reads the files on its next fire, so there's nothing to provision.
  *
  * The manifest's `contributes.files` entry points `.intentic/config/drafts/` at this query key, so the agent dropping
@@ -20,7 +20,7 @@ export const draftsQuery = () => ({
 // A proposal waiting for a yes, a post that failed, and a file the daemon could not read are the three states
 // where nothing moves until the owner acts. Approved-and-scheduled goes out on its own and `posted` is history:
 // counting either gives a badge that never returns to zero, which is how a badge stops being read. `broken` is
-// the subset that is wrong rather than merely waiting — enough to pick a tone without re-deriving the split.
+// the subset that is wrong rather than merely waiting, enough to pick a tone without re-deriving the split.
 export const owedOf = (list: DraftsList | undefined): { owed: number; broken: number } => {
     const drafts = list?.drafts ?? [];
     const broken = drafts.filter((draft) => draft.status === `failed`).length + (list?.invalid.length ?? 0);

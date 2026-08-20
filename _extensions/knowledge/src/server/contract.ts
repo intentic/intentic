@@ -28,7 +28,7 @@ export const knowledgeContract = {
     graph: oc.route({ method: "GET", path: "/graph" }).input(GraphQuerySchema).output(GraphSchema),
     write: oc.route({ method: "PUT", path: "/note" }).input(NoteWriteSchema).output(OkSchema),
     delete: oc.route({ method: "DELETE", path: "/note" }).input(NoteQuerySchema).output(OkSchema),
-    // Owner-initiated, from the empty state — never on a read. A knowledge base appearing in somebody's workspace
+    // Owner-initiated, from the empty state, never on a read. A knowledge base appearing in somebody's workspace
     // because they looked at a panel is a surprise; a knowledge base appearing because they pressed "start it off" is
     // the feature.
     seed: oc.route({ method: "POST", path: "/seed" }).output(SeedResultSchema),

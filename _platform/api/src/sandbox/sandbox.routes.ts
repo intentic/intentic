@@ -39,14 +39,14 @@ const SETUP_CODE_TTL_MS = 30 * 60 * 1000;
 // the wait renders as the plain spinner it has always had.
 const MACHINE_STATES = HostedStatusSchema.shape.machine.options;
 
-// The hub's zone when the tunnel fabric is configured, else undefined — the zone alone defaults even when
+// The hub's zone when the tunnel fabric is configured, else undefined, the zone alone defaults even when
 // the fabric is off, so it must not flag sandboxes on its own.
 const intenticZoneOf = (context: OrpcContext): string | undefined => (zrokEnabled(context.config) ? context.config.zrok.zone : undefined);
 
-// Shape a sandbox row for the browser. `role` is the caller's relationship — owner rows drive management, member
+// Shape a sandbox row for the browser. `role` is the caller's relationship, owner rows drive management, member
 // rows are access-only. token + daemonUrl are what the browser needs to reach the daemon directly (the stored
 // token is encrypted at rest, so it is decrypted here); daemonUrl + lastSeenAt come from the daemon's announce.
-// `providedTunnel` flags a daemonUrl under the platform's own tunnel zone — the browser reads it to tell a
+// `providedTunnel` flags a daemonUrl under the platform's own tunnel zone, the browser reads it to tell a
 // sandbox we made reachable from one the owner attached behind a domain of their own.
 // `setupCodeClaimedAt` rides along for the setup wizard: it is the platform's only evidence that the pasted
 // command reached a machine, and the wizard's wait reads very differently before and after it.
@@ -62,7 +62,7 @@ const toSummary = (
         bootReport: unknown;
         announceRefusal: unknown;
         cloud: unknown;
-        // The hosted lane's machine record — every query feeding this summary includes the relation, so a
+        // The hosted lane's machine record, every query feeding this summary includes the relation, so a
         // rename or an announce can never silently strip the hosted badge from the browser's row. Optional
         // (not just nullable) as the same shield the report parse below gives rows from before a schema
         // existed: a caller that skipped the include reads as "not hosted", never as a crash.
@@ -74,16 +74,16 @@ const toSummary = (
 ) => {
     const zone = intenticZoneOf(context);
     // The stored report was validated on write (/setup/report); the parse here only shields the summary from
-    // rows written before this schema existed — anything unrecognizable reads as "no report".
+    // rows written before this schema existed, anything unrecognizable reads as "no report".
     const report = SetupReportSchema.safeParse(sandbox.setupReport);
     // Same shield, same reason, for the daemon's own boot verdict (/sandbox/boot-report). A sandbox on an
-    // image older than that route simply never writes one, which reads here as "said nothing" — and the
+    // image older than that route simply never writes one, which reads here as "said nothing", and the
     // wizard treats saying nothing exactly as it behaved before this existed.
     const boot = BootReportSchema.safeParse(sandbox.bootReport);
     // And for the refusal record, which the announce route writes whole.
     const refusal = AnnounceRefusalSchema.safeParse(sandbox.announceRefusal);
     // Same shield for the cloud stamp (cloudProvision wrote it validated; the stored serverId is dropped by
-    // the parse — the browser has no use for it).
+    // the parse, the browser has no use for it).
     const cloud = SandboxCloudSchema.safeParse(sandbox.cloud);
     return {
         id: sandbox.id,
@@ -102,7 +102,7 @@ const toSummary = (
                 : {
                       region: sandbox.hosted.region,
                       // The app name already records the machine's origin (`<prefix>-pool-<hex>` for a pool
-                      // claim, `<prefix>-<sandbox id>` built to order — the HostedMachine model documents
+                      // claim, `<prefix>-<sandbox id>` built to order, the HostedMachine model documents
                       // this), so "warm" is read off it rather than stored twice.
                       warm: sandbox.hosted.appName.includes(`-pool-`),
                   },
@@ -114,12 +114,12 @@ const toSummary = (
 
 export const sandboxRoutes = {
     // Every sandbox the caller owns or has been granted access to (by email), owned first. The single read the
-    // browser needs — token + daemonUrl included so it can reach each daemon directly.
+    // browser needs, token + daemonUrl included so it can reach each daemon directly.
     list: os.sandbox.list.handler(async ({ context }) => {
         const user = requireUser(context);
         const [owned, memberships] = await Promise.all([
             context.prisma.sandbox.findMany({ where: { ownerId: user.id }, include: { hosted: true }, orderBy: { createdAt: `asc` } }),
-            // Only ACCEPTED memberships surface a shared sandbox — a pending invite must not reveal it before
+            // Only ACCEPTED memberships surface a shared sandbox, a pending invite must not reveal it before
             // the invitee accepts. Lowercased to match how invites are stored (and how the daemon verifies).
             // Queried through the membership row (not `some`) because the row carries the caller's ROLE.
             context.prisma.sandboxMember.findMany({
@@ -136,7 +136,7 @@ export const sandboxRoutes = {
             ],
         };
     }),
-    // Mint a new sandbox for the caller. Unlimited — own as many as you like. Nothing is provisioned here:
+    // Mint a new sandbox for the caller. Unlimited, own as many as you like. Nothing is provisioned here:
     // a zrok account is one fast call the first setup mint (or hosted provision) makes, which is why the
     // pre-provisioned pool the Cloudflare tunnels needed died with them.
     create: os.sandbox.create.handler(async ({ context, input }) => {
@@ -148,7 +148,7 @@ export const sandboxRoutes = {
         });
         return toSummary(sandbox, `owner`, context);
     }),
-    // Rename an owned sandbox and/or set its switcher logo (a small data URL the browser produced) — `null`
+    // Rename an owned sandbox and/or set its switcher logo (a small data URL the browser produced), `null`
     // clears the logo back to the monogram. The `!== undefined` guards are what keep the two fields
     // independent: a rename must not blank a logo, and clearing a logo must not rename anything.
     update: os.sandbox.update.handler(async ({ context, input }) => {
@@ -161,15 +161,15 @@ export const sandboxRoutes = {
         return toSummary(sandbox, `owner`, context);
     }),
     // Remove an owned sandbox (cascades its member grants), its hosted machine, and its reachability grant on
-    // the hub — the platform destroys everything it provisioned. The grant is revoked FIRST and the machine is
+    // the hub, the platform destroys everything it provisioned. The grant is revoked FIRST and the machine is
     // destroyed after the row, and the asymmetry is the hubs' own doing: Fly apps can be listed by prefix, so
     // a machine the teardown missed is found and destroyed tomorrow, while zrok v2 has no way to list accounts
-    // at all — a grant whose row is gone could never be found again. So the removal fails on a hub hiccup and
+    // at all, a grant whose row is gone could never be found again. So the removal fails on a hub hiccup and
     // the user retries, rather than stranding an address nobody can revoke. The daemon keeps running on its
     // host until cleanup.sh tears it down there.
     delete: os.sandbox.delete.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        // Read the hosted record BEFORE the row goes — the cascade takes it, and its appName is the teardown.
+        // Read the hosted record BEFORE the row goes, the cascade takes it, and its appName is the teardown.
         const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: input.sandboxId } });
         if (sandbox.zrokToken !== null && zrokEnabled(context.config)) {
             const sandboxId = sandboxIdFromToken(decryptSecret(context.config, sandbox.token)) ?? sandbox.id;
@@ -184,7 +184,7 @@ export const sandboxRoutes = {
         }
         await context.prisma.sandbox.delete({ where: { id: input.sandboxId } });
         // A hosted sandbox's machine dies with it, best-effort AFTER the row: the row is what the browser
-        // reads, so a slow provider would otherwise keep a just-removed sandbox on screen — and a failed
+        // reads, so a slow provider would otherwise keep a just-removed sandbox on screen, and a failed
         // teardown leaves an app with no row, which is exactly what the hosted reaper destroys tomorrow.
         if (hosted !== null) {
             try {
@@ -198,7 +198,7 @@ export const sandboxRoutes = {
         }
         return { ok: true };
     }),
-    // Drop the caller's OWN member grant — a member removing a shared sandbox from their account. The sandbox,
+    // Drop the caller's OWN member grant, a member removing a shared sandbox from their account. The sandbox,
     // its owner, and the daemon are untouched (the daemon's authorized list stays owner-pushed, like delete).
     // Idempotent; lowercased to match how share stores grants.
     leave: os.sandbox.leave.handler(async ({ context, input }) => {
@@ -206,9 +206,9 @@ export const sandboxRoutes = {
         await context.prisma.sandboxMember.deleteMany({ where: { sandboxId: input.sandboxId, email: user.email.toLowerCase() } });
         return { ok: true };
     }),
-    // The zones a pasted Cloudflare token can see — the in-app Cloudflare capability's credential check (the
+    // The zones a pasted Cloudflare token can see, the in-app Cloudflare capability's credential check (the
     // user's OWN zone, for the deploy engine's apps). Nothing to do with sandbox reachability, which the
-    // self-hosted hub serves. Session-gated, used for this one call, then dropped — never persisted or logged.
+    // self-hosted hub serves. Session-gated, used for this one call, then dropped, never persisted or logged.
     zones: os.sandbox.zones.handler(async ({ context, input }) => {
         requireUser(context);
         try {
@@ -221,7 +221,7 @@ export const sandboxRoutes = {
         }
     }),
     // The cloud lane's credential check + catalog: spend the pasted provider credential on the provider's own
-    // region/size/price listing (cloud/index.ts), then drop it with the request — the `zones` contract. Both
+    // region/size/price listing (cloud/index.ts), then drop it with the request, the `zones` contract. Both
     // named refusals become BAD_REQUESTs the wizard can render; anything else (network, surprise shapes)
     // propagates like every other handler's unexpected failure.
     cloudOptions: os.sandbox.cloudOptions.handler(async ({ context, input }) => {
@@ -237,11 +237,11 @@ export const sandboxRoutes = {
     }),
     /* Create the ONE machine in the user's own cloud account whose first boot runs this sandbox's setup code
      * (cloud/user-data.ts). Requires a LIVE intentic-mode code: the machine boots headless with no Cloudflare
-     * of its own, so only the platform-provisioned tunnel can make it reachable — and a dead code would build
+     * of its own, so only the platform-provisioned tunnel can make it reachable, and a dead code would build
      * a machine that boots to a 404. The wizard mints (its lane defaults to intentic mode) before calling
      * this, so the gate only fires on a stale tab.
      *
-     * The credential is request-scoped here exactly as in cloudOptions — after this response the platform
+     * The credential is request-scoped here exactly as in cloudOptions, after this response the platform
      * cannot reach the machine again, which is why the non-secret residue (provider, server name, location)
      * is stamped on the row: it is everything the UI can ever say about where the machine lives. The server
      * name is derived from the tunnel id, so the machine in the provider's console visibly matches the
@@ -274,7 +274,7 @@ export const sandboxRoutes = {
             if (error instanceof CloudCredentialError || error instanceof CloudProviderError) {
                 throw new ORPCError(`BAD_REQUEST`, { message: error.message });
             }
-            // Surface WHY like setupCode's tunnel provisioning — a raw throw serializes as a bare
+            // Surface WHY like setupCode's tunnel provisioning, a raw throw serializes as a bare
             // "Internal server error" in the wizard.
             if (error instanceof Error) {
                 throw new ORPCError(`BAD_GATEWAY`, { message: error.message });
@@ -298,7 +298,7 @@ export const sandboxRoutes = {
         }
         const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } });
         // The hour budget rides along so the lane's card can state the ceiling BEFORE anyone spends it, and
-        // is omitted entirely for the unmetered (members, ceiling-less platforms) — a limit that does not
+        // is omitted entirely for the unmetered (members, ceiling-less platforms), a limit that does not
         // apply to you should not appear on your screen at all.
         const budget = await hostedBudgetOf(context.prisma, context.config, user.id);
         return {
@@ -309,7 +309,7 @@ export const sandboxRoutes = {
                 : {}),
         };
     }),
-    /* Give an existing sandbox a machine on intentic's own provider — the lane with no command, no code, no
+    /* Give an existing sandbox a machine on intentic's own provider, the lane with no command, no code, no
      * paste. Shaped after cloudProvision on purpose: the ROW is created the ordinary way on arrival, and
      * choosing this lane moves a MACHINE, never the sandbox, so the wizard can switch lanes without losing
      * the name and address the user already has.
@@ -319,7 +319,7 @@ export const sandboxRoutes = {
      * ordinary announce narrates the rest to the waiting browser, exactly as a pasted run's does. OWNER_EMAIL
      * seeds the daemon's first-bind exactly like setupCode's payload: only this Google identity may bind.
      *
-     * Idempotent — a sandbox that already has a machine answers with itself rather than growing a second one,
+     * Idempotent, a sandbox that already has a machine answers with itself rather than growing a second one,
      * so a double-click or a retry after a slow response costs nothing. A FAILURE leaves the sandbox exactly
      * as it found it (provisionHosted cleans up its own half-made app), which is what lets the wizard say
      * what went wrong and stay on a working row instead of starting the user over. */
@@ -340,7 +340,7 @@ export const sandboxRoutes = {
                 message: `you already have ${used === 1 ? `a sandbox we host` : `${used} sandboxes we host`} — remove one to have this sandbox hosted instead`,
             });
         }
-        // A new machine boots the moment it is created, so the hour ceiling applies here as much as at wake —
+        // A new machine boots the moment it is created, so the hour ceiling applies here as much as at wake,
         // otherwise releasing a spent machine and provisioning another would be the way around it.
         const budget = await hostedBudgetOf(context.prisma, context.config, user.id);
         if (budget.metered && budget.remainingMinutes === 0) {
@@ -354,7 +354,7 @@ export const sandboxRoutes = {
         let grant;
         try {
             // The machine's env must carry the sandbox's reachability grant, so it is minted (or reused)
-            // before the machine exists — the same ordering the tunnel had, one call instead of a dozen.
+            // before the machine exists, the same ordering the tunnel had, one call instead of a dozen.
             grant = await ensureZrokAccount(context.prisma, context.config, sandbox);
         } catch (error) {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `provisioning reachability failed` });
@@ -370,7 +370,7 @@ export const sandboxRoutes = {
         } catch (error) {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `creating the hosted machine failed` });
         }
-        // The provision just spent (or found empty) a pool slot — start rebuilding stock now rather than
+        // The provision just spent (or found empty) a pool slot, start rebuilding stock now rather than
         // letting the replacement wait out the five-minute tick. Fire-and-forget: never this caller's wait.
         kickHostedPool(context.prisma, context.config, context.logger);
         const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
@@ -378,7 +378,7 @@ export const sandboxRoutes = {
     }),
     /* The way back out of the hosted lane: destroy the machine, keep the sandbox. This is the wizard's
      * lane-switch (someone tries "we host it", then decides to run it on their own machine after all), which
-     * is why it is deliberately narrow — a sandbox that has EVER connected is a workspace with a person's
+     * is why it is deliberately narrow, a sandbox that has EVER connected is a workspace with a person's
      * files on it, and destroying its machine belongs to the delete dialog and the confirmation it shows,
      * never to a card being clicked. Idempotent: no machine is a no-op, not an error. */
     hostedRelease: os.sandbox.hostedRelease.handler(async ({ context, input }) => {
@@ -400,7 +400,7 @@ export const sandboxRoutes = {
         const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
         return toSummary(fresh, `owner`, context);
     }),
-    /* WHAT THE MACHINE ITSELF IS DOING — the only link of the setup chain that exists before the daemon does,
+    /* WHAT THE MACHINE ITSELF IS DOING, the only link of the setup chain that exists before the daemon does,
      * and therefore the only way to tell a machine that never booted from one that booted and went silent.
      * The setup wait polls this while it waits; nothing else does, which is the whole reason it is a route
      * rather than a field on the summary (a per-row provider call in `list` would be paid by every browser on
@@ -409,7 +409,7 @@ export const sandboxRoutes = {
      * Every failure answers `unknown` rather than throwing: this is narration for a screen that is ALREADY
      * waiting, and a provider hiccup must degrade it to the honest spinner it replaced, never break it or
      * turn a slow boot into an error. An unmodelled state does the same, which is what the enum's `unknown`
-     * is for — Fly's vocabulary is theirs to extend. */
+     * is for. Fly's vocabulary is theirs to extend. */
     hostedStatus: os.sandbox.hostedStatus.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
@@ -423,12 +423,12 @@ export const sandboxRoutes = {
         const known = MACHINE_STATES.find((candidate) => candidate === state?.state);
         return { machine: known ?? (`unknown` as const) };
     }),
-    /* Boot a hosted machine again — the setup wait's one recovery, for a daemon that never came up, a tunnel
+    /* Boot a hosted machine again, the setup wait's one recovery, for a daemon that never came up, a tunnel
      * that never bound, or a machine pinned to a broken image. Stop, refresh its full config from the current
      * hosted image while preserving its volume, then start; a stop that refuses because the machine is already
      * down is exactly the state we wanted, so only the refresh/start is allowed to fail the call.
      *
-     * Owner-only, and nothing is destroyed — the volume, the files and the address all survive, which is what
+     * Owner-only, and nothing is destroyed, the volume, the files and the address all survive, which is what
      * separates this from hostedRelease and what makes it safe to put under a failure message somebody is
      * reading in frustration. */
     hostedRestart: os.sandbox.hostedRestart.handler(async ({ context, input }) => {
@@ -442,7 +442,7 @@ export const sandboxRoutes = {
             context.logger.warn({ err: error, app: hosted.appName }, `hosted restart: stop refused; starting anyway`),
         );
         // The stop above just ended any open stretch, so settling now is exact rather than lazy. The budget
-        // gate applies here too — a restart is a start, and a lane that refused to wake but agreed to restart
+        // gate applies here too, a restart is a start, and a lane that refused to wake but agreed to restart
         // would be a limit with a button next to it.
         await settleHostedStretch(context.prisma, context.config, context.logger, hosted, sandbox.ownerId);
         const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
@@ -470,13 +470,13 @@ export const sandboxRoutes = {
         await openHostedStretch(context.prisma, hosted.id);
         return { ok: true };
     }),
-    /* Power a hosted sandbox's machine back on — the idle-stop's other half, called by any browser (owner or
+    /* Power a hosted sandbox's machine back on, the idle-stop's other half, called by any browser (owner or
      * accepted member) that finds the daemon unreachable. Idempotent: waking a running machine is a no-op, so
      * the browser needs no machine-state oracle, it just wakes and keeps probing the daemon like always.
      *
      * ALSO THE FREE LANE'S ONLY GATE. The previous stretch is settled first (this is the moment Fly can tell
      * us when the machine actually stopped), then the owner's remaining hours decide whether this wake
-     * happens at all. Everything is billed to the OWNER, never to the caller — a guest on a shared sandbox
+     * happens at all. Everything is billed to the OWNER, never to the caller, a guest on a shared sandbox
      * spends the owner's month, which is the only reading under which sharing cannot launder machine time. */
     wake: os.sandbox.wake.handler(async ({ context, input }) => {
         const user = requireUser(context);
@@ -494,7 +494,7 @@ export const sandboxRoutes = {
         const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
         if (budget.metered && budget.remainingMinutes === 0) {
             // Addressed to the person reading it, which on a shared sandbox may not be the account that spent
-            // the hours — hence "this sandbox's" rather than "your". PAYMENT_REQUIRED so the editor can offer
+            // the hours, hence "this sandbox's" rather than "your". PAYMENT_REQUIRED so the editor can offer
             // the membership without string-matching a message.
             throw new ORPCError(`PAYMENT_REQUIRED`, {
                 message: `this sandbox's ${budget.allowanceMinutes / 60} free hours are used up for this month — a membership lifts the limit, or run it on a machine of your own and it never applies`,
@@ -509,7 +509,7 @@ export const sandboxRoutes = {
         await openHostedStretch(context.prisma, sandbox.hosted.id);
         return { ok: true };
     }),
-    /* Whether this platform mints addresses — the same switch `setupCode` enforces, asked without spending a
+    /* Whether this platform mints addresses, the same switch `setupCode` enforces, asked without spending a
      * code. It exists because "the mint 404s" is a terrible way for a wizard to learn what it can offer: the
      * page had already drawn the lanes that need an address by the time the answer came back, and had to take
      * them off screen again. Cheap and session-only, like hostedOffer, and it reports the platform's
@@ -520,7 +520,7 @@ export const sandboxRoutes = {
     }),
     /* Mint the short-lived setup code the install one-liner carries instead of raw tokens. One lane now: the
      * sandbox's reachability grant on the self-hosted hub is minted (or reused) here and stashed in the
-     * payload, so the pasted command carries a code and nothing else — the address it will answer on is a
+     * payload, so the pasted command carries a code and nothing else, the address it will answer on is a
      * derivation of the connect token, known before anything runs. Re-claimable until expiry so a failed run
      * stays re-runnable; re-minting overwrites the previous code but never the grant. */
     setupCode: os.sandbox.setupCode.handler(async ({ context, input }) => {
@@ -533,7 +533,7 @@ export const sandboxRoutes = {
         try {
             grant = await ensureZrokAccount(context.prisma, context.config, sandbox);
         } catch (error) {
-            // Surface WHY — a raw throw serializes as a bare "Internal server error" in the wizard.
+            // Surface WHY, a raw throw serializes as a bare "Internal server error" in the wizard.
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `provisioning reachability failed` });
         }
         const hostname = grant.hostname;
@@ -544,7 +544,7 @@ export const sandboxRoutes = {
             SANDBOX_HOSTNAME: hostname,
         };
         // Seed the creator's account email so the daemon binds ONLY this Google identity as owner (TOFU by
-        // the intended person, not just whoever holds the connect token) — daemon ownership then always
+        // the intended person, not just whoever holds the connect token), daemon ownership then always
         // matches the intentic account. Lowercased to match the daemon's case-insensitive owner check.
         payload[`OWNER_EMAIL`] = user.email.toLowerCase();
         const code = randomBytes(8).toString(`base64url`);
@@ -558,7 +558,7 @@ export const sandboxRoutes = {
                 setupCode: code,
                 setupCodeExpiresAt: expiresAt,
                 setupCodeClaimedAt: null,
-                // A fresh code describes a fresh run — last run's setup report would narrate the wrong one.
+                // A fresh code describes a fresh run, last run's setup report would narrate the wrong one.
                 setupReport: Prisma.DbNull,
                 setupPayload: encryptSecret(context.config, JSON.stringify(payload)),
             },
@@ -568,10 +568,10 @@ export const sandboxRoutes = {
     /* Mail the owner a link back to this sandbox's setup screen. Owner-only and self-addressed: the recipient is
      * the SESSION's email, never an input, so this can only ever put a link in the requester's own inbox and is
      * no use to anyone as a way to send mail to someone else. What it carries is in setup-email.ts, and the short
-     * version is that it carries nothing — the code, the command and the connect token all stay off it.
+     * version is that it carries nothing, the code, the command and the connect token all stay off it.
      *
      * Deliberately NOT plan-gated and NOT rate-limited beyond that: it is the escape hatch on the step where the
-     * funnel loses people, its blast radius is one mail to the sender's own address, and the mail costs nothing
+     * funnel loses people, its reach is one mail to the sender's own address, and the mail costs nothing
      * to ignore. */
     emailSetupLink: os.sandbox.emailSetupLink.handler(async ({ context, input }) => {
         const user = requireUser(context);
@@ -579,7 +579,7 @@ export const sandboxRoutes = {
         await sendSetupLinkEmail(context.config, context.logger, { to: user.email, sandboxName: sandbox.name, sandboxId: sandbox.id });
         return { ok: true };
     }),
-    // Record where a sandbox the user ALREADY runs is reachable — the owner-asserted counterpart to the daemon's
+    // Record where a sandbox the user ALREADY runs is reachable, the owner-asserted counterpart to the daemon's
     // POST /sandbox/announce, for a daemon that never phones home (no PLATFORM_URL, or a network that can't
     // reach us). The browser has already probed the URL and been authorized by the daemon before calling this,
     // which is the only verification that means anything: the platform never calls into a sandbox (so it can't

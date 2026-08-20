@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 
-/* One Komodo connection's board, via the daemon's /komodo routes. The credential stays in the sandbox — the
+/* One Komodo connection's board, via the daemon's /komodo routes. The credential stays in the sandbox, the
  * browser never holds either half of the API key, which is why these routes exist rather than this composable
  * talking to Komodo directly.
  *
@@ -50,13 +50,13 @@ export function useDeploymentBoard(capability: Ref<string>) {
                 post({ kind: input.resource.kind, id: input.resource.id, action: input.action }),
             ),
         // Komodo's execute returns as soon as the operation is accepted, so the board it refetches may still
-        // show the old state for a beat. That is honest — the poll above is what lands the new one — and it
+        // show the old state for a beat. That is honest, the poll above is what lands the new one, and it
         // beats optimistically drawing a state the container has not reached.
         onSuccess: invalidate,
     });
 
     // Bind a workspace repo to one of this Komodo's stacks (empty `stack` unlinks). Invalidates, because the
-    // overview is what carries the link back — no optimistic copy to drift.
+    // overview is what carries the link back, no optimistic copy to drift.
     const link = useMutation({
         mutationFn: (input: { repo: string; stack: string }) => api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability.value}/link`, post(input)),
         onSuccess: invalidate,
@@ -70,7 +70,7 @@ export function useDeploymentBoard(capability: Ref<string>) {
     });
 
     // Starts an isolated agent seeded with the resource, its state and its log tail; resolves to its
-    // conversation id, which is the fleet's card id — the view hands it to /agents?focus= and the board lands
+    // conversation id, which is the fleet's card id, the view hands it to /agents?focus= and the board lands
     // on the card.
     const fix = useMutation({
         mutationFn: async ({ resource, pick }: { resource: DeployResource; pick?: AgentRunChoice | undefined }): Promise<DeployFixResponse> =>
@@ -90,7 +90,7 @@ export function useDeploymentBoard(capability: Ref<string>) {
         board: computed(() => query.data.value),
         error: computed(() => query.error.value?.message),
         // isPending, not isLoading: true from mount until the FIRST response, INCLUDING the window where
-        // `enabled` still gates the fetch on the sandbox handshake — the window in which isLoading is false
+        // `enabled` still gates the fetch on the sandbox handshake, the window in which isLoading is false
         // and an "nothing deployed" empty state would flash at someone whose board is about to arrive.
         isPending: query.isPending,
         act,

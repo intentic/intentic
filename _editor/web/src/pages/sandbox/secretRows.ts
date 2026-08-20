@@ -3,12 +3,12 @@ import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-c
 import { capabilityCard } from "../capabilities/cards";
 import { type ConnectionState, connectionFacts, connectionState } from "../capabilities/connections";
 
-/* ONE SECRET AS THE SECRETS TAB READS IT — the inventory entry plus the three things the daemon cannot know:
+/* ONE SECRET AS THE SECRETS TAB READS IT, the inventory entry plus the three things the daemon cannot know:
  * what to CALL it, what tells it apart from the row above, and whether anything is owed on it.
  *
  * THE TAB HOLDS TWO DIFFERENT OBJECTS UNDER ONE WORD, and every complaint about it at scale comes from that.
  * Some rows are values the owner keeps: they can be missing, they are set and rotated and removed here, and a
- * deploy fails without them. The rest are credentials belonging to a connection or a subscription — they are
+ * deploy fails without them. The rest are credentials belonging to a connection or a subscription, they are
  * connected by construction, nothing here can add or remove one, and each group already ends in a button that
  * leads to where they ARE managed. `group` is that line drawn once, so the page can give the first kind the
  * management furniture and the second kind an inventory it can fold away.
@@ -16,15 +16,15 @@ import { type ConnectionState, connectionFacts, connectionState } from "../capab
  * WHAT A CREDENTIAL ROW IS CALLED comes from the same join the Capabilities view makes (capabilityCard), which
  * is what turns nineteen rows of `radarsuspam2, radarsuspam3, …` into nineteen accounts with a brand, a kind
  * and an address on them. An id its owner typed is the row's name; where they never typed one the card's name
- * IS the name, and the row does not say "docker / Docker" — CapabilityConnections' rule, for its reason.
+ * IS the name, and the row does not say "docker / Docker". CapabilityConnections' rule, for its reason.
  *
  * ATTENTION IS ONLY EVER A SECRETS ERRAND: a value the intent requires that nobody has set, or a copy CI never
- * got. A connection that needs signing in again is a real problem and it is not this tab's — it belongs to the
+ * got. A connection that needs signing in again is a real problem and it is not this tab's, it belongs to the
  * page that can fix it, and pinning it here would be a badge answering a question nobody asked on the screen
  * they were sent to by a different one. Such a row still carries its `state` and still sorts to the top of its
  * OWN group, which is where the reader is when it matters. */
 
-/** Where a row belongs — and, in the first three cases, that it is the owner's to set. */
+/** Where a row belongs, and, in the first three cases, that it is the owner's to set. */
 export type SecretGroup = `required` | `yours` | `generated` | `credential` | `provider`;
 
 export interface SecretRow {
@@ -34,7 +34,7 @@ export interface SecretRow {
     readonly title: string;
     /** Env keys are compared character by character; account names are read as words. */
     readonly mono: boolean;
-    /** What tells this row apart from its neighbours — what uses it, or which account it belongs to. */
+    /** What tells this row apart from its neighbours, what uses it, or which account it belongs to. */
     readonly detail: string;
     readonly logo?: string | undefined;
     readonly icon: string;
@@ -57,7 +57,7 @@ export interface SecretSources {
     readonly extensions: readonly ExtensionSummary[];
 }
 
-// A generated value is intentic's to write, and a provider account is the subscription's — neither is typed in.
+// A generated value is intentic's to write, and a provider account is the subscription's, neither is typed in.
 const GROUPS: Readonly<Record<SecretInventoryEntry[`kind`], SecretGroup | undefined>> = {
     env: undefined,
     generated: `generated`,
@@ -67,7 +67,7 @@ const GROUPS: Readonly<Record<SecretInventoryEntry[`kind`], SecretGroup | undefi
 
 const groupOf = (entry: SecretInventoryEntry): SecretGroup => GROUPS[entry.kind] ?? (entry.requiredBy.length > 0 ? `required` : `yours`);
 
-// The one glyph a credential falls to when its card declares none, and the one every AI subscription wears —
+// The one glyph a credential falls to when its card declares none, and the one every AI subscription wears,
 // there is no card behind a subscription to ask, and the section it sits in already says what it is.
 const CREDENTIAL_GLYPH = `key`;
 const PROVIDER_GLYPH = `sparkles`;
@@ -142,7 +142,7 @@ export const secretRow = (entry: SecretInventoryEntry, sources: SecretSources): 
 
 /* THE ORDER INSIDE A GROUP, never across the whole tab: what is unfinished should rise past the rows it sits
  * WITH, not jump the heading it belongs under. Debts first, then connections that need something, then the
- * rest by name — an inventory read by scanning has to be in an order the reader can predict. */
+ * rest by name, an inventory read by scanning has to be in an order the reader can predict. */
 const bySeverity = (left: SecretRow, right: SecretRow): number =>
     Number(right.attention) - Number(left.attention) || (left.state?.rank ?? 3) - (right.state?.rank ?? 3) || left.title.localeCompare(right.title);
 

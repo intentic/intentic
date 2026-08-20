@@ -5,12 +5,12 @@ import { formatDayMonth } from "@intentic/extension-ui/format";
  *
  * The daemon's log is deliberately event-per-append: a turn writes `turn.started`, maybe `turn.plan`, maybe
  * `turn.error`, then `turn.completed`, plus one row per outbound provider call it made. That is the right shape
- * to WRITE (each append is one fact, and a crash mid-turn loses nothing) and the wrong shape to READ — five rows
+ * to WRITE (each append is one fact, and a crash mid-turn loses nothing) and the wrong shape to READ, five rows
  * saying "a turn ran" is five times the scrolling and none of the answer. Measured on a real log: 1,929 events
  * for 837 turns, every one of them titled "Turn started"/"Turn completed" over a session UUID.
  *
  * So this module collapses events into EPISODES (one turn, one inbound message, one health event) and events
- * into SOURCES (who set it off). Both are pure functions over the fetched page — no request, no clock, no Vue —
+ * into SOURCES (who set it off). Both are pure functions over the fetched page, no request, no clock, no Vue,
  * because the interesting logic here is the grouping and grouping is exactly what is worth testing.
  *
  * WHO SET IT OFF is the axis the whole view hangs on, and it is NOT the event's `provider`. On a turn, `provider`
@@ -18,7 +18,7 @@ import { formatDayMonth } from "@intentic/extension-ui/format";
  * nobody, which means the user typed it. Filing turns under their runtime is what made the old view claim to be
  * about Discord while showing 1,600 rows of the user's own work. */
 
-// A rail entry. Bounded by how many things can call the agent — never by how much traffic they send, which is
+// A rail entry. Bounded by how many things can call the agent, never by how much traffic they send, which is
 // the whole reason the rail can stay a list while the timeline cannot.
 export interface Source {
     readonly key: string;
@@ -35,7 +35,7 @@ export interface Source {
     readonly lastAt?: number;
 }
 
-// One thing that happened. `events` keeps the raw rows so the row can expand to exactly what the daemon wrote —
+// One thing that happened. `events` keeps the raw rows so the row can expand to exactly what the daemon wrote,
 // the audit trail must stay inspectable, or collapsing it is hiding it.
 export interface Episode {
     readonly key: string;
@@ -45,11 +45,11 @@ export interface Episode {
     readonly at: number;
     readonly kind: "turn" | "message" | "event";
     readonly label: string;
-    // The daemon's own event type, humanised — carried only by a single-event episode, where the label is the
+    // The daemon's own event type, humanised, carried only by a single-event episode, where the label is the
     // event's content and the type is the other half of what happened. A turn's row states its kind by shape.
     readonly typeName?: string;
     readonly detail?: string;
-    // The runtime that served a turn — a facet of the row, deliberately not a source of its own.
+    // The runtime that served a turn, a facet of the row, deliberately not a source of its own.
     readonly runtime?: string;
     readonly channelId?: string;
     readonly author?: string;
@@ -60,7 +60,7 @@ export interface Episode {
     readonly error?: string;
     readonly durationMs?: number;
     readonly costUsd?: number;
-    // Provider calls the turn made — the "and then it replied" half of a wake, folded into the wake's own row.
+    // Provider calls the turn made, the "and then it replied" half of a wake, folded into the wake's own row.
     readonly outbound: number;
     readonly events: readonly ActivityEvent[];
 }
@@ -87,7 +87,7 @@ const isTurn = (event: ActivityEvent): boolean => event.type.startsWith(`turn.`)
 
 /* Which source an event belongs to. A turn goes to whatever WOKE it and falls back to the user; everything else
  * goes to the provider that carried it. The provider-less remainder is an automation nothing external triggered,
- * which is a schedule or a webhook — filed as such rather than dropped into the user's own work. */
+ * which is a schedule or a webhook, filed as such rather than dropped into the user's own work. */
 export const sourceKeyOf = (event: ActivityEvent): string => {
     if (isTurn(event)) {
         return event.origin?.provider ?? DIRECT;
@@ -194,7 +194,7 @@ const turnEpisode = (turnId: string, events: readonly ActivityEvent[]): Episode 
     };
 };
 
-/* An event that belongs to no turn: an inbound message, a gateway failure, an automation run — and every event
+/* An event that belongs to no turn: an inbound message, a gateway failure, an automation run, and every event
  * already on disk from before turns carried an id.
  *
  * What it says comes from its CONTENT when it has any, with the type demoted to a chip beside it. A row reading
@@ -209,7 +209,7 @@ const looseEpisode = (event: ActivityEvent): Episode => ({
     ...(event.content !== undefined ? { typeName: typeLabel(event.type) } : {}),
     ...(event.content !== undefined ? { detail: event.content } : {}),
     // On a turn event `provider` is the runtime that served it, worth showing. On a channel event it is the
-    // channel — already the row's source, so repeating it would just be noise.
+    // channel, already the row's source, so repeating it would just be noise.
     ...(isTurn(event) && event.provider !== undefined ? { runtime: event.provider } : {}),
     ...(event.channelId !== undefined ? { channelId: event.channelId } : {}),
     ...(event.author !== undefined ? { author: event.author } : {}),
@@ -225,7 +225,7 @@ const looseEpisode = (event: ActivityEvent): Episode => ({
 export const toEpisodes = (events: readonly ActivityEvent[]): Episode[] => {
     const turns = new Map<string, ActivityEvent[]>();
     const loose: Episode[] = [];
-    // Oldest first while grouping, so each turn's own array is in the order the turn wrote it — which is what
+    // Oldest first while grouping, so each turn's own array is in the order the turn wrote it, which is what
     // lets `at` be the start and the raw list read forwards.
     for (const event of [...events].toReversed()) {
         if (event.turnId === undefined) {
@@ -242,7 +242,7 @@ export const toEpisodes = (events: readonly ActivityEvent[]): Episode[] => {
     return [...loose, ...[...turns].map(([turnId, group]) => turnEpisode(turnId, group))].toSorted((a, b) => b.at - a.at);
 };
 
-/* The rail. Every source the log knows about, UNIONED with every connection the daemon is currently holding —
+/* The rail. Every source the log knows about, UNIONED with every connection the daemon is currently holding,
  * a Discord bot that has been quiet all day still has to appear, because "connected and silent" is an answer to
  * the question the rail is asked, and a source that only exists in the log (a provider since disconnected) still
  * has history worth reaching. Sorted by most recent activity within each group, so the rail reorders itself
@@ -258,10 +258,10 @@ export const toSources = (episodes: readonly Episode[], connections: readonly Ac
         });
     }
     // A provider with several bots reports one connection each; the rail is per PROVIDER, so the worst state wins
-    // — a rail row that reads "ready" while one of its two bots is down would be the one lie that matters here.
+    //, a rail row that reads "ready" while one of its two bots is down would be the one lie that matters here.
     // Worst first: the representative a provider gets is its HEALTHIEST connection, so a second number that is
     // still being linked never speaks for one that is already carrying messages. `pairing` sits just above
-    // outright disconnected — the socket is up, but nothing it can do will finish the job.
+    // outright disconnected, the socket is up, but nothing it can do will finish the job.
     const RANK: Readonly<Record<ActivityStatus["connections"][number]["gateway"], number>> = {
         disconnected: 0,
         pairing: 1,
@@ -295,7 +295,7 @@ export const toSources = (episodes: readonly Episode[], connections: readonly Ac
     return sources.toSorted((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0) || a.label.localeCompare(b.label));
 };
 
-// Free-text match over what the row actually shows plus the ids it hides — someone pasting a session id from a
+// Free-text match over what the row actually shows plus the ids it hides, someone pasting a session id from a
 // bug report should find the turn, and someone typing a channel name should find the conversation.
 export const matches = (episode: Episode, query: string): boolean => {
     const needle = query.trim().toLowerCase();
@@ -327,7 +327,7 @@ const dayLabel = (at: number, now: number): string => {
     return at >= midnight - 86_400_000 ? `Yesterday` : formatDayMonth(at);
 };
 
-// Episodes grouped into consecutive day runs, order preserved — the timeline renders these as its sections.
+// Episodes grouped into consecutive day runs, order preserved, the timeline renders these as its sections.
 export const byDay = (episodes: readonly Episode[], now: number): { label: string; episodes: Episode[] }[] => {
     const days: { label: string; episodes: Episode[] }[] = [];
     for (const episode of episodes) {

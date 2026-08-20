@@ -25,7 +25,7 @@ interface DriveFile {
 
 /* DRIVE'S QUERY LANGUAGE IS NOT SOMETHING TO MAKE ANYONE LEARN. `name contains 'budget' and trashed = false`
  * is what it wants; "budget" is what gets typed. So a bare phrase becomes a full-text search over content and
- * names, and anything that already looks like a query is passed through untouched — which keeps the whole
+ * names, and anything that already looks like a query is passed through untouched, which keeps the whole
  * language available to whoever does know it. */
 const OPERATORS = /\b(contains|in parents|mimeType|trashed|modifiedTime|starred|sharedWithMe|owners|fullText)\b/;
 
@@ -37,7 +37,7 @@ export const driveQuery = (input: string): string => {
     return `fullText contains '${phrase.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}' and trashed = false`;
 };
 
-/* Exporting a Google-native file means naming the format, and the formats differ per kind — a Doc has no csv,
+/* Exporting a Google-native file means naming the format, and the formats differ per kind, a Doc has no csv,
  * a Sheet has no docx. Getting that wrong answers with a 400 nobody can act on, so the mapping is explicit and
  * an unsupported pair is refused here, by name. */
 const EXPORTS: Record<string, Record<string, string>> = {

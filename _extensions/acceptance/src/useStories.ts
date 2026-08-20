@@ -8,7 +8,7 @@ import { BRIEF_OVERRIDE, STORIES_DIR, type Story, storiesOf, uniqueOf } from "./
  *
  *  • The area is workspace-wide, so the walk is too: every repo the daemon says carries `userStories` is listed
  *    in one pass, and the repo becomes a field on each story rather than the thing that addressed the view.
- *  • Story text is prefetched for the list and editor — titles come from headings and rows show authored criteria.
+ *  • Story text is prefetched for the list and editor, titles come from headings and rows show authored criteria.
  *    A run reads every selected file again at launch, because this display cache is bounded and is not evidence.
  *  • Directories are walked to a bounded depth. A stories tree is written by hand; a deep one means someone
  *    pointed this at the wrong directory, and the walk should stop rather than crawl a repo.
@@ -44,14 +44,14 @@ export function useStories() {
 
     /* THE READERS ARE DECLARED BEFORE THE QUERY, and must stay that way. vue-query subscribes its observer
      * synchronously inside `useQuery`, so a query that is enabled and has nothing cached calls `queryFn` during
-     * setup — before any `const` further down this function has been initialized. Declaring these below the
+     * setup, before any `const` further down this function has been initialized. Declaring these below the
      * query typechecks fine and dies at runtime with `Cannot access 'walk' before initialization`, surfacing as
      * the view's error banner until a retry (by which time the closure is live) quietly succeeds. */
 
     const children = async (path: string): Promise<WorkspaceTreeEntry[]> =>
         WorkspaceChildrenSchema.parse(await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(path)}`)).entries;
     // Breadth-first to MAX_DEPTH. A directory that does not exist (or was removed under us) is an empty level,
-    // not an error — the stories dir is a convention, and the daemon's facts may be a poll stale.
+    // not an error, the stories dir is a convention, and the daemon's facts may be a poll stale.
     const walk = async (root: string): Promise<WorkspaceTreeEntry[]> => {
         const listed: WorkspaceTreeEntry[] = [];
         let frontier = [root];

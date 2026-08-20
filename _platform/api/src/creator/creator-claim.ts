@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Config } from "../config.js";
 import { RESERVED_WORDS, resolvesPublicly } from "../pool/pool-admission.js";
 
-/* PROVING A PUBLISHER NAME IS YOURS — the one question standing between "this listing earned $128" and "pay
+/* PROVING A PUBLISHER NAME IS YOURS, the one question standing between "this listing earned $128" and "pay
  * this person $128".
  *
  * The platform cannot answer it from anything it already holds. Sign-in is Google-only, so there is no GitHub
@@ -14,7 +14,7 @@ import { RESERVED_WORDS, resolvesPublicly } from "../pool/pool-admission.js";
  * reads, neither of which needs an account anywhere:
  *
  *   1. THE REGISTRY SAYS WHICH REPOSITORIES BACK A PUBLISHER. The official registry's marketplace file is the
- *      existing authority for that — a listing's `name` is `publisher.name` read from its manifest, and its
+ *      existing authority for that, a listing's `name` is `publisher.name` read from its manifest, and its
  *      `source` is the sha-pinned repository the code comes from. Nothing new has to be maintained for this to
  *      be true, and a publisher that is not listed has nothing to claim yet.
  *   2. WRITE ACCESS TO ONE OF THEM IS THE PROOF. The claimant commits a challenge token to the repository's
@@ -23,12 +23,12 @@ import { RESERVED_WORDS, resolvesPublicly } from "../pool/pool-admission.js";
  *      the listing does, to the same standard, without the platform holding a GitHub credential.
  *
  * The token is DERIVED, not stored: an HMAC over (user, publisher) keyed by the platform's own signing secret.
- * That makes it stable across visits — a creator can start the claim, push the file the next day and finish —
+ * That makes it stable across visits, a creator can start the claim, push the file the next day and finish,
  * with no challenge table, no expiry sweep, and no way for one user's token to verify another's claim. It is
  * not a secret in the usual sense (it ends up in a public repository); its whole job is to be unguessable by
  * someone who is not the account it names. */
 
-// Only a github source can be verified this way — a raw read of its default branch is the whole mechanism.
+// Only a github source can be verified this way, a raw read of its default branch is the whole mechanism.
 // Other source kinds (a bare git url, a subdirectory) list fine and earn fine; they simply cannot carry the
 // proof yet, and the creator surface says so rather than pretending the publisher is unknown.
 const RegistrySchema = z.object({
@@ -38,7 +38,7 @@ const RegistrySchema = z.object({
                 name: z.string(),
                 source: z.union([
                     z.object({ source: z.literal(`github`), repo: z.string() }),
-                    // Every other shape parses and is discarded — an unrecognized source must not fail the
+                    // Every other shape parses and is discarded, an unrecognized source must not fail the
                     // whole file, or one new listing kind takes every claim down with it.
                     z.looseObject({}),
                 ]),
@@ -57,14 +57,14 @@ export const CLAIM_PATH = `.intentic-claim`;
 export const DOMAIN_CLAIM_PATH = `.well-known/intentic-claim`;
 
 /* The two lanes' discriminator, and the whole of it. Registry publisher names are the prefix of an extension
- * id before its FIRST dot (publisherOf below), so a registry-provable name can never contain one — and a
+ * id before its FIRST dot (publisherOf below), so a registry-provable name can never contain one, and a
  * domain always does. Nothing anywhere records which lane a claim came through; the name itself says. */
 export const isDomainPublisher = (publisher: string): boolean => publisher.includes(`.`);
 
 /* What disqualifies a string from being claimed as a domain at all, answered synchronously so both the
  * challenge and the claim can refuse with the same sentence before any network is touched. The contract's
  * schema already constrains the characters; what is left is the IP shape (all-digit labels parse as labels)
- * and the reserved words, refused for the listing rules' reason — a claimed domain becomes a publisher name
+ * and the reserved words, refused for the listing rules' reason, a claimed domain becomes a publisher name
  * every card shows. */
 export const domainClaimProblem = (domain: string): string | undefined => {
     if (isIP(domain) !== 0) {
@@ -80,7 +80,7 @@ export const domainClaimProblem = (domain: string): string | undefined => {
 const publisherOf = (entryName: string): string => entryName.split(`.`)[0] ?? ``;
 
 /* The challenge for one (user, publisher). Keyed by the platform's session-signing secret because it is the
- * one key every deployment is required to have — a derivation nobody outside the platform can reproduce is the
+ * one key every deployment is required to have, a derivation nobody outside the platform can reproduce is the
  * entire security property, and a second configurable key would be one more thing to leave unset. */
 export const claimToken = (config: Config, userId: string, publisher: string): string =>
     `intentic-claim-${createHmac(`sha256`, config.betterAuth.secret).update(`${userId}:${publisher}`).digest(`hex`).slice(0, 32)}`;
@@ -95,7 +95,7 @@ const tokenMatches = (served: string, expected: string): boolean => {
 
 export interface PublisherRepos {
     readonly publisher: string;
-    // The subset of the caller's own projects that back this publisher — what the screen names back to them.
+    // The subset of the caller's own projects that back this publisher, what the screen names back to them.
     readonly repos: readonly string[];
 }
 
@@ -106,7 +106,7 @@ export interface RegistryReader {
      *
      * This is what turns the claim from a name the creator has to remember into a name the screen already
      * knows. The claim screen sends the projects open in their workspace; a publisher comes back only when one
-     * of those projects is listed under it — which is exactly the condition for the claim being provable. */
+     * of those projects is listed under it, which is exactly the condition for the claim being provable. */
     readonly publishersOf: (projects: readonly string[]) => Promise<readonly PublisherRepos[]>;
 }
 
@@ -117,11 +117,11 @@ const slug = (repo: string): string => repo.toLowerCase();
 
 /* The registry read, cached for a few minutes. Cached because a claim page reads it on every visit and the
  * file changes when somebody merges a pull request, not between two clicks; a few minutes stale costs a
- * creator one retry and costs GitHub nothing. A failed fetch is NOT cached — an outage must not pin an empty
+ * creator one retry and costs GitHub nothing. A failed fetch is NOT cached, an outage must not pin an empty
  * answer in front of every claimant for the rest of the window. */
 const CACHE_MS = 5 * 60 * 1000;
 
-// One listing's github repository, or nothing — the shape both reads below are built out of.
+// One listing's github repository, or nothing, the shape both reads below are built out of.
 const repoOf = (plugin: { source: unknown }): string | undefined => {
     const repo = (plugin.source as { source?: string; repo?: string }).repo;
     return typeof repo === `string` && repo !== `` ? repo : undefined;
@@ -175,7 +175,7 @@ export const registryReader = (config: Config, fetchFn: typeof fetch = fetch, no
 
 /* WHAT ONE REPOSITORY SAID when the platform looked. The distinction that earns its keep is `mismatched` vs
  * `absent`: a file that is there but carries somebody else's line means the creator pushed a token minted for a
- * different account, or to a repository someone else already claimed with — and telling them "no file found"
+ * different account, or to a repository someone else already claimed with, and telling them "no file found"
  * there sends them to push it again, which will fail again. */
 export type ClaimOutcome = "matched" | "absent" | "mismatched" | "unreadable";
 
@@ -185,7 +185,7 @@ export interface ClaimAttempt {
 }
 
 export interface ClaimReport {
-    // The repository that carried the proof — recorded on the claim, so a disputed slug can be retraced.
+    // The repository that carried the proof, recorded on the claim, so a disputed slug can be retraced.
     readonly repo?: string;
     // Every repository looked at and what it said, in listing order. This is the whole point of the report: a
     // failed verify has to be able to say what was actually read, not just that it did not work.
@@ -223,7 +223,7 @@ export const checkClaim = async (
                 }
                 return { repo, outcome: tokenMatches(await response.text(), expected) ? `matched` : `mismatched` };
             } catch {
-                // A repository that times out or refuses the connection has not disproved anything — it just
+                // A repository that times out or refuses the connection has not disproved anything, it just
                 // could not be read this time. The claim fails as a whole only if none of them matched.
                 return { repo, outcome: `unreadable` };
             }
@@ -238,7 +238,7 @@ export const checkClaim = async (
  * decides what the creator should do next, and each of them has exactly one useful next move.
  *
  * Naming the repositories that were read is the part that matters most. The old message said only that nothing
- * carrying the token was readable, which is indistinguishable — from the creator's chair — from the platform
+ * carrying the token was readable, which is indistinguishable, from the creator's chair, from the platform
  * not having looked. */
 export const claimFailureReason = (publisher: string, report: ClaimReport): string => {
     const { attempts } = report;
@@ -271,7 +271,7 @@ export const claimFailureReason = (publisher: string, report: ClaimReport): stri
 
 /* Read the challenge from the domain's well-known path. One attempt, reported in the registry lane's
  * vocabulary so the two proofs stay one story: `absent` is "nothing served there yet", `mismatched` is a
- * token minted for a different account, `unreadable` is a domain that could not be fetched — including one
+ * token minted for a different account, `unreadable` is a domain that could not be fetched, including one
  * that does not resolve publicly, which is refused for the conformance probe's reason: the platform must not
  * be talked into fetching from someone's private network. */
 export const checkDomainClaim = async (
@@ -298,7 +298,7 @@ export const checkDomainClaim = async (
     }
 };
 
-// The domain lane's failure sentences — same job as claimFailureReason above, phrased for a URL rather than
+// The domain lane's failure sentences, same job as claimFailureReason above, phrased for a URL rather than
 // a repository, because "push to the default branch" is the wrong next move for every one of these.
 export const domainClaimFailureReason = (domain: string, report: ClaimReport): string => {
     const at = `https://${domain}/${DOMAIN_CLAIM_PATH}`;

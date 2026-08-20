@@ -2,13 +2,13 @@ import type { DraftSummary } from "@intentic/sandbox-contract";
 import { type ComputedRef, computed, type Ref, ref } from "vue";
 import { type PostEdit, postEdit } from "./postText";
 
-/* EDITING A DRAFT IN PLACE — the state behind the pencil, kept out of the page so it can be tested without one.
+/* EDITING A DRAFT IN PLACE, the state behind the pencil, kept out of the page so it can be tested without one.
  *
  * IT SAVES AS YOU TYPE, and losing the Save button is the whole point rather than a side effect. The first
  * version had Save and Cancel appear under the post while the row's own Approve and Reject vanished, so a click
  * on the pencil rearranged four controls: you looked back at a row whose buttons had all moved and had to find
  * your place in it again. Nothing here is transactional enough to deserve that. A draft file is not a form
- * submission — it is the post, sitting in a queue, unpublished until a separate decision — so typing into it
+ * submission, it is the post, sitting in a queue, unpublished until a separate decision, so typing into it
  * writes it, exactly as the acceptance panel writes a story (StoryRow.vue, which is where this pattern is from).
  * The row keeps every control it had, in the same place, and only the words become editable.
  *
@@ -17,7 +17,7 @@ import { type PostEdit, postEdit } from "./postText";
  * That is also what makes the debounce safe to keep short.
  *
  * FLUSH IS PART OF THE CONTRACT, not a tidy-up. The gap between the last keystroke and the write is exactly
- * where Approve lives — someone fixes a word and immediately approves — and a post published from the copy the
+ * where Approve lives, someone fixes a word and immediately approves, and a post published from the copy the
  * list is holding would go out with that word still wrong. Every path that leaves the editor goes through
  * `flush` first: closing it, opening another one, and the approve click itself. */
 
@@ -27,7 +27,7 @@ const SAVE_AFTER_MS = 700;
 
 export interface DraftEdit {
     readonly isEditing: (draft: DraftSummary) => boolean;
-    /** Open a draft for editing — flushing whatever was open before it. */
+    /** Open a draft for editing, flushing whatever was open before it. */
     readonly open: (draft: DraftSummary) => Promise<void>;
     /** Write anything pending and close the editor. */
     readonly close: () => Promise<void>;
@@ -35,7 +35,7 @@ export interface DraftEdit {
     readonly flush: () => Promise<void>;
     readonly content: Ref<string>;
     readonly title: Ref<string>;
-    /** Restart the debounce — bound to the fields' input. */
+    /** Restart the debounce, bound to the fields' input. */
     readonly touch: () => void;
     /** The draft's length as it stands, counting unsaved keystrokes. */
     readonly liveLength: (draft: DraftSummary) => number;
@@ -47,7 +47,7 @@ export const useDraftEdit = (write: (draft: DraftSummary, changes: PostEdit) => 
     const content = ref(``);
     const title = ref(``);
 
-    // The draft as the daemon last had it — the comparison baseline, advanced on every successful write so a
+    // The draft as the daemon last had it, the comparison baseline, advanced on every successful write so a
     // second flush with nothing new to say stays silent. Not a ref: no template reads it.
     let baseline: DraftSummary | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -90,7 +90,7 @@ export const useDraftEdit = (write: (draft: DraftSummary, changes: PostEdit) => 
             clearTimeout(timer);
             timer = setTimeout(() => void flush(), SAVE_AFTER_MS);
         },
-        // Reading the field rather than the row is what keeps the footer's count honest while typing — it is
+        // Reading the field rather than the row is what keeps the footer's count honest while typing, it is
         // the one fact on the row that has to move with the words, since it is the reason a post can fail.
         liveLength: (draft) => (editingId.value === draft.id ? content.value.length : draft.content.length),
         anyOpen: computed(() => editingId.value !== undefined),

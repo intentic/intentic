@@ -6,7 +6,7 @@ import { bindHost } from "./host";
  * A SANDBOX SECTION, BESIDE MEMORY, not a rail tile. The rail is a column of unlabelled squares aimed at from
  * muscle memory all day, and a tile earns one of those seats by being somewhere you go constantly or by being
  * able to tell you something happened. A knowledge base is neither. It is somewhere you go to look something
- * up — deliberately, knowing what you want — and it has nothing to announce: the one thing it could badge is
+ * up, deliberately, knowing what you want, and it has nothing to announce: the one thing it could badge is
  * "the agent captured things you have not read", which would be lit most of the day in a working sandbox and
  * would teach the reader to stop seeing the rail. That is the exact failure the badge vocabulary exists to
  * prevent. What it belongs beside is the agent's other body of knowledge, which is where the hub already keeps

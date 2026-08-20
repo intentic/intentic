@@ -5,14 +5,14 @@ import { host } from "./host.js";
 import { useAsyncAction } from "./useAsyncAction.js";
 import { useRefRefresh } from "./useRefRefresh.js";
 
-/* THIS REPO'S STASHES — work set aside without committing it.
+/* THIS REPO'S STASHES, work set aside without committing it.
  *
  * Shown in the graph because a stash entry IS a commit: it has a sha, a time, a subject and a diff, and its
  * first parent is the commit it was taken on. Until this existed, a `git stash` in a terminal made the work
- * invisible everywhere in this workspace — not listed, not diffable, not recoverable except by remembering it
+ * invisible everywhere in this workspace, not listed, not diffable, not recoverable except by remembering it
  * was there.
  *
- * `ref` is POSITIONAL (`stash@{0}`, `stash@{1}`…), and dropping one renumbers the rest — so every verb here
+ * `ref` is POSITIONAL (`stash@{0}`, `stash@{1}`…), and dropping one renumbers the rest, so every verb here
  * invalidates the list rather than assuming the refs it was rendered from still mean the same entries. */
 
 export function useStashes(repo: Ref<string>) {
@@ -33,7 +33,7 @@ export function useStashes(repo: Ref<string>) {
 
     const files = (ref: string): Promise<GitCommitDiff> => api.sandbox.rpc.git.stashDiff({ repo: repo.value, ref });
 
-    // Applying or popping rewrites the worktree, and dropping changes the list — all three invalidate both, since
+    // Applying or popping rewrites the worktree, and dropping changes the list, all three invalidate both, since
     // a renumbered list rendered against old refs would act on the wrong entry.
     const invalidate = (): Promise<unknown> =>
         Promise.all([
@@ -47,7 +47,7 @@ export function useStashes(repo: Ref<string>) {
         busy,
         actionError,
         // `pop` puts it back and consumes the entry; `apply` keeps it. A conflict comes back as `ok: false` with
-        // the entry intact — the work is never lost, so it is worth saying rather than throwing.
+        // the entry intact, the work is never lost, so it is worth saying rather than throwing.
         apply: (ref: string, pop: boolean): Promise<void> =>
             run(async () => {
                 const result = await api.sandbox.rpc.git.stashApply({ repo: repo.value, ref, pop });

@@ -4,7 +4,7 @@ import { ndJsonStream } from "@agentclientprotocol/sdk";
 import { bridgeAgentApp } from "./bridge.js";
 import { runLogin } from "./login.js";
 
-/* Two commands, no CLI framework: the DEFAULT invocation serves ACP on stdio (what the editor spawns —
+/* Two commands, no CLI framework: the DEFAULT invocation serves ACP on stdio (what the editor spawns,
  * stdout is the protocol, so nothing else may print there), and `login` runs the interactive terminal auth
  * flow. The registry's npx distribution and the ACP terminal auth method both invoke this same binary. */
 

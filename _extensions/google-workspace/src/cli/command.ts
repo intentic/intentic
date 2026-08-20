@@ -6,13 +6,13 @@ import type { Args } from "./args.js";
  * have to be derived from the same list and a switch can only answer the first: what runs, what `--help`
  * prints, and which commands a read-only connection refuses.
  *
- * `writes` is that third one, and it is a property of the command rather than a check inside it — a guard the
+ * `writes` is that third one, and it is a property of the command rather than a check inside it, a guard the
  * command performs is a guard a new command forgets. The refusal happens once, in the router, for everything
  * flagged here. */
 
 export interface RootContext {
     readonly args: Args;
-    // `--json` — print Google's own response instead of the compact lines. The agent reaches for this when it
+    // `--json`, print Google's own response instead of the compact lines. The agent reaches for this when it
     // needs a field the summary doesn't carry.
     readonly json: boolean;
     readonly out: (line: string) => void;
@@ -34,7 +34,7 @@ export interface Command {
     readonly run: (ctx: CommandContext) => Promise<void>;
 }
 
-/* A command that runs BEFORE an account is chosen — listing what is connected, and the login that produces the
+/* A command that runs BEFORE an account is chosen, listing what is connected, and the login that produces the
  * credential a connection is made of. Separated by type rather than by a flag on Command because the
  * difference is what the context can offer: everything else here is handed a session, and these two cannot be,
  * since the whole situation they exist for is not having one yet. */

@@ -13,4 +13,4 @@ export const normalizeHostName = (value: string): string => {
 };
 
 // The zone the sandbox tunnel lives under is derived by the shared `zoneFromUrl` in @intentic/sandbox-contract
-// (the single implementation the daemon + web + CLI agree on) — import it from there directly.
+// (the single implementation the daemon + web + CLI agree on), import it from there directly.

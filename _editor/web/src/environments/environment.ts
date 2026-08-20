@@ -1,6 +1,6 @@
 // Runtime web config (mirrors atlas). environment.local.ts (dev) / environment.deployment.ts (deploy)
 // set window.env via an esbuild-bundled script loaded before the app, so the SPA talks to the API
-// directly at api.url — no dev-server proxy, calls go cross-origin (the API enables CORS).
+// directly at api.url, no dev-server proxy, calls go cross-origin (the API enables CORS).
 export type WebEnvironment = {
     production: boolean;
     api: { url: string };
@@ -11,7 +11,7 @@ export type WebEnvironment = {
     // container's envsubst fills $POSTHOG_KEY. See composables/analytics.ts.
     analytics: { posthogKey: string; posthogHost: string };
     // Where signing out leaves the browser. Ordinarily the app's own /login; the interactive demo is served
-    // under /demo/ on the marketing site, where /login doesn't exist — its sign-out lands on the site homepage.
+    // under /demo/ on the marketing site, where /login doesn't exist, its sign-out lands on the site homepage.
     afterSignOut: string;
 };
 

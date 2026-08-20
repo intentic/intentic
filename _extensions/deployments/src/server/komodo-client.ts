@@ -8,7 +8,7 @@
  * stories; sharing them would mean one module that logs in OR carries keys depending on who called it.
  *
  * `fetch` is injectable for tests, the CiClient/git-access precedent. Failures throw with Komodo's own status
- * and body tail — the caller decides whether that means "unreachable" (the overview, which degrades) or a
+ * and body tail, the caller decides whether that means "unreachable" (the overview, which degrades) or a
  * BAD_GATEWAY (the actions, where the vendor's words are the whole point). */
 
 export type FetchFn = typeof fetch;
@@ -16,7 +16,7 @@ export type FetchFn = typeof fetch;
 // Komodo's own env var names, which are also this connector's (see _extensions/connectors).
 export interface KomodoConnection {
     readonly capability: string;
-    // No trailing slash — every path below is joined with one.
+    // No trailing slash, every path below is joined with one.
     readonly baseUrl: string;
     readonly apiKey: string;
     readonly apiSecret: string;
@@ -28,7 +28,7 @@ const BODY_TAIL = 300;
 const TIMEOUT_MS = 15_000;
 
 /* Node's fetch sends NO user-agent at all, and a Komodo behind Cloudflare answers that with 403 "error code:
- * 1010" — the browser-integrity check refusing a client with no signature. Every read came back as a hard
+ * 1010", the browser-integrity check refusing a client with no signature. Every read came back as a hard
  * failure and the board read as unreachable, for a Komodo that was perfectly healthy.
  *
  * Any value fixes it (verified against a live Cloudflare-fronted Komodo: absent → 403, curl/… → 200), so this
@@ -39,13 +39,13 @@ const USER_AGENT = "intentic-sandbox";
 /* POST {module}/{Operation} with the params object as the WHOLE body.
  *
  * Komodo Core's variant route reads the body as the params and re-wraps it itself
- * (`serde_json::from_value(json!({"type": variant, "params": <body>}))`) — so a body of `{params: {...}}`
+ * (`serde_json::from_value(json!({"type": variant, "params": <body>}))`), so a body of `{params: {...}}`
  * arrives as `params.params` and every required field reads as absent. That shipped, and it was invisible for
  * exactly as long as this client only called the no-argument lists: `ListStacks` has no required field, so the
- * doubly-wrapped body deserialized fine and the board rendered. Everything that takes an argument failed —
+ * doubly-wrapped body deserialized fine and the board rendered. Everything that takes an argument failed,
  * `GetStackLog` with "missing field `stack`", and, more quietly, every execute behind the row buttons.
  *
- * The other spelling — POST /{module} with a `{type, params}` envelope — is what _deploy/providers' engine
+ * The other spelling. POST /{module} with a `{type, params}` envelope, is what _deploy/providers' engine
  * client uses. Both are correct; this one keeps the operation in the URL, where a stack trace and a proxy log
  * can both see it. */
 const call = async <T>(
@@ -76,7 +76,7 @@ const call = async <T>(
 /* The raw shapes we consume, named as Komodo names them. Read loosely on purpose: every list item is
  * `{id, name, info}` with a per-type `info`, and Komodo adds fields to `info` release over release. Typing
  * only what we read (and leaving the rest to pass through unread) is what keeps a Komodo upgrade from
- * emptying this view — the alternative, a strict schema, turns every new field into an outage. */
+ * emptying this view, the alternative, a strict schema, turns every new field into an outage. */
 
 export interface KomodoListItem<Info> {
     readonly id: string;
@@ -128,7 +128,7 @@ export interface KomodoAlert {
 }
 
 /* Who the API key acts as. Komodo filters every list by the caller's permissions, so a key minted on a
- * service user with no grants gets a 200 and an EMPTY array — indistinguishable, from the response alone, from
+ * service user with no grants gets a 200 and an EMPTY array, indistinguishable, from the response alone, from
  * a Komodo with nothing deployed. This is what lets the view tell those two apart instead of reporting the
  * second when the truth is the first. */
 export interface KomodoViewer {
@@ -138,7 +138,7 @@ export interface KomodoViewer {
 }
 
 export interface KomodoClient {
-    // GET /user — the one call on this surface that is not a POST envelope.
+    // GET /user, the one call on this surface that is not a POST envelope.
     readonly whoami: () => Promise<KomodoViewer>;
     readonly listDeployments: () => Promise<readonly KomodoListItem<KomodoDeploymentInfo>[]>;
     readonly listStacks: () => Promise<readonly KomodoListItem<KomodoStackInfo>[]>;
@@ -177,7 +177,7 @@ export const komodoClient = (connection: KomodoConnection, fetchFn: FetchFn = fe
         return { stdout: log.stdout ?? "", stderr: log.stderr ?? "" };
     },
     execute: async (operation, params) => {
-        // Execute returns an Update record describing the run; only the status matters here — the view
+        // Execute returns an Update record describing the run; only the status matters here, the view
         // refetches the overview, which is the authoritative answer to "did it work".
         await call(connection, fetchFn, "execute", operation, params);
     },

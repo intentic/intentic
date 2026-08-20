@@ -1,7 +1,7 @@
 import type { ListenerDispatchFrame, ListenerMessage, ListenerStatus } from "@intentic/sandbox-contract";
 
 /* The gateway's client for the daemon's provider-scoped listener routes (app.ts / listener.routes.ts). The
- * daemon holds no provider connection itself — the gateway process does — so every interaction with
+ * daemon holds no provider connection itself, the gateway process does, so every interaction with
  * automations rides these four routes, authenticated with the per-boot panel token injected as
  * INTENTIC_PANEL_TOKEN. One client for all connectors: this used to be five near-identical copies whose
  * payloads were untyped inline literals, so a field rename in the daemon's schema broke five producers
@@ -9,7 +9,7 @@ import type { ListenerDispatchFrame, ListenerMessage, ListenerStatus } from "@in
  * with. */
 
 // The reconcile feed /listeners/<provider>/state serves: the enabled listener automations for this provider
-// plus its connector capabilities WITH full config (secret tokens included — the gateway needs them to
+// plus its connector capabilities WITH full config (secret tokens included, the gateway needs them to
 // connect). TConfig is the connector's own capability-config shape.
 export interface DaemonState<TConfig> {
     readonly automations: ReadonlyArray<{ id: string; enabled: boolean }>;

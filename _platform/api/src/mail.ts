@@ -3,15 +3,15 @@ import type { Logger } from "pino";
 
 /* The platform's transactional mail, and every piece of it that is not the wording.
  *
- * Both mails it sends are the same object — one link, and the sentence that says why it arrived: an invite to
+ * Both mails it sends are the same object, one link, and the sentence that says why it arrived: an invite to
  * someone else's sandbox, and a way back to a setup that has to be finished on a different machine. So the
  * frame and the transport live here and the two callers own only their words.
  *
- * Talks to Resend's HTTP API directly (no SDK — a single authenticated POST, like cloudflare.ts). When email is
+ * Talks to Resend's HTTP API directly (no SDK, a single authenticated POST, like cloudflare.ts). When email is
  * unconfigured the link is LOGGED instead of sent, so both flows still work on a dev machine with no mail
  * credentials; a non-2xx propagates, so the mutation that sent the mail fails and the caller can retry.
  *
- * A send therefore has THREE outcomes, not two, and the caller is told which — a mail that was never attempted
+ * A send therefore has THREE outcomes, not two, and the caller is told which, a mail that was never attempted
  * is not the same event as one that went out, and a flow whose whole point is delivering a link has to be able
  * to say so. `unconfigured` and `local-link` are the two ways this platform declines to send; the caller decides
  * what that means for the mutation (for an invite: keep the grant, hand the owner the link).
@@ -22,14 +22,14 @@ export interface Mail {
     to: string;
     subject: string;
     /* The link the mail exists to deliver. Its own field rather than something to dig back out of `html`,
-     * because it is exactly what the unconfigured-dev branch logs — a developer reads it out of the server
+     * because it is exactly what the unconfigured-dev branch logs, a developer reads it out of the server
      * output and carries on with the flow by hand. */
     link: string;
     html: string;
 }
 
 // The shared frame: a heading, a sentence, the button, and the same link again as text. The last part is not
-// decoration — a mail client that strips the anchor, or a reader forwarding this to the machine it is meant
+// decoration, a mail client that strips the anchor, or a reader forwarding this to the machine it is meant
 // for, still needs the URL somewhere it can be selected.
 export const linkEmail = (mail: { heading: string; body: string; action: string; link: string }): string => `
     <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 30rem; margin: 0 auto; color: #1a1a1a;">
@@ -44,11 +44,11 @@ export const linkEmail = (mail: { heading: string; body: string; action: string;
     </div>
 `;
 
-/* A link that only resolves on the machine that built it — the dev default (WEB_ORIGIN=https://localhost:…),
+/* A link that only resolves on the machine that built it, the dev default (WEB_ORIGIN=https://localhost:…),
  * and anyone else running this platform locally. Mailing one is worse than not mailing it: the recipient gets a
  * real invitation whose button lands on their OWN empty localhost, so the failure surfaces at the far end, to
  * the person least able to explain it. Declining keeps it at the near end, where the link can still be copied
- * and handed over by hand. Only loopback counts — a platform on a LAN address is reachable by the people on
+ * and handed over by hand. Only loopback counts, a platform on a LAN address is reachable by the people on
  * that LAN, which is exactly who its invites are for. */
 const resolvesOnlyHere = (link: string): boolean => {
     try {

@@ -17,7 +17,7 @@ import {
 import { payoutState } from "./creator-payouts.js";
 import type { StripeGateway } from "../pool/pool-stripe.js";
 
-/* THE PROVIDER'S SIDE OF OPEN ADMISSION — six operations that replace "email an operator and wait".
+/* THE PROVIDER'S SIDE OF OPEN ADMISSION, six operations that replace "email an operator and wait".
  *
  * Everything a provider can do to their own listing lives here, and the shape of it follows one rule: the
  * platform never decides anything this module could not tell them in advance. Rule failures come back as a
@@ -26,8 +26,8 @@ import type { StripeGateway } from "../pool/pool-stripe.js";
  * read to also learn about payouts.
  *
  * WHAT IS DELIBERATELY AWKWARD: changing a live listing's endpoint drops it back to `draft`. A conforming
- * endpoint that can be swapped for an unproven one after admission would make gate 2 decorative — the probe
- * proves an endpoint, not a promise — so the swap costs a re-probe and a fresh trip through probation. Price
+ * endpoint that can be swapped for an unproven one after admission would make gate 2 decorative, the probe
+ * proves an endpoint, not a promise, so the swap costs a re-probe and a fresh trip through probation. Price
  * moves are rate-limited instead of blocked, because a price is a number a member reads before every single
  * click, not a trust boundary. */
 
@@ -45,7 +45,7 @@ export const admissionRules = (config: Config): AdmissionRules => ({
     maxServicesPerOwner: config.pool.maxServicesPerOwner,
 });
 
-/* What the provider's own view is built from — structurally, the pool modules' precedent, so this file's
+/* What the provider's own view is built from, structurally, the pool modules' precedent, so this file's
  * logic is testable without the generated client. `secret` is absent by construction: it is answered once at
  * mint and once at rotation, and nothing ever reads it back. */
 interface ServiceRow {
@@ -79,7 +79,7 @@ const viewOf = (row: ServiceRow, served: number, refunded: number): ProviderServ
 });
 
 // Run counts for a set of listings in one grouped read rather than two queries per row. Exported because the
-// public catalog (pool.routes.ts /catalog) states the same numbers to everyone — one derivation, two readers.
+// public catalog (pool.routes.ts /catalog) states the same numbers to everyone, one derivation, two readers.
 export const countsOf = async (prisma: PrismaClient, serviceIds: readonly string[]): Promise<Map<string, { served: number; refunded: number }>> => {
     const counts = new Map<string, { served: number; refunded: number }>();
     if (serviceIds.length === 0) {
@@ -120,7 +120,7 @@ const admissionDeps = ({ prisma, gateway }: ServiceDeps): AdmissionDeps => ({
     liveServiceCount: async (userId) => prisma.service.count({ where: { userId, status: { in: [...LIVE_STATUSES] } } }),
 });
 
-// Self-serve being off is a platform's choice, not a per-caller refusal — so every write says the same thing
+// Self-serve being off is a platform's choice, not a per-caller refusal, so every write says the same thing
 // and the read still works, which is what lets the screen explain rather than break.
 const requireOpen = (config: Config): void => {
     if (!config.pool.openAdmission) {
@@ -131,7 +131,7 @@ const requireOpen = (config: Config): void => {
 const rulesRefusal = (problems: readonly string[]): ORPCError<string, unknown> =>
     new ORPCError(`BAD_REQUEST`, { message: problems.join(` `) });
 
-// A listing this caller owns, or a 404 — an owner asking about a slug that is someone else's must not learn
+// A listing this caller owns, or a 404, an owner asking about a slug that is someone else's must not learn
 // whether it exists.
 const ownedOr404 = async (prisma: PrismaClient, userId: string, slug: string) => {
     const row = await prisma.service.findFirst({ where: { slug, userId } });
@@ -164,7 +164,7 @@ export const listServices = async (deps: ServiceDeps, userId: string) => {
     };
 };
 
-/* A new draft. The secret is minted here and answered exactly once — the provider needs it to verify
+/* A new draft. The secret is minted here and answered exactly once, the provider needs it to verify
  * forwarded calls, and the platform keeps only the encrypted copy, so this response is the only time it
  * exists in readable form outside their own code.
  *
@@ -185,7 +185,7 @@ export const draftService = async (deps: ServiceDeps, userId: string, input: Ser
     if ((await prisma.service.findUnique({ where: { slug: input.slug }, select: { id: true } })) !== null) {
         throw new ORPCError(`CONFLICT`, { message: `The slug ${input.slug} is taken.` });
     }
-    /* The same cap the publish gate applies, counted here over drafts too — otherwise the live-listing limit
+    /* The same cap the publish gate applies, counted here over drafts too, otherwise the live-listing limit
      * bounds nothing, because unlimited drafts are unlimited rows and unlimited slugs held out of the
      * namespace. SUSPENDED ROWS DO NOT COUNT: they are history somebody's earnings hang off, and making a
      * provider delete their record to list again would be the wrong incentive to build in. */
@@ -244,7 +244,7 @@ export const updateService = async (deps: ServiceDeps, userId: string, slug: str
     }
     /* An endpoint swap invalidates the only thing gate 2 ever proved, so it costs the listing its admission:
      * back to draft, re-probe, publish again. A sample-request change only invalidates the probe, since it is
-     * the probe's body — the listing stays live and the canary re-proves it. */
+     * the probe's body, the listing stays live and the canary re-proves it. */
     const endpointMoved = merged.upstreamUrl !== row.upstreamUrl;
     const sampleMoved = merged.sampleRequest !== row.sampleRequest;
     const updated = await prisma.service.update({
@@ -279,7 +279,7 @@ export const probeOwnService = async (deps: ServiceDeps, userId: string, slug: s
     return { passed: verdict.passed, checks: [...verdict.checks], message: probeFailure(verdict) };
 };
 
-/* Gates 1 and 3, and the transition. A passing listing goes live IMMEDIATELY, into probation — no operator
+/* Gates 1 and 3, and the transition. A passing listing goes live IMMEDIATELY, into probation, no operator
  * click, which was the whole point. Probation is what makes that safe to say: a price ceiling, a badge on
  * every card a member sees, and the watch counting from the first run. */
 export const publishService = async (deps: ServiceDeps, userId: string, slug: string) => {
@@ -315,7 +315,7 @@ export const withdrawService = async (deps: ServiceDeps, userId: string, slug: s
 };
 
 /* A fresh signing secret, answered once. The old one stops working the moment this returns, so a live listing
- * will fail every forward until the provider deploys the new one — which is why this is a deliberate button
+ * will fail every forward until the provider deploys the new one, which is why this is a deliberate button
  * and not something any other operation does as a side effect. */
 export const rotateServiceSecret = async (deps: ServiceDeps, userId: string, slug: string): Promise<{ secret: string }> => {
     const { prisma, config } = deps;

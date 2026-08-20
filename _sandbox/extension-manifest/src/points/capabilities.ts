@@ -13,7 +13,7 @@ export const CapabilityFieldSchema = z.object({
     secret: z.boolean().optional().describe("Mask it, and never echo it back."),
     optional: z.boolean().optional(),
     multiline: z.boolean().optional(),
-    // An OPT-IN EXTRA rather than a decision — rendered as a switch, carried as the "on"/"off" the config
+    // An OPT-IN EXTRA rather than a decision, rendered as a switch, carried as the "on"/"off" the config
     // schemas already speak (the vpn's pfs/aggressive precedent). A two-option Segmented can express the same
     // value, and reads wrong for this: it presents a choice the user must make to proceed, sized like the
     // required fields around it. Something the capability works fine without wants the control that is quiet
@@ -34,7 +34,7 @@ export const CapabilityFieldSchema = z.object({
         .describe(
             "A line under this control, for what the label alone cannot say — a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
         ),
-    /* This field's value only takes effect after the sandbox is REBUILT — it rides the environment overlay
+    /* This field's value only takes effect after the sandbox is REBUILT, it rides the environment overlay
      * rather than something the daemon can act on now. Rendered as a chip beside the label.
      *
      * The one fact a user needs before touching a control, and the one the form cannot infer: two switches
@@ -52,12 +52,12 @@ export const CapabilityFieldSchema = z.object({
         .array(z.object({ value: z.string(), label: z.string() }))
         .optional()
         .describe("Turns the field into a select."),
-    /* Gates this field on the answers already given — the SSH credential that only applies to the auth mode
+    /* Gates this field on the answers already given, the SSH credential that only applies to the auth mode
      * chosen, the gateway fields that belong to one VPN provider. A `when` condition (@intentic/base/when)
      * evaluated against the form's live values, so it re-reads as the user toggles.
      *
      * Refused at parse when it does not parse. A card is data an extension ships, and a condition nobody can
-     * evaluate is not a field that is always shown or always hidden — it is a card whose author believes it
+     * evaluate is not a field that is always shown or always hidden, it is a card whose author believes it
      * asks something it never asks. Failing the manifest names the card; failing at render names nothing. */
     when: z
         .string()
@@ -66,7 +66,7 @@ export const CapabilityFieldSchema = z.object({
         .describe(
             "Only show this field while a condition over the answers already given holds — `auth == 'key'`, `provider in ['ipsec', 'fortinet']`, `!advanced`. Supports `&&`, `||`, `!`, comparisons and `in`.",
         ),
-    // A fixed value baked into the config rather than asked for — how a card pins a discriminator
+    // A fixed value baked into the config rather than asked for, how a card pins a discriminator
     // (platform="reddit", provider="stripe"). Rendered as nothing; sent as itself.
     value: z
         .string()
@@ -74,9 +74,9 @@ export const CapabilityFieldSchema = z.object({
         .describe(
             'A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform="reddit", provider="stripe"). Renders as nothing.',
         ),
-    /* This field holds a TOTP seed — the base32 key (or otpauth:// URI) a service shows when enrolling an
+    /* This field holds a TOTP seed, the base32 key (or otpauth:// URI) a service shows when enrolling an
      * authenticator app. Declare it WITH `secret: true`: the seed is a durable second factor, so it is never
-     * echoed and, unlike an ordinary secret, never enters the agent's environment either — the daemon mints the
+     * echoed and, unlike an ordinary secret, never enters the agent's environment either, the daemon mints the
      * six-digit codes on demand (`otp <name>` / GET /capabilities/<id>/otp) and only those cross, each dead
      * within its period. A cli entry whose env references a totp field therefore fails to parse (see below). */
     totp: z
@@ -88,7 +88,7 @@ export const CapabilityFieldSchema = z.object({
 });
 export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
 
-/* WHETHER A FIELD IS IN PLAY, given what has been answered so far — and the only place that decides it.
+/* WHETHER A FIELD IS IN PLAY, given what has been answered so far, and the only place that decides it.
  *
  * Two tiers ask this question about the same card. The web's form asks it to decide what to draw and what to
  * validate; the daemon asks it at install to decide which fields it may demand. They used to answer it with
@@ -98,7 +98,7 @@ export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
  * report about one card rather than as a broken rule.
  *
  * It lives beside the schema for the reason the description does: this is a fact about the shape, and the two
- * consumers are in different packages. Parsed per call rather than cached — a card has a handful of fields,
+ * consumers are in different packages. Parsed per call rather than cached, a card has a handful of fields,
  * this runs on a keystroke at worst, and a cache keyed by manifest strings is a map that outlives every
  * extension that ever declared one. */
 export const fieldApplies = (field: CapabilityField, values: Readonly<Record<string, unknown>>): boolean =>
@@ -109,7 +109,7 @@ export const fieldApplies = (field: CapabilityField, values: Readonly<Record<str
 const CatalogSchema = z.object({
     name: z.string().min(1),
     ...MARK_FIELDS,
-    // ONE LINE — aim for 60 characters or fewer. The grid clamps this at two lines and a card sits beside two
+    // ONE LINE, aim for 60 characters or fewer. The grid clamps this at two lines and a card sits beside two
     // others in a pane the index column has already taken 16rem out of, so a paragraph here is a paragraph the
     // reader gets truncated. Everything longer belongs in `hint`, which the config form prints in full and the
     // catalog's search reads. Not capped in the schema: an extension published before this rule should still
@@ -121,7 +121,7 @@ const CatalogSchema = z.object({
             "ONE LINE — aim for 60 characters or fewer. The grid clamps it at two lines in a narrow pane, so a paragraph here is a paragraph the reader gets truncated. Everything longer belongs in `hint`.",
         ),
     category: z.string().min(1),
-    // The paragraph. Shown under the add-form, and searched from the catalog — so the words that identify this
+    // The paragraph. Shown under the add-form, and searched from the catalog, so the words that identify this
     // card to someone hunting for it ("webauthn", "socket mode") belong here even when the tile can't show them.
     hint: z
         .string()
@@ -151,24 +151,24 @@ const contributionBase = {
     fields: z.array(CapabilityFieldSchema),
 };
 
-/* A CAPABILITY CARD AS DATA. The catalog is the extensible layer; the HANDLERS are core — so an entry names one
+/* A CAPABILITY CARD AS DATA. The catalog is the extensible layer; the HANDLERS are core, so an entry names one
  * of the kinds whose daemon-side machinery is fully generic over its data, and the machinery stays put. The
  * kinds NOT listed here are the ones whose card is one-to-one with a handler that owns real privilege (`docker`
  * bakes --privileged, `vpn` bakes NET_ADMIN, `extension` installs extensions, `devops` scaffolds repos): their
  * cards live in the platform catalog because separating card from handler would split one concept in two, and
  * because a manifest that could name them would be a manifest that grants itself privilege. That restriction is
- * this discriminated union, not a comment — a manifest naming any other kind fails to parse.
+ * this discriminated union, not a comment, a manifest naming any other kind fails to parse.
  *
  * `${id}` in a cli/host skill file is substituted with the instance name at apply time (so a host pack's tool
  * names read `mcp__my-laptop__run_command`), and, for `cli`, each `$ENVVAR` becomes its per-instance suffixed
- * name. A BROWSER pack's skill renders once per SITE rather than per instance — its seams are `${accounts}`
+ * name. A BROWSER pack's skill renders once per SITE rather than per instance, its seams are `${accounts}`
  * (the roster of connected accounts), `${tools}` (the core driving/connecting note) and `${site}` (the host,
  * for the generic card whose text can name no site of its own); `${id}` and per-field substitution do not
  * apply there (capabilities/account-skills.ts in the sandbox daemon). */
 export const CapabilityContributionSchema = z
     .discriminatedUnion("kind", [
         // A CLI tool the AGENT gets, authenticated: the env vars its shell receives (value templates over the
-        // fields — `${field}` substitutes, `${field:uri}` percent-encodes), a SKILL.md cheatsheet, and an optional
+        // fields, `${field}` substitutes, `${field:uri}` percent-encodes), a SKILL.md cheatsheet, and an optional
         // image fragment holding the client binary (psql, mysql, whisper).
         z.object({
             ...contributionBase,
@@ -191,18 +191,18 @@ export const CapabilityContributionSchema = z
         }),
         /* A site the agent acts on AS THE OWNER, through the shared logged-in Chromium. `loginUrl` is what the
          * sign-in window opens; the profile it persists is the credential. `homeUrl` is where that same profile
-         * opens once it HAS one — the owner's own hands on the connected browser, which a login page is the wrong
+         * opens once it HAS one, the owner's own hands on the connected browser, which a login page is the wrong
          * place to start (signed in, it only redirects). Two fields because for some platforms the login lives on
          * another site entirely (YouTube signs in at accounts.google.com), so one cannot be derived from the other.
          * No `env` and no `fragment`: the browser itself is core (one Chromium install serves every platform),
-         * only the identity is per-entry. A card never declares the account's username/password either — those are
+         * only the identity is per-entry. A card never declares the account's username/password either, those are
          * CORE form fields on every browser card (the catalog appends them; the daemon's add validation accepts
          * them), because which box a login form wants filled is the same fact on every site.
          *
          * BOTH URLs ARE OPTIONAL, so that one card can be the GENERIC one: a site card pins them (Reddit knows
          * where Reddit signs in), and the generic "browser session" card asks for them on its form instead, which
-         * is what lets a user connect a site nobody shipped a card for. A card must do one or the other — pin a
-         * URL or declare a field that supplies it — and the daemon's apply says so on the form when neither does,
+         * is what lets a user connect a site nobody shipped a card for. A card must do one or the other, pin a
+         * URL or declare a field that supplies it, and the daemon's apply says so on the form when neither does,
          * because the alternative is a sign-in window that opens on nothing. */
         z.object({
             ...contributionBase,
@@ -226,7 +226,7 @@ export const CapabilityContributionSchema = z
                     "Checkout-relative SKILL.md teaching the agent this site's actions — rendered once per site, all its connected accounts on one roster (`${accounts}`), the core tool note at `${tools}`.",
                 ),
         }),
-        // An operating system a connected computer can run — the skill pack that teaches the agent THAT machine's
+        // An operating system a connected computer can run, the skill pack that teaches the agent THAT machine's
         // shell. The enrollment, the socket and the scope enforcement are core; only the pack varies.
         z.object({
             ...contributionBase,
@@ -234,13 +234,13 @@ export const CapabilityContributionSchema = z
             skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent that machine's shell."),
         }),
         /* A PRESET over a core kind: no payload at all, just a named card whose `fields` carry the defaults. What an
-         * ACP agent needs is a command, so "OpenCode" is entirely a name, a logo and a filled-in form — which is
+         * ACP agent needs is a command, so "OpenCode" is entirely a name, a logo and a filled-in form, which is
          * exactly what a catalog row is. */
         z.object({ ...contributionBase, kind: z.literal("agent") }),
     ])
     .superRefine((spec, ctx) => {
         // The totp flag's one invariant, enforced where the manifest is parsed rather than trusted to authors: a
-        // seed the daemon mints codes from must never ride the env into the agent's shell — that would hand the
+        // seed the daemon mints codes from must never ride the env into the agent's shell, that would hand the
         // agent the second factor itself instead of one expiring code at a time.
         if (spec.kind !== "cli") {
             return;
@@ -255,15 +255,15 @@ export const CapabilityContributionSchema = z
         }
     });
 export type CapabilityContribution = z.infer<typeof CapabilityContributionSchema>;
-// The arms carrying a per-instance SKILL.md — the daemon templates and installs these identically.
+// The arms carrying a per-instance SKILL.md, the daemon templates and installs these identically.
 export type SkillContribution = Extract<CapabilityContribution, { skill: string }>;
 
 /* The config key a kind's cards PIN to their own id, so a stored capability can be traced back to the card that
- * made it — the daemon resolves the entry's handler data through it, and the web tells one card's instances from
+ * made it, the daemon resolves the entry's handler data through it, and the web tells one card's instances from
  * another's. `agent` has none on purpose: its cards are presets over one config shape, differing only in their
  * defaults, so every agent instance belongs to every agent card equally.
  *
- * Here, beside the schema, because it is a fact about the contribution shape — the daemon, the catalog and the
+ * Here, beside the schema, because it is a fact about the contribution shape, the daemon, the catalog and the
  * web all need it, and three copies of it is three chances for a card's instances to go missing. `satisfies`
  * rather than a lookup table so a new arm above is a compile error until this answers for it. */
 const DISCRIMINATOR = { cli: "provider", browser: "platform", host: "platform", agent: undefined } satisfies Record<

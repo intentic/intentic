@@ -1,6 +1,6 @@
 import type { ParsedNote } from "./note.js";
 
-/* THE DECLARED VOCABULARY — which kinds of thing and which relationships this knowledge base has agreed to use.
+/* THE DECLARED VOCABULARY, which kinds of thing and which relationships this knowledge base has agreed to use.
  *
  * It is a NOTE, not a config file and not a schema the tools enforce. That is the whole design decision, and
  * it is the difference between a knowledge base an agent fills and one it stalls against:
@@ -9,7 +9,7 @@ import type { ParsedNote } from "./note.js";
  *     at the moment the fact was in hand, and the fact is what we were trying to keep. So an undeclared type
  *     works immediately.
  *   - Left at that, the knowledge base silently accumulates `person`, `people`, `Person` and `human` as four kinds. So
- *     everything undeclared is REPORTED — in the panel's overview and in `kb check` — as drift to adopt or
+ *     everything undeclared is REPORTED, in the panel's overview and in `kb check`, as drift to adopt or
  *     rename. The vocabulary is a habit the tools help keep, not a gate they enforce.
  *
  * A note, rather than a JSON file, because the agent reads it: the prose under the header is where "a decision
@@ -28,7 +28,7 @@ export interface Vocabulary {
     readonly path: string | undefined;
 }
 
-// A knowledge base that has declared none — a legitimate state, not a missing one: everything is then simply
+// A knowledge base that has declared none, a legitimate state, not a missing one: everything is then simply
 // undeclared, and nothing is reported as drift.
 const EMPTY_VOCABULARY: Vocabulary = { types: [], relations: [], path: undefined };
 
@@ -44,12 +44,12 @@ export const readVocabulary = (notes: readonly ParsedNote[]): Vocabulary => {
     };
 };
 
-// A word this knowledge base has not adopted, and how many notes use it — the drift report, in the shape both the
+// A word this knowledge base has not adopted, and how many notes use it, the drift report, in the shape both the
 // overview panel and `kb check` render. Sorted by weight: the one used twelve times is the one worth a decision.
 export interface Drift {
     readonly word: string;
     readonly uses: number;
-    // Which notes use it, capped by the caller — enough to go look, not a second copy of the knowledge base.
+    // Which notes use it, capped by the caller, enough to go look, not a second copy of the knowledge base.
     readonly notes: readonly string[];
 }
 
@@ -63,7 +63,7 @@ const tally = (entries: readonly (readonly [string, string])[]): Drift[] => {
         .toSorted((a, b) => b.uses - a.uses || a.word.localeCompare(b.word));
 };
 
-/* Types in use that the vocabulary does not list. A knowledge base with NO vocabulary reports nothing — there is nothing
+/* Types in use that the vocabulary does not list. A knowledge base with NO vocabulary reports nothing, there is nothing
  * to have drifted from, and a fresh knowledge base flagging every note it holds would be noise on the day it is least
  * useful. The vocabulary note's own type is never drift, however it is spelled. */
 export const typeDrift = (notes: readonly ParsedNote[], vocabulary: Vocabulary): Drift[] => {
@@ -74,7 +74,7 @@ export const typeDrift = (notes: readonly ParsedNote[], vocabulary: Vocabulary):
     return tally(notes.flatMap((note) => (note.type === undefined || declared.has(note.type) ? [] : [[note.type, note.path] as const])));
 };
 
-// Relationship names in use that the vocabulary does not list — the same rule, over the header fields that
+// Relationship names in use that the vocabulary does not list, the same rule, over the header fields that
 // carry links.
 export const relationDrift = (notes: readonly ParsedNote[], vocabulary: Vocabulary): Drift[] => {
     if (vocabulary.path === undefined) {

@@ -8,7 +8,7 @@ import { fileServiceWant, readServiceCatalog, WANT_MAX, WANT_MIN, WANTS_PER_DAY 
 import { refusalResponse, runMeteredService } from "../pool/pool-run.js";
 import { consumeGrant, createOffer, findRecentOffer, WHY_MAX } from "./mcp-offer.js";
 
-/* THE THREE TOOLS A CLAUDE CODE SESSION SEES — the sandbox `services` CLI, spoken as MCP.
+/* THE THREE TOOLS A CLAUDE CODE SESSION SEES, the sandbox `services` CLI, spoken as MCP.
  *
  * The surface is deliberately the same three verbs (list, run, wanted) carrying the same etiquette, because
  * what is being ported is a *contract with the owner*, not a feature: an agent may ask, the platform states
@@ -18,12 +18,12 @@ import { consumeGrant, createOffer, findRecentOffer, WHY_MAX } from "./mcp-offer
  * WHAT CHANGED IN THE PORT, and why each had to:
  *
  *   The card became a page. A sandbox has a live conversation to push an offer card into and a held socket to
- *   wait on. A Claude Code session has neither, so `services_run` answers with a URL-mode elicitation — the
- *   spec's own mode for interactions that must not pass through the client or the model — and the approving
+ *   wait on. A Claude Code session has neither, so `services_run` answers with a URL-mode elicitation, the
+ *   spec's own mode for interactions that must not pass through the client or the model, and the approving
  *   happens on the platform's own page, in the owner's browser, under their own session.
  *
  *   The wait became a retry. URL elicitation is multi-round-trip: the client re-calls the tool once the user
- *   is done. Nothing about that retry is trusted — see mcp-offer.ts. The client reporting "they consented" is
+ *   is done. Nothing about that retry is trusted, see mcp-offer.ts. The client reporting "they consented" is
  *   not consent; the run re-reads the row the owner's browser wrote.
  *
  *   Progress became notifications. The daemon turns a provider's `status` lines into transcript frames under
@@ -31,7 +31,7 @@ import { consumeGrant, createOffer, findRecentOffer, WHY_MAX } from "./mcp-offer
  *   Code renders while a tool call is in flight.
  *
  * WHAT DID NOT CHANGE is every number. The price, the meter and the refusals are read from the platform's own
- * catalog and relayed in the platform's own words — never composed here, and never shown to the owner by
+ * catalog and relayed in the platform's own words, never composed here, and never shown to the owner by
  * anything but the platform. */
 
 export interface ToolDeps {
@@ -58,7 +58,7 @@ interface ProgressSink {
 // One text answer, which is what a model reads. `isError` marks the ones it must act on rather than relay.
 const say = (text: string, isError = false) => ({ content: [{ type: `text` as const, text }], isError });
 
-/* The request body, canonicalised — this is the key a retry finds its own offer by (mcp-offer.ts
+/* The request body, canonicalised, this is the key a retry finds its own offer by (mcp-offer.ts
  * findRecentOffer), so it has to be stable for the same logical body. An object is stringified; a string is
  * re-stringified through a parse, so whitespace the model happened to emit does not fork the key and strand
  * an approval nobody can spend. */
@@ -73,7 +73,7 @@ export const canonicalRequest = (request: unknown): string => {
     return JSON.stringify(request ?? {});
 };
 
-// A listing, rendered for a model: price, publisher, what it does, and the provider's own worked example —
+// A listing, rendered for a model: price, publisher, what it does, and the provider's own worked example,
 // which is the best thing to shape a request body after.
 const renderListing = (listing: {
     readonly slug: string;
@@ -94,7 +94,7 @@ const renderListing = (listing: {
         .join(`\n`);
 
 /* THE RUN ITSELF, reached only once a grant has actually been spent. Everything about the money belongs to
- * pool-run.ts — the same function the sandbox's HTTP route drives — so the two surfaces cannot come to
+ * pool-run.ts, the same function the sandbox's HTTP route drives, so the two surfaces cannot come to
  * different conclusions about what was charged. This owns only how the outcome reads. */
 const executeRun = async (deps: ToolDeps, ownerId: string, slug: string, body: string, sink: ProgressSink) => {
     const run = await runMeteredService(
@@ -110,12 +110,12 @@ const executeRun = async (deps: ToolDeps, ownerId: string, slug: string, body: s
         return say(`${run.service.name} did not answer — nothing was charged. Please try again shortly.`, true);
     }
     if (run.kind === `answered`) {
-        // A provider's own 4xx: a complete answer, CHARGED, relayed verbatim — "your query was malformed" is
+        // A provider's own 4xx: a complete answer, CHARGED, relayed verbatim, "your query was malformed" is
         // the service serving exactly what was asked.
         return say(`${run.service.name} refused the request (charged, ${run.remaining} credits left today):\n${run.body}`, true);
     }
-    /* The stream. Status lines become progress notifications the moment they arrive — the caller watches the
-     * run live rather than a spinner of unknowable length — and the result is buffered into the one answer a
+    /* The stream. Status lines become progress notifications the moment they arrive, the caller watches the
+     * run live rather than a spinner of unknowable length, and the result is buffered into the one answer a
      * model acts on. The receipt goes on the end, in the platform's numbers. */
     // `_meta` is MCP's own field name on a request's extra; renaming it would only hide which wire field it is.
     // eslint-disable-next-line no-underscore-dangle
@@ -210,7 +210,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
              * offer a button that does not work, so the useful thing to put in front of them is the join page
              * itself. URL mode is also the only honest way to carry somebody to a payment form: the spec
              * forbids asking for payment details through the client, and here the whole interaction stays
-             * between the owner and the site — neither this server nor the model sees any of it. */
+             * between the owner and the site, neither this server nor the model sees any of it. */
             if (!catalog.member) {
                 throw new UrlElicitationRequiredError([
                     {
@@ -229,7 +229,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
             }
             const body = canonicalRequest(request);
             const recent = await findRecentOffer(prisma, { userId: ownerId, serviceId: service.id, request: body }, at);
-            /* Settled and recent: say what the owner decided, once, and stop. Never re-offer from here — a card
+            /* Settled and recent: say what the owner decided, once, and stop. Never re-offer from here, a card
              * that reappears the instant it is dismissed is a nag, and the point of the gate is that "no" is an
              * answer the agent acts on rather than works around. */
             if (recent?.status === `declined`) {
@@ -262,7 +262,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
                 return await executeRun(deps, ownerId, grant.slug, grant.request, extra);
             }
             /* Nothing recent: raise the card. The row is written FIRST, with the price stamped on it, so the
-             * page the owner opens quotes the platform rather than anything the model typed — and so a listing
+             * page the owner opens quotes the platform rather than anything the model typed, and so a listing
              * repriced while they are deciding cannot change what they agreed to. */
             const offerId = await createOffer(
                 prisma,
@@ -284,7 +284,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
 
     /* The wanted list. Registered beside the two above but sharing nothing with them: it spends nothing, raises
      * no card, needs no membership, and returns nothing about anyone. It is the platform's single most valuable
-     * demand signal and its cheapest — an agent that read the catalog and found nothing is telling providers
+     * demand signal and its cheapest, an agent that read the catalog and found nothing is telling providers
      * exactly what to build. */
     server.registerTool(
         `services_wanted`,

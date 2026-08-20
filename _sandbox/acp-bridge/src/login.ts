@@ -2,7 +2,7 @@ import readline from "node:readline/promises";
 import { createDaemonClient } from "./daemon-client.js";
 import { writeConfig } from "./config.js";
 
-/* `intentic-acp login` — the ACP terminal auth method (the client runs THIS binary interactively): prompt
+/* `intentic-acp login`, the ACP terminal auth method (the client runs THIS binary interactively): prompt
  * for the sandbox URL and an owner-minted bridge token, validate with the auth probe, persist to
  * ~/.intentic/acp/config.json (0600). Exit code is the auth outcome the editor reads. */
 

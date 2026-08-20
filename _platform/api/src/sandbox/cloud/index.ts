@@ -4,7 +4,7 @@ import { digitaloceanCreate, digitaloceanOptions } from "./digitalocean.js";
 import { hetznerCreate, hetznerOptions } from "./hetzner.js";
 import { oracleCreate, oracleOptions } from "./oracle.js";
 
-// The provider switch the sandbox routes call — the only place the CloudCredentials union meets the three
+// The provider switch the sandbox routes call, the only place the CloudCredentials union meets the three
 // adapters, so a provider added to the contract fails to compile here until it is wired.
 
 export const cloudOptions = (credentials: CloudCredentials): Promise<CloudOptions> => {

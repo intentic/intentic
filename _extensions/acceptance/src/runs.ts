@@ -3,7 +3,7 @@ import type { Story } from "./stories";
 
 /* A RUN is the set of stories the user selected at one moment, and it is backed by files rather than by any
  * store this extension owns: `run.json` under the run directory is written before the first turn starts, and
- * each agent writes its own `result.json` beside it. Two consequences worth stating —
+ * each agent writes its own `result.json` beside it. Two consequences worth stating,
  *
  *  • The run survives everything. Archive the fleet agents, discard them, close the browser, rebuild the image:
  *    the reports are still there, because nothing about them lives in the registry or in extension settings.
@@ -12,7 +12,7 @@ import type { Story } from "./stories";
  *    recorded: no session exists for the roster to describe in that case.
  *
  * The directory sits under the workspace's `.intentic`, which is outside every repo (the root repo excludes it)
- * and is bound back in SHARED for isolated turns — so every agent in a run writes into the same tree the browser
+ * and is bound back in SHARED for isolated turns, so every agent in a run writes into the same tree the browser
  * reads, with nothing to land and no git noise. */
 
 export const RUNS_DIR = `${STATE_DIR}/records/artifacts/acceptance`;
@@ -30,7 +30,7 @@ export const resultPath = (runId: string, slug: string): string => `${storyDir(r
 export const reportPath = (runId: string, slug: string): string => `${storyDir(runId, slug)}/report.md`;
 
 // What the rail's badge has already been shown. A file rather than an extension setting: the badge is derived
-// from run files, so its acknowledgement belongs in the same tree — it survives a reload, is shared across the
+// from run files, so its acknowledgement belongs in the same tree, it survives a reload, is shared across the
 // owner's browsers, and adds no user-visible setting for a value no user would ever type.
 export const SEEN_PATH = `${RUNS_DIR}/seen.json`;
 
@@ -51,11 +51,11 @@ export const isShotPath = (path: string): boolean => SHOT_PATH.test(path);
 // Taken from the caller so this module stays pure and testable.
 export const runIdAt = (epochMs: number): string => `r${epochMs.toString(36)}`;
 
-/* The fleet conversation id for one story of one run. The run id is what must survive truncation — it is how a
- * card is attributed back to its run — so the SLUG is what gets cut when the two together would overflow. A
+/* The fleet conversation id for one story of one run. The run id is what must survive truncation, it is how a
+ * card is attributed back to its run, so the SLUG is what gets cut when the two together would overflow. A
  * truncated slug can collide with a sibling's, which is why storiesOf() has already made slugs unique by
  * suffixing digits: the suffix sits at the end, exactly where the cut lands, so uniqueness is preserved only if
- * the cut leaves it. It does — slugs are capped at 40 characters and run ids are ~9, well inside 64. */
+ * the cut leaves it. It does, slugs are capped at 40 characters and run ids are ~9, well inside 64. */
 export const conversationIdOf = (runId: string, slug: string): string =>
     `${PREFIX}-${runId}-${slug}`.slice(0, CONVERSATION_ID_MAX).replace(/[-_]+$/, ``);
 
@@ -83,7 +83,7 @@ export interface StorySnapshot extends Story {
 export interface RunManifest {
     readonly runId: string;
     readonly createdAt: number;
-    /* What the agents were pointed at, keyed by stories.ts targetKeyOf — kept because a report is unreadable a
+    /* What the agents were pointed at, keyed by stories.ts targetKeyOf, kept because a report is unreadable a
      * week later without it. A map rather than one URL: a run can walk the marketing site's stories at :4321 and
      * the app's at :5173, and one field could only ever describe one of them. */
     readonly targets: Readonly<Record<string, string>>;
@@ -126,7 +126,7 @@ export const runManifestOf = (params: {
     launchFailures: {},
 });
 
-// Every repo a run touched, first-appearance order — the run row's subtitle, and what the report joins
+// Every repo a run touched, first-appearance order, the run row's subtitle, and what the report joins
 // `targets` against.
 export const reposOf = (manifest: RunManifest): readonly string[] => [...new Set(manifest.stories.map((story) => story.repo))];
 
@@ -139,7 +139,7 @@ export const matchesStoryRevision = (story: Pick<RunStory, "content">, current: 
 // upstream of this story" is a different report to the author than "this story's behaviour is wrong".
 export type Verdict = "pass" | "fail" | "blocked";
 
-/* The colour a verdict reads as, in the one place both the run's report and the story list can share it —
+/* The colour a verdict reads as, in the one place both the run's report and the story list can share it,
  * `blocked` is warning rather than danger because the run never got to judge the story, and a list that painted
  * "we could not reach the app" the same red as "this promise is broken" would send someone to the wrong file.
  * Plain strings: this module stays free of the UI kit, and the names are its StatusVariant's. */
@@ -148,12 +148,12 @@ const verdictTone = (verdict: Verdict): "success" | "danger" | "warning" =>
 
 /* WHERE ONE STORY OF ONE RUN STANDS, from the two facts that answer it: what the agent WROTE, and what its
  * session is doing. Shared by the run's report and the stories list because they were deriving it separately and
- * had drifted into disagreeing about the case that matters — a session that DIED. The report called it a neutral
+ * had drifted into disagreeing about the case that matters, a session that DIED. The report called it a neutral
  * "error" beside a plain "no report was written", and the list said nothing at all, leaving a story whose test
  * never ran looking exactly like one nobody had ever tested. Both were the same wrong answer: silence.
  *
  * A verdict outranks the session, always: a story the agent judged is judged, whatever became of the session
- * afterwards. Below that, a live session is progress and a dead one is a failure of the RUN — `untested` rather
+ * afterwards. Below that, a live session is progress and a dead one is a failure of the RUN, `untested` rather
  * than `fail`, because the promise was never examined and calling that a broken promise would send the reader to
  * a file that may be perfectly fine. Undefined ⇒ nothing to show: no verdict, no session, nothing happening. */
 export const storyStanding = (

@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { extensionRuntimeDir } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
-/* When the owner last LOOKED at each Komodo connection's deployments, plus their repo→stack links — the
+/* When the owner last LOOKED at each Komodo connection's deployments, plus their repo→stack links, the
  * extension's own state file in its runtime home (extensionRuntimeDir; it used to sit at the `.intentic` root,
- * where nothing classified it) — moved here with the backend that reads it. Backend-side rather than in a browser, on the same reasoning ci-store records its `seenAt`:
+ * where nothing classified it), moved here with the backend that reads it. Backend-side rather than in a browser, on the same reasoning ci-store records its `seenAt`:
  * whether a breakage has been seen is a fact about the work, so clearing site data or picking up the phone
  * must not resurrect a badge already dealt with.
  *
@@ -30,13 +30,13 @@ type KomodoState = z.infer<typeof KomodoStateSchema>;
 const EMPTY: KomodoState = { seenAt: {}, links: {} };
 
 export interface KomodoStore {
-    // Undefined until that connection's view has been opened once — which reads as "everything is news", the
+    // Undefined until that connection's view has been opened once, which reads as "everything is news", the
     // right answer for a surface the owner has never looked at.
     readonly seenAt: (capability: string) => Promise<number | undefined>;
     readonly markSeen: (capability: string, at: number) => Promise<void>;
     // The owner's repo → stack decisions for one connection. Empty until they link something.
     readonly links: (capability: string) => Promise<Record<string, string>>;
-    // An empty `stack` clears the link — the owner unlinking, or replacing one that no longer exists.
+    // An empty `stack` clears the link, the owner unlinking, or replacing one that no longer exists.
     readonly link: (capability: string, repo: string, stack: string) => Promise<void>;
 }
 

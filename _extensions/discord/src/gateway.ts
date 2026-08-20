@@ -8,7 +8,7 @@ import { activeVoiceSession, joinVoice, leaveVoice, stopVoice, voiceStatus } fro
 // The Discord gateway process: a baked extension's autoStart process (contributes.processes). It reconciles a
 // discord.js connection per bot token against the daemon's /listeners/discord/state, dispatches every inbound
 // message (painting mention replies back), holds voice sessions across turns, and exposes a loopback control
-// surface the `discord-voice` CLI hits (join/leave/status). The daemon holds no Discord connection — this does.
+// surface the `discord-voice` CLI hits (join/leave/status). The daemon holds no Discord connection, this does.
 // The reconcile/status/health/shutdown shell is the shared connector runtime; what's here is only what Discord
 // IS: a refcounted client per bot token (shared with voice), a login failure that retrying can't fix, and the
 // voice control routes.
@@ -17,7 +17,7 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
     provider: "discord",
     publishGatewayUrl: true,
     create: (ctx) => {
-        // The listener's live view of connected bots — maintained by open/close below. Keyed by TOKEN, which is
+        // The listener's live view of connected bots, maintained by open/close below. Keyed by TOKEN, which is
         // also the slot key: two capabilities sharing one bot token share one client and one subscription.
         const subscribed = new Map<string, Client>();
         const listener = createDiscordListener(ctx, subscribed);
@@ -53,7 +53,7 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
                 subscribed.delete(token);
                 releaseDiscordClient(token, "listener");
             },
-            // Every login failure is fatal — a bad token or missing intent can only be fixed portal-side, and
+            // Every login failure is fatal, a bad token or missing intent can only be fixed portal-side, and
             // client.ts has already mapped it onto a sentence the owner can act on.
             fatal: (error) => (error instanceof Error ? error.message : String(error)),
             phase: (connector) => discordGatewayState(connector.config.botToken),

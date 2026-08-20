@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Session } from "./session.js";
 
-/* EVERY REQUEST TO GOOGLE GOES THROUGH HERE — authorization, retries, paging and, above all, errors that say
+/* EVERY REQUEST TO GOOGLE GOES THROUGH HERE, authorization, retries, paging and, above all, errors that say
  * what to do.
  *
  * Google's failures arrive as `{error: {code, message, status, details}}`, and the useful part is rarely the
@@ -22,7 +22,7 @@ export interface CallSpec {
     readonly body?: unknown;
     /* A pre-encoded payload (a MIME message, a multipart upload, raw file bytes) instead of a JSON body. The
      * buffer is pinned to `ArrayBuffer` rather than the wider `ArrayBufferLike` because that is what `fetch`
-     * takes — a Buffer over a SharedArrayBuffer is not a body, and nothing here produces one. */
+     * takes, a Buffer over a SharedArrayBuffer is not a body, and nothing here produces one. */
     readonly raw?: { readonly contentType: string; readonly data: Uint8Array<ArrayBuffer> | string };
 }
 
@@ -145,12 +145,12 @@ export const call = async <T>(session: Session, spec: CallSpec): Promise<T> => {
 
 export const callBytes = async (session: Session, spec: CallSpec): Promise<Buffer> => Buffer.from(await (await send(session, spec)).arrayBuffer());
 
-/* Every Google list endpoint pages the same way — `pageToken` in, `nextPageToken` out — and every one of them
+/* Every Google list endpoint pages the same way, `pageToken` in, `nextPageToken` out, and every one of them
  * will happily walk a 30,000-message mailbox if nothing stops it. `limit` is that stop, and it is required
  * rather than optional: an unbounded paginate reached from a CLI is a command that never returns.
  *
  * The page-size parameter is NOT the same name across Google's own APIs (`maxResults` on Gmail and Calendar,
- * `pageSize` on Drive, Sheets and People), which is exactly the kind of difference a caller forgets — so it is
+ * `pageSize` on Drive, Sheets and People), which is exactly the kind of difference a caller forgets, so it is
  * named per call rather than defaulted silently to whichever one was written first. */
 export interface PageSpec<T> {
     readonly itemsOf: (page: Record<string, unknown>) => readonly T[] | undefined;

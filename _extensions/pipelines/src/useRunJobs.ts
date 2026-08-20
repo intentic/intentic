@@ -4,7 +4,7 @@ import { computed, type Ref } from "vue";
 import { host } from "./host";
 
 /* Lazily fetches ALL jobs for a single pipeline run when `enabled` flips on (the user expanded that row).
- * Not polled — the run's terminal state is stable and the cost of one extra call per expand is negligible. */
+ * Not polled, the run's terminal state is stable and the cost of one extra call per expand is negligible. */
 
 export function useRunJobs(run: Ref<PipelineRun | undefined>) {
     const api = host();

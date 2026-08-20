@@ -2,7 +2,7 @@ import type { Ref } from "vue";
 import type { Disposable, IntenticApi } from "./api.js";
 import { sandboxRef, sandboxScopeGuard } from "./scope.js";
 
-/* WHAT AN EXTENSION DOES WHILE NONE OF IT IS ON SCREEN — the two pieces every surface that badges a rail tile
+/* WHAT AN EXTENSION DOES WHILE NONE OF IT IS ON SCREEN, the two pieces every surface that badges a rail tile
  * turned out to need, and had been writing out by hand.
  *
  * A tile has to be able to say something before it is opened. That rules out the view's own query, which stops
@@ -12,7 +12,7 @@ import { sandboxRef, sandboxScopeGuard } from "./scope.js";
  * Seven modules across six extensions arrived at the identical shape for that timer, and it carries five rules
  * that are each invisible until they are broken:
  *
- *   never reject      it runs detached, so a throw is an unhandled rejection with no caller to report to — and
+ *   never reject      it runs detached, so a throw is an unhandled rejection with no caller to report to, and
  *                     that includes reading the host handle, which throws before activate() has bound one
  *   skip when down    an unreachable daemon is not news; asking it is a failed request per tick, forever
  *   guard the await   a read issued before a sandbox switch must not write its answer into the box after it
@@ -31,7 +31,7 @@ export interface SandboxPoll<T> {
     readonly state: Ref<T>;
     // Begin polling. Push the Disposable onto `context.subscriptions` and the clock stops with the extension.
     start(): Disposable;
-    // Read now, off-cycle — for the moments that change the answer and should not wait out the interval: a
+    // Read now, off-cycle, for the moments that change the answer and should not wait out the interval: a
     // connection appearing, a draft published, a run discarded.
     refresh(): void;
 }
@@ -46,14 +46,14 @@ export interface SandboxPollOptions<T> {
     readonly everyMs: number;
     // The value before anything has been read, rebuilt on every sandbox switch (sandboxRef).
     readonly initial: () => T;
-    /* The read. Gets the api and the value currently held — the second for a poll that ACCUMULATES rather than
+    /* The read. Gets the api and the value currently held, the second for a poll that ACCUMULATES rather than
      * replaces, where one failed source must leave its own last answer standing beside the others. Throwing is
      * fine and means "nothing changed": the value in hand is kept.
      */
     readonly read: (api: IntenticApi, previous: T) => Promise<T>;
     /* Whether `start()` reads immediately as well as on the interval. Default true, because a tile that only
      * badges a minute after login is a tile nobody trusts. Set false when the poll has nothing to ask until
-     * something else tells it what to ask about — deployments learns its connections from `detect()`. */
+     * something else tells it what to ask about, deployments learns its connections from `detect()`. */
     readonly immediate?: boolean;
     // For a value that owns something the garbage collector will not take back; see sandboxRef.
     readonly dispose?: (previous: T) => void;
@@ -75,7 +75,7 @@ export const sandboxPoll = <T>(options: SandboxPollOptions<T>): SandboxPoll<T> =
             }
             state.value = next;
         } catch {
-            // Whatever went wrong — an unbound host, a refused route, a daemon mid-boot — the answer is the
+            // Whatever went wrong, an unbound host, a refused route, a daemon mid-boot, the answer is the
             // same: leave the last value standing. "We could not ask" is not "there is nothing there".
         }
     };
@@ -97,12 +97,12 @@ export const sandboxPoll = <T>(options: SandboxPollOptions<T>): SandboxPoll<T> =
  *
  * The rail's bar is that a badge means "something happened here that you do not already know about". Meeting it
  * needs somewhere to record what they DO know, and three extensions independently chose the same home: a JSON
- * object under `.intentic`, keyed by whatever identifies the thing. That is the right home — it survives a
- * reload, it is shared across the owner's browsers, and it needs no setting nobody would ever type — but each
+ * object under `.intentic`, keyed by whatever identifies the thing. That is the right home, it survives a
+ * reload, it is shared across the owner's browsers, and it needs no setting nobody would ever type, but each
  * of them then hand-wrote the same tolerant reader and the same careful write.
  *
  * KEY → MARK, where the mark is what makes the entry STALE. That is the whole vocabulary, and it covers both
- * the ledgers that compare (a chore's evidence digest, a story's verdict — the same key with a different mark
+ * the ledgers that compare (a chore's evidence digest, a story's verdict, the same key with a different mark
  * is news again) and the ones that only ask whether a key is present at all (a document set reviewed once).
  * A presence-only ledger writes the acknowledgement time as its mark, which nothing reads and a human opening
  * the file is glad of.
@@ -113,18 +113,18 @@ export const sandboxPoll = <T>(options: SandboxPollOptions<T>): SandboxPoll<T> =
  *
  * BOTH WRITES ANSWER "did this take effect", which is the question the caller's NEXT line depends on. Marking
  * something seen is almost always followed by folding it out of the badge locally, so the tile clears on the
- * spot rather than at the next poll — and that fold is a write into sandbox-scoped state, so it must not happen
+ * spot rather than at the next poll, and that fold is a write into sandbox-scoped state, so it must not happen
  * when the acknowledgement itself was abandoned because the owner switched sandbox mid-operation. It would
  * silence the NEW box's badge for a fact about the old one. `false` means only that: the scope moved. A ledger
  * that already said what you asked it to say answers `true`, because it does. */
 export interface SandboxLedger {
     // Everything acknowledged so far. Absent, unparseable or not-an-object all read as nothing.
     read(): Promise<Readonly<Record<string, string>>>;
-    /* Record these, leaving every other entry alone — the ordinary acknowledgement. No write happens when
+    /* Record these, leaving every other entry alone, the ordinary acknowledgement. No write happens when
      * nothing moved: the file push would otherwise cost every connected browser a refetch for a file whose
      * content is identical. */
     mark(entries: Readonly<Record<string, string>>): Promise<boolean>;
-    /* Make these the WHOLE ledger, dropping anything not named. For a ledger whose keys go out of scope — a
+    /* Make these the WHOLE ledger, dropping anything not named. For a ledger whose keys go out of scope, a
      * run that has scrolled past the scan window can never be seen again, and merging forever would grow the
      * file without bound. Same no-op-when-unchanged rule as `mark`.
      */
@@ -142,7 +142,7 @@ export const sandboxLedger = (host: () => IntenticApi, path: string): SandboxLed
         return Object.fromEntries(Object.entries(parsed ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === `string`));
     };
 
-    /* One writer for both verbs, and the scope guard lives HERE rather than at the call site — this is the
+    /* One writer for both verbs, and the scope guard lives HERE rather than at the call site, this is the
      * only thing in an extension's background work that damages state on DISK when a sandbox switch lands
      * mid-operation. Reading one workspace's acknowledgements and writing them into the tree of the workspace
      * the owner has just moved to is bookkeeping filed in the wrong place, which no later poll corrects. */

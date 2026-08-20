@@ -12,7 +12,7 @@ const API = "https://docs.googleapis.com/v1/documents";
  *
  * That is a deliberate stop rather than an unfinished job. The Docs API expresses editing as a batch of
  * index-addressed mutations against a document whose indices every earlier mutation in the same batch has
- * already moved — correct use of it means maintaining an offset model of a document nobody in this process can
+ * already moved, correct use of it means maintaining an offset model of a document nobody in this process can
  * see. The four verbs below need no such model, and they are what "put the summary in a doc and share it"
  * actually requires. Anything past them belongs to a person with the document open. */
 
@@ -72,7 +72,7 @@ const append: Command = {
         await call(ctx.session, {
             method: "POST",
             url: `${API}/${encodeURIComponent(id)}:batchUpdate`,
-            // endOfSegmentLocation is what spares this from computing the document's length first — and from
+            // endOfSegmentLocation is what spares this from computing the document's length first, and from
             // being wrong about it the moment somebody else is typing in the same document.
             body: { requests: [{ insertText: { endOfSegmentLocation: {}, text: text.startsWith("\n") ? text : `\n${text}` } }] },
         });

@@ -1,12 +1,12 @@
 import { composeAsk } from "./prompt.js";
 
-/* AN EXTENSION UPDATE, READ AS A DIFF. The commit that is installed was approved once already — re-reading all
+/* AN EXTENSION UPDATE, READ AS A DIFF. The commit that is installed was approved once already, re-reading all
  * of it would bury the one question an update asks: what is different, and did any of it change the deal? So
  * the turn's subject is the diff between the two commits, and the manifest's delta leads, because a new entry
  * in `permissions.sandbox` is reach the owner never approved, arriving dressed as an update.
  *
  * Here in the contract's chores rather than in the web app, because two callers build it: the update card's
- * "read the diff" button, and the daemon's agent-prepared update policy — which runs this exact read
+ * "read the diff" button, and the daemon's agent-prepared update policy, which runs this exact read
  * unprompted when the registry lists a new sha, so the owner opens a finished account instead of starting one. */
 const UPDATE_INVARIANTS =
     `This turn reads and reports; it changes nothing and installs nothing. Clone into a scratch directory ` +
@@ -19,7 +19,7 @@ export interface UpdateBrief {
     // The listing's display name, or the repository when it is being installed straight from a URL.
     readonly label: string;
     readonly url: string;
-    // What is installed and what the update proposes — both full shas, both facts, neither a branch.
+    // What is installed and what the update proposes, both full shas, both facts, neither a branch.
     readonly fromRef: string;
     readonly toRef: string;
     // Subdirectory inside the repository, for a monorepo source. Empty for a repo of its own.

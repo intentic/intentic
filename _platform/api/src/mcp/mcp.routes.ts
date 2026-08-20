@@ -8,7 +8,7 @@ import type { Config } from "../config.js";
 import { poolEnabled } from "../pool/pool-membership.js";
 import { registerServiceTools } from "./mcp-tools.js";
 
-/* THE MCP DOOR — how a coding agent that is not running in a sandbox reaches the services catalog.
+/* THE MCP DOOR, how a coding agent that is not running in a sandbox reaches the services catalog.
  *
  * Everything the platform sells was, until now, reachable only through a sandbox's connect token, which made
  * owning a machine an accidental precondition for buying and spending a membership. This mount is the other
@@ -17,21 +17,21 @@ import { registerServiceTools } from "./mcp-tools.js";
  * that names their account and nothing else.
  *
  * STATELESS, ONE SERVER PER REQUEST. No session id is generated and no transport is kept: each POST builds an
- * McpServer closed over the authenticated user, answers, and is thrown away. That is not a shortcut — it is
+ * McpServer closed over the authenticated user, answers, and is thrown away. That is not a shortcut, it is
  * what lets any replica answer any request, survives a deploy mid-conversation, and removes the whole class of
  * bugs where an approval is stranded on a connection that has since died. The one thing a long-lived session
- * would buy — pushing "the browser step is finished" at the client — is the thing Claude Code's own UX does
+ * would buy, pushing "the browser step is finished" at the client, is the thing Claude Code's own UX does
  * not need: it asks the user to confirm in the terminal once they are done, and the retry re-reads the row.
  *
  * WHAT IS DELIBERATELY NOT HERE: the wallet. x402 payments need custody, a policy engine and the
- * quarantined-turn rule that strips a poisoned turn's auto-approve band — machinery that belongs to a sandbox
+ * quarantined-turn rule that strips a poisoned turn's auto-approve band, machinery that belongs to a sandbox
  * and does not travel. The metered, refunded, catalogued rail is the one that survives leaving home. */
 
 export interface McpDeps {
     readonly config: Config;
     readonly prisma: PrismaClient;
     readonly auth: Auth;
-    // Injectable so tests drive the service forward without a network — the pool's pattern.
+    // Injectable so tests drive the service forward without a network, the pool's pattern.
     readonly fetchFn?: typeof fetch;
     readonly now?: () => Date;
     /* The demo service's upstream is the platform itself, so its forward dispatches in-process. Passed in
@@ -52,7 +52,7 @@ const INSTRUCTIONS =
 export const mcpHttpRoutes = ({ config, prisma, auth, fetchFn = fetch, now = () => new Date(), demoDispatch }: McpDeps) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
 
-    /* 401 WITH A POINTER, not 404 — the one place on this platform where saying what is wrong is the correct
+    /* 401 WITH A POINTER, not 404, the one place on this platform where saying what is wrong is the correct
      * move. An MCP client discovers where to authenticate by reading `WWW-Authenticate` off exactly this
      * refusal; answering blankly would leave Claude Code with a dead server and no way to offer a sign-in. */
     const unauthorized = (c: { json: (body: unknown, status: 401, headers: Record<string, string>) => Response }) => {
@@ -93,7 +93,7 @@ export const mcpHttpRoutes = ({ config, prisma, auth, fetchFn = fetch, now = () 
          * response's stream ends or the client goes away; closing it here would cut the SSE stream this call's
          * own answer rides on. */
         const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: false });
-        // The SDK's Transport is a plain object with an `onclose` property, not an EventTarget — nothing to add.
+        // The SDK's Transport is a plain object with an `onclose` property, not an EventTarget, nothing to add.
         // eslint-disable-next-line unicorn/prefer-add-event-listener
         transport.onclose = () => void server.close().catch(() => undefined);
         await server.connect(transport);

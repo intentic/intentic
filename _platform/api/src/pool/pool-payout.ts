@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type { Config } from "../config.js";
 import type { StripeGateway } from "./pool-stripe.js";
 
-/* THE PAYOUT RUN — where the promise finally becomes money in someone's account.
+/* THE PAYOUT RUN, where the promise finally becomes money in someone's account.
  *
  * Everything here is arranged around one hazard: paying twice. A transfer that succeeds at Stripe but whose
  * answer never reaches the platform is indistinguishable, from here, from one that never happened. Retrying
@@ -17,7 +17,7 @@ import type { StripeGateway } from "./pool-stripe.js";
  *   3. RECORD. Mark the row paid with the transfer id.
  *
  * A crash between any two steps leaves a `pending` row, and the next run FINISHES that row rather than building
- * a new one — same key, same outcome. This is also why a failed transfer never releases its statements: a fresh
+ * a new one, same key, same outcome. This is also why a failed transfer never releases its statements: a fresh
  * payout would carry a fresh key, which is exactly how a silently-successful payment gets made again.
  *
  * The run pays only what is due (a month's stated payable date has arrived), only to creators who connected an
@@ -73,7 +73,7 @@ const settle = async (
 };
 
 /* Where a creator's money can be sent, or undefined if it cannot be sent at all. `payoutsEnabled` is the only
- * field read as permission — an account that exists, or has submitted its details, is not the same as one
+ * field read as permission, an account that exists, or has submitted its details, is not the same as one
  * Stripe will accept a transfer for. */
 const destinationOf = async (prisma: PrismaClient, userId: string): Promise<string | undefined> => {
     const account = await prisma.payoutAccount.findUnique({ where: { userId }, select: { stripeAccountId: true, payoutsEnabled: true } });
@@ -104,7 +104,7 @@ const resumePending = async (deps: PayoutDeps, at: Date): Promise<PayoutOutcome[
 };
 
 /* One creator's fresh payment. The reservation is guarded by `payoutId: null` in the WHERE rather than trusting
- * the read that preceded it: two runs racing — different replicas, or a tick overlapping a slow predecessor —
+ * the read that preceded it: two runs racing, different replicas, or a tick overlapping a slow predecessor,
  * would otherwise both believe they own the same statements. Whoever updates fewer rows than it expected has
  * lost the race and rolls back, which the transaction makes free. */
 const payCreator = async (
@@ -141,7 +141,7 @@ const payCreator = async (
     return settle(deps, reserved, destination, at);
 };
 
-/* The run. Pays every creator whose due, unpaid, unexpired statements clear the minimum — and does it as one
+/* The run. Pays every creator whose due, unpaid, unexpired statements clear the minimum, and does it as one
  * payment per creator rather than one per statement or per publisher, because a creator holding three names
  * across four months is owed a number, not twelve bank lines. */
 export const runPayouts = async (deps: PayoutDeps): Promise<readonly PayoutOutcome[]> => {
@@ -195,7 +195,7 @@ export const runPayouts = async (deps: PayoutDeps): Promise<readonly PayoutOutco
     return outcomes;
 };
 
-// The scheduled entry point: run, then say what happened. Never throws — a payout run that takes the API down
+// The scheduled entry point: run, then say what happened. Never throws, a payout run that takes the API down
 // with it would be a worse failure than the one it hit.
 export const runPayoutsLogged = async (deps: PayoutDeps, logger: Logger): Promise<void> => {
     const outcomes = await runPayouts(deps);

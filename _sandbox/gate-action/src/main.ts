@@ -1,9 +1,9 @@
-/* The process around action.ts: environment in, appended runner files and an exit code out — the same
+/* The process around action.ts: environment in, appended runner files and an exit code out, the same
  * relationship gate's cli.ts has to gate.ts. Bundled whole to dist/index.mjs and synced to the public action
  * repository, where the runner executes it directly; nothing here may assume node_modules exists.
  *
  * EXIT 2 IS NEVER A VERDICT, here as in the CLI: 0/1 (and blocked's mapping) come from the verdict's own
- * outcome, and 2 means the exchange itself broke — wrong token, no such door, the daily ceiling, a network
+ * outcome, and 2 means the exchange itself broke, wrong token, no such door, the daily ceiling, a network
  * that ate the reply. Both fail the step the same way on GitHub; the code and the message keep the two
  * apart for whoever reads the log, because they need opposite responses from whoever is on call. */
 
@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { clientTimeoutMs, readVerdict, targetOf } from "@intentic/gate";
 import { annotationOf, defaultRequest, outputLines, parseInputs, stepExitOf, summaryOf } from "./action.js";
 
-// A runner file is append-only shared state; absent (running outside a runner) the write is simply skipped —
+// A runner file is append-only shared state; absent (running outside a runner) the write is simply skipped,
 // the log lines below carry the same facts.
 const appendTo = (file: string | undefined, content: string): void => {
     if (file !== undefined && file !== "") {
@@ -29,7 +29,7 @@ function wiring(message: string): never {
 }
 
 // The daemon's own sentence when it has one ({"error": ...}), the raw body when it does not (a proxy or
-// tunnel answered — the raw body is the only clue there is).
+// tunnel answered, the raw body is the only clue there is).
 const detailOf = (text: string): string => {
     try {
         const body = JSON.parse(text) as { error?: unknown };
@@ -45,7 +45,7 @@ if (parsed.kind === "error") {
 }
 const { inputs } = parsed;
 
-// The event payload the runner already wrote to disk — the same JSON a GitHub webhook would have delivered,
+// The event payload the runner already wrote to disk, the same JSON a GitHub webhook would have delivered,
 // which is exactly what an event automation's prompt was written against. Unreadable means no payload.
 const eventText = ((): string => {
     const path = process.env["GITHUB_EVENT_PATH"];
@@ -63,7 +63,7 @@ if (inputs.door === "fire") {
     const body = inputs.request !== "" ? inputs.request : eventText;
     let response: Response;
     try {
-        // The fire route answers immediately — the minute is for the network, not for the agent.
+        // The fire route answers immediately, the minute is for the network, not for the agent.
         response = await fetch(inputs.url, { method: "POST", body, signal: AbortSignal.timeout(60_000) });
     } catch (error) {
         wiring(`the automation could not be reached: ${error instanceof Error ? error.message : String(error)}`);
@@ -114,7 +114,7 @@ if (verdict === undefined) {
 
 appendTo(process.env["GITHUB_OUTPUT"], outputLines(verdict, randomUUID()));
 appendTo(process.env["GITHUB_STEP_SUMMARY"], summaryOf(verdict));
-// The same two lines the CLI prints — the reason IS the product of this whole exchange, and the run id is
+// The same two lines the CLI prints, the reason IS the product of this whole exchange, and the run id is
 // what a person pastes into the sandbox when the one line is not enough.
 console.log(`${verdict.outcome}: ${verdict.reason}`);
 console.log(`run ${verdict.runId}`);

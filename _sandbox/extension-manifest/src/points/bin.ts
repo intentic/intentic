@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ContributionPoint } from "../contribution-point.js";
 
-// A checkout-relative directory of executables the daemon prepends to the AGENT's PATH each turn — how an
+// A checkout-relative directory of executables the daemon prepends to the AGENT's PATH each turn, how an
 // extension ships a command-line tool for the agent (the CLI-tools path). The files ARE the approved code (they
 // ride the sha-pinned checkout); the daemon only adds the dir to PATH.
 export const binPoint = {

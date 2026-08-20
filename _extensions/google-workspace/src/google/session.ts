@@ -9,7 +9,7 @@ import { type AccessToken, mintToken } from "./token.js";
  *
  * `gw` is a fresh process per command and an agent runs a lot of them, so without this every `gw mail search`
  * pays a token round trip before it asks Google anything. The cache is a small file under the workspace's
- * runtime tree — the same place the watcher keeps its resume marks.
+ * runtime tree, the same place the watcher keeps its resume marks.
  *
  * IT IS KEYED BY A FINGERPRINT OF THE CREDENTIAL, not by the connection name. Rotate the refresh token on the
  * card and the old entry simply stops matching, which is the behaviour that needs no invalidation step: a
@@ -51,7 +51,7 @@ const readCache = async (path: string, fingerprint: string, now: number): Promis
         }
         return parsed.expiresAt - SKEW_SECONDS > now ? parsed.token : undefined;
     } catch {
-        // A truncated or hand-edited file reads as "no token" — it must never be able to break a command.
+        // A truncated or hand-edited file reads as "no token", it must never be able to break a command.
         return undefined;
     }
 };
@@ -60,7 +60,7 @@ export interface Session {
     readonly connection: Connection;
     // The bearer token for this hour, minted on first use and reused from the cache after that.
     readonly token: () => Promise<string>;
-    // Drop the cached token and mint a fresh one — what a 401 mid-command means.
+    // Drop the cached token and mint a fresh one, what a 401 mid-command means.
     readonly refresh: () => Promise<string>;
 }
 

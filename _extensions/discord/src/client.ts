@@ -7,7 +7,7 @@ export interface DiscordConnectorConfig {
     readonly voiceLanguage?: string;
 }
 
-// The gateway's discord.js clients — one connection per bot token, shared by the text listener and the voice
+// The gateway's discord.js clients, one connection per bot token, shared by the text listener and the voice
 // session manager, each alive only while at least one consumer needs it. A module singleton map: both consumers
 // reach it directly. discord.js owns resume/backoff for a live session; a failed login clears that token's slot
 // so the next reconcile tick retries.
@@ -36,7 +36,7 @@ export const ensureDiscordClient = (token: string, consumer: Consumer): Promise<
             GatewayIntentBits.GuildVoiceStates,
             GatewayIntentBits.DirectMessages,
         ],
-        // DM channels arrive partial (no cache warm-up event) — without this, DM messageCreate is dropped.
+        // DM channels arrive partial (no cache warm-up event), without this, DM messageCreate is dropped.
         partials: [Partials.Channel],
     });
     const slot: Slot = {
@@ -57,7 +57,7 @@ export const ensureDiscordClient = (token: string, consumer: Consumer): Promise<
     return slot.ready;
 };
 
-// Live gateway state for the status snapshot — a probe over the pool, no event plumbing.
+// Live gateway state for the status snapshot, a probe over the pool, no event plumbing.
 export const discordGatewayState = (token: string): "ready" | "connecting" | "disconnected" => {
     const slot = slots.get(token);
     if (slot === undefined) {

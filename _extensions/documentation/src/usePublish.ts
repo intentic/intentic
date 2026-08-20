@@ -5,20 +5,20 @@ import { host } from "./host.js";
 import { publishedTail, stagingDir, stagingPath } from "./paths.js";
 import { listStagedTails } from "./stagedTree.js";
 
-/* PUBLISH — the staged set becomes part of the repository, in one commit the owner asked for.
+/* PUBLISH, the staged set becomes part of the repository, in one commit the owner asked for.
  *
  * This is the step that makes the whole design work: an agent writes documents where they are cheap to inspect and
  * throw away, and only a human decision moves them into the repo's history. It is deliberately not automatic.
  *
  * The mechanics are the daemon's own intended flow. `POST /git/{repo}/commit` has two shapes and no path-scoped
- * variant — with `all` it stages everything first, without it the index is recorded as it stands — and the routes'
+ * variant, with `all` it stages everything first, without it the index is recorded as it stands, and the routes'
  * own comment says why: "staging is how the user chooses". So publish writes the files, stages exactly its own
  * paths, and commits WITHOUT `all`. `all` would sweep every unrelated edit in the repo into a docs commit, which
- * in a workspace with live agents in it is a real way to lose someone else's work — and more so now that a
+ * in a workspace with live agents in it is a real way to lose someone else's work, and more so now that a
  * published path is a README beside somebody's working tree rather than a quiet corner of `docs/`.
  *
  * A LIMIT WORTH KNOWING, because it is not fixable from here. If something was ALREADY staged in this repo before
- * publishing, it rides along in the commit — a bare commit records the whole index, not just the paths we added.
+ * publishing, it rides along in the commit, a bare commit records the whole index, not just the paths we added.
  * The daemon's status route cannot distinguish that case: `GitStatus.files` carries porcelain lines that
  * `_sandbox/scaffold/src/git.ts` has already `.trim()`ed, and trimming is exactly what destroys the leading column
  * that says "staged". So `preflight()` reports every change that is not one of the paths this publish will
@@ -32,7 +32,7 @@ const gitRepo = (repo: string): string => (repo === `` ? `root` : repo);
 
 export interface Preflight {
     readonly tails: readonly string[];
-    // Changed paths in this repo that are NOT part of the document set — what may ride along. See the header.
+    // Changed paths in this repo that are NOT part of the document set, what may ride along. See the header.
     readonly foreign: readonly string[];
     readonly branch: string;
 }
@@ -104,7 +104,7 @@ export function usePublish() {
             body: JSON.stringify({ path: stagingDir(repo) }),
         });
         void queryClient.invalidateQueries({ queryKey: api.sandbox.key(`documentation`) });
-        // The tree's icons are module state on a slow poll, not a query — invalidation cannot reach them, and a
+        // The tree's icons are module state on a slow poll, not a query, invalidation cannot reach them, and a
         // publish is precisely when a draft icon becomes a published one.
         refreshDocumentPresence();
     };
@@ -116,7 +116,7 @@ export function usePublish() {
             body: JSON.stringify({ path: stagingDir(repo) }),
         });
         void queryClient.invalidateQueries({ queryKey: api.sandbox.key(`documentation`) });
-        // The tree's icons are module state on a slow poll, not a query — invalidation cannot reach them, and a
+        // The tree's icons are module state on a slow poll, not a query, invalidation cannot reach them, and a
         // publish is precisely when a draft icon becomes a published one.
         refreshDocumentPresence();
     };

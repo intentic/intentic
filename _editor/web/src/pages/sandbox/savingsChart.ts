@@ -3,7 +3,7 @@ import { seriesColor } from "@intentic/ui/series";
 import type { InputSavings, TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract";
 import { formatCompact } from "./usageChart";
 
-/* Every number and every mark on the Savings surfaces, as pure functions over the daemon's savings report —
+/* Every number and every mark on the Savings surfaces, as pure functions over the daemon's savings report,
  * the same split as usageChart.ts, and for the same reason: the arithmetic under a "89% saved" claim should be
  * testable without mounting a component.
  *
@@ -30,7 +30,7 @@ export const CLEANER_OPTIONS = [
 
 export const ALL_CLEANER_IDS: readonly string[] = CLEANER_OPTIONS.map((cleaner) => cleaner.id);
 
-// Stages the ledger attributes savings to that have NO switch on the settings page — they are unconditional
+// Stages the ledger attributes savings to that have NO switch on the settings page, they are unconditional
 // parts of the filter. Named rather than folded into "other": a reader comparing the chart to the checklist
 // above it must be able to tell "this mechanism isn't listed" from "this mechanism isn't yours to turn off".
 const FIXED_STAGE_LABELS: Record<string, string> = {
@@ -45,11 +45,11 @@ export const stageLabel = (id: string): string => CLEANER_OPTIONS.find((cleaner)
 // --- the composition bar ------------------------------------------------------------------------------------
 
 // How many mechanisms get their own slot before the tail is folded. Five is the validated categorical palette's
-// width (usageChart.ts PROVIDER_SERIES) — a sixth hue would be one this design system has never checked for
+// width (usageChart.ts PROVIDER_SERIES), a sixth hue would be one this design system has never checked for
 // adjacent-pair contrast.
 const SLOTS = 5;
 
-// The palette's slots, named directly. This used to be a list of PROVIDER names — claude, codex, kimi… — fed
+// The palette's slots, named directly. This used to be a list of PROVIDER names, claude, codex, kimi…, fed
 // through the provider→slot lookup purely to arrive back at slots 1–5, because slot→colour was not reachable
 // on its own. It is now (`seriesColor` is exported), so the detour is gone: nothing here is about providers.
 const SLOTS_BY_RANK = [`1`, `2`, `3`, `4`, `5`] as const satisfies readonly FigureAccent[];
@@ -59,7 +59,7 @@ export interface SavingsSegment {
     readonly label: string;
     readonly tokens: number;
     readonly color: string;
-    // "reached" is what the model was actually handed — not a mechanism, and coloured so it can never be read
+    // "reached" is what the model was actually handed, not a mechanism, and coloured so it can never be read
     // as one. It is the segment the whole chart exists to make visible.
     readonly kind: "saved" | "reached";
 }
@@ -71,7 +71,7 @@ export interface Composition {
     readonly rawTokens: number;
     // Tokens the filter ADDS back as retrieval pointers. Not a segment: it is already inside the emitted total,
     // so stacking it would make the bar sum to more than the raw output it is a decomposition of. Disclosed as
-    // its own line instead — it is the price of the trimming being reversible, and hiding a cost inside a
+    // its own line instead, it is the price of the trimming being reversible, and hiding a cost inside a
     // savings chart is how these screens start lying.
     readonly footerTokens: number;
 }
@@ -101,7 +101,7 @@ export const compositionOf = (input: InputSavings): Composition => {
             kind: `saved`,
         });
     }
-    // What reached the model, as the remainder — which is exactly the emitted total minus the footers the
+    // What reached the model, as the remainder, which is exactly the emitted total minus the footers the
     // filter added back, and keeps the bar summing to the raw output rather than to a number of its own.
     const removed = segments.reduce((sum, segment) => sum + segment.tokens, 0);
     segments.push({
@@ -122,7 +122,7 @@ export const compositionOf = (input: InputSavings): Composition => {
  * readings at once whose whole difference is which of these they count.
  *
  * `searches per turn` and `searches before the first file` are deliberately near-identical phrases. They ARE
- * near-identical quantities — the second is a prefix of the first — and naming them as if they were unrelated
+ * near-identical quantities, the second is a prefix of the first, and naming them as if they were unrelated
  * would invite a reader to treat two readings of one experiment as two findings. */
 const METRIC_UNITS = {
     proseChars: `prose written per turn`,
@@ -131,7 +131,7 @@ const METRIC_UNITS = {
 } satisfies Record<TurnMetricReading["metric"], string>;
 
 // An arm's mean in the metric's own unit. Prose compact (a turn writes thousands of characters), searches to
-// the tenth (a turn runs a handful, and the delta between two arms is a fraction of one) — the same split the
+// the tenth (a turn runs a handful, and the delta between two arms is a fraction of one), the same split the
 // daemon rounds on, in turn-experiments.ts.
 export const meanLabel = (reading: TurnMetricReading, value: number): string =>
     reading.metric === `proseChars` ? `${formatCompact(value)} chars/turn` : `${value} searches/turn`;
@@ -147,7 +147,7 @@ const savedLabel = (reading: TurnMetricReading): string =>
  * without. Same three slots either way.
  *
  * A verdict is a WORD when there is no figure. "Measuring" sitting at the same size, in the same place, as
- * "↓12%" is what lets the savings row be read in one scan — the version this replaces left the headline slot
+ * "↓12%" is what lets the savings row be read in one scan, the version this replaces left the headline slot
  * holding a methodology tag ("terse steer · A/B") and buried the actual state four lines down in 11px prose,
  * so the only way to learn an experiment had no answer yet was to read a paragraph. */
 export interface ExperimentVerdict {
@@ -156,7 +156,7 @@ export interface ExperimentVerdict {
     // Down is the direction that saves work, so a measured saving is the only thing that earns success. An
     // increase is stated, not alarmed about: an experiment reporting the mechanism cost more is working.
     readonly tone: "success" | "content" | "muted";
-    // The qualification the figure is meaningless without — its margin and what it bought, or how far the
+    // The qualification the figure is meaningless without, its margin and what it bought, or how far the
     // shorter arm still has to run. Never optional: a delta without one reads differently tomorrow.
     readonly detail: string;
 }
@@ -176,7 +176,7 @@ export const readingVerdict = (
         return { value: `Measuring`, unit, tone: `muted`, detail: `needs ${minTurns} ${sampleUnit} per arm — ${shortfall} more on the shorter one` };
     }
     /* MEASURED, AND THE ANSWER IS "NOT YET DISTINGUISHABLE FROM NOTHING". A separate verdict from "Measuring"
-     * because it is a different fact — the arms are big enough, the spread is simply wider than the effect —
+     * because it is a different fact, the arms are big enough, the spread is simply wider than the effect,
      * and the reader's next move differs: one waits, the other asks whether the mechanism is worth its keep.
      * The resolution is what it gets instead of a number, since that is the honest content of the reading. */
     if (reading.deltaPct === undefined) {
@@ -188,7 +188,7 @@ export const readingVerdict = (
             reading.controlTurnsNeeded === undefined
                 ? `keep collecting`
                 : `~${formatCompact(reading.controlTurnsNeeded)} more control ${sampleUnit} would settle it`;
-        /* SAME GRAMMAR AS THE MEASURED VERDICT'S DETAIL below — margin first, then the one thing that qualifies
+        /* SAME GRAMMAR AS THE MEASURED VERDICT'S DETAIL below, margin first, then the one thing that qualifies
          * it, joined by a middot. It used to read "anything real is inside ±35.1pp (95%) — ~5.8K more control
          * turns would settle it": a clause, a figure and a second clause in one breath, which is exactly the
          * run-on the settings rows could not lay out. The framing it drops is carried by the headline this
@@ -211,7 +211,7 @@ export const readingVerdict = (
  * rediscover with a `[0]`.
  *
  * `undefined` ⇒ the experiment isn't running at all (its flag off, or no holdout set), which is a verdict like
- * any other and gets the same three slots — so a card cannot end up saying "Off" in a shape the measured
+ * any other and gets the same three slots, so a card cannot end up saying "Off" in a shape the measured
  * states don't share. */
 export const verdictsOf = (experiment: TurnExperiment | undefined): { headline: ExperimentVerdict; also: ExperimentVerdict[] } => {
     if (experiment === undefined) {

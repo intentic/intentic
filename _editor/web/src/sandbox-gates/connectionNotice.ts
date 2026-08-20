@@ -3,15 +3,15 @@ import type { ConnectionFailure } from "../composables/sandbox/connection";
 /* What the connecting gate SAYS, as a pure function of the classified failure.
  *
  * A first connect must never wear the language of a failure, and a failure must never wear the language of a
- * wait — that distinction used to be carried by "is probeError set", which could only ever produce two
+ * wait, that distinction used to be carried by "is probeError set", which could only ever produce two
  * shapes. With the cause tagged, each genuinely different situation gets its own words and its own offered
  * action: a sandbox that never announced itself needs setup, one that stopped answering mid-session needs a
- * reconnect, and an expired Google session needs neither — it needs a token, which the shell can mint. */
+ * reconnect, and an expired Google session needs neither, it needs a token, which the shell can mint. */
 
 export interface ConnectionNotice {
     readonly title: string;
     readonly body: string;
-    // Which affordance to offer, if any. `undefined` means the wait is ordinary and clears itself — showing a
+    // Which affordance to offer, if any. `undefined` means the wait is ordinary and clears itself, showing a
     // button there invites the user to "fix" something that isn't broken.
     readonly action: "setup" | "signin" | undefined;
 }

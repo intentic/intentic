@@ -1,14 +1,14 @@
 // The cloud lane's shared vocabulary. Each provider adapter (hetzner.ts, digitalocean.ts, oracle.ts) is a
-// standalone plain-fetch client — same stance as ../cloudflare.ts: the platform must not grow provider SDK
+// standalone plain-fetch client, same stance as ../cloudflare.ts: the platform must not grow provider SDK
 // dependencies, and the credential lives exactly as long as the request that carried it. index.ts is the
 // provider switch the routes call.
 
-// The pasted credential is wrong — invalid, expired, or missing a scope. The router maps this to BAD_REQUEST
+// The pasted credential is wrong, invalid, expired, or missing a scope. The router maps this to BAD_REQUEST
 // so the wizard tells the user to fix the paste (the CloudflareTokenError contract).
 export class CloudCredentialError extends Error {}
 
 // The provider understood us and said no, for a reason the USER can act on: server limit reached, a machine
-// of that name already exists, no free-tier capacity right now. Also BAD_REQUEST — the message is written for
+// of that name already exists, no free-tier capacity right now. Also BAD_REQUEST, the message is written for
 // the person at the wizard. Anything else (network, unexpected shape) propagates and maps to BAD_GATEWAY.
 export class CloudProviderError extends Error {}
 

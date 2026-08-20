@@ -9,11 +9,11 @@ import { useRefRefresh } from "./useRefRefresh.js";
  *
  * Deliberately a different verb from the Checkpoints timeline the app already has: a checkpoint restores the
  * WORKING TREE, this moves the BRANCH. After a rebase that went wrong the files are often already fine and only
- * the ref is in the wrong place — and restoring a whole worktree snapshot to fix that would drag every unrelated
+ * the ref is in the wrong place, and restoring a whole worktree snapshot to fix that would drag every unrelated
  * edit made since back with it. Which is also why this one is safe to offer prominently: the daemon checkpoints
  * before it resets, so the bigger hammer is still there underneath.
  *
- * Refreshed off the ref push, since the thing it reports IS a ref move — including the agent's, which is the
+ * Refreshed off the ref push, since the thing it reports IS a ref move, including the agent's, which is the
  * case where a stale Undo button would be most dangerous: it would name an action the user never took. */
 
 // What the button says. Git's reflog subject is the honest description but it is also long and shaped for a log
@@ -49,7 +49,7 @@ export function useUndo(repo: Ref<string>) {
      * mean by undo: after a commit you usually want the files kept (soft), after a bad rebase you usually want
      * the tree back too (hard). `changesWorkingTree` on the action is what the UI uses to default it.
      *
-     * `previousSha` goes back as the concurrency token the read handed out — the daemon refuses the undo if the
+     * `previousSha` goes back as the concurrency token the read handed out, the daemon refuses the undo if the
      * repository has moved since, so a button rendered a minute ago cannot land somewhere unlooked-at. */
     const undo = (discardChanges: boolean): Promise<void> =>
         run(async () => {
@@ -64,7 +64,7 @@ export function useUndo(repo: Ref<string>) {
                 queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `branches`, repo.value) }),
             ]);
             if (!result.ok) {
-                // A refusal is a real answer worth showing — most often "the repository moved since this undo was
+                // A refusal is a real answer worth showing, most often "the repository moved since this undo was
                 // prepared", which tells the user their view was stale rather than that something broke.
                 throw new Error(result.reason ?? `Could not undo.`);
             }
@@ -72,7 +72,7 @@ export function useUndo(repo: Ref<string>) {
 
     return {
         action,
-        // "Undo commit", "Undo rebase" — the verb, so the button says what it will do without being hovered.
+        // "Undo commit", "Undo rebase", the verb, so the button says what it will do without being hovered.
         label: computed(() => (action.value === undefined ? undefined : `Undo ${VERBS[action.value.kind]}`)),
         busy,
         actionError,

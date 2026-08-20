@@ -10,18 +10,18 @@ import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspac
  * navigation between areas. Workspace.vue layers the close orchestration (dirty confirm, edit-buffer forget,
  * context menu) on top of these refs. */
 
-// Open items, in tab order — a filesystem file, snapshot diff, or generated workspace surface (see workspaceTabs.ts).
+// Open items, in tab order, a filesystem file, snapshot diff, or generated workspace surface (see workspaceTabs.ts).
 // Clicking opens/focuses its tab; `activeId` is the focused tab's id (a file's path, or a synthetic
 // surface id).
 const tabs = ref<readonly WorkspaceTab[]>([]);
 const activeId = ref<string | null>(null);
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeId.value));
-// The line the viewer should scroll to — set by a content-search match, cleared on any plain open/tab switch.
+// The line the viewer should scroll to, set by a content-search match, cleared on any plain open/tab switch.
 // Every jump is a NEW object (seq++), so the viewer reacts even when the same hit is clicked again.
 const openLine = ref<LineJump | undefined>(undefined);
 let jumpSeq = 0;
 /* The strip's preview slot: the id of the tab that is only being LOOKED at (see OpenMode), or null. At most one
- * exists, the next preview takes its place, and nothing else about it is special — it is an ordinary tab that
+ * exists, the next preview takes its place, and nothing else about it is special, it is an ordinary tab that
  * happens to be transient, so closing, cycling and the context menu all still act on it as they do on any
  * other. It survives a reload with the strip: a peek that came back pinned would be the one tab the user never
  * asked for, growing the strip by one on every session. */
@@ -48,13 +48,13 @@ const restoreTabs = (): void => {
 };
 restoreTabs();
 
-// Re-scope to the incoming sandbox (see sandboxScope) — a path names a file in ONE sandbox's /work, so the
+// Re-scope to the incoming sandbox (see sandboxScope), a path names a file in ONE sandbox's /work, so the
 // outgoing sandbox's tabs would open nothing here. Its own strip takes their place.
 export const resetWorkspaceTabs = (): void => {
     restoreTabs();
 };
 
-// What the strip persists: every tab but a diff, and a focus that survives the cut — one focused on a diff
+// What the strip persists: every tab but a diff, and a focus that survives the cut, one focused on a diff
 // comes back on its last surviving neighbour (the rule closeTabs already uses for a closed tab), while one
 // focused on nothing (a bare /workspace, where mobile browses folders) stays that way. The preview slot only
 // survives when the tab holding it does: a previewed DIFF is not stored at all, so its slot has nothing to name.
@@ -73,7 +73,7 @@ watch(persistedStrip, (json) => {
     }
 });
 
-// Promote the preview tab into an ordinary one — the double-click VSCode uses, on the tab or on the row that
+// Promote the preview tab into an ordinary one, the double-click VSCode uses, on the tab or on the row that
 // opened it. Named by id because the gesture lands on a tab, and only the tab holding the slot gives it up.
 const keepTab = (id: string): void => {
     if (previewId.value === id) {
@@ -83,7 +83,7 @@ const keepTab = (id: string): void => {
 
 /* Typing into a previewed file keeps it, VSCode's third promotion gesture beside the double-click and the menu.
  * It is the one that matters most: a preview tab is replaced by the next file looked at, so without this the
- * user's own edit would be what the next peek closed — and they would have to answer a discard prompt about a
+ * user's own edit would be what the next peek closed, and they would have to answer a discard prompt about a
  * file they never chose to open as more than a glance. */
 const { dirtyPaths, forget } = useEditBuffers();
 watch(dirtyPaths, (dirty) => {
@@ -96,7 +96,7 @@ watch(dirtyPaths, (dirty) => {
 /* Handing the slot to a new tab, called BEFORE the strip is rewritten. The tab in the slot is not closed, it is
  * REPLACED in place (placeTab puts the newcomer at its index), and a replaced file tab has to give up what a
  * closed one gives up: its edit buffer. Left behind, that buffer stands in for the file's real contents the next
- * time it is opened — the editor seeds from the buffer first — so a file peeked at, changed on disk by an agent,
+ * time it is opened, the editor seeds from the buffer first, so a file peeked at, changed on disk by an agent,
  * and peeked at again would come back as the stale text, and saving would write it over the newer file.
  *
  * Never drops unsaved work: an edited preview has already left the slot (the dirty watch above), so the tab
@@ -108,7 +108,7 @@ const releasePreview = (incomingId: string): void => {
     }
 };
 
-/* Opening a file, in whichever of the two modes the GESTURE meant (see OpenMode) — a click in the explorer is a
+/* Opening a file, in whichever of the two modes the GESTURE meant (see OpenMode), a click in the explorer is a
  * peek that takes the preview slot, a double-click, a deep link or a jump from the chat asks to keep.
  *
  * A file that is ALREADY open is only focused: it keeps whatever standing it had, so peeking at a file the user
@@ -140,8 +140,8 @@ const openAtLine = (path: string, line: number, mode: OpenMode = `keep`): void =
  * source's file refreshes its content in place rather than stacking a duplicate tab.
  *
  * Reviewing is the reading gesture the strip could not survive: a click per changed file left a tab per changed
- * file, all of them pinned by a look. So a row click opens in `preview` mode — the previous preview gives up
- * its place to this one — and the deliberate gestures (a double-click, an extension, "open in workspace") ask
+ * file, all of them pinned by a look. So a row click opens in `preview` mode, the previous preview gives up
+ * its place to this one, and the deliberate gestures (a double-click, an extension, "open in workspace") ask
  * to `keep`, which also releases the slot when the tab holding it is the one being kept. */
 const diffTab = (payload: DiffPayload): WorkspaceTab => ({
     kind: `diff`,
@@ -178,11 +178,11 @@ const openDiff = (payload: DiffPayload, mode: OpenMode): void => {
 
 /* The second half of a `pending` open: the content arrived, so put it in the tab that is holding its place.
  *
- * REFRESHES, NEVER OPENS — that distinction is the whole reason this is a separate verb rather than a second
+ * REFRESHES, NEVER OPENS, that distinction is the whole reason this is a separate verb rather than a second
  * openDiff. Reading down a change list outruns the network, and a plain re-open of a late answer would take the
  * preview slot away from whatever the reader has moved on to: click file A, click file B, and A's content lands
  * to find B in the slot it was going to be placed in. So a tab that has since been closed, replaced or scrolled
- * out of the strip takes nothing, and the answer is simply dropped — the cache kept it anyway, so going back to
+ * out of the strip takes nothing, and the answer is simply dropped, the cache kept it anyway, so going back to
  * that file paints instantly rather than re-reading.
  *
  * It touches neither the active tab nor the preview slot for the same reason: filling a tab is not a gesture the
@@ -197,7 +197,7 @@ const fillDiff = (payload: DiffPayload): void => {
 };
 
 // A repository directory opened from the tree renders its management surface (DirectoryOperator) in the main
-// area as a tab — open-or-focus by dir path, so re-selecting the same directory doesn't stack duplicates.
+// area as a tab, open-or-focus by dir path, so re-selecting the same directory doesn't stack duplicates.
 const openDirectory = (dir: string): void => {
     const id = `dir:${dir}`;
     openLine.value = undefined;
@@ -207,7 +207,7 @@ const openDirectory = (dir: string): void => {
     }
 };
 
-// One repo's codebase-health report — its hotspots and key modules. Open-or-focus by repo, like openDirectory:
+// One repo's codebase-health report, its hotspots and key modules. Open-or-focus by repo, like openDirectory:
 // re-opening the same repo's report focuses its tab rather than stacking a duplicate.
 const openHealth = (repo: string): void => {
     const id = `health:${repo}`;
@@ -219,7 +219,7 @@ const openHealth = (repo: string): void => {
 };
 
 /* A directory's document, contributed by an extension (documentRegistry) and opened from the row that offers it.
- * Open-or-focus by provider + path, so re-clicking the same folder's icon focuses the tab it already has — but
+ * Open-or-focus by provider + path, so re-clicking the same folder's icon focuses the tab it already has, but
  * two providers explaining the SAME directory get a tab each, which is why the id carries both.
  *
  * Title and icon are copied onto the tab rather than looked up on render: the strip has to draw a restored tab
@@ -243,7 +243,7 @@ const selectTab = (id: string): void => {
 /* The strip's undo stack. One entry per CLOSE, not per tab: a single × pushes one tab, and a bulk close (Close
  * Others / to the Right / All) pushes its whole set as one entry, so the keystroke undoes the action the user
  * took rather than dribbling tabs back one press at a time. Each tab carries the index it held, and a group
- * re-inserts left to right, so the strip comes back in its old ORDER — restoring at the end would leave the
+ * re-inserts left to right, so the strip comes back in its old ORDER, restoring at the end would leave the
  * user hunting for the tab they just recovered. `focus` is the tab that had the focus when it went away, so an
  * undone close also gives the editor back.
  *
@@ -261,7 +261,7 @@ interface TabClose {
 const closedTabs = ref<readonly TabClose[]>([]);
 
 // Close a set of tabs, remembering them for reopenClosedTab. Returns the paths whose edit buffers the caller
-// should forget — the one part of a close this store has no business doing (see useEditBuffers).
+// should forget, the one part of a close this store has no business doing (see useEditBuffers).
 const closeTabIds = (ids: ReadonlySet<string>): readonly string[] => {
     const { nextTabs, nextActiveId, forgetPaths } = closeTabs(tabs.value, activeId.value, ids);
     const entries = tabs.value.flatMap((tab, index) => (ids.has(tab.id) ? [{ tab, index }] : []));
@@ -281,7 +281,7 @@ const closeTabIds = (ids: ReadonlySet<string>): readonly string[] => {
 
 // Undo the last close: every tab it removed comes back at its old position, focused as it was. A tab that is
 // open again by other means (the user re-clicked the file) is left where it is, and the entry still leaves the
-// stack either way — the keystroke landed.
+// stack either way, the keystroke landed.
 const reopenClosedTab = (): void => {
     const last = closedTabs.value.at(-1);
     if (last === undefined) {
@@ -292,7 +292,7 @@ const reopenClosedTab = (): void => {
     const next = [...tabs.value];
     for (const { tab, index } of last.entries) {
         if (!next.some((open) => open.id === tab.id)) {
-            // The strip may have shrunk since the close, so the remembered index can point past its end — clamp.
+            // The strip may have shrunk since the close, so the remembered index can point past its end, clamp.
             next.splice(Math.min(index, next.length), 0, tab);
         }
     }

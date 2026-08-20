@@ -1,17 +1,17 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { ServiceStreamEventSchema, type ServiceStreamEvent } from "@intentic/sandbox-contract";
 
-/* THE SIGNED FORWARD — one metered call from the platform to a service's upstream, carrying proof of origin.
+/* THE SIGNED FORWARD, one metered call from the platform to a service's upstream, carrying proof of origin.
  *
  * The platform is the intermediary the whole services economy rests on: the provider never learns who the
  * user is, the user never holds a provider credential, and what crosses the boundary is exactly the JSON the
  * caller sent. What the provider gets instead of an API key is a signature: `x-intentic-timestamp` plus
- * `x-intentic-signature = HMAC-SHA256(secret, "{timestamp}.{body}")` — the same scheme Stripe signs webhooks
+ * `x-intentic-signature = HMAC-SHA256(secret, "{timestamp}.{body}")`, the same scheme Stripe signs webhooks
  * with (pool-stripe.ts verifies the mirror image), so a provider verifies with ten lines and a replay dies
  * of old age.
  *
  * WHAT COMES BACK IS A STREAM: a 2xx upstream answer is NDJSON, one event per line in the contract's
- * ServiceStreamEvent vocabulary — `status` lines while the run works, exactly one `result` that ends it.
+ * ServiceStreamEvent vocabulary, `status` lines while the run works, exactly one `result` that ends it.
  * Every line is validated here, at the trust boundary, before it is relayed anywhere: an unparseable line,
  * an unknown event kind, a stream that ends (or blows its size or time budget) before its `result` is a
  * provider that FAILED TO SERVE, which is what refunds. A non-2xx below 500 is still a complete answer the
@@ -24,14 +24,14 @@ import { ServiceStreamEventSchema, type ServiceStreamEvent } from "@intentic/san
 const SIGNATURE_TOLERANCE_S = 300;
 
 // A streaming run's whole budget, connection to `result`. Streams exist so a run can outlive the old one-
-// minute round trip — status lines are what make five otherwise-silent minutes tolerable to watch.
+// minute round trip, status lines are what make five otherwise-silent minutes tolerable to watch.
 const RUN_DEADLINE_MS = 300_000;
 
-// The most a provider may stream in one run, the request cap ×2 — past it the stream is a misbehaving
+// The most a provider may stream in one run, the request cap ×2, past it the stream is a misbehaving
 // provider, and misbehaving refunds.
 const STREAM_CAP_BYTES = 2_000_000;
 
-// A status line is a spinner label, not a log — sliced rather than refused, because truncated prose is not
+// A status line is a spinner label, not a log, sliced rather than refused, because truncated prose is not
 // a protocol violation.
 const STATUS_TEXT_MAX = 400;
 
@@ -56,18 +56,18 @@ export const verifyServiceSignature = (
 };
 
 /* How a forward settled, told apart by what the route must do next:
- *   - `stream`   — the provider is streaming; pull `events` (each already validated) and relay them live.
+ *   - `stream`  , the provider is streaming; pull `events` (each already validated) and relay them live.
  *     The generator's RETURN value is the verdict: true iff a `result` arrived, which is what "served" means
- *     for a stream — anything else (early end, bad line, budget blown) refunds.
- *   - `answered` — a complete non-2xx answer below 500, paid and relayed verbatim.
- *   - `failed`   — no answer at all (5xx, timeout, dead socket): refund. */
+ *     for a stream, anything else (early end, bad line, budget blown) refunds.
+ *   - `answered`, a complete non-2xx answer below 500, paid and relayed verbatim.
+ *   - `failed`  , no answer at all (5xx, timeout, dead socket): refund. */
 export type ForwardOutcome =
     | { readonly kind: `stream`; readonly events: AsyncGenerator<ServiceStreamEvent, boolean> }
     | { readonly kind: `answered`; readonly status: number; readonly body: string; readonly contentType: string }
     | { readonly kind: `failed` };
 
 /* One provider stream, read line by line: validate, slice status prose, stop at `result`. Every way a stream
- * can go wrong funnels into `return false` — the one sentence the route needs ("did not serve"). */
+ * can go wrong funnels into `return false`, the one sentence the route needs ("did not serve"). */
 async function* readEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<ServiceStreamEvent, boolean> {
     const reader = body.getReader();
     const decoder = new TextDecoder();

@@ -2,7 +2,7 @@
  * file ends up inside a bundle that must be self-contained, and the grammar it has to cover is one verb, some
  * positionals and a handful of `--flag value` pairs.
  *
- * REPEATABLE BY DEFAULT — every flag is collected into a list, and the single-value readers take the last one.
+ * REPEATABLE BY DEFAULT, every flag is collected into a list, and the single-value readers take the last one.
  * `--tag colleague --tag math` is a thing the agent will type without being told it can, and a parser that
  * silently kept one of the two would drop half of what it asked for. */
 
@@ -12,7 +12,7 @@ export interface Args {
     readonly flags: ReadonlyMap<string, readonly string[]>;
 }
 
-// Flags that are switches, not values — so `--json read` is not read as `json=read`.
+// Flags that are switches, not values, so `--json read` is not read as `json=read`.
 const SWITCHES = new Set(["json", "help", "all"]);
 
 export const parseArgs = (argv: readonly string[]): Args => {
@@ -41,7 +41,7 @@ export const parseArgs = (argv: readonly string[]): Args => {
         }
         const next = argv[i + 1];
         // A value-taking flag at the end of the line, or followed by another flag, is still a flag that was
-        // meant — record it as set-with-nothing rather than swallowing the next flag as its value.
+        // meant, record it as set-with-nothing rather than swallowing the next flag as its value.
         if (next === undefined || next.startsWith("--")) {
             push(name, "");
             continue;

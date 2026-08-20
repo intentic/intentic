@@ -7,7 +7,7 @@ import { choresRunsQuery } from "./choresQuery";
 import { host } from "./host";
 import { ANY_RUN_PREFIX, conversationIdOf, reportingClause, type RunManifest, type RunResult, runIdAt, runManifestPath } from "./runs";
 
-/* CHORE RUNS — starting them, watching them, and promoting the finished ones into the ledger.
+/* CHORE RUNS, starting them, watching them, and promoting the finished ones into the ledger.
  *
  * A chore run is an ISOLATED fleet agent: `POST /agent` with a conversationId and `isolated: true` is the shape
  * (and the only shape) that registers a fleet entry, which is why this extension owns no session machinery. The
@@ -19,7 +19,7 @@ import { ANY_RUN_PREFIX, conversationIdOf, reportingClause, type RunManifest, ty
  * upgrade your dependencies at all.
  *
  * Permissions are NOT bypassed, also unlike acceptance's. A test that parks on a permission card is a test that
- * never finishes, so that surface trades the prompt away; a chore is different in kind — nobody is waiting on it,
+ * never finishes, so that surface trades the prompt away; a chore is different in kind, nobody is waiting on it,
  * it is allowed to take until tomorrow, and a maintenance sweep that can answer its own permission prompts is
  * exactly the thing an owner would want to have been asked about. */
 
@@ -42,7 +42,7 @@ export function useRuns() {
     // a run's result is a few hundred bytes, the walk is capped at SCAN_RUNS, and needing a second query to know
     // whether a run finished is what makes a history list flicker.
     //
-    // The read itself lives in choresQuery, shared with the host's read-ahead — this is the slowest thing the
+    // The read itself lives in choresQuery, shared with the host's read-ahead, this is the slowest thing the
     // view does (a directory walk, then two files per run), so it is the one most worth already having.
     const runsQuery = useQuery({
         queryKey: runsKey,
@@ -70,7 +70,7 @@ export function useRuns() {
         }),
     );
 
-    // The newest run per repo + chore — what a chore row shows as "last run", and the only one of a chore's runs
+    // The newest run per repo + chore, what a chore row shows as "last run", and the only one of a chore's runs
     // that is ever the current answer.
     const latestByChore = computed(() => {
         const latest = new Map<string, ChoreRun>();
@@ -83,10 +83,10 @@ export function useRuns() {
         return latest;
     });
 
-    /* PROMOTION — a finished run becomes a ledger row. Runs on every settle of the runs query, and is idempotent:
+    /* PROMOTION, a finished run becomes a ledger row. Runs on every settle of the runs query, and is idempotent:
      * a run whose ledger row already carries its id is skipped, so re-running this costs one comparison per run.
      *
-     * The alternative — having the agent post the ledger row itself — would mean handing a turn a daemon token
+     * The alternative, having the agent post the ledger row itself, would mean handing a turn a daemon token
      * and a client it needs for nothing else. This way the agent writes one JSON file, which is a thing every
      * agent can already do, and a browser that was closed when the turn finished picks the run up the next time
      * it opens. Nothing is lost by not being watched.
@@ -120,7 +120,7 @@ export function useRuns() {
     /* Start a chore: write the manifest FIRST, then the turn.
      *
      * Order matters, and it is the same reason acceptance writes its manifest first. The manifest is what makes a
-     * run discoverable — if the turn started before it existed and the browser closed in between, there would be
+     * run discoverable, if the turn started before it existed and the browser closed in between, there would be
      * a fleet agent with a derived id and nothing on disk saying which chore it belonged to. A manifest with no
      * turn behind it is the recoverable failure; the reverse is not. */
     const start = async (verdict: ChoreVerdict, pick?: AgentRunChoice | undefined): Promise<string> => {
@@ -149,7 +149,7 @@ export function useRuns() {
                     conversationId: manifest.conversationId,
                     isolated: true,
                     /* A chore is started by a row rather than by a person at a composer, so the daemon answers
-                     * with the owner's `agentRunModels` (Sandbox ▸ Agent ▸ Models) — unless they used the caret
+                     * with the owner's `agentRunModels` (Sandbox ▸ Agent ▸ Models), unless they used the caret
                      * on that row's button, in which case the pair rides on here and the daemon's fill step
                      * leaves it alone. The flag stays either way: it is what the turn IS. */
                     unattended: true,

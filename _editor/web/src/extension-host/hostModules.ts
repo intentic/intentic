@@ -7,7 +7,7 @@ import * as vue from "vue";
 
 /* Publishes the app's OWN module instances for extension bundles. Bundles are built with these packages as
  * externals; the import map in index.html resolves the bare specifiers (blob-URL modules included) to the
- * static shims in public/ext-shims/, which re-export from this global — so a bundle's `import { ref } from
+ * static shims in public/ext-shims/, which re-export from this global, so a bundle's `import { ref } from
  * "vue"` lands on the same vue instance the shell runs on, extension-ui renders the shell's own themed
  * components, and vue-query joins the app's ONE QueryClient (shared cache + invalidation). Two copies of any
  * of these would silently fork reactivity/caching, which is why the shims never bundle their own. Imported for
@@ -29,7 +29,7 @@ globalThis.__intenticHost = {
     },
 };
 
-// names.mjs is the shim generator's source of export names (it cannot import the kit's .vue graph in node) —
+// names.mjs is the shim generator's source of export names (it cannot import the kit's .vue graph in node),
 // catch drift between the list and the real module the moment the app boots in dev.
 if (import.meta.env.DEV) {
     const actual = new Set(Object.keys(extensionUi));

@@ -16,7 +16,7 @@ import { type FormValues, secretFields } from "./form";
 const keyOf = (entry: CapabilityCatalogEntry, fieldKey: string): string => `capability.${entry.id}.${fieldKey}`;
 
 /* The remembered answers, as a patch over a freshly seeded form. A remembered value the daemon would NOW reject
- * is skipped — it was saved before the check existed, and silently re-offering it turns a convenience into a
+ * is skipped, it was saved before the check existed, and silently re-offering it turns a convenience into a
  * confusing 400 on submit. */
 export const rememberedSecrets = (entry: CapabilityCatalogEntry): FormValues => {
     const values: FormValues = {};

@@ -5,12 +5,12 @@ import { PUBLIC } from "../queryKeys";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
-/* THE WORKSPACE OUTBOX, read from the app rather than from the preview extension — the Preview area lists the
+/* THE WORKSPACE OUTBOX, read from the app rather than from the preview extension, the Preview area lists the
  * served page as its "Public site" target, so the app needs its own read of what is actually published.
  *
  * IT REGISTERS UNDER THE EXTENSION'S OWN KEY (see PUBLIC in queryKeys). The preview extension's manifest binds
  * `public/` to the name `public`, so the daemon's file watcher already pushes staleness for this exact key on
- * every write into the directory — this read inherits that for free, and the two surfaces can never disagree
+ * every write into the directory, this read inherits that for free, and the two surfaces can never disagree
  * about what is published.
  *
  * `live` IS A CLOCK, AND IT IS THE ONE EXCEPTION. That push is unioned from the ACTIVATED extensions, so on a
@@ -35,7 +35,7 @@ export function usePublicOutbox(live: MaybeRefOrGetter<boolean> = false) {
     return {
         files: computed(() => query.data.value?.files ?? []),
         /* The outbox's own address. Absent on a sandbox with no tunnel, which is the honest signal that nothing
-         * here can be published at all — a screen promising a public link on such a box would be lying. */
+         * here can be published at all, a screen promising a public link on such a box would be lying. */
         url: computed(() => query.data.value?.url),
         settled: computed(() => query.isFetched.value || query.isError.value),
         error,

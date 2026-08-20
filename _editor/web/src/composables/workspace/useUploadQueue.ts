@@ -10,13 +10,13 @@ import { WORKSPACE_TREE } from "../queryKeys";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
 
 // The workspace upload queue: drops (and file-input picks) funnel through here instead of a one-shot spinner, so a
-// second drop while an upload runs just APPENDS to the queue rather than clobbering shared state (the old bug) —
+// second drop while an upload runs just APPENDS to the queue rather than clobbering shared state (the old bug),
 // and every file gets a live per-file status the panel renders. Module-level so the drop targets, the button, and
 // the progress panel all share one queue.
 //
-// Transport: per file, a bounded-concurrency pool of XHR POSTs with a plain File body (see sandboxUpload) — this
+// Transport: per file, a bounded-concurrency pool of XHR POSTs with a plain File body (see sandboxUpload), this
 // streams from disk yet works on HTTP/1.1 AND HTTP/2, and gives real byte progress. As an OPTIMIZATION, a large
-// tree (> TAR_THRESHOLD files) streams as ONE tar to /workspace/upload-archive — but that uses a fetch streaming
+// tree (> TAR_THRESHOLD files) streams as ONE tar to /workspace/upload-archive, but that uses a fetch streaming
 // request body, which the browser only allows over HTTP/2. So the tar is attempted while `canStreamRequestBody`
 // holds; the first time it fails before sending a byte (HTTP/1.1), we flip the flag off and fall back to the XHR
 // pool for that batch and every later one. Nothing is ever buffered, so a multi-GB file or tree stays flat in memory.
@@ -34,7 +34,7 @@ const TAR_THRESHOLD = 20;
 const POOL_SIZE = 5;
 
 // Reliability knobs for large drops. A drop uploads as bounded CHUNKS (chunkItems), each its own request with its
-// own stall watchdog and retry, so one hung file or stalled hop can't freeze (or fail) the whole tree — only its
+// own stall watchdog and retry, so one hung file or stalled hop can't freeze (or fail) the whole tree, only its
 // chunk. The size caps live in uploadChunking.ts (pure, unit-checked).
 const RETRY_ATTEMPTS = 4;
 const RETRY_BASE_MS = 1000;
@@ -61,7 +61,7 @@ const scanningName = ref("");
 let activeScans = 0;
 
 // A drop that produced no files (only symlinks/special items Chrome can't read, or an empty folder). Surfaced so
-// the panel says "Nothing to upload — skipped N item(s)" instead of a frozen spinner or dead silence.
+// the panel says "Nothing to upload, skipped N item(s)" instead of a frozen spinner or dead silence.
 const skippedNotice = ref<number | undefined>(undefined);
 
 // Files a re-drop skipped because they were already identical on the sandbox (same size + mtime, per upload-diff).
@@ -72,15 +72,15 @@ const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${di
 
 // ---- dependency install (see @intentic/workspace-setup) ----
 // A drop omits node_modules/.venv on purpose, so what lands is a project that can't build, test or type-check
-// yet. Rather than leave that for the user to hit later — or spring a dialog before the upload they already
-// asked for — the manager is detected from the dropped FILE NAMES at scan time, and the offer rides the
+// yet. Rather than leave that for the user to hit later, or spring a dialog before the upload they already
+// asked for, the manager is detected from the dropped FILE NAMES at scan time, and the offer rides the
 // progress panel for the whole upload. By the time it could run, the user has had the entire upload to
 // uncheck it. Dirs here are workspace-root-relative (targetDir already joined in), ready to POST.
 const setupProjects = ref<readonly ProjectSetup[]>([]);
 
 const INSTALL_PREF_KEY = `intentic.install-on-import`;
 // Sticky default rather than a second "always" control: a 320px panel can't afford two checkboxes, and the last
-// choice is a better predictor than any fixed default. Starts ON — dragging a project in almost always means
+// choice is a better predictor than any fixed default. Starts ON, dragging a project in almost always means
 // "I want to work on this", and a wrong yes costs a cancellable install in a visible terminal, where a wrong no
 // costs a workspace that silently lies to both the user and the agent.
 const readInstallPreference = (): boolean => {
@@ -96,7 +96,7 @@ const setInstallAfterUpload = (enabled: boolean): void => {
     try {
         localStorage.setItem(INSTALL_PREF_KEY, enabled ? `always` : `never`);
     } catch {
-        // Storage unavailable (private mode) — the choice still holds for this session.
+        // Storage unavailable (private mode), the choice still holds for this session.
     }
 };
 
@@ -107,7 +107,7 @@ const installQueued = ref<readonly string[]>([]);
 const installError = ref<string | undefined>(undefined);
 const installSettled = ref(false);
 
-// Read each detected project's package.json for its `packageManager` declaration — the corepack field beats any
+// Read each detected project's package.json for its `packageManager` declaration, the corepack field beats any
 // lockfile, and we have the File in hand, so the guess costs one small read per project. A missing or unreadable
 // manifest just leaves the lockfile answer standing.
 const detectSetup = async (targetDir: string, entries: readonly DroppedFile[]): Promise<readonly ProjectSetup[]> => {
@@ -130,7 +130,7 @@ const detectSetup = async (targetDir: string, entries: readonly DroppedFile[]): 
     return detectProjects(paths, fields).map((project) => ({ dir: joinPath(targetDir, project.dir), recipe: project.recipe }));
 };
 
-// Kick off the install once the bytes are down. Never blocks or fails the upload — a workspace that uploaded
+// Kick off the install once the bytes are down. Never blocks or fails the upload, a workspace that uploaded
 // fine but couldn't start its install is still a successful import, so the error is reported, not thrown.
 const runInstall = async (): Promise<void> => {
     const projects = setupProjects.value;
@@ -156,14 +156,14 @@ const pending: QueueFile[][] = [];
 let running = false;
 let queryClient: ReturnType<typeof useQueryClient> | undefined;
 
-// One AbortController per upload session — its signal is threaded into the scan walk, the per-file XHRs, and the
+// One AbortController per upload session, its signal is threaded into the scan walk, the per-file XHRs, and the
 // tar fetch. Aborting it (via resetUploadQueue, which cancel + dismiss both call) stops everything in flight; a
 // still-unwinding run() keeps its OWN captured signal, so replacing the controller here can't corrupt it.
 let controller = new AbortController();
 
 // Clear the queue AND abort anything in flight (the scan, the XHR pool, the tar request), then mint a fresh
 // controller for the next drop. Serves three roles: fresh-start reset, the panel's dismiss, and cancel. Does NOT
-// touch `running`/`activeScans` — the in-flight run()/scan own those and settle themselves once their (now aborted)
+// touch `running`/`activeScans`, the in-flight run()/scan own those and settle themselves once their (now aborted)
 // signal is observed.
 export const resetUploadQueue = (): void => {
     controller.abort();
@@ -197,7 +197,7 @@ const recomputeBytesDone = (): void => {
 };
 
 // Ask the daemon which of these dropped files are already identical on the sandbox (same size + mtime) so we can
-// SKIP re-uploading them — a re-drop then sends only what changed. Returns the entries that still need uploading.
+// SKIP re-uploading them, a re-drop then sends only what changed. Returns the entries that still need uploading.
 // On ANY error, returns them ALL: the dedup is an optimization and must never block or silently drop an upload.
 const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[]): Promise<readonly DroppedFile[]> => {
     try {
@@ -231,7 +231,7 @@ const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
         );
     });
 
-// Upload one file via XHR with a plain File body — works on HTTP/1.1 and HTTP/2, streams from disk, real progress.
+// Upload one file via XHR with a plain File body, works on HTTP/1.1 and HTTP/2, streams from disk, real progress.
 // onProgress reports the file's CUMULATIVE bytes, so we add only the delta since the last event to the aggregate.
 const uploadOneXhr = (item: QueueFile, signal: AbortSignal): Promise<void> => {
     let last = 0;
@@ -244,7 +244,7 @@ const uploadOneXhr = (item: QueueFile, signal: AbortSignal): Promise<void> => {
     });
 };
 
-// Bounded-concurrency per-file upload — POOL_SIZE files in flight at once. A failed file is recorded and skipped;
+// Bounded-concurrency per-file upload. POOL_SIZE files in flight at once. A failed file is recorded and skipped;
 // the rest of the batch still uploads. On cancel (signal aborted) the workers stop pulling and DON'T mark the
 // aborted in-flight file as failed.
 const uploadParallel = async (items: readonly QueueFile[], signal: AbortSignal): Promise<void> => {
@@ -275,14 +275,14 @@ const uploadParallel = async (items: readonly QueueFile[], signal: AbortSignal):
     await Promise.all(Array.from({ length: Math.min(POOL_SIZE, items.length) }, worker));
 };
 
-// Stream one bounded chunk as a tar (fetch streaming body — HTTP/2 only). packTar walks items IN ORDER, so
+// Stream one bounded chunk as a tar (fetch streaming body. HTTP/2 only). packTar walks items IN ORDER, so
 // onFileStart's call count indexes the chunk for the live "currently landing" line. Returns:
-//   "done"     — the chunk landed; every item marked done.
-//   "fallback" — the browser refused a streaming body (HTTP/1.1, no h2): the caller uses the per-file XHR pool.
-//   "failed"   — a stall (watchdog aborted) or a genuine mid-stream/daemon error: the caller retries the chunk.
+//   "done"    , the chunk landed; every item marked done.
+//   "fallback", the browser refused a streaming body (HTTP/1.1, no h2): the caller uses the per-file XHR pool.
+//   "failed"  , a stall (watchdog aborted) or a genuine mid-stream/daemon error: the caller retries the chunk.
 // A private AbortController links the run's signal AND a stall watchdog: no byte progress for TAR_STALL_MS aborts
 // the request, so a hung read or stalled hop retries instead of freezing the whole drop. Status is only ever set
-// to "uploading" until the request fully succeeds — a failed attempt never leaves a file falsely marked landed.
+// to "uploading" until the request fully succeeds, a failed attempt never leaves a file falsely marked landed.
 const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): Promise<"done" | "fallback" | "failed"> => {
     const control = new AbortController();
     const onOuterAbort = (): void => control.abort();
@@ -336,7 +336,7 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
             return `fallback`;
         }
         // A stall-abort or a genuine mid-stream/daemon error. Record the reason for the retry wrapper's give-up
-        // message but don't mark done or failed — a retry re-sends the whole chunk.
+        // message but don't mark done or failed, a retry re-sends the whole chunk.
         for (const item of items) {
             if (item.status !== `done`) {
                 item.error = errorMessage(error, `Upload failed.`);
@@ -352,7 +352,7 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
 // Upload one bounded chunk with retry + exponential backoff. Each attempt re-sends the whole chunk (idempotent
 // writes; already-landed files are skipped by the pool and re-sent harmlessly by the tar). A stall or transient
 // failure retries; a real user cancel bails immediately; after RETRY_ATTEMPTS the still-unlanded files are failed
-// — so a persistently-bad chunk costs only its own files, and the rest of the drop still completes.
+//, so a persistently-bad chunk costs only its own files, and the rest of the drop still completes.
 const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Promise<void> => {
     for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
         if (signal.aborted) {
@@ -380,7 +380,7 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
             if (result === `failed`) {
                 continue;
             }
-            // "fallback": HTTP/1.1 — fall through to the per-file pool (this chunk, and later ones via the flag).
+            // "fallback": HTTP/1.1, fall through to the per-file pool (this chunk, and later ones via the flag).
         }
         await uploadParallel(chunk, signal);
         if (signal.aborted || chunk.every((item) => item.status === `done`)) {
@@ -414,7 +414,7 @@ const run = async (): Promise<void> => {
                 break;
             }
             const batch = pending.shift() as QueueFile[];
-            // Upload in bounded chunks, each retried independently, so a stall or reset costs one chunk — not the
+            // Upload in bounded chunks, each retried independently, so a stall or reset costs one chunk, not the
             // whole drop. Within a chunk uploadChunk picks the transport (tar over h2, else the per-file XHR pool).
             for (const chunk of chunkItems(batch)) {
                 if (signal.aborted) {
@@ -450,7 +450,7 @@ export function useUploadQueue() {
         // Dropped before anything else, so the root's own .git never reaches project detection or the diff manifest.
         const entries = dropped.filter((entry) => !isRootGitPath(joinPath(targetDir, entry.path)));
         if (entries.length === 0) {
-            // Dropping a bare `.git` on the root leaves nothing to send. Say so — the scan already narrated a file
+            // Dropping a bare `.git` on the root leaves nothing to send. Say so, the scan already narrated a file
             // count, and going quiet after it reads as a hang. A drop that kept something ignores what it left.
             if (dropped.length > 0 && !running && pending.length === 0) {
                 skippedNotice.value = dropped.length;
@@ -469,7 +469,7 @@ export function useUploadQueue() {
         const known = new Set(setupProjects.value.map((project) => project.dir));
         setupProjects.value = [...setupProjects.value, ...detected.filter((project) => !known.has(project.dir))];
         // Skip files already identical on the sandbox (size + mtime) so a re-upload only sends what changed. Capture
-        // the signal first — a cancel during the round-trip must abort the enqueue.
+        // the signal first, a cancel during the round-trip must abort the enqueue.
         const signal = controller.signal;
         const unchanged = await filterUnchanged(targetDir, entries);
         if (signal.aborted) {
@@ -480,14 +480,14 @@ export function useUploadQueue() {
         // does less than the file count.
         const surviving = dedupeByPath(unchanged, (entry) => entry.path);
         // A dropped repo deliberately keeps its .git (dropEntries), and the daemon calls a directory a repo the
-        // moment .git merely EXISTS — so if refs/objects land before the work tree they describe, every Changes
+        // moment .git merely EXISTS, so if refs/objects land before the work tree they describe, every Changes
         // poll runs `git status` against a half-written repo ("fatal: bad object HEAD"). The queue uploads in array
         // order, so sinking every .git entry to the back makes the repo discoverable only once its work tree is
         // already on disk. sort is stable, so everything else keeps the order dedupeByPath produced.
         surviving.sort((left, right) => (isGitEntry(left.path) ? 1 : 0) - (isGitEntry(right.path) ? 1 : 0));
         skippedUnchanged.value += entries.length - surviving.length;
         if (surviving.length === 0) {
-            // The whole drop is already up to date — surface it (via skippedUnchanged) instead of a silent no-op.
+            // The whole drop is already up to date, surface it (via skippedUnchanged) instead of a silent no-op.
             if (!running && pending.length === 0) {
                 finished.value = true;
                 // Still offer the install: re-dropping a project that's already on the sandbox is exactly what
@@ -497,7 +497,7 @@ export function useUploadQueue() {
             }
             return;
         }
-        // markRaw the File so Vue doesn't proxy it — calling .stream() on a reactive proxy of a File throws.
+        // markRaw the File so Vue doesn't proxy it, calling .stream() on a reactive proxy of a File throws.
         const items = surviving.map((entry): QueueFile =>
             reactive({ path: joinPath(targetDir, entry.path), size: entry.file.size, status: `queued`, file: markRaw(entry.file) }),
         );
@@ -534,7 +534,7 @@ export function useUploadQueue() {
                 }
                 void enqueue(targetDir, result.files);
                 // Nothing to upload: tell the user (symlink/special items skipped, or an empty folder) rather than
-                // leaving the panel silent. A drop that DID yield files ignores stray skips — the upload speaks.
+                // leaving the panel silent. A drop that DID yield files ignores stray skips, the upload speaks.
                 if (result.files.length === 0) {
                     skippedNotice.value = result.skipped;
                 }

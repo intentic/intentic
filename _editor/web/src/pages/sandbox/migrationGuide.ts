@@ -1,20 +1,20 @@
 import type { MigrationSource } from "@intentic-app/api-contract";
 
-/* WHAT TO TELL SOMEONE WHOSE SETUP IS ON ANOTHER COMPUTER — the instructions the migration card renders, as
+/* WHAT TO TELL SOMEONE WHOSE SETUP IS ON ANOTHER COMPUTER, the instructions the migration card renders, as
  * data, so the copy is testable and the card stays about layout.
  *
  * The first version of this was one grey caption holding both tools' archive commands. It assumed six things
  * at once: that you know which command is yours, that you have a shell, that the shell is on the machine your
  * browser is on, that your setup sits at the default path, that you know where the file will land, and that
- * you know the file will hold your keys. Every wrong assumption failed LATE — after packing, copying and
- * uploading — which on a server is minutes per attempt.
+ * you know the file will hold your keys. Every wrong assumption failed LATE, after packing, copying and
+ * uploading, which on a server is minutes per attempt.
  *
  * So: one tool at a time, one command, its output location named, and the three ways this actually goes wrong
  * (a server, a container, a folder that has moved) each answered in place instead of left to be discovered.
  *
  * The OpenClaw path deliberately uses the tool's OWN backup command rather than teaching an archive: it cannot
  * get the paths wrong, it works even when the config is malformed, and it is one line the user can check
- * against their own documentation. Hermes ships no equivalent, so that one is the archive command — with the
+ * against their own documentation. Hermes ships no equivalent, so that one is the archive command, with the
  * `&&` that stops a failed pack from printing a "Ready" line the reader would believe. */
 
 export interface SourceGuide {
@@ -24,7 +24,7 @@ export interface SourceGuide {
     readonly command: string;
     // What happens after the command, in the words the reader will see on their own screen.
     readonly lands: string;
-    // Shown behind "the command isn't available" — the way that always works.
+    // Shown behind "the command isn't available", the way that always works.
     readonly fallbackCommand?: string;
     readonly fallbackNote?: string;
 }

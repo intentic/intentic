@@ -11,7 +11,7 @@ export default defineConfig({
     ...shared,
     server: {
         host: "localhost",
-        // Must stay 47145 — the API's CORS + Better Auth trust WEB_ORIGIN=https://localhost:47145, and the
+        // Must stay 47145, the API's CORS + Better Auth trust WEB_ORIGIN=https://localhost:47145, and the
         // Google client authorizes this exact origin.
         port: 47145,
         strictPort: true,
@@ -30,7 +30,7 @@ export default defineConfig({
         target: "es2024",
         rolldownOptions: {
             // Two HTML entries: the app, and the page a popped-out panel is teleported into (see
-            // src/composables/usePopout.ts) — its own document so a pop-out window carries a real URL and icon
+            // src/composables/usePopout.ts), its own document so a pop-out window carries a real URL and icon
             // instead of about:blank.
             input: { index: here("./index.html"), popout: here("./popout.html") },
         },

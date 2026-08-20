@@ -7,13 +7,13 @@ import { parseManifest, parseResult, resultPath, type RunManifest, type RunResul
  * same cache entry.
  *
  * Three things want the chore report, and they used to be three separate reads of the same route: the panel
- * (through its own useQuery), the rail badge (on a ten-minute timer, keeping the answer to itself), and — now —
+ * (through its own useQuery), the rail badge (on a ten-minute timer, keeping the answer to itself), and, now,
  * the host's background loader reading ahead of a click. The badge's poll being private was the expensive one:
  * it fetched exactly what the panel renders, six times an hour, and the panel still started from nothing every
  * time it was opened. Filed under one key, that poll IS the panel's first paint.
  *
  * The runs list is the slower of the two and the reason warming this view is worth anything. It walks the run
- * directory and then reads TWO files per run, so it is the read most likely to be the visible wait — and it is
+ * directory and then reads TWO files per run, so it is the read most likely to be the visible wait, and it is
  * pure history, which is exactly the kind of answer that is worth having before it is asked for. */
 
 const reportFn = async (): Promise<ChoresReport> => ChoresReportSchema.parse(await host().sandbox.json(`/chores`));
@@ -36,7 +36,7 @@ const runsFn = async (): Promise<StoredRun[]> => {
     }
     const dirs = WorkspaceChildrenSchema.parse(listing)
         .entries.filter((entry) => entry.type === `dir`)
-        // Run ids sort by their base-36 timestamp, so newest-first is a reverse lexical sort — no manifest
+        // Run ids sort by their base-36 timestamp, so newest-first is a reverse lexical sort, no manifest
         // read needed to decide which SCAN_RUNS to read at all.
         .toSorted((left, right) => right.path.localeCompare(left.path))
         .slice(0, SCAN_RUNS);

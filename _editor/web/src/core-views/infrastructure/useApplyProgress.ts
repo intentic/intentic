@@ -11,7 +11,7 @@ import { describeProvisionError } from "./provisionError";
 /* The apply half of the infra flow: kicks off the durable apply → adopt tmux job, then surfaces structured live
  * progress by tailing the daemon's /intentic/apply/events stream (per-resource create → ready, readiness URLs,
  * convergence). Completion is EVIDENCE-based: the event log's terminal exit ({command:"adopt"}, or a failed
- * apply's) ends the run; the terminal-list poll is only the fallback for a SIGKILLed job that wrote no exit —
+ * apply's) ends the run; the terminal-list poll is only the fallback for a SIGKILLed job that wrote no exit,
  * and needs two consecutive "gone" reads, so a partial terminal list can't fake completion. The tail replays
  * from the run's start (refresh rebuilds the full view), a stall watchdog catches a dead stream (the daemon
  * heartbeats every second), and a dropped stream visibly auto-reattaches instead of silently freezing.
@@ -26,15 +26,15 @@ export function useApplyProgress() {
     const { openFocused } = useTerminalPanel();
 
     const state = ref<ApplyProgressState>(initialApplyState());
-    // "the apply → adopt job is running" — flipped off by the event log's terminal exit (primary) or the
+    // "the apply → adopt job is running", flipped off by the event log's terminal exit (primary) or the
     // terminal poll's SIGKILL fallback.
     const applying = ref(false);
     // Failure to even start the job (the POST), kept apart from the stream-reported error the reducer records.
     const startError = ref<string | undefined>(undefined);
-    // The events stream dropped and is being re-opened — progress may lag; visible, never silent.
+    // The events stream dropped and is being re-opened, progress may lag; visible, never silent.
     const reattaching = ref(false);
     let applyPoll: ReturnType<typeof setInterval> | undefined;
-    // Consecutive polls that saw no running session — two in a row declare the job dead (fallback path).
+    // Consecutive polls that saw no running session, two in a row declare the job dead (fallback path).
     let missStreak = 0;
     // Invalidates stale attach loops after the run they belonged to ended.
     let attachGeneration = 0;
@@ -94,7 +94,7 @@ export function useApplyProgress() {
     };
 
     // Tail the durable apply events into the reduced state, replaying from the run's {kind:"start"}. The
-    // terminal exit ends the run (evidence-based completion); a dropped/stalled stream visibly reattaches —
+    // terminal exit ends the run (evidence-based completion); a dropped/stalled stream visibly reattaches,
     // safe, because the log is durable and the reducer resets on the replayed start marker.
     const attach = async (): Promise<void> => {
         const generation = attachGeneration;
@@ -124,9 +124,9 @@ export function useApplyProgress() {
                 }
             }
             // Clean stream end without a terminal exit: the daemon closed on its !running() fallback (the job
-            // was SIGKILLed). Let the poll confirm and finish — nothing more will be written.
+            // was SIGKILLed). Let the poll confirm and finish, nothing more will be written.
         } catch {
-            // Stream dropped or stalled: reattach while the run is still live — visibly, never silently.
+            // Stream dropped or stalled: reattach while the run is still live, visibly, never silently.
             if (generation === attachGeneration && applying.value) {
                 reattaching.value = true;
                 setTimeout(() => {

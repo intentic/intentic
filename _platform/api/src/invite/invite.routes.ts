@@ -16,17 +16,17 @@ const listInvites = async (context: OrpcContext, sandboxId: string) => {
     return { members: members.map((member) => toInviteRecord(member, now)) };
 };
 
-/* THE MAIL IS A COURIER, NOT THE GRANT — which is the whole shape of `create`/`resend` below.
+/* THE MAIL IS A COURIER, NOT THE GRANT, which is the whole shape of `create`/`resend` below.
  *
  * By the time this runs the invitee is already granted: the owner's browser pushed them to the daemon (the
  * enforcer) and the row here is written. So a send that fails is one delivery attempt failing, and letting it
- * throw made the request a 500 — which the browser could only report as the invite not happening at all, over a
+ * throw made the request a 500, which the browser could only report as the invite not happening at all, over a
  * roster that already showed the person pending. The owner's own account of it was "it says the sandbox is
  * offline", about a sandbox that had just answered.
  *
  * So every outcome comes back as data, with the link itself, and the caller says the true thing: invited, and
  * here is how the link travelled. `refused` is the send that was attempted and rejected (a bad key, a quota, a
- * domain that isn't verified) — logged as an incident here, because it is one, AND carried back as `reason`:
+ * domain that isn't verified), logged as an incident here, because it is one, AND carried back as `reason`:
  * the route is owner-only, the platform is the owner's own, and every one of those causes is fixed by the
  * person reading the card. Leaving it in the server log is what made this undiagnosable from the product. */
 const REASON_LIMIT = 300;
@@ -48,7 +48,7 @@ const deliverInvite = async (
 
 export const inviteRoutes = {
     // The owner's access roster for an owned sandbox: every invited email plus its derived state. The daemon's
-    // own authorized list is pushed separately by the owner's browser — the server can't call the daemon.
+    // own authorized list is pushed separately by the owner's browser, the server can't call the daemon.
     list: os.invite.list.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         return listInvites(context, sandbox.id);
@@ -95,7 +95,7 @@ export const inviteRoutes = {
         return { ...(await listInvites(context, sandbox.id)), ...delivered };
     }),
     // Re-grade an existing invitee (pending or accepted) to a different role. The owner's browser separately
-    // pushes the same grant to the daemon — whose list is the enforced one, applied on the member's next
+    // pushes the same grant to the daemon, whose list is the enforced one, applied on the member's next
     // request. Mirror-only here, like every other grant write.
     setRole: os.invite.setRole.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);

@@ -8,7 +8,7 @@ import { OkSchema, ShareCreateSchema, ShareListSchema, ShareRemoveSchema, ShareU
  * share takes a CONVERSATION ID and renders something that did not exist as a file until it was asked for.
  * Folding them together would have `publish` accept two unrelated kinds of input distinguished by a flag.
  *
- * There is no route to read a share back. The page is the read — it answers on the unauthenticated
+ * There is no route to read a share back. The page is the read, it answers on the unauthenticated
  * `public-<slot>` hostname like every other published file, which is the point of having made one. */
 export const shareContract = {
     list: oc.route({ method: "GET", path: "/share" }).output(ShareListSchema),

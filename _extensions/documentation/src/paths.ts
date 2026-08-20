@@ -1,5 +1,5 @@
 import { STATE_DIR } from "@intentic/sandbox-contract";
-/* WHERE THE DOCUMENTS LIVE — two trees, and the reason there are two.
+/* WHERE THE DOCUMENTS LIVE, two trees, and the reason there are two.
  *
  * PUBLISHED: a package's page is its own `README.md`, beside its code; only the repo-level map lives apart, at
  * `<repo>/docs/architecture/`. In the repo, in git, landed and reviewed like code, and present for anyone who
@@ -8,22 +8,22 @@ import { STATE_DIR } from "@intentic/sandbox-contract";
  * way an acceptance run's reports do: a run is point-in-time evidence, a document is a maintained artifact.
  *
  * Putting the package page IN the package is the strongest form of the same argument. A parallel tree is a
- * second place to remember, and the one nobody has open while editing — the layout it replaced reached 61 stale
+ * second place to remember, and the one nobody has open while editing, the layout it replaced reached 61 stale
  * pages out of 69, one of them 203 commits behind. A README cannot be forgotten in the same way: it is in the
  * diff already.
  *
  * STAGING: `.intentic/config/docs/<repo>/`, mirroring the published tail exactly. Generation writes here first, for
  * three reasons that all matter:
- *   1. N isolated agents can write into it at once — `.intentic` is bound back SHARED for isolated turns, so
+ *   1. N isolated agents can write into it at once, `.intentic` is bound back SHARED for isolated turns, so
  *      every agent in a fan-out lands in the same tree the browser is reading.
  *   2. The browser sees it appear LIVE. `.intentic/config/docs/` is a workspace-root path, so it can ride the daemon's
- *      file-change push (contributes.files) — an in-repo path cannot, because a manifest is static and repo
+ *      file-change push (contributes.files), an in-repo path cannot, because a manifest is static and repo
  *      names are not known when it is written.
  *   3. The owner reads it before it touches the repo. "Agent proposes, owner approves, it publishes" is already
  *      this workspace's shape for agent output (`.intentic/config/drafts/`), not a new idea.
  *
  * The two trees share their TAIL (`repo.json`, `<pkg>/README.md`, …) so publishing is a copy per tail and never a
- * translation — and so a reviewer reading either tree is reading the same layout. */
+ * translation, and so a reviewer reading either tree is reading the same layout. */
 
 // Repo-relative. Sits beside `docs/user-stories` (what the product promises) as its structural sibling: what
 // the code IS. A plain directory name, because the documents themselves are the evidence the view detects on.
@@ -41,7 +41,7 @@ export const STAGING_ROOT = `${STATE_DIR}/config/docs`;
  * the code has run ahead of it is a commit count. A field an author must remember to update is a field that goes
  * wrong; a field computed from what they did update cannot.
  *
- * `index.json` is DERIVED — `intentic-docs check` regenerates it, and nothing authors it by hand. It exists so
+ * `index.json` is DERIVED, `intentic-docs check` regenerates it, and nothing authors it by hand. It exists so
  * the browser can render the package list, its one-liners, its anchors and its staleness in ONE fetch instead of
  * one per package. A generated file cannot drift from its own inputs. */
 export const REPO_DOC_TAIL = "repo.json";
@@ -62,12 +62,12 @@ export const publishedTail = (tail: string): string => (MAP_TAILS.has(tail) ? `$
  * exception is the whole reason this is a rule rather than "the directory is not empty".
  *
  * The index is derived, as the paragraph above says: `intentic-docs check --write` regenerates it for whichever
- * tree it is pointed at, and its default is the staged one — so an agent updating a README that is already in the
+ * tree it is pointed at, and its default is the staged one, so an agent updating a README that is already in the
  * repository drops an index into a staging directory that holds no draft. Counting it emptied the whole area: the
  * view switched to a draft with no map and no pages, said the repository had no documentation yet, and left the
  * real published documents behind a toggle nobody had a reason to press.
  *
- * A HALF-WRITTEN DRAFT MUST STILL COUNT — a run in flight is exactly what the draft banner exists to explain —
+ * A HALF-WRITTEN DRAFT MUST STILL COUNT, a run in flight is exactly what the draft banner exists to explain,
  * and it does: the map's `repo.json` and each package's directory are entries like any other. */
 export const holdsDraft = (names: readonly string[]): boolean => names.some((name) => name !== INDEX_TAIL);
 
@@ -77,7 +77,7 @@ export const underRepo = (repo: string, rest: string): string => (repo === `` ? 
 
 /* The inverse, against the repos the workspace actually has: a workspace path → which repo it is in and where
  * inside it. LONGEST match wins, because the root repo ("") contains every path and would otherwise swallow a
- * nested repo's packages — and a repo dir itself answers with an empty rest, which is the repository's own
+ * nested repo's packages, and a repo dir itself answers with an empty rest, which is the repository's own
  * overview page rather than any package's.
  *
  * This is what lets a document be addressed by the path the file tree already speaks, so nothing has to carry a
@@ -94,7 +94,7 @@ export const splitRepo = (path: string, repos: readonly string[]): { repo: strin
 
 export const publishedPath = (repo: string, tail: string): string => underRepo(repo, publishedTail(tail));
 
-// The staging key for a repo. The root repo needs a NAME here — it is a directory under STAGING_ROOT, and an
+// The staging key for a repo. The root repo needs a NAME here, it is a directory under STAGING_ROOT, and an
 // empty segment would collapse the path onto the root itself.
 export const stagingKey = (repo: string): string => (repo === `` ? `root` : repo);
 export const stagingDir = (repo: string): string => `${STAGING_ROOT}/${stagingKey(repo)}`;
@@ -108,7 +108,7 @@ export const RUNS_DIR = `${STAGING_ROOT}/runs`;
 const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
 export const runManifestPath = (runId: string): string => `${runDir(runId)}/run.json`;
 
-// What the rail badge has already been shown, in the same tree as the runs it summarises — so acknowledging is
+// What the rail badge has already been shown, in the same tree as the runs it summarises, so acknowledging is
 // durable across reloads and shared across the owner's browsers without inventing a setting nobody would type.
 export const SEEN_PATH = `${STAGING_ROOT}/seen.json`;
 
@@ -135,14 +135,14 @@ export const slugOf = (dir: string): string => {
 };
 
 // The conversationId regex is `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$` (it lands in branch names and paths), so 64 is
-// a hard ceiling. The RUN id is what must survive truncation — it attributes a fleet card back to its run — so
+// a hard ceiling. The RUN id is what must survive truncation, it attributes a fleet card back to its run, so
 // the slug is what gets cut, and slugs are already capped at 40 with run ids around 9.
 const CONVERSATION_ID_MAX = 64;
 
-// `dg` for "docs generation" — the prefix `GET /agents` is filtered by to join a run to the live fleet, which is
+// `dg` for "docs generation", the prefix `GET /agents` is filtered by to join a run to the live fleet, which is
 // why the ids are derived rather than stored.
-/* Exported because THREE things filter on it — one run's agents, any run's agents, and the poll deciding whether
- * to keep polling — and the id scheme has to live in one place. */
+/* Exported because THREE things filter on it, one run's agents, any run's agents, and the poll deciding whether
+ * to keep polling, and the id scheme has to live in one place. */
 const RUN_ID_PREFIX = "dg";
 
 // Every documentation-run conversation, across all runs.
@@ -151,11 +151,11 @@ export const ANY_RUN_PREFIX = `${RUN_ID_PREFIX}-`;
 export const conversationIdOf = (runId: string, slug: string): string =>
     `${RUN_ID_PREFIX}-${runId}-${slug}`.slice(0, CONVERSATION_ID_MAX).replace(/[-_]+$/, ``);
 
-// The map phase's own conversation — one per run, before the fan-out. Named so it sorts first and reads as what
+// The map phase's own conversation, one per run, before the fan-out. Named so it sorts first and reads as what
 // it is in the fleet board.
 export const mapConversationId = (runId: string): string => conversationIdOf(runId, `map`);
 
 /* Every conversation belonging to a run starts with this. A run whose scope the MAP decides cannot enumerate its
- * own conversation ids, so joining it to the live fleet is a prefix filter over `GET /agents` — which is the whole
+ * own conversation ids, so joining it to the live fleet is a prefix filter over `GET /agents`, which is the whole
  * reason the ids are derived from the run id instead of being stored anywhere. */
 export const runPrefix = (runId: string): string => `${ANY_RUN_PREFIX}${runId}-`;

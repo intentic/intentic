@@ -5,7 +5,7 @@ import { deployBadge, startDeployAttention, watchConnections } from "./attention
 /* ext-deployments activation: bind the host handle, start the badge's background poll, then register the
  * "Deployments" rail view.
  *
- * Capability-driven, not repo-driven — the ext-pipelines shape, and for the same reason. The two existing
+ * Capability-driven, not repo-driven, the ext-pipelines shape, and for the same reason. The two existing
  * infra surfaces (Infrastructure, Live status) are gated on the intent and desired-state repos, so someone who
  * simply connects a Komodo they already run gets nothing in the rail. Gating on the connection fixes that, and
  * ONE TILE PER CONNECTION is right rather than one for the extension: two Komodos are two production estates,
@@ -25,7 +25,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                     .filter((capability) => capability.kind === `cli` && capability.config[`provider`] === `komodo`)
                     .map((capability) => capability.id);
                 // detect() runs on every facts poll, which makes it the one place that knows which Komodos are
-                // connected right now — so it is also what tells the badge poller what to watch.
+                // connected right now, so it is also what tells the badge poller what to watch.
                 watchConnections(connections);
                 return connections.map((capability) => ({
                     key: capability,
@@ -37,7 +37,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                     props: { capability },
                 }));
             },
-            // Unacknowledged incidents only — see incidents.ts for why this reads Komodo's alert log rather
+            // Unacknowledged incidents only, see incidents.ts for why this reads Komodo's alert log rather
             // than counting what is currently down.
             badge: (activation) => deployBadge(activation.key),
             view: async () => (await import(`./DeploymentsView.vue`)).default,

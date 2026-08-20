@@ -1,7 +1,7 @@
 import { type NoteFile, parseNote, type ParsedNote } from "./note.js";
 import { type Drift, relationDrift, type Vocabulary, readVocabulary, typeDrift, VOCABULARY_TYPE } from "./vocabulary.js";
 
-/* THE KNOWLEDGE BASE, RESOLVED — the one place a pile of files becomes a graph.
+/* THE KNOWLEDGE BASE, RESOLVED, the one place a pile of files becomes a graph.
  *
  * Everything here is derived and nothing is stored. There is no index file to rebuild, go stale, or disagree
  * with the notes: a knowledge base of a few thousand small markdown files parses in milliseconds, so the honest answer
@@ -11,7 +11,7 @@ import { type Drift, relationDrift, type Vocabulary, readVocabulary, typeDrift, 
 export interface NoteEdge {
     readonly from: string;
     // The resolved note, or undefined when the link points at something that isn't there yet. BOTH are kept:
-    // an unresolved link is not an error, it is a note somebody has not written — the knowledge base's own to-do list.
+    // an unresolved link is not an error, it is a note somebody has not written, the knowledge base's own to-do list.
     readonly to: string | undefined;
     readonly target: string;
     readonly relation: string | undefined;
@@ -21,7 +21,7 @@ export interface KnowledgeIndex {
     readonly notes: readonly ParsedNote[];
     readonly byPath: ReadonlyMap<string, ParsedNote>;
     readonly edges: readonly NoteEdge[];
-    // Incoming edges per note path — what links HERE, which is the half a plain file tree cannot show you.
+    // Incoming edges per note path, what links HERE, which is the half a plain file tree cannot show you.
     readonly backlinks: ReadonlyMap<string, readonly NoteEdge[]>;
     readonly outgoing: ReadonlyMap<string, readonly NoteEdge[]>;
     readonly vocabulary: Vocabulary;
@@ -34,7 +34,7 @@ export interface KnowledgeIndex {
 
 const normalise = (value: string): string => value.trim().toLowerCase();
 
-// A link may be written with or without the extension, and with or without folders — `[[Ada Lovelace]]`,
+// A link may be written with or without the extension, and with or without folders, `[[Ada Lovelace]]`,
 // `[[ada-lovelace]]`, `[[people/ada-lovelace]]`, `[[people/ada-lovelace.md]]` all mean the same note.
 const pathKeys = (path: string): string[] => {
     const withoutExtension = path.replace(/\.md$/i, "");
@@ -134,14 +134,14 @@ export interface KnowledgeOverview {
     readonly vocabulary: Vocabulary;
     // Links pointing at a note nobody has written. The knowledge base's to-do list, not its error list.
     readonly broken: readonly BrokenLink[];
-    // Notes nothing links to and which link to nothing — knowledge that fell out of the graph and will never
+    // Notes nothing links to and which link to nothing, knowledge that fell out of the graph and will never
     // be found again by following anything.
     readonly orphans: readonly string[];
-    // Notes with no `type:` — usable, but invisible to every "show me every decision about X" question.
+    // Notes with no `type:`, usable, but invisible to every "show me every decision about X" question.
     readonly untyped: readonly string[];
     readonly typeDrift: readonly Drift[];
     readonly relationDrift: readonly Drift[];
-    // Header keys the parser could not read, per note — the only way a malformed header is ever announced.
+    // Header keys the parser could not read, per note, the only way a malformed header is ever announced.
     readonly unreadable: readonly { readonly path: string; readonly keys: readonly string[] }[];
     readonly ambiguous: readonly { readonly name: string; readonly notes: readonly string[] }[];
 }
@@ -161,7 +161,7 @@ export const overviewOf = (index: KnowledgeIndex): KnowledgeOverview => ({
     tags: counted(index.notes.flatMap((note) => note.tags)),
     vocabulary: index.vocabulary,
     broken: index.edges.flatMap((edge) => (edge.to === undefined ? [{ from: edge.from, target: edge.target, relation: edge.relation }] : [])),
-    /* The vocabulary note is never an orphan however few links it holds — it is the knowledge base's structure, not a
+    /* The vocabulary note is never an orphan however few links it holds, it is the knowledge base's structure, not a
      * fact that fell out of it, and reporting it would put a permanent entry in a list whose whole value is
      * being empty most of the time. */
     orphans: index.notes

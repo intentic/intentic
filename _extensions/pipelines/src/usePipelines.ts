@@ -7,7 +7,7 @@ import { host } from "./host";
 
 /* CI runs across the workspace repos' github/gitlab remotes, via the daemon's /ci routes. The daemon serves a
  * webhook-freshened cache and backfills it from the vendors when stale, so plain polling here costs one daemon
- * call — the vendors are only hit when the picture is actually stale. Actions address a run by repo + vendor
+ * call, the vendors are only hit when the picture is actually stale. Actions address a run by repo + vendor
  * id; the daemon re-resolves the project and token per call. All daemon access goes through the host api. */
 
 const POLL_MS = 30_000;
@@ -41,10 +41,10 @@ export function usePipelines() {
         onSuccess: invalidate,
     });
     /* Starts an isolated agent seeded with the failure context; resolves to its conversation id, which is the
-     * fleet's card id — the view hands it to /agents?focus= and the board lands on the card.
+     * fleet's card id, the view hands it to /agents?focus= and the board lands on the card.
      *
      * `pick` is the run button's caret: absent on the ordinary click, in which case the daemon opens the session
-     * on the sandbox's own agent-run list. Nothing here reads that list — `api.models.agentRun()` already names
+     * on the sandbox's own agent-run list. Nothing here reads that list, `api.models.agentRun()` already names
      * it for the button, and a second reading of the same setting is how a button comes to promise one model
      * while the daemon spends another. */
     const fix = useMutation({

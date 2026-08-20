@@ -12,7 +12,7 @@ import type { Client, Message } from "discord.js";
 // listener message and POST it to the daemon's dispatch route. On a mention we hold the streaming response and
 // paint the model's reply back into the channel live (one painter per matched automation, keyed by automationId).
 
-// The slice of the discord.js channel API the painter uses — structural so this file stays decoupled from
+// The slice of the discord.js channel API the painter uses, structural so this file stays decoupled from
 // discord.js message classes. `channel.send(...)` returns a Message; `message.edit(...)` edits it in place.
 export interface EditableMessage {
     readonly edit: (content: string) => Promise<unknown>;
@@ -23,11 +23,11 @@ export interface StreamChannel {
 
 // Discord's per-message content limit; a longer reply spills into follow-up messages.
 const DISCORD_MAX = 2_000;
-// Min gap between edits of the growing message — Discord rate-limits edits (~5/5s per channel) and we don't need
+// Min gap between edits of the growing message. Discord rate-limits edits (~5/5s per channel) and we don't need
 // to repaint on every token. The typing indicator covers the gap until the first paint.
 const EDIT_INTERVAL_MS = 1_200;
 // Recent message ids, to drop the duplicate delivery when two of our bots share a channel and both receive the
-// same human message. ponytail: best-effort in-memory cap; a restart forgets it — at worst one duplicate wake.
+// same human message. ponytail: best-effort in-memory cap; a restart forgets it, at worst one duplicate wake.
 const RECENT_MAX = 500;
 // Prior messages pulled for context when a bot is tagged (discord fetch max is 100).
 const HISTORY_LIMIT = 20;
@@ -58,7 +58,7 @@ export const toHistory = (newestFirst: readonly Message[], selfIds: ReadonlySet<
         return entry;
     });
 
-/* The gateway's /deliver door (GatewayHooks.deliver): post one message into a channel outside any live turn —
+/* The gateway's /deliver door (GatewayHooks.deliver): post one message into a channel outside any live turn,
  * the daemon's "speak as the agent" path for a Discord conversation. Which bot speaks is whichever connected
  * one can see the channel; with several bots sharing a channel that is the first subscribed, matching the
  * dedup order inbound messages already follow. Chunked at the same ceiling a streamed reply spills at. */
@@ -83,7 +83,7 @@ export interface DiscordListener {
 
 export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, Client>): DiscordListener => {
     const recent = new Set<string>();
-    // Live "typing…" indicators keyed by channelId — started on a mention, cleared when our own reply lands or
+    // Live "typing…" indicators keyed by channelId, started on a mention, cleared when our own reply lands or
     // after TYPING_MAX_MS.
     const typing = new Map<string, NodeJS.Timeout>();
     const stopTyping = (channelId: string): void => {
@@ -119,12 +119,12 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
     };
 
     const onMessage = (message: Message): void => {
-        // Never wake on our own bots' posts (any connected instance) — an agent reply in-channel must not
+        // Never wake on our own bots' posts (any connected instance), an agent reply in-channel must not
         // re-trigger, and bot A must not wake on bot B. Third-party bots/webhooks still dispatch (CI alerts are a
         // valid trigger); guards can filter them.
         for (const client of subscribed.values()) {
             if (client.user?.id === message.author.id) {
-                // Our own reply landed in this channel — stop the "typing…" heartbeat.
+                // Our own reply landed in this channel, stop the "typing…" heartbeat.
                 stopTyping(message.channelId);
                 return;
             }
@@ -140,7 +140,7 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
             }
         }
         // "Tagged": a direct @mention of any of our bots or a reply to one of their messages (roles/@everyone
-        // excluded) — checked against every subscribed bot because the recent-id dedup means only the first
+        // excluded), checked against every subscribed bot because the recent-id dedup means only the first
         // delivery dispatches, and it may reach a bot other than the one tagged.
         const mentioned = [...subscribed.values()].some(
             (client) => client.user !== null && message.mentions.has(client.user, { ignoreEveryone: true, ignoreRoles: true }),
@@ -157,7 +157,7 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
             const history = mentioned
                 ? await fetchHistory(message).catch((error: unknown) => {
                       // A history-fetch failure (missing Read Message History perm, rate limit) must not drop the
-                      // wake — degrade to no context.
+                      // wake, degrade to no context.
                       ctx.log.warn({ err: error }, "discord history fetch failed");
                       return undefined;
                   })
@@ -197,7 +197,7 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
                     ),
                 );
             } finally {
-                // The turn(s) ended (or the stream broke) — drop the typing heartbeat if our own reply didn't
+                // The turn(s) ended (or the stream broke), drop the typing heartbeat if our own reply didn't
                 // already clear it.
                 stopTyping(message.channelId);
             }

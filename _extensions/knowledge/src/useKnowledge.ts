@@ -14,11 +14,11 @@ import {
 } from "./contract";
 import { host } from "./host";
 
-/* The knowledge base, through this extension's OWN backend at its /x namespace — no `permissions.sandbox` entry, because
+/* The knowledge base, through this extension's OWN backend at its /x namespace, no `permissions.sandbox` entry, because
  * an extension's own backend is its own code. All daemon access goes through the host api, which injects auth
  * and scopes the cache per sandbox.
  *
- * EVERY QUERY KEY STARTS WITH `knowledge`, and that is load-bearing rather than tidy: the manifest's
+ * EVERY QUERY KEY STARTS WITH `knowledge`, and that is functional rather than tidy: the manifest's
  * `contributes.files` declares `knowledge/` → invalidates `knowledge`, so when the agent writes a note with its
  * own file tools the daemon's watcher pushes the change and these queries refetch. The poll below is the
  * fallback for a knowledge base the owner has pointed somewhere else, where no static path could have been declared. */
@@ -53,7 +53,7 @@ export interface Filters {
     readonly linkedTo: string | undefined;
 }
 
-/* THE LIST IS THE SEARCH — one route, whether or not anything has been typed. An empty query with no filters is
+/* THE LIST IS THE SEARCH, one route, whether or not anything has been typed. An empty query with no filters is
  * "every note, newest first", which is exactly what a browse surface wants, so there is no second code path for
  * browsing and no chance of the two disagreeing about what the knowledge base contains. */
 export function useSearch(filters: Ref<Filters>) {
@@ -107,7 +107,7 @@ export function useGraph(path: Ref<string | undefined>, depth: Ref<number>, enab
     const graph = useQuery({
         queryKey: computed(() => api.sandbox.key(`knowledge`, `graph`, path.value ?? ``, String(depth.value))),
         queryFn: async () => GraphSchema.parse(await api.sandbox.json(`${KNOWLEDGE_BASE}/graph?${query({ focus: path.value, depth: depth.value })}`)),
-        // Only fetched once the map is actually being looked at — it is the most expensive answer here and the
+        // Only fetched once the map is actually being looked at, it is the most expensive answer here and the
         // least often wanted.
         enabled: computed(() => api.sandbox.reachable() && path.value !== undefined && enabled.value),
     });
@@ -121,7 +121,7 @@ export function useGraph(path: Ref<string | undefined>, depth: Ref<number>, enab
 export function useNoteMutations() {
     const api = host();
     const queryClient = useQueryClient();
-    // A write changes the note, its neighbours' backlinks, the counts and the map — everything under the one
+    // A write changes the note, its neighbours' backlinks, the counts and the map, everything under the one
     // prefix. Invalidating the lot is right here: this is a hand edit, not a stream, and being certain the
     // panel agrees with the folder is worth one extra round trip.
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: api.sandbox.key(`knowledge`) });
@@ -143,7 +143,7 @@ export function useNoteMutations() {
             }),
         onSuccess: () => void invalidate(),
     });
-    // Starting the knowledge base off — owner-pressed, from the empty state, never on a read. It answers with what it
+    // Starting the knowledge base off, owner-pressed, from the empty state, never on a read. It answers with what it
     // wrote so the panel can open the note rather than announce a success nobody can see.
     const seed = useMutation({
         mutationFn: async () => SeedResultSchema.parse(await api.sandbox.json(`${KNOWLEDGE_BASE}/seed`, { method: `POST` })),
@@ -152,7 +152,7 @@ export function useNoteMutations() {
     return { save, remove, seed };
 }
 
-// Everything the filter controls offer, read off the overview so the knowledge base's own words are the vocabulary —
+// Everything the filter controls offer, read off the overview so the knowledge base's own words are the vocabulary,
 // never a hardcoded list that could disagree with what is in the folder.
 export const filterOptions = (overview: Overview | undefined): { types: readonly string[]; tags: readonly string[] } => ({
     types: (overview?.types ?? []).map((entry) => entry.name),

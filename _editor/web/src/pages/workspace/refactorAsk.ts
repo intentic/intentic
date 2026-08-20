@@ -2,20 +2,20 @@ import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic-app/api-con
 import { composeAsk, REFACTOR_INVARIANTS } from "@intentic/sandbox-contract/chores";
 import type { ChurnWindow } from "./codebaseHealth";
 
-/* WHICH REFACTOR THE NUMBERS CALL FOR — and what we say to the agent.
+/* WHICH REFACTOR THE NUMBERS CALL FOR, and what we say to the agent.
  *
  * The panel ranks files; this decides what to DO about the one the user picked. A row's own figures are enough
- * to tell the kinds apart, and they fail in different ways — one generic "clean this up" would be wrong for
+ * to tell the kinds apart, and they fail in different ways, one generic "clean this up" would be wrong for
  * most rows, and wrong in a way that costs a whole turn:
  *
  *   churn and branching together   a change magnet that is also tangled → split along its change seams
  *   branching out of proportion    tangled logic, rarely touched → flatten it where it stands
  *   churn out of proportion        not tangled, CROWDED: unrelated work keeps landing here → split by subject
- *   also a key module              volatile AND load-bearing → separate the stable contract from the churn
+ *   also a key module              volatile AND depended-on → separate the stable contract from the churn
  *   a wide key module              everything imports it because it holds everything → narrow the surface
  *   a test file                    the figures are cost-to-work-in, not product risk → split by subject
  *
- * Every comparison is LEADER-RELATIVE, against the same list the user is reading — the trick hotspotRows uses
+ * Every comparison is LEADER-RELATIVE, against the same list the user is reading, the trick hotspotRows uses
  * for its bars. Absolute thresholds would need tuning per repository and per language; a share of the top row
  * needs none. And none of it ever surfaces as a grade: it picks WORDING, nothing else.
  *
@@ -25,12 +25,12 @@ export type RefactorKind = "decompose" | "simplify" | "split" | "stabilize" | "t
 
 export interface RefactorAsk {
     readonly kind: RefactorKind;
-    // The tooltip: what the turn will actually be asked to do, in the user's terms — the button itself is a
+    // The tooltip: what the turn will actually be asked to do, in the user's terms, the button itself is a
     // glyph, so this is the only place the archetype is legible before the turn starts.
     readonly hint: string;
     // The turn. Sent as an ordinary user message, so it lands in the transcript to be read and argued with.
     readonly prompt: string;
-    // Nothing has touched the file in a season. Not a refusal — the user may know something the log doesn't —
+    // Nothing has touched the file in a season. Not a refusal, the user may know something the log doesn't,
     // but the panel's own thesis says the payoff is in files that get edited AGAIN, so the action steps back
     // rather than inviting the spend.
     readonly dormant: boolean;
@@ -40,18 +40,18 @@ export interface RefactorAsk {
 // (churn AND branching), which is the balanced case and its own archetype.
 const DOMINANT = 1.5;
 const DAY_MS = 86_400_000;
-// The panel's own dormancy horizon: a quarter without a commit. Only reachable while viewing all of history —
+// The panel's own dormancy horizon: a quarter without a commit. Only reachable while viewing all of history,
 // a narrower churn window has already excluded everything older than itself.
 const DORMANT_MS = 90 * DAY_MS;
 // A key module's surface is "wide" against its PEERS in the same ranking, with a floor: a module exporting a
-// dozen symbols has no surface problem however it compares, and offering to split the repo's most load-bearing
+// dozen symbols has no surface problem however it compares, and offering to split the repo's most depended-on
 // file for no reason is the worst invitation this panel could make.
 const WIDE_MULTIPLE = 3;
 const WIDE_FLOOR = 20;
 
 const TEST_FILE = /(\.(test|spec)\.[^./]+$|(^|\/)__tests__\/)/;
 
-// Exact, always — a prompt quotes numbers the agent may recount, so the panel's compacting formatter (which
+// Exact, always, a prompt quotes numbers the agent may recount, so the panel's compacting formatter (which
 // trades "2,450,000" for "2.5M" to fit a tile) is the wrong rule here.
 const count = (value: number): string => value.toLocaleString(`en-US`);
 
@@ -69,10 +69,10 @@ const dormantFor = (ms: number): string => {
 };
 
 /* WHAT EACH ARCHETYPE ASKS FOR. Kept terse on purpose: the reader is a model about to act, and every sentence
- * past the load-bearing ones dilutes them — the rationale lives in this file, not in the prompt.
+ * past the required ones dilutes them. The rationale lives in this file, not in the prompt.
  *
  *   `hint` speaks to the user, from a tooltip on a dense row.
- *   `goal` is the only part that differs in kind: WHAT shape to move the file towards, never a design — the
+ *   `goal` is the only part that differs in kind: WHAT shape to move the file towards, never a design, the
  *          agent reads the file first, and a prescribed split from out here would be a guess.
  *   `done` is falsifiable, and deliberately something the agent can check itself: the same resident engine
  *          that ranked this row answers `iq` in the agent's own worktree, so it can recount rather than
@@ -117,7 +117,7 @@ const ARCHETYPE: Record<RefactorKind, { hint: string; diagnosis: string; goal: s
 };
 
 /* The four-part shape (subject / why / goal / done) and the refactor invariants both live in @intentic/sandbox-contract/chores:
- * this panel's rows and the Maintenance surface's chores are the same move — a measurement turned into a turn —
+ * this panel's rows and the Maintenance surface's chores are the same move, a measurement turned into a turn,
  * and phrasing them two different ways would be two different products explaining themselves to the same reader.
  * What stays here is what is genuinely local: which archetype a row's own figures call for, and what each one asks
  * the agent to do about it. */
@@ -138,14 +138,14 @@ export interface HotspotContext {
     readonly window: ChurnWindow;
     // The top row's figures, which every share below is taken against.
     readonly leader: { readonly commits: number; readonly complexity: number };
-    // Whether this path also placed in the import graph's key modules — volatile and load-bearing at once.
+    // Whether this path also placed in the import graph's key modules, volatile and depended-on at once.
     readonly keyModule: boolean;
     readonly nowMs: number;
 }
 
 /* Which of the hotspot archetypes this row is, in precedence order:
- *   a test file first — its numbers mean something else entirely, so no product-side reading of them applies;
- *   then load-bearing, because "who else depends on this" outranks the shape of the file itself;
+ *   a test file first, its numbers mean something else entirely, so no product-side reading of them applies;
+ *   then depended-on, because "who else depends on this" outranks the shape of the file itself;
  *   then the two signals' shares against the leader, which is the ordinary case. */
 const hotspotKind = (hotspot: WorkspaceHotspot, context: HotspotContext): RefactorKind => {
     if (TEST_FILE.test(hotspot.path)) {
@@ -178,13 +178,13 @@ export const hotspotAsk = (hotspot: WorkspaceHotspot, context: HotspotContext): 
 
 export interface ModuleContext {
     readonly rank: number;
-    // Median exports across the modules in the same ranking — the peer group this one is called wide against.
+    // Median exports across the modules in the same ranking, the peer group this one is called wide against.
     readonly medianExports: number;
 }
 
 /* A key module gets an action only when its SURFACE is the problem. The top of a PageRank ranking is where a
- * healthy chokepoint lives too — an `index.ts` exporting four symbols that everything imports is the shape you
- * want, not a finding — and a "refactor" offered on it would be this panel at its worst: a ranking laundered
+ * healthy chokepoint lives too, an `index.ts` exporting four symbols that everything imports is the shape you
+ * want, not a finding, and a "refactor" offered on it would be this panel at its worst: a ranking laundered
  * into a to-do list. Undefined means the row stays what it was, a pointer at a file. */
 export const moduleAsk = (module: WorkspaceKeyModule, context: ModuleContext): RefactorAsk | undefined => {
     if (module.exports < WIDE_FLOOR || module.exports < context.medianExports * WIDE_MULTIPLE) {

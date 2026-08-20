@@ -5,15 +5,15 @@ import { host } from "./host";
 
 /* The saved loops (.intentic/config/loop-designs.json), read and written through the daemon's /loops/designs routes.
  *
- * WHY THEY LIVE ON THIS PAGE. A loop and a workflow answer one question — what is the next message run
- * THROUGH — with two answers: a workflow spreads it across sessions that are not this one, a loop repeats it
+ * WHY THEY LIVE ON THIS PAGE. A loop and a workflow answer one question, what is the next message run
+ * THROUGH, with two answers: a workflow spreads it across sessions that are not this one, a loop repeats it
  * in this one until a stated bar is cleared. Both are shapes you author once and point at a different job every
  * time, both are picked from the composer's badge row, and both leave the sentence to whatever you type. Two
  * things that are read, written and used the same way belong on one page; splitting them would have bought a
  * second entry in the rail and a second place to look.
  *
  * NOT POLLED, for the reason the designs beside them are not: the file is on the daemon's change push
- * (`loop-designs`, a CORE key — every composer lists these whether or not this extension is enabled), so an
+ * (`loop-designs`, a CORE key, every composer lists these whether or not this extension is enabled), so an
  * edit here reaches a picker in another window without either side asking.
  */
 
@@ -46,7 +46,7 @@ export function useLoopDesigns() {
     return { loops: computed<LoopDesign[]>(() => query.data.value ?? []), error: computed(() => query.error.value?.message), save, remove };
 }
 
-/* A saved loop's id, minted from its name the way a manifest entry's always is here — lower-cased, punctuation
+/* A saved loop's id, minted from its name the way a manifest entry's always is here, lower-cased, punctuation
  * collapsed to dashes, bounded to what `entryId` accepts. A name that survives none of that (emoji, CJK) still
  * has to produce something, so it falls back to a stable-enough stamp rather than failing the save. */
 export const loopIdFrom = (name: string, existing: readonly LoopDesign[]): string => {

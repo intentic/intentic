@@ -33,7 +33,7 @@ import {
 
 const os = implement(apiContract).$context<OrpcContext>();
 
-/* THE CREATOR SURFACE — the browser half of getting paid, and the first place the pool has ever been able to
+/* THE CREATOR SURFACE, the browser half of getting paid, and the first place the pool has ever been able to
  * answer "who is this money for". Everything here is one of two questions: is this publisher name mine, and
  * can money reach me.
  *
@@ -62,7 +62,7 @@ export interface CreatorDeps {
     // Injectable so tests answer registry reads without the network.
     readonly reader?: RegistryReader;
     readonly fetchFn?: typeof fetch;
-    // Injectable so tests drive a domain claim against a name that was never meant to exist — the probe's
+    // Injectable so tests drive a domain claim against a name that was never meant to exist, the probe's
     // seam (creator-services.ts), reused for the claim's public-resolution guard.
     readonly lookupFn?: typeof lookup;
 }
@@ -71,7 +71,7 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch, lookupFn }: Cr
     const stripeOf = (context: OrpcContext): StripeGateway => gateway ?? stripeGateway(context.config.pool.stripeSecretKey);
     const readerOf = (context: OrpcContext): RegistryReader => reader ?? registryReader(context.config, fetchFn);
     // The service operations take the same two injectables the rest of this surface does, plus the fetch the
-    // conformance probe reaches the provider's endpoint with — so a test drives a whole admission without a
+    // conformance probe reaches the provider's endpoint with, so a test drives a whole admission without a
     // network, a Stripe account, or a provider.
     const serviceDeps = (context: OrpcContext): ServiceDeps => ({
         prisma: context.prisma,
@@ -81,7 +81,7 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch, lookupFn }: Cr
     });
     return {
         /* What this account holds today. Signed in but holding nothing is the ordinary first visit, and it
-         * answers with empty claims and an unconnected payout state rather than an error — the screen needs
+         * answers with empty claims and an unconnected payout state rather than an error, the screen needs
          * something to render the offer against. */
         status: os.creator.status.handler(async ({ context }): Promise<CreatorState> => {
             if (!poolEnabled(context.config)) {
@@ -91,7 +91,7 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch, lookupFn }: Cr
             const [claims, payouts] = await Promise.all([claimsOf(context, user.id), payoutState(context.prisma, stripeOf(context), user.id)]);
             /* Statements are looked up by the names the caller holds, not by a stored user id: a creator who
              * claims in October is owed for July, and the frozen rows are never rewritten to say so. Money
-             * already swept back into the pool is excluded — it is no longer theirs, and listing it as an
+             * already swept back into the pool is excluded, it is no longer theirs, and listing it as an
              * earning with no payment behind it would be the most misleading row on the screen. */
             const [statements, payments] = await Promise.all([
                 claims.length === 0
@@ -131,12 +131,12 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch, lookupFn }: Cr
         }),
 
         /* What proving one name would take. A pure read: it computes the token, names every repository the
-         * proof may be published in, and reports whether the name is already spoken for — so the screen can
+         * proof may be published in, and reports whether the name is already spoken for, so the screen can
          * show "already yours" or "held by someone else" instead of walking a creator through an instruction
          * that could never succeed. */
         /* Which publisher names the caller's own repositories back. Names already claimed BY ANYONE are dropped:
          * a settled name is not something to offer as a next step, and the caller's own already appear on the
-         * card above this step. A registry that cannot be read answers empty — the screen still has its text box,
+         * card above this step. A registry that cannot be read answers empty, the screen still has its text box,
          * so a suggestion list that fails is a missing convenience, never a blocked claim. */
         claimable: os.creator.claimable.handler(async ({ context, input }) => {
             requirePool(context);
@@ -166,7 +166,7 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch, lookupFn }: Cr
             requirePool(context);
             const user = requireUser(context);
             /* The domain lane: a dotted name is a domain (creator-claim.ts owns the discriminator), and its
-             * challenge is the same token at the domain's own well-known path — no registry, no repos. An
+             * challenge is the same token at the domain's own well-known path, no registry, no repos. An
              * unclaimable domain (an IP, a reserved word) is refused HERE, before anyone stands up a route
              * that could never verify. */
             if (isDomainPublisher(input.publisher)) {
@@ -207,7 +207,7 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch, lookupFn }: Cr
         }),
 
         /* File the claim, but only against a proof that is actually readable right now. Re-claiming a name this
-         * account already holds answers with the existing claim rather than an error — a creator clicking twice
+         * account already holds answers with the existing claim rather than an error, a creator clicking twice
          * has done nothing wrong. */
         claim: os.creator.claim.handler(async ({ context, input }): Promise<PublisherClaim> => {
             requirePool(context);
@@ -252,7 +252,7 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch, lookupFn }: Cr
         /* Start or resume payout setup. Answers a Stripe-hosted URL for the browser to navigate to; a creator
          * who abandons it and returns later continues on the same connected account.
          *
-         * A Stripe refusal is passed on in Stripe's own words rather than left to become a 500 — the cloud
+         * A Stripe refusal is passed on in Stripe's own words rather than left to become a 500, the cloud
          * lane's precedent, and it matters more here: the two things that stop this route (Connect not yet
          * enabled on the platform's Stripe account, an account that cannot be onboarded) are both fixed by
          * someone reading the sentence, and "Internal server error" on a card whose whole job is telling a
@@ -270,12 +270,12 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch, lookupFn }: Cr
             }
         }),
 
-        /* OPEN ADMISSION — the provider's six operations, each a thin call into creator-services.ts. The
+        /* OPEN ADMISSION, the provider's six operations, each a thin call into creator-services.ts. The
          * handlers are this shallow on purpose: every rule, refusal sentence and transition lives in one
          * module that the tests drive directly, so what the contract exposes cannot quietly grow logic of
          * its own.
          *
-         * `list` is the only one that answers on a platform with self-serve turned off — the screen has to be
+         * `list` is the only one that answers on a platform with self-serve turned off, the screen has to be
          * able to say so, and a read that threw would leave it with nothing to explain. */
         services: {
             list: os.creator.services.list.handler(async ({ context }) => {

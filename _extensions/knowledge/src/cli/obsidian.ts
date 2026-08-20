@@ -19,18 +19,18 @@ import {
 import { type Args, flag, flagAll, has, number, parseArgs } from "./args.js";
 import { linkFields, slugify } from "./note-shape.js";
 
-/* `obsidian` — the owner's own Obsidian vault, live, on the AGENT's path (contributes.bin, beside `kb`).
+/* `obsidian`, the owner's own Obsidian vault, live, on the AGENT's path (contributes.bin, beside `kb`).
  *
  * TWO KNOWLEDGE BASES, ONE FORMAT. `kb` reads the folder of notes in this workspace; this reads the vault in
  * the Obsidian window on the owner's machine, over the Local REST API plugin. They are different places and
- * stay different places — but a note is the same object in both, so this command parses vault notes with the
+ * stay different places, but a note is the same object in both, so this command parses vault notes with the
  * knowledge base's own parser, writes them with its own writer, and carries them between the two with `pull`
  * and `push`. The agent therefore never has to learn a second idea of what a note is, and a note that crosses
  * does not stop being a typed node with relationships when it lands.
  *
  * WRITING IS OFF UNTIL THE OWNER TURNS IT ON. The card carries the switch; every verb that changes the vault
  * checks it here. Reaching somebody's vault and being allowed to edit it are separate permissions, and the
- * default for the second one is no — these are notes a person keeps, not a scratch directory.
+ * default for the second one is no, these are notes a person keeps, not a scratch directory.
  *
  * Exit codes as `kb` uses them, because the agent already reasons in them: 0 found something, 1 found nothing,
  * 2 could not run. */
@@ -228,7 +228,7 @@ const writeVerb = async (run: Run): Promise<number> => {
     const path = vaultPath(run, name.includes("/") || name.toLowerCase().endsWith(".md") ? name : slugify(name));
     const type = flag(run.args, "type");
     const tags = flagAll(run.args, "tag");
-    // The same header shape `kb new` writes — so a note this agent puts in somebody's vault is a note the
+    // The same header shape `kb new` writes, so a note this agent puts in somebody's vault is a note the
     // knowledge base can read back later without a translation step.
     const fields = new Map<string, string[]>([
         ...(type === undefined ? [] : ([["type", [type]]] as [string, string[]][])),
@@ -283,7 +283,7 @@ const removeVerb = async (run: Run): Promise<number> => {
 // ---- the bridge to the knowledge folder -----------------------------------------------------------------------
 
 /* WHY THESE TWO VERBS EXIST. The Knowledge section of this sandbox reads a folder in the workspace; the vault
- * is on somebody's laptop and is only readable while Obsidian is open. Neither is going to become the other —
+ * is on somebody's laptop and is only readable while Obsidian is open. Neither is going to become the other,
  * so the honest thing is a copy, in either direction, that keeps the note intact.
  *
  * The vault-relative path is kept as the workspace-relative path (and the other way round), so a `[[link]]`
@@ -375,7 +375,7 @@ const pushVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
 const workspaceRoot = (): string => process.env["WORKSPACE_ROOT"] ?? "/work";
 
 // Verbs that only touch the vault never read the workspace, and verbs that only touch the workspace never dial
-// Obsidian — so a closed Obsidian does not stop `obsidian vaults`, and an empty knowledge folder does not stop
+// Obsidian, so a closed Obsidian does not stop `obsidian vaults`, and an empty knowledge folder does not stop
 // a read of somebody's vault.
 const NEEDS_KNOWLEDGE = new Set(["push"]);
 
@@ -464,7 +464,7 @@ const main = async (): Promise<number> => {
     }
 };
 
-// A crash must still name the vault and the verb, and must not look like "found nothing" (exit 1) — an agent
+// A crash must still name the vault and the verb, and must not look like "found nothing" (exit 1), an agent
 // acts very differently on those two. `kb`'s ending, for the same reason.
 main().then(
     (code) => {

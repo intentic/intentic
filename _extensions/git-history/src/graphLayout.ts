@@ -1,13 +1,13 @@
 import type { GitCommit } from "@intentic/sandbox-contract";
 
-/* The commit-graph lane layout — the pure geometry behind GitHistoryTab.vue. Given commits newest-first in topo
+/* The commit-graph lane layout, the pure geometry behind GitHistoryTab.vue. Given commits newest-first in topo
  * order (as `git log --all --topo-order` returns them), it assigns every commit a lane (column) and emits, per
  * row, the line segments to draw: a top half (lanes entering the row, bending into the node where they are the
  * node's children) and a bottom half (the node's parents leaving toward their lanes). This is the standard
  * "two half-edges per row" model VSCode's graph renderers use; keeping it pure makes it unit-testable and lets
  * the component stay a thin SVG mapping.
  *
- * COLOUR FOLLOWS THE BRANCH, NOT THE COLUMN — the one rule here that is not obvious, and the one a reader
+ * COLOUR FOLLOWS THE BRANCH, NOT THE COLUMN, the one rule here that is not obvious, and the one a reader
  * actually navigates by. Colouring by lane index is the cheap version and it is wrong in both directions: two
  * unrelated branches that happen to reuse a freed column come out the same colour, and a branch that shifts
  * columns changes colour halfway down. So a colour is allocated when a branch BEGINS, travels with it through
@@ -16,14 +16,14 @@ import type { GitCommit } from "@intentic/sandbox-contract";
  * adopting the colour of whatever it merges into.
  *
  * Parents outside the fetched window are dropped, so a commit whose parents predate the limit ends its lane at
- * its own row (it reads like a root) — raising the log limit reveals the continuation. */
+ * its own row (it reads like a root), raising the log limit reveals the continuation. */
 
 export interface GraphEdge {
     // Lane columns at the segment's two ends. A top-half edge runs from `from` (top of the row) to `to` (row
     // center); a bottom-half edge from `from` (center) to `to` (bottom). Equal ends = a straight vertical line.
     readonly from: number;
     readonly to: number;
-    // Palette index of the BRANCH this segment belongs to — stable for the branch's whole descent, so a reader
+    // Palette index of the BRANCH this segment belongs to, stable for the branch's whole descent, so a reader
     // can follow one colour from a tip down to wherever it was forked from.
     readonly color: number;
 }
@@ -41,7 +41,7 @@ export interface GraphRow {
 
 export interface GraphLayout {
     readonly rows: readonly GraphRow[];
-    // The widest lane count across all rows — the gutter's column count.
+    // The widest lane count across all rows, the gutter's column count.
     readonly laneCount: number;
 }
 
@@ -81,7 +81,7 @@ export const computeGraphLayout = (commits: readonly GitCommit[]): GraphLayout =
             lanes[col] = undefined;
         }
         // A commit some lane was waiting for continues that lane's branch and keeps its colour. One nothing was
-        // waiting for is a TIP — a branch head, or the newest commit of a disconnected component — and so starts
+        // waiting for is a TIP, a branch head, or the newest commit of a disconnected component, and so starts
         // a branch of its own.
         const color = lanes[col]?.color ?? freeColor(lanes);
 
@@ -93,7 +93,7 @@ export const computeGraphLayout = (commits: readonly GitCommit[]): GraphLayout =
         );
 
         // Advance the lanes: the merged-in children lanes are freed (releasing their colours), then the commit's
-        // in-window parents take lanes — the first continues in `col` carrying this branch's colour, each extra
+        // in-window parents take lanes, the first continues in `col` carrying this branch's colour, each extra
         // one opens (or reuses) a lane and starts a branch of its own.
         for (const index of incoming) {
             lanes[index] = undefined;

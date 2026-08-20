@@ -14,14 +14,14 @@ export const WHATSAPP_MAX = 60_000;
  * for the length of the turn, and send the reply once it is complete (stream.ts says why it is not painted
  * live here).
  *
- * LIKE TELEGRAM, THERE IS NO HISTORY API — worse, actually: WhatsApp is end-to-end encrypted, so not even
+ * LIKE TELEGRAM, THERE IS NO HISTORY API, worse, actually: WhatsApp is end-to-end encrypted, so not even
  * WhatsApp could hand us a chat's past. The context the model gets when it is addressed is what THIS PROCESS
  * watched go by, kept in a small per-chat ring. A gateway restart starts the ring empty, and our own replies
- * are not in it (a linked device does not receive its own sends as live traffic) — they do not need to be,
+ * are not in it (a linked device does not receive its own sends as live traffic), they do not need to be,
  * because a chat is one continuing conversation (thread-sessions) and the agent remembers what it said. */
 
 // Recent `chat:id` keys, to drop a redelivered message. ponytail: best-effort in-memory cap; a restart forgets
-// it — at worst one duplicate wake.
+// it, at worst one duplicate wake.
 const RECENT_MAX = 500;
 // Prior messages handed to the model when the bot is addressed, per chat, and how many chats we keep rings for.
 const HISTORY_LIMIT = 20;
@@ -56,7 +56,7 @@ export const unwrap = (content: WaMessageContent | null | undefined): WaMessageC
 export const jidUser = (jid: string | null | undefined): string => jid?.split("@")[0]?.split(":")[0]?.split("/")[0] ?? "";
 
 /* What the message says, when it carries no words. A voice note or a photo without a caption reaches the model
- * as an empty string otherwise, which reads as "someone sent nothing" — the medium itself is in
+ * as an empty string otherwise, which reads as "someone sent nothing", the medium itself is in
  * `extra.attachments` for an agent that wants to fetch it. Exported for tests. */
 export const contentOf = (content: WaMessageContent | undefined): string => {
     if (content === undefined) {
@@ -96,7 +96,7 @@ export const contentOf = (content: WaMessageContent | undefined): string => {
 const mediaCaption = (content: WaMessageContent): string | undefined =>
     content.imageMessage?.caption ?? content.videoMessage?.caption ?? content.documentMessage?.caption;
 
-// Whether the (unwrapped) content carries a downloadable medium — what puts the message id into
+// Whether the (unwrapped) content carries a downloadable medium, what puts the message id into
 // `extra.attachments` for `whatsapp download`.
 export const hasMedia = (content: WaMessageContent | undefined): boolean =>
     content !== undefined &&
@@ -214,7 +214,7 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
         const content = unwrap(raw.message);
         const text = contentOf(content);
         const media = hasMedia(content);
-        // Receipts, edits, reaction notices, key changes — bookkeeping arrives on the same stream as speech,
+        // Receipts, edits, reaction notices, key changes, bookkeeping arrives on the same stream as speech,
         // and only speech (or something fetchable) is worth an agent's attention.
         if (text === "" && !media) {
             return;
@@ -254,7 +254,7 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
             return;
         }
         // Immediate feedback: "typing…" the moment we're addressed, held for the whole (debounced) turn. The
-        // reply itself lands once, complete, when the turn ends — see stream.ts for why.
+        // reply itself lands once, complete, when the turn ends, see stream.ts for why.
         startTyping(connection, chat);
         const onError = (error: unknown): void => ctx.log.warn({ err: error }, "whatsapp reply send failed");
         // In a group the answer points at what it answers; in a DM that is just noise.

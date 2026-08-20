@@ -1,4 +1,4 @@
-// A gateway is a standalone process (tmux captures its stdout), so a tiny console logger is enough — the
+// A gateway is a standalone process (tmux captures its stdout), so a tiny console logger is enough, the
 // failures that matter for the owner ride the daemon's /listeners/<provider>/failure route into the activity
 // feed. One logger for all five connectors; only the bracket tag ever differed.
 export interface Logger {

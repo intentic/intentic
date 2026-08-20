@@ -2,7 +2,7 @@
  * runs of styled text, and every consumer here wants the prose back out of it.
  *
  * Headings, lists and tables are marked in the flattened text rather than dropped, because a model asked to
- * summarize or edit a document needs to know which line was a heading — and `#` is both the cheapest marker
+ * summarize or edit a document needs to know which line was a heading, and `#` is both the cheapest marker
  * and the one it already reads everywhere else. */
 
 interface TextRun {
@@ -61,7 +61,7 @@ const flatten = (content: readonly StructuralElement[] | undefined): string[] =>
         }
         if (element.table !== undefined) {
             for (const tableRow of element.table.tableRows ?? []) {
-                // One table row per line, cells separated — enough to read a table, not a rendering of one.
+                // One table row per line, cells separated, enough to read a table, not a rendering of one.
                 lines.push((tableRow.tableCells ?? []).map((cell) => flatten(cell.content).join(" ").trim()).join(" | "));
             }
             continue;

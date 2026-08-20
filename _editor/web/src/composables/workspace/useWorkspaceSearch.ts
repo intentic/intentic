@@ -12,8 +12,8 @@ import { WORKSPACE_SEARCH } from "../queryKeys";
  *
  * Two scopes, two verbs, and the difference is the whole point of having both:
  *
- *   `text`  → iq's `find`: ripgrep over the workspace. The query is ONE pattern — a phrase matches as a phrase,
- *             not as its words — case-insensitive unless Aa, marked in the results by the char spans the daemon
+ *   `text`  → iq's `find`: ripgrep over the workspace. The query is ONE pattern, a phrase matches as a phrase,
+ *             not as its words, case-insensitive unless Aa, marked in the results by the char spans the daemon
  *             reports. This is what every editor's search box does, and it is the default.
  *   `smart` → iq's `q`: BM25 + embeddings + a cross-encoder rerank. The query is a QUESTION; its words are
  *             scored separately and a file can place without containing any of them, which is why it is a
@@ -21,7 +21,7 @@ import { WORKSPACE_SEARCH } from "../queryKeys";
  *   `files` → iq's `files`: fuzzy over PATHS, no file contents. The quick-open fallback for the trees the
  *             client can't rank itself (useFuzzyFiles).
  *
- * Either scope can be pointed at part of the workspace instead of all of it — the search box's second field,
+ * Either scope can be pointed at part of the workspace instead of all of it, the search box's second field,
  * carrying VSCode's files-to-include grammar (`*.test.ts, _editor/web`, `!` to exclude) straight through to the
  * daemon, which turns it into the engine's path globs.
  *
@@ -48,7 +48,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
                 settled.value = value.trim();
             }, debounceMs);
         });
-        // The pending timer dies with the surface — closing the panel mid-type would otherwise let it land, write
+        // The pending timer dies with the surface, closing the panel mid-type would otherwise let it land, write
         // `settled`, and start a search for a field nobody is looking at any more (useAgentFilter's own note).
         // Registered per field, so the include box is covered by the same rule as the query box.
         onScopeDispose(() => clearTimeout(timer));
@@ -59,13 +59,13 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
 
     // The daemon rejects queries under 2 chars (min length in the contract), so short input just disables the query.
     const enabled = computed(() => reachable.value && active.value && debounced.value.length >= 2);
-    // Only `text` reads the match switches — `smart` has no pattern to apply them to.
+    // Only `text` reads the match switches, `smart` has no pattern to apply them to.
     const params = computed(() => {
         const search = new URLSearchParams({ query: debounced.value, mode: VERB[scope.value] });
         if (includeIgnored.value) {
             search.set(`includeIgnored`, `true`);
         }
-        // Which files to ask, in VSCode's grammar — the daemon splits it into the engine's path globs. It scopes
+        // Which files to ask, in VSCode's grammar, the daemon splits it into the engine's path globs. It scopes
         // both content scopes: a question about `_editor/web` is as answerable as a pattern found only there.
         if (debouncedInclude.value !== ``) {
             search.set(`include`, debouncedInclude.value);
@@ -99,11 +99,11 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
     });
 
     const pages = computed<readonly WorkspaceSearchResult[]>(() => (enabled.value ? (query.data.value?.pages ?? []) : []));
-    // Every page carries the same counts — they describe the whole match set, not the slice that came back.
+    // Every page carries the same counts, they describe the whole match set, not the slice that came back.
     const head = computed(() => pages.value[0]);
 
     return {
-        // Ranked best-first by the daemon. A text search then goes back to path order — every hit is an equally
+        // Ranked best-first by the daemon. A text search then goes back to path order, every hit is an equally
         // exact match of the same pattern, so ranking them says nothing, while path order groups a directory's
         // files together the way an editor's search tree does.
         groups: computed(() => {
@@ -114,7 +114,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         files: computed(() => head.value?.files ?? 0),
         // `total` is a floor: some file had more matches than the engine keeps per file.
         partial: computed(() => head.value?.partial ?? false),
-        // More pages exist behind the cursor — the panel offers them rather than implying this is everything.
+        // More pages exist behind the cursor, the panel offers them rather than implying this is everything.
         truncated: computed(() => query.hasNextPage.value),
         loadMore: () => void query.fetchNextPage(),
         loadingMore: computed(() => query.isFetchingNextPage.value),
@@ -122,7 +122,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         searching: computed(() => enabled.value && query.isFetching.value && !query.isFetchingNextPage.value),
         error: computed(() => (enabled.value && query.error.value ? query.error.value.message : undefined)),
         /* What the engine did with the pattern that the pattern didn't ask for (an unparseable regex rerun as
-         * literal text, grep-style escapes rewritten) — the panel shows it the way the CLI prints it.
+         * literal text, grep-style escapes rewritten), the panel shows it the way the CLI prints it.
          *
          * And the ONE limit of the workspace scope, said out loud rather than left to be discovered. While the
          * view is showing a conversation's own copy (workspaceScope), search still answers from the shared
@@ -135,7 +135,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
                 ? head.value?.note
                 : [head.value?.note, `Searching the shared workspace — an agent's own copy isn't indexed.`].filter(Boolean).join(` `),
         ),
-        // True while what is typed hasn't produced a searchable query yet (too short, or debounce pending) —
+        // True while what is typed hasn't produced a searchable query yet (too short, or debounce pending),
         // either field, since editing the glob filter re-searches exactly as editing the query does.
         pending: computed(
             () => filter.value.trim().length >= 2 && (debounced.value !== filter.value.trim() || debouncedInclude.value !== include.value.trim()),

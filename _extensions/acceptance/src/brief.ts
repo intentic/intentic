@@ -1,21 +1,21 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/sandbox-contract";
 import { reportPath, resultPath, type RunStory, storyDir } from "./runs";
 
-/* THE BRIEF — what makes a test session a test session.
+/* THE BRIEF, what makes a test session a test session.
  *
  * The daemon has exactly one per-conversation specialization seam: the turn's PROMPT. The system prompt is a
  * sandbox-wide setting (three bases, one owner-chosen), so "a slightly specialized acceptance-testing session"
  * cannot be a different system prompt without changing what every other conversation in the sandbox runs on.
- * That is fine — everything this needs to say is task instruction, which is what a prompt is for.
+ * That is fine, everything this needs to say is task instruction, which is what a prompt is for.
  *
  * Five things it has to get right, each of which cost something real when it was missing:
  *
  * 1. THE STORY IS INLINED, not referenced. Handing the agent a path spends a Read, and worse, invites it to go
- *    read the implementation next — at which point it is testing the code it just read rather than the app a
+ *    read the implementation next, at which point it is testing the code it just read rather than the app a
  *    user meets. The story text and the base URL are the whole world it needs.
  *
  * 2. THE AUTHORED CRITERIA ARE ENUMERATED AND NUMBERED. They are already in the inlined story, but as prose in a
- *    checklist an agent is free to paraphrase, merge or reorder — and a report whose criteria are the agent's
+ *    checklist an agent is free to paraphrase, merge or reorder, and a report whose criteria are the agent's
  *    paraphrase cannot be read against what someone promised. Repeating them as a numbered list with "return
  *    exactly these, in this order" is what turns the result file into a matrix the view can line up.
  *
@@ -24,12 +24,12 @@ import { reportPath, resultPath, type RunStory, storyDir } from "./runs";
  *    client-rendered, or installs its own Playwright.
  *
  * 4. SCREENSHOTS DO NOT GO WHERE THE MODEL ASKS. The daemon's PreToolUse hook rewrites every screenshot's
- *    filename into the shared, FLAT `.intentic/records/artifacts/browser` — model-chosen names and all — and every agent in
+ *    filename into the shared, FLAT `.intentic/records/artifacts/browser`, model-chosen names and all, and every agent in
  *    a run shares that directory. So names must be namespaced by story, and each shot copied into the story's
  *    own `shots/` immediately: copying at the end means reconstructing which step each file belonged to, and
  *    that is exactly the information a report exists to carry.
  *
- * 5. IT IS A TESTER, NOT A DEVELOPER. Left unsaid, a coding agent that finds a bug fixes it — which is the one
+ * 5. IT IS A TESTER, NOT A DEVELOPER. Left unsaid, a coding agent that finds a bug fixes it, which is the one
  *    outcome that makes the run worthless, because the report then describes an app that no longer exists.
  */
 
@@ -53,7 +53,7 @@ const HEADER = [
 ].join(`\n`);
 
 /* The criteria, restated as the contract the result file is judged against. Numbered because the result's
- * `criteria` array is positional — "criterion 3 failed" has to mean the same thing to the agent, the report and
+ * `criteria` array is positional, "criterion 3 failed" has to mean the same thing to the agent, the report and
  * the person who wrote the story.
  *
  * A story that authored none is not an error: the brief asks the agent to derive them from the prose instead,

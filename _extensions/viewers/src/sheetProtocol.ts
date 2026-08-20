@@ -1,7 +1,7 @@
 /* The worker answers with DATA, not markup.
  *
- * It used to answer with an HTML table, which meant a workbook — a file the reader may have been sent by
- * anyone — decided what markup the app injected, and the only thing standing between the two was a sanitiser
+ * It used to answer with an HTML table, which meant a workbook, a file the reader may have been sent by
+ * anyone, decided what markup the app injected, and the only thing standing between the two was a sanitiser
  * call on the main thread. Rows of values cannot carry an event handler or a script tag, so the viewer renders
  * them with an ordinary template and the injection path is gone rather than filtered. */
 

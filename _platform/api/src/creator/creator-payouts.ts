@@ -2,7 +2,7 @@ import type { PrismaClient } from "@intentic-app/prisma";
 import type { Config } from "../config.js";
 import type { ConnectAccount, StripeGateway } from "../pool/pool-stripe.js";
 
-/* WHERE A CREATOR'S MONEY GOES — the second half of phase one, and the half the platform deliberately does the
+/* WHERE A CREATOR'S MONEY GOES, the second half of phase one, and the half the platform deliberately does the
  * least of. Bank details, identity documents and tax forms are collected by Stripe's own hosted onboarding
  * against a connected account; what lands here is an account id and the three answers a payout decision is
  * made of. That is not laziness about compliance, it is the point: money out is the part of this system where
@@ -15,12 +15,12 @@ import type { ConnectAccount, StripeGateway } from "../pool/pool-stripe.js";
  * silence this phase exists to remove. */
 
 // Where Stripe returns the creator once the hosted flow is finished, and where it sends them when a link has
-// gone stale (straight back to minting a fresh one — the whole reason the link is never stored).
+// gone stale (straight back to minting a fresh one, the whole reason the link is never stored).
 const returnPath = (config: Config): string => `${config.webOrigin}/settings/payouts?payouts=done`;
 const refreshPath = (config: Config): string => `${config.webOrigin}/settings/payouts?payouts=refresh`;
 
 export interface PayoutState {
-    // Whether the creator has begun at all — an account exists on Stripe's side.
+    // Whether the creator has begun at all, an account exists on Stripe's side.
     readonly connected: boolean;
     // The only field the settlement job may read as permission to send money.
     readonly payoutsEnabled: boolean;
@@ -30,7 +30,7 @@ export interface PayoutState {
     readonly disabledReason?: string;
 }
 
-// The stored row, structurally — the pool-membership.ts precedent: these modules read a handful of columns and
+// The stored row, structurally, the pool-membership.ts precedent: these modules read a handful of columns and
 // naming them here keeps the logic testable without the generated client.
 interface StoredAccount {
     readonly stripeAccountId: string;
@@ -62,7 +62,7 @@ const applyAccountTo = async (prisma: PrismaClient, userId: string, account: Con
 };
 
 /* The creator's payout state, refreshed through to Stripe while it is still unfinished. A ready account is
- * answered from the row alone — it is the steady state, the webhook keeps it current, and a Stripe round-trip
+ * answered from the row alone, it is the steady state, the webhook keeps it current, and a Stripe round-trip
  * on every settings render would buy nothing. An unfinished one is re-read, because that is precisely the
  * window where the row is most likely to be a few seconds stale and the creator is most likely to be watching.
  * A Stripe failure degrades to the stored answer rather than failing the screen. */
@@ -107,7 +107,7 @@ export const startPayoutSetup = async (
 };
 
 /* The webhook's mirror. Keyed by the connected-account id rather than a user, because that is all the event
- * carries — and an event for an account this platform has never seen is dropped, exactly as a subscription
+ * carries, and an event for an account this platform has never seen is dropped, exactly as a subscription
  * event for an unknown customer is: it belongs to some other product on the same Stripe account. */
 export const applyAccountEvent = async (prisma: PrismaClient, account: ConnectAccount): Promise<void> => {
     await prisma.payoutAccount.updateMany({

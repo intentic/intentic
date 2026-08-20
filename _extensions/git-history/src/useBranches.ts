@@ -6,14 +6,14 @@ import { useAsyncAction } from "./useAsyncAction.js";
 import { groupBranches } from "./groupBranches.js";
 import { useRefRefresh } from "./useRefRefresh.js";
 
-/* One repo's local branches — the graph header's switcher. Parameterized by a reactive repo so the query
+/* One repo's local branches, the graph header's switcher. Parameterized by a reactive repo so the query
  * re-keys when the caller swaps repos (the same shape useGitLog takes).
  *
  * Every verb refreshes the branch list AND the log, because both render ref decorations. Nothing here drops the
  * app's edit buffers on checkout the way the in-app predecessor did: a save is guarded by its baseline hash
  * daemon-side (the write 409s when the file moved under it) and the file viewer keeps an unsaved buffer and
- * offers Reload, so the swap is already safe. What the reset bought was quiet — no "changed on disk" notice per
- * file — and that belongs on the ref push, where it also covers an agent switching branches in a terminal. */
+ * offers Reload, so the swap is already safe. What the reset bought was quiet, no "changed on disk" notice per
+ * file, and that belongs on the ref push, where it also covers an agent switching branches in a terminal. */
 
 export function useBranches(repo: Ref<string>) {
     const api = host();
@@ -38,7 +38,7 @@ export function useBranches(repo: Ref<string>) {
 
     const { busy, error: actionError, run } = useAsyncAction();
 
-    // The branch list and the graph's decorations — two disjoint caches, no ordering between them.
+    // The branch list and the graph's decorations, two disjoint caches, no ordering between them.
     const invalidateRefs = (): Promise<unknown> =>
         Promise.all([
             queryClient.invalidateQueries({ queryKey: branchesKey.value }),
@@ -60,7 +60,7 @@ export function useBranches(repo: Ref<string>) {
         }, `Could not create that branch.`);
 
     /* Publish a branch. Named explicitly rather than pushing HEAD, because the pill the user right-clicked is the
-     * branch they meant — which is not always the one checked out. The daemon resolves which REMOTE from that
+     * branch they meant, which is not always the one checked out. The daemon resolves which REMOTE from that
      * branch's own upstream (or the configured default when it has none), so this never has to guess.
      *
      * A rejected push is a value, not a throw: "no upstream yet", "would not fast-forward" and "no permission"

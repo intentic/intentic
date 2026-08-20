@@ -6,19 +6,19 @@ import type { Config } from "../config.js";
 import { decryptSecret, encryptSecret } from "../crypto.js";
 import { createSandboxAccount, publicNamespaceToken } from "./zrok.js";
 
-/* PROVISIONING REACHABILITY, once per sandbox — the routes' shared half of the zrok swap (zrok.ts is the wire
+/* PROVISIONING REACHABILITY, once per sandbox, the routes' shared half of the zrok swap (zrok.ts is the wire
  * client). What the Cloudflare path did in a dozen API calls is one account mint whose token is cached on the
  * row, so every later mint, hosted provision or re-run reuses it: the sandbox's address is a pure derivation
  * of its connect token, and its reachability grant is a single value.
  *
- * The namespace token is the hub's, not the sandbox's — the daemon needs it to attach its own names under the
+ * The namespace token is the hub's, not the sandbox's, the daemon needs it to attach its own names under the
  * wildcard frontend, so it rides the claim payload beside the account token. It is resolved once per process
  * and cached: it changes only if the hub is rebootstrapped, which is not a thing that happens under a running
  * platform. */
 
 export const zrokEnabled = (config: Config): boolean => config.zrok.adminToken !== `` && config.zrok.apiEndpoint !== ``;
 
-// The sandbox's public address — the SAME derivation the Cloudflare path used (sandbox-<id> from the connect
+// The sandbox's public address, the SAME derivation the Cloudflare path used (sandbox-<id> from the connect
 // token's digest), now under the hub's wildcard zone. Unchanged on purpose: the browser, the announce check
 // and the wizard's address line all knew this shape before the fabric swapped underneath them.
 export const sandboxHostname = (zone: string, connectToken: string): string => `${sandboxSubdomain(sandboxIdFromToken(connectToken) ?? ``)}.${zone}`;
@@ -38,13 +38,13 @@ export interface ZrokGrant {
     readonly accountToken: string;
     readonly namespaceToken: string;
     readonly hostname: string;
-    // What the sandbox dials — the agent's view of the hub, which differs from the platform's whenever the
+    // What the sandbox dials, the agent's view of the hub, which differs from the platform's whenever the
     // platform sits on the hub's LAN and the boxes come in from outside.
     readonly apiEndpoint: string;
 }
 
 /* The row's grant, minting it the first time. Idempotent by the cached column: a second setup mint, a hosted
- * provision after a pasted run, a re-run of a failed install — all reuse the one account, so a sandbox never
+ * provision after a pasted run, a re-run of a failed install, all reuse the one account, so a sandbox never
  * accumulates grants and its address never moves. */
 export const ensureZrokAccount = async (
     prisma: PrismaClient,

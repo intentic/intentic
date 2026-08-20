@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
-/* A thin typed client for the Stripe operations the creator pool needs — money IN (checkout, portal, one
+/* A thin typed client for the Stripe operations the creator pool needs, money IN (checkout, portal, one
  * subscription read), money OUT (a creator's connected account, its hosted onboarding, its payout readiness),
  * and webhook signature verification. Hand-rolled over fetch rather than the Stripe SDK, the stripe-api.ts
  * precedent in the deploy engine: the platform's CLAUDE.md model is "as few dependencies as the job allows",
@@ -11,7 +11,7 @@ import { z } from "zod";
 const API_BASE = `https://api.stripe.com/v1`;
 
 /* WHY A REFUSAL HAPPENED, NOT MERELY THAT ONE DID. Every non-2xx from Stripe carries `{ error: { message } }`,
- * and that message is written for a person to act on — "you must complete your Connect platform profile"
+ * and that message is written for a person to act on, "you must complete your Connect platform profile"
  * names the fix, where a dump of the response body names nothing. It is pulled out here because the routes
  * hand it to the screen (the cloudflare.ts precedent): a creator whose payout setup will not open is owed the
  * reason, and a bare "Internal server error" on that card is the one answer that helps nobody. */
@@ -25,7 +25,7 @@ const refusal = async (call: string, response: Response): Promise<StripeError> =
     try {
         said = RefusalSchema.parse(JSON.parse(body)).error.message;
     } catch {
-        // Not Stripe's envelope — a proxy's HTML error page, a truncated body. Keep the raw evidence instead.
+        // Not Stripe's envelope, a proxy's HTML error page, a truncated body. Keep the raw evidence instead.
         said = undefined;
     }
     return new StripeError(said !== undefined ? `Stripe refused: ${said}` : `Stripe ${call} failed (HTTP ${response.status}): ${body}`);
@@ -73,7 +73,7 @@ const get = async (fetchFn: typeof fetch, secretKey: string, path: string): Prom
 const SessionSchema = z.object({ url: z.url() });
 
 /* The subscription fields the membership mirror needs. `current_period_end` sits top-level on older API
- * versions and on the items on newer ones — read both, prefer the top. A subscription somehow carrying
+ * versions and on the items on newer ones, read both, prefer the top. A subscription somehow carrying
  * neither still parses; the caller falls back to "now", which under-promises rather than inventing a date. */
 const SubscriptionSchema = z.object({
     id: z.string(),
@@ -102,7 +102,7 @@ const toSubscription = (raw: unknown, now: () => Date): StripeSubscription => {
 };
 
 // A subscription as a webhook event carries it (data.object), or undefined for an object of some other
-// shape — the webhook route treats that as "not for us" rather than an error.
+// shape, the webhook route treats that as "not for us" rather than an error.
 export const subscriptionFromEvent = (raw: unknown, now: () => Date = () => new Date()): StripeSubscription | undefined =>
     SubscriptionSchema.safeParse(raw).success ? toSubscription(raw, now) : undefined;
 
@@ -112,7 +112,7 @@ export const subscriptionFromEvent = (raw: unknown, now: () => Date = () => new 
  *
  * `payouts_enabled` is the ONLY field that may be read as permission to send money. `details_submitted`
  * separates a half-finished onboarding from a finished one, and `requirements.disabled_reason` is why a
- * finished account still cannot be paid — without it the creator sees a silent "not yet" and has nothing to
+ * finished account still cannot be paid, without it the creator sees a silent "not yet" and has nothing to
  * act on. Every field is optional in the parse: an account object is large and Stripe grows it, so a missing
  * one must read as "not enabled yet", never as a parse failure that breaks the screen. */
 const AccountSchema = z.object({
@@ -141,7 +141,7 @@ const toAccount = (raw: unknown): ConnectAccount => {
     };
 };
 
-// A connected account as `account.updated` carries it, or undefined for an object of some other shape — the
+// A connected account as `account.updated` carries it, or undefined for an object of some other shape, the
 // webhook treats that as "not for us", exactly as it does for a subscription it cannot read.
 export const accountFromEvent = (raw: unknown): ConnectAccount | undefined => (AccountSchema.safeParse(raw).success ? toAccount(raw) : undefined);
 
@@ -152,7 +152,7 @@ export const accountFromEvent = (raw: unknown): ConnectAccount | undefined => (A
  *
  * Balance transactions are the honest read because they are what moved money: a charge adds, a refund
  * subtracts, a dispute adjusts, and every one of them carries the fee Stripe took. Payout and transfer rows are
- * excluded on purpose — those are money leaving for the platform's own bank or a creator's, not revenue, and
+ * excluded on purpose, those are money leaving for the platform's own bank or a creator's, not revenue, and
  * summing them would net the month down to roughly nothing. */
 const COUNTED_TYPES = new Set([`charge`, `payment`, `refund`, `payment_refund`, `adjustment`]);
 
@@ -161,7 +161,7 @@ const BalancePageSchema = z.object({
     data: z.array(z.object({ id: z.string(), type: z.string(), amount: z.number(), fee: z.number() })),
 });
 
-// A transfer's id is all the platform keeps of it — the receipt line a creator can quote back at support, and
+// A transfer's id is all the platform keeps of it, the receipt line a creator can quote back at support, and
 // what a reconciliation against Stripe's own records joins on.
 const TransferSchema = z.object({ id: z.string() });
 
@@ -174,7 +174,7 @@ export interface SettledRevenue {
 
 export interface StripeGateway {
     // A subscription-mode Checkout Session; the answer is the URL to send the browser to.
-    // `clientReferenceId` is the platform's user id — it comes back on checkout.session.completed and is the
+    // `clientReferenceId` is the platform's user id, it comes back on checkout.session.completed and is the
     // only join between a Stripe customer and a platform account.
     readonly checkoutSession: (opts: {
         readonly priceId: string;
@@ -183,27 +183,27 @@ export interface StripeGateway {
         readonly successUrl: string;
         readonly cancelUrl: string;
     }) => Promise<{ url: string }>;
-    // A Billing Portal session for an existing customer — where cancel/payment-method changes happen, so the
+    // A Billing Portal session for an existing customer, where cancel/payment-method changes happen, so the
     // platform never grows its own subscription-management UI.
     readonly portalSession: (customerId: string, returnUrl: string) => Promise<{ url: string }>;
-    // One subscription, read fresh — the webhook handler pulls this after checkout completes.
+    // One subscription, read fresh, the webhook handler pulls this after checkout completes.
     readonly subscription: (id: string) => Promise<StripeSubscription>;
     /* A creator's connected account, requesting only the `transfers` capability: the platform sends money to
      * this account and never charges through it, and asking for less is what keeps the creator's onboarding to
      * the questions their own payouts actually require. Express, so Stripe hosts the identity, bank and tax
-     * collection — the platform stores an id and three booleans, and never sees the rest. */
+     * collection, the platform stores an id and three booleans, and never sees the rest. */
     readonly createAccount: (opts: { readonly email: string }) => Promise<ConnectAccount>;
     /* The hosted onboarding URL. Single-use and short-lived by Stripe's design, so it is minted per visit and
      * never stored; `refreshUrl` is where Stripe sends a claimant whose link went stale (straight back to mint
      * another), `returnUrl` where it sends them when they are done. */
     readonly accountLink: (opts: { readonly accountId: string; readonly refreshUrl: string; readonly returnUrl: string }) => Promise<{ url: string }>;
-    // One connected account, read fresh — what an unfinished onboarding is re-checked against.
+    // One connected account, read fresh, what an unfinished onboarding is re-checked against.
     readonly account: (id: string) => Promise<ConnectAccount>;
-    // What settled between two instants, paged to the end — the revenue figure a closed month publishes.
+    // What settled between two instants, paged to the end, the revenue figure a closed month publishes.
     readonly settledRevenue: (opts: { readonly from: Date; readonly to: Date }) => Promise<SettledRevenue>;
     /* Move money from the platform's balance to a creator's connected account. `idempotencyKey` is the payout
      * row's id, so retrying an attempt whose answer was lost returns the original transfer instead of making a
-     * second one — the single guarantee the whole run is built around. */
+     * second one, the single guarantee the whole run is built around. */
     readonly transfer: (opts: {
         readonly amountCents: number;
         readonly currency: string;
@@ -278,7 +278,7 @@ export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, 
         TransferSchema.parse(await post(fetchFn, secretKey, `/transfers`, { amount: String(amountCents), currency, destination }, idempotencyKey)),
 });
 
-// How far a webhook's timestamp may sit from now — Stripe's own recommended replay window.
+// How far a webhook's timestamp may sit from now. Stripe's own recommended replay window.
 const SIGNATURE_TOLERANCE_S = 300;
 
 /* Verify a Stripe-Signature header against the RAW request body: v1 = HMAC-SHA256(secret, "{t}.{payload}").

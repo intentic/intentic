@@ -7,7 +7,7 @@ import { host } from "./host";
 /* Which jobs keep breaking, across the runs on screen.
  *
  * Deliberately uses the SAME query keys as useRunJobs, so this shares vue-query's cache with the rows rather
- * than fetching anything twice — every visible row already loads its own jobs, and this is a second reader of
+ * than fetching anything twice, every visible row already loads its own jobs, and this is a second reader of
  * those same entries. Adding this view-level analysis costs no extra requests.
  */
 
@@ -39,7 +39,7 @@ export function useFailureHistory(runs: Ref<readonly PipelineRun[]>) {
 
     const history = computed((): JobFailureRun[] => {
         const jobsByRun = new Map<number, CiJobsResponse | undefined>(failedRuns.value.map((run, index) => [run.runId, queries.value[index]?.data]));
-        // A green run failed nothing — known without asking, and it is what ends a streak.
+        // A green run failed nothing, known without asking, and it is what ends a streak.
         const entryOf = (run: PipelineRun): JobFailureRun => ({
             repo: run.repo,
             branch: run.branch,

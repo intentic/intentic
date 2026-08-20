@@ -2,8 +2,8 @@ import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
 
 /* EVERY EDIT A WORKFLOW CAN HAVE, as pure functions over the document.
  *
- * WHY THIS IS NOT IN THE COMPONENT. Graph edits are where the real bugs live — a `needs` left pointing at a
- * deleted step, a cycle drawn by connecting backwards, a `continue` step that ends up with two predecessors —
+ * WHY THIS IS NOT IN THE COMPONENT. Graph edits are where the real bugs live, a `needs` left pointing at a
+ * deleted step, a cycle drawn by connecting backwards, a `continue` step that ends up with two predecessors,
  * and every one of them is a data fault that the daemon will refuse a save for, hours after the click that
  * caused it. Inside an SFC none of that is reachable by a test; out here all of it is, and the test suite next
  * door asserts the property that actually matters: NO EDIT MAY LEAVE THE GRAPH FAULTY. That rule is worth more
@@ -16,14 +16,14 @@ import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
  *
  * THE INVARIANTS THEY MAINTAIN BETWEEN THEM:
  *  · `needs` only ever names a step that exists.
- *  · the graph stays acyclic — `connect` refuses an edge that would close a loop.
+ *  · the graph stays acyclic, `connect` refuses an edge that would close a loop.
  *  · a `continue` step has exactly one predecessor, and no predecessor is continued twice. Both are repaired
  *    by demoting the offending step to `fresh` rather than by refusing the edit: the user's gesture was about
  *    the DEPENDENCY, and a handoff mode is a detail they can put back.
  */
 
 /* What a new step starts as. Everything here is a working default, which is the whole premise of the designer's
- * tiering — and a new step is now RUNNABLE the moment it exists, because the two prose fields are no longer
+ * tiering, and a new step is now RUNNABLE the moment it exists, because the two prose fields are no longer
  * among the things it has to be told.
  *
  * `goal` and `prompt` are ABSENT rather than empty, and the difference is the contract's: absent means the step
@@ -34,7 +34,7 @@ const DEFAULTS = {
     /* `none`, and this is the field where the default did the most damage. A `claim` reads like a harmless
      * "have it say what it did" and is a COMPLETION GATE: the step is not finished until it writes a valid
      * verdict file, so a step that did the work and described it in the wrong shape fails and takes everything
-     * downstream with it — and the contract for that file lands in the prompt on top of the user's own words.
+     * downstream with it, and the contract for that file lands in the prompt on top of the user's own words.
      * A step is finished when its turn is finished. Anyone who wants convergence asks for it in Advanced. */
     output: { kind: `none` },
     checks: [],
@@ -42,7 +42,7 @@ const DEFAULTS = {
 } as const satisfies Omit<WorkflowStep, "id" | "title" | "needs">;
 
 /* A slug-shaped, unique id. Minted rather than typed because it is spliced into a conversation id and a git
- * branch name — `wf-<run>-<step>` — so it has a regex to satisfy that a human-typed title does not. The title
+ * branch name, `wf-<run>-<step>`, so it has a regex to satisfy that a human-typed title does not. The title
  * is what the user names; the id is plumbing they never see.
  */
 const mintId = (workflow: Pick<Workflow, "steps">): string => {
@@ -95,7 +95,7 @@ export const addStep = (workflow: Workflow, after?: string): { workflow: Workflo
     return { workflow: withSteps(workflow, [...workflow.steps, step]), stepId: id };
 };
 
-/* Draw a dependency. Refused — the workflow comes back unchanged — when it would close a cycle, when either
+/* Draw a dependency. Refused, the workflow comes back unchanged, when it would close a cycle, when either
  * end is missing, or when the edge is already there. Refusing rather than repairing is right for this one:
  * there is no sensible interpretation of "B waits for A" once A already waits for B.
  */
@@ -118,7 +118,7 @@ export const disconnectSteps = (workflow: Workflow, from: string, to: string): W
     );
 
 /* Remove a step, and take its edges with it. Its dependents lose the reference rather than being left pointing
- * at nothing — producing a dangling `needs` as a side effect of a delete would be the designer breaking its
+ * at nothing, producing a dangling `needs` as a side effect of a delete would be the designer breaking its
  * own document, and the fault would surface at save time as a sentence about a step that no longer exists.
  */
 export const removeStep = (workflow: Workflow, id: string): Workflow => {
@@ -126,7 +126,7 @@ export const removeStep = (workflow: Workflow, id: string): Workflow => {
     return withSteps(workflow, workflow.steps.filter((step) => step.id !== id).map(withoutNeed));
 };
 
-/* Flip how a step meets its predecessor — the choice the designer puts on the EDGE rather than in a form,
+/* Flip how a step meets its predecessor, the choice the designer puts on the EDGE rather than in a form,
  * because it is the one structural decision a reader can see (a solid tie versus a dashed handover) and the
  * one that most changes what the run does.
  *

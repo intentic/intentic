@@ -5,10 +5,10 @@ import { OkSchema, PushChannelIdSchema, PushChannelSchema, PushConfigQuerySchema
 // push/push-store.ts for why the key lives on the history volume), and sends on the three moments where the
 // operator's attention is genuinely wanted: a turn finished, the agent is blocked on an answer, and an
 // automation is waiting for approval. A channel is either a browser's web-push subscription or a native
-// install reached through the platform's push relay — see PushChannelSchema for the split and why.
+// install reached through the platform's push relay, see PushChannelSchema for the split and why.
 //
 // `test` exists because a notification pipeline has four independent failure points the user cannot inspect
-// (device permission, service-worker or shell registration, the daemon's key, the push service itself) — a
+// (device permission, service-worker or shell registration, the daemon's key, the push service itself), a
 // button that proves the whole chain end-to-end is worth more than any amount of status rendering.
 export const pushContract = {
     config: oc.route({ method: "GET", path: "/push/config" }).input(PushConfigQuerySchema).output(PushConfigSchema),

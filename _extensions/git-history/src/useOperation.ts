@@ -8,8 +8,8 @@ import { useRefRefresh } from "./useRefRefresh.js";
 /* WHETHER THIS REPO IS HALTED MID-OPERATION, and the way out.
  *
  * The graph is where a stuck repo is most visible and least explicable: HEAD sits somewhere unexpected, a rebase
- * has replayed half its commits, and none of it says why. Nothing this extension starts can cause it — every
- * write it makes aborts cleanly on failure daemon-side — so this is always what a terminal left behind, which is
+ * has replayed half its commits, and none of it says why. Nothing this extension starts can cause it, every
+ * write it makes aborts cleanly on failure daemon-side, so this is always what a terminal left behind, which is
  * exactly why the graph has to surface it rather than assume its own actions are the only ones.
  *
  * Refreshed off the ref push rather than polled: the markers this reads are written in the git dir, so starting
@@ -30,14 +30,14 @@ export function useOperation(repo: Ref<string>) {
 
     const { busy, error: actionError, run } = useAsyncAction();
 
-    // Aborting rewrites the worktree AND moves HEAD, so the log goes with it — the ref push covers every other
+    // Aborting rewrites the worktree AND moves HEAD, so the log goes with it, the ref push covers every other
     // browser, but this one should not wait a round trip to see its own click land.
     const abort = (): Promise<void> =>
         run(async () => {
             const result = await api.sandbox.rpc.git.abort({ repo: repo.value });
             if (!result.ok) {
                 // Someone else finished or aborted it between the render and the click. Nothing to report as a
-                // failure — refreshing below simply drops the banner.
+                // failure, refreshing below simply drops the banner.
                 await queryClient.invalidateQueries({ queryKey: key.value });
                 return;
             }

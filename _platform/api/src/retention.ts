@@ -11,16 +11,16 @@ import type { PrismaClient } from "@intentic-app/prisma";
 // Data-retention sweep (GDPR storage limitation): expired sessions, verifications and desktop sign-in
 // handoffs, plus sandbox-share invites older than 90 days whose email never became an account
 // (grant-before-signup emails must not linger forever). Runs at boot, then daily. The privacy policy
-// documents these windows — keep in sync.
+// documents these windows, keep in sync.
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INVITE_MAX_AGE_MS = 90 * DAY_MS;
 
 const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; verifications: number; handoffs: number; invites: number }> => {
     const now = new Date();
-    // A handoff normally lives seconds — the redeem deletes it — so this only ever catches the ones nobody
+    // A handoff normally lives seconds, the redeem deletes it, so this only ever catches the ones nobody
     // picked up. They hold a Google ID token, which is exactly why an unclaimed one must not sit for a day.
     // The creator pool's ledgers keep 13 months: a full year of transparency history plus the month in
-    // progress, then the rows go — they are pseudonymous but per-user, so storage limitation applies. The
+    // progress, then the rows go, they are pseudonymous but per-user, so storage limitation applies. The
     // credit meter's day rows follow the same window (nothing reads a past day, but a year of them is what
     // lets a member dispute a bill), as do the donation and service-run rows earnings were computed from.
     const ledgerCutoff = new Date(now.getTime() - 396 * DAY_MS).toISOString().slice(0, 10);
@@ -35,9 +35,9 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
         // past month, but a year of them is what lets someone dispute a limit they were told they hit.
         prisma.hostedUsage.deleteMany({ where: { month: { lt: ledgerCutoff.slice(0, 7) } } }),
         // Wanted-list rows go far sooner than the ledgers: the public aggregate reads 90 days, and a want is
-        // a lead rather than a record anyone disputes — double the read window is all the history it needs.
+        // a lead rather than a record anyone disputes, double the read window is all the history it needs.
         prisma.serviceWant.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 180 * DAY_MS) } } }),
-        /* Approval offers are ephemera, not a ledger — the CHARGE is recorded as a service run, which the
+        /* Approval offers are ephemera, not a ledger, the CHARGE is recorded as a service run, which the
          * window above keeps. What an offer holds is the request body an agent composed, which can carry
          * anything the task was about, so it goes on the shortest window here: a day is far past the ten
          * minutes it could ever be acted on, and long enough that "what did my agent ask for this morning"
@@ -48,7 +48,7 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
         prisma.oauthAccessToken.deleteMany({ where: { refreshTokenExpiresAt: { lt: now } } }),
     ]);
     /* Offers nobody answered, marked before the delete above eventually takes them. Not a correctness
-     * requirement — every reader already treats a lapsed row as expired — but a `pending` row that can never
+     * requirement, every reader already treats a lapsed row as expired, but a `pending` row that can never
      * be clicked is a table lying at rest, and this is the one statement that stops it. */
     await expireOffers(prisma, now);
     const stale = await prisma.sandboxMember.findMany({
@@ -84,7 +84,7 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
         /* The record sweep: the loopback pair (`local-<id>` A + its ACME TXT) of sandboxes that no longer
          * exist, plus any CNAME left pointing at a Cloudflare tunnel from before the migration. Nothing
          * creates tunnel records any more, so this is now a shrinking cleanup rather than a standing defence
-         * against the per-zone quota — but the `total` it logs is still the number to watch. */
+         * against the per-zone quota, but the `total` it logs is still the number to watch. */
         try {
             const rows = await prisma.sandbox.findMany({ select: { tokenDigest: true } });
             const liveSandboxIds = new Set(rows.map((row) => row.tokenDigest.slice(0, 12)));
@@ -110,7 +110,7 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
         }
         /* The hour meter's daily settle: close the stretch of every machine that has stopped since anyone
          * last looked. Without this a box woken once and asleep an hour later stays uncounted until its owner
-         * happens to return — which is precisely the account the meter most needs to be right about.
+         * happens to return, which is precisely the account the meter most needs to be right about.
          *
          * Before the idle sweep deliberately: settling reads machine state anyway, and a machine about to be
          * collected should have its last stretch on the books before its app stops existing. */

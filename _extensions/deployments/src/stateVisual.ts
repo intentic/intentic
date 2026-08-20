@@ -2,13 +2,13 @@ import type { IconName, StatusVariant } from "@intentic/extension-ui";
 import type { DeployServerState, DeployState } from "./contract";
 import type { IncidentTone } from "./incidents";
 
-/* Every way a deployment state is drawn, in one table — the statusVisual.ts pattern from ext-pipelines. Class
+/* Every way a deployment state is drawn, in one table, the statusVisual.ts pattern from ext-pipelines. Class
  * strings are spelled out in full because Tailwind scans source text: `text-${tone}` would never reach the
  * stylesheet.
  *
  * `stopped` is NEUTRAL, not red, and that is the design rather than an oversight. Most stopped things were
  * stopped on purpose, so colouring them as breakage paints a board that is permanently alarming and therefore
- * unreadable — the level-vs-edge point that incidents.ts exists to make. What turns red is `unhealthy` (a
+ * unreadable, the level-vs-edge point that incidents.ts exists to make. What turns red is `unhealthy` (a
  * crash loop is never intentional) and the incident strip above the list. */
 
 export interface StateTone {
@@ -18,7 +18,7 @@ export interface StateTone {
     readonly variant: StatusVariant;
     readonly text: string;
     readonly dot: string;
-    // The row's left accent stripe — ext-pipelines' `rowBorder`, so a stopped container and a canceled CI run
+    // The row's left accent stripe, ext-pipelines' `rowBorder`, so a stopped container and a canceled CI run
     // are the same grey by construction. It is what lets a board be scanned by colour down its edge instead of
     // by reading a chip on every line.
     readonly rowBorder: string;
@@ -118,7 +118,7 @@ export const gaugeTone = (percent: number): string => {
  *
  * `registry.gitlab.com/radarsu/atlas/registry-api:main` becomes `registry-api:main`. Four services of one stack
  * share the first forty characters of that string, so a column of them is forty characters of identical noise
- * ahead of the eight that differ — the reader's eye has nowhere to land. The full reference is never dropped,
+ * ahead of the eight that differ, the reader's eye has nowhere to land. The full reference is never dropped,
  * only demoted to the row's tooltip, which is where a registry host belongs: you check it when something is
  * wrong, you do not read it forty times a day. */
 export const imageLabel = (image: string): string => image.split(`/`).at(-1) ?? image;

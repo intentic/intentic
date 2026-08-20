@@ -1,14 +1,14 @@
 import { z } from "zod";
 
-/* THE MEMORY EXTENSION'S OWN WIRE CONTRACT — shared by its two halves and by nobody else.
+/* THE MEMORY EXTENSION'S OWN WIRE CONTRACT, shared by its two halves and by nobody else.
  *
  * This used to live in @intentic/sandbox-contract as core routes; it moved here when the backend did. The
  * keystone property survives at the right grain: the UI half and the server half import THIS file and are
- * compiled together, so their wire cannot drift — while the core contract no longer carries a feature the
+ * compiled together, so their wire cannot drift, while the core contract no longer carries a feature the
  * core no longer implements. Paths are the extension's own (the daemon proxies /x/intentic.memory/<path> and
  * the backend host strips the prefix), so both halves speak them relative. */
 
-// The daemon-proxied prefix the UI half calls — its own namespace, so no permissions.sandbox entry is needed.
+// The daemon-proxied prefix the UI half calls, its own namespace, so no permissions.sandbox entry is needed.
 // A literal rather than derived from the id so the permissions conformance scanner (a regex over source) can
 // resolve calls that interpolate it.
 export const MEMORY_BASE = "/x/intentic.memory";

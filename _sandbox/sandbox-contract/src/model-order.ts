@@ -1,35 +1,35 @@
-/* HOW A MODEL CATALOG IS ORDERED — one rule for every provider, because only one provider publishes an order
+/* HOW A MODEL CATALOG IS ORDERED, one rule for every provider, because only one provider publishes an order
  * worth keeping.
  *
  * Anthropic's REST /v1/models answers newest-first: that IS a provider opinion, and Claude's catalog rides it
- * (claude-models.ts). Every other provider here is read through an OpenAI-compatible /v1/models — Codex and
- * Gemini and Kimi via the bundled translator — or out of xAI's "Did you mean" rejection, and those
+ * (claude-models.ts). Every other provider here is read through an OpenAI-compatible /v1/models. Codex and
+ * Gemini and Kimi via the bundled translator, or out of xAI's "Did you mean" rejection, and those
  * endpoints publish a SET, not a ranking: they hand the ids back in whatever order their registry iterates,
  * which in practice is alphabetical. Reading that as a preference is what put "GPT 5.4 Mini" at the head of the
  * Codex group with GPT 5.6 below it, and what made a fresh Codex conversation start on whichever id happened to
- * sort first — models[0] is the provider default.
+ * sort first, models[0] is the provider default.
  *
  * So for those providers the order is DERIVED from the id, out of the only two facts an id reliably carries:
- * which TIER the model is (the adjective) and which RELEASE it is (the numbers). Both are provider-agnostic —
- * every vendor names its models the same way — which is what lets the daemon's four catalog services and the
+ * which TIER the model is (the adjective) and which RELEASE it is (the numbers). Both are provider-agnostic,
+ * every vendor names its models the same way, which is what lets the daemon's four catalog services and the
  * web's picker share one rule instead of each inventing a local one. */
 
 // A version-ish segment: digits and dots, optionally prefixed by the vendor's version marker (`4`, `5.1`, `v2`,
 // `k3`, `k2.7`, `20251001`). Kimi is the one provider that fuses the marker with the generation; treating `k3`
 // as a name made the current flagship look unversioned, so K2.x sorted above it. Everything else is a NAME
-// segment and belongs to the family — which is what makes the split below exhaustive.
+// segment and belongs to the family, which is what makes the split below exhaustive.
 const VERSION_SEGMENT = /^(?:v|k)?[\d.]+$/i;
 
 // A date stamp rather than a version component: six digits or more (20251001, 250514). The distinction is not
-// cosmetic — claude-opus-4-1-20250805 (Opus 4.1) and claude-opus-4-20250514 (Opus 4.0) compare as (4,1) vs (4)
-// with the stamps held apart, and as (4,1,20250805) vs (4,20250514) — the OLDER model winning — without.
+// cosmetic, claude-opus-4-1-20250805 (Opus 4.1) and claude-opus-4-20250514 (Opus 4.0) compare as (4,1) vs (4)
+// with the stamps held apart, and as (4,1,20250805) vs (4,20250514), the OLDER model winning, without.
 const DATE_SEGMENT = /^\d{6,}$/;
 
 const segmentsOf = (id: string): string[] => id.split(/[-_]/);
 
-// A model's FAMILY — its id with every version-ish segment dropped, so claude-opus-5 and claude-opus-4-8 land
+// A model's FAMILY, its id with every version-ish segment dropped, so claude-opus-5 and claude-opus-4-8 land
 // together (as do gpt-5.1/gpt-5, and claude-haiku-4-5-20251001 with its date suffix). Derived, never listed: a
-// family that ships tomorrow groups itself. The id is the stable key here — labels get renamed, ids don't.
+// family that ships tomorrow groups itself. The id is the stable key here, labels get renamed, ids don't.
 export const familyOf = (id: string): string => {
     const stem = segmentsOf(id)
         .filter((segment) => !VERSION_SEGMENT.test(segment))
@@ -43,7 +43,7 @@ export interface ModelRelease {
     // id (kimi-latest, gemini-pro-agent), which therefore reads as the oldest of its tier: a rolling alias names
     // no release, and inventing one for it would outrank the models that do name theirs.
     readonly version: readonly number[];
-    // The id's date stamp, 0 for none — the tiebreak between two builds of the SAME version.
+    // The id's date stamp, 0 for none, the tiebreak between two builds of the SAME version.
     readonly date: number;
 }
 
@@ -75,14 +75,14 @@ const compareRelease = (left: ModelRelease, right: ModelRelease): number => {
 
 /* THE ONE CURATED FACT in this file, and the only one the providers publish nowhere the app can read: which tier
  * is the frontier and which is the cheap one. It ranks FAMILIES, never models, and it is a vocabulary of tier
- * ADJECTIVES rather than a table of ids — that scoping is the whole point, because a per-model ranking table
+ * ADJECTIVES rather than a table of ids, that scoping is the whole point, because a per-model ranking table
  * failed here once already. The words are the ones every vendor reaches for, so a release that ships tomorrow
  * ranks itself as long as it is named like its predecessors, and a release named some other way ranks as unknown.
  *
  * An UNKNOWN family LEADS rather than sinks, and that direction is the point: the ranking this replaced sank
  * unrecognized ids to a floor below the everyday tier, so a brand-new flagship sorted beneath the model it
- * replaced. An id carrying no tier word at all is the provider's BASE line (gpt-5.6, grok-4, kimi-k2) — which is
- * exactly the line a user reaches for — and a family nobody here has heard of is far likelier to be the next
+ * replaced. An id carrying no tier word at all is the provider's BASE line (gpt-5.6, grok-4, kimi-k2), which is
+ * exactly the line a user reaches for, and a family nobody here has heard of is far likelier to be the next
  * flagship than the next budget tier. Being wrong costs one row's position; being wrong the other way hides a
  * launch. */
 const TIER_RANK: Readonly<Record<string, number>> = {
@@ -113,7 +113,7 @@ const UNRANKED = -1;
 
 /* Some providers name a capability ladder INSIDE one release instead of using the cross-release adjectives
  * above. Codex 5.6's Sol/Terra/Luna rows are that shape: they must remain together ahead of the older 5.5 line,
- * but their order is not an arbitrary id tiebreak — Sol is the strongest, followed by Terra, then Luna. Keeping
+ * but their order is not an arbitrary id tiebreak. Sol is the strongest, followed by Terra, then Luna. Keeping
  * this as a separate rank lets release recency still win across generations (a future GPT 5.7 base model must
  * not be buried under a recognized 5.6 suffix), while the three siblings sort by their real tier. */
 const RELEASE_TIER_RANK: Readonly<Record<string, number>> = {
@@ -135,23 +135,23 @@ const lastRankOf = (family: string, ranks: Readonly<Record<string, number>>): nu
 
 const releaseTierRankOf = (family: string): number => lastRankOf(family, RELEASE_TIER_RANK);
 
-/* HOW HARD AN ID SAYS IT WILL THINK. A routed catalog does not publish one row per model — it publishes one row
+/* HOW HARD AN ID SAYS IT WILL THINK. A routed catalog does not publish one row per model, it publishes one row
  * per model PER THINKING LEVEL, spelling the level into the id: `gemini-3.6-flash-high` and
  * `gemini-3.5-flash-extra-low` are the same Flash at opposite ends of its reasoning budget.
  *
  * Which the ranking above cannot see at all, and that blind spot has a direction: `high` and `low` are both
- * unrecognized words, so two variants of one model tie on tier and the RELEASE tiebreak settles them — and the
+ * unrecognized words, so two variants of one model tie on tier and the RELEASE tiebreak settles them, and the
  * newest variant a channel publishes is routinely the high one. The quick model, whose entire job is to be the
  * cheap rung, would therefore reach for the most expensive reading of the cheapest model it can find.
  *
  * That is not a small mis-sort. Thinking is the difference between a commit message that is in the box before
- * the user has finished reading the file list and one that arrives half a minute later — measured at ~2s versus
+ * the user has finished reading the file list and one that arrives half a minute later, measured at ~2s versus
  * ~27s on the same model and the same diff (agent/one-shot.ts, which disables thinking for the rungs where a
  * request parameter can). For a routed rung there is no such parameter: the id IS the setting, so this ranking
  * is the only place the choice can be made.
  *
  * Read ONLY by the cheap-end order. A picker orders a catalog by what a person reaches for, and a person
- * pinning `-high` on purpose means it — see compareCheapestFirst for the seam this belongs to. */
+ * pinning `-high` on purpose means it, see compareCheapestFirst for the seam this belongs to. */
 const THINKING_RANK: Readonly<Record<string, number>> = {
     minimal: 0,
     none: 0,
@@ -164,7 +164,7 @@ const THINKING_RANK: Readonly<Record<string, number>> = {
     thinking: 4,
 };
 
-/* An id naming NO level sits between the two ends rather than at either — the provider's own default, which for
+/* An id naming NO level sits between the two ends rather than at either, the provider's own default, which for
  * a model that can think is usually some thinking. Ranking it cheapest would seat a silent default ahead of an
  * id that explicitly says `minimal`, and ranking it dearest would bury every model whose channel publishes no
  * variants at all (Anthropic's, Kimi's) beneath one that does. Neither is what the id claims. */
@@ -180,7 +180,7 @@ const thinkingRankOf = (family: string): number => {
 export const tierRankOf = (family: string): number => lastRankOf(family, TIER_RANK);
 
 // The canonical order of two model ids: broad tier first, then release, then a tier declared within that release.
-// Hand it straight to Array#toSorted — that sort is stable, so two ids this rule cannot separate keep the order
+// Hand it straight to Array#toSorted, that sort is stable, so two ids this rule cannot separate keep the order
 // they arrived in (for Claude, the provider's own).
 export const compareModelIds = (left: string, right: string): number => {
     const leftFamily = familyOf(left);
@@ -192,28 +192,28 @@ export const compareModelIds = (left: string, right: string): number => {
     );
 };
 
-/* The order for a catalog its endpoint published as a SET — Codex, Gemini, Kimi and Grok, i.e. everything but
+/* The order for a catalog its endpoint published as a SET. Codex, Gemini, Kimi and Grok, i.e. everything but
  * Anthropic's ranked list. Falling back on arrival order is what the rule above does with a tie, and for a RANKED
  * catalog that is exactly right: the tie is the provider's own opinion, so claude-opus-5 stays ahead of
  * claude-fable-5. For a set there is no opinion to keep, and the header of this file assumed the leftover order
- * was at least alphabetical — it is not. A subscription can hand tied rows back in whatever order its registry
+ * was at least alphabetical, it is not. A subscription can hand tied rows back in whatever order its registry
  * iterated THIS request, so the tie decides which model a fresh conversation opens on and can flip between
  * catalog refreshes.
  *
- * So a set breaks its own ties on the id. Which sibling that seats first is arbitrary — but it is the same
+ * So a set breaks its own ties on the id. Which sibling that seats first is arbitrary, but it is the same
  * arbitrary answer every refresh, which is the property `default` actually needs. */
 export const compareUnrankedModelIds = (left: string, right: string): number => compareModelIds(left, right) || left.localeCompare(right);
 
 /* THE SAME TIER SCALE READ FROM THE OTHER END, for the one caller that wants the WEAKEST model rather than the
  * strongest: the quick model behind an automatic helper (the commit message written at land time). A picker
  * orders a catalog by what a user reaches for; this orders it by what a helper should spend, and the two are
- * exact opposites — so they share TIER_RANK rather than each naming its own list of cheap ids.
+ * exact opposites, so they share TIER_RANK rather than each naming its own list of cheap ids.
  *
  * The direction of UNRANKED is the reason this can't just be compareModelIds reversed. There, an unrecognized
  * family LEADS, because an id carrying no tier word is the provider's base line and a family nobody here has
  * heard of is likelier the next flagship than the next budget tier. Reversing would therefore seat exactly that
- * unknown-probably-flagship id as the cheap pick. So unknown sinks to LAST here too — both orders agree it is
- * not the efficient rung — and the cheap end is only ever a family whose tier word is actually recognized.
+ * unknown-probably-flagship id as the cheap pick. So unknown sinks to LAST here too, both orders agree it is
+ * not the efficient rung, and the cheap end is only ever a family whose tier word is actually recognized.
  * Falling off the end of a catalog with no efficient tier at all (Kimi publishes none) is then honest: the
  * newest of what it does publish, chosen by the release tiebreak below. */
 export const compareCheapestFirst = (left: string, right: string): number => {
@@ -223,14 +223,14 @@ export const compareCheapestFirst = (left: string, right: string): number => {
         tierRankOf(rightFamily) - tierRankOf(leftFamily) ||
         // BEFORE release, and that placement is the point: two rows of one model differing only in thinking
         // level are the same model, so recency has nothing to say between them, and letting it speak is what
-        // seated the high variant. Tier still wins over both — a thinking Haiku is cheaper than a silent Opus.
+        // seated the high variant. Tier still wins over both, a thinking Haiku is cheaper than a silent Opus.
         thinkingRankOf(leftFamily) - thinkingRankOf(rightFamily) ||
         compareRelease(releaseOf(left), releaseOf(right)) ||
         releaseTierRankOf(rightFamily) - releaseTierRankOf(leftFamily)
     );
 };
 
-/* WOULD RUNNING THIS ID MAKE THE MODEL THINK — as far as its name admits, which for a routed catalog is as far
+/* WOULD RUNNING THIS ID MAKE THE MODEL THINK, as far as its name admits, which for a routed catalog is as far
  * as anyone can tell without running it. True only for an id that spells out a level ABOVE the quiet end, so an
  * ordinary id nobody has annotated (claude-haiku-4-5, kimi-k2) is never accused of it.
  *

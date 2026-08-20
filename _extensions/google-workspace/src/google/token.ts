@@ -6,7 +6,7 @@ import { scopesFor } from "./scopes.js";
 /* MINTING THE ONE-HOUR ACCESS TOKEN every request rides, from whichever durable credential the card holds.
  *
  * Two grants, one endpoint. A `user` card exchanges its refresh token; a `domain` card signs a short JWT with
- * the service account's private key, naming the person to act as in `sub` — which is the whole of domain-wide
+ * the service account's private key, naming the person to act as in `sub`, which is the whole of domain-wide
  * delegation, and the reason a company card needs no per-person approval.
  *
  * THE ERROR THAT MATTERS IS `invalid_grant`. It is what this integration dies of: a consent screen left in
@@ -105,7 +105,7 @@ export const mintToken = async (connection: Connection, credential: Credential, 
     return { token, expiresAt: now + lifetime };
 };
 
-// Exchange an authorization code from the consent flow — `gw auth login`'s last step, and the only place a
+// Exchange an authorization code from the consent flow, `gw auth login`'s last step, and the only place a
 // refresh token is ever created rather than read.
 export const exchangeCode = async (
     clientId: string,

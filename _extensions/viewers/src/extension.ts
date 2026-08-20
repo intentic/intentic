@@ -4,7 +4,7 @@ import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
  *
  * This is where "what can this app open?" lives. The core resolves a path to TEXT or to opaque bytes and stops
  * there; each viewer below claims a set of extensions and turns those bytes into something to look at. Switch
- * this extension off and the workspace still opens every file — as a download — which is the honest floor, and
+ * this extension off and the workspace still opens every file, as a download, which is the honest floor, and
  * the reason none of these ever needed a branch in the core.
  *
  * A viewer is pure render. The host resolves an open file to it, gets the content the way its MANIFEST entry

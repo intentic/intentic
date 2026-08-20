@@ -2,7 +2,7 @@ import { describeProvisionError } from "./provisionError";
 
 /* The pure reduction of the apply event stream into per-resource progress. Kept separate from the composable
  * (which owns the reactive ref, the daemon calls, and the terminal poll) so it's unit-testable against a
- * fabricated stream — including a mid-stream cut + replay, which must rebuild identical state (refresh survival). */
+ * fabricated stream, including a mid-stream cut + replay, which must rebuild identical state (refresh survival). */
 
 export interface ApplyNode {
     readonly id: string;
@@ -42,10 +42,10 @@ export interface ApplyProgressState {
     readonly prunes: readonly ApplyPrune[];
     readonly orphans: readonly ApplyOrphan[];
     readonly converged?: boolean;
-    // apply's {kind:"exit",command:"apply"} arrived — the per-resource phase ended (adopt may still run).
+    // apply's {kind:"exit",command:"apply"} arrived, the per-resource phase ended (adopt may still run).
     readonly applyPhaseDone: boolean;
     // The whole apply → adopt job ended: adopt's exit, or a failed apply's (`&&` means adopt never ran). The
-    // EVIDENCE-based completion signal — the terminal-list poll is only the SIGKILL fallback.
+    // EVIDENCE-based completion signal, the terminal-list poll is only the SIGKILL fallback.
     readonly jobDone: boolean;
     readonly error?: string;
 }
@@ -67,7 +67,7 @@ const str = (value: unknown): string | undefined => (typeof value === `string` ?
 // Fold one apply-events line into the running state. {kind:"start"} resets (a run's file always begins with it,
 // so a replay after refresh rebuilds from scratch); {kind:"exit"} marks the apply phase done and, on a non-zero
 // code with no prior error, records a generic failure (the real reason is in the durable terminal log reachable
-// from the progress card — the CLI lets its error propagate to stderr, not the events file). {kind:"heartbeat"}
+// from the progress card, the CLI lets its error propagate to stderr, not the events file). {kind:"heartbeat"}
 // and any unknown kind pass through untouched.
 export const reduceApplyLine = (state: ApplyProgressState, line: Record<string, unknown>): ApplyProgressState => {
     const kind = line[`kind`];
@@ -135,9 +135,9 @@ export const reduceApplyLine = (state: ApplyProgressState, line: Record<string, 
         return {
             ...state,
             // The chain may be `apply && adopt` or the service capability's `resolve && apply && adopt`.
-            // resolve's clean exit is a preamble — the per-resource phase hasn't even started; any other exit
+            // resolve's clean exit is a preamble, the per-resource phase hasn't even started; any other exit
             // (apply's own, adopt's, an untagged one, or any failure) ends it. The whole JOB ends on adopt's
-            // exit, an untagged exit, or any command's failure (`&&` stops the chain) — the daemon tail and
+            // exit, an untagged exit, or any command's failure (`&&` stops the chain), the daemon tail and
             // applyRunLive use the same convention (isTerminalExit).
             applyPhaseDone: state.applyPhaseDone || command !== `resolve` || failed,
             jobDone: state.jobDone || command === `adopt` || command === undefined || failed,

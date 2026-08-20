@@ -11,10 +11,10 @@ import {
 
 // Per-sandbox agent settings (.intentic/config/settings.json). `get` returns the current flags with defaults applied
 // when the file is absent; `set` overwrites them. `savings` reports what each token-reduction mechanism was
-// worth — the cleaners' realized per-command savings and the terse steer's measured A/B — over an inclusive
+// worth, the cleaners' realized per-command savings and the terse steer's measured A/B, over an inclusive
 // UTC day window, the same one the spend ledger takes, so a screen can filter both with one calendar.
-// `builtinPrompt` returns one of the two built-in system prompts as text — Intentic's own, or Claude Code's
-// read out of the installed CLI — so the settings page can SHOW the prompt behind a mode instead of asking the
+// `builtinPrompt` returns one of the two built-in system prompts as text. Intentic's own, or Claude Code's
+// read out of the installed CLI, so the settings page can SHOW the prompt behind a mode instead of asking the
 // user to trust a description of it, and can fork either into a custom one.
 export const settingsContract = {
     get: oc.route({ method: "GET", path: "/settings" }).output(SandboxSettingsSchema),

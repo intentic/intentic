@@ -1,7 +1,7 @@
 import type { DocComponent, DocTerm } from "./docModel.js";
 import { INDEX_TAIL, REPO_DOC_TAIL, REPO_PROSE_TAIL, packagePageTail, stagingDir, stagingPath } from "./paths.js";
 
-/* THE BRIEFS — what makes a documentation session produce orientation rather than a restated API.
+/* THE BRIEFS, what makes a documentation session produce orientation rather than a restated API.
  *
  * The daemon has exactly one per-conversation specialization seam: the turn's PROMPT (the system prompt is a
  * sandbox-wide owner setting). Everything below is task instruction, which is what a prompt is for.
@@ -9,31 +9,31 @@ import { INDEX_TAIL, REPO_DOC_TAIL, REPO_PROSE_TAIL, packagePageTail, stagingDir
  * There are TWO briefs because there are two jobs, and running them in the wrong order is the single biggest
  * quality failure available here:
  *
- *   MAP  — one agent, once per run, BEFORE any package is documented. It decides which packages form a logical
+ *   MAP , one agent, once per run, BEFORE any package is documented. It decides which packages form a logical
  *          component, what the repo's own vocabulary means, and what to read first. Nothing else can decide
  *          those: they are cross-package judgements, and 42 agents deciding independently produce 42 leaflets
  *          with 42 vocabularies and no map at all.
- *   PACKAGE — one agent per package, fanned out after the map exists, each handed ITS component and the shared
+ *   PACKAGE, one agent per package, fanned out after the map exists, each handed ITS component and the shared
  *          glossary so the set reads as one voice.
  *
  * Five things the briefs have to get right, each of which is a specific failure they exist to prevent:
  *
- * 1. THE AUDIENCE IS AN OUTSIDER, NOT A MAINTAINER. Left unsaid, a coding model writes an API reference —
- *    signatures, options, exported names — which is the one artifact the reader can already get for free from
+ * 1. THE AUDIENCE IS AN OUTSIDER, NOT A MAINTAINER. Left unsaid, a coding model writes an API reference,
+ *    signatures, options, exported names, which is the one artifact the reader can already get for free from
  *    `iq outline`. What cannot be got for free is what this thing is FOR and why it is shaped this way.
  *
  * 2. THE FACTS COME FROM THE TOOL. `intentic-docs facts` computes the package list, the dependency edges, the
  *    sizes and the revisions. An agent left to state those from reading writes numbers that are plausible and
  *    wrong, and a document whose numbers are wrong is worse than no document.
  *
- * 3. FIGURES ARE FENCES, NOT PROSE ABOUT FIGURES — and a PACKAGE agent draws almost none of them. The vocabulary
+ * 3. FIGURES ARE FENCES, NOT PROSE ABOUT FIGURES, and a PACKAGE agent draws almost none of them. The vocabulary
  *    is inlined verbatim below, because a model told "you may include diagrams" invents a format and gets a code
  *    block. But the measurable figures are computed and drawn by the app now, so the package brief's job is
  *    mostly to say "do not write those", which is why it carries its own shorter figure block.
  *
  * 4. IT WRITES TO STAGING, NEVER INTO THE REPO. Published documents are committed by the owner's Publish action
  *    after they have read them. An agent that writes a package's README straight into the package has published
- *    without review, which is the one outcome the two-tree design exists to prevent — and the temptation is
+ *    without review, which is the one outcome the two-tree design exists to prevent, and the temptation is
  *    sharper now that the destination is an ordinary file beside the code rather than a documentation directory.
  *
  * 5. IT VALIDATES ITS OWN OUTPUT. `intentic-docs validate` is on its PATH; the brief requires a clean run before
@@ -57,7 +57,7 @@ const AUDIENCE = [
         `sentence, that difficulty is itself worth writing down.`,
 ].join(`\n`);
 
-// The figure vocabulary, verbatim. This is the contract with @intentic/ui/markdown's figures.ts — a fence
+// The figure vocabulary, verbatim. This is the contract with @intentic/ui/markdown's figures.ts, a fence
 // whose body does not parse renders as a code block, which is a visible, self-correcting failure.
 const FIGURES = [
     `## Figures`,
@@ -92,7 +92,7 @@ const FIGURES = [
         `cannot: what to notice in it.`,
 ].join(`\n`);
 
-/* What a PACKAGE agent may draw — which is much less than the map may, and deliberately so. Sizes, file counts
+/* What a PACKAGE agent may draw, which is much less than the map may, and deliberately so. Sizes, file counts
  * and neighbour lists are computed by `intentic-docs check` and drawn by the app above the prose, so a page that
  * writes them by hand is duplicating a fact it will not be around to update. That duplication was 62% of the
  * bytes in the layout this replaced, and the largest single source of rot in it. */
@@ -120,7 +120,7 @@ const PACKAGE_FIGURES = [
 ].join(`\n`);
 
 /* Provenance takes its revision from the FACTS OUTPUT, not from the browser that started the run. The tool already
- * computes both — `head` for the repository, a per-package `sourceRev` — and it computes them inside the worktree
+ * computes both, `head` for the repository, a per-package `sourceRev`, and it computes them inside the worktree
  * the agent is actually reading. A revision injected from the browser would be one more thing that can be subtly
  * wrong (a run started before a commit landed, a worktree at a different base) about the one field the staleness
  * check depends on. */
@@ -156,7 +156,7 @@ const validateRule = (repoFlag: string): string =>
 export interface MapBriefInput {
     // Root-relative repo dir; "" is the workspace's own root repo.
     readonly repo: string;
-    // Its display name — what the prose should call it.
+    // Its display name, what the prose should call it.
     readonly label: string;
 }
 
@@ -237,7 +237,7 @@ export const mapBrief = (input: MapBriefInput): string => {
 export interface PackageBriefInput {
     readonly repo: string;
     readonly label: string;
-    // Repo-relative package dir — the document's identity.
+    // Repo-relative package dir, the document's identity.
     readonly dir: string;
     // The component this package was assigned by the map phase, when the map placed it in one.
     readonly component?: DocComponent | undefined;

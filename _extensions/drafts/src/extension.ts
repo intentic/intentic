@@ -5,7 +5,7 @@ import { draftsQuery, owedOf } from "./useDrafts";
 
 /* ext-drafts activation: bind the host handle, then register the "Drafts" rail view.
  *
- * PERMANENT TILE, unconditional detect — the shell's old tile made this argument and it moves here with it:
+ * PERMANENT TILE, unconditional detect, the shell's old tile made this argument and it moves here with it:
  * Drafts used to appear only once something was waiting, which made the whole area unlearnable (a surface that
  * exists intermittently cannot be checked, only stumbled into). The tile is the place; the badge is the news.
  *
@@ -29,7 +29,7 @@ const { state: badge, start: startDraftsAttention } = sandboxPoll<ViewBadge | un
                   count: owed,
                   // Phrased to follow the tile's name, which the rail puts in front of it: "Drafts · 3 waiting on you".
                   tooltip: `${owed} waiting on you`,
-                  // `danger` only when something is WRONG (a failed post, an unreadable file) — a proposal
+                  // `danger` only when something is WRONG (a failed post, an unreadable file), a proposal
                   // merely waiting is the resting tone, or the rail cries wolf every time the agent drafts.
                   tone: broken > 0 ? `danger` : `info`,
               };

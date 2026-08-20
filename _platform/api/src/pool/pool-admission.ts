@@ -4,19 +4,19 @@ import { isIP } from "node:net";
 import type { Config } from "../config.js";
 import { forwardToService } from "./pool-services.js";
 
-/* OPEN ADMISSION — the published algorithm that replaced "an operator writes the row after a Discord chat".
+/* OPEN ADMISSION, the published algorithm that replaced "an operator writes the row after a Discord chat".
  *
  * The member's safety never came from curation. It comes from the spend gate in the sandbox
  * (platform/service-offer.ts): the agent cannot spend, one click releases exactly one run, every number on the
  * card is the platform's own, and a run that fails to answer is refunded before a receipt exists. A hostile
- * listing's whole blast radius is a few small, individually-approved, refundable charges — and it ships no
+ * listing's whole reach is a few small, individually-approved, refundable charges, and it ships no
  * code to anyone, because a service is an endpoint rather than a bundle.
  *
  * That leaves review guarding three mechanical questions, which is what this module answers:
- *   1. IDENTITY  — a claimed publisher name plus a payout-ready account (both already exist, creator/*).
- *   2. CONFORMANCE — a live probe the provider's endpoint must pass, INCLUDING refusing forged calls.
- *   3. LISTING RULES — bounded fields, a price band, reserved words, a reachable public https endpoint.
- * What is left over — "is the answer any good" — is not knowable at admission by anyone, so it is not asked
+ *   1. IDENTITY , a claimed publisher name plus a payout-ready account (both already exist, creator/*).
+ *   2. CONFORMANCE, a live probe the provider's endpoint must pass, INCLUDING refusing forged calls.
+ *   3. LISTING RULES, bounded fields, a price band, reserved words, a reachable public https endpoint.
+ * What is left over, "is the answer any good", is not knowable at admission by anyone, so it is not asked
  * here. pool-watch.ts asks it afterwards, out of behaviour, which is a service's only artifact.
  *
  * Every threshold is config (config.ts pool.*), never a constant: a rule a provider cannot look up in advance
@@ -30,7 +30,7 @@ export const LIVE_STATUSES: readonly ServiceStatus[] = [`probation`, `listed`];
 
 /* ── Gate 3: the listing rules ────────────────────────────────────────────────────────────────────────── */
 
-// Words a listing may not wear unless the platform itself published it — the whole of what "impersonation"
+// Words a listing may not wear unless the platform itself published it, the whole of what "impersonation"
 // means on a surface whose only prose is a name and one description. Exported because a domain claim
 // (creator/creator-claim.ts) refuses the same words for the same reason: a claimed domain becomes a
 // publisher name every card shows.
@@ -55,7 +55,7 @@ export interface ListingInput {
 }
 
 /* Every problem with a listing, in one pass rather than one per round trip. A provider fixing four things
- * should learn all four at once — the alternative is four submissions to discover what a published rule
+ * should learn all four at once, the alternative is four submissions to discover what a published rule
  * could have told them before the first. */
 export const checkListingRules = (config: Config, input: ListingInput): readonly string[] => {
     const problems: string[] = [];
@@ -98,10 +98,10 @@ export const checkListingRules = (config: Config, input: ListingInput): readonly
     if (urlProblem !== undefined) {
         problems.push(urlProblem);
     }
-    /* A DOTTED PUBLISHER IS A DOMAIN (the claim's discriminator — creator-claim.ts), and its endpoint must
+    /* A DOTTED PUBLISHER IS A DOMAIN (the claim's discriminator, creator-claim.ts), and its endpoint must
      * live under it. This is what makes a domain claim mean something for a listing: the name on the card
      * and the host that serves the runs are provably the same party, checked here syntactically so the rule
-     * is readable in advance like every other one. Registry-claimed (dotless) publishers are untouched —
+     * is readable in advance like every other one. Registry-claimed (dotless) publishers are untouched,
      * their proof is a repository, and their endpoints host wherever they like. */
     if (input.publisher.includes(`.`) && urlProblem === undefined) {
         const host = new URL(input.upstreamUrl).hostname.toLowerCase();
@@ -112,7 +112,7 @@ export const checkListingRules = (config: Config, input: ListingInput): readonly
     return problems;
 };
 
-// Private space, in the four forms a provider's DNS could hand back. Not a security boundary by itself —
+// Private space, in the four forms a provider's DNS could hand back. Not a security boundary by itself,
 // see resolvesPublicly below for why the name check and the address check are both here.
 const isPrivateAddress = (address: string): boolean => {
     if (isIP(address) === 6) {
@@ -178,7 +178,7 @@ export interface ProbeVerdict {
     readonly checks: readonly ProbeCheck[];
 }
 
-// How far back the replay probe's timestamp is stamped — comfortably outside pool-services.ts's own
+// How far back the replay probe's timestamp is stamped, comfortably outside pool-services.ts's own
 // five-minute tolerance, so a provider implementing the documented check refuses it without ambiguity.
 const REPLAY_AGE_S = 3_600;
 
@@ -188,7 +188,7 @@ const FORGED_SIGNATURE = `0`.repeat(64);
 
 const PROBE_TIMEOUT_MS = 30_000;
 
-// One deliberately-bad call. Anything that is not a 2xx is a pass — including a connection error, which is
+// One deliberately-bad call. Anything that is not a 2xx is a pass, including a connection error, which is
 // the bluntest possible refusal and refuses the forgery just as effectively as a 401 does.
 const expectRefusal = async (
     upstreamUrl: string,
@@ -215,7 +215,7 @@ const expectRefusal = async (
 
 /* THE PROBE. Three calls, all of which must pass, none of which costs anyone a credit.
  *
- * `serves` goes through forwardToService — the REAL forward a paid run takes, not a reimplementation of it —
+ * `serves` goes through forwardToService, the REAL forward a paid run takes, not a reimplementation of it,
  * so what conformance means here cannot drift from what the metered path actually does. The other two prove
  * the endpoint VERIFIES, which is the only reason the signature exists: an endpoint that answers a forged
  * call can be billed by anyone on the internet against the provider's own upstream costs, and listing it
@@ -244,7 +244,7 @@ export const probeService = async (
                 detail: `answered ${outcome.status} to its own sample request — the probe body must be one the service serves`,
             };
         }
-        // Drain the stream; its RETURN value is the verdict — true iff a `result` arrived.
+        // Drain the stream; its RETURN value is the verdict, true iff a `result` arrived.
         let served = false;
         try {
             while (true) {
@@ -287,7 +287,7 @@ export const probeService = async (
     return { passed: checks.every((check) => check.passed), checks };
 };
 
-// The first failing check's sentence — what a provider is shown, and what a suspension records.
+// The first failing check's sentence, what a provider is shown, and what a suspension records.
 export const probeFailure = (verdict: ProbeVerdict): string => {
     const failed = verdict.checks.find((check) => !check.passed);
     if (failed === undefined) {
@@ -318,7 +318,7 @@ export type GateVerdict = { readonly ok: true } | { readonly ok: false; readonly
  * read last, so a listing with four rule problems never spends a network call to learn it also needs payouts.
  *
  * The probe is NOT run here. It is its own call the provider makes when they are ready, because it hits their
- * endpoint and they should be the one choosing when — publish only checks that a passing one is recent. */
+ * endpoint and they should be the one choosing when, publish only checks that a passing one is recent. */
 export const publishGates = async (
     deps: AdmissionDeps,
     config: Config,

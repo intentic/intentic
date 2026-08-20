@@ -2,10 +2,10 @@ import { z } from "zod";
 
 /* WHERE A REGISTRY ENTRY'S CODE LIVES, and how that resolves to something cloneable.
  *
- * A registry never hosts code — an entry is a pointer to somebody else's repository at a commit. `source` is
+ * A registry never hosts code, an entry is a pointer to somebody else's repository at a commit. `source` is
  * that pointer in the shapes Claude Code's plugin-marketplace format already defines, so one registry repo
  * serves both consumers; `resolveSource` maps the shapes we can clone onto the url/ref/path a capability
- * install takes, and returns undefined for the ones we can't (npm, say) rather than dropping the entry —
+ * install takes, and returns undefined for the ones we can't (npm, say) rather than dropping the entry,
  * an entry that exists but can't be installed in a click is information, a missing row is a bug report. */
 
 // The resolved pointer: exactly the fields a plugin- or extension-capability install needs.
@@ -46,14 +46,14 @@ export const resolveSource = (source: unknown, registryUrl: string, pluginRoot: 
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 
-/* Whether this pointer names one immutable commit. An EXTENSION install requires it — extension code runs
+/* Whether this pointer names one immutable commit. An EXTENSION install requires it, extension code runs
  * trusted in the owner's browser, so the approved code and the running code have to be the same object, and a
  * branch name is a promise the upstream can break with a force-push. A registry entry that gives only a branch
  * is still listed and still readable; it just can't be a one-click install, which is the pressure that makes
  * authors pin. Plugins are laxer by design: they load into the agent, not the browser. */
 export const isShaPinned = (install: RegistryInstall | undefined): boolean => install?.ref !== undefined && FULL_SHA.test(install.ref);
 
-// `owner/repo` for a GitHub pointer — what the scanner keys upstream facts by, and what the gallery links to.
+// `owner/repo` for a GitHub pointer, what the scanner keys upstream facts by, and what the gallery links to.
 // Undefined for any host that isn't GitHub, which is a listing we simply carry no stars for.
 export const githubRepoOf = (install: RegistryInstall | undefined): string | undefined => {
     if (install === undefined) {

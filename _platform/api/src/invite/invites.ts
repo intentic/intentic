@@ -5,7 +5,7 @@ import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 // that a stale link in an inbox goes dead. Resend mints a fresh token + expiry.
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-// The invite/grant row's derived state — the only place the pending/accepted/expired rules live, so the roster
+// The invite/grant row's derived state, the only place the pending/accepted/expired rules live, so the roster
 // and the accept gate agree. Pure (no DB): unit-tested in invites.test.ts.
 interface InviteRow {
     email: string;
@@ -36,7 +36,7 @@ export const toInviteRecord = (member: InviteRow, now: Date): InviteRecord => ({
 });
 
 // The accept gate for a found invite row: whether this caller can accept, and if so whether it's a fresh accept
-// (needs the acceptedAt write) or already done (idempotent). email-locked — the caller's Google email must equal
+// (needs the acceptedAt write) or already done (idempotent). email-locked, the caller's Google email must equal
 // the invited address, since the daemon authorizes by that exact email. Pure so the expiry/lock rules are tested
 // without a DB; the handler maps each rejection to an ORPCError and the null-row (invalid token) case itself.
 export type InviteAcceptDecision = "accept" | "already-accepted" | "expired" | "wrong-email";

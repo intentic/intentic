@@ -7,7 +7,7 @@ import { bindHost } from "./host.js";
  * surfaces documentation legitimately has.
  *
  * ONE RAIL TILE, WORKSPACE-WIDE. Documentation is read to answer "how does this system work", and a system is
- * rarely one repository — so the area is workspace-wide and the repo is a dimension inside it, the same shape and
+ * rarely one repository, so the area is workspace-wide and the repo is a dimension inside it, the same shape and
  * for the same reason as Acceptance. A tile per repo would fragment the one thing a reader wants, which is the map.
  *
  * IT ACTIVATES ON ANY REPO, not on documents already existing. This view is where the FIRST document set gets
@@ -16,12 +16,12 @@ import { bindHost } from "./host.js";
  * area.
  *
  * THE PER-REPO SURFACE IS `directory` AND `auxiliary`. Opened from the Workspace tree beside whatever else serves
- * that repo — auxiliary because a docs browser renders no preview, so claiming the repo would drop the dev-server
+ * that repo, auxiliary because a docs browser renders no preview, so claiming the repo would drop the dev-server
  * tile for nothing. The extension API's own comment names "a docs browser" as the example of exactly this case.
  * It activates for every repo rather than only documented ones DELIBERATELY, and not for want of a fact to gate
  * on: `RepoFacts.docs` now says which repos carry documentation (docPresence spends it to avoid reading anything
  * from the rest), but gating the surface on it would hide the one place a first document set gets generated from
- * every repo that needs one. An undocumented repo gets an empty state that offers to generate — the same answer
+ * every repo that needs one. An undocumented repo gets an empty state that offers to generate, the same answer
  * the rail gives. */
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
@@ -35,18 +35,18 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             surface: `rail`,
             /* `question-circle`: the icon set has no `book`, and the two obvious alternatives both collide at
              * rail size. `align-left` (the first attempt) is a stack of horizontal lines, which is Acceptance's
-             * `list-check` with the ticks removed — indistinguishable in a 20px tile. `file` is a page outline,
+             * `list-check` with the ticks removed, indistinguishable in a 20px tile. `file` is a page outline,
              * which is every other boxy glyph in the rail at a glance (`desktop`, and Workspace's `folder` until
              * that tile moved to `file-tree`). A ring with a mark inside shares its silhouette with
              * nothing else in the rail, and "?" is the most widely understood "read about this" affordance.
              * `clock` (Automations) is the only other round glyph, so RAIL_ORDER keeps the two apart.
              *
              * `Activation.icon` is a deliberately OPEN string (a third-party bundle may name an icon this app has
-             * never heard of), so a name outside the set is not a compile error — the rail silently renders its
+             * never heard of), so a name outside the set is not a compile error, the rail silently renders its
              * fallback, which is how the tile shipped blank once. builtins.test.ts now checks every compiled-in
              * extension's icons against the real vocabulary. */
             detect: (repos) => (repos.length > 0 ? [{ key: `documentation`, title: `Documentation`, icon: `question-circle` }] : []),
-            // Newly generated sets nobody has read yet — see attention.ts for why that is the bar rather than a
+            // Newly generated sets nobody has read yet, see attention.ts for why that is the bar rather than a
             // count of what is undocumented or stale.
             badge: () => documentationBadge(),
             view: async () => (await import(`./DocsView.vue`)).default,
@@ -64,13 +64,13 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
         }),
     );
 
-    /* THE PER-DIRECTORY SURFACE — an icon on every documented directory in the Workspace tree, opening that
+    /* THE PER-DIRECTORY SURFACE, an icon on every documented directory in the Workspace tree, opening that
      * directory's page as a tab.
      *
      * This is the grain the other two surfaces cannot reach. The rail tile is workspace-wide and the directory
      * panel is per REPO, but a document is per PACKAGE: fifty-five of them in this monorepo, each mirroring a
      * directory that is already sitting in the tree. Reaching one meant leaving the file you were reading, opening
-     * an area, and finding the package again in a list — for an answer ("what is this thing?") that is only ever
+     * an area, and finding the package again in a list, for an answer ("what is this thing?") that is only ever
      * asked while looking at the thing.
      *
      * The row's tooltip carries the package's one-liner rather than the word "documentation": the icon already
@@ -96,7 +96,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                      * row icon used to be revealed on hover, which is right for an action and wrong for this: a
                      * repo's row is one row and gets found, while fifty-five package rows that look identical to
                      * fifty-five undocumented ones hide the whole per-package layer. Reading the tree now also
-                     * reads the coverage — and a package that is missing one is visible too. */
+                     * reads the coverage, and a package that is missing one is visible too. */
                     evidence: true,
                 };
             },

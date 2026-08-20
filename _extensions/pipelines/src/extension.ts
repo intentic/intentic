@@ -4,7 +4,7 @@ import { ciRunsQuery } from "./ciRunsQuery";
 import { bindHost } from "./host";
 
 /* ext-pipelines activation: bind the host handle, start the badge's background poll, then register the
- * "Pipelines" rail view. Capability-driven, not repo-driven — the tile surfaces when a github/gitlab connector
+ * "Pipelines" rail view. Capability-driven, not repo-driven, the tile surfaces when a github/gitlab connector
  * is on, detected purely from the public capability facts (which repos actually map to CI projects is the
  * daemon's answer, rendered inside the view). */
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
@@ -28,7 +28,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                        * either lands or doesn't", which is the whole of what the tile reports. */
                       [{ key: `pipelines`, title: `Pipelines`, icon: `bolt` }]
                     : [],
-            // Unacknowledged breakages only — see ciStreaks.ts for why this counts streaks and not failures.
+            // Unacknowledged breakages only, see ciStreaks.ts for why this counts streaks and not failures.
             badge: () => ciBadge(),
             /* The board's opening read, into the same entry observed by usePipelines and filled by the badge's
              * poll. The host schedules it at the rail band: a wish for spare time, never competition for work

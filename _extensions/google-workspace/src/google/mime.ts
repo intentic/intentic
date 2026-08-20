@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 
 /* BUILDING THE MESSAGE GMAIL ACTUALLY SENDS. Gmail's send endpoint takes an RFC 5322 message, not a JSON
- * object with a `to` and a `body`, so composing one is unavoidable — and getting it slightly wrong is how mail
+ * object with a `to` and a `body`, so composing one is unavoidable, and getting it slightly wrong is how mail
  * arrives with a mangled subject or an attachment nobody can open.
  *
  * Two decisions carry most of that: headers with non-ASCII in them are encoded per RFC 2047 (otherwise an
@@ -27,7 +27,7 @@ export interface Draft {
     readonly headers?: Readonly<Record<string, string>>;
 }
 
-// RFC 2047, base64 form. Plain ASCII passes through — an encoded-word where none is needed is legal but makes
+// RFC 2047, base64 form. Plain ASCII passes through, an encoded-word where none is needed is legal but makes
 // every subject line unreadable in the one place a human might look at the raw message.
 export const encodeHeader = (value: string): string =>
     /^[ -~]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
@@ -78,7 +78,7 @@ export const buildMessage = (draft: Draft, boundarySeed: string): string => {
 // What Gmail's `raw` field takes.
 export const encodeRaw = (message: string): string => Buffer.from(message, "utf8").toString("base64url");
 
-// A file's content type from its name — enough for the formats people actually attach. Everything else is
+// A file's content type from its name, enough for the formats people actually attach. Everything else is
 // octet-stream, which every mail client handles by offering to save it.
 const TYPES: Record<string, string> = {
     pdf: "application/pdf",

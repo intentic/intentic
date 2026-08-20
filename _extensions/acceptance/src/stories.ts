@@ -1,12 +1,12 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 
-/* A repo's user stories, read off `docs/user-stories`. One FILE is one story — one test session, one agent, one
+/* A repo's user stories, read off `docs/user-stories`. One FILE is one story, one test session, one agent, one
  * report. Not a section-level split: an acceptance run is a walkthrough with setup and state, and cutting a
  * file into fragments would hand each agent a scenario whose preconditions live in a sibling fragment. A repo
  * that wants finer tests writes finer files.
  *
  * Subdirectories are groups, not stories, and they nest one level in the UI (`auth/01-sign-in.md` shows under
- * "auth") — deeper trees still work, the group is just the first segment.
+ * "auth"), deeper trees still work, the group is just the first segment.
  *
  * Stories stay MARKDOWN FILES IN THE REPO even though the view that edits them is workspace-wide. A story is
  * product documentation: it belongs beside the code that implements it, in the diff that changes it, and in the
@@ -14,18 +14,18 @@ import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 
 export const STORIES_DIR = "docs/user-stories";
 
-// A repo may tune the brief without forking the extension — see brief.ts. Lives beside the stories, dot-prefixed
+// A repo may tune the brief without forking the extension, see brief.ts. Lives beside the stories, dot-prefixed
 // so it never reads as one.
 export const BRIEF_OVERRIDE = `${STORIES_DIR}/.acceptance.md`;
 
 // What counts as a story file. Markdown is the norm; .feature (Gherkin) and .txt are accepted because the brief
-// hands the text to a model verbatim — it never parses the story, so the format is the author's business.
+// hands the text to a model verbatim, it never parses the story, so the format is the author's business.
 const STORY_EXTENSIONS = [".md", ".markdown", ".feature", ".txt"];
 
 export interface Story {
-    // The repo this story belongs to — which app it is walked through, and how the view groups it.
+    // The repo this story belongs to, which app it is walked through, and how the view groups it.
     readonly repo: string;
-    // Root-relative path — what /workspace/file is asked for.
+    // Root-relative path, what /workspace/file is asked for.
     readonly path: string;
     // Stable, filesystem-free identity used in the run directory and the conversation id.
     readonly slug: string;
@@ -75,14 +75,14 @@ export const titleOf = (path: string, content: string | undefined): string => {
 };
 
 /* WHERE A STORY'S APP ANSWERS is a property of its GROUP, not of its repo. One repository can serve several
- * applications — a monorepo's marketing site and its web app are two dev servers on two ports — and the group is
+ * applications, a monorepo's marketing site and its web app are two dev servers on two ports, and the group is
  * the only thing in a stories tree that already says which is which. So a run resolves one address per
  * (repo, group) pair, and an ungrouped story simply targets its repo, which is what every run did before groups
  * could be aimed. The key is `<repo>/<group>` so it reads as the directory it names. */
 export const targetKeyOf = (story: Pick<Story, "repo" | "group">): string => (story.group === `` ? story.repo : `${story.repo}/${story.group}`);
 
 /* Fold a listing into stories. `entries` is what /workspace/children returned for `docs/user-stories` and each
- * of its subdirectories, flattened by the caller — this stays pure so it is testable without a daemon.
+ * of its subdirectories, flattened by the caller, this stays pure so it is testable without a daemon.
  *
  * Slugs are made unique by suffixing `-2`, `-3`, … because two groups may legitimately hold `overview.md`, and a
  * collision would otherwise put two agents in one run directory, silently overwriting each other's report. This
@@ -112,7 +112,7 @@ export const storiesOf = (repo: string, entries: readonly WorkspaceTreeEntry[], 
 
 /* Merge several repos' stories into the one list the workspace-wide view shows, renumbering any slug two REPOS
  * both produced. Without this, `site/docs/user-stories/checkout.md` and `api/docs/user-stories/checkout.md`
- * derive the same conversation id and the same run directory — two agents overwriting each other's report, which
+ * derive the same conversation id and the same run directory, two agents overwriting each other's report, which
  * is the exact failure storiesOf() already prevents inside one repo. */
 export const uniqueOf = (stories: readonly Story[]): Story[] => {
     const taken = new Map<string, number>();
@@ -127,14 +127,14 @@ export const uniqueOf = (stories: readonly Story[]): Story[] => {
  *
  * Criteria are a CHECKLIST SECTION of the story file, not a sidecar: the file stays the one thing a human reads
  * and a PR reviews, and the brief inlines it whole either way. Authoring them structurally is what buys the
- * report its matrix — the agent is told to return one verdict per authored criterion, in order, so a run's
+ * report its matrix, the agent is told to return one verdict per authored criterion, in order, so a run's
  * findings line up with what someone actually promised rather than with the agent's paraphrase of the prose.
  *
  * A story with no such section is still a story. The brief falls back to "read the criteria out of the text
  * yourself", which is what every story did before the section existed. */
 
 const CRITERIA_HEADING = "## Acceptance criteria";
-// `- [ ] text`, `- [x] text`, or a plain `- text` — authors write all three, and the box state carries no meaning
+// `- [ ] text`, `- [x] text`, or a plain `- text`, authors write all three, and the box state carries no meaning
 // here: a criterion is verified by a run, never by someone ticking it in an editor.
 const CRITERION_LINE = /^\s*[-*]\s+(?:\[[ xX]?\]\s*)?(.+?)\s*$/;
 const HEADING_LINE = /^\s{0,3}#{1,6}\s/;
@@ -148,7 +148,7 @@ export const criteriaOf = (content: string | undefined): string[] => {
         return [];
     }
     const rest = lines.slice(start + 1);
-    // The section runs to the next heading of ANY level — a criteria list followed by "## Notes" must not eat it.
+    // The section runs to the next heading of ANY level, a criteria list followed by "## Notes" must not eat it.
     const end = rest.findIndex((line) => HEADING_LINE.test(line));
     return (end === -1 ? rest : rest.slice(0, end)).flatMap((line) => {
         const match = CRITERION_LINE.exec(line);
@@ -156,7 +156,7 @@ export const criteriaOf = (content: string | undefined): string[] => {
     });
 };
 
-// Everything that is neither the title line nor the criteria section — what the editor shows in its prose box.
+// Everything that is neither the title line nor the criteria section, what the editor shows in its prose box.
 export const narrativeOf = (content: string | undefined): string => {
     const lines = (content ?? ``).split(`\n`);
     const start = headingIndex(lines);

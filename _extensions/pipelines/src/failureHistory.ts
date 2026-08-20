@@ -1,6 +1,6 @@
 import type { PipelineJob, PipelineRun } from "@intentic/sandbox-contract";
 
-/* "Is this the same failure as last time?" — the question a 75%-failure repo actually needs answered.
+/* "Is this the same failure as last time?", the question a 75%-failure repo actually needs answered.
  *
  * A row that says a run failed tells you nothing you can prioritise. What separates a new problem from the
  * one you already know about is whether the SAME job keeps breaking: `eslint` red for nine runs straight is
@@ -14,7 +14,7 @@ export interface JobFailureRun {
     readonly repo: string;
     readonly branch: string;
     readonly createdAt: number;
-    // Undefined while that run's jobs haven't loaded yet — distinct from "loaded, and nothing failed", which
+    // Undefined while that run's jobs haven't loaded yet, distinct from "loaded, and nothing failed", which
     // is an empty array and DOES break a streak.
     readonly failed: readonly string[] | undefined;
 }
@@ -98,6 +98,6 @@ export const recurringFailures = (history: readonly JobFailureRun[]): RecurringF
             }
         }
     }
-    // Worst offender first — the one to fix.
+    // Worst offender first, the one to fix.
     return recurring.toSorted((a, b) => b.runs - a.runs || a.job.localeCompare(b.job));
 };

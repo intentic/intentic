@@ -5,15 +5,15 @@ import type { Config } from "../config.js";
 import { encryptSecret } from "../crypto.js";
 import { poolEnabled } from "./pool-membership.js";
 
-/* THE DEMO SERVICE — a complete, working premium service the platform itself hosts, so the catalog is never
+/* THE DEMO SERVICE, a complete, working premium service the platform itself hosts, so the catalog is never
  * an empty promise and the whole metered path (spend → signed forward → answer → credits header; refund on
  * failure) is demonstrable end to end without recruiting a provider. Its upstream is the platform's own
- * /pool/demo/upstream, which verifies the forwarded signature exactly as a real provider would — making it
+ * /pool/demo/upstream, which verifies the forwarded signature exactly as a real provider would, making it
  * doubly useful as living documentation of what a provider implements.
  *
  * THE REQUEST PICKS THE OUTCOME, test-card style: `scenario` selects which side of the metered contract to
  * demonstrate (the happy stream, a slow run, a paid refusal, a refunded failure, a refunded broken stream),
- * and `paceMs` sets how fast the stream breathes — because the flow's every look (the live status line, the
+ * and `paceMs` sets how fast the stream breathes, because the flow's every look (the live status line, the
  * receipt that says charged, the receipt that says refunded) should be reproducible on demand rather than
  * waiting for a real provider to fail interestingly.
  *
@@ -61,13 +61,13 @@ export const seedDemoService = async (prisma: PrismaClient, config: Config): Pro
     await prisma.service.update({ where: { slug: DEMO_SLUG }, data: state });
 };
 
-/* ── The scenarios — every way a metered run can settle, each reproducible on demand ─────────────────────
+/* ── The scenarios, every way a metered run can settle, each reproducible on demand ─────────────────────
  *
  *   ok      the happy path: paced status lines, then the result (charged; the receipt says ok)
- *   slow    the long run: many status lines at a slower pace — what five patient minutes look like
+ *   slow    the long run: many status lines at a slower pace, what five patient minutes look like
  *   refuse  a provider 4xx: a complete, PAID answer ("your query was malformed"), relayed verbatim
- *   fail    a provider 5xx: no answer at all — the platform refunds before anyone sees a body
- *   broken  a stream that dies without its result — the mid-stream refund and the `refunded` receipt trailer
+ *   fail    a provider 5xx: no answer at all, the platform refunds before anyone sees a body
+ *   broken  a stream that dies without its result, the mid-stream refund and the `refunded` receipt trailer
  *
  * Anything unrecognized reads as `ok`, because a demo that punishes a typo demonstrates nothing. */
 
@@ -101,7 +101,7 @@ export const parseDemoRequest = (body: string): DemoRequest => {
     };
 };
 
-// The canned answer the demo upstream serves — deliberately shaped like a real research result, so an agent
+// The canned answer the demo upstream serves, deliberately shaped like a real research result, so an agent
 // quoting it in chat reads plausibly, and deliberately labelled, so nobody mistakes it for one.
 const demoAnswer = (query: string): object => ({
     demo: true,
@@ -110,7 +110,7 @@ const demoAnswer = (query: string): object => ({
     sources: [{ title: `The creator pool, documented`, url: `https://intentic.dev/api/earn/` }],
 });
 
-// The stream's lines per scenario — NDJSON events in the contract's ServiceStreamEvent vocabulary, status
+// The stream's lines per scenario. NDJSON events in the contract's ServiceStreamEvent vocabulary, status
 // lines then the one `result`. `broken` is the contract violated on purpose: statuses, then silence.
 const demoLines = ({ query, scenario }: DemoRequest): readonly object[] => {
     if (scenario === `slow`) {
@@ -138,7 +138,7 @@ const demoLines = ({ query, scenario }: DemoRequest): readonly object[] => {
     ];
 };
 
-/* What the demo upstream answers, decided per scenario — either a complete HTTP answer (the paid 4xx, the
+/* What the demo upstream answers, decided per scenario, either a complete HTTP answer (the paid 4xx, the
  * refunded 5xx) or a paced NDJSON stream. Being the living reference of the wire format is half this
  * service's job: the platform's own forward parses these exact lines, so the documented shape cannot drift
  * from the enforced one. */

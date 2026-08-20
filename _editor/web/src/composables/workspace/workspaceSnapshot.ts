@@ -4,7 +4,7 @@ import { readWindowState, writeWindowState } from "../windowStore";
 
 /* Where the workspace view's "where I was" lives between page loads: the file tree's open folders and the
  * editor's open tabs, as this window's own state seeded by the last window's (windowStore holds the two-store
- * mechanics and why). Per SANDBOX, like the chat's tab snapshot — a path names a file in one sandbox's /work,
+ * mechanics and why). Per SANDBOX, like the chat's tab snapshot, a path names a file in one sandbox's /work,
  * so carrying it to another would restore a tree of folders that aren't there.
  *
  * Two keys rather than one blob, because the two halves have different owners (useWorkspaceTree holds the open
@@ -54,13 +54,13 @@ const tabsKey = (sandboxId: string): string => `intentic.workspaceTabs.${sandbox
 /* Every tab kind EXCEPT a diff, which is deliberately not persisted for two reasons that point the same way:
  * it carries both sides of the file as content (megabytes, for the strip that is most likely to hold several),
  * and what it shows is a snapshot of a git/snapshot state that the agent has probably moved on from by the
- * next page load — a restored diff would quietly display a comparison that is no longer true. The Changes and
+ * next page load, a restored diff would quietly display a comparison that is no longer true. The Changes and
  * Checkpoints panels re-open a live one in a click. Every other kind restores from identity alone (a path, a
  * dir, or a repo). */
 export type StoredWorkspaceTab = Exclude<WorkspaceTab, { kind: "diff" }>;
 
 export interface WorkspaceTabStrip {
-    // Which tab is focused, or null — a legitimate state, not a missing value: closing the last tab leaves the
+    // Which tab is focused, or null, a legitimate state, not a missing value: closing the last tab leaves the
     // strip empty, and a bare /workspace URL deselects a file tab while its neighbours stay open.
     readonly active: string | null;
     // The transient tab (see OpenMode), or null when nothing is merely being looked at. Stored so a session that
@@ -70,7 +70,7 @@ export interface WorkspaceTabStrip {
     readonly tabs: readonly StoredWorkspaceTab[];
 }
 
-// Every field that NAMES something is required and non-empty — an entry missing one names nothing this build
+// Every field that NAMES something is required and non-empty, an entry missing one names nothing this build
 // can reopen. The exceptions are `dir` and a document's `path`: the /work root is a directory like any other
 // and its path is the empty string, so those two are plain strings.
 const named = z.string().min(1);
@@ -81,12 +81,12 @@ const StoredTabSchema: z.ZodType<StoredWorkspaceTab> = z.discriminatedUnion(`kin
     z.object({ kind: z.literal(`health`), id: named, repo: named }),
     /* An extension's document. Restored on identity + the strip's own label, never on the provider being back:
      * extensions activate after this is read, and one that has since been switched off should still leave the
-     * tab where the user left it — it renders its own "no longer available" rather than vanishing silently. */
+     * tab where the user left it, it renders its own "no longer available" rather than vanishing silently. */
     z.object({ kind: z.literal(`document`), id: named, extension: named, provider: named, path: z.string(), title: named, icon: named }),
 ]);
 
 // Parse one stored blob into a coherent strip: readable tabs only (an unreadable one is skipped rather than
-// fatal — it must not cost the user every other file they had open), each id once (a duplicate would render as
+// fatal, it must not cost the user every other file they had open), each id once (a duplicate would render as
 // two tabs sharing a key), and a focus and a preview slot that each name one of them.
 const parseStrip = (raw: string): WorkspaceTabStrip | undefined => {
     let stored: { active?: unknown; preview?: unknown; tabs?: unknown };

@@ -15,7 +15,7 @@ import { createWhatsAppListener, WHATSAPP_MAX } from "./listener.js";
  * one paired multi-device session per configured capability against the daemon's /listeners/whatsapp/state,
  * dispatches every inbound message (sending mention replies back into the chat), publishes WHERE EACH UNPAIRED
  * CAPABILITY'S CEREMONY STANDS through the status route, and exposes a loopback control surface for the agent's
- * `whatsapp` CLI. The daemon holds no WhatsApp connection — this does. The reconcile/status/health/shutdown shell is the
+ * `whatsapp` CLI. The daemon holds no WhatsApp connection, this does. The reconcile/status/health/shutdown shell is the
  * shared connector runtime; what's here is only what WhatsApp IS: a paired session per phone number, forgotten
  * (logout + wipe) rather than closed when its capability goes away, with a pairing code to surface while the
  * phone hasn't linked yet.
@@ -25,7 +25,7 @@ import { createWhatsAppListener, WHATSAPP_MAX } from "./listener.js";
  * (connectWithoutAutomations). Three reasons, all of them the session's nature rather than taste: pairing
  * happens the moment the capability is added (the card is showing a code and the phone is waiting for the link
  * to come up), the agent's `whatsapp` CLI sends through this socket and must work without any automation, and
- * WhatsApp unlinks a device that stays offline for weeks — a connection that only exists while automations do
+ * WhatsApp unlinks a device that stays offline for weeks, a connection that only exists while automations do
  * would quietly lose the pairing the owner did. */
 
 export interface WhatsAppConnectorConfig {
@@ -37,14 +37,14 @@ export interface WhatsAppConnectorConfig {
 export const chatJidOf = (chat: string): string => (chat.includes("@") ? chat : `${chat.replaceAll(/\D/g, "")}@s.whatsapp.net`);
 
 // The connection the control surface acts through. First-ready is the single-number common case; with several
-// numbers paired, sends go out on whichever paired first — a per-capability pick is a follow-up if anyone runs two.
+// numbers paired, sends go out on whichever paired first, a per-capability pick is a follow-up if anyone runs two.
 const firstReady = (): WhatsAppConnection | undefined => [...whatsappConnections().values()].find((each) => each.phase() === "ready");
 
 void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
     provider: "whatsapp",
     connectWithoutAutomations: true,
     // Status carries the pairing code the capability card renders, and a fresh code must not wait half a
-    // minute — faster cadence than the other gateways, still trivial traffic (a loopback POST).
+    // minute, faster cadence than the other gateways, still trivial traffic (a loopback POST).
     statusMs: 5_000,
     publishGatewayUrl: true,
     create: (ctx) => {
@@ -55,10 +55,10 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
 
         const hooks: GatewayHooks<WhatsAppConnectorConfig, WhatsAppConnection> = {
             desired: (connectors) => connectors.filter(({ config }) => config.phoneNumber !== "").map(({ id, config }) => [id, config] as const),
-            // A number edit means a DIFFERENT phone — the old session is forgotten (logout + wipe), not resumed.
+            // A number edit means a DIFFERENT phone, the old session is forgotten (logout + wipe), not resumed.
             keyOf: (config) => config.phoneNumber,
             open: async (id, config) => {
-                // The connection reference the message callback closes over — assigned as soon as open() returns;
+                // The connection reference the message callback closes over, assigned as soon as open() returns;
                 // baileys delivers nothing before the socket finishes opening, so the gap is unobservable.
                 let connection: WhatsAppConnection | undefined;
                 connection = await openWhatsAppConnection({
@@ -92,7 +92,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                 // "dead" = the connection logged itself out of the pool; nothing left to stop.
             },
             alive: (id) => whatsappConnection(id) !== undefined,
-            // No fatal classification: an open failure just retries next tick — a pairing that hasn't happened
+            // No fatal classification: an open failure just retries next tick, a pairing that hasn't happened
             // yet is the NORMAL state of a fresh capability, not an error to back off from.
             phase: (connector, view) => {
                 const connection = whatsappConnection(connector.id);
@@ -109,7 +109,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                 }
                 return connection !== undefined || view.connecting ? "connecting" : "disconnected";
             },
-            // Every unpaired capability, whether or not it is holding a code this second — see ListenerPairing:
+            // Every unpaired capability, whether or not it is holding a code this second, see ListenerPairing:
             // an absent entry has to mean PAIRED, or the seconds before the first code read as connected.
             statusExtras: () => {
                 const pairing: Record<string, ListenerPairing> = {};
@@ -122,7 +122,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                 return Object.keys(pairing).length > 0 ? { pairing } : {};
             },
             // The daemon's outbound door (shell route /deliver): a message the owner placed in a chat
-            // conversation, sent through the paired session — the same first-ready pick the CLI's /send uses.
+            // conversation, sent through the paired session, the same first-ready pick the CLI's /send uses.
             deliver: async (channelId, text) => {
                 const connection = firstReady();
                 if (connection === undefined) {
@@ -133,7 +133,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                 }
             },
             // The loopback control surface the agent's `whatsapp` CLI drives (address published via
-            // gateway.url). Every response is a human-readable string — the CLI prints it for the model.
+            // gateway.url). Every response is a human-readable string, the CLI prints it for the model.
             routes: async (req, body) => {
                 const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
                 if (req.method === "GET" && path === "/chats") {

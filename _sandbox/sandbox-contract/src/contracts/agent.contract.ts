@@ -14,7 +14,7 @@ import {
 } from "../schemas.js";
 
 // A turn EXECUTES as a detached daemon-side run: `run` starts it and acks with the run id; any number of
-// clients render it via `attach` (replay from a seq cursor, then live) — the initiating window holds no
+// clients render it via `attach` (replay from a seq cursor, then live), the initiating window holds no
 // special stream, so a reload, a second window, or another device attaches identically. `reply` un-parks a
 // turn waiting on any interactive card (plan approval, clarifying questions, a per-tool permission prompt);
 // steer injects a user message into the running turn; stop hard-cancels it daemon-side.
@@ -25,7 +25,7 @@ export const agentContract = {
     steer: oc.route({ method: "POST", path: "/agent/steer" }).input(SteerSchema).output(OkSchema),
     stop: oc.route({ method: "POST", path: "/agent/stop" }).input(StopTurnSchema).output(OkSchema),
     // Go back to a message: restore the workspace to that turn's checkpoint, drop the messages after it, and
-    // forget the provider session. CONFLICT while a turn is running — a restore cannot overwrite files an
+    // forget the provider session. CONFLICT while a turn is running, a restore cannot overwrite files an
     // agent is editing. NOT_FOUND when that message has no checkpoint to go back to.
     rewind: oc.route({ method: "POST", path: "/agent/rewind" }).input(RewindTurnSchema).output(RewindResultSchema),
     // The provider's slash commands as last published by one of its turns, so a conversation's `/` popover is

@@ -1,6 +1,6 @@
 import type { Config } from "../config.js";
 
-/* THE CUSTODY PROVIDER — where a member's signing key actually lives, and the one design decision this
+/* THE CUSTODY PROVIDER, where a member's signing key actually lives, and the one design decision this
  * whole feature rests on.
  *
  * The platform does NOT hold private keys. It holds an API credential for a wallet-custody service (a
@@ -16,7 +16,7 @@ import type { Config } from "../config.js";
  *
  * The wire is deliberately small and provider-shaped rather than provider-specific: two calls, both plain
  * JSON over fetch, so no chain SDK enters this codebase and swapping providers is this file. Everything
- * 404s when unconfigured (walletEnabled below), the pool's own pattern — a self-hosted platform that has
+ * 404s when unconfigured (walletEnabled below), the pool's own pattern, a self-hosted platform that has
  * not set a custody credential has no wallet feature, and says so tersely. */
 
 export interface CustodyWallet {
@@ -25,7 +25,7 @@ export interface CustodyWallet {
 }
 
 // The EIP-712 typed data an EIP-3009 transferWithAuthorization is signed as. Built by the caller from the
-// sandbox's relayed challenge, sent whole — the provider signs exactly this and returns a 65-byte signature.
+// sandbox's relayed challenge, sent whole, the provider signs exactly this and returns a 65-byte signature.
 export interface TypedData {
     readonly domain: { readonly name: string; readonly version: string; readonly chainId: number; readonly verifyingContract: string };
     readonly primaryType: "TransferWithAuthorization";
@@ -51,7 +51,7 @@ const call = async (config: Config, fetchFn: typeof fetch, path: string, body: u
     });
     const text = await response.text();
     if (!response.ok) {
-        // The provider's own words, bounded — a custody refusal ("insufficient balance", "wallet frozen") is
+        // The provider's own words, bounded, a custody refusal ("insufficient balance", "wallet frozen") is
         // already written for a human, and rewriting it would blur who said what (the pool relay's rule).
         throw new Error(`the custody provider refused (${response.status}): ${text.slice(0, 300)}`);
     }

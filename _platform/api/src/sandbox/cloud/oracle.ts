@@ -3,20 +3,20 @@ import { ORACLE_CAPACITY_PHRASE, type CloudOptions } from "@intentic-app/api-con
 import { CloudCredentialError, CloudProviderError, type CloudCreate } from "./common.js";
 import { parseOciConfig, signedHeaders, type OciCredential } from "./oci-sign.js";
 
-/* Oracle Cloud, the Always-Free lane: an ARM VM inside the user's own free-tier allowance — the one provider
+/* Oracle Cloud, the Always-Free lane: an ARM VM inside the user's own free-tier allowance, the one provider
  * where the machine can cost nothing. Everything happens in the tenancy ROOT compartment (free-tier accounts
  * don't manage compartments) with the A1.Flex shape pinned to the 2 OCPU / 12 GB the free tier allows since
- * June 2026 — a bigger ask would silently bill a Pay-As-You-Go account, and this lane's promise is "free".
+ * June 2026, a bigger ask would silently bill a Pay-As-You-Go account, and this lane's promise is "free".
  *
  * Unlike Hetzner/DO, an instance cannot launch into nothing: it needs a VCN + public subnet + internet
- * gateway + default route. `create` finds-or-creates that network under the fixed name "intentic" — a rerun
+ * gateway + default route. `create` finds-or-creates that network under the fixed name "intentic", a rerun
  * (or a second sandbox) reuses it rather than stacking VCNs, and nothing existing is ever modified except
  * appending the default route when the table lacks one. */
 
 const FREE_SHAPE = { id: `VM.Standard.A1.Flex`, ocpus: 2, memoryGb: 12, diskGb: 50 } as const;
 const NETWORK_NAME = `intentic`;
 
-// Capacity is weather, not a verdict — see the throw site in `call` and the domain walk in `oracleCreate`.
+// Capacity is weather, not a verdict, see the throw site in `call` and the domain walk in `oracleCreate`.
 class OracleCapacityError extends CloudProviderError {}
 
 const errorSchema = z.object({ code: z.string(), message: z.string() });
@@ -51,7 +51,7 @@ const call = async (credential: OciCredential, method: string, url: string, body
     }
     if (failure.success) {
         // The A1 free tier's famous refusal: no ARM capacity in that availability domain right now. Its own
-        // error class because `create` reacts to it — trying the OTHER domains before giving up — where every
+        // error class because `create` reacts to it, trying the OTHER domains before giving up, where every
         // other refusal propagates as final. The phrase is the contract's (ORACLE_CAPACITY_PHRASE): the
         // wizard keys its keep-trying offer on it.
         if (/out of host capacity/i.test(failure.data.message)) {
@@ -74,7 +74,7 @@ const call = async (credential: OciCredential, method: string, url: string, body
     throw new Error(`Oracle API ${method} ${parsed.pathname} failed with HTTP ${response.status}`);
 };
 
-// Options doubles as the credential check everywhere; here the availability-domain list is also a real pick —
+// Options doubles as the credential check everywhere; here the availability-domain list is also a real pick,
 // A1 capacity differs per domain, so surfacing all of them gives the user somewhere to go on a capacity miss.
 export const oracleOptions = async (config: string, privateKeyPem: string): Promise<CloudOptions> => {
     const credential = parseOciConfig(config, privateKeyPem);
@@ -145,7 +145,7 @@ const ensureNetwork = async (credential: OciCredential): Promise<{ subnetId: str
                 displayName: NETWORK_NAME,
             }),
         );
-    // Append the default route only when the table lacks one — an existing 0.0.0.0/0 rule (this network's own
+    // Append the default route only when the table lacks one, an existing 0.0.0.0/0 rule (this network's own
     // from a previous run, or a hand-managed table) is left exactly as found.
     const table = routeTableSchema.parse(await call(credential, `GET`, `${core}/routeTables/${vcn.defaultRouteTableId}`));
     if (!table.routeRules.some((rule) => rule.destination === `0.0.0.0/0`)) {
@@ -171,15 +171,15 @@ const ensureNetwork = async (credential: OciCredential): Promise<{ subnetId: str
 
 // One free-tier instance: newest Ubuntu 24.04 image compatible with the A1 shape (the shape filter is what
 // makes ListImages answer aarch64 builds), the ensured network, and the setup one-liner as user_data. `size`
-// from the wizard is asserted against the pinned free shape rather than trusted — this adapter never launches
+// from the wizard is asserted against the pinned free shape rather than trusted, this adapter never launches
 // anything that could bill.
 //
 // CAPACITY IS WALKED, NOT REPORTED: A1 capacity differs per availability domain and shifts by the minute, so
-// a capacity refusal in the picked domain tries every other domain of the region before giving up — the loop
+// a capacity refusal in the picked domain tries every other domain of the region before giving up, the loop
 // a person runs by hand in the console (pick the next domain, press create again), automated. Only the
 // capacity refusal continues the walk; any other refusal is a verdict and propagates from the domain it
 // happened in. The exhausted-everything error carries the contract's capacity phrase, so the wizard can offer
-// to keep retrying — by then it is a matter of WHEN, not where.
+// to keep retrying, by then it is a matter of WHEN, not where.
 export const oracleCreate = async (config: string, privateKeyPem: string, create: CloudCreate): Promise<{ serverId: string }> => {
     const credential = parseOciConfig(config, privateKeyPem);
     if (create.size !== FREE_SHAPE.id) {
@@ -213,7 +213,7 @@ export const oracleCreate = async (config: string, privateKeyPem: string, create
         );
         return { serverId: instance.id };
     };
-    // The picked domain first, then the region's others — fetched only on the first capacity miss, so the
+    // The picked domain first, then the region's others, fetched only on the first capacity miss, so the
     // happy path pays no extra round-trip.
     try {
         return await launch(create.location);

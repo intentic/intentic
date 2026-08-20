@@ -16,7 +16,7 @@ const resourceUrl = (baseUrl: string, path: string, id: string): string => `${ba
  *
  * `stopped` deliberately swallows exited: a container that exited could have crashed or been stopped on
  * purpose, and Komodo's own status prose ("Exited (1) 20 minutes ago") is the only thing that knows which.
- * Guessing from the exit code here would put a red chip on every deliberately-stopped resource — a LEVEL that
+ * Guessing from the exit code here would put a red chip on every deliberately-stopped resource, a LEVEL that
  * is lit forever, which is the exact failure ciStreaks was written to avoid. What says a running thing stopped
  * is the alert log, and that is an edge.
  *
@@ -74,7 +74,7 @@ export const stackResource = (baseUrl: string, item: KomodoListItem<KomodoStackI
     };
 };
 
-// ServerState is Ok | NotOk | Disabled; anything else reads as unreachable, which is the safe direction — a
+// ServerState is Ok | NotOk | Disabled; anything else reads as unreachable, which is the safe direction, a
 // state we cannot interpret must not be drawn as healthy.
 const serverState = (state: string | undefined): DeployServer["state"] => {
     if (state === "Ok") {
@@ -106,8 +106,8 @@ export const serverEntry = (baseUrl: string, item: KomodoListItem<KomodoServerIn
 
 const LEVEL: Record<string, DeployAlert["level"]> = { OK: "ok", WARNING: "warning", CRITICAL: "critical" };
 
-// Every AlertData variant names its subject the same two ways when it has them — `name` for the resource and
-// `server_name` for its host — so one reader serves ContainerStateChange, ServerUnreachable, BuildFailed and
+// Every AlertData variant names its subject the same two ways when it has them, `name` for the resource and
+// `server_name` for its host, so one reader serves ContainerStateChange, ServerUnreachable, BuildFailed and
 // every variant Komodo adds next. A variant carrying neither still produces an alert; it just goes unnamed,
 // which is a far better outcome during an incident than being dropped.
 const text = (data: Record<string, unknown> | undefined, key: string): string | undefined => {
@@ -116,7 +116,7 @@ const text = (data: Record<string, unknown> | undefined, key: string): string | 
 };
 
 // Bracket access because the field is mongo's `_id` and the repo forbids dangling underscores in member
-// expressions — the same spelling _deploy/providers' Komodo client already uses for this exact field.
+// expressions, the same spelling _deploy/providers' Komodo client already uses for this exact field.
 const alertId = (raw: KomodoAlert, index: number): string => {
     const id = raw["_id"];
     if (typeof id === "string") {
@@ -148,7 +148,7 @@ export const deployAlert = (raw: KomodoAlert, index: number): DeployAlert => {
     };
 };
 
-// Newest first — the same order every list on this surface uses, and the order an operator reads an incident
+// Newest first, the same order every list on this surface uses, and the order an operator reads an incident
 // log in.
 export const deployAlerts = (raw: readonly KomodoAlert[]): DeployAlert[] =>
     raw.map((alert, index) => deployAlert(alert, index)).toSorted((a, b) => b.ts - a.ts);

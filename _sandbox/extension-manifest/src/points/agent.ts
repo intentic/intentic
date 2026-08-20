@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ContributionPoint } from "../contribution-point.js";
 
 // "This checkout is ALSO a Claude Code plugin": the daemon hands the directory to the Agent SDK's plugin
-// loader, which reads skills/agents/hooks/commands/.mcp.json each turn — the daemon never parses plugin
+// loader, which reads skills/agents/hooks/commands/.mcp.json each turn, the daemon never parses plugin
 // internals.
 export const AgentContributionSchema = z.object({
     path: z.string().optional().describe("Relative to the extension checkout. Absent ⇒ the checkout root."),

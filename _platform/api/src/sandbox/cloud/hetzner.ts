@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CloudCredentialError, CloudProviderError, type CloudCreate } from "./common.js";
 
 // Hetzner Cloud, the cheap-x86 lane: one project API token (Read & Write) is the whole credential. Plain
-// fetch against the documented v1 API; the token is used for the calls of one request and dropped — the
+// fetch against the documented v1 API; the token is used for the calls of one request and dropped, the
 // ../cloudflare.ts contract.
 
 const BASE = `https://api.hetzner.cloud/v1`;
@@ -49,7 +49,7 @@ const call = async (token: string, method: string, path: string, body?: unknown)
     if (parsed.success) {
         const { code, message } = parsed.data.error;
         // The refusals a user can act on, in their words. uniqueness_error means a previous attempt already
-        // created the machine — pointing at the console beats a retry loop that can never succeed.
+        // created the machine, pointing at the console beats a retry loop that can never succeed.
         if (code === `uniqueness_error`) {
             throw new CloudProviderError(
                 `A server with this sandbox's name already exists in your Hetzner project — it is probably a previous attempt; delete it in the Hetzner console, then retry.`,
@@ -83,7 +83,7 @@ const listServerTypes = async (token: string): Promise<z.infer<typeof serverType
 };
 
 // The curated catalog: current-generation shared-x86 types with the RAM a sandbox actually needs (the image
-// alone is ~2 GB and agent turns run Node + builds), priced from Hetzner's own numbers — never hard-coded.
+// alone is ~2 GB and agent turns run Node + builds), priced from Hetzner's own numbers, never hard-coded.
 // x86-only for now: an ARM pick would need the arm64 image manifest, which is Oracle's lane's rollout.
 // monthlyPrice is the cheapest location's net (VAT-free) price; the wizard's copy says "from … excl. VAT".
 export const hetznerOptions = async (token: string): Promise<CloudOptions> => {
@@ -114,7 +114,7 @@ export const hetznerOptions = async (token: string): Promise<CloudOptions> => {
     };
 };
 
-// One VM, Ubuntu 24.04, first boot = the setup one-liner. No SSH key on purpose: nothing ever dials in — the
+// One VM, Ubuntu 24.04, first boot = the setup one-liner. No SSH key on purpose: nothing ever dials in, the
 // machine is driven entirely by its user-data, and Hetzner mails the root password for manual rescue.
 export const hetznerCreate = async (token: string, create: CloudCreate): Promise<{ serverId: string }> => {
     const created = createdSchema.parse(

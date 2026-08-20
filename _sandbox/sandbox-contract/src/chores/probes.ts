@@ -11,19 +11,19 @@ import {
     TAILWIND_PACKAGES,
 } from "./stack.js";
 
-/* THE PROBES — the measurements that cost a subprocess, declared once so the daemon that runs them and the panel
+/* THE PROBES, the measurements that cost a subprocess, declared once so the daemon that runs them and the panel
  * that explains them cannot disagree about what "outdated" meant.
  *
  * A spec is a shell command and a parser, deliberately in that order of trust: the command is whatever the tool's
  * own maintainers publish as its machine-readable output, and the parser is written to be DISAPPOINTED. Every one
  * of these tools has changed its JSON shape at least once, they are run against whatever version the repo pinned,
  * and a probe that throws on an unexpected field would take the whole maintenance surface down with it. So each
- * parser walks the structure defensively and returns `undefined` when it cannot recognise what it got — which the
+ * parser walks the structure defensively and returns `undefined` when it cannot recognise what it got, which the
  * runner records as a failed probe with the output attached, rather than as a clean repository.
  *
  * TIERS ARE ABOUT COST, and the cost is what sets the cadence. Tier 1 reads metadata that already exists (a
  * lockfile, a registry's version list) and finishes in seconds, so the background runner refreshes it daily. Tier
- * 2 reads the whole tree — knip type-checks it, jscpd tokenizes every file — and can run for minutes on a large
+ * 2 reads the whole tree, knip type-checks it, jscpd tokenizes every file, and can run for minutes on a large
  * repo, so it refreshes weekly and says how long it took, because a reader deciding whether to force a refresh
  * deserves to know what they are asking for.
  *
@@ -48,7 +48,7 @@ export interface ProbeSpec {
     // Exit 0 ⇒ this repo can be measured. Runs in the repo's own directory, like the command.
     readonly available: string;
     /* What is MISSING when `available` says no, named here rather than derived from the title. The obvious
-     * derivation — "this repository has no security advisories to measure" — states the one thing an unmeasured
+     * derivation, "this repository has no security advisories to measure", states the one thing an unmeasured
      * probe must never claim, that there are none, and it is the same conflation the block above exists to
      * prevent. Phrased as a bare clause ("no lockfile"), because the panel groups these under its own lead-in. */
     readonly unavailable: string;
@@ -97,7 +97,7 @@ const semverKind = (current: string, latest: string): OutdatedPackage["kind"] =>
 /* `pnpm outdated --json` prints a map of package name → { current, latest, dependencyType }. In a workspace the
  * recursive form merges every package's entries into the same map and adds `dependentPackages`, which is why this
  * reads the map rather than expecting a list: one shape covers both, and a field we don't use appearing is not a
- * parse failure. Entries missing `current` or `latest` are skipped — that is how pnpm reports a package it could
+ * parse failure. Entries missing `current` or `latest` are skipped, that is how pnpm reports a package it could
  * not resolve against the registry, and it is not evidence of anything. */
 const parseOutdated = (stdout: string): ProbeFacts | undefined => {
     const root = asObject(stdout);
@@ -123,8 +123,8 @@ const parseOutdated = (stdout: string): ProbeFacts | undefined => {
 const SEVERITIES = new Set([`critical`, `high`, `moderate`, `low`, `info`]);
 
 /* `pnpm audit --json` prints `{ advisories: { <id>: {...} }, metadata: {...} }`. The metadata's counts are
- * deliberately ignored: they are a tally, and this surface needs the advisories themselves — which package, and
- * whether a patched range exists — because "there is a fix that is a version bump" and "there is no patch yet"
+ * deliberately ignored: they are a tally, and this surface needs the advisories themselves, which package, and
+ * whether a patched range exists, because "there is a fix that is a version bump" and "there is no patch yet"
  * lead to completely different turns, and a count cannot tell them apart.
  *
  * `dev` comes off the findings' own flag rather than being inferred. A build-time-only advisory is real but it is
@@ -135,7 +135,7 @@ const parseAudit = (stdout: string): ProbeFacts | undefined => {
         return undefined;
     }
     const raw = root[`advisories`];
-    // No `advisories` key at all is pnpm's clean report — an empty list, not an unrecognisable one.
+    // No `advisories` key at all is pnpm's clean report, an empty list, not an unrecognisable one.
     if (raw === undefined) {
         return { id: `audit`, advisories: [] };
     }
@@ -168,7 +168,7 @@ const parseAudit = (stdout: string): ProbeFacts | undefined => {
     return { id: `audit`, advisories };
 };
 
-/* knip's JSON reporter prints `{ issues: [...] }` — one row per file that has findings, carrying a per-kind array
+/* knip's JSON reporter prints `{ issues: [...] }`, one row per file that has findings, carrying a per-kind array
  * of what it found there. A wholly unreferenced file is a row whose own `files` array names it, which is why that
  * count is a sum like every other kind rather than a list of its own. Counts plus a sample of the file paths, not
  * the full list: the agent re-runs knip itself against the live tree (a list from a probe hours old would send it
@@ -233,16 +233,16 @@ const parseJscpd = (stdout: string): ProbeFacts | undefined => {
  * Everything it emits is a labelled, tab-separated line, and the first line is always the bare marker `UI`. That
  * marker is the whole reason this parser can tell "the sweep ran and this repository is clean" from "the sweep
  * never ran": every other line is optional, so without it an empty stdout and a spotless codebase are the same
- * string — and reporting the second when it was the first is the one thing probes.ts exists to prevent. */
+ * string, and reporting the second when it was the first is the one thing probes.ts exists to prevent. */
 const UI_MARKER = `UI`;
-// Caps, applied after `sort` so truncation is alphabetical and therefore identical between runs — an unsorted
+// Caps, applied after `sort` so truncation is alphabetical and therefore identical between runs, an unsorted
 // truncation would mint a new digest on every sweep and badge forever. What is dropped is genuinely dropped: a
 // component past the cap cannot join a family, and the chore says so rather than implying it saw everything.
 const COMPONENT_LIMIT = 2000;
 const RULE_FILE_LIMIT = 500;
 
 /* THE `.` IS LOAD-BEARING, and leaving it off cost this probe every finding it will ever have. Given no path,
- * ripgrep searches the tree only when stdin is a TTY — otherwise it reads STDIN, which is exactly how the runner
+ * ripgrep searches the tree only when stdin is a TTY, otherwise it reads STDIN, which is exactly how the runner
  * spawns a probe. The sweep therefore ran, exited 0, printed its marker and matched nothing, in every repository,
  * forever: the precise failure the marker line was introduced to make impossible, arriving through the one door it
  * does not cover. It reproduces from Node and not from an interactive shell, which is why it survived being read.
@@ -367,7 +367,7 @@ const parseBundle = (stdout: string): ProbeFacts | undefined => {
 };
 
 // Where the tier-2 tools leave their reports. Under /tmp because they are inputs to a parse that happens
-// immediately after, never something to keep — the cached ProbeResult is the artefact that survives. The same
+// immediately after, never something to keep, the cached ProbeResult is the artefact that survives. The same
 // path the scheduled form of this chore uses (chores.ts), so a workspace running both keeps one copy.
 const JSCPD_DIR = `/tmp/intentic-chore-jscpd`;
 
@@ -423,7 +423,7 @@ export const PROBES: readonly ProbeSpec[] = [
         timeoutMs: 20 * 60_000,
         available: `test -f package.json`,
         unavailable: `no package.json`,
-        // `--threshold 100` so jscpd never fails the command on its own opinion of what is too much duplication —
+        // `--threshold 100` so jscpd never fails the command on its own opinion of what is too much duplication,
         // that judgement is the chore's, made from the percentage, not the tool's exit code.
         command:
             `pnpm dlx jscpd --reporters json --output ${JSCPD_DIR} --min-lines 12 --threshold 100 . >/dev/null 2>&1; ` +
@@ -437,11 +437,11 @@ export const PROBES: readonly ProbeSpec[] = [
         /* Tier 1 despite reading the whole tree, and the placement is a judgement rather than an oversight. The
          * tier is about COST: this is a dozen ripgrep walks, seconds on a large monorepo, against knip
          * type-checking the tree and jscpd tokenizing every file for minutes. A weekly TTL would also make it the
-         * wrong shape — its findings move whenever someone writes a component, which is daily. */
+         * wrong shape, its findings move whenever someone writes a component, which is daily. */
         tier: 1,
         ttlMs: DAY_MS,
         timeoutMs: 5 * 60_000,
-        // Any manifest in the repo declaring a UI framework or Tailwind, not just the root's — a monorepo keeps
+        // Any manifest in the repo declaring a UI framework or Tailwind, not just the root's, a monorepo keeps
         // React in the app package and the root manifest is a handful of build tools.
         available:
             `rg -l --no-messages -g '**/package.json' -g '!**/node_modules/**' ` +

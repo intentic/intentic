@@ -46,11 +46,11 @@ const hostOf = (url: string): string | undefined => {
 /* WHERE A SANDBOX IS ALLOWED TO SAY IT LIVES.
  *
  * `daemonUrl` is not a passive record: the browser reads it out of the registry and sends the user's Google ID
- * token — or the daemon session minted from it — to whatever it names, unprobed (the tunnel candidate is the
+ * token, or the daemon session minted from it, to whatever it names, unprobed (the tunnel candidate is the
  * one endpoint the browser never qualifies, because it IS the registry's own answer). So a `daemonUrl` an
  * attacker can write is a `daemonUrl` that harvests the owner's Google credential and replays it against the
  * real daemon. Announce is authenticated only by the connect token, which lives in the container's env, in a
- * compose file, and in whatever shell history ran the installer — a weaker secret than the identity it would
+ * compose file, and in whatever shell history ran the installer, a weaker secret than the identity it would
  * be trading up for. A platform-side compromise is the same story with no token needed at all, which is what
  * makes the "the platform holds nothing it could replay" claim (sandbox auth.ts) worth defending here.
  *
@@ -59,19 +59,19 @@ const hostOf = (url: string): string | undefined => {
  * and we stored those too. Both are known before the daemon ever boots, so an announce that disagrees is
  * either a misconfiguration or an attack, and neither deserves to be written.
  *
- * The remaining case is a sandbox with neither record — an `attach`-only row, or one predating the stored
+ * The remaining case is a sandbox with neither record, an `attach`-only row, or one predating the stored
  * hostname. There it pins on first announce and holds: still not a free-form field, just one whose value is
  * learned instead of derived. */
 const expectedDaemonHost = (
     config: Config,
     sandbox: { token: string; zrokToken: string | null; setupPayload: unknown; daemonUrl: string | null },
 ): string | undefined => {
-    // A sandbox we made reachable answers at the address DERIVED from its connect token — known before the
+    // A sandbox we made reachable answers at the address DERIVED from its connect token, known before the
     // daemon ever boots, which is what makes a disagreeing announce a misconfiguration or an attack.
     if (sandbox.zrokToken !== null) {
         return sandboxHostname(config.zrok.zone, decryptSecret(config, sandbox.token));
     }
-    // A row whose payload is absent or not the string shape simply contributes no expectation — an
+    // A row whose payload is absent or not the string shape simply contributes no expectation, an
     // attach-only sandbox lives at an address its owner asserted, and pins on first announce below.
     const stored =
         typeof sandbox.setupPayload === `string` ? (JSON.parse(decryptSecret(config, sandbox.setupPayload)) as Record<string, string>) : {};
@@ -84,7 +84,7 @@ const expectedDaemonHost = (
 };
 
 const logUnexpectedError = (log: Logger, error: unknown): void => {
-    // oRPC "expected" errors (UNAUTHORIZED, NOT_FOUND, …) are control flow, not incidents — don't log them.
+    // oRPC "expected" errors (UNAUTHORIZED, NOT_FOUND, …) are control flow, not incidents, don't log them.
     if (error instanceof ORPCError && error.code !== `INTERNAL_SERVER_ERROR`) {
         return;
     }
@@ -93,11 +93,11 @@ const logUnexpectedError = (log: Logger, error: unknown): void => {
 
 // The platform is the sandbox REGISTRY: each daemon announces its own URL + liveness here (outbound-only,
 // authenticated by its connect token), and the browser reads the registry, then talks to the daemon DIRECTLY
-// over its tunnel for everything else. No relay, no platform→sandbox calls — a breach still can't reach into
+// over its tunnel for everything else. No relay, no platform→sandbox calls, a breach still can't reach into
 // any sandbox. The public (sessionless) routes are /setup/claim (the connect script redeems its setup code)
 // and the connect-token-authenticated daemon relays /sandbox/announce (phone-home), /sandbox/host-tunnel and
 // /sandbox/preview-route (minted on intentic's own Cloudflare). sandbox.zones is the one route handed an infra secret (the
-// Cloudflare token), and only transiently — it lists zones for the picker and drops the token, never
+// Cloudflare token), and only transiently, it lists zones for the picker and drops the token, never
 // persisting or logging it.
 export const createApp = (config: Config, prisma: PrismaClient, logger: Logger): { app: Hono<AppEnv>; auth: Auth } => {
     const auth = createAuth(config, prisma);
@@ -105,7 +105,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     const app = new Hono<AppEnv>();
 
     // Outermost: the OTel server span (@hono/otel). Registered first so the request logger and oRPC handlers
-    // run inside the active span — their pino mixin then stamps logs with the span's trace_id/span_id.
+    // run inside the active span, their pino mixin then stamps logs with the span's trace_id/span_id.
     app.use(`*`, createTracingHttpMiddleware());
 
     // Then bind a per-request child logger (correlated by requestId) and log the completed request with
@@ -124,9 +124,9 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     });
 
     // The SPA is served from webOrigin and calls this API cross-origin (there is no dev proxy), so CORS is
-    // load-bearing, not a safety net. A rejected origin is otherwise invisible: Hono still answers the preflight
+    // required, not a safety net. A rejected origin is otherwise invisible: Hono still answers the preflight
     // 204, just without Access-Control-Allow-Origin, so the browser blocks the real request before it is ever
-    // sent — the API logs the OPTIONS and nothing else, and devtools blames "CORS". Log the mismatch instead.
+    // sent, the API logs the OPTIONS and nothing else, and devtools blames "CORS". Log the mismatch instead.
     app.use(
         `*`,
         cors({
@@ -149,7 +149,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     app.on([`POST`, `GET`], `/api/auth/**`, (c: Context) => auth.handler(c.req.raw));
 
     /* OAUTH DISCOVERY AT THE ROOT, where an MCP client actually looks. Better Auth serves both documents under
-     * its own base path, and the 401 from /mcp points at them there — but RFC 8414 and RFC 9728 put them at the
+     * its own base path, and the 401 from /mcp points at them there, but RFC 8414 and RFC 9728 put them at the
      * ORIGIN root, and clients probe there first. Two aliases cost nothing and are the difference between
      * "Claude Code offers a sign-in" and "Claude Code says the server failed to connect".
      *
@@ -157,7 +157,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
      * authenticate, which is not a secret and is useless to anyone who cannot then complete the flow. */
     app.get(`/.well-known/oauth-authorization-server`, (c: Context) => oAuthDiscoveryMetadata(auth)(c.req.raw));
     app.get(`/.well-known/oauth-protected-resource`, (c: Context) => oAuthProtectedResourceMetadata(auth)(c.req.raw));
-    // Same document, addressed by the resource path — what a client derives when the resource is /mcp.
+    // Same document, addressed by the resource path, what a client derives when the resource is /mcp.
     app.get(`/.well-known/oauth-protected-resource/mcp`, (c: Context) => oAuthProtectedResourceMetadata(auth)(c.req.raw));
 
     app.get(`/health`, async (c) => {
@@ -170,7 +170,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     });
 
     // The connect script (no session) redeems the setup code minted by sandbox.setupCode for the values the
-    // install one-liner used to carry inline. Plain-text KEY=value lines — POSIX sh parses them with sed, no
+    // install one-liner used to carry inline. Plain-text KEY=value lines. POSIX sh parses them with sed, no
     // JSON tooling on the user's box. The request logger records method/path/status only, so neither the code
     // nor the returned tokens are ever logged. 404 for unknown AND expired alike (no oracle).
     app.post(`/setup/claim`, async (c) => {
@@ -191,28 +191,28 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         // The loopback shortcut's host port, for the COMPOSE path only. Every other flow asks the image for its
         // run command and the run contract derives this from the same token (see @intentic/sandbox-run); a
         // compose file is written before the token exists, so it interpolates ${LOCAL_PORT} from this .env
-        // instead. The browser derives the identical port from the token it holds — nothing is stored.
+        // instead. The browser derives the identical port from the token it holds, nothing is stored.
         const sandboxId = sandboxIdFromToken(connectToken);
         if (sandboxId !== undefined) {
             lines.push(`LOCAL_PORT=${localDaemonPort(sandboxId)}`);
         }
         // The reachability grant itself (ZROK_TOKEN/ZROK_API/ZROK_NAMESPACE/SANDBOX_HOSTNAME) rides in the
-        // stored payload below — minted when the code was, so the box can enable and share the moment it boots.
+        // stored payload below, minted when the code was, so the box can enable and share the moment it boots.
         // Single-use desktop-sync pairing token, minted per claim (the sandbox isn't running yet to mint its own).
         // The daemon arms it at boot; the connect script only runs the sync agent when SYNC_DIR was passed on the
         // command (the user's opt-in), so returning it unconditionally is harmless when sync is off.
         lines.push(`SYNC_PAIR_TOKEN=${randomBytes(32).toString(`base64url`)}`);
-        // The same, for the CONNECTED-COMPUTER agent the flow installs beside it — so the machine running this
+        // The same, for the CONNECTED-COMPUTER agent the flow installs beside it, so the machine running this
         // sandbox can be seen and managed from the browser instead of from a terminal on that machine. Minted
         // here for the same reason as the one above: nothing is running yet to mint it. Unconditional and inert
-        // when unused — the daemon arms it once and burns it on redemption, and a flow that installs no agent
+        // when unused, the daemon arms it once and burns it on redemption, and a flow that installs no agent
         // simply never spends it.
         lines.push(`HOST_PAIR_TOKEN=${randomBytes(32).toString(`base64url`)}`);
         lines.push(...Object.entries(payload).map(([key, value]) => `${key}=${value}`));
         // The one moment the platform learns the pasted command reached a machine. Everything after this point
-        // happens inside the user's Docker and is invisible until the daemon announces minutes later — so the
+        // happens inside the user's Docker and is invisible until the daemon announces minutes later, so the
         // setup wizard leans on this stamp to stop telling someone who has not opened a terminal that we are
-        // waiting on their sandbox. Re-claimable, so this overwrites: the stamp marks the LATEST attempt —
+        // waiting on their sandbox. Re-claimable, so this overwrites: the stamp marks the LATEST attempt,
         // and the previous attempt's setup report is cleared with it, so a fixed-and-re-run machine never
         // shows last time's failure over this run's progress.
         await prisma.sandbox.update({ where: { id: sandbox.id }, data: { setupCodeClaimedAt: new Date(), setupReport: Prisma.DbNull } });
@@ -220,10 +220,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     });
 
     /* The machine-side setup narrator (issue: the wizard could only guess by elapsed time). ic POSTs each
-     * stage transition and any terminal failure here — with each broken check's problem AND its fix — so the
+     * stage transition and any terminal failure here, with each broken check's problem AND its fix, so the
      * browser names why a setup died even when the terminal that knew is long closed. Possession of a live
      * setup code is the auth, exactly the claim's trust; the code stays valid until expiry, so a failure
-     * BEFORE the claim (Docker not running) reaches the wizard too. `at` is stamped here — the reporting
+     * BEFORE the claim (Docker not running) reaches the wizard too. `at` is stamped here, the reporting
      * machine's clock is never trusted. */
     app.post(`/setup/report`, async (c) => {
         const body = (await c.req.json().catch(() => undefined)) as { code?: unknown; stage?: unknown; failed?: unknown } | undefined;
@@ -244,7 +244,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     });
 
     // The daemon's phone-home: on boot + periodically it announces its public URL, authenticated by possession
-    // of the connect token (x-intentic-connect — the same secret class /setup/claim's code redeems into). The
+    // of the connect token (x-intentic-connect, the same secret class /setup/claim's code redeems into). The
     // wizard polls sandbox.list for a fresh lastSeenAt instead of probing DNS-fragile hostnames from the
     // browser. 404 for unknown tokens (no oracle); the request logger records method/path/status only, so the
     // token never lands in logs.
@@ -264,12 +264,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         }
         /* The browser trusts this value with the user's Google credential, so it is pinned to the address we
          * already know this sandbox by (see expectedDaemonHost). A daemon that announces anything else is
-         * refused and the stored URL is left alone — lastSeenAt too, so the sandbox reads as not-phoning-home
+         * refused and the stored URL is left alone, lastSeenAt too, so the sandbox reads as not-phoning-home
          * rather than quietly alive at an address nobody vetted.
          *
          * The refused HOST is recorded, though, because the refusal is otherwise a perfect silence: the box
          * retries, we say no, and the wizard shows the same spinner it shows a machine that never booted. It
-         * is not secret (it is the address the sandbox itself just claimed) and it is the whole diagnosis — a
+         * is not secret (it is the address the sandbox itself just claimed) and it is the whole diagnosis, a
          * sandbox announcing somewhere other than where we expect it is a misconfiguration with a name. */
         const expected = expectedDaemonHost(config, sandbox);
         if (expected !== undefined && hostOf(daemonUrl) !== expected) {
@@ -289,13 +289,13 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         return c.json({ ok: true });
     });
 
-    /* THE DAEMON'S BOOT REPORT — the announce's other half, and the half that was missing. An announce says
+    /* THE DAEMON'S BOOT REPORT, the announce's other half, and the half that was missing. An announce says
      * "I started"; this says "and my public address answers", which the box establishes by asking that address
      * itself from the inside. They are separate routes because they are separate claims and they fail
      * separately: the tunnel migration produced a fleet of sandboxes that announced perfectly and could not be
      * reached, and nothing in the registry could tell them apart from healthy ones.
      *
-     * Authenticated by the connect token exactly like the announce — the same secret, the same outbound path,
+     * Authenticated by the connect token exactly like the announce, the same secret, the same outbound path,
      * and deliberately not the tunnel, so the report still arrives when the tunnel is what is broken. `at` is
      * stamped here; the reporting machine's clock is never trusted. */
     app.post(`/sandbox/boot-report`, async (c) => {
@@ -319,10 +319,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     /* The two Cloudflare relays that used to live here (POST /sandbox/host-tunnel, POST /sandbox/preview-route)
      * are gone with the tunnels they minted. Under the self-hosted hub a sandbox's names live under ONE
      * wildcard the frontend routes by name, and the daemon attaches its own (panels, forwarded ports, the
-     * public outbox) with the zrok account token it already holds — so the platform is no longer on the path
+     * public outbox) with the zrok account token it already holds, so the platform is no longer on the path
      * for naming at all, which is one fewer thing a compromised platform could do to a sandbox. */
 
-    /* The LOOPBACK CERTIFICATE's DNS relay — kept through the tunnel migration because it is not a tunnel: a
+    /* The LOOPBACK CERTIFICATE's DNS relay, kept through the tunnel migration because it is not a tunnel: a
      * sandbox on the same machine as the browser is reached at 127.0.0.1, and that address still needs a real
      * certificate (`local-<id>.<zone>`, an unproxied A record plus the ACME TXT of one order). The daemon
      * drives its own issuance and holds the key; it relays here for these two records only, because on the
@@ -371,7 +371,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
                 } catch (error) {
                     // A client that vanished mid-request leaves the node request stream aborted, so oRPC's input
                     // decode throws `TypeError: Body is unusable` (node-server's fast path refuses a read on a
-                    // disturbed stream). It answers a 400 nobody is left to receive — not worth a log line.
+                    // disturbed stream). It answers a 400 nobody is left to receive, not worth a log line.
                     if (options.request.signal?.aborted === true) {
                         throw error;
                     }
@@ -384,26 +384,26 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         ],
     });
 
-    /* The free trial's model API — the one route family the platform serves ON the command path, mounted as its
+    /* The free trial's model API, the one route family the platform serves ON the command path, mounted as its
      * own sub-app so that exception has a boundary you can point at (see trial/trial.routes.ts). Off unless
      * TRIAL_KEYS is set, which is the default and the only sane setting for a self-hosted platform: with no keys
      * every route under here 404s and the daemon provisions no trial endpoint. */
     app.route(`/trial`, trialRoutes({ config, prisma }));
 
-    /* The creator pool's non-browser routes — the daemon's ledger report + premium probe, Stripe's webhook,
+    /* The creator pool's non-browser routes, the daemon's ledger report + premium probe, Stripe's webhook,
      * and the public transparency read (see pool/pool.routes.ts). Off unless POOL_STRIPE_SECRET_KEY +
      * POOL_STRIPE_PRICE_ID are set, the trial's pattern: unset, everything under here 404s and no surface
      * anywhere offers a membership. */
     app.route(`/pool`, poolHttpRoutes({ config, prisma, auth }));
 
-    /* The agent wallet's signer — a sandbox's two connect-token routes (see wallet/wallet.routes.ts): make
+    /* The agent wallet's signer, a sandbox's two connect-token routes (see wallet/wallet.routes.ts): make
      * this member's wallet, and mint one EIP-712 signature over one fully-specified USDC transfer, with the
      * owner's caps re-checked HERE against this database rather than trusted from the container. Off unless
      * WALLET_CUSTODY_URL + WALLET_CUSTODY_KEY are set, the pool's pattern: unset, everything under here
      * 404s, no key material exists anywhere, and a sandbox's wallet card stays pending and says so. */
     app.route(`/wallet`, walletHttpRoutes({ config, prisma }));
 
-    /* THE MCP DOOR — the same services catalog, reached by a coding agent that has no sandbox (see
+    /* THE MCP DOOR, the same services catalog, reached by a coding agent that has no sandbox (see
      * mcp/mcp.routes.ts). Authenticated by an OAuth bearer this platform issued rather than by a connect
      * token, which is what lets somebody buy and spend a membership without owning a machine. Same pool
      * switch: no Stripe price, no door.

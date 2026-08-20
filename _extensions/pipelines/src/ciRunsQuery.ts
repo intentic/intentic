@@ -7,7 +7,7 @@ import { host } from "./host";
  * The view, its rail badge and the host's background loader all want the same `/ci/runs` answer. Keeping the
  * route call beside each reader made the badge's minute-by-minute fetch private: it warmed the daemon's short
  * cache, but the view's vue-query entry still started empty and rendered a skeleton on open. A HostQuery is the
- * common filing instruction — one sandbox-scoped key and one parser — so any of the three readers fills the
+ * common filing instruction, one sandbox-scoped key and one parser, so any of the three readers fills the
  * entry the other two consume.
  *
  * Twenty seconds is the daemon sweep's own freshness window (ci/runs-cache.ts). Within it, mounting the view
