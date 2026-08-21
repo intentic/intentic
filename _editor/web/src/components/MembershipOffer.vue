@@ -152,9 +152,6 @@ const assurances = computed(() => [
             <RouterLink v-if="props.browsable" :to="{ name: `sandbox`, params: { tab: `discover` } }" class="text-xs text-link hover:underline">
                 See what's premium first
             </RouterLink>
-            <p class="w-full text-xs text-muted">
-                Credits you never spend pay nobody: the membership is what you'd like to give, not a bill for what you took.
-            </p>
         </div>
     </Card>
 </template>
