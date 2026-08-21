@@ -2,17 +2,17 @@
 import { describe, expect, it } from "vitest";
 import { placeAnchored } from "@intentic/ui";
 
-// The barrel reaches window.matchMedia (useDevice) at import — hence jsdom, and the
+// The barrel reaches window.matchMedia (useDevice) at import: hence jsdom, and the
 // stub vitest.setup.ts installs for every suite in the package. The geometry under test is pure arithmetic and touches no DOM.
 
 /* The geometry behind every anchored panel in a POPPABLE panel (the composer's model/mode pickers, the tab
- * strip's history menu). It lives in @intentic/ui, which carries no test runner of its own — so it is
+ * strip's history menu). It lives in @intentic/ui, which carries no test runner of its own, so it is
  * pinned here, where the surfaces that broke without it live.
  *
  * WHAT THESE PIN IS A BUG THAT CAME BACK TWICE. PrimeVue's Popover measures the room around a trigger with the
  * module-scope `window`, which for a popped-out chat panel is the OPENER's window while the overlay lands in
- * the pop-out's. When the two differ — and they always do; one is a column, the other a window the user
- * dragged — it decided "no room above, flip below" against the wrong numbers and put the picker off the bottom
+ * the pop-out's. When the two differ, and they always do; one is a column, the other a window the user
+ * dragged: it decided "no room above, flip below" against the wrong numbers and put the picker off the bottom
  * edge with its top over the very pill that opens it. An overlay covering its own trigger cannot be closed by
  * clicking that trigger, and that is what "sometimes I can't close the model picker" was. Hence: the view is an
  * argument, and these tests are about what the answer does with it. */
@@ -30,7 +30,7 @@ describe(`placeAnchored`, () => {
         expect(inPopout.top).toBe(727 - 8 - 430);
         expect(inPopout.maxHeight).toBe(727 - 8 - 8);
 
-        // The same pill, riding the bottom of a window 380 tall — a chat column, or a pop-out the user made
+        // The same pill, riding the bottom of a window 380 tall: a chat column, or a pop-out the user made
         // short. The panel is CAPPED to the room above rather than flipped below, where 21px is all there is.
         const short = placeAnchored({ ...base, anchor: { ...pill, top: 307 }, view: { width: 1280, height: 380 } });
         expect(short.side).toBe(`top`);
@@ -58,7 +58,7 @@ describe(`placeAnchored`, () => {
         expect(top.side).toBe(`bottom`);
         expect(top.top).toBe(40 + 36 + 8);
 
-        // A trigger with the box fitting above stays above even though below has more room — a panel that
+        // A trigger with the box fitting above stays above even though below has more room: a panel that
         // already fits must not jump sides.
         const fits = placeAnchored({ ...base, box: { width: 418, height: 120 }, anchor: { ...pill, top: 200 }, view: { width: 1280, height: 800 } });
         expect(fits.side).toBe(`top`);
@@ -85,7 +85,7 @@ describe(`placeAnchored`, () => {
         const centred = placeAnchored({ ...base, anchor: { ...pill, left: 500 }, view, cross: `center` });
         expect(centred.arrow).toBeCloseTo(picker.width / 2, 5);
 
-        // A pill against the left edge pulls the box inward — the box moved, the arrow stays over the pill.
+        // A pill against the left edge pulls the box inward: the box moved, the arrow stays over the pill.
         const edgePill = { top: 727, left: 0, width: 40, height: 36 };
         const pushed = placeAnchored({ ...base, anchor: edgePill, view, cross: `center` });
         expect(pushed.left).toBe(8);

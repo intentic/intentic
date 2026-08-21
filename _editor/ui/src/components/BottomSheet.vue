@@ -1,7 +1,7 @@
 <!-- Mobile action sheet: PrimeVue Drawer docked to the bottom edge with a rounded top, grab handle, and
-     safe-area padding. The touch replacement for every Popover/ContextMenu on mobile code paths — pass the
+     safe-area padding. The touch replacement for every Popover/ContextMenu on mobile code paths: pass the
      same content, get a thumb-reachable sheet. Height follows content up to `--height-panel-xl`, the step it
-     shares with the fullscreen-canvas modal — both are "as much screen as this may take". -->
+     shares with the fullscreen-canvas modal: both are "as much screen as this may take". -->
 <script setup lang="ts">
 import Drawer from "primevue/drawer";
 

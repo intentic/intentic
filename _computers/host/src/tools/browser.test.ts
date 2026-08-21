@@ -8,7 +8,7 @@ import { clickElement, fillElement, listTabs, openPage, readPage, snapshotPage }
  *
  * The scope split is the same rule the rest of the tools follow, and worth pinning here too: reading a page is
  * LOOKING (screen), clicking and typing CHANGE things (control), and opening may start a browser process
- * (shell). The other half worth pinning is that every action answers with the page AFTER it — which is what
+ * (shell). The other half worth pinning is that every action answers with the page AFTER it, which is what
  * makes a sequence of calls one step each instead of three. */
 
 const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({

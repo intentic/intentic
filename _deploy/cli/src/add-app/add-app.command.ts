@@ -47,7 +47,7 @@ export const addAppCommand = buildCommand<AddAppFlags>({
         const out = createOutput(this.process.stdout, loadConfig().intenticOutput);
         const apps = parseApps(flags.apps);
         if (apps.length === 0) {
-            throw new Error("no apps specified — pass --apps api,web:shop-web");
+            throw new Error("no apps specified: pass --apps api,web:shop-web");
         }
         const progress = addAppsToMonorepo({
             repoDir: flags.dir,

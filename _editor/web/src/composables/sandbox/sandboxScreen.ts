@@ -24,7 +24,7 @@ import { useSandbox } from "./useSandbox";
 const screenKey = (sandboxId: string): string => `intentic.sandboxScreen.${sandboxId}`;
 
 /* A screen OF A SANDBOX is a route inside the workspace shell, and every one of them matches the shell record
- * (path `/`) first. The account's own pages — /login, /setup, /invite, /desktop-auth, sit outside it and
+ * (path `/`) first. The account's own pages: /login, /setup, /invite, /desktop-auth, sit outside it and
  * belong to no sandbox: neither remembering one nor landing on one says anything about the machine that was
  * picked, and answering a switch with a setup screen is the worst of the two. */
 const inShell = (matched: readonly RouteRecordNormalized[]): boolean => matched[0]?.path === `/`;

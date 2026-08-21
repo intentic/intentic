@@ -5,7 +5,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 // whole of what it wants (see useChat.test.ts, which cuts the same edge).
 
 // The same edges useAgents.test.ts cuts, for the same reason: the fleet store sits behind the app shell, and
-// this file's subject is one wire between the stream router and that store — nothing here wants a browser.
+// this file's subject is one wire between the stream router and that store: nothing here wants a browser.
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../analytics", () => ({ track: vi.fn() }));
 vi.mock("../sandbox/useSandbox", async () => {
@@ -26,13 +26,13 @@ import { applySystemEvent } from "./systemEvents";
  *
  * The fleet roster is versioned by a counter the daemon keeps in its own memory: it starts at 0 and is bumped
  * per published change, so a rebuild, an update or a crash hands the next connection numbers far below the
- * high-water mark this tab is holding. `setAgents` drops those as out-of-order — which is right within one
+ * high-water mark this tab is holding. `setAgents` drops those as out-of-order, which is right within one
  * daemon and catastrophic across two: the board freezes at the instant before the restart, agents started
  * since never appear, and only a reload clears it.
  *
  * The stream's failure path reset the line, but that is one of four ways a stream ends and a REBUILD takes
  * another (the loopback listener dies with the container and the client demotes to the tunnel). So the reset
- * moved to the hello frame, which every connection begins with, whichever way the last one ended — and that is
+ * moved to the hello frame, which every connection begins with, whichever way the last one ended, and that is
  * what these hold it to. */
 const SANDBOX = `sbx-1`;
 
@@ -73,7 +73,7 @@ it(`ignores a roster read answering for the daemon it has already left`, async (
     setAgents([summary(`a1`, 1_000)], 800);
     /* Two reads are in play, and they answer for two different daemons. The first is the stale one this test
      * is about; the second is the hello's own held-wakes pull (systemEvents), issued on the line the hello just
-     * opened — so it answers with the NEW daemon's numbering, which starts low. Both are held open and both are
+     * opened, so it answers with the NEW daemon's numbering, which starts low. Both are held open and both are
      * released, because a single resolver slot would be overwritten by the second read and leave the first
      * awaiting forever. */
     const answers: (() => void)[] = [];

@@ -252,7 +252,7 @@ export type {
 /* The raw primitives, kept deliberately short. Handing out a primitive the KIT already wraps is how an
  * extension screen ends up wearing OS chrome next to the app's own: `Select` and `InputText` used to ship here
  * and four views took them, so a dropdown with a different focus ring sat beside <Picker> and a text field with
- * different padding beside `ui.input`. Those two are gone — <Picker> and `ui.input()` are the spellings.
+ * different padding beside `ui.input`. Those two are gone: <Picker> and `ui.input()` are the spellings.
  * <Dialog> was the third, and it is gone for the same reason: it stayed "until the kit has a general dialog
  * shell", six extension views took it, and every one of them typed its own width into a style attribute with
  * no viewport clamp, the exact spread that <Modal> above now exists to end. The shell is here, so the raw one

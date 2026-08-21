@@ -47,7 +47,7 @@ test("a tunnel sidecar folds into its sandbox instead of being a sandbox", () =>
     ]);
 });
 
-test("a sandbox with no sidecar at all has no tunnelRunning key — absent and false are different facts", () => {
+test("a sandbox with no sidecar at all has no tunnelRunning key: absent and false are different facts", () => {
     const boxes = sandboxesFrom([row("intentic-sandbox-work")]);
     expect(boxes).toHaveLength(1);
     expect("tunnelRunning" in (boxes[0] ?? {})).toBe(false);
@@ -63,7 +63,7 @@ test("listing is refused only when NEITHER grant covers it, naming the manage sw
     await expect(listSandboxes(scopes({ shell: "off", sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this computer/);
 });
 
-test("managing is refused by the sandboxes switch alone — a full shell does not imply it", async () => {
+test("managing is refused by the sandboxes switch alone: a full shell does not imply it", async () => {
     await expect(manageSandbox("stop", "work", scopes({ sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this computer/);
 });
 
@@ -78,7 +78,7 @@ test("each swap builds the argv ic actually takes", () => {
     // `prepare` is the one that must NEVER reach `update`: the whole reason it is offered is that it does not
     // restart the sandbox, and a verb that slipped would recreate a container someone was told nothing about.
     expect(icSwapArgs("prepare", "work", undefined)).toEqual(["sandbox", "prepare", "work"]);
-    // A hash tagging along changes nothing — prepare re-applies whatever the owner has approved, and taking
+    // A hash tagging along changes nothing: prepare re-applies whatever the owner has approved, and taking
     // a digest here would silently turn it into a rebuild.
     expect(icSwapArgs("prepare", "work", "deadbeef")).toEqual(["sandbox", "prepare", "work"]);
 });
@@ -94,7 +94,7 @@ test("removal confirms itself, because there is no terminal on this end to answe
     expect(icRemoveArgs("work")).toEqual(["sandbox", "remove", "work", "-y"]);
 });
 
-/* The agent's own install is preferred over whatever is on PATH, per platform — the same rule the desktop app
+/* The agent's own install is preferred over whatever is on PATH, per platform: the same rule the desktop app
  * applies to the sync agent, and for the same reason: a developer's global copy answers on the machine where this
  * was written and nothing answers on a real user's. */
 test("ic is looked for where the installers put it before PATH is tried", () => {
@@ -115,7 +115,7 @@ test("swapping is refused by the sandboxes switch, like managing", async () => {
 
 /* The point of the separate switch, asserted: a user who delegated the fleet did not thereby agree to lose one
  * of it. Granting `sandboxes` must not be enough to remove. */
-test("removal takes its own switch — managing sandboxes does not imply destroying one", async () => {
+test("removal takes its own switch: managing sandboxes does not imply destroying one", async () => {
     await expect(removeSandbox("work", scopes({ sandboxRemove: "off" }), () => {})).rejects.toThrow(/Remove sandboxes from this computer/);
     await expect(removeSandbox("work", scopes({ sandboxes: "on", sandboxRemove: "off" }), () => {})).rejects.toThrow(ScopeError);
 });
@@ -125,7 +125,7 @@ test("reading a log is covered by either grant, like listing", async () => {
 });
 
 /* The Computers view's Logs button reaches the same reading through the flow door, so it is gated the same way
- * — a grant that answers `sandbox_logs` for a model answers the button for its owner, and neither answers when
+ *: a grant that answers `sandbox_logs` for a model answers the button for its owner, and neither answers when
  * both switches are off. Asserted because this one is a READ travelling a route whose other seven ops write. */
 test("the log flow is gated exactly like the log tool it shares a reading with", async () => {
     await expect(tailSandboxLogs("work", scopes({ shell: "off", sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this computer/);

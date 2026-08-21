@@ -26,7 +26,7 @@ describe(`sectionsOf`, () => {
         ]);
     });
 
-    it(`keeps the order rows arrive in WITHIN a section — the list stays alphabetical under its heading`, () => {
+    it(`keeps the order rows arrive in WITHIN a section: the list stays alphabetical under its heading`, () => {
         expect(shape(sectionsOf([entry(`acceptance`, `work`), entry(`activity`, `work`), entry(`pipelines`, `work`)]))).toEqual([
             [`Work & delivery`, [`acceptance`, `activity`, `pipelines`]],
         ]);
@@ -36,7 +36,7 @@ describe(`sectionsOf`, () => {
         expect(shape(sectionsOf([entry(`memory`, `knowledge`)]))).toEqual([[`Knowledge`, [`memory`]]]);
     });
 
-    it(`lists an extension that declares nothing rather than dropping it — an unrendered row cannot be switched off`, () => {
+    it(`lists an extension that declares nothing rather than dropping it: an unrendered row cannot be switched off`, () => {
         expect(shape(sectionsOf([entry(`mystery`)]))).toEqual([[`Other`, [`mystery`]]]);
     });
 

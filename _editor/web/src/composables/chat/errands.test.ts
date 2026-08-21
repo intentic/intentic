@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ERRANDS, errandOf, errandPrompt } from "./errands";
 
 /* The classifier is the whole mechanism: an errand that stops reading as one goes back to opening a turn of
- * its own and pinning the app's prose over the user's question, silently and only after a reload — so what it
+ * its own and pinning the app's prose over the user's question, silently and only after a reload, so what it
  * has to survive is pinned here rather than left to the one call site. */
 
 const errand = ERRANDS.landConflict;
@@ -31,7 +31,7 @@ describe(`errandOf`, () => {
 });
 
 // Two errands sharing an opening would make the pair unresolvable, and the registry is where a new one is
-// added — so the uniqueness it depends on is checked over whatever it currently holds, not over today's two.
+// added, so the uniqueness it depends on is checked over whatever it currently holds, not over today's two.
 it(`gives every errand an opening no other errand's prompt starts with`, () => {
     const openings = Object.values(ERRANDS).map((entry) => entry.opening);
     for (const opening of openings) {

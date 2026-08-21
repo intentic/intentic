@@ -2,7 +2,7 @@ import { type AgentEvent, RESUME_NOTES, withoutResumeNote, withResumeNote } from
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TranscriptClock } from "./transcriptClock";
 
-/* WHO THE TYPEWRITER IS FOR — the pane the reader is in, and nobody else.
+/* WHO THE TYPEWRITER IS FOR: the pane the reader is in, and nobody else.
  *
  * A popped-out chat window shows as many chats side by side as the user picks (ChatPanel's panes), and each
  * one that is streaming owns a clock. Left to themselves they would all type at once: N things moving in the
@@ -31,7 +31,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-// Exactly one paint of whatever the clock has asked for — the frames it schedules DURING the tick wait for the
+// Exactly one paint of whatever the clock has asked for: the frames it schedules DURING the tick wait for the
 // next call, which is what makes "one frame" a measurable thing.
 const paint = (): void => {
     for (const frame of frames.splice(0, frames.length)) {
@@ -65,7 +65,7 @@ it(`settles an unwatched transcript in the frame its text arrives`, () => {
  * withoutResumeNote, then reuseUserBubble against what the transcript already shows. The two resume shapes
  * want OPPOSITE outcomes and this is the seam that decides them. A re-run repeats the original request behind
  * its note, so the stripped words match the bubble the user really typed and that bubble is reused; an
- * `answered` resume carries the user's ANSWER to a restored card — words the transcript has never shown — so
+ * `answered` resume carries the user's ANSWER to a restored card: words the transcript has never shown, so
  * it must land as its own bubble rather than be mistaken for the question it answers. */
 it(`a re-run's head reuses the prompt's own bubble; an answered park's head lands as its own`, () => {
     const clock = new TranscriptClock(() => {});
@@ -74,9 +74,9 @@ it(`a re-run's head reuses the prompt's own bubble; an answered park's head land
     const rerun = withoutResumeNote(withResumeNote(`ship the parser`, RESUME_NOTES.restart));
     expect(clock.reuseUserBubble(rerun, false)).toBe(asked);
 
-    const answered = withoutResumeNote(withResumeNote(`The user approved the plan — proceed with it.`, RESUME_NOTES.answered));
-    // The strip leaves exactly the answer — no machine preamble in a user bubble either way.
-    expect(answered).toBe(`The user approved the plan — proceed with it.`);
+    const answered = withoutResumeNote(withResumeNote(`The user approved the plan: proceed with it.`, RESUME_NOTES.answered));
+    // The strip leaves exactly the answer: no machine preamble in a user bubble either way.
+    expect(answered).toBe(`The user approved the plan: proceed with it.`);
     expect(clock.reuseUserBubble(answered, false)).toBeUndefined();
 });
 

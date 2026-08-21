@@ -12,7 +12,7 @@ vi.mock("./sandboxSession", () => ({
     }),
 }));
 // The real useEndpoint rides on top of this mock: with no loopback shortcut resolved for the sandbox, its
-// daemonBase falls through to daemonUrl — which is what keeps every call below aimed at the tunnel.
+// daemonBase falls through to daemonUrl, which is what keeps every call below aimed at the tunnel.
 vi.mock("./useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
 }));
@@ -20,7 +20,7 @@ vi.mock("./useSandbox", () => ({
 const { sandboxRpc, daemonErrorMessage, daemonErrorStatus } = await import("./sandboxRpc");
 
 // The daemon serves /events as an oRPC event iterator, which reaches the browser as text/event-stream. This is
-// the exact wire shape @orpc/server's OpenAPIHandler emits — proving the typed client decodes it is the whole
+// the exact wire shape @orpc/server's OpenAPIHandler emits: proving the typed client decodes it is the whole
 // reason the browser no longer reassembles SSE frames by hand.
 const eventStream = (frames: readonly unknown[]): Response =>
     new Response(frames.map((frame) => `event: message\ndata: ${JSON.stringify(frame)}\n\n`).join(``), {
@@ -63,7 +63,7 @@ it(`sends the session bearer and the TOFU connect token on the stream request`, 
     expect(request.headers.get(`x-intentic-connect`)).toBe(`connect`);
     expect(request.url).toContain(`https://daemon.test/events`);
     // The daemon keys this tab's presence roster entry by clientId, so a GET's input has to survive as a query
-    // param — the one thing a typed client could plausibly have changed about this route's wire shape.
+    // param: the one thing a typed client could plausibly have changed about this route's wire shape.
     expect(new URL(request.url).searchParams.get(`clientId`)).toBe(`c1`);
 });
 
@@ -86,7 +86,7 @@ it(`invalidates and retries exactly once when daemon middleware rejects a sessio
 });
 
 it(`surfaces the daemon's status so a refusal can be told from a failure to connect`, async () => {
-    // The daemon's hand-written routes answer `{ error }` with a bare status — NOT oRPC's error envelope — so
+    // The daemon's hand-written routes answer `{ error }` with a bare status: NOT oRPC's error envelope, so
     // the status has to survive the malformed-response path for the connection machine to classify a 403.
     vi.stubGlobal(
         `fetch`,

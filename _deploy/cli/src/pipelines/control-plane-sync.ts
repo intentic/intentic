@@ -27,7 +27,7 @@ export const forgejoIdentity = (
 } => {
     const forgejo = Object.values(graph.resources).find((node) => node.type === "forgejo");
     if (forgejo === undefined) {
-        throw new Error("no forgejo resource in the artifact — run `intentic deploy apply` first");
+        throw new Error("no forgejo resource in the artifact: run `intentic deploy apply` first");
     }
     const domain = forgejo.inputs["domain"];
     const user = forgejo.inputs["adminUser"];
@@ -83,7 +83,7 @@ export const syncControlPlaneSecrets = async (args: {
     // Without a previous artifact every key looks new and we would overwrite the correct Forgejo values with
     // freshly-minted ones. `adopt` always commits the artifact, so this only guards misuse, skip safely.
     if (args.previousGraph === undefined) {
-        args.log("sync-control-plane: no previous artifact to diff against — skipping secret sync");
+        args.log("sync-control-plane: no previous artifact to diff against, skipping secret sync");
         return { pushed: [], newEnv: [] };
     }
     const api = args.api ?? forgejoApi;
@@ -125,7 +125,7 @@ export const syncControlPlaneSecrets = async (args: {
 
     if (newEnv.length > 0) {
         args.log(
-            `sync-control-plane: set these user secret(s) in the app's Secrets page (or \`intentic deploy secrets push\` after setting .env) — apply fails until they reach ${user}/${TARGET_DIR}: ${newEnv.join(", ")}`,
+            `sync-control-plane: set these user secret(s) in the app's Secrets page (or \`intentic deploy secrets push\` after setting .env), apply fails until they reach ${user}/${TARGET_DIR}: ${newEnv.join(", ")}`,
         );
     }
     return { pushed: addedGenerated, newEnv };

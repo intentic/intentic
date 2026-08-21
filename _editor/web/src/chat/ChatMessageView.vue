@@ -39,11 +39,11 @@ const props = defineProps<{
     message: ChatMessage;
     // True while this message is the turn currently being streamed.
     streaming: boolean;
-    // What turnsOf folded into this turn — the user's "continue"-style nudges and the app's errands. Set only
+    // What turnsOf folded into this turn: the user's "continue"-style nudges and the app's errands. Set only
     // on the turn's opening message, which renders them as its "↳ … ×N" trailer (see ChatTurn.folded).
     folded?: readonly ChatMessage[];
     /* This row is at or below the message an unsent edit is aimed at, and would go if that edit were sent
-     * (ChatPane's `doomed`). Drawn faded and struck through — a preview, not a state: nothing has happened to
+     * (ChatPane's `doomed`). Drawn faded and struck through, a preview, not a state: nothing has happened to
      * this message, and cancelling the edit restores it in place. */
     doomed?: boolean;
 }>();
@@ -66,20 +66,20 @@ const {
 } = usePaneView();
 
 // The browser-help card's one real action leads AWAY from the chat: the live stage (and "hand back") are on
-// /browsers, so the primary button is a navigation, not a decision — the card resolves from over there. It is
+// /browsers, so the primary button is a navigation, not a decision: the card resolves from over there. It is
 // therefore a LINK (ChatDecisionButton's `to`): an address to hover, and a Ctrl/⌘-click that puts the stage in
 // its own tab beside the conversation asking for help, rather than replacing it.
 const router = useRouter();
 const helpBrowserAt = (session: string): string => `/browsers/${session}`;
 
-// The terminal-help card's, the same way — except the terminal is a PANEL under every view rather than a
+// The terminal-help card's, the same way: except the terminal is a PANEL under every view rather than a
 // route, so this opens and focuses it on the agent's own session instead of navigating. The title is what the
 // panel says about itself while the tab is on its way (useTerminalPanel), which for a handover is the ask.
 const openHelpTerminal = (help: TerminalHelpRequest): void =>
     useTerminalPanel().openFocused(help.session, { title: `The agent needs you at this terminal`, detail: help.message });
 
 /* The capability card's Connect is a decision AND a navigation: the reply un-parks the daemon's watch (the
- * agent now waits for the connection to come live), and the setup itself happens on the Capabilities page —
+ * agent now waits for the connection to come live), and the setup itself happens on the Capabilities page:
  * opened straight on the asked card, so the user lands on the form rather than the grid. "Open setup" while
  * connecting is the navigation alone, for whoever closed the page mid-setup. */
 const capabilitySetupAt = (card: string): string => `/capabilities/${card}`;
@@ -89,7 +89,7 @@ const connectCapability = (message: ChatMessage): void => {
 };
 
 // The card's one line of catalog prose, when the static catalog knows the card (a contributed card's frame
-// still carries its name — the description line simply stays off).
+// still carries its name: the description line simply stays off).
 const capabilityDescription = computed(() => {
     const card = props.message.capabilityOffer?.offer.card;
     return card === undefined ? undefined : CAPABILITY_CATALOG.find((entry) => entry.id === card)?.description;
@@ -97,10 +97,10 @@ const capabilityDescription = computed(() => {
 const { mobile } = useDevice();
 
 /* The landed notice's one-press offer (ChatMessage.noticeAction): flip THIS agent to holding its future work
- * on the branch — the moment the auto-land just fired is when "I'd rather have reviewed that first" is worth
+ * on the branch: the moment the auto-land just fired is when "I'd rather have reviewed that first" is worth
  * exactly one press (the same reasoning as ChatPanel's "Enable auto-resume" on a limit banner). Per-agent,
  * not the sandbox default: the click happens inside one agent's conversation, so its honest blast radius is
- * that agent — Sandbox ▸ Agent owns the global. Gated on the CURRENT effective posture rather than on the
+ * that agent: Sandbox ▸ Agent owns the global. Gated on the CURRENT effective posture rather than on the
  * message, so pressing it once retires the offer from every landed notice at once, and a transcript replayed
  * into an already-holding agent never shows a stale one. */
 const { agentById, setAutoLand, setResumeAfterOutage } = useAgents();
@@ -115,14 +115,14 @@ const holdFutureLands = (): void => {
     void setAutoLand(conversation.value.conversationId, false).catch(() => undefined);
 };
 
-/* The outage notice's opt-out, on exactly the same reasoning one line up — and now with the same reach, which
+/* The outage notice's opt-out, on exactly the same reasoning one line up, and now with the same reach, which
  * is the whole repair. It used to switch the SANDBOX-wide setting off, because there was no per-agent override
  * to point it at; that made the pair lopsided in the worst direction, since a person regretting one automatic
  * retry would silently disarm every other agent that was mid-outage.
  *
  * `false` rather than null, and the difference matters: null would hand this chat back to a default that may
  * well say "resume", which is not what somebody pressing Stop means. Gated on the EFFECTIVE posture, so the
- * offer retires itself the moment this conversation stops resuming — whichever level answered. */
+ * offer retires itself the moment this conversation stops resuming: whichever level answered. */
 const outageOptOutOffer = computed(
     () =>
         props.message.noticeAction === `outageOptOut` &&
@@ -132,7 +132,7 @@ const stopResumingOutages = (): void => {
     void setResumeAfterOutage(conversation.value.conversationId, false).catch(() => undefined);
 };
 
-/* The dependency reconcile's one press — a REVEAL, not a setting. The daemon started an install because the
+/* The dependency reconcile's one press: a REVEAL, not a setting. The daemon started an install because the
  * turn's landed delta needed one, and the only thing left to offer is the terminal it is running in.
  *
  * Gated on the install still RUNNING, on the same reasoning as the two offers above: a transcript replayed after
@@ -171,9 +171,9 @@ const LOADER_WORDS = [
 // --- Markdown / rendering --------------------------------------------------------------------
 // Both prose surfaces go through the one composable (see useMarkdown), which splits a live turn into settled
 // + still-writing halves and renders anything finished in one pass. One renderer per message view, held for
-// the component's life — the list is keyed by message id, so an instance tracks one message throughout.
+// the component's life: the list is keyed by message id, so an instance tracks one message throughout.
 /* Whose copy of the workspace this conversation's prose is about (workspaceScope). An isolated conversation
- * works in its own checkout, so a file it names in an answer is the one in THAT tree — the shared tree's file
+ * works in its own checkout, so a file it names in an answer is the one in THAT tree: the shared tree's file
  * of the same path is a different file, or none at all, and linking there is how "I wrote docs/plan.md" led to
  * a not-found page. A shared-workspace conversation is undefined: /work IS its tree. */
 const linkAgent = computed(() => (conversation.value.isolated.value ? conversation.value.conversationId : undefined));
@@ -188,7 +188,7 @@ const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.pla
 
 const planTitle = (request: PlanRequest): string => planParts(request.text).title ?? `Proposed plan`;
 
-// One delegated listener for every control the rendered markdown carries — a code block's copy button and the
+// One delegated listener for every control the rendered markdown carries: a code block's copy button and the
 // file links a mentioned path becomes. Both live inside v-html, so neither can hold a component of its own.
 // Copying is bound to the PRESS as well (see copyCodeFromEvent): a live turn rewrites its markdown every frame,
 // which destroys the button between mousedown and mouseup, and the click then never reaches it.
@@ -207,7 +207,7 @@ const toggleThinking = (): void => {
 };
 
 // The permission card's header line: the bridge's own rendered prompt sentence, else its short noun phrase,
-// else the bare tool name — so the card reads like Claude Code's prompt rather than a raw tool dump.
+// else the bare tool name, so the card reads like Claude Code's prompt rather than a raw tool dump.
 const permissionTitle = computed(() => {
     const permission = props.message.permission;
     if (permission === undefined) {
@@ -216,7 +216,7 @@ const permissionTitle = computed(() => {
     return permission.title ?? permission.displayName ?? permission.toolName;
 });
 
-// The approved run's latest status line off the provider's stream — what the card shows living while the
+// The approved run's latest status line off the provider's stream: what the card shows living while the
 // receipt is still pending. Newest wins: a status line is a spinner label, not a log.
 const serviceStatus = computed(() => {
     const offer = props.message.serviceOffer;
@@ -233,12 +233,12 @@ const serviceStatus = computed(() => {
 });
 
 // Keep the loader visible for the whole live turn, not just before the first token. The model streams a
-// preamble sentence and then goes quiet while it runs tools and thinks — text is present but the turn isn't
+// preamble sentence and then goes quiet while it runs tools and thinks: text is present but the turn isn't
 // done. Anchored at the bottom of the assistant stack, the loader tells the user work is still in flight;
 // it disappears only when streaming ends or a card takes over the prompt.
 //
 // A pending card is the one case where the turn is still streaming (its fetch stays open) while nothing is
-// being computed — the card is the prompt, so the loader must yield to it. Read the CONVERSATION's flag, not
+// being computed: the card is the prompt, so the loader must yield to it. Read the CONVERSATION's flag, not
 // this message's own cards: a card parks the whole turn but hangs on whichever bubble was current when it
 // arrived, which isn't always the bubble the loader trails (a plan nulls the turn's bubble, so later frames
 // open a fresh one below the card). Per-message, that left "Scheming… (107s)" ticking under a permission
@@ -253,7 +253,7 @@ const pendingWait = computed(() =>
     props.message.noticeWait === `credentialRenewal` ? conversation.value.failures.credentialRenewal.value : undefined,
 );
 
-// The shared second-ticking clock, armed for every live readout in this view — the turn's elapsed counter, the
+// The shared second-ticking clock, armed for every live readout in this view: the turn's elapsed counter, the
 // retry countdown, and a pending notice's wait. Armed whenever any of them is showing, which is why a notice's
 // wait counts too: it outlives the turn it describes, and a frozen "0s" beside a spinner reads as a hang.
 const now = useNow(() => props.streaming || pendingWait.value !== undefined);
@@ -275,7 +275,7 @@ const loaderElapsed = computed(() => {
  * quiet: nothing of its own is running, the transcript looks finished, and the only thing between it and the
  * end is agents working somewhere else. "Percolating… (6m 12s)" over that reads as a model that has hung.
  *
- * The count is the roster's — the same number the board's card and the chat rail already say — so the three
+ * The count is the roster's: the same number the board's card and the chat rail already say, so the three
  * never disagree about how many are out (agentStatus.ts's rule). */
 const liveSubagents = computed(() => agentById(conversation.value.conversationId)?.subagents?.running ?? 0);
 const loaderWord = computed(() =>
@@ -289,11 +289,11 @@ const loaderWord = computed(() =>
  * here is when it tries again.
  *
  * This line is what makes the long in-turn retry budget safe to have. Without it a turn absorbing an outage looks
- * identical to a hung one for minutes at a stretch, and the move a user makes against an apparent hang is Stop —
+ * identical to a hung one for minutes at a stretch, and the move a user makes against an apparent hang is Stop:
  * the only move that actually throws away the work the turn has already done. Rides the same one-second tick as
  * the elapsed counter, so the countdown moves and stale-looks impossible. */
 const providerRetry = computed(() => conversation.value.providerRetry.value);
-// "and here is when it tries again" holds only when the harness said when — Claude's does. Codex reports which
+// "and here is when it tries again" holds only when the harness said when: Claude's does. Codex reports which
 // attempt it is on and nothing else (codex-agent.ts), so its line drops the countdown rather than name an
 // instant the retry never agreed to.
 const retryWait = computed(() => {
@@ -311,12 +311,12 @@ const retryReason = computed(() =>
 
 // --- Interactive question card ---------------------------------------------------------------
 // Selection state for a pending question card, keyed by question index. Held here because it is UI state of
-// this card, but mirrored to localStorage per requestId (see questionDraft) so a reload — which reattaches to
-// the same still-parked card — doesn't make the user pick everything again.
+// this card, but mirrored to localStorage per requestId (see questionDraft) so a reload, which reattaches to
+// the same still-parked card: doesn't make the user pick everything again.
 //
 // One list of picks per question, with OTHER_LABEL standing in for the free-text row, is the whole reason this
 // card has no state to reconcile: "Other" is an option, so choosing it is the same act as choosing any other
-// option and single-select falls out of the list arithmetic below. `otherTexts` is not a parallel selection —
+// option and single-select falls out of the list arithmetic below. `otherTexts` is not a parallel selection:
 // it is the words that belong to that one row, kept whether or not the row is currently picked, so clicking
 // away to re-read the options and clicking back doesn't cost the user what they typed.
 const selections = ref<Record<number, string[]>>({});
@@ -332,7 +332,7 @@ const growOther = (el: HTMLTextAreaElement | undefined): void => {
     }
     el.style.height = `auto`;
     // A field that isn't laid out yet measures nothing, and writing that back would pin the box shut with no
-    // later measurement to undo it — the one-row default stands instead until there is a real height to use.
+    // later measurement to undo it: the one-row default stands instead until there is a real height to use.
     if (el.scrollHeight > 0) {
         el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
     }
@@ -347,7 +347,7 @@ const setOtherInput = (index: number, el: Element | ComponentPublicInstance | nu
 };
 
 // Load the draft when a pending card appears (mount, or the frame arriving mid-turn), and drop it the moment
-// the card settles — answered, dismissed, or frozen `cancelled` by a stop. One watcher for both because they
+// the card settles: answered, dismissed, or frozen `cancelled` by a stop. One watcher for both because they
 // are the same event seen from either side: this card is no longer taking picks.
 watch(
     () => [props.message.question?.requestId, props.message.question?.status] as const,
@@ -380,7 +380,7 @@ watch([selections, otherTexts], ([picks, texts]) => {
 const isSelected = (index: number, label: string): boolean => (selections.value[index] ?? []).includes(label);
 
 // Picking, for every row including Other. Single-select replaces, multi-select accumulates, and clicking the
-// row you are on takes it back — nothing here reaches across to clear a different piece of state, because
+// row you are on takes it back: nothing here reaches across to clear a different piece of state, because
 // there is no longer a different piece of state to clear.
 const toggleOption = (question: AskQuestion, index: number, label: string): void => {
     const current = selections.value[index] ?? [];
@@ -403,7 +403,7 @@ const toggleOption = (question: AskQuestion, index: number, label: string): void
  * marks is a card that lies: every convention the user has ever met reads a circle as "one of these", so they
  * pick one, submit, and never learn the other options were theirs to take too. The shape carries it first
  * (square marks are a checkbox list everywhere else), the words carry it for anyone who reads before clicking,
- * and the ARIA role carries it for anyone who cannot see either — one fact, three channels, no card where a
+ * and the ARIA role carries it for anyone who cannot see either: one fact, three channels, no card where a
  * reader has to click to find out which kind it is. */
 const markFor = (question: AskQuestion, selected: boolean): IconName => {
     if (question.multiSelect) {
@@ -426,12 +426,12 @@ const onOtherInput = (index: number, event: Event): void => {
     growOther(el);
 };
 
-// A picked Other row with nothing written in it is an unfinished answer, not an empty one — it holds Submit
+// A picked Other row with nothing written in it is an unfinished answer, not an empty one: it holds Submit
 // rather than being quietly dropped, which would send the agent something other than what the card shows.
 const otherPending = (index: number): boolean => isSelected(index, OTHER_LABEL) && otherValue(index).trim().length === 0;
 
 // What this question answers with: the picked labels, with the Other row swapped for what was typed into it.
-// The sentinel never leaves this function — the agent is answered in the user's own words.
+// The sentinel never leaves this function: the agent is answered in the user's own words.
 const picksFor = (index: number): string[] =>
     (selections.value[index] ?? []).flatMap((label) => {
         if (label !== OTHER_LABEL) {
@@ -455,7 +455,7 @@ const submitAnswers = (): void => {
     void answerQuestion(props.message, answers);
 };
 
-/* Enter submits, Shift+Enter breaks the line — the chat composer's bargain, held to here so one keystroke does
+/* Enter submits, Shift+Enter breaks the line: the chat composer's bargain, held to here so one keystroke does
  * not mean two things depending on which box the caret is in. On mobile Enter is always a newline: a virtual
  * keyboard has no Shift+Enter, and Submit is a button away. */
 const otherKeydown = (event: KeyboardEvent): void => {
@@ -467,7 +467,7 @@ const otherKeydown = (event: KeyboardEvent): void => {
 };
 
 // A DECIDED question card is the record of the decision, so it keeps every option that was on the table and
-// marks the one(s) taken — read back a week later, "Your original ×" means nothing without the alternatives it
+// marks the one(s) taken: read back a week later, "Your original ×" means nothing without the alternatives it
 // was chosen over. A free-text answer belongs to no option, so it joins the list as a row of its own: it is
 // the one answer that would otherwise vanish from the transcript entirely.
 interface DecidedOption {
@@ -486,7 +486,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
     ];
 };
 
-/* GOING BACK lives in the column's margin now, beside the answer rather than on the bubble — see ChatForkCut.
+/* GOING BACK lives in the column's margin now, beside the answer rather than on the bubble: see ChatForkCut.
  * The two controls that used to hang off a user message (a history icon that rewound in place, a pencil that
  * copied the chat into a new tab) were the same decision asked twice in different words, and neither said what
  * would happen to the files. One mark, one menu, three named outcomes.
@@ -495,26 +495,26 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
  *
  * A pencil is back, and the distinction is worth stating because the old one was removed on purpose. That
  * pencil was a FORK wearing an edit's clothes: it copied the chat into a new tab, left the files where they
- * were, and called it editing — the mislabelling was the whole complaint against it. This one edits. It aims
+ * were, and called it editing: the mislabelling was the whole complaint against it. This one edits. It aims
  * the composer at this message; the send it eventually gets rewinds to this point, files and all, before the
- * new prompt goes out. Nothing at all happens on the click — see Conversation.editing.
+ * new prompt goes out. Nothing at all happens on the click: see Conversation.editing.
  *
  * IT IS ON THE PROMPT because that is where the hand goes. The cut's mark stands level with the END of an
  * answer, which is exactly right for "carry on from there another way" and exactly wrong for "I named the
  * wrong file": a reader fixing their own sentence looks at their own sentence, finds nothing there, and either
- * retypes it from scratch or never finds the affordance at all. So the two marks now bracket the turn — the
- * edit at the prompt that opened it, the fork menu at the close of the answer — and they share the one gutter
+ * retypes it from scratch or never finds the affordance at all. So the two marks now bracket the turn: the
+ * edit at the prompt that opened it, the fork menu at the close of the answer, and they share the one gutter
  * column, so the pair reads as one idea rather than as two controls that happen to both be near a turn.
  *
  * What the cut GREYS OUT, this HIDES, and the difference is deliberate: a menu row that vanished would leave a
- * menu whose shape changed under the reader, while a margin mark is invisible until hovered anyway — there is
+ * menu whose shape changed under the reader, while a margin mark is invisible until hovered anyway: there is
  * no gap to explain. No checkpoint behind the message means the files cannot come back to it, and an edit that
  * quietly kept today's files would start the new turn on the very work it was meant to discard. Mid-turn it
  * goes for the reason the cut's file rows wait: a rewind under a running agent is the one interleaving the
  * daemon's lease exists to refuse (agent/rewind.ts). And a prompt whose OWN edit is already armed offers no
  * pencil, because the composer is holding it.
  *
- * An ERRAND — a prompt the app composed and sent on the user's behalf — is excluded by the BRANCH this control
+ * An ERRAND (a prompt the app composed and sent on the user's behalf) is excluded by the BRANCH this control
  * lives in rather than by a condition of its own: those render as their own row (see `errand` below) and never
  * reach the prompt bubble the pencil hangs off. Editing one would mean editing our prose anyway. */
 const editable = computed(
@@ -532,15 +532,15 @@ const startEdit = (): void => {
 // --- Long prompt clamp (see .chat-prompt-text) ------------------------------------------------
 // The bubble is clamped in CSS; whether the clamp actually bites is a question of wrapping, and wrapping
 // depends on a panel width the user can drag. So the element is measured rather than its text guessed at,
-// and re-measured whenever it resizes — a prompt that fits at a wide panel clips at a narrow one, and a
+// and re-measured whenever it resizes: a prompt that fits at a wide panel clips at a narrow one, and a
 // faded-out prompt with no way to open it is just lost text.
 const bubble = ref<HTMLElement>();
 const overflowing = ref(false);
 const expanded = ref(false);
-// Which window this row's observers belong to changes with the panel's — see the two watches below.
+// Which window this row's observers belong to changes with the panel's: see the two watches below.
 const { poppedOut } = useChatPopout();
 
-/* Built by the window the bubble is IN, and rebuilt when the panel moves to another one — an observer is
+/* Built by the window the bubble is IN, and rebuilt when the panel moves to another one: an observer is
  * per-window machinery: it delivers in the rendering steps of the document that CREATED it, whatever document
  * the element it watches has since been adopted into. Popped out, one made here reports on the OPENER's frames,
  * and the opener is the window behind the chat window, which a browser stops rendering entirely. Same reasoning
@@ -555,7 +555,7 @@ watch(
         }
         const view = element.ownerDocument.defaultView ?? window;
         const observer = new view.ResizeObserver(() => {
-            // Open, the clamp is off and the box always fits — there is nothing to measure, and measuring
+            // Open, the clamp is off and the box always fits: there is nothing to measure, and measuring
             // would clear the flag that keeps the collapse control on screen. The next collapse re-measures.
             if (!expanded.value) {
                 overflowing.value = element.scrollHeight > element.clientHeight + 1;
@@ -572,20 +572,20 @@ watch(
 // going" stays an ordinary bubble sliding beneath the pinned question; an errand gets the row below.
 const defers = computed(() => foldsIntoTurn(props.message));
 
-/* AN ERRAND — a prompt the app composed and sent on the user's behalf (errands.ts). It is rendered by its
+/* AN ERRAND: a prompt the app composed and sent on the user's behalf (errands.ts). It is rendered by its
  * label, at the meta tier where the tool cards answering it will appear, because its text is a paragraph of
  * OUR prose: shown as a user bubble it read as something they had typed, and cost the panel six clamped lines
- * of it. The words themselves stay one click away — a message nobody typed must still be auditable, and "what
+ * of it. The words themselves stay one click away: a message nobody typed must still be auditable, and "what
  * exactly did you tell my agent to do?" is a fair question with a conflict half-resolved. */
 const errand = computed(() => errandOf(props.message));
 const errandOpen = ref(false);
 
-/* THE NOTES THE DAEMON ADDED TO A TURN'S MESSAGE (ChatMessage.notes) — the errand row's reasoning applied to
+/* THE NOTES THE DAEMON ADDED TO A TURN'S MESSAGE (ChatMessage.notes): the errand row's reasoning applied to
  * the other half of the same problem.
  *
  * An errand is our prose sent AS the user; these are our prose sent WITH them, prepended to what they typed
  * before the model reads it: a rebase that moved the branch out from under the agent, dependencies that are
- * behind, workspace context retrieved for the message. They change what the agent does — and the chat's only
+ * behind, workspace context retrieved for the message. They change what the agent does, and the chat's only
  * trace of any of them used to be a single muted line paraphrasing the rebase, so an agent visibly acting on
  * instructions had those instructions nowhere on screen and nowhere to look for them.
  *
@@ -597,12 +597,12 @@ const noteTitles = computed(() => (props.message.notes ?? []).map((note) => note
 
 /* Verbatim, minus the markdown heading most of these notes open with. That heading is addressed to a model
  * reading markdown; drawn here it is two literal hashes above a row that already names the note, so it reads as
- * a formatting failure and says nothing the label did not. Only a heading, and only the FIRST line — everything
+ * a formatting failure and says nothing the label did not. Only a heading, and only the FIRST line: everything
  * below it is the note's prose and stays exactly as the agent got it. */
 const noteBody = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim();
 
 /* THE PINNED PROMPT'S TRAILER: things have happened to this turn since it was asked, and the pin must not
- * pretend otherwise. One line, so it names the LAST of them and counts how many said the same thing — in the
+ * pretend otherwise. One line, so it names the LAST of them and counts how many said the same thing: in the
  * user's own words for a nudge (the lexicon keeps those short) and by label for an errand. In flow whenever
  * there is something to say rather than only while pinned: an element appearing at the pin threshold would
  * change the row's height there, which yanks the transcript (the same rule .chat-prompt-text's clamp obeys). */
@@ -622,11 +622,11 @@ const { showToolCalls } = useToolCalls();
 
 // --- Pinned state (see .chat-prompt-pinned) ----------------------------------------------------
 /* CSS has no way to ask whether a sticky element is currently stuck, and the band under a prompt must only be
- * painted while it is — on an in-flow row it would read as a card floating over the transcript, and it would
+ * painted while it is: on an in-flow row it would read as a card floating over the transcript, and it would
  * paint over the neighbouring rows the negative margins reach into.
  *
  * THE STATE IS MEASURED, NOT INFERRED. The row is offset a pixel above the scroller's top edge (`top: -1px`),
- * so a stuck row's top edge sits above that edge and an in-flow one's does not — one comparison, true whenever
+ * so a stuck row's top edge sits above that edge and an in-flow one's does not: one comparison, true whenever
  * it is asked.
  *
  * It used to be inferred instead, from an IntersectionObserver's ratio: that same pixel is clipped once the row
@@ -636,18 +636,18 @@ const { showToolCalls } = useToolCalls();
  *
  *   - AN OBSERVER GOES SILENT WHEN ITS TARGET CHANGES DOCUMENT. Popping the chat out adopts these very rows
  *     into another window (see the clamp's observer above), and an observer built in the window they came from
- *     reports nothing about them afterwards — measured, not inferred: it reported once before the move and
+ *     reports nothing about them afterwards, measured, not inferred: it reported once before the move and
  *     never again, through a scroll that pinned the row in its new home. The flag is reset to false as the row
  *     is rebuilt, so the band simply never painted there.
  *   - A report that arrives stale. The callback takes a queue, not a state, and reading the first of a batch
  *     answers with the older of two frames.
  *
  * Either way the prompt sticks with the flag still saying otherwise, and the band goes unpainted for the rest
- * of the turn — the answer then scrolls visibly THROUGH the pinned prompt, which is the bug this replaces.
+ * of the turn: the answer then scrolls visibly THROUGH the pinned prompt, which is the bug this replaces.
  *
  * So the observer is demoted to a gate over a listener that carries the correctness on its own. The scroller's
- * own scroll is what re-reads the box — one rect per on-screen prompt, on an event where layout is already
- * settled — and the gate only takes that listener OFF a row scrolled out of the transcript. A gate that never
+ * own scroll is what re-reads the box: one rect per on-screen prompt, on an event where layout is already
+ * settled, and the gate only takes that listener OFF a row scrolled out of the transcript. A gate that never
  * speaks therefore costs a listener that never comes off, which is the harmless direction to fail in. */
 const row = ref<HTMLElement>();
 const pinned = ref(false);
@@ -662,7 +662,7 @@ watch(
         }
         /* The transcript scroller is the only scrolling ancestor the pin is relative to, so it is both what the
          * row is measured against and what the gate is rooted at. A row mounted outside one cannot be stuck to
-         * anything — it stays an ordinary bubble rather than pinning against the viewport by accident. */
+         * anything: it stays an ordinary bubble rather than pinning against the viewport by accident. */
         const scroller = element.closest(`.chat-scroller`);
         if (scroller === null) {
             return;
@@ -714,9 +714,9 @@ watch(
 );
 
 // A clamped box has no scrollbar and cannot be scrolled by hand, so any scroll it reports came from the
-// browser revealing something inside it — find-in-page landing on a match below the fold, or a screen reader
+// browser revealing something inside it: find-in-page landing on a match below the fold, or a screen reader
 // moving to it. Both mean the same thing: open the message, and put the box back where it belongs. An OPEN
-// box is different — it owns a real scrollbar (see .chat-prompt-open), so its scrolls are the user reading
+// box is different: it owns a real scrollbar (see .chat-prompt-open), so its scrolls are the user reading
 // and must be left alone.
 const onBubbleScroll = (): void => {
     if (expanded.value) {
@@ -728,12 +728,12 @@ const onBubbleScroll = (): void => {
     }
 };
 
-// A clamped bubble is its own expand target — the chip is only where that affordance is drawn, and a cut
+// A clamped bubble is its own expand target: the chip is only where that affordance is drawn, and a cut
 // prompt is a thing you reach for by pointing at the text, not by finding a 20px control. One direction
 // only: a body click that FOLDED the box would fire under a reader who is still inside it, and the chip is
 // on screen throughout. Guarded on a live selection so dragging text out of a prompt doesn't unfold it.
 const onBubbleClick = (): void => {
-    // The selection asked of the bubble's OWN window — popped out, the drag being guarded against lives there,
+    // The selection asked of the bubble's OWN window: popped out, the drag being guarded against lives there,
     // and this realm's selection is a different (always-collapsed) one.
     const selection = bubble.value?.ownerDocument.defaultView?.getSelection() ?? window.getSelection();
     if (expanded.value || !overflowing.value || selection?.isCollapsed === false) {
@@ -746,14 +746,14 @@ const toggleExpanded = (): void => {
     expanded.value = !expanded.value;
     // Fold back up showing the top, and do it NOW, before Vue re-applies the clamp: a leftover offset from
     // reading inside the open bubble would be clamped by the relayout, and that fires the very scroll event
-    // onBubbleScroll reads as find-in-page — reopening the message the click just closed.
+    // onBubbleScroll reads as find-in-page: reopening the message the click just closed.
     if (!expanded.value && bubble.value !== undefined) {
         bubble.value.scrollTop = 0;
     }
 };
 
 // The chip row with thumbs resolved: the send-time object URL while this window still holds it, else one
-// re-minted from the workspace bytes for a restored/cached bubble (attachmentPreview — reactive, so the name
+// re-minted from the workspace bytes for a restored/cached bubble (attachmentPreview: reactive, so the name
 // chip flips to a thumb when the bytes land).
 const attachmentThumbs = computed(() =>
     (props.message.attachments ?? []).map((attachment) => ({
@@ -763,11 +763,11 @@ const attachmentThumbs = computed(() =>
     })),
 );
 
-// Whether the attachment MAY sit beside the prompt instead of stacked above it. Not a width test — the @lg
+// Whether the attachment MAY sit beside the prompt instead of stacked above it. Not a width test: the @lg
 // container query in the template owns that half. What is settled here is whether the arrangement can pay for
 // itself at all, since the only thing it buys is height on the pinned row:
 //   · EXACTLY ONE attachment. Beside the bubble they stack vertically, so N of them cost N × 62px where the
-//     row above the bubble costs 56 once however many there are. One is the case that always wins — the pair
+//     row above the bubble costs 56 once however many there are. One is the case that always wins: the pair
 //     costs the taller of the two rather than their sum. Two only wins past a three-line prompt, three only
 //     at the six-line cap (measured: three beside a one-line prompt came out 80px TALLER than the row does),
 //     and past that it always loses. A rule that held only sometimes would have to measure the bubble and
@@ -779,13 +779,13 @@ const attachmentsAside = computed(
     () => props.message.text.length > 0 && attachmentThumbs.value.length === 1 && attachmentThumbs.value[0]?.previewUrl !== undefined,
 );
 
-/* WHEN THE MESSAGE WAS SENT, as the wall-clock minute alone: "14:32". Absolute rather than "3h ago" — the
+/* WHEN THE MESSAGE WAS SENT, as the wall-clock minute alone: "14:32". Absolute rather than "3h ago", the
  * question a transcript raises is which sitting a turn belongs to, which a relative age answers only for the
  * last hour and then has to keep re-rendering to stay true.
  *
  * The DAY is not in the label, because it is already on screen: the transcript draws a marker naming the day
  * wherever the date changes (ChatPane's dayMarks), so every stamp reads under one. That is what buys the label
- * its place — five characters fit the margin beside the bubble, where the twenty of "Aug 10, 2026, 14:32" did
+ * its place: five characters fit the margin beside the bubble, where the twenty of "Aug 10, 2026, 14:32" did
  * not, and the full day and minute stay one hover away in the tooltip for the one reader who wants them without
  * scrolling up to the marker.
  *
@@ -796,9 +796,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 </script>
 
 <template>
-    <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
+    <!-- The click handler is delegated for the markdown's own controls: copy buttons and file links, which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
-    <!-- A folded message (see `defers`) is a row like any other: no pin, and no inset of its own either — the
+    <!-- A folded message (see `defers`) is a row like any other: no pin, and no inset of its own either, the
          column's gap is the air around every event in it, and .chat-prompt's band adds none on top of that
          (see chat.css). An acknowledgment keeps the prompt's alignment, because it is still the user talking;
          an errand is the app talking, so it sits at the left edge with the machinery. -->
@@ -840,7 +840,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <div v-else-if="message.role === 'user'" class="group relative flex max-w-[85%] flex-col items-end gap-1.5">
             <!-- Stacked: a row of attachments above the prompt. The arrangement for a narrow panel, for edit
                  mode (a thumbnail beside the textarea would come out of the width of the narrowest thing in
-                 the panel), and for every attachment set that can't go beside the bubble — see
+                 the panel), and for every attachment set that can't go beside the bubble: see
                  attachmentsAside. It steps aside only where the copy below is actually shown. -->
             <ChatAttachmentStrip
                 v-if="attachmentThumbs.length"
@@ -852,7 +852,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <!-- Aside: the same thumbnail to the LEFT of the prompt, taking over from the stacked row
                      above once the panel is wide enough (attachmentsAside settles everything except width).
                      A prompt is pinned for as long as its answer runs, so its height is charged against the
-                     room that answer is read in — the six-line clamp on .chat-prompt-text is that budget —
+                     room that answer is read in: the six-line clamp on .chat-prompt-text is that budget:
                      and a 56px thumbnail row was 62px on top of it that nothing accounted for. Beside the
                      bubble the pair costs the TALLER of the two rather than their sum: measured, a screenshot
                      with a short prompt goes 121px -> 77px and one with a clamped prompt 218px -> 156px, on
@@ -860,7 +860,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                      Two elements rather than one moved by CSS, because the two arrangements do not share a
                      flex parent: reaching the stacked position from in here needs the row to wrap, and a
                      wrapping row drops the action buttons onto a line of their own as soon as the bubble
-                     fills the width — 28px of dead height spent to save 62.
+                     fills the width: 28px of dead height spent to save 62.
                      @lg is the floor at which the bubble still keeps a readable measure once the thumbnail
                      and the action gutter come out of 85% of the transcript width (47 characters there,
                      against 49 stacked one step narrower); at the docked default the same arrangement sets
@@ -882,7 +882,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         {{ message.text }}
                     </div>
                     <!-- Only for a prompt the clamp actually cut. Opening does NOT unpin: wanting the whole
-                         prompt while its answer streams beneath is exactly what the pin is for — past its cap
+                         prompt while its answer streams beneath is exactly what the pin is for: past its cap
                          the open bubble scrolls internally instead of taking the panel over. -->
                     <button
                         v-if="overflowing"
@@ -899,16 +899,16 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             </div>
             <!-- WHEN IT WAS SENT, in the MARGIN BESIDE the bubble and only while the pointer is on the message.
                  A transcript is read for what was said, so the hour it was said at is worth exactly the room it
-                 takes when nobody is asking — which is none: the label is absolute, so it costs the row no
+                 takes when nobody is asking, which is none: the label is absolute, so it costs the row no
                  height either way. What the margin buys over the strip below the bubble (where this used to
                  hang) is that the label is INSIDE its own message's band. Under the bubble it sat in the gap
-                 between two turns — the row's own bottom padding plus the gap between turns, which the meta tier
-                 fills edge to edge — so it touched the bubble above and the answer below at once,
+                 between two turns: the row's own bottom padding plus the gap between turns, which the meta tier
+                 fills edge to edge, so it touched the bubble above and the answer below at once,
                  reading as plausibly a header for that answer as a footer for the prompt. And it landed in the
                  one corner of the bubble that already carries the clamp fade and the open/close chip.
                  The room is guaranteed, not hoped for: a prompt caps at 85% of the column, so the flank to its
                  left is never narrower than 15% of the reading measure, and the label is five characters wide
-                 (see sentClock) — it fits that flank at every panel width, with the column's own gutter behind
+                 (see sentClock): it fits that flank at every panel width, with the column's own gutter behind
                  it for the tightest one. Right-aligned against the bubble so a run of stamps forms one edge
                  down the margin rather than ragging, and CENTRED on the message it belongs to: a stamp level
                  with the first line reads as a label attached to that line, and against a bubble six lines deep
@@ -917,10 +917,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  Centred by spanning the message's own height and aligning inside it (`inset-y-0` + a flex
                  centre) rather than by a half-height translate. The two land in the same pixel, but a transform
                  rasterises what it moves through a compositing step, and five characters at the meta tier are
-                 exactly the ink that softens under one — and this way the rule states its intent (centre this on
+                 exactly the ink that softens under one, and this way the rule states its intent (centre this on
                  the message) instead of half of a height the label does not own. It is measured against the
                  whole message, so a stacked attachment row counts toward the middle the same as the bubble does.
-                 The span covers the flank's full height this way, which is dead space either way — it takes the
+                 The span covers the flank's full height this way, which is dead space either way: it takes the
                  pointer for its tooltip and blocks nothing, unlike the old position under the bubble, which lay
                  over the strip a click uses to open a clamped prompt. -->
             <span
@@ -929,7 +929,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 class="absolute inset-y-0 right-full mr-2 flex items-center text-2xs whitespace-nowrap tabular-nums text-subtle opacity-0 transition-opacity group-hover:opacity-100"
                 >{{ sentClock }}</span
             >
-            <!-- ASK THIS AGAIN, DIFFERENTLY — in the column's RIGHT margin, level with the prompt, which is the
+            <!-- ASK THIS AGAIN, DIFFERENTLY: in the column's RIGHT margin, level with the prompt, which is the
                  same gutter the fork mark stands in at the other end of the turn (see ChatForkCut and the
                  EXCEPT-FOR note above). Real column, not negative space borrowed from the scroller, so it
                  cannot be clipped or push a horizontal scrollbar at any panel width.
@@ -937,17 +937,17 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  EXACTLY the gutter wide and flush to the column's content edge, with no nudge of its own. A
                  prompt caps at 85% of the column and is right-aligned, so `left-full` IS that edge and the
                  gutter is the padding beyond it: one --chat-gutter of width drops the mark into precisely the
-                 strip the fork mark stands in, and the pair measures to the same x. A margin on top of that —
-                 even four pixels — spends room the column does not have and hangs the mark past the panel's own
+                 strip the fork mark stands in, and the pair measures to the same x. A margin on top of that:
+                 even four pixels: spends room the column does not have and hangs the mark past the panel's own
                  edge, which is why the fork mark carries none either.
 
                  It costs the row NO HEIGHT and no width: absolute, inside padding the column was already
-                 carrying, opposite a clock in the left margin — so a prompt is exactly as tall with this control
+                 carrying, opposite a clock in the left margin, so a prompt is exactly as tall with this control
                  as without it, which is the budget .chat-prompt-text's clamp is defending.
 
                  Pinned to the message's TOP rather than centred on it like the clock opposite, because the two
                  are answering different questions. The clock labels the whole message, so it points at the
-                 middle of it; this acts on the message's first line — the words the reader is about to rewrite —
+                 middle of it; this acts on the message's first line: the words the reader is about to rewrite:
                  and against a six-line clamped prompt a centred pencil drifts into the middle of the margin with
                  nothing beside it to explain what it belongs to.
 
@@ -959,7 +959,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 type="button"
                 class="absolute top-0 left-full flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md text-subtle transition-opacity hover:bg-overlay hover:text-content"
                 :class="mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`"
-                v-tooltip.right="`Edit this message — replaces it and everything after`"
+                v-tooltip.right="`Edit this message: replaces it and everything after`"
                 aria-label="Edit this message"
                 @click.stop="startEdit"
             >
@@ -971,13 +971,13 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs text-subtle"
         >
             <!-- A notice whose wait is still running spins instead of showing the info glyph, and says how long
-                 it has been waiting — the two things that tell "something is happening" from "this is stuck". It
+                 it has been waiting: the two things that tell "something is happening" from "this is stuck". It
                  settles back to the plain line the moment the wait ends (see ChatMessage.noticeWait). -->
             <Icon v-if="pendingWait" name="spinner" spin class="text-2xs text-info" />
             <Icon v-else name="info-circle" class="text-2xs" />
             <span>{{ message.text }}</span>
             <span v-if="pendingWait" class="shrink-0 tabular-nums">{{ formatElapsed(pendingWait.since, now) }}</span>
-            <!-- The quiet follow-up some notices carry — see holdOffer. A link, not a button: the notice line
+            <!-- The quiet follow-up some notices carry, see holdOffer. A link, not a button: the notice line
                  is the most muted thing in the transcript, and the offer must not outshout the turn it trails.
                  What the offer CHANGES trails it as a clause rather than hiding in a hover box: this is a
                  standing setting the click turns on, and a paragraph nobody hovers is not consent. The line
@@ -986,13 +986,13 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdFutureLands">
                     Keep future work on the branch
                 </button>
-                <span class="shrink-0">— it waits as “Ready to land” until you land it.</span>
+                <span class="shrink-0">(it waits as "Ready to land" until you land it)</span>
             </template>
             <template v-if="outageOptOutOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopResumingOutages">
                     Stop resuming this chat
                 </button>
-                <span class="shrink-0">— a turn the provider kills stops and waits for you.</span>
+                <span class="shrink-0">(a turn the provider kills stops and waits for you)</span>
             </template>
             <template v-if="depsInstallOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="watchDepsInstall">Watch the install</button>
@@ -1019,8 +1019,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
             <!-- `live` is this bubble's own stream flag, which is what "still happening" means for both of
                  these: a call in flight and the checklist the agent is moving both belong to the bubble the
-                 turn is currently writing into. Anywhere else they are a record — frozen mid-flight by a Stop,
-                 by the turn moving on, or by the session ending — and must not animate. -->
+                 turn is currently writing into. Anywhere else they are a record: frozen mid-flight by a Stop,
+                 by the turn moving on, or by the session ending, and must not animate. -->
             <div v-if="message.tools?.length" class="flex w-full flex-col gap-1">
                 <ChatToolRows v-if="showToolCalls" :tools="message.tools" :live="streaming" />
                 <ChatToolRun v-else :tools="message.tools" :live="streaming" />
@@ -1030,7 +1030,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
             <!-- The answer, as the parts the engine cut it into (see useMarkdown): prose runs, and the figures
                  an agent drew between them. Several v-html slots rather than one, and that is the streaming
-                 property — a settled run is unchanged between frames, so Vue leaves its DOM (and the user's
+                 property: a settled run is unchanged between frames, so Vue leaves its DOM (and the user's
                  selection) alone while only the short tail is re-rendered. `.md-part` is display:contents, so
                  the prose still lays out as direct children of .chat-markdown. -->
             <div v-if="message.text" class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
@@ -1040,14 +1040,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </template>
             </div>
             <!-- The quiet mark on words the USER placed wearing the agent's voice (composer "as agent" mode).
-                 Its one audience is the human re-reading this later — an unmarked planted line fools its own
+                 Its one audience is the human re-reading this later: an unmarked planted line fools its own
                  author within a month. Deliberately outside the bubble and in the smallest muted tier: the row
                  must read as the agent's at a glance (that is the feature), and only confess on inspection.
                  The agent itself never sees the flag; the daemon's handoff renders placed rows as its own. -->
             <p
                 v-if="message.placed"
                 class="flex items-center gap-1 px-1 text-2xs text-subtle"
-                v-tooltip.top="`You wrote this in the agent's voice — the agent reads it as its own words`"
+                v-tooltip.top="`You wrote this in the agent's voice: the agent reads it as its own words`"
             >
                 <Icon name="pencil" class="text-2xs" />Placed by you
             </p>
@@ -1083,7 +1083,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                      card carries a generic title and breaks each question out inline in the body below.
                      Body tier, font-medium: this header is a SENTENCE, often two lines of it, and prose held
                      a size above the answer it is asking about reads as a banner shouted at the reader rather
-                     than as a question being asked — the same ask sits at this size in the multi-question
+                     than as a question being asked: the same ask sits at this size in the multi-question
                      card's body. Weight alone separates it from the options under it, and one step of it is
                      enough. The other card headers (plan / permission) keep the title tier: they are single
                      truncated lines, not prose. -->
@@ -1113,7 +1113,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                             }}</span>
                             <!-- Roles, not just paint: a radiogroup of radios and a group of checkboxes are how
                                  a screen reader is told the same thing the marks tell everyone else. The Other
-                                 FIELD stays outside the group — it is the payload of the row above it, not
+                                 FIELD stays outside the group: it is the payload of the row above it, not
                                  another option to move a cursor onto. -->
                             <div class="flex flex-col gap-1.5" :role="question.multiSelect ? 'group' : 'radiogroup'" :aria-label="question.question">
                                 <button
@@ -1136,7 +1136,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                                     <span class="flex min-w-0 flex-col gap-0.5">
                                         <span class="text-xs font-medium text-content">{{ option.label }}</span>
                                         <span class="text-2xs leading-snug text-muted">{{ option.description }}</span>
-                                        <!-- The preview is a MOCKUP — an ASCII layout, a diff, a config block —
+                                        <!-- The preview is a MOCKUP: an ASCII layout, a diff, a config block:
                                              which the asking side writes precisely so the options can be compared
                                              side by side. It used to be piped into a tooltip: a 17rem strip, five
                                              lines at most, one option at a time, and gone the instant you moved
@@ -1149,11 +1149,11 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                                     </span>
                                 </button>
                                 <!-- "Other" is the LAST OPTION, not a text box parked beside the list: same row,
-                                     same mark, same click, and MARKUP IDENTICAL to the rows above — no wrapper of
+                                     same mark, same click, and MARKUP IDENTICAL to the rows above: no wrapper of
                                      its own, or its border, hover and selected tint drift from the siblings it
                                      must read as one of. That sameness is what keeps this card's state a single
-                                     list of picks — writing your own answer cannot contradict the options, because
-                                     it is one of them — and it is why nothing here has to erase anything. The
+                                     list of picks: writing your own answer cannot contradict the options, because
+                                     it is one of them, and it is why nothing here has to erase anything. The
                                      field appears BELOW the row on picking it, and keeps its text when the row is
                                      unpicked, so clicking away to re-read an option and clicking back costs
                                      nothing. -->
@@ -1180,7 +1180,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                             </div>
                             <div v-if="isSelected(index, OTHER_LABEL)" class="flex flex-col gap-1">
                                 <!-- A TEXTAREA THAT GROWS, not a one-line input: the answers that go here are the
-                                     ones no option covered, which is exactly the case that runs to a paragraph —
+                                     ones no option covered, which is exactly the case that runs to a paragraph:
                                      and a field that scrolls its own start out of view while you write is a field
                                      you cannot re-read before submitting. It opens one row tall, so a short answer
                                      costs no more space than before. text-base below md: 16px is the iOS threshold
@@ -1201,7 +1201,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                             </div>
                         </div>
                         <!-- Decided (answered or dismissed): the same options, frozen. Nothing here may read as
-                             a control — no button, no hover, no focus stop, and no empty radio, which is the
+                             a control: no button, no hover, no focus stop, and no empty radio, which is the
                              one mark that says "still yours to pick". Only the check moves. No preview either:
                              a mockup is an aid to CHOOSING, and once the choice is made, keeping every option's
                              block in the transcript would spend a screen on a question already answered. -->
@@ -1224,7 +1224,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                                          the label is what says "not this one", and fading the reasoning under
                                          it past legibility would leave the alternatives on screen as texture
                                          rather than as the record they are here to be. (That colour is muted,
-                                         not subtle — the live card moved with the type scale, and this rule is
+                                         not subtle: the live card moved with the type scale, and this rule is
                                          stated against it, so it moves too. Weight and gap match the live row
                                          for the same reason: answering a card must not reflow it.) -->
                                     <span v-if="option.description" class="text-2xs leading-snug text-muted">{{ option.description }}</span>
@@ -1238,7 +1238,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                             >Submit</ChatDecisionButton
                         >
                         <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
-                             does not say — so the tooltip does, before the click rather than after it. -->
+                             does not say, so the tooltip does, before the click rather than after it. -->
                         <ChatDecisionButton tone="secondary" compact v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)"
                             >Dismiss</ChatDecisionButton
                         >
@@ -1290,7 +1290,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
             </div>
 
-            <!-- The agent's browser needs a person — a captcha, a sign-in step it cannot clear. The primary
+            <!-- The agent's browser needs a person: a captcha, a sign-in step it cannot clear. The primary
                  action NAVIGATES rather than decides: the live stage, Take control and "hand back" are all on
                  /browsers, so the card resolves from over there (the resolved frame freezes it here). Chat
                  offers only the answer that needs no browser: can't help now. -->
@@ -1298,7 +1298,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
                     <Icon name="desktop" class="text-sm text-warning" />
                     <span class="min-w-0 flex-1 truncate text-sm font-medium text-content"
-                        >The agent's browser needs you — {{ message.browserHelp.account }}</span
+                        >The agent's browser needs you: {{ message.browserHelp.account }}</span
                     >
                     <span v-if="message.browserHelp.status === 'helped'" class="text-2xs font-medium text-success">✓ You helped</span>
                     <span v-else-if="message.browserHelp.status === 'declined'" class="text-2xs font-medium text-muted">✕ Couldn't help</span>
@@ -1317,7 +1317,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
             </div>
 
-            <!-- The agent's terminal needs a person — a command it started is sitting at a prompt it cannot
+            <!-- The agent's terminal needs a person: a command it started is sitting at a prompt it cannot
                  answer. The browser card's twin, and deliberately identical in shape: the primary action
                  NAVIGATES (opens the terminal panel on that session, where the live prompt and "hand back"
                  are), and chat offers only the answer that needs no terminal. -->
@@ -1342,7 +1342,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
             </div>
 
-            <!-- A priced service run asking for the owner's click — the product's spend gate. Every number on
+            <!-- A priced service run asking for the owner's click: the product's spend gate. Every number on
                  it is the platform's (relayed through the daemon's offer card, never typed by the model); the
                  agent's own words are the one `why` line. The click here is the ONLY way the run can happen:
                  the agent's command sits parked on the daemon until this card settles it. -->
@@ -1377,14 +1377,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <!-- The run living: the provider's own status line, streamed through the platform while the
-                     answer is composed — the paid seconds visible instead of a spinner of unknowable length. -->
+                     answer is composed: the paid seconds visible instead of a spinner of unknowable length. -->
                 <div v-if="serviceStatus" class="flex items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <Icon name="spinner" class="text-2xs text-link" spin />
                     <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ serviceStatus }}</span>
                 </div>
 
                 <!-- The receipt, from the platform's own answer: what a served run cost and what is left, or the
-                     two ways it ended free — a refunded no-answer, a refusal that raced the allowance. -->
+                     two ways it ended free: a refunded no-answer, a refusal that raced the allowance. -->
                 <div v-if="message.serviceOffer.receipt" class="border-t border-line px-3.5 py-2.5">
                     <span v-if="message.serviceOffer.receipt.outcome === 'ok'" class="font-mono text-2xs text-muted"
                         >Served · {{ formatCredits(message.serviceOffer.receipt.credits) }} credits<template
@@ -1394,21 +1394,21 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         ></span
                     >
                     <span v-else-if="message.serviceOffer.receipt.outcome === 'refunded'" class="text-2xs text-muted"
-                        >The service didn't answer — refunded, nothing charged.</span
+                        >The service didn't answer: refunded, nothing charged.</span
                     >
-                    <span v-else class="text-2xs text-muted">The platform refused the run after all — nothing charged.</span>
+                    <span v-else class="text-2xs text-muted">The platform refused the run after all: nothing charged.</span>
                 </div>
 
                 <div v-if="message.serviceOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <ChatDecisionButton tone="primary" icon="check" @click="decideServiceOffer(message, true)"
-                        >Run — {{ formatCredits(message.serviceOffer.offer.creditsPerRun) }} credits</ChatDecisionButton
+                        >Run: {{ formatCredits(message.serviceOffer.offer.creditsPerRun) }} credits</ChatDecisionButton
                     >
                     <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
-                    <ChatDecisionButton tone="secondary" icon="times" @click="decideServiceOffer(message, false)">Skip — free</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="times" @click="decideServiceOffer(message, false)">Skip: free</ChatDecisionButton>
                 </div>
             </div>
 
-            <!-- A USDC payment asking for the owner's click — the wallet's spend gate. Every number on it is
+            <!-- A USDC payment asking for the owner's click: the wallet's spend gate. Every number on it is
                  the daemon's arithmetic over the ENDPOINT's own 402 challenge and the wallet's ledger, never
                  typed by the model; the agent's own words are the one `why` line. The click here is the ONLY
                  way the money can move: the agent's command sits parked on the daemon until this card settles
@@ -1448,14 +1448,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <!-- The receipt, from the endpoint's own settlement answer: what was paid and the onchain
-                     transaction, or the one honest failure — a payment that never settled spends nothing,
+                     transaction, or the one honest failure: a payment that never settled spends nothing,
                      because the signed authorization simply expires. -->
                 <div v-if="message.paymentOffer.receipt" class="border-t border-line px-3.5 py-2.5">
                     <span v-if="message.paymentOffer.receipt.outcome === 'paid'" class="truncate font-mono text-2xs text-muted"
                         >Paid ${{ message.paymentOffer.receipt.amountUsd
                         }}<template v-if="message.paymentOffer.receipt.transaction"> · {{ message.paymentOffer.receipt.transaction }}</template></span
                     >
-                    <span v-else class="text-2xs text-muted">The payment didn't go through — nothing was spent.</span>
+                    <span v-else class="text-2xs text-muted">The payment didn't go through: nothing was spent.</span>
                 </div>
 
                 <div v-if="message.paymentOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
@@ -1463,15 +1463,15 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         >Pay ${{ message.paymentOffer.offer.amountUsd }}</ChatDecisionButton
                     >
                     <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
-                    <ChatDecisionButton tone="secondary" icon="times" @click="decidePaymentOffer(message, false)">Skip — free</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="times" @click="decidePaymentOffer(message, false)">Skip: free</ChatDecisionButton>
                 </div>
             </div>
 
-            <!-- A missing capability asking for the owner's setup — the product's setup gate. The title and the
+            <!-- A missing capability asking for the owner's setup: the product's setup gate. The title and the
                  card id are the catalog's own words (resolved by the daemon that validated the ask, never typed
                  by the model); the agent's own words are the one `why` line. Connect is a decision AND a
                  navigation: setup happens on the Capabilities page, and the agent stays parked until the
-                 connection comes live — the outcome row below is what says how that wait ended. -->
+                 connection comes live: the outcome row below is what says how that wait ended. -->
             <div v-if="message.capabilityOffer" class="chat-surface w-full overflow-hidden rounded-xl">
                 <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
                     <Icon name="bolt" class="text-sm text-primary-500" />
@@ -1493,7 +1493,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     >
                 </div>
 
-                <!-- The wait living: the owner said yes and the agent is parked on the setup — with the way back
+                <!-- The wait living: the owner said yes and the agent is parked on the setup, with the way back
                      to it for whoever closed the page mid-flow. Settles via the outcome frame. -->
                 <div
                     v-if="message.capabilityOffer.status === 'connecting' && !message.capabilityOffer.outcome"
@@ -1506,13 +1506,13 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     >
                 </div>
 
-                <!-- How an accepted ask ended — the agent's side of it, so the row reads as what happened next. -->
+                <!-- How an accepted ask ended: the agent's side of it, so the row reads as what happened next. -->
                 <div v-if="message.capabilityOffer.outcome" class="border-t border-line px-3.5 py-2.5">
                     <span v-if="message.capabilityOffer.outcome.outcome === 'connected'" class="text-2xs text-muted"
-                        >Connected<template v-if="message.capabilityOffer.outcome.id"> as “{{ message.capabilityOffer.outcome.id }}”</template> — the
+                        >Connected<template v-if="message.capabilityOffer.outcome.id"> as "{{ message.capabilityOffer.outcome.id }}"</template>: the
                         agent is continuing with it.</span
                     >
-                    <span v-else class="text-2xs text-muted">The setup didn't finish while the agent waited — it continued without it.</span>
+                    <span v-else class="text-2xs text-muted">The setup didn't finish while the agent waited: it continued without it.</span>
                 </div>
 
                 <div v-if="message.capabilityOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
@@ -1530,7 +1530,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <div v-if="showTyping" class="flex items-center gap-2 self-start rounded-lg bg-overlay px-3 py-2 text-2xs text-muted">
                 <Icon name="spinner" class="text-2xs text-link" spin />
                 <span v-if="providerRetry"
-                    >The model provider is {{ retryReason }} — {{ retryWait }}
+                    >The model provider is {{ retryReason }}: {{ retryWait }}
                     <span class="text-subtle">(attempt {{ providerRetry.attempt }}, nothing lost)</span></span
                 >
                 <span v-else
@@ -1540,8 +1540,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         </template>
 
         <!-- What this turn has been kept going by since it was asked (see `trailer`). Outside the branches
-             above because it belongs to the turn's OPENER whatever that opener turned out to be — a prompt, an
-             errand, or the assistant text a restored history opens on — and it inherits the row's alignment,
+             above because it belongs to the turn's OPENER whatever that opener turned out to be: a prompt, an
+             errand, or the assistant text a restored history opens on, and it inherits the row's alignment,
              so it reads under the bubble it qualifies on either side. -->
         <span v-if="trailer" class="text-2xs text-subtle"
             >↳ {{ trailer.label }}<template v-if="trailer.count > 1"> ×{{ trailer.count }}</template></span

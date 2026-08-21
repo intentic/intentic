@@ -99,7 +99,7 @@ const perform = async (id: string, chosen: PendingAction): Promise<void> => {
                 // instead), either way a first refusal with a report to read, not the repeat of one the user
                 // has already seen. A re-land reaches it when the user's own tree has moved over the paths it
                 // is putting back, which is the same report and the same read.
-                notice.value = `Landing hit a conflict — open the agent to see what blocked it.`;
+                notice.value = `Landing hit a conflict: open the agent to see what blocked it.`;
             }
         } else if (chosen === `resolve`) {
             // The turn does the rest: it rebases, resolves, and the auto-land at completion moves the card.

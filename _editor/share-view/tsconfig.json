@@ -1,4 +1,4 @@
-/* The published page. Same toolchain as the app it borrows its components from (Vite + vue-tsc, no emit —
+/* The published page. Same toolchain as the app it borrows its components from (Vite + vue-tsc, no emit,
  * Vite produces the artifact), and the same source-first paths, so a change in the chat's tool card is
  * type-checked here without a build in between.
  *

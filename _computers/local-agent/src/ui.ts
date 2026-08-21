@@ -414,14 +414,14 @@ export const createUi = (process: UiProcess): Ui => {
         row: (outcome, name, note = "") => {
             if (mode === "plain") {
                 // The separator appears only when there is something after it.
-                const tail = note === "" ? "" : ` — ${note}`;
+                const tail = note === "" ? "" : `, ${note}`;
                 const word = outcome === "pass" ? "ok  " : outcome === "fail" ? "FAIL" : outcome === "warn" ? "warn" : "skip";
                 out(`  ${word}  ${name}${tail}\n`);
                 return;
             }
             const glyph = outcome === "pass" ? glyphs.ok : outcome === "fail" ? glyphs.fail : outcome === "warn" ? glyphs.warn : glyphs.skip;
             const code = outcome === "pass" ? GREEN : outcome === "fail" ? RED : outcome === "warn" ? YELLOW : DIM;
-            const body = note === "" ? name : `${name} — ${note}`;
+            const body = note === "" ? name : `${name}, ${note}`;
             for (const [at, part] of wrap(body, width - 10).entries()) {
                 above(at === 0 ? `        ${paint(glyph, code)} ${paint(part, DIM)}` : `          ${paint(part, DIM)}`);
             }

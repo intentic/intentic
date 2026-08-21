@@ -9,7 +9,7 @@ import { createApp, defineComponent, h, ref } from "vue";
 /* The rail's terminal badge and the panel's tab strip are the same list, and these tests are why they can't
  * drift apart. Two things break that: a `web-*` shell exists in tmux only once its socket has connected, so for
  * the length of that handshake the daemon does not list a tab the user is already looking at; and a kill is
- * true the moment it is issued, long before the DELETE lands. Both used to resolve the wrong way — the badge
+ * true the moment it is issued, long before the DELETE lands. Both used to resolve the wrong way: the badge
  * trailing the strip by a poll interval, and a list taken mid-handshake DROPPING the new tab out from under a
  * live session. */
 
@@ -27,7 +27,7 @@ const { addPendingTerminal, clearPendingTerminals, dropPendingTerminal, listTerm
     await import("./terminalsQuery");
 const { useTerminalActivity } = await import("./useTerminalActivity");
 
-// `activityAt` is part of every session the daemon lists (TerminalSessionSchema) — 0 stands for "tmux didn't
+// `activityAt` is part of every session the daemon lists (TerminalSessionSchema): 0 stands for "tmux didn't
 // say", which is all these cases need: nothing here reads the clock.
 const shell = (name: string, running = true) => ({ name, kind: `shell` as const, running, activityAt: 0 });
 
@@ -123,7 +123,7 @@ test("the panel's relists share the badge's cache entry rather than re-asking th
     await listTerminals();
     expect(reads).toBe(1);
 
-    // A kill's confirmation is the exception — it must not read the list that still contains what it killed.
+    // A kill's confirmation is the exception: it must not read the list that still contains what it killed.
     await refreshTerminals();
     await listTerminals();
     expect(reads).toBe(2);

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/extension-ui",
     "version": "0.0.0",
-    "description": "The UI kit intentic extensions render with — host-provided at runtime (the app's own components via the import map), so extension UI is always native to the shell",
+    "description": "The UI kit intentic extensions render with, host-provided at runtime (the app's own components via the import map), so extension UI is always native to the shell",
     "license": "MIT",
     "type": "module",
     "repository": {

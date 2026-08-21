@@ -54,18 +54,18 @@ import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
 import ComposerEffort from "./ComposerEffort.vue";
 import ComposerModelPill from "./ComposerModelPill.vue";
 
-/* ONE CHAT ON SCREEN — the transcript, the composer that writes into it, and the pickers and banners that
+/* ONE CHAT ON SCREEN: the transcript, the composer that writes into it, and the pickers and banners that
  * belong to that one conversation. The panel around it (ChatPanel) owns the frame: the chat list, the pop-out,
  * the resize handle, the shell-wide commands. Several of these stand side by side in a popped-out window.
  *
  * IT TAKES ITS CONVERSATION RATHER THAN READING THE FOCUSED ONE, which is the whole reason it is a component:
- * every value on screen here — what the composer sends, which model the pill names, whose plan the card
- * approves — has to be this pane's, not whichever chat happens to hold the focus. The facade over it
+ * every value on screen here: what the composer sends, which model the pill names, whose plan the card
+ * approves: has to be this pane's, not whichever chat happens to hold the focus. The facade over it
  * (conversationView) is built once here and PROVIDED, so the transcript rows and their tool cards four levels
  * down answer for the same chat without threading a prop through everything in between.
  *
  * WHAT THIS FILE IS, after everything that could be lifted out of it has been. The pane is wiring: it holds the
- * conversation, the transcript's shape, and the keyboard — and it delegates the four things that are their own
+ * conversation, the transcript's shape, and the keyboard, and it delegates the four things that are their own
  * machine. What the next press MEANS and what to say about it is one decision table (composerIntent.ts); the
  * mic, the staged files, the run-through badge and the scroll warm-up are composables beside it; the standing
  * banners and the status readouts are components of their own (ChatPaneNotices, ChatPaneStatus). Anything that
@@ -74,15 +74,15 @@ import ComposerModelPill from "./ComposerModelPill.vue";
  *
  * The column is a @container: composer/status label density keys off the width the messages get (288px docked
  * while the viewport is desktop-wide, or this pane's share of the pop-out window), while touch-target sizing
- * keys off the max-md: device class. Two intentional axes — don't unify them. */
+ * keys off the max-md: device class. Two intentional axes, don't unify them. */
 
 const props = defineProps<{
     conversation: Conversation;
     // Whether this is the pane the keyboard is acting on. Only the focused pane answers the shell's "put the
-    // caret in the composer" signal — with several panes open, every one of them answering would move the
+    // caret in the composer" signal: with several panes open, every one of them answering would move the
     // caret to whichever mounted last.
     focused: boolean;
-    // Whether this pane's column can be given back — true in a split, where taking one column back still
+    // Whether this pane's column can be given back: true in a split, where taking one column back still
     // leaves a panel. The panel decides it (ChatPanel), because it is a fact about the set, not about this chat.
     closable: boolean;
 }>();
@@ -105,7 +105,7 @@ watch(
 // ...and a pane that goes away (a split closed, the panel docked) leaves nothing claiming to be watched.
 onBeforeUnmount(() => (props.conversation.watched.value = false));
 
-// Working in a pane is what focuses it — a click anywhere in it, or the caret arriving by any other route
+// Working in a pane is what focuses it: a click anywhere in it, or the caret arriving by any other route
 // (Tab, a picker closing). The panel answers by moving the focus, which is a store write, so it is only
 // raised by a pane that does not already hold it: every click in the focused pane would otherwise re-seat a
 // focus that had not moved and scroll the rail to it.
@@ -116,11 +116,11 @@ const takeFocus = (): void => {
     }
 };
 
-// The corner ×, and what it is careful to say: this ends the COLUMN, not the conversation — the chat is still
+// The corner ×, and what it is careful to say: this ends the COLUMN, not the conversation, the chat is still
 // in the rail, one click from a column again. The chord it duplicates (chat.closePane) acts on the FOCUSED
 // pane, so only the focused pane's button teaches it; on any other, naming a key that would close a different
 // column is worse than naming none.
-const CLOSE_PANE = `Close this pane — the chat stays open`;
+const CLOSE_PANE = `Close this pane: the chat stays open`;
 const closeHint = computed(() => (props.focused ? withShortcut(CLOSE_PANE, `chat.closePane`) : CLOSE_PANE));
 
 // The prop as a ref, for the view and the composables that follow this pane from one chat to the next.
@@ -172,27 +172,27 @@ provide(
 );
 const { poppedOut } = useChatPopout();
 const { activeSandboxId, reachable, connection } = useSandbox();
-// The daemon refused this Google account outright — a different sentence than "not connected yet", because
+// The daemon refused this Google account outright: a different sentence than "not connected yet", because
 // waiting will not fix it.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 const blocked = computed(() => connection.value.failure !== undefined && isBlocked(connection.value.failure));
 const { mobile } = useDevice();
 
-/* Pill labels — rendered as our own text (not a PrimeVue Select); always a real model name. The option
+/* Pill labels: rendered as our own text (not a PrimeVue Select); always a real model name. The option
  * catalogs live in the contract's agent-catalog.ts (shared with the automations dialog) and chat/catalog.ts.
  *
  * `providerDisplayLabel`, not the static one: a capability-derived provider has no row in the static table, so
- * the static label falls through to the RAW ID — which is how a chat on the free trial invited the user to
+ * the static label falls through to the RAW ID, which is how a chat on the free trial invited the user to
  * "Ask endpoint/free-trial…". The display label is the one every other surface already reads. */
 const providerName = computed(() => providerDisplayLabel(provider.value));
 // The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
 // blank) while Grok's daemon catalog is still loading.
 const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
-// The trial has no vendor to name — it is the product's own channel, and "Ask Free trial…" invites a sentence
+// The trial has no vendor to name: it is the product's own channel, and "Ask Free trial…" invites a sentence
 // to a thing rather than to somebody.
 const onTrial = computed(() => isTrialProvider(provider.value));
-/* NEITHER PILL CARRIES A HOVER LABEL. The model pill's said the provider's name — which its own logo is
- * already there to say — and the mode pill's said the mode's description, which the menu one click below
+/* NEITHER PILL CARRIES A HOVER LABEL. The model pill's said the provider's name, which its own logo is
+ * already there to say, and the mode pill's said the mode's description, which the menu one click below
  * prints under every mode including the one in force. Two boxes that opened over the composer to repeat what
  * was under them, on the two controls a hand rests on most while writing.
  * What the model's hint alone could say is gone with it: a turn RUNNING a different model than the one
@@ -201,10 +201,10 @@ const onTrial = computed(() => isTrialProvider(provider.value));
 const scroller = ref<HTMLElement>();
 const content = ref<HTMLElement>();
 const input = ref<HTMLTextAreaElement>();
-// The pickers: ONE open flag per menu, whichever surface renders it — an anchored panel on desktop, a bottom
+// The pickers: ONE open flag per menu, whichever surface renders it, an anchored panel on desktop, a bottom
 // sheet on mobile, which ResponsiveOverlay picks between. One flag, not one per surface: the pair drifted apart
 // once already, with the close-on-disconnect watch below reaching only the desktop half. The PILL is what says
-// which window a desktop panel opens in — it is the anchor, and the overlay derives the document, the viewport
+// which window a desktop panel opens in: it is the anchor, and the overlay derives the document, the viewport
 // it measures against and the dismissal listeners from it. That is the whole reason this panel can be popped
 // out into a real window and still have overlays that land in the right place and close when clicked away from.
 const modelOpen = ref(false);
@@ -218,12 +218,12 @@ const personaPill = ref<HTMLElement>();
 // Auto-follow: the transcript stays at its newest content unless the user has scrolled up to read. The rule
 // and every geometry change it has to survive live in the composable; the pane only says when a NEW
 // transcript is on screen (the conversationId watch below), when the user has just sent something (submit),
-// and — because the composable watches these boxes with an observer owned by the window they are in — when
+// and, because the composable watches these boxes with an observer owned by the window they are in, when
 // they move to another one, which for this pane is the pop-out and back.
 const { pin, follow } = useStickToBottom(scroller, content, poppedOut);
 
 const activeError = computed(() => props.conversation.error.value);
-/* This conversation's transcript round-trip, still in flight with nothing painted yet — the empty state
+/* This conversation's transcript round-trip, still in flight with nothing painted yet: the empty state
  * defers to a loading one on it. Gated by useLoadingReveal, not read raw: a warm daemon answers this in well
  * under the time it takes to read a placeholder, and an outline that appears for one beat and vanishes is a
  * glitch, not feedback. Keyed on the conversation so switching tabs mid-load drops the outline at once instead
@@ -235,13 +235,13 @@ const activeLoading = useLoadingReveal(
 
 const { agentById } = useAgents();
 
-/* THE PANE FOLLOWS THE FLEET — the missing half of "the chats fill a second later" (chatRun's promise about a
+/* THE PANE FOLLOWS THE FLEET: the missing half of "the chats fill a second later" (chatRun's promise about a
  * workflow's derived conversation ids). A run's panes open on conversations the daemon has not created yet,
  * and every read such a tab makes is one-shot: the transcript fetch 404s, the attach probe finds no run, and
- * nothing ever asks again — so a pane that lost that race stayed blank while the daemon streamed the whole
+ * nothing ever asks again, so a pane that lost that race stayed blank while the daemon streamed the whole
  * step into a record nobody re-read. The roster rides the /events stream, so it answers in real time what the
  * one-shot reads cannot: this conversation now exists, its turn began, its turn settled. Any change in that
- * answer, for a pane that is not itself streaming, means the daemon knows something this tab does not — bring
+ * answer, for a pane that is not itself streaming, means the daemon knows something this tab does not: bring
  * the tab up to date (hydrate attaches to a live turn and reconciles a settled one against the record).
  *
  * Primitive-valued, so the roster's full-snapshot republishing only fires the watch on an actual transition.
@@ -251,7 +251,7 @@ const fleetTurn = computed<boolean | undefined>(() => {
     const agent = agentById(props.conversation.conversationId);
     return agent === undefined ? undefined : turnInFlight(agent);
 });
-// Whether this tab itself streamed the turn the roster will settle next — its transcript already holds the
+// Whether this tab itself streamed the turn the roster will settle next: its transcript already holds the
 // result then, and reconciling against the record would only repaint what is on screen.
 let streamedTurn = false;
 watch(streaming, (live) => {
@@ -268,10 +268,10 @@ watch(fleetTurn, (now, before) => {
         return;
     }
     if (now) {
-        // A turn this tab is not streaming just began — whatever the flag remembers is about an older one.
+        // A turn this tab is not streaming just began: whatever the flag remembers is about an older one.
         streamedTurn = false;
     }
-    // The roster listing this conversation IS the registration fact — heal a tab whose early probe took the
+    // The roster listing this conversation IS the registration fact: heal a tab whose early probe took the
     // daemon's "unknown agent" for a final answer (replayStoredSession's unlatch), asked before the run's
     // first turn created the entry.
     props.conversation.registered.value = true;
@@ -279,18 +279,18 @@ watch(fleetTurn, (now, before) => {
 });
 
 // True for the assistant turn currently being streamed: the last assistant bubble while streaming. Not simply
-// the last message — a notice this window wrote (a control action, a provider switch) sits below the bubble the
+// the last message: a notice this window wrote (a control action, a provider switch) sits below the bubble the
 // turn is still writing into.
 const isStreaming = (message: ChatMessage): boolean =>
     streaming.value && message.role === `assistant` && messages.value.findLast((entry) => entry.role === `assistant`)?.id === message.id;
 
 // The transcript as prompt-headed groups. Each group is the box its own prompt is sticky WITHIN (see
-// .chat-prompt), which is what ends the pin where the answer ends — rendered flat, every prompt would pin to
+// .chat-prompt), which is what ends the pin where the answer ends: rendered flat, every prompt would pin to
 // the same top edge and pile up on the one before it. Recomputed per streamed frame like the list it replaces,
 // and just as shallow: one pass, no message read beyond its role.
 const turns = computed(() => turnsOf(messages.value));
 
-/* THE TRANSCRIPT'S DATE — a day named above the first turn sent on it, and nowhere else (dayMarksOf).
+/* THE TRANSCRIPT'S DATE: a day named above the first turn sent on it, and nowhere else (dayMarksOf).
  *
  * A chat is read over days and reopened weeks later, and until now the only place a date appeared at all was
  * inside a per-prompt label nobody sees without hovering the right bubble: "what did I ask on Tuesday" meant
@@ -299,26 +299,26 @@ const turns = computed(() => turnsOf(messages.value));
  * alone (see ChatMessageView's sentClock). */
 const dayMarks = computed(() => dayMarksOf(turns.value));
 
-/* WHAT A FORK BELOW EACH TURN INHERITS — the number that turn's mark hands the daemon (forkCutsOf), and the one
+/* WHAT A FORK BELOW EACH TURN INHERITS: the number that turn's mark hands the daemon (forkCutsOf), and the one
  * thing the grouped render has thrown away: a section knows its messages, not where they sit in the flat list.
  *
  * Built as one index rather than searched per turn: `turns` is rebuilt on every paint of a streaming answer, so
- * a findIndex per section would be quadratic in the transcript on every frame — the cost this file's v-memo
+ * a findIndex per section would be quadratic in the transcript on every frame: the cost this file's v-memo
  * note is about, arriving by a different road. */
 const forkCuts = computed(() => forkCutsOf(turns.value));
 
-/* WHAT AN EDIT IN PROGRESS WOULD THROW AWAY — the id of every row from the edited message down, so the
+/* WHAT AN EDIT IN PROGRESS WOULD THROW AWAY: the id of every row from the edited message down, so the
  * transcript can draw them as already gone while they are still entirely there.
  *
  * THIS IS THE HALF THAT MAKES THE MODE HONEST. An edit is the one gesture here that destroys turns without the
  * user naming a number: they click a pencil three prompts up and the cost is however much has happened since,
  * which is exactly the quantity nobody holds in their head. Rewind answers this with an arming step that
  * counts the messages in a menu row; an edit cannot borrow that, because the count has to stay legible for as
- * long as it takes to type a new prompt — so it is shown on the messages THEMSELVES, and stays shown until the
+ * long as it takes to type a new prompt, so it is shown on the messages THEMSELVES, and stays shown until the
  * send or the cancel. Nothing is dropped to draw this; the rows are struck, not removed.
  *
  * A set of ids rather than an index, because it is read per row by a component that knows its message and not
- * its position — and because the id survives the reducer rebuilding `turns` under a streaming turn, which an
+ * its position, and because the id survives the reducer rebuilding `turns` under a streaming turn, which an
  * index would not. Empty whenever nothing is being edited, which is the ordinary case and costs one compare. */
 const doomed = computed<ReadonlySet<number>>(() => {
     const target = editing.value;
@@ -329,19 +329,19 @@ const doomed = computed<ReadonlySet<number>>(() => {
     return from < 0 ? new Set() : new Set(messages.value.slice(from).map((message) => message.id));
 });
 
-// How many bubbles the armed edit would take with it, the edited prompt included — the number the Send names
+// How many bubbles the armed edit would take with it, the edited prompt included: the number the Send names
 // and the strip counts. Derived from `doomed` rather than counted again, so the strip can never disagree with
 // what the transcript has struck through.
 const editDropped = computed(() => doomed.value.size);
 
-/* KEEP BOTH INSTEAD — the fork, offered from inside the edit, at the one moment it is most wanted and least
+/* KEEP BOTH INSTEAD: the fork, offered from inside the edit, at the one moment it is most wanted and least
  * reachable: half-way through retyping the prompt, having just read the answer they are about to throw away
  * and thought better of it. The alternative is cancel, hunt for the mark in the margin at the end of that
- * answer, fork, and type the whole thing again from memory — which is enough friction that the honest
+ * answer, fork, and type the whole thing again from memory, which is enough friction that the honest
  * prediction is they simply spend the answer instead.
  *
  * It forks at the SAME cut the edit was aimed at, so the new tab inherits everything above the edited prompt
- * and opens with that prompt in its composer (see forkAt) — where this pane's half-written replacement then
+ * and opens with that prompt in its composer (see forkAt), where this pane's half-written replacement then
  * replaces it. Nothing is dropped here and nothing is sent: the source keeps its turns, the fork carries the
  * words, and the user is left in the new tab exactly where they were in this one.
  *
@@ -360,12 +360,12 @@ const forkInsteadOfEdit = (): void => {
     }
     const carried = draft.value;
     const staged = attachments.value;
-    // Ends the edit first, which puts THIS pane's composer back to whatever the pencil displaced — the fork
+    // Ends the edit first, which puts THIS pane's composer back to whatever the pencil displaced: the fork
     // gets the words, and the tab being left behind is returned to the state it was in before any of this.
     cancelEdit();
     const fork = forkAt(cut, `now`);
     // The fork opens holding the ORIGINAL prompt (forkAt seeds it from the cut). What the user has actually
-    // been typing is the replacement, so it wins — the whole reason to reach for this instead of cancelling is
+    // been typing is the replacement, so it wins: the whole reason to reach for this instead of cancelling is
     // that the half-written words are worth keeping.
     if (fork !== undefined) {
         fork.draft.value = carried;
@@ -380,17 +380,17 @@ const modeIcon = computed(() => modeMeta(mode.value).icon);
 /* Manual textarea auto-grow: reset to one line, then size to content up to the max-height.
  *
  * WITH A FLOOR OF ONE LINE, because `scrollHeight` is a measurement and a measurement can be taken at a moment
- * that has no answer. Every caller below fires on something this pane just did — a tab switch, a send, an
- * account connecting — and lands on `nextTick` or a post-flush watch, which guarantees the DOM is updated and
+ * that has no answer. Every caller below fires on something this pane just did: a tab switch, a send, an
+ * account connecting, and lands on `nextTick` or a post-flush watch, which guarantees the DOM is updated and
  * guarantees nothing about the box being laid out and styled yet. When it isn't, the element reports a height
  * smaller than one line of its own text, and the old code wrote that number into `style.height` and never
  * looked again. The result was a composer permanently the height of its own padding, with the placeholder
- * sliced through the middle — worst in a popped-out window, where the panel is measured in the window it left
+ * sliced through the middle: worst in a popped-out window, where the panel is measured in the window it left
  * and dressed in the one it arrived in, so nothing this pane does ever re-measures it.
  *
  * The floor is computed rather than assumed: line-height plus the vertical padding is what this box is when it
  * holds one line, whatever the reader's text size. Below it, the measurement is not believed at all and the
- * height is left as `auto` — the browser's own one-line size, and the same thing the box would show if this
+ * height is left as `auto`: the browser's own one-line size, and the same thing the box would show if this
  * function had never run. A later grow (the first keystroke, the next tab switch) then measures properly. */
 const MAX_COMPOSER_HEIGHT = 192;
 const grow = (): void => {
@@ -414,25 +414,25 @@ const { dragDepth } = staging;
 // The chip that offers the file the user is looking at (useEditorContextChip).
 const { target: editorTarget, include: includeEditorContext, label: editorChipLabel, forSend: editorContextForSend } = useEditorContextChip();
 
-// The composer Send is usable whenever there is something to send — text, a finished attachment, or a queued
-// message waiting to go out — regardless of what the conversation is doing: a message written mid-turn is
+// The composer Send is usable whenever there is something to send: text, a finished attachment, or a queued
+// message waiting to go out, regardless of what the conversation is doing: a message written mid-turn is
 // never refused, it is delivered into the running turn or queued behind it (see Conversation.enqueue). A
 // pending plan is no exception: the typed text becomes revision feedback, and staged files ride along with it
 // (Conversation.decidePlan), because a screenshot is the most natural way to say what a plan got wrong.
 const staged = computed(() => draft.value.trim().length > 0 || attachments.value.length > 0);
 /* --- The composer's VOICE: yours, or the agent's --------------------------------------------------
- * Armed, the next Send does not prompt anything — the words are PLACED into the transcript as an assistant
+ * Armed, the next Send does not prompt anything: the words are PLACED into the transcript as an assistant
  * bubble, no turn, no reply, and the daemon retires the provider session so the next real turn re-reads the
  * record and takes the placed line as its own (agents.place). Per-pane and DISARMED BY A SEND, deliberately:
  * speaking as the agent is a deliberate act each time, and a mode that stayed armed would have the next
  * ordinary question land in the transcript as words the agent never said.
  *
  * Offered only where it can land: the route is keyed on the registry, so a draft chat that has never run a
- * turn has nowhere to place into — the pill appears with the first turn, like the agent itself does. */
+ * turn has nowhere to place into: the pill appears with the first turn, like the agent itself does. */
 const voiceAgent = ref(false);
 const placeable = computed(() => props.conversation.registered.value || agentById(props.conversation.conversationId) !== undefined);
 
-// The badge that says what the next message is run THROUGH — a loop, a workflow, or nothing (useRunThrough).
+// The badge that says what the next message is run THROUGH: a loop, a workflow, or nothing (useRunThrough).
 const runThrough = useRunThrough(chat, { reachable, connected, staged, draft });
 const {
     open: runThroughOpen,
@@ -452,14 +452,14 @@ const {
     end: endLoop,
 } = runThrough;
 
-/* NOTHING ELSE THAT REWRITES WHAT SEND MEANS SURVIVES AN EDIT BEING ARMED — the voice, and the run-through
+/* NOTHING ELSE THAT REWRITES WHAT SEND MEANS SURVIVES AN EDIT BEING ARMED: the voice, and the run-through
  * badge's two picks. All three answer the same question the edit does ("what happens when I press send") with
  * answers that cannot both hold, and submit() has to pick one; every arrangement where the loser stays LIT is a
  * composer showing a promise it will not keep.
  *
  * THE EDIT WINS, in every direction, because it is the most specific act of the four: the user pointed at one
  * message in this transcript. The others are standing postures that cost a single click to put back, and
- * clearing them VISIBLY — the pill goes quiet, the badge goes neutral — is what makes the precedence something
+ * clearing them VISIBLY (the pill goes quiet, the badge goes neutral) is what makes the precedence something
  * the user sees rather than something they discover by pressing Send.
  *
  * Cleared here rather than by disabling the controls, which is also why the run-through badge's PRESS is left
@@ -472,7 +472,7 @@ watch(editing, (armed) => {
     voiceAgent.value = false;
     runThrough.clear();
 });
-// A workflow badge takes the composer over entirely — the message becomes a run's request, and an agent voice
+// A workflow badge takes the composer over entirely: the message becomes a run's request, and an agent voice
 // left armed under it would be a promise about a send that is no longer a message into this chat.
 watch(pickedWorkflow, (picked) => {
     if (picked !== undefined) {
@@ -482,7 +482,7 @@ watch(pickedWorkflow, (picked) => {
 /* Close the model, mode and persona panels whenever the pill they hang off stops being usable, which happens
  * two ways. The pills live behind `v-if="connected"`, so switching to a disconnected provider unmounts the
  * anchor out from under an open panel; and a picked workflow greys them, which a panel already open would
- * happily go on ignoring — a tab switch is enough to land in that state, since the open flags belong to the pane
+ * happily go on ignoring: a tab switch is enough to land in that state, since the open flags belong to the pane
  * and the badge belongs to the conversation. Either way the answer is the same: the composer that owns them
  * closes them.
  *
@@ -497,7 +497,7 @@ watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
     }
 });
 
-/* WHAT THE NEXT PRESS MEANS — one snapshot of the composer, and every answer that follows from it. The ladder
+/* WHAT THE NEXT PRESS MEANS: one snapshot of the composer, and every answer that follows from it. The ladder
  * itself is composerIntent.ts; what the pane owns is the reading of it, because these are the values only a
  * mounted chat has. */
 const situation = computed<ComposerSituation>(() => ({
@@ -516,7 +516,7 @@ const situation = computed<ComposerSituation>(() => ({
     connected: connected.value,
 }));
 const intent = computed(() => sendIntentOf(situation.value));
-// Why Send is refusing, in the user's words — undefined when the press will land.
+// Why Send is refusing, in the user's words: undefined when the press will land.
 const refusal = computed(() => sendRefusal(situation.value));
 const continueOffer = computed(() => continueOffered(situation.value));
 const canSend = computed(() => sendable(situation.value, intent.value, refusal.value));
@@ -527,36 +527,36 @@ const readyToSend = computed(() => connected.value && staged.value && refusal.va
 
 const words = computed(() => ({ provider: providerName.value, onTrial: onTrial.value, editDropped: editDropped.value }));
 // A viewer's composer is present but inert: the transcript is theirs to read, the send is not theirs to make
-// (the daemon floors every turn route at collaborator). Disabled-with-a-reason over hidden — an input that
+// (the daemon floors every turn route at collaborator). Disabled-with-a-reason over hidden: an input that
 // vanished would read as broken, and the placeholder is where a composer explains itself.
 const { canDrive } = useRole();
 const composerPlaceholder = computed(() => (canDrive.value ? placeholderFor(intent.value, words.value) : VIEWER_PLACEHOLDER));
 const sendHint = computed(() => {
     if (!reachable.value) {
-        return `The sandbox is busy — keep typing; Send is available when it is ready.`;
+        return `The sandbox is busy: keep typing; Send is available when it is ready.`;
     }
     return refusal.value ?? sendHintFor(intent.value, words.value);
 });
-// Stop is offered for every live turn, including one parked on a card — that state is the most common reason to
+// Stop is offered for every live turn, including one parked on a card: that state is the most common reason to
 // want out (a permission the user won't grant, a plan they'd rather restate from scratch), and until now the
 // card's own buttons were the only way forward. Name the consequence there: the parked request goes with it.
 const stopLabel = computed(() => (awaitingDecision.value ? `Stop the turn` : `Stop generating`));
 const stopHint = computed(() =>
-    awaitingDecision.value ? `Stop the turn — discards the request above` : mobile.value ? stopLabel.value : `${stopLabel.value} (Esc)`,
+    awaitingDecision.value ? `Stop the turn, discards the request above` : mobile.value ? stopLabel.value : `${stopLabel.value} (Esc)`,
 );
 
-/* THE STOPPED TURN'S OFFER, LEFT ON — and the strip carries it because that is where the user is when they wish
+/* THE STOPPED TURN'S OFFER, LEFT ON, and the strip carries it because that is where the user is when they wish
  * they had it: reading "this turn stopped before it finished" for the third time in half an hour.
  *
  * Shown WHENEVER the automation is armed, not only alongside the offer, because the switch has to be reachable
- * to be turned off. The armed line is the whole of what a chat looks like while it is waiting on itself — a
- * countdown when one is scheduled, otherwise the standing promise — and without it a conversation sitting on a
+ * to be turned off. The armed line is the whole of what a chat looks like while it is waiting on itself: a
+ * countdown when one is scheduled, otherwise the standing promise, and without it a conversation sitting on a
  * five-second timer looks exactly like one nothing is happening to. */
 const autoContinueStrip = computed(() => autoContinue.value && connected.value);
 const autoContinueLine = computed(() =>
     autoContinueAt.value === undefined
-        ? `Auto-continue is on — this chat picks itself back up when a turn stops short.`
-        : `Auto-continue is on — continuing in ${formatWait(autoContinueAt.value / 1000)}.`,
+        ? `Auto-continue is on: this chat picks itself back up when a turn stops short.`
+        : `Auto-continue is on, continuing in ${formatWait(autoContinueAt.value / 1000)}.`,
 );
 
 // The one line under the queued stack: what will actually happen to those messages. A turn that can take
@@ -569,12 +569,12 @@ const queuedHint = computed(() => {
     return awaitingDecision.value ? `Sends once you answer the request above` : `Sends when this turn ends`;
 });
 
-// The sandbox's message-recall ring (↑ / ↓ / Escape in the composer — see the Message recall section below).
+// The sandbox's message-recall ring (↑ / ↓ / Escape in the composer: see the Message recall section below).
 // Resolved per active sandbox rather than held, so switching sandboxes switches rings.
 const history = computed(() => (activeSandboxId.value === undefined ? undefined : inputHistoryFor(activeSandboxId.value)));
 
-/* Send the sentence the press stands for (see continueOffered). It goes down the ordinary send path — it IS
- * an ordinary message, typed by the button instead of by hand — so it lands in the recall ring like any other,
+/* Send the sentence the press stands for (see continueOffered). It goes down the ordinary send path: it IS
+ * an ordinary message, typed by the button instead of by hand, so it lands in the recall ring like any other,
  * and ↑ brings it straight back for anyone who wants to continue with an instruction attached rather than
  * plain. Down here beside the ring rather than up with the offer, so it reads after the thing it writes to. */
 const continueTurn = (): void => {
@@ -587,7 +587,7 @@ const continueTurn = (): void => {
     pin();
 };
 
-// A tab or sandbox switch swaps the composer's draft out from under a half-finished recall — drop it on both
+// A tab or sandbox switch swaps the composer's draft out from under a half-finished recall: drop it on both
 // the outgoing and incoming ring so ↓/Escape can never paste one tab's draft into another's composer.
 watch([() => props.conversation, history], (_current, [, previousHistory]) => {
     previousHistory?.reset();
@@ -596,11 +596,11 @@ watch([() => props.conversation, history], (_current, [, previousHistory]) => {
 
 /* Whether this draft SENDS as a command, which is a different question from what the popover lists: the
  * picker matches the token being typed, this matches the whole first word against the published names. It is
- * the same call the daemon makes on arrival (agent-commands.ts) — a leading `/` runs as a command only when
+ * the same call the daemon makes on arrival (agent-commands.ts): a leading `/` runs as a command only when
  * the first token names one, and anything else is prose that goes to the model as written.
  *
- * Only the true case is worth saying. The composer used to speak up for the false one — "No command matches"
- * while the caret sat in the first token — which put a warning over `/workspace` and then withdrew it the
+ * Only the true case is worth saying. The composer used to speak up for the false one: "No command matches"
+ * while the caret sat in the first token, which put a warning over `/workspace` and then withdrew it the
  * moment the user typed a space and the message became the sentence it was always going to be. */
 const commandRun = computed<AgentCommand | undefined>(() => {
     const text = draft.value.trimStart();
@@ -612,7 +612,7 @@ const commandRun = computed<AgentCommand | undefined>(() => {
 });
 
 /* WHO THIS CHAT IS WHEN IT REACHES THE OUTSIDE WORLD. The pick lives on the conversation (and rides every turn
- * it sends); what the pane adds is the card behind the id — the name on the pill, and the one state worth
+ * it sends); what the pane adds is the card behind the id: the name on the pill, and the one state worth
  * interrupting for.
  *
  * The cards are read here rather than passed in because the answer is workspace-wide and cached: several panes
@@ -633,9 +633,9 @@ const personaNotice = computed<string | undefined>(() => {
         return undefined;
     }
     if (pickedPersona.value === undefined) {
-        return `This chat acts as “${pinned}”, which no longer exists — it would reach no account and no tools. Pick another persona.`;
+        return `This chat acts as "${pinned}", which no longer exists: it would reach no account and no tools. Pick another persona.`;
     }
-    /* A CARD HOLDING NO ACCOUNTS IS NOT A NOTICE. It used to raise one — "can work but can't post" — and that
+    /* A CARD HOLDING NO ACCOUNTS IS NOT A NOTICE. It used to raise one: "can work but can't post", and that
      * is a strip above the composer, on every turn, about a state the user chose and can see: they named a
      * persona that has no accounts on it, which still bounds the turn and still says who is speaking. Nothing
      * is failing, so there is nothing to interrupt for. What remains below is the case where the user asked
@@ -654,7 +654,7 @@ const pickPersona = (id: string | undefined): void => {
     props.conversation.actsAs.value = id;
 };
 
-// Snap the box back to one line and keep the cursor ready for the next message — what every path that spends
+// Snap the box back to one line and keep the cursor ready for the next message: what every path that spends
 // the draft ends with.
 const settleComposer = (): void => {
     draft.value = ``;
@@ -673,10 +673,10 @@ const placeDraft = async (): Promise<void> => {
     if (!(await props.conversation.placeAsAgent(text))) {
         return;
     }
-    // The warmed transcript cache now ends one row early — the same signal a settled turn sends.
+    // The warmed transcript cache now ends one row early: the same signal a settled turn sends.
     invalidateAgentTranscript(props.conversation.conversationId);
     history.value?.record(text);
-    // Disarm — speaking as the agent is a deliberate act each time (see voiceAgent).
+    // Disarm: speaking as the agent is a deliberate act each time (see voiceAgent).
     voiceAgent.value = false;
     pin();
     settleComposer();
@@ -685,7 +685,7 @@ const placeDraft = async (): Promise<void> => {
 /* Rewind to the message being edited and send the box in its place (Conversation.submitEdit).
  *
  * THE SEND IS THE CONFIRMATION. Everything the edit destroys is destroyed here and nowhere earlier, which is
- * what buys the mode its cancel-costs-nothing promise — and why there is no second "are you sure" on top of it:
+ * what buys the mode its cancel-costs-nothing promise, and why there is no second "are you sure" on top of it:
  * the user has just restated the prompt with the casualties struck through on screen in front of them. */
 const sendEdit = (): void => {
     const replacement = draft.value.trim();
@@ -697,13 +697,13 @@ const sendEdit = (): void => {
     settleComposer();
 };
 
-// The ordinary message: one path whether or not a turn is running — the conversation delivers it into the
+// The ordinary message: one path whether or not a turn is running, the conversation delivers it into the
 // running turn or queues it (see Conversation.enqueue). Typing while a plan is pending rejects that plan with
 // the text as feedback (Claude Code style) instead, and the agent stays in plan mode to revise.
 const sendDraft = (): void => {
     const text = draft.value.trim();
     const pendingPlan = pendingPlanMessage.value;
-    // Snapshot the chips onto the message, then clear WITHOUT revoking preview URLs — the thumbnails now live
+    // Snapshot the chips onto the message, then clear WITHOUT revoking preview URLs: the thumbnails now live
     // on the queued/sent (or rejected-with-feedback) message, which owns them.
     if (pendingPlan !== undefined) {
         void decidePlan(pendingPlan, false, text, staging.snapshot());
@@ -714,11 +714,11 @@ const sendDraft = (): void => {
         includeEditorContext.value = false;
     }
     // Both branches send `text` somewhere (a turn, the queue, a plan revision), so both earn a slot in the
-    // recall ring — except the bare "flush the queue" press, which contributed no text of its own.
+    // recall ring: except the bare "flush the queue" press, which contributed no text of its own.
     if (text.length > 0) {
         history.value?.record(text);
     }
-    // Sending is a statement that the bottom is where the user now wants to be — they wrote the newest thing
+    // Sending is a statement that the bottom is where the user now wants to be: they wrote the newest thing
     // in the transcript. It re-arms the follow they gave up by scrolling away to check something before
     // writing, which is the one case where the "leave the reader alone" rule would be reading the wrong intent.
     pin();
@@ -728,8 +728,8 @@ const sendDraft = (): void => {
 /* THE PRESS, in the precedence the intents are named in.
  *
  * The first two INTERCEPT: placed words are not a turn and an edit is not a new message at the end of the
- * conversation, so no gate below them — a plan to revise, a turn to steer, a queue to flush, a stopped turn to
- * continue — is asking about the right thing. Each returns either way, because falling through with an empty
+ * conversation, so no gate below them: a plan to revise, a turn to steer, a queue to flush, a stopped turn to
+ * continue: is asking about the right thing. Each returns either way, because falling through with an empty
  * box would let a press meant as "place" become a Continue, and a press meant as "replace that prompt" become
  * an ordinary send appended to the very turns the user was replacing.
  *
@@ -760,7 +760,7 @@ const submit = (): void => {
     }
     /* NOTHING TYPED AND A TURN LEFT HANGING: the press means Continue (see continueOffered). Below the badges,
      * which are explicit choices the user armed, and above everything else, because every gate under here reads
-     * the draft — and the whole point of this branch is that there isn't one. */
+     * the draft, and the whole point of this branch is that there isn't one. */
     if (continueOffer.value) {
         continueTurn();
         return;
@@ -769,7 +769,7 @@ const submit = (): void => {
 };
 
 // Hands-free voice: the mic, and what the pause does (useComposerVoice). Below `submit`, because the pause IS
-// the send — the countdown calls it.
+// the send: the countdown calls it.
 const {
     on: voiceOn,
     live: voiceLive,
@@ -781,12 +781,12 @@ const {
     toggle: toggleVoice,
     quit: quitVoice,
 } = useComposerVoice({ draft, reachable, grew: grow, send: submit });
-// Leaving exits hands-free — a mode that kept recording a pane the user walked away from would be the feature
+// Leaving exits hands-free: a mode that kept recording a pane the user walked away from would be the feature
 // at its worst. The draft is untouched. (Typing exits it too, from the input handler below.)
 watch([() => props.conversation, () => props.focused], quitVoice);
 
 // The one hint slot under the composer. An empty box can't take a newline but CAN take a recall, so it
-// advertises whichever of the two is live. Recomputed as the draft empties — which is exactly when a send has
+// advertises whichever of the two is live. Recomputed as the draft empties, which is exactly when a send has
 // just filled the ring.
 const recallable = computed(() => draft.value === `` && history.value?.recallable === true);
 const composerHint = computed(() => {
@@ -796,7 +796,7 @@ const composerHint = computed(() => {
     if (spoken !== undefined) {
         return spoken;
     }
-    // While the agent is generating, the shortcut worth the slot is the way out of it — the same slot is how
+    // While the agent is generating, the shortcut worth the slot is the way out of it: the same slot is how
     // the user learns Escape does this at all.
     if (streaming.value && !awaitingDecision.value) {
         return `Esc to stop`;
@@ -807,7 +807,7 @@ const composerHint = computed(() => {
     }
     /* The stopped turn's shortcut, in the slot the user is already looking at while they decide what to type.
      * This is the whole of how anyone learns the key exists: the strip above says a turn is unfinished and
-     * carries the button, and this says the key does the same thing — so the gesture is learned once, at the
+     * carries the button, and this says the key does the same thing, so the gesture is learned once, at the
      * only moment it applies, and costs the composer nothing on every other turn. Ahead of the recall hint
      * because it is the rarer state and the more useful one: ↑ is always there, and this is not. */
     if (continueOffer.value) {
@@ -827,10 +827,10 @@ const syncCaret = (): void => {
 const onInput = (): void => {
     grow();
     syncCaret();
-    // Typing makes the text the user's own again — a recalled message they have started editing is a draft, so
+    // Typing makes the text the user's own again: a recalled message they have started editing is a draft, so
     // the stashed one it displaced is no longer anyone's to restore. Only real keystrokes land here: the
     // programmatic draft writes (recall, mention/command picks, voice transcripts) go through v-model and fire
-    // no input event — which is exactly what lets a keystroke mean "I'm taking over from the mic": it catches
+    // no input event, which is exactly what lets a keystroke mean "I'm taking over from the mic": it catches
     // the armed voice send and ends hands-free, with the words kept in the box.
     quitVoice();
     history.value?.reset();
@@ -848,7 +848,7 @@ watch([() => activeMention.value?.query, slashQuery], () => {
     popoverDismissed.value = false;
 });
 // Commands the token being typed could still become. Nothing to show is a closed popover, not an empty one
-// saying so — see ChatCommandPopover's header for why that line was the wrong warning.
+// saying so: see ChatCommandPopover's header for why that line was the wrong warning.
 const commandMatches = computed<readonly AgentCommand[]>(() => {
     const needle = slashQuery.value?.toLowerCase();
     return needle === undefined ? [] : availableCommands.value.filter((command) => command.name.toLowerCase().includes(needle));
@@ -891,17 +891,17 @@ const pickCommand = (name: string): void => {
 // Put a recalled message in the composer with the caret at its end, ready to send or edit.
 const recallInto = (text: string): void => {
     applyDraftEdit(text, text.length);
-    // A recalled message is complete — a leading `/` or an @-path in it must not pop an autocomplete list open
+    // A recalled message is complete: a leading `/` or an @-path in it must not pop an autocomplete list open
     // over it. Dismissed on the next tick, after the query watch above has re-armed on the new draft.
     void nextTick(() => {
         popoverDismissed.value = true;
     });
 };
 
-// Returns true when recall consumed the key — see recallStep for which presses it claims and which walk the
+// Returns true when recall consumed the key: see recallStep for which presses it claims and which walk the
 // caret to the edge of a wrapped line first. Nothing is claimed while text is selected: there the arrows are
 // collapsing a selection, not navigating. The live element is read rather than the `caret` ref, which only
-// tracks keyup/click and so goes stale under an auto-repeating arrow — exactly the case that decides when the
+// tracks keyup/click and so goes stale under an auto-repeating arrow: exactly the case that decides when the
 // caret reaches the edge.
 const recallKeydown = (event: KeyboardEvent): boolean => {
     const past = history.value;
@@ -920,7 +920,7 @@ const recallKeydown = (event: KeyboardEvent): boolean => {
     }
     el.setSelectionRange(step.at, step.at);
     caret.value = step.at;
-    // The step always lands on an edge of the draft, which past max-h-48 is scrolled out of view — and moving a
+    // The step always lands on an edge of the draft, which past max-h-48 is scrolled out of view, and moving a
     // textarea's selection does not reliably bring it back. Without this the caret would leave the visible rows
     // and the press would read as having done nothing.
     el.scrollTop = step.at === 0 ? 0 : el.scrollHeight;
@@ -931,7 +931,7 @@ const recallKeydown = (event: KeyboardEvent): boolean => {
 // Both lists answer the same three gestures, and the composer wants nothing else from either.
 interface PopoverList {
     readonly move: (delta: number) => void;
-    /** Whether a row was actually picked — with none active, the key belongs to the composer. */
+    /** Whether a row was actually picked: with none active, the key belongs to the composer. */
     readonly pickActive: () => boolean;
 }
 const activePopover = computed<PopoverList | undefined>(() =>
@@ -965,14 +965,14 @@ const popoverKeydown = (event: KeyboardEvent): boolean => {
 
 // Escape interrupts the turn (Claude Code's shortcut), but only while it is GENERATING: a turn parked on a card
 // is spending nothing, and losing a plan the user is still reading to a stray Escape costs far more than the
-// keystroke saves — the Stop button is the deliberate way out of that one.
+// keystroke saves: the Stop button is the deliberate way out of that one.
 const interruptible = computed(() => streaming.value && !awaitingDecision.value && reachable.value);
 /* WHO GETS ESCAPE, once the popovers and message recall have had their claim on it. Both modes above the
  * turn-stop are there on the same reasoning: the thing the user is escaping is the mode they are in, and
  * stopping a streaming turn instead would be a far bigger action than the key meant.
  *
  * The voice catches a message counting down to send (the words stay in the box for editing) and ends hands-free
- * either way. The edit is simply abandoned, which is free — the transcript is intact, the files are untouched,
+ * either way. The edit is simply abandoned, which is free: the transcript is intact, the files are untouched,
  * and the composer goes back to whatever the pencil displaced (Conversation.cancelEdit). */
 const escapeKeydown = (): boolean => {
     if (voiceLive.value) {
@@ -1010,7 +1010,7 @@ const onKeydown = (event: KeyboardEvent): void => {
         }
         return;
     }
-    // On mobile Enter is a newline (the send button submits) — the virtual keyboard has no Shift+Enter.
+    // On mobile Enter is a newline (the send button submits): the virtual keyboard has no Shift+Enter.
     if (event.key !== `Enter` || mobile.value) {
         return;
     }
@@ -1024,11 +1024,11 @@ const onKeydown = (event: KeyboardEvent): void => {
 
 // --- Tabs / history --------------------------------------------------------------------------
 // This pane's half of "New agent" (and of anything else that hands the user the composer): the action itself
-// lives in agentActions.startAgent, which opens the tab wherever it was pressed — the board, the strip's "+",
-// the mobile header — and then asks for the caret. A composer is the only thing that can give it, so the pane
+// lives in agentActions.startAgent, which opens the tab wherever it was pressed: the board, the strip's "+",
+// the mobile header, and then asks for the caret. A composer is the only thing that can give it, so the pane
 // answers the signal, and every surface gets the same result instead of the one that happens to sit next to
 // the textarea getting a better one. Only the FOCUSED pane answers: the signal names no conversation, and the
-// tab it was raised for is the one that just took the focus. The scroller needs nothing here — a new tab is a
+// tab it was raised for is the one that just took the focus. The scroller needs nothing here: a new tab is a
 // new conversation, and the watch below pins on that.
 watch(composerFocus, () => {
     if (!props.focused) {
@@ -1038,8 +1038,8 @@ watch(composerFocus, () => {
         grow();
         const field = input.value;
         field?.focus();
-        // A composer that arrives ALREADY FILLED — a board starter's suggestion, deliberately left mid-sentence
-        // where the repository goes — has to leave the caret where the sentence stops rather than in front of
+        // A composer that arrives ALREADY FILLED: a board starter's suggestion, deliberately left mid-sentence
+        // where the repository goes: has to leave the caret where the sentence stops rather than in front of
         // it. A no-op on the empty draft every other summons focuses.
         field?.setSelectionRange(field.value.length, field.value.length);
     });
@@ -1056,16 +1056,16 @@ const { realizing } = useTranscriptWarmup({
     poppedOut,
 });
 
-/* A different transcript is on screen — start it at its newest message, the way a chat is opened everywhere.
+/* A different transcript is on screen: start it at its newest message, the way a chat is opened everywhere.
  *
  * This is the ONE place that says so, and it is the state itself rather than any of the presses that reach it:
  * the strip's tabs and history menu, the agents board opening a card, /agents/:id, the review panel, a closed
- * tab handing focus to its neighbour. Half of those don't know this pane exists — which is exactly how the
+ * tab handing focus to its neighbour. Half of those don't know this pane exists, which is exactly how the
  * bug this replaces worked, since each of them had to remember to re-pin and only three did. Post-flush so the
  * new transcript is in the DOM to be scrolled; what arrives later (a hydrate, the cached repaint, an attached
  * live turn) grows the transcript, and the pin follows growth on its own.
  *
- * A tab switch also swaps a possibly multi-line draft under the textarea — re-size the box to the new one. */
+ * A tab switch also swaps a possibly multi-line draft under the textarea: re-size the box to the new one. */
 watch(
     () => props.conversation.conversationId,
     () => {
@@ -1075,7 +1075,7 @@ watch(
     { flush: `post` },
 );
 
-/* The transcript changed — follow it, if the reader has not scrolled up.
+/* The transcript changed: follow it, if the reader has not scrolled up.
  *
  * The composable's observers say "these boxes are a different size now", which is a measurement, taken in a
  * frame, and delivered in one: a notification the browser coalesces or defers past the layout that produced it
@@ -1085,13 +1085,13 @@ watch(
  * under the composer, and the panel sat exactly where it was.
  *
  * So the pane states the fact it holds directly, in terms no frame can lose: a message arrived or left, and a
- * turn started or ended — which is the loader, the one thing a send puts on screen before the answer exists.
+ * turn started or ended, which is the loader, the one thing a send puts on screen before the answer exists.
  * O(1) per flush and post-flush, so the row is in the DOM to be scrolled to; a streamed frame appends text to
  * a bubble that is already counted, and stays the observers' job. */
 watch([() => messages.value.length, streaming], follow, { flush: `post` });
 
 // Drop focus into the composer as soon as the account connects; grow sizes the box to a restored draft (the
-// textarea mounts with the persisted text already in it). Not on mobile — autofocus there pops the keyboard
+// textarea mounts with the persisted text already in it). Not on mobile: autofocus there pops the keyboard
 // over half the transcript before the user asked for it, and not in an unfocused pane, which would steal the
 // caret out of the one the user is typing in.
 watch(
@@ -1112,7 +1112,7 @@ watch(
 
 <template>
     <!-- Everything the panel's chat list is NOT. It carries the @container, so the composer's density keys off
-         the width left for the transcript rather than off the panel plus its rail — and with several panes
+         the width left for the transcript rather than off the panel plus its rail, and with several panes
          open, off THIS pane's share of it. -->
     <div
         class="chat-pane @container relative flex min-h-0 min-w-0 flex-1 flex-col"
@@ -1129,7 +1129,7 @@ watch(
             class="pointer-events-none absolute inset-1 z-30 rounded-xl border-2 border-dashed border-primary-500 bg-primary-500/10"
         ></div>
         <!-- GIVING THIS COLUMN BACK. It floats over the transcript's top-right corner rather than sitting in a
-             header, because a pane has no header — a bar per column would cost every pane a strip of height to
+             header, because a pane has no header: a bar per column would cost every pane a strip of height to
              carry one control, and the panel above already names the chats. Muted at rest so a permanent mark
              does not compete with the conversation, over its own faint backdrop so it stays legible against
              whatever scrolls under it (it clears the pinned prompt, which is opaque).
@@ -1151,7 +1151,7 @@ watch(
              reserved by the layout rather than measured back into it: the composer is the last thing in
              the scrolled content and sticks to the bottom edge, which means the transcript can always be
              read clear of it, by exactly as much as it happens to be tall (a five-line draft, attachment
-             chips, the queued stack, a banner) and no more. Scrolled up, the messages pass under it — see
+             chips, the queued stack, a banner) and no more. Scrolled up, the messages pass under it: see
              the composer's own note.
              The inner wrapper is what the autoscroll ResizeObserver measures; the scroller itself never
              changes height, so it can't report either of them growing.
@@ -1161,10 +1161,10 @@ watch(
              than the column of text, which a padding shared by both could not. -->
         <!-- .chat-scroller is the IntersectionObserver root each prompt uses to tell whether it is pinned.
              VERTICAL ONLY. This scroller holds the transcript AND the composer, so anything in either that
-             happens to be wider than the column used to drag a sideways scrollbar across the entire panel —
+             happens to be wider than the column used to drag a sideways scrollbar across the entire panel:
              a chat that scrolls left and right is always a bug, and it announced itself as one at the size the
              docked column ships at. Nothing legitimately needs the axis: the composer's controls wrap now, and
-             the two kinds of content that genuinely cannot be narrowed — code blocks and tables — carry their
+             the two kinds of content that genuinely cannot be narrowed (code blocks and tables) carry their
              own scroller in prose.css, which is where that scroll belongs. -->
         <div
             ref="scroller"
@@ -1173,7 +1173,7 @@ watch(
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
                 <div class="chat-turns flex flex-1 flex-col pt-4">
-                    <!-- Where a forked chat says so — above the turns it inherited, which without it read as
+                    <!-- Where a forked chat says so: above the turns it inherited, which without it read as
                          this conversation's own beginning. -->
                     <ChatForkLine />
                     <template v-if="messages.length > 0">
@@ -1184,13 +1184,13 @@ watch(
                         <!-- `index` is here for the day marker below, which is the one row that cares where it
                              stands in the column rather than which turn it belongs to. -->
                         <template v-for="(turn, index) in turns" :key="turn.id">
-                            <!-- THE DAY THIS STRETCH OF THE CONVERSATION WAS SENT ON — drawn only where the date
+                            <!-- THE DAY THIS STRETCH OF THE CONVERSATION WAS SENT ON: drawn only where the date
                                  changes (dayMarks), so a chat written in one sitting carries exactly one and a
                                  chat picked up over a fortnight says so where it was picked up. Between the
                                  sections rather than inside one, because it is a boundary, not part of a turn.
                                  Bare centred text, no rule across the column: a line there fences the turns off
                                  from each other, which is the reason the old cut line between every two turns
-                                 went (see ChatForkCut). Weighted above rather than below — the marker belongs to
+                                 went (see ChatForkCut). Weighted above rather than below: the marker belongs to
                                  what follows it, and the extra air separates it from the answer it interrupts.
                                  The first row needs none of that air: the column's own top padding is already
                                  there. -->
@@ -1205,7 +1205,7 @@ watch(
                                 <!-- v-memo skips the vnode entirely for a row whose inputs are unchanged, which
                                      during a streaming turn is every row but the one being written: `turns` is
                                      rebuilt on each paint, so without it the whole transcript is re-created to
-                                     redraw one bubble. The key lists exactly what the row renders from — a
+                                     redraw one bubble. The key lists exactly what the row renders from: a
                                      message keeps its identity through the reducer unless that message changed,
                                      and `folded` holds still per turn (see ChatTurn.folded). -->
                                 <!-- `doomed` joins the memo key for the same reason every other input does: a
@@ -1225,7 +1225,7 @@ watch(
                                      everything down to here is what a fork keeps, and everything after it is
                                      what it leaves behind. Last in the section so it stands level with the close
                                      of what was said rather than in the middle of it, and drawn inside the
-                                     section so it hangs off the turn's own hover — a mark nobody is pointing at
+                                     section so it hangs off the turn's own hover: a mark nobody is pointing at
                                      is invisible. It costs the transcript no height (see ChatForkCut). -->
                                 <ChatForkCut :cut="forkCuts.get(turn.id) ?? messages.length" />
                             </section>
@@ -1237,10 +1237,10 @@ watch(
                     <ChatTranscriptSkeleton v-else-if="activeLoading" />
                     <!-- "Start a conversation with X" names the provider because on every other one that is the
                          fact worth having: whose model is about to answer. On the trial it is the wrong
-                         sentence — the reader has connected nothing, so what they need to know is that this
+                         sentence: the reader has connected nothing, so what they need to know is that this
                          works anyway, and naming a provider they never chose only raises a question. -->
                     <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">
-                        {{ onTrial ? `Ask anything — this chat is free and needs nothing connected.` : `Start a conversation with ${providerName}.` }}
+                        {{ onTrial ? `Ask anything, this chat is free and needs nothing connected.` : `Start a conversation with ${providerName}.` }}
                     </p>
                     <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
                 </div>
@@ -1249,13 +1249,13 @@ watch(
                      but leaves the draft mounted so the interruption cannot eat or discourage work in progress.
                      It is the LAST ROW OF THE TRANSCRIPT, stuck to the bottom edge, rather than a band beneath
                      it. In its own row it was panel background wrapped around the box, and that padding read as
-                     chrome the composer was mounted on — which is what a chat's most-used control should least
+                     chrome the composer was mounted on, which is what a chat's most-used control should least
                      look like. Here the only surface is the composer's own rounded box (and whichever banners
                      are up): the transcript runs to the bottom of the pane and, once the user scrolls up,
                      slides under a box with nothing but transparent padding around it. Parked at the bottom
                      there is nothing behind it to see, because being in the flow is what reserves its room.
                      .chat-footer hands pointer events in that transparent region back to the messages, and the
-                     z-index clears .chat-prompt's — a pinned prompt is opaque, and in a pane short enough
+                     z-index clears .chat-prompt's: a pinned prompt is opaque, and in a pane short enough
                      (mobile with the keyboard up) it reaches this far down.
                      The box is a touch WIDER than the column of text it sits under (50rem against .chat-turns'
                      48rem, and a half-inset against its full one below either cap): a composer flush with the
@@ -1267,10 +1267,10 @@ watch(
                     <p v-if="!reachable" class="px-1 text-2xs text-subtle">
                         {{
                             denied
-                                ? `Chat is unavailable — this Google account has no access to this sandbox.`
+                                ? `Chat is unavailable: this Google account has no access to this sandbox.`
                                 : blocked
                                   ? `Chat is available after this sandbox finishes setup.`
-                                  : `The sandbox is busy — keep typing. Send is available when it is ready.`
+                                  : `The sandbox is busy, keep typing. Send is available when it is ready.`
                         }}
                     </p>
                     <template v-if="!blocked">
@@ -1280,20 +1280,20 @@ watch(
                         <!-- THE TURN STOPPED BEFORE IT FINISHED, and here is the way on. Under the outage
                              banner and above the queue, because that is the order the three answer "what is
                              happening to my work": one is coming back by itself, this one is waiting on a
-                             press, and the queue is what goes next either way. The two can't both be up —
+                             press, and the queue is what goes next either way. The two can't both be up:
                              an outage arms its own resume and never this one.
                              The key is named on the button rather than in a tooltip. A pointer that has
                              travelled to the button has already spent what the shortcut would have saved,
-                             so the only reader it can still help is the one who hasn't moved yet — and the
+                             so the only reader it can still help is the one who hasn't moved yet, and the
                              composer's hint slot says the same thing one line below, for exactly them. -->
                         <div
                             v-if="continueOffer"
                             class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
                         >
                             <Icon name="pause" class="shrink-0" />
-                            <span class="min-w-0 flex-1">This turn stopped before it finished — the work so far is still here.</span>
+                            <span class="min-w-0 flex-1">This turn stopped before it finished: the work so far is still here.</span>
                             <!-- The standing version of the same press, offered where the wish for it happens:
-                                 reading this line for the third time in half an hour. Only while it is OFF —
+                                 reading this line for the third time in half an hour. Only while it is OFF:
                                  armed, the strip below carries both the state and the way out of it. -->
                             <button
                                 v-if="!autoContinue"
@@ -1336,7 +1336,7 @@ watch(
                         <template v-if="connected">
                             <!-- Messages written while the agent was busy that haven't reached it yet. They sit here
                              rather than in the transcript because they are not part of the conversation until the
-                             agent has them — a steered one moves into the transcript the moment the daemon takes
+                             agent has them: a steered one moves into the transcript the moment the daemon takes
                              it. Each is removable, so a queued thought can be withdrawn before it lands. -->
                             <div v-if="queued.length > 0" class="flex flex-col gap-1">
                                 <div
@@ -1356,7 +1356,7 @@ watch(
                                         type="button"
                                         class="composer-ghost h-5 w-5 shrink-0"
                                         @click="removeQueued(message.id)"
-                                        v-tooltip.top="'Remove — this message will not be sent'"
+                                        v-tooltip.top="'Remove: this message will not be sent'"
                                         aria-label="Remove queued message"
                                     >
                                         <Icon name="times" class="text-2xs" />
@@ -1366,8 +1366,8 @@ watch(
                             </div>
                             <!-- AN EDIT IN FLIGHT, said in the one place the user is certainly looking: directly
                                  over the box they are typing the replacement into. The struck rows up in the
-                                 transcript are the count; this is the LABEL — which message, and the two ways
-                                 out of it — and it has to be here rather than only up there because an edit
+                                 transcript are the count; this is the LABEL, which message, and the two ways
+                                 out of it, and it has to be here rather than only up there because an edit
                                  aimed twenty turns back leaves nothing struck anywhere near the composer, and a
                                  box that has silently changed what Send does with no mark on it is the trap
                                  this whole mode is arranged to avoid.
@@ -1383,7 +1383,7 @@ watch(
                             >
                                 <Icon name="pencil" class="shrink-0 text-link" />
                                 <span class="min-w-0 flex-1">
-                                    Editing this message —
+                                    Editing this message:
                                     <template v-if="editDropped > 1">it and the {{ editDropped - 1 }} below it are replaced when you send.</template>
                                     <template v-else>it is replaced when you send.</template>
                                 </span>
@@ -1393,7 +1393,7 @@ watch(
                                 <button
                                     type="button"
                                     class="shrink-0 rounded-full px-2 py-px font-semibold text-muted transition-colors hover:bg-primary-600/15 hover:text-link"
-                                    v-tooltip.top="'Open a new chat from here with what you have typed — this one keeps its answer'"
+                                    v-tooltip.top="'Open a new chat from here with what you have typed: this one keeps its answer'"
                                     @click="forkInsteadOfEdit"
                                 >
                                     Keep both instead
@@ -1401,7 +1401,7 @@ watch(
                                 <button
                                     type="button"
                                     class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
-                                    v-tooltip.top="'Leave everything as it is — nothing has been changed yet'"
+                                    v-tooltip.top="'Leave everything as it is: nothing has been changed yet'"
                                     @click="cancelEdit"
                                 >
                                     Cancel
@@ -1419,7 +1419,7 @@ watch(
                                 <ChatCommandPopover v-if="commandOpen" ref="commandPopover" :commands="commandMatches" @pick="pickCommand" />
                                 <div v-if="attachments.length > 0 || editorTarget !== undefined" class="flex flex-wrap gap-2 px-3 pt-3">
                                     <!-- Editor-context chip: off by default, one click attaches the open file /
-                                     selection to the next message — the inverse of VSCode Claude Code. Sized
+                                     selection to the next message: the inverse of VSCode Claude Code. Sized
                                      like the attachment chips beside it. -->
                                     <button
                                         v-if="editorTarget !== undefined"
@@ -1448,7 +1448,7 @@ watch(
                                         <span class="max-w-36 truncate text-content" v-tooltip.top="a.error ?? a.name">{{ a.name }}</span>
                                         <!-- The chip's own state, in a glyph. The progress hairline below is
                                              invisible once it fills, so a chip whose bytes are still in flight
-                                             read as finished — while Send stayed disabled behind it. -->
+                                             read as finished, while Send stayed disabled behind it. -->
                                         <Icon v-if="a.status === 'uploading'" name="spinner" spin class="shrink-0 text-2xs text-link" />
                                         <Icon
                                             v-else-if="a.status === 'failed'"
@@ -1489,29 +1489,29 @@ watch(
                                     @paste="staging.onPaste"
                                 ></textarea>
 
-                                <!-- THE CONTROL ROW, IN TWO GROUPS THAT WRAP AS UNITS — and the wrapping is the
+                                <!-- THE CONTROL ROW, IN TWO GROUPS THAT WRAP AS UNITS, and the wrapping is the
                                      point, not a nicety. Every pill in here is `shrink-0` (they are glyphs and
                                      short words; there is nothing in them to squeeze), so a single row of them
                                      had exactly one way to answer a column too narrow to hold it: run out past
-                                     the edge. It did, at the width the docked column USED to ship at — the send
+                                     the edge. It did, at the width the docked column USED to ship at: the send
                                      button fell off the right side and the pane grew a sideways scrollbar under
                                      the whole transcript, on the first screen of a fresh sandbox.
 
                                      So the row is allowed to become two rows. The groups are the ones the pills
-                                     already read as — which brain (model · effort), then how the turn is shaped
-                                     and the press that sends it — and each stays whole, because a group broken
+                                     already read as, which brain (model · effort), then how the turn is shaped
+                                     and the press that sends it, and each stays whole, because a group broken
                                      mid-way is worse than a second line. `ml-auto` rather than
                                      `justify-between`: an auto margin holds the second group against the right
                                      edge whether it is sharing the first line or sitting on its own, where
                                      space-between would slam it left the moment it wrapped. -->
                                 <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5">
                                     <!-- MODEL, EFFORT, MODE, PERSONA GO INERT UNDER A WORKFLOW BADGE, and that is not
-                                         a caveat about the feature — it is what the badge means. Every one of them
+                                         a caveat about the feature: it is what the badge means. Every one of them
                                          describes a turn on THIS conversation, and a workflow send makes none: the
                                          message becomes a run's request, and each step opens its own unattended
                                          session on the provider, harness and model the step declares, looping the way
                                          the step says to loop. Left live they were four controls that changed nothing
-                                         about the press beneath them — pick Opus · Max · Plan, watch the run come back
+                                         about the press beneath them: pick Opus · Max · Plan, watch the run come back
                                          on something else, and you would be right to call it a bug.
 
                                          The run-through badge at the end of the row is the exception, because it is
@@ -1519,7 +1519,7 @@ watch(
 
                                          Dimmed rather than hidden: they still say what an ordinary send would use, the
                                          line under the box says whose they are instead, and the badge is one press
-                                         from handing them back — a control that vanished would take that offer with
+                                         from handing them back: a control that vanished would take that offer with
                                          it. -->
                                     <!-- WHICH BRAIN. `min-w-0` is what lets the model name give way first: it is
                                          the one thing in the row with a shrinkable middle, so a column a little
@@ -1529,7 +1529,7 @@ watch(
                                          THEY USED TO. Measured, at the sizes this row actually draws: the model
                                          name alone needs ~426px of pane to leave the row on one line, the
                                          effort word ~476, the mode word ~504. They were switching back on at
-                                         320, 384 and 448 — every one of them 60-100px early — so widening the
+                                         320, 384 and 448: every one of them 60-100px early, so widening the
                                          column from ~390 to ~540 turned labels on that immediately pushed the
                                          row onto two lines, and it took another 150px of dragging to earn the
                                          single line back. A reader who widens a column and watches it get
@@ -1557,14 +1557,14 @@ watch(
                                         />
                                     </div>
 
-                                    <!-- HOW THE TURN IS SHAPED, AND THE PRESS THAT SENDS IT — the group that
+                                    <!-- HOW THE TURN IS SHAPED, AND THE PRESS THAT SENDS IT: the group that
                                          keeps the right edge (see the note on the row above). -->
                                     <div class="flex items-center gap-1 ml-auto">
                                         <!-- MODE leads the right-hand group, and the group reads left to right as a
                                          gradient away from the model: which brain (model · effort), then how it
                                          works (mode), then who it is (persona), then what the message is run
                                          through (loop or workflow). Mode sits closest to effort because the two
-                                         are one thought — how hard it thinks, and how much rope it has — and
+                                         are one thought: how hard it thinks, and how much rope it has, and
                                          because it is the only pill here that is always worded, so it anchors
                                          the row's baseline where a bare glyph could not. -->
                                         <button
@@ -1582,7 +1582,7 @@ watch(
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
-                                        <!-- PERSONA — who the chat IS when it reaches outside: which of your accounts
+                                        <!-- PERSONA, who the chat IS when it reaches outside: which of your accounts
                                          this turn may speak through, and how much of the toolbox it holds.
 
                                          A BADGE like the workflow pill beside it, for the same reason: unpicked
@@ -1605,14 +1605,14 @@ watch(
                                             @click="personaOpen = !personaOpen"
                                             v-tooltip.top="
                                                 conversation.actsAs.value !== undefined
-                                                    ? `This chat acts as ${personaName} — only its accounts are in reach`
-                                                    : `Act as one of your personas — only that person's accounts`
+                                                    ? `This chat acts as ${personaName}: only its accounts are in reach`
+                                                    : `Act as one of your personas, only that person's accounts`
                                             "
                                             :aria-expanded="personaOpen"
                                             :aria-label="conversation.actsAs.value !== undefined ? `Acts as: ${personaName}` : `Acts as anyone`"
                                         >
-                                            <!-- PICKED, IT WEARS THE FACE. The glyph is right for the unset pill —
-                                                 "anyone" is a category and has no face — but once a message is
+                                            <!-- PICKED, IT WEARS THE FACE. The glyph is right for the unset pill:
+                                                 "anyone" is a category and has no face, but once a message is
                                                  about to go out under somebody's account, the pill is the last
                                                  thing seen before Enter, and the character every other surface
                                                  identifies that persona by belongs here too. It is also what
@@ -1632,22 +1632,22 @@ watch(
                                             <Icon v-if="conversation.actsAs.value !== undefined" name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
-                                        <!-- RUN THROUGH — the row's last shaping control, and ONE where there were
+                                        <!-- RUN THROUGH: the row's last shaping control, and ONE where there were
                                          two. A loop and a workflow answer the same question about the next
                                          message (what is it run THROUGH) with answers the composer can only
                                          take one of, so they are one badge: picking is picking, and a pick
                                          replaces a pick. Two glyphs side by side said the same thing only by
                                          greying each other out, which is a rule you learn by tripping over it.
 
-                                         Unpicked it is a bare neutral glyph — all the room a control most
+                                         Unpicked it is a bare neutral glyph: all the room a control most
                                          chats never use deserves. Picked it wears the CHOSEN thing's own icon
                                          and names it in the active tint, so nothing the two pills used to say
                                          about an armed state is lost: a composer about to spend money round
                                          after round, or to fan one message across paid sessions, still says so
                                          before the press rather than after it.
 
-                                         A RUNNING loop takes it over entirely — the count replaces the name,
-                                         the press ends it — and that outranks even an armed workflow, because
+                                         A RUNNING loop takes it over entirely: the count replaces the name,
+                                         the press ends it, and that outranks even an armed workflow, because
                                          stopping something already going is not a thing the next message
                                          decides, and a badge that buried the stop in a menu would leave the
                                          loop no way out but the fleet board. -->
@@ -1678,14 +1678,14 @@ watch(
                                             </template>
                                         </button>
 
-                                        <!-- VOICE — whose words the box is writing: yours (the default, a bare glyph),
+                                        <!-- VOICE, whose words the box is writing: yours (the default, a bare glyph),
                                          or the AGENT's. Armed, it names itself in the active tint and the next
-                                         Send PLACES the draft into the transcript as the agent's own words — no
-                                         turn, no reply — then disarms. Last of the shaping pills and nearest to
+                                         Send PLACES the draft into the transcript as the agent's own words: no
+                                         turn, no reply: then disarms. Last of the shaping pills and nearest to
                                          Send, because it changes what Send IS more than anything else in the
                                          row: every other pill shapes a turn, this one removes the turn entirely.
                                          Appears with the conversation's first turn (a draft chat has no
-                                         transcript to place into), and a workflow badge greys it like the rest —
+                                         transcript to place into), and a workflow badge greys it like the rest:
                                          a run's request is nobody's transcript. -->
                                         <button
                                             v-if="placeable"
@@ -1699,10 +1699,10 @@ watch(
                                             @click="voiceAgent = !voiceAgent"
                                             v-tooltip.top="
                                                 editing !== undefined
-                                                    ? `Finish or cancel the edit first — this box is holding a message to replace`
+                                                    ? `Finish or cancel the edit first: this box is holding a message to replace`
                                                     : voiceAgent
-                                                      ? `Writing as the agent — Send places the words into the transcript, no reply`
-                                                      : `Write as the agent — place words into the transcript in its voice`
+                                                      ? `Writing as the agent: Send places the words into the transcript, no reply`
+                                                      : `Write as the agent, place words into the transcript in its voice`
                                             "
                                             :aria-pressed="voiceAgent"
                                             aria-label="Write as the agent"
@@ -1711,10 +1711,10 @@ watch(
                                             <span v-if="voiceAgent" class="@max-lg:hidden">As agent</span>
                                         </button>
 
-                                        <!-- HANDS-FREE VOICE — one tap arms it, and from there the pause is the send
+                                        <!-- HANDS-FREE VOICE: one tap arms it, and from there the pause is the send
                                      (see useComposerVoice). Every browser gets this button now: the
                                      transcription is the sandbox's own, so there is no per-browser support
-                                     to gate on — only the viewer role, which cannot send at all. While
+                                     to gate on: only the viewer role, which cannot send at all. While
                                      listening the icon breathes with the microphone level, which is the whole
                                      "it can hear you" indicator; a state label rides the hint slot below. -->
                                         <button
@@ -1739,7 +1739,7 @@ watch(
                                             />
                                         </button>
 
-                                        <!-- Stop is present for the whole live turn — generating OR parked on a plan /
+                                        <!-- Stop is present for the whole live turn: generating OR parked on a plan /
                                      question / permission card. A parked turn still holds the conversation's run
                                      lock, so without this the user's only exits were answering a card they didn't
                                      want to answer or closing the tab. -->
@@ -1776,19 +1776,19 @@ watch(
                             <p v-else-if="loopFailure" class="px-1 text-2xs text-danger">{{ loopFailure }}</p>
                             <!-- What the badge changes about the press, said under the box that is about to do
                                  it: the message is going to a design, not to this chat. The second sentence is
-                                 what the greyed pills above would otherwise only say on hover — and a control
+                                 what the greyed pills above would otherwise only say on hover, and a control
                                  that refuses has to name itself somewhere a touch device can read it. -->
                             <p v-else-if="pickedWorkflow" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
-                                <Icon name="sitemap" class="shrink-0 text-2xs text-link" />Send starts “{{ pickedWorkflow.name }}” — this message is
+                                <Icon name="sitemap" class="shrink-0 text-2xs text-link" />Send starts "{{ pickedWorkflow.name }}": this message is
                                 what every step is asked to do. Model, effort, mode and looping are each step's own.
                             </p>
                             <!-- The loop badge's own sentence, and it carries the STOP CONDITION rather than just
                                  the name. This is the one badge in the row whose press starts something that goes
                                  on spending after the user has looked away, so "what ends it" belongs where the
-                                 message is being written — not behind a hover on the pill, which no touch device
+                                 message is being written, not behind a hover on the pill, which no touch device
                                  will ever show anyone. -->
                             <p v-else-if="runThroughState === 'loop' && pickedLoop" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
-                                <Icon name="repeat" class="shrink-0 text-2xs text-link" />Send loops this message until it's met — ends on
+                                <Icon name="repeat" class="shrink-0 text-2xs text-link" />Send loops this message until it's met: ends on
                                 {{ loopDesignLine(pickedLoop) }}.
                             </p>
                             <!-- A persona that CANNOT do what the pill implies, said where the message is being
@@ -1815,7 +1815,7 @@ watch(
 
         <!-- The four composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
              panel on desktop, a bottom sheet on a phone, one open flag either way. No height cap on any of them
-             — the overlay measures the room its side of the pill actually has IN THE PILL'S OWN WINDOW and caps
+            : the overlay measures the room its side of the pill actually has IN THE PILL'S OWN WINDOW and caps
              itself to it, so a picker fits whether this panel is docked in a column or floating in a window the
              user has since made short, and the `min-h-0` column passes that cap down to the scrolling list
              inside (see ChatModelPicker). -->

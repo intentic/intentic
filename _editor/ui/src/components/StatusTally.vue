@@ -1,14 +1,14 @@
 <!-- The orientation line at the top of an operations board: "3 running · 1 stopped · 2 need attention".
      Answers "is anything wrong right now" before the reader parses a single row.
 
-     NOT <StatStrip>, which is the document strip — big proportional numbers for unrelated measures a reader
+     NOT <StatStrip>, which is the document strip: big proportional numbers for unrelated measures a reader
      studies. These are a SINGLE measure split by state, read at a glance during an incident, so they are small,
      inline, and colour-coded by the same StatusVariant vocabulary <StatusBadge> uses. One tally vocabulary
      across the app: Pipelines and Deployments had each written this out by hand, byte-identical down to the
      `h-2 w-2 rounded-full`, which is how two boards end up disagreeing about what "failed" looks like.
 
      UNBOXED on purpose. It sits directly under a <PageHeader>, where the heading above and the first section
-     label below already bound it — a border here is one more box in a view that is mostly boxes, and it
+     label below already bound it: a border here is one more box in a view that is mostly boxes, and it
      frames a line that is not a container of anything.
 
      ZERO IS SILENT by default: "0 unhealthy" is a fact nobody asked for, and dropping it is what lets the eye
@@ -57,7 +57,7 @@ const { items } = defineProps<{ items: readonly TallyItem[] }>();
                 <span class="text-xs text-muted">{{ item.label }}</span>
             </span>
         </template>
-        <!-- Whatever else belongs on the orientation line — a pass-rate ring, a "last checked" stamp. Separated
+        <!-- Whatever else belongs on the orientation line: a pass-rate ring, a "last checked" stamp. Separated
              by the same gap, so it reads as another fact rather than as a control. -->
         <slot />
     </div>

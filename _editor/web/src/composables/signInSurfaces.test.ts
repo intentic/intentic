@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 //
-// EVERY SIGN-IN SURFACE, IN BOTH WINDOWS IT CAN BE OPENED IN — the one table this app did not have, and the
+// EVERY SIGN-IN SURFACE, IN BOTH WINDOWS IT CAN BE OPENED IN: the one table this app did not have, and the
 // absence of which shipped a screen that could not be got past.
 //
 // There are three surfaces (the login screen, the workspace's sandbox gate, the desktop hand-off page) and
 // two windows (an ordinary browser, and the desktop app's embedded webview). Google refuses OAuth from an
-// embedded webview and Identity Services is FedCM-based, which that webview does not implement — so Google's
+// embedded webview and Identity Services is FedCM-based, which that webview does not implement, so Google's
 // button RENDERS there, ACCEPTS CLICKS, and does nothing whatsoever. Each surface answered that separately.
 // Two answered it right, one did not, and the one that did not was the screen between a fresh install and a
 // working workspace.
@@ -25,8 +25,8 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
 }));
 
-/* The real mechanism, with only its edges faked. `renderButton` answers the way the real one does — false in
- * the desktop window, true elsewhere — because THAT is the behaviour under test here: what each surface does
+/* The real mechanism, with only its edges faked. `renderButton` answers the way the real one does: false in
+ * the desktop window, true elsewhere, because THAT is the behaviour under test here: what each surface does
  * with the refusal. The mechanism's own half of the rule is asserted in useGoogleIdentity.desktop.test.ts. */
 const desktopVersion = vi.fn<() => string | undefined>();
 const signInThroughBrowser = vi.fn();
@@ -60,7 +60,7 @@ const { default: Login } = await import("../pages/Login.vue");
 const { default: DesktopAuth } = await import("../pages/DesktopAuth.vue");
 const { default: GoogleSigninGate } = await import("../sandbox-gates/GoogleSigninGate.vue");
 
-/* THE TABLE. A surface belongs here the moment it can put a sign-in in front of someone — that is the whole
+/* THE TABLE. A surface belongs here the moment it can put a sign-in in front of someone: that is the whole
  * membership rule, and it is deliberately not "pages that import Google", which would have missed the gate. */
 const SURFACES = [
     { name: `the login screen`, component: Login },
@@ -89,7 +89,7 @@ const mount = async (component: (typeof SURFACES)[number][`component`]): Promise
     return el;
 };
 
-// Something a person can press — the minimum a sign-in screen owes its reader. jsdom reports no layout, so
+// Something a person can press: the minimum a sign-in screen owes its reader. jsdom reports no layout, so
 // visibility cannot be asserted here; presence and enabled-ness are what a dead end fails on anyway.
 const pressable = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll(`button`)].filter((button) => !button.disabled);
 

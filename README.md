@@ -4,7 +4,7 @@
 
 ### You delegate. Agents work. You approve.
 
-A workspace for coding agents. Every agent works in a sandbox on hardware **you** own, in a git worktree of its own — and keeps running when you look away.<br>
+A workspace for coding agents. Every agent works in a sandbox on hardware **you** own, in a git worktree of its own: and keeps running when you look away.<br>
 Run ten in parallel, reopen from any device, read every diff before it lands. Free.
 
 <p>
@@ -35,20 +35,20 @@ Run ten in parallel, reopen from any device, read every diff before it lands. Fr
 
 ## What this is
 
-intentic gives your agents **a machine of their own** — a persistent **sandbox** on hardware you own, with
-every browser a window onto it. What lives in one is a **specialized agent** — an autonomous employee with
+intentic gives your agents **a machine of their own**: a persistent **sandbox** on hardware you own, with
+every browser a window onto it. What lives in one is a **specialized agent**: an autonomous employee with
 dev-tools really installed, wired to the systems it operates, and context curated for one job. The runs
-live on your machine, not in a tab: close the laptop and they keep going; reopen from any browser — or your
-phone — onto the same fleet. Works with **Claude Code, Codex, Grok, Kimi Code and Gemini**, on your own
+live on your machine, not in a tab: close the laptop and they keep going; reopen from any browser, or your
+phone: onto the same fleet. Works with **Claude Code, Codex, Grok, Kimi Code and Gemini**, on your own
 subscription.
 
 ## Quick start
 
-Nothing to install locally — you need a machine that stays on and a browser.
+Nothing to install locally: you need a machine that stays on and a browser.
 
 1. **Sign in with Google** at **[app.intentic.dev](https://app.intentic.dev)** and name a sandbox.
 2. **Paste the one command it gives you** on the machine that should host it (laptop, desktop, VPS).
-   It starts the sandbox daemon and an outbound-only Cloudflare tunnel — no ports to open, no inbound firewall rule.
+   It starts the sandbox daemon and an outbound-only Cloudflare tunnel: no ports to open, no inbound firewall rule.
 3. **The workspace opens** the moment the daemon reports in. Specialize the agent, give it work, review what it does.
 
 ```sh
@@ -62,7 +62,7 @@ curl -fsSL https://intentic.dev/sync | sh
 ## Co-piloted, not fire-and-forget
 
 An autonomous agent still needs a human in the loop. AI has to have its context configured, its work
-supervised, and its riskier calls approved — so every agent in intentic is **co-piloted**. That is what the
+supervised, and its riskier calls approved: so every agent in intentic is **co-piloted**. That is what the
 workspace is *for*: the IDE surfaces (file tree, Monaco editor, diff review, terminals) and the observability
 surfaces (a fleet board of every run, plan mode by default, per-edit permission modes, a changes-review panel,
 full transcripts) exist so you can configure an agent, watch it work, drive it when you want, and approve what
@@ -70,10 +70,10 @@ lands. Autonomy with the wheel in your hands.
 
 ## What you get
 
-### Walk away — the runs don't stop
+### Walk away: the runs don't stop
 
 The agents live on your machine, not in the tab. Terminals survive disconnects, turns finish without you,
-and any browser — or your phone — reopens onto the same fleet, sorted by who needs you.
+and any browser (or your phone) reopens onto the same fleet, sorted by who needs you.
 
 |  |  |
 | :---: | :---: |
@@ -88,21 +88,21 @@ A file tree, a Monaco editor, terminals that survive reconnects, live preview pa
 
 ### Plan-and-review by default
 
-Agents propose before they act. Every change is a diff you land or discard, per file and per hunk — and
+Agents propose before they act. Every change is a diff you land or discard, per file and per hunk: and
 environment changes need your explicit approval before anything rebuilds.
 
 <img src="_site/site/src/assets/product/workspace-changes.png" alt="The changes panel: staged and unstaged files across two repos beside a split diff of the working change">
 
 ### Specialize the environment, not just the prompt
 
-The sandbox image is an overlay you can read and edit — the agent proposes toolchain changes as a Dockerfile
+The sandbox image is an overlay you can read and edit: the agent proposes toolchain changes as a Dockerfile
 diff, you approve or reject, and a rebuild applies the result.
 
 <img src="_site/site/src/assets/product/sandbox-environment.png" alt="The Environment tab: a proposed Dockerfile diff awaiting review, with Reject and Approve actions">
 
 ### Capabilities
 
-Wire an agent into GitHub, databases, Sentry, Stripe, SSH hosts, Discord, MCP servers and Claude plugins — a
+Wire an agent into GitHub, databases, Sentry, Stripe, SSH hosts, Discord, MCP servers and Claude plugins: a
 click each. Credentials are stored **inside the sandbox** and injected per turn, never written to disk in the
 workspace and never shown in the file tree.
 
@@ -110,19 +110,19 @@ workspace and never shown in the file tree.
 
 ### And the rest
 
-- **A fleet of specialized agents** — each in its own sandbox on a machine you own, reached from your browser
+- **A fleet of specialized agents**: each in its own sandbox on a machine you own, reached from your browser
   over a private Cloudflare tunnel. One agent per role, and as many as you care to run.
-- **Automations** — wake an agent on a schedule, a webhook, or a live event (a push, an alert, a payment, an
+- **Automations**: wake an agent on a schedule, a webhook, or a live event (a push, an alert, a payment, an
   email), each run leaving a transcript.
-- **Ownership by construction** — code and credentials never leave your machine. The platform stores your
+- **Ownership by construction**: code and credentials never leave your machine. The platform stores your
   identity, the sandbox's URL and the secrets that pair the two, and sits off the command path. The one
   exception is the optional free trial, which lets you chat before connecting any AI account: those messages
   run on intentic's keys and pass through intentic, and every screen that offers it says so.
-- **Your subscriptions, your hardware, free** — each agent runs on your own Claude, ChatGPT or SuperGrok plan.
+- **Your subscriptions, your hardware, free**: each agent runs on your own Claude, ChatGPT or SuperGrok plan.
   intentic charges nothing and never meters your model usage.
 
 <details>
-<summary><b>More screenshots</b> — plan mode, spend, automations</summary>
+<summary><b>More screenshots</b>: plan mode, spend, automations</summary>
 <br>
 
 <img src="_site/site/src/assets/product/chat-plan.png" alt="Plan mode: the agent's proposed plan in the conversation, awaiting approval">
@@ -135,7 +135,7 @@ workspace and never shown in the file tree.
 
 ## How it fits together
 
-Two tiers at runtime. The platform knows **who you are** and **where your sandbox is** — and nothing else. Every
+Two tiers at runtime. The platform knows **who you are** and **where your sandbox is**: and nothing else. Every
 command, file and keystroke goes from your browser straight to your own machine.
 
 ```mermaid
@@ -161,12 +161,12 @@ flowchart LR
 A platform breach can read the stored URL, but **cannot drive any sandbox**: the browser proves itself to the
 daemon directly, with a credential the platform never holds and cannot forge.
 
-The product is three parts, all in this monorepo — a thin **platform** (identity + the sandbox's URL), the
+The product is three parts, all in this monorepo: a thin **platform** (identity + the sandbox's URL), the
 per-user **sandbox** daemon (where the agent and your code actually live), and the browser **workspace**.
 [ARCHITECTURE.md](ARCHITECTURE.md) covers the split, the ownership and trust model, the extension system, the
 agent-facing tooling (iq/lsp) and the bundled deployment engine.
 
-For the shorter, picture-led version — the components, the vocabulary, and what to read first — read
+For the shorter, picture-led version (the components, the vocabulary, and what to read first) read
 **[docs/architecture/repo.md](docs/architecture/repo.md)**, or open the **Documentation** tile in the app. It
 renders that map and every package's README as one browsable set, draws each package's size and neighbours from
 the live package graph, and flags any page whose code has moved on since it was written.
@@ -176,7 +176,7 @@ the live package graph, and flags any page whose code has moved on since it was 
 > Requires **Node 24** and **pnpm 11**.
 
 A single `.env` at the repo root drives the platform (only the api reads it; web/site bake their dev config
-into `src`). Copy the template and fill in Google credentials — everything else degrades with a startup warning:
+into `src`). Copy the template and fill in Google credentials: everything else degrades with a startup warning:
 
 ```sh
 pnpm install
@@ -190,23 +190,23 @@ Dev serves over HTTPS via `@intentic-app/localhost-https` (Google FedCM One Tap 
 `pnpm install` mints a root and a certificate into your own data directory, outside every checkout;
 `pnpm cert:trust` is what puts that root in your trust store, and you run it once per machine rather than once
 per clone. Skip it and everything still works behind a browser warning. Run both on the machine whose browser
-you use — inside a container they produce a perfectly good pair that your desktop browser never sees. See
+you use: inside a container they produce a perfectly good pair that your desktop browser never sees. See
 [_tools/localhost-https](_tools/localhost-https/README.md).
 
-**Sandbox daemon (optional).** To run the daemon outside its container, add its creds to the same root `.env` —
+**Sandbox daemon (optional).** To run the daemon outside its container, add its creds to the same root `.env`:
 see the `# Sandbox daemon` section of `.env.example` (`ANTHROPIC_API_KEY`, `CLOUDFLARE_API_TOKEN`, … all
-optional) — then `pnpm --filter @intentic/sandbox dev`.
+optional): then `pnpm --filter @intentic/sandbox dev`.
 
 ## Working in this repo (for agents)
 
-- **Read [AGENTS.md](AGENTS.md) first** — it holds the hard editing rules (no legacy/compat shims, no
+- **Read [AGENTS.md](AGENTS.md) first**: it holds the hard editing rules (no legacy/compat shims, no
   re-exports or aliases, let errors propagate, prefer `undefined`, early returns).
 - **Edit `src/` directly.** Workspace packages expose an `@intentic/src` export condition, so cross-package
-  imports resolve to source — no build step is needed between editing a lib and running a dependent test.
-- **Tests are co-located:** `*.test.ts` (unit), `*.integration.test.ts` (temp trees, subprocesses, real git — a
+  imports resolve to source: no build step is needed between editing a lib and running a dependent test.
+- **Tests are co-located:** `*.test.ts` (unit), `*.integration.test.ts` (temp trees, subprocesses, real git: a
   60s budget instead of the 5s hang detector), and gated `*.e2e.test.ts` (real infra, opt-in). Run `pnpm test`
   (Turbo) or per-package `vitest`.
-- **`pnpm verify` is the gate — run it before you finish, including from an agent worktree.** It is
+- **`pnpm verify` is the gate: run it before you finish, including from an agent worktree.** It is
   `pnpm typecheck` and then `pnpm test`, across every package in the workspace. Both emit every dependency's
   dist with `tsgo -b` first (`_tools/scripts/prepass.mjs`), so neither needs `pnpm build`, which cannot run
   under worktree isolation. It is also what CI decides main's health on, so a green run here is a green run
@@ -215,31 +215,31 @@ optional) — then `pnpm --filter @intentic/sandbox dev`.
   excludes `*.test.ts` from its build config and re-includes it in `tsconfig.test.json`; a package that only
   type-checks uses one config for both. Adding a package with tests and no `typecheck` script fails the same
   script's coverage guard. The testing conventions this protects are in [AGENTS.md](AGENTS.md).
-- **Each package is documented by its own README** — responsibilities, key files, gotchas. Start there when
+- **Each package is documented by its own README**: responsibilities, key files, gotchas. Start there when
   working inside one, and update it in the same commit as a change that dates it. That rule is the whole of how
   these stay true; [AGENTS.md](AGENTS.md#documentation) has the details, including the two parts of the page a
   tool parses.
 
 ## Bundled deployment engine (a tool, not the product)
 
-This monorepo also contains a standalone **deployment engine** — a declarative, reconciling infrastructure tool
+This monorepo also contains a standalone **deployment engine**: a declarative, reconciling infrastructure tool
 driven by the `intentic deploy` command group (`init` · `resolve` · `plan` · `apply` · `destroy` · `adopt` ·
 `restore` · …). It turns `i.have` / `i.want` intent into real self-hosted infrastructure on hosts you own.
 
-It is **not part of the intentic product.** It is one of the many tools a specialized agent can reach for — no
-more a "feature" than `psql` or `docker` — and it lives in this repo only for convenience. Its walkthrough,
+It is **not part of the intentic product.** It is one of the many tools a specialized agent can reach for: no
+more a "feature" than `psql` or `docker`: and it lives in this repo only for convenience. Its walkthrough,
 capabilities and known limits are documented separately in **[docs/deploy-engine.md](docs/deploy-engine.md)**.
 
 ## Releases
 
-**One repository — [github.com/intentic/intentic](https://github.com/intentic/intentic) — and nothing is
+**One repository ([github.com/intentic/intentic](https://github.com/intentic/intentic)) and nothing is
 exported anywhere else.** A release is a tag on the commit CI already built, and two things hang off it:
 
-- **[GitHub Releases](https://github.com/intentic/intentic/releases)** — `_tools/scripts/publish-github.sh`,
+- **[GitHub Releases](https://github.com/intentic/intentic/releases)**: `_tools/scripts/publish-github.sh`,
   semantic-release's `publishCmd`, runs once the `v<version>` tag is on the remote and attaches the desktop
   installers and machine-agent binaries. That Release is the anonymous download channel behind
   `curl https://intentic.dev/sync | sh`.
-- **[npm `@intentic/*`](https://www.npmjs.com/org/intentic)** — `.github/workflows/npm-publish.yml`, dispatched
+- **[npm `@intentic/*`](https://www.npmjs.com/org/intentic)**: `.github/workflows/npm-publish.yml`, dispatched
   at that tag, builds the closure and publishes all 23 packages **with provenance** over npm's OIDC trusted
   publishing. There is no npm token in this repo's CI at all.
 
@@ -249,13 +249,13 @@ the tag exists. A new publishing target joins a release by being listed there.
 
 ## Contributing
 
-Issues and pull requests are welcome — start with **[CONTRIBUTING.md](CONTRIBUTING.md)** for the workflow and
+Issues and pull requests are welcome: start with **[CONTRIBUTING.md](CONTRIBUTING.md)** for the workflow and
 **[AGENTS.md](AGENTS.md)** for the editing rules the codebase actually enforces. Found a security problem?
 **[SECURITY.md](SECURITY.md)** tells you how to report it privately.
 
 ## License
 
-[MIT](LICENSE) — sandbox, CLI, workspace and platform alike, so you can verify every claim on this page.
+[MIT](LICENSE): sandbox, CLI, workspace and platform alike, so you can verify every claim on this page.
 
 <div align="center">
 <br>

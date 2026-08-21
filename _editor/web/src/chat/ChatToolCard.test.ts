@@ -3,7 +3,7 @@
 // jsdom because the whole point of this card is what it RENDERS: a sub-agent (Agent/Task) delegation nests its
 // own tool calls and thinking UNDER the card (ChatToolCard renders itself recursively), so the run reads as one
 // unit instead of a flat sibling list with a lone spinner stranded above it. Recursion that fails to resolve
-// draws nothing and throws nothing — only a mounted render catches it.
+// draws nothing and throws nothing: only a mounted render catches it.
 import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
@@ -19,7 +19,7 @@ const { CHAT_SURFACE } = await import("./chatSurface");
 
 let app: App | undefined;
 // `surface` is what the card can reach beyond itself (chatSurface.ts). Left out, the card falls back to the
-// inert one — which is exactly the shape a conversation published to the public renders under, so the default
+// inert one, which is exactly the shape a conversation published to the public renders under, so the default
 // here is also the published case.
 const mount = (tool: ChatTool, live = true, surface?: ChatSurface): HTMLElement => {
     const element = document.createElement(`div`);
@@ -65,7 +65,7 @@ describe(`ChatToolCard`, () => {
             ],
         });
 
-        // The child's own card rendered — proof the recursive <ChatToolCard> reference resolved.
+        // The child's own card rendered: proof the recursive <ChatToolCard> reference resolved.
         const nested = element.querySelector(`.border-l`);
         expect(nested).not.toBeNull();
         expect(nested?.textContent).toContain(`Bash`);
@@ -103,7 +103,7 @@ describe(`ChatToolCard`, () => {
         expect(element.querySelector(`.animate-spin`)).not.toBeNull();
     });
 
-    it(`freezes a call the turn never finished — no animation on a transcript that is only a record`, () => {
+    it(`freezes a call the turn never finished: no animation on a transcript that is only a record`, () => {
         // How a stopped turn (and a session restored from disk with no tool_result) reads back: still
         // `in_progress`, but nothing will ever move it, so an animation there claims work that is not happening.
         const element = mount({ id: `t1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `pnpm test` }, false);

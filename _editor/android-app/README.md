@@ -1,13 +1,13 @@
 # @intentic/android-app
 
-The Play Store shell: the hosted web app as a Trusted Web Activity — real Chrome, near-zero upkeep.
+The Play Store shell: the hosted web app as a Trusted Web Activity, real Chrome, near-zero upkeep.
 
-## What it is — and is not
+## What it is: and is not
 
 The Android half of "one product codebase, thin wrappers" (`@intentic/ios-app` is the other half, and this
 repository's README of record for the mobile strategy). A Trusted Web Activity is Chrome itself rendering
-`app.intentic.dev` full-screen under the app's own icon: the PWA the web app already is — its manifest, its
-service worker, its **ordinary web push straight from the daemon** — with a Play Store listing in front. No
+`app.intentic.dev` full-screen under the app's own icon: the PWA the web app already is, its manifest, its
+service worker, its **ordinary web push straight from the daemon**: with a Play Store listing in front. No
 webview, no bridge, no relay: the iOS shell needs all three because Apple has no equivalent; Android does, so
 this package is deliberately nothing but a build description.
 
@@ -26,7 +26,7 @@ version and the workflow run number are stamped over the manifest's placeholders
 upload's `versionCode` is monotonic by construction. The secrets the release needs and the one-time Play
 setup are in that workflow's header comment. Both jobs start by running
 [`_tools/scripts/mobile-android-sdk.sh`](../../_tools/scripts/mobile-android-sdk.sh), which answers on a
-runner what `bubblewrap init` asks a human once — and works around Bubblewrap still expecting the SDK layout
+runner what `bubblewrap init` asks a human once: and works around Bubblewrap still expecting the SDK layout
 that moved in 2020; that script carries the argument.
 
 The same flow by hand, for a local device build (needs a JDK + Android SDK, which Bubblewrap offers to
@@ -43,12 +43,12 @@ Then, once, after the first Play Console upload: copy the **App signing key cert
 console into `assetlinks.template.json`'s placeholder, and publish that JSON at
 `https://app.intentic.dev/.well-known/assetlinks.json`. Until it is served, the app works but wears a URL bar.
 
-One gotcha worth its sentence: the generated project and keystore stay out of git — the manifest is the
+One gotcha worth its sentence: the generated project and keystore stay out of git, the manifest is the
 source of truth, `bubblewrap update` rebuilds the rest, and the UPLOAD keystore matters less than it looks
 because Play app signing holds the certificate that the asset link actually names.
 
 ## Key files
 
-- [twa-manifest.json](twa-manifest.json) — the whole app: package id, origin, colors, start URL; what Bubblewrap builds from.
-- [assetlinks.template.json](assetlinks.template.json) — what the web origin must serve at `/.well-known/assetlinks.json`, fingerprint pending.
-- [package.json](package.json) — the two Bubblewrap invocations above.
+- [twa-manifest.json](twa-manifest.json), the whole app: package id, origin, colors, start URL; what Bubblewrap builds from.
+- [assetlinks.template.json](assetlinks.template.json): what the web origin must serve at `/.well-known/assetlinks.json`, fingerprint pending.
+- [package.json](package.json): the two Bubblewrap invocations above.

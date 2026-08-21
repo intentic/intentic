@@ -1,9 +1,9 @@
 <!-- Compact reference/comparison table for explainer bodies (<InfoDialog>, <InfoHint>). Two jobs, one shape:
      a lookup list too long to read as prose (13 cleaners × what each removes) and an A-vs-B comparison
-     ("", "Intentic", "Claude"). Both are the case the form heuristic sends to a table rather than a chart — many
+     ("", "Intentic", "Claude"). Both are the case the form heuristic sends to a table rather than a chart: many
      classes that all carry meaning, or two options a reader wants to scan row by row instead of holding two
      paragraphs in their head. Cells are plain strings: the first is the row's subject and wears the primary
-     ink, the rest are values in muted ink. Hairline rows, no zebra, no vertical rules — the alignment does
+     ink, the rest are values in muted ink. Hairline rows, no zebra, no vertical rules: the alignment does
      the separating. `headers` is optional; a leading "" gives the row-subject column a blank heading. -->
 <script setup lang="ts">
 defineProps<{ headers?: string[]; rows: string[][] }>();

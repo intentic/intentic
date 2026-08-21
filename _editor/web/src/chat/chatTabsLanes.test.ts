@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 //
-// THE RAIL IS MOUNTED ONCE AND LIVES FOR HOURS. Docked, the open-chat list is a sheet the header drops — built
-// and torn down on every open — so anything it only gets right at mount time still looks right. Popped out it
+// THE RAIL IS MOUNTED ONCE AND LIVES FOR HOURS. Docked, the open-chat list is a sheet the header drops: built
+// and torn down on every open, so anything it only gets right at mount time still looks right. Popped out it
 // is the window's left edge for as long as that window is open, and every lane it draws has to follow the store
 // with no remount to fall back on. That is what this file holds it to, by mounting the list ONCE and then
 // opening chats the way the fleet board does.
 //
 // The bug it exists for: the lanes were hidden with `v-show` over the constant LANES list. A `v-for` over a
 // compile-time constant compiles to a STABLE fragment whose <section>s carry no patch flag, so Vue patched
-// their children through the block tree and never the sections themselves — `v-show` ran once at mount and
+// their children through the block tree and never the sections themselves: `v-show` ran once at mount and
 // `display` froze there. A chat opened from the board arrived in a lane still set to `display:none`, and the
 // popped-out rail sat looking empty while the panel beside it had the conversation open ("I keep clicking cards
 // in /agents and the popped-out window doesn't react"). Every assertion here is about what is ON SCREEN rather
@@ -33,12 +33,12 @@ vi.hoisted(() => {
 
 let app: App | undefined;
 
-// Mounted ONCE per test and never again — the pop-out window's own lifetime, and the condition every assertion
+// Mounted ONCE per test and never again: the pop-out window's own lifetime, and the condition every assertion
 // below is made under.
 const mountList = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
-    // Wired the way ChatPanel wires it — the list emits verbs and its host performs them, so a press on a close
+    // Wired the way ChatPanel wires it: the list emits verbs and its host performs them, so a press on a close
     // affordance here has the same consequence it does in the app.
     app = createApp({ render: () => h(ChatTabList, { onClose: (ids: ReadonlySet<string>) => useChat().closeTabs(ids) }) });
     app.component(`Icon`, { render: () => null });
@@ -70,8 +70,8 @@ const settle = async (): Promise<void> => {
 };
 
 // Two agents the board could hand this list, one per lane it is not already showing: a question waiting on the
-// user (Attention) and a landed run (Finished). Seeded at a high revision so the list's own roster read — which
-// reaches a daemon that is not there — cannot be mistaken for a newer one.
+// user (Attention) and a landed run (Finished). Seeded at a high revision so the list's own roster read, which
+// reaches a daemon that is not there: cannot be mistaken for a newer one.
 const seed = (): void =>
     setAgents(
         [
@@ -97,7 +97,7 @@ const seed = (): void =>
         100,
     );
 
-// A card on /agents, which is the traffic this file is about — the same call the board's own click makes.
+// A card on /agents, which is the traffic this file is about: the same call the board's own click makes.
 const openFromBoard = (id: string): void => {
     openAgentConversation({ id, provider: `claude`, harness: `native` });
 };
@@ -109,7 +109,7 @@ const lanesOnScreen = (el: HTMLElement): string[] =>
         .filter((section) => section instanceof HTMLElement && section.style.display !== `none`)
         .map((section) => section.querySelectorAll(`header span`)[1]?.textContent?.trim() ?? ``);
 
-// The chats on screen under those lanes — the answer to "did the card I just clicked turn up in the list".
+// The chats on screen under those lanes: the answer to "did the card I just clicked turn up in the list".
 const cardsOnScreen = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)]
         .filter((section) => section instanceof HTMLElement && section.style.display !== `none`)
@@ -156,8 +156,8 @@ it(`drops a lane the last chat left, so no empty header is left standing`, async
     expect(cardsOnScreen(el)).toEqual([`waiting`]);
 });
 
-/* THE FINISHED LANE IS THE ONLY ONE THAT GROWS. Attention and Active empty themselves — a card leaves them the
- * moment its turn settles — so on the surface that is mounted for hours, an uncapped Finished lane is a column
+/* THE FINISHED LANE IS THE ONLY ONE THAT GROWS. Attention and Active empty themselves: a card leaves them the
+ * moment its turn settles, so on the surface that is mounted for hours, an uncapped Finished lane is a column
  * of every agent the day produced. The board has always capped its own (windowFinished); this list drew the
  * same lane with no cap at all, which is the "my popped-out Finished lane keeps growing" report. */
 const seedFinished = (count: number): void =>
@@ -175,7 +175,7 @@ const seedFinished = (count: number): void =>
         100,
     );
 
-// Opening them oldest-first leaves the NEWEST as the focused chat — inside the window, so these cases are about
+// Opening them oldest-first leaves the NEWEST as the focused chat: inside the window, so these cases are about
 // the cap alone and not about the pin.
 const openFinished = (count: number): void => {
     for (let at = count - 1; at >= 0; at--) {
@@ -196,7 +196,7 @@ it(`caps the Finished lane and says how many it is holding back`, async () => {
 
     await settle();
     expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`]);
-    // The header still counts the whole lane — the row below is what accounts for the difference.
+    // The header still counts the whole lane: the row below is what accounts for the difference.
     expect(el.querySelector(`section header span:nth-of-type(3)`)?.textContent?.trim()).toBe(`10`);
     expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
 });
@@ -220,7 +220,7 @@ it(`opens the rest in place, and folds them back`, async () => {
 });
 
 // The list is the switcher for the panel beside it, so the one card it may never drop is the chat that panel is
-// showing — the board's own exception, and the reason the window takes a selection at all.
+// showing: the board's own exception, and the reason the window takes a selection at all.
 it(`pins the chat being read into the window, however far down the lane it is`, async () => {
     seedFinished(10);
     const el = await mountList();
@@ -235,8 +235,8 @@ it(`pins the chat being read into the window, however far down the lane it is`, 
     expect(tailRow(el)?.textContent?.trim()).toBe(`2 earlier`);
 });
 
-// The exit the lane never had. It was reachable only by right-clicking a card — a hunt for a target to perform
-// an action whose target is the lane — which is what left "Close finished" being described as a manual chore.
+// The exit the lane never had. It was reachable only by right-clicking a card: a hunt for a target to perform
+// an action whose target is the lane, which is what left "Close finished" being described as a manual chore.
 it(`clears the whole lane from its header, whatever the window is showing`, async () => {
     seedFinished(10);
     const el = await mountList();

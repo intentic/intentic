@@ -36,7 +36,7 @@ test("detectHostMoves ignores an unchanged address, a new id, a removed id, and 
     expect(detectHostMoves(graphOf(hostNode("host", "10.0.0.1")), graphOf(hostNode("host", "10.0.0.1")))).toEqual([]);
     // A brand-new host id is a create, not a move; a removed id is a prune.
     expect(detectHostMoves(graphOf(hostNode("old", "10.0.0.1")), graphOf(hostNode("new", "10.0.0.2")))).toEqual([]);
-    // Same address, different SSH key — same machine, new creds, not a migration.
+    // Same address, different SSH key: same machine, new creds, not a migration.
     const reKeyed: ResourceNode = {
         id: "host",
         type: "host",

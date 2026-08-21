@@ -50,7 +50,7 @@ describe(`diffStat`, () => {
     });
 
     it(`counts a whole-file Write as all additions, past the render cap`, () => {
-        // The rendered rows cap at 160, but the stat is exact — every added line counts.
+        // The rendered rows cap at 160, but the stat is exact: every added line counts.
         expect(diffStat(undefined, Array.from({ length: 500 }, (_, i) => `l${i}`).join(`\n`))).toEqual({ additions: 500, deletions: 0 });
     });
 

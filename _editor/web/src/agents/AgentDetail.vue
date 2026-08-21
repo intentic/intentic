@@ -16,16 +16,16 @@ import AgentSessionMenu from "./AgentSessionMenu.vue";
 import SessionChip from "./SessionChip.vue";
 import SessionIdentity from "./SessionIdentity.vue";
 
-/* Drill-in for one agent (/agents/:id) — one canonical chat surface per form factor (the fleet-UX rule that
+/* Drill-in for one agent (/agents/:id): one canonical chat surface per form factor (the fleet-UX rule that
  * kills the duplicated-conversation problem):
- * - MOBILE: this IS the chat surface (no dock exists) — Chat | Changes segmented, chat default.
+ * - MOBILE: this IS the chat surface (no dock exists), Chat | Changes segmented, chat default.
  * - DESKTOP: the conversation lives ONLY in the docked ChatPanel (focused by the binding below); this view is
- *   review-only — the isolated diff + Land/Discard, the one job the dock can't host. A draft/unknown id has
+ *   review-only: the isolated diff + Land/Discard, the one job the dock can't host. A draft/unknown id has
  *   nothing to review → back to the board.
  *
  * THIS ROW OWNS THE SESSION; the panel below owns the review. That split is the whole point of the header:
- * everything here answers "what is this agent, and what do I want to happen to it" — the title, the branch, the
- * one status chip, Land, and the ⋯ that holds the rest — while the panel's bars answer "what did it write".
+ * everything here answers "what is this agent, and what do I want to happen to it": the title, the branch, the
+ * one status chip, Land, and the ⋯ that holds the rest, while the panel's bars answer "what did it write".
  * They used to be interleaved across three stacked bars, which is how the page came to state its file count
  * four times and the word "landed" twice, in two different senses, twenty-four pixels apart. */
 
@@ -37,7 +37,7 @@ const { conversations, setActive } = useChat();
 
 const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.params[`id`] : ``));
 // Across both halves of the fleet: an ARCHIVED agent is off the board's roster but keeps its branch, diff and
-// transcript, so this page is still its destination — from the board's archive, from a bookmarked URL, and
+// transcript, so this page is still its destination: from the board's archive, from a bookmarked URL, and
 // from the moment the review panel's own Archive button fires under the user's cursor.
 const fleetAgent = computed(() => agentById(agentId.value));
 
@@ -46,10 +46,10 @@ const fleetAgent = computed(() => agentById(agentId.value));
  * on the events stream, so a reconnect, a restarted daemon or an agent created in another window can leave
  * this tab a roster behind, and the archive is not read at all until something asks for it.
  *
- * Read as absence, that produced two failures a reload "fixed" — which is exactly how it was reported. With no
+ * Read as absence, that produced two failures a reload "fixed", which is exactly how it was reported. With no
  * tab open for the id the page bounced back to the board. With one open (the usual case: the chat was just
  * pointed at this agent) it stayed and went HOLLOW: no fleet entry means not registered, not registered means
- * not reviewable, and the review query is keyed on that — so the header rendered over a review area that was
+ * not reviewable, and the review query is keyed on that, so the header rendered over a review area that was
  * empty for good, fetching nothing, explaining nothing.
  *
  * So both halves are asked, once per id, and the decisions below wait for the answer. Then the page either
@@ -72,7 +72,7 @@ const conversation = computed(() => conversations.value.find((candidate) => cand
 // Bind the shared chat singleton to this agent's tab: open/create from the fleet entry, else focus the
 // already-open conversation. Desktop additionally requires a REGISTERED agent (there must be a diff to
 // review); a draft or unknown id bounces back to the board. Keyed on the id + the roster SIZE, not the
-// fleetAgent computed — its per-recompute object identity (and markSeen's write into the fleet source)
+// fleetAgent computed: its per-recompute object identity (and markSeen's write into the fleet source)
 // would refire this watch forever. The archive counts toward that size: archiving the agent under review
 // shrinks the roster by one and grows the archive by one, and only watching the first would bounce the user
 // off the page they are reading.
@@ -89,10 +89,10 @@ watch(
             }
             return;
         }
-        // Unknown so far — ask both halves for it (once), and let the reads land before reading anything into
+        // Unknown so far: ask both halves for it (once), and let the reads land before reading anything into
         // the silence. Either they name it, and this watch runs again on a roster that has it, or they don't.
         settleLookup(id);
-        // No fleet entry means no registry entry, so there is no read marker to stamp — just focus the tab.
+        // No fleet entry means no registry entry, so there is no read marker to stamp: just focus the tab.
         if (conversation.value !== undefined) {
             setActive(conversation.value.conversationId);
             return;
@@ -120,39 +120,39 @@ const edit = createInlineRename(
     `Couldn't rename the agent.`,
 );
 
-// The card's own status glyph, carried into the header — the one piece of fleet state the review below can't
+// The card's own status glyph, carried into the header: the one piece of fleet state the review below can't
 // tell you (it reports the work, not whether the agent is still writing it). It is also the page's ONLY
 // statement of whether the work landed: the review's toolbar used to carry a second "✓ landed" chip a line
-// below this one, meaning "every file reached the workspace" where this one means "the last turn landed" —
+// below this one, meaning "every file reached the workspace" where this one means "the last turn landed":
 // two scopes, one word, stacked.
 const status = computed(() => (fleetAgent.value === undefined ? undefined : agentStatusMeta(fleetAgent.value.status)));
 
 /* THE REVIEW'S STATE, owned here and handed to the panel. One instance, because the actions are split across
- * the two components now — Land and the ⋯ menu fire from this row, the conflict report's merge/resolve fire
- * from the panel — and a second useAgentChanges() would give each its own busy and error flags. The query
+ * the two components now: Land and the ⋯ menu fire from this row, the conflict report's merge/resolve fire
+ * from the panel, and a second useAgentChanges() would give each its own busy and error flags. The query
  * behind it is keyed by agent id, so this is also the only fetch. */
-// Empty until the agent is known to HAVE a review (registered, branch-backed) — see useAgentChanges: this is
+// Empty until the agent is known to HAVE a review (registered, branch-backed), see useAgentChanges: this is
 // created for the page, which outlives the panel, so a draft agent must not send it looking for a diff.
 const changes = useAgentChanges(computed(() => (reviewable.value ? agentId.value : ``)));
 const streaming = computed(() => conversation.value?.streaming.value === true);
 
-/* Discard stays gated on the turn — it takes the worktree away and the daemon refuses it outright while one
+/* Discard stays gated on the turn: it takes the worktree away and the daemon refuses it outright while one
  * runs. Land does not, any more: it only READS that checkout, so the daemon lets it through whenever nobody is
  * mid-sentence and asks for an explicit override when someone is (agents.routes.ts landable).
  *
  * So the button is live in every state that has something to apply, and `writing` decides which of the two
  * presses it is: a plain land, or the one that opens the warning first. Read off the FLEET status rather than
- * off `streaming` — this browser's stream is open for a parked turn exactly as it is for a working one, which
+ * off `streaming`: this browser's stream is open for a parked turn exactly as it is for a working one, which
  * is what made "wait for the agent turn to finish" the answer to a card that was waiting for the user. */
 const writing = computed(() => fleetAgent.value !== undefined && writingNow(fleetAgent.value));
 const canLand = computed(() => !changes.actionBusy.value && changes.pending.value.length > 0);
 // A live turn that is NOT writing: parked on a question or a permission card, or unwinding a Stop. Its land is
-// an ordinary one, and saying so is the point — this is the state the old copy called "running".
+// an ordinary one, and saying so is the point: this is the state the old copy called "running".
 const parked = computed(() => streaming.value && !writing.value);
 // What the button says it will do, in the three states it can be pressed in.
 const landHint = computed(() =>
     writing.value
-        ? `The agent is still writing — you'll be asked to confirm`
+        ? `The agent is still writing: you'll be asked to confirm`
         : parked.value
           ? `Applies what the agent has written so far`
           : `Applies ${changes.pending.value.length} change(s) to your workspace`,
@@ -175,7 +175,7 @@ const confirmForceLand = (): void => {
 };
 
 // The role split on the toolbar's primary action: maintainers land, collaborators ask (the daemon floors the
-// land itself — see AgentCard for the same split on the board).
+// land itself: see AgentCard for the same split on the board).
 const { canDrive, canShip } = useRole();
 const requestingLand = ref(false);
 const requestLand = async (): Promise<void> => {
@@ -191,7 +191,7 @@ const requestLand = async (): Promise<void> => {
     }
 };
 
-/* The session's name and the session's actions, each in the app's standard touch swap — anchored beside their
+/* The session's name and the session's actions, each in the app's standard touch swap: anchored beside their
  * trigger on desktop, a thumb-reachable sheet on a phone. Both were the hand-written pair <ResponsiveOverlay>
  * exists to replace: a <BottomSheet> under `v-if="mobile"`, a PrimeVue <Popover> under `v-else`, and TWO open
  * flags between them (a `*Sheet` boolean plus the popover's own internal state), which is the drift that
@@ -218,9 +218,9 @@ const confirmDiscard = (): void => {
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <!-- A @container: the header thins out against ITS OWN width, which is the workspace pane's and not
-             the window's — with the chat panel open the two are nowhere near each other. -->
+             the window's: with the chat panel open the two are nowhere near each other. -->
         <div class="view-header @container flex items-center gap-2 border-b border-line px-3">
-            <!-- The board is a place, so the way back to it is a link — hoverable, copyable, and openable in
+            <!-- The board is a place, so the way back to it is a link: hoverable, copyable, and openable in
                  a tab of its own beside the agent being read. -->
             <RouterLink
                 to="/agents"
@@ -248,7 +248,7 @@ const confirmDiscard = (): void => {
                 </button>
             </template>
             <!-- THE SESSION'S NAME, and the way to get hold of it. This chip used to be a picture of the name:
-                 cut off at a fixed width, hoverable to see the rest, and impossible to put on a clipboard — so
+                 cut off at a fixed width, hoverable to see the rest, and impossible to put on a clipboard, so
                  the only route to the id every git command, worktree path and CLI verb needs was to read
                  thirty-six characters off the screen and retype them. Pressing it now opens the one panel that
                  states the name in all three forms anyone pastes it in.
@@ -264,7 +264,7 @@ const confirmDiscard = (): void => {
             </span>
             <SessionChip v-if="fleetAgent?.branch !== undefined && mobile" :branch="fleetAgent.branch" reveal compact @reveal="identityOpen = true" />
             <!-- THE STATUS COMPRESSES TO ITS GLYPH IN A NARROW HEADER, and on mobile that is now the only
-                 fixed-width thing left competing with the title — the Chat | Changes switch moved to a row of
+                 fixed-width thing left competing with the title: the Chat | Changes switch moved to a row of
                  its own below (see there for why). The words return the moment the HEADER, not the window, has
                  room for them, so a phone in landscape and a narrow desktop column both get the sentence. The
                  chip keeps its full accessible name at every width, so nothing is lost to a screen reader.
@@ -310,7 +310,7 @@ const confirmDiscard = (): void => {
                     class="shrink-0 whitespace-nowrap"
                     :disabled="requestingLand"
                     @click="requestLand"
-                    v-tooltip.bottom="'Landing needs a maintainer — this puts the ask on their board'"
+                    v-tooltip.bottom="'Landing needs a maintainer: this puts the ask on their board'"
                 >
                     <Icon :name="requestingLand ? 'spinner' : 'send'" :spin="requestingLand" />Request land
                 </Button>
@@ -329,21 +329,21 @@ const confirmDiscard = (): void => {
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
         <!-- CHAT | CHANGES OWNS A ROW ON A PHONE, instead of riding the header above.
-             It was the single biggest thing in that row — a two-word switch is ~120px — and the row also
+             It was the single biggest thing in that row: a two-word switch is ~120px, and the row also
              carries a back arrow, the title, a rename pencil, the session chip, the status and the actions
              menu. Measured at 390px the title was left 55px for a string that needs 250: "Add Stripe checkout
              to the pricing page" rendered as "Add St…", which is not a title, it is a shrug.
-             The `stretch` variant is the one built for this — SegmentedControl's own note calls it right when
-             "the choice is a step of the task on a narrow screen" — so the two views become equal halves of a
+             The `stretch` variant is the one built for this: SegmentedControl's own note calls it right when
+             "the choice is a step of the task on a narrow screen", so the two views become equal halves of a
              full-width track at a thumb's height, and the header gets its width back. It costs ~36px and the
              header stops needing the second line it was effectively wrapping onto. -->
         <div v-if="mobile && reviewable" class="shrink-0 border-b border-line px-2 py-1.5">
             <SegmentedControl v-model="view" :options="viewOptions" stretch />
         </div>
-        <!-- `:tabs="false"` — this screen's header already names the conversation, and the panel's own mobile
+        <!-- `:tabs="false"`: this screen's header already names the conversation, and the panel's own mobile
              header named it again directly beneath (see ChatPanel for the full reasoning). -->
         <ChatPanel v-if="mobile && (view === 'chat' || !reviewable)" :tabs="false" class="min-h-0 flex-1" />
-        <!-- `chat` is the review asking to be swapped for the conversation — raised when it hands a land
+        <!-- `chat` is the review asking to be swapped for the conversation: raised when it hands a land
              conflict back to the agent and offers to show the turn. Desktop never sees it: the docked chat is
              already on screen there, so the review has nothing to swap itself for. -->
         <AgentReviewPanel
@@ -356,7 +356,7 @@ const confirmDiscard = (): void => {
             @chat="view = 'chat'"
         />
 
-        <!-- The session menu: anchored beside its button on desktop, a thumb-reachable sheet on a phone — one
+        <!-- The session menu: anchored beside its button on desktop, a thumb-reachable sheet on a phone, one
              body either way. `land-in-menu` is the one thing that differs, and it tracks the FORM rather than
              the surface: landing has its own button in the header on desktop, and no room for one on a phone. -->
         <ResponsiveOverlay v-model="menuOpen" :anchor="menuAnchor ?? undefined" header="Session" side="bottom" cross="end" panel-class="w-72">
@@ -387,7 +387,7 @@ const confirmDiscard = (): void => {
              because a warning that only says "are you sure" teaches people to click through it. -->
         <Modal :open="pendingForceLand" size="sm" header="Land while the agent is working?" @update:open="pendingForceLand = false">
             <p class="text-xs text-content">
-                The agent is still writing. Landing now takes its work exactly as it stands, which can mean half-finished changes — one side of a
+                The agent is still writing. Landing now takes its work exactly as it stands, which can mean half-finished changes: one side of a
                 rename, or three files of a larger edit.
             </p>
             <p class="mt-2 text-xs text-muted">
@@ -406,7 +406,7 @@ const confirmDiscard = (): void => {
                 conversation's isolated history go with them.
             </p>
             <p v-if="changes.count.value > changes.pending.value.length" class="mt-2 text-xs text-muted">
-                Work that already landed stays in your workspace — only what is still on the branch is lost.
+                Work that already landed stays in your workspace: only what is still on the branch is lost.
             </p>
             <template #footer>
                 <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingDiscard = false" />

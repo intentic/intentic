@@ -43,7 +43,7 @@ describe("ensureGeneratedSecrets", () => {
         await ensureGeneratedSecrets(localStore(dir), ["FORGEJO_ADMIN_PASSWORD"], env);
 
         expect(env["FORGEJO_ADMIN_PASSWORD"]).toBe("from-forgejo-secret");
-        // With env supplying the value, .secrets.json is neither needed nor written — which is exactly what
+        // With env supplying the value, .secrets.json is neither needed nor written, which is exactly what
         // lets the pipeline run without the file (and never mint a new, locking-out password).
         expect(existsSync(secretsPath(dir))).toBe(false);
     });

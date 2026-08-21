@@ -48,13 +48,13 @@ describe(`ChatTodoList`, () => {
         expect(element.textContent).toContain(`Serializing git write routes`);
     });
 
-    it(`freezes the active row once the bubble is settled — a snapshot must not animate`, () => {
+    it(`freezes the active row once the bubble is settled: a snapshot must not animate`, () => {
         // The reported bug: scrolling back through a session that finished long ago and finding a row still
         // spinning, which reads as an agent still working.
         const element = mount(LIST, false);
         expect(element.querySelector(`.animate-spin`)).toBeNull();
         expect(element.querySelector(`[data-icon="spinner"]`)).toBeNull();
-        // Still marked as the row the agent had reached — a filled dot where the spinner was.
+        // Still marked as the row the agent had reached: a filled dot where the spinner was.
         expect(element.querySelector(`[data-icon="circle-fill"]`)).not.toBeNull();
         // And read back in the same imperative form as the rows around it, not as something in progress.
         expect(element.textContent).toContain(`Serialize git write routes`);

@@ -34,7 +34,7 @@ test("initialize advertises tools and identifies the agent", async () => {
     expect(response.result.serverInfo.name).toBe("intentic-host");
 });
 
-test("tools/list is the machine's whole surface — and there is no delete", async () => {
+test("tools/list is the machine's whole surface, and there is no delete", async () => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes)) as { result: { tools: { name: string }[] } };
     const names = response.result.tools.map((tool) => tool.name);
     expect(names).toEqual([
@@ -84,7 +84,7 @@ test("tools/list publishes each tool's argument schema, which is the one an arri
     const logs = response.result.tools.find((entry) => entry.name === "sandbox_logs");
     expect(logs).toBeDefined();
     const lines = (logs?.inputSchema["properties"] as { lines: { maximum: number; description: string } } | undefined)?.lines;
-    // The ceiling the model is told is the ceiling it is held to, below — one number, not two.
+    // The ceiling the model is told is the ceiling it is held to, below: one number, not two.
     expect(lines?.maximum).toBe(2000);
     expect(lines?.description).toContain("maximum 2000");
 });
@@ -141,7 +141,7 @@ test("trash moves the file somewhere recoverable instead of deleting it", async 
     // The trash lives under $HOME and the move is a rename, which files.ts refuses across filesystems by design.
     // A home of its own next to the file keeps both on ONE filesystem, which is the case this test means. Left to
     // the host they need not be: in a container job $HOME is a bind mount from the runner while tmpdir() is the
-    // image's own layer — two devices, so this passed on every laptop and failed only in CI.
+    // image's own layer: two devices, so this passed on every laptop and failed only in CI.
     vi.stubEnv("HOME", mkdtempSync(join(tmpdir(), "host-home-")));
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const path = join(root, "doomed.txt");
@@ -186,12 +186,12 @@ test("a command cannot escape the allowed folders by its working directory", asy
 test("a command waiting for input dies on the timeout with an explanation instead of hanging", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const result = await call("run_command", { command: "read -r line", cwd: root, timeoutMs: 1500 }, scopes({ roots: root }));
-    // Either the shell reads EOF from the closed stdin (fast, exit code) or the deadline kills it — both are
+    // Either the shell reads EOF from the closed stdin (fast, exit code) or the deadline kills it: both are
     // answers the agent can act on, and neither is a hang.
     expect(result.text).toMatch(/Exit code|killed after/);
 });
 
-test("describe names the shell, the home and the boundary — what the agent needs before its first command", async () => {
+test("describe names the shell, the home and the boundary: what the agent needs before its first command", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const described = await call("describe", {}, scopes({ roots: root }));
     expect(described.text).toContain("Shell for run_command:");

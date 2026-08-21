@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 
-/* A compact image-attachment thumbnail that reveals a large floating preview on hover — shared by the
+/* A compact image-attachment thumbnail that reveals a large floating preview on hover: shared by the
  * composer's staged chips and the sent user bubble so both read the same. The preview teleports to the overlay
  * target (the pop-out body while the chat is popped out, else <body>) so it escapes the chat scroller's
  * overflow-auto clipping. Sideways it hangs off the whole chat panel's nearer edge (the left, for the right-docked
@@ -18,11 +18,11 @@ const { overlayTarget } = useChatPopout();
 // recomputed from the thumb's rect each time it opens; undefined while hidden.
 const box = ref<{ left?: number; right?: number; top?: number; bottom?: number; maxWidth: number; maxHeight: number }>();
 
-const MARGIN = 16; // px — breathing room against the window edges.
-const GAP = 12; // px — between the thumb and the preview.
-const MIN_WIDTH = 240; // px — below this a side is too cramped to be worth preferring.
-const MAX_WIDTH = 900; // px — cap so the preview stays a preview on very wide windows.
-const MIN_HEIGHT = 160; // px — floor for the same reason, vertically.
+const MARGIN = 16; // px: breathing room against the window edges.
+const GAP = 12; // px: between the thumb and the preview.
+const MIN_WIDTH = 240; // px: below this a side is too cramped to be worth preferring.
+const MAX_WIDTH = 900; // px: cap so the preview stays a preview on very wide windows.
+const MIN_HEIGHT = 160; // px: floor for the same reason, vertically.
 
 // How much room a box leaves either side of it, once the gap and the window margin are paid for.
 const gutters = (rect: DOMRect, viewportWidth: number): [left: number, right: number] => [
@@ -32,12 +32,12 @@ const gutters = (rect: DOMRect, viewportWidth: number): [left: number, right: nu
 
 const show = (event: MouseEvent): void => {
     const el = event.currentTarget as HTMLElement;
-    // The thumb may live in the pop-out window, whose viewport (and fixed-position origin) is its own — measure and
+    // The thumb may live in the pop-out window, whose viewport (and fixed-position origin) is its own: measure and
     // clamp against that window, not the main realm's globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();
     // Hang the preview off the CHAT PANEL's edge whenever the window has room beside it. That space is workspace by
-    // definition, so the preview covers nothing belonging to the thing it previews — and, being measured from the
+    // definition, so the preview covers nothing belonging to the thing it previews, and, being measured from the
     // panel, it opens in the same place whether the thumb is a composer chip on the right or a sent attachment on
     // the left of its prompt. Keying off the thumb's own rect made placement move with the thumb, which is how a
     // left-hand thumbnail ends up throwing its preview rightwards over the very prompt it illustrates.
@@ -53,7 +53,7 @@ const show = (event: MouseEvent): void => {
     // Vertically the thumb stays the reference either way: the preview has to read as coming out of the image the
     // pointer is on, and the panel's full height says nothing about where in the transcript that is.
     // Flush with the thumb's bottom edge and growing up (the composer sits low), or with its top edge growing down
-    // for a thumb near the top of the transcript — whichever direction has more room.
+    // for a thumb near the top of the transcript: whichever direction has more room.
     const upRoom = rect.bottom - MARGIN;
     const growUp = upRoom >= win.innerHeight - rect.top - MARGIN;
     const maxHeight = Math.max(MIN_HEIGHT, growUp ? upRoom : win.innerHeight - rect.top - MARGIN);

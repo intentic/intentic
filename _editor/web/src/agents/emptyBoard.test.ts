@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // THE EMPTY BOARD, MOUNTED. Out of setup the desktop lands on the workspace, and this board is the first
-// screen most new users deliberately open — and on a box with nothing on it the things that make it work are
+// screen most new users deliberately open, and on a box with nothing on it the things that make it work are
 // easy to break silently: that it offers the way in rather than a composer it cannot send from, that the
 // docked chat then drops its copy of that offer, that an empty workspace is offered the one task needing no
 // code and none of the ones that need some, and that a starter fills the chat's composer rather than
@@ -39,7 +39,7 @@ afterEach(() => {
 });
 
 // The connection picture is the axis this screen turns on, so every test states it outright rather than
-// inheriting whatever the previous one left. Read: the daemon has answered, and the answer is "nothing" — no
+// inheriting whatever the previous one left. Read: the daemon has answered, and the answer is "nothing", no
 // account, and no free trial either, which is what most platforms serve (it is off unless an operator sets keys).
 beforeEach(() => {
     accountsLoaded.value = true;
@@ -69,7 +69,7 @@ it(`offers the way in rather than a box it cannot send from, and the docked chat
     const board = mount(AgentsView);
     await nextTick();
 
-    // The free channel, in the middle of the board — the same card the chat's gate shows (ConnectOffer).
+    // The free channel, in the middle of the board: the same card the chat's gate shows (ConnectOffer).
     expect(board.textContent).toContain(`Try free with Google`);
     expect([...board.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Continue with Google`))).toBe(true);
     // And the subscriptions under it, for a user who already pays for one.
@@ -89,7 +89,7 @@ it(`waits for the daemon before claiming nothing is connected`, async () => {
     const board = mount(AgentsView);
     await nextTick();
 
-    // "You have nothing connected" is a claim, and until the read lands it is one this screen may not make —
+    // "You have nothing connected" is a claim, and until the read lands it is one this screen may not make:
     // but the wait belongs to it too, or the chat would spin beside it saying the same thing.
     expect(board.textContent).toContain(`Checking your AI accounts…`);
     expect(board.textContent).not.toContain(`Try free with Google`);
@@ -98,7 +98,7 @@ it(`waits for the daemon before claiming nothing is connected`, async () => {
 
 /* AN EMPTY WORKSPACE OFFERS THE ONE TASK THAT NEEDS NO CODE, and nothing that needs some. The distinction is
  * the whole point of the branch and both halves are pinned here, because each has been got wrong once:
- *   · the chips that proposed cloning and scaffolding are gone and stay gone — getting EXISTING code in is
+ *   · the chips that proposed cloning and scaffolding are gone and stay gone: getting EXISTING code in is
  *     the workspace pane's offer, made properly there and in an agent's words here
  *   · but the board is not silent either, which is what it was: building something is the only suggestion a
  *     user with an empty box can press and get an artifact from */
@@ -123,7 +123,7 @@ it(`offers building on an empty workspace, and nothing that points at code which
     }
 });
 
-// Filled, not sent — the same contract every other starter has, and the reason the chips are suggestions.
+// Filled, not sent: the same contract every other starter has, and the reason the chips are suggestions.
 it(`fills the composer with the build task rather than sending it`, async () => {
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1` }] as never };
     const board = mount(AgentsView);
@@ -155,7 +155,7 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     expect(useChat().active.value.draft.value).toContain(`Explain this codebase`);
     expect(useChat().active.value.messages.value).toHaveLength(0);
     expect(useChat().conversations.value).toHaveLength(Math.max(before, 1));
-    // Still the empty board — filling the composer is not starting anything.
+    // Still the empty board: filling the composer is not starting anything.
     expect(board.textContent).toContain(`Start your first agent`);
 });
 
@@ -165,7 +165,7 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
  *
  * What the trial changes here is which of the two shapes this screen takes, so both halves are asserted: the
  * offer stops being the screen (the chat one column over has a live composer, so the board goes back to asking
- * for a task and hands the gate back), and it does NOT leave the screen — the free Google sign-in is the rung
+ * for a task and hands the gate back), and it does NOT leave the screen: the free Google sign-in is the rung
  * above the trial, with no daily cap, and hiding it until the allowance ran out would hide the better deal. */
 it(`chats on the free trial rather than demanding a sign-in first`, async () => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
@@ -186,7 +186,7 @@ it(`chats on the free trial rather than demanding a sign-in first`, async () => 
 });
 
 // And the moment the allowance is spent the trial stops being a way to send, so the offer takes the screen
-// back — the one press that removes the daily cap, at the moment it becomes the only way on.
+// back: the one press that removes the daily cap, at the moment it becomes the only way on.
 it(`hands the screen back to the offer once the trial is used up`, async () => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
     trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0, health: `healthy` };

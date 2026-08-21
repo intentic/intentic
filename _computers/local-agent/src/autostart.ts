@@ -152,7 +152,7 @@ const systemdUserAvailable = (): boolean => {
  * already given, and an agent that declares none keeps the journal. */
 export const systemdUserUnit = (spec: AutostartSpec, launcher: CliLauncher): string => {
     return `[Unit]
-Description=${spec.desktopName} — ${spec.desktopComment}
+Description=${spec.desktopName}: ${spec.desktopComment}
 After=network-online.target
 
 [Service]

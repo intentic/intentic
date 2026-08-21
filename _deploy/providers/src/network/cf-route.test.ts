@@ -32,16 +32,16 @@ test("read returns the route url plus the record's current target", async () => 
 });
 
 // On a fresh plan the tunnel is a pending create, so cname (a $ref to its output) resolves to the engine's
-// PENDING symbol; zoneId can be PENDING too when the cf node itself is pending. read/diff must tolerate both —
+// PENDING symbol; zoneId can be PENDING too when the cf node itself is pending. read/diff must tolerate both:
 // this is the exact crash that broke every fresh-setup preview ("expected string, received symbol").
 const PENDING_LIKE = Symbol("pending-output");
 
-test("read tolerates a PENDING cname — it never parses the field it doesn't use", async () => {
+test("read tolerates a PENDING cname: it never parses the field it doesn't use", async () => {
     const provider = createCfRouteProvider(api({ findDnsRecord: async () => undefined }));
     expect(await provider.read({ ...inputs, cname: PENDING_LIKE }, ctx())).toBeUndefined();
 });
 
-test("read returns undefined on a PENDING zoneId — the zone is itself a pending create", async () => {
+test("read returns undefined on a PENDING zoneId: the zone is itself a pending create", async () => {
     const provider = createCfRouteProvider(api({}));
     expect(await provider.read({ ...inputs, zoneId: PENDING_LIKE }, ctx())).toBeUndefined();
 });

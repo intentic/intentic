@@ -7,7 +7,7 @@ import { onScreen, unwatchOnScreen, watchOnScreen } from "./onScreen";
  * visibility alone reported them away in the very window they were reading in. */
 
 // jsdom answers `visible` for the page's own document and `prerender` for a detached one (no browsing context),
-// and neither can be set — so both windows are dressed by hand, the way the browser would report them.
+// and neither can be set, so both windows are dressed by hand, the way the browser would report them.
 const show = (doc: Document, visible: boolean): void => {
     Object.defineProperty(doc, `visibilityState`, { value: visible ? `visible` : `hidden`, configurable: true });
     doc.dispatchEvent(new Event(`visibilitychange`));
@@ -41,7 +41,7 @@ describe(`onScreen`, () => {
 
         show(popout, false);
 
-        // Both windows away — a minimized pop-out beside a background tab is nobody looking.
+        // Both windows away: a minimized pop-out beside a background tab is nobody looking.
         expect(onScreen.value).toBe(false);
         unwatchOnScreen(popout);
     });
@@ -55,7 +55,7 @@ describe(`onScreen`, () => {
 
         expect(onScreen.value).toBe(false);
 
-        // The document outlives the dock — a window handed back keeps it — so its later visibility must not
+        // The document outlives the dock: a window handed back keeps it, so its later visibility must not
         // speak for an app that is no longer rendered in it.
         show(popout, true);
 

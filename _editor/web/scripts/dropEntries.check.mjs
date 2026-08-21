@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { collectDroppedFiles, filesToEntries, isRootGitPath } from "../src/pages/workspace/dropEntries.ts";
 
-// Fake FileSystemEntry builders (only the fields the walk touches). fullPath is required — the walk dedupes on it
+// Fake FileSystemEntry builders (only the fields the walk touches). fullPath is required: the walk dedupes on it
 // to break symlink cycles; the real API always supplies a unique string, so the fakes do too (defaults to name).
 const fileEntry = (name, fullPath = `/${name}`) => ({ isFile: true, isDirectory: false, name, fullPath, file: (cb) => cb({ name }) });
 const dirEntry = (name, children, fullPath = `/${name}`) => ({
@@ -11,7 +11,7 @@ const dirEntry = (name, children, fullPath = `/${name}`) => ({
     isDirectory: true,
     name,
     fullPath,
-    // readEntries yields the whole batch once, then [] — mirrors the real batched reader the walk drains.
+    // readEntries yields the whole batch once, then []: mirrors the real batched reader the walk drains.
     createReader: () => {
         let drained = false;
         return {
@@ -30,7 +30,7 @@ const dirEntry = (name, children, fullPath = `/${name}`) => ({
 // A drop of one or more entry roots (a folder or loose file each). `null` roots model webkitGetAsEntry returning
 // nothing (a symlink/special item Chrome won't expose).
 const dt = (roots, files = []) => ({ items: roots.map((entry) => ({ kind: "file", webkitGetAsEntry: () => entry })), files });
-// The walk is parallel, so path ORDER isn't deterministic — compare as sorted sets.
+// The walk is parallel, so path ORDER isn't deterministic: compare as sorted sets.
 const paths = (result) => result.files.map((e) => e.path).sort();
 
 // A nested folder flattens to slash-joined relative paths. Give every entry a distinct fullPath so the visited set
@@ -45,7 +45,7 @@ const tree = dirEntry("root", [
 ]);
 assert.deepEqual(paths(await collectDroppedFiles(dt([tree]))), ["root/a.txt", "root/sub/b.txt", "root/sub/deep/c.txt"]);
 
-// Multiple directories + a loose file dropped together — the case that broke the sequential walk.
+// Multiple directories + a loose file dropped together: the case that broke the sequential walk.
 const multi = await collectDroppedFiles(
     dt([
         dirEntry("proj", [fileEntry("index.ts", "/proj/index.ts"), dirEntry("src", [fileEntry("app.ts", "/proj/src/app.ts")], "/proj/src")]),
@@ -71,7 +71,7 @@ const junk = await collectDroppedFiles(dt([withJunk]), (path) => scanned.push(pa
 assert.deepEqual(paths(junk), ["proj/.git/config", "proj/index.ts"]);
 assert.deepEqual(scanned.toSorted(), ["proj/.git/config", "proj/index.ts"]);
 
-// An already-aborted signal stops the walk immediately (cancel) — no files captured.
+// An already-aborted signal stops the walk immediately (cancel): no files captured.
 const canceled = await collectDroppedFiles(
     dt([dirEntry("big", [fileEntry("a.txt", "/big/a.txt"), fileEntry("b.txt", "/big/b.txt")])]),
     undefined,
@@ -127,7 +127,7 @@ assert.deepEqual(
     ["p.png", "folder/q.ts"],
 );
 
-// isRootGitPath: only the workspace ROOT's own .git (the /work pointer file the daemon also refuses) — the drop
+// isRootGitPath: only the workspace ROOT's own .git (the /work pointer file the daemon also refuses), the drop
 // that produces it is a repo's CONTENTS landing at the root.
 assert.equal(isRootGitPath(".git"), true);
 assert.equal(isRootGitPath(".git/config"), true);
@@ -135,7 +135,7 @@ assert.equal(isRootGitPath(".git/objects/ab/cdef"), true);
 // A NESTED repo's .git travels: dropping the repo's FOLDER, or its contents onto a folder, both land here.
 assert.equal(isRootGitPath("repo/.git"), false);
 assert.equal(isRootGitPath("repo/.git/config"), false);
-// Name-alike siblings at the root are ordinary content — segment-exact, not a prefix match.
+// Name-alike siblings at the root are ordinary content: segment-exact, not a prefix match.
 assert.equal(isRootGitPath(".gitignore"), false);
 assert.equal(isRootGitPath(".github/workflows/ci.yml"), false);
 assert.equal(isRootGitPath(".gitmodules"), false);

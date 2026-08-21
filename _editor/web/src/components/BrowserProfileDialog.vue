@@ -14,7 +14,7 @@ import { socketUrl as wsSocketUrl } from "../composables/sandbox/wsTicket";
  * image frames; we forward the user's mouse + keyboard back over the same socket. Modeled on terminalSession.ts
  * (same token+connect query-string auth over the sandbox's tunnel).
  *
- * `capability` is the connection this window belongs to, not the site — one site can be connected several times
+ * `capability` is the connection this window belongs to, not the site: one site can be connected several times
  * over (a work Reddit and a personal one), each with its own profile, so the connection is what identifies the
  * browser to open. `label` is what the user sees, and it names the ACCOUNT for the same reason: two windows onto
  * one site have to be tellable apart.
@@ -22,7 +22,7 @@ import { socketUrl as wsSocketUrl } from "../composables/sandbox/wsTicket";
  * `login` is the first visit: it opens the site's sign-in page, the user signs in (incl. 2FA/CAPTCHA) and
  * clicks "I'm done", and the daemon keeps the logged-in profile so the agent's browser tools reuse it.
  * `browse` is every visit after that: the SAME profile, already signed in, opened on the site's home page
- * for the user to do something in themselves. One component because it is one browser and one wire — what
+ * for the user to do something in themselves. One component because it is one browser and one wire: what
  * differs is where it starts, whether finishing re-attests the account, and the address bar, which only browsing
  * needs (the screencast is the page alone, so there is no window chrome in the picture to click). */
 
@@ -41,7 +41,7 @@ const viewW = ref(1280);
 const viewH = ref(800);
 const surface = ref<HTMLElement>();
 const imgEl = ref<HTMLImageElement>();
-// The address bar's text: the page's own URL, except while the user is editing it — a `url` frame landing
+// The address bar's text: the page's own URL, except while the user is editing it, a `url` frame landing
 // mid-type would eat what they were typing.
 const address = ref("");
 const editingAddress = ref(false);
@@ -54,7 +54,7 @@ let pendingSelection: ((text: string) => void) | undefined;
  * no frame ever carries it; the daemon answers a click that focused one with its options and this draws a real
  * menu over the control. Undefined whenever none is open. */
 const selectMenu = ref<SelectMenu | undefined>();
-// Closed here rather than on the daemon's say-so — leaving it up until a frame confirms the pick would read as
+// Closed here rather than on the daemon's say-so: leaving it up until a frame confirms the pick would read as
 // a click that did nothing, which is the whole complaint this menu exists to answer.
 const chooseOption = (index: number): void => {
     selectMenu.value = undefined;
@@ -103,7 +103,7 @@ const connect = async (): Promise<void> => {
             text?: string;
             menu?: SelectMenu | null;
         };
-        // The encoding alternates: a cheap jpeg while the page paints, a sharp webp once it settles — so the
+        // The encoding alternates: a cheap jpeg while the page paints, a sharp webp once it settles, so the
         // frame says which it is rather than the client assuming (screencast.ts).
         if (message.type === "frame" && message.data !== undefined && message.format !== undefined) {
             frame.value = `data:image/${message.format};base64,${message.data}`;
@@ -120,7 +120,7 @@ const connect = async (): Promise<void> => {
             pendingSelection?.(message.text ?? "");
             pendingSelection = undefined;
         } else if (message.type === "select") {
-            // A drop-down to draw, or null for "nothing is open now" — which closes one clicked away from.
+            // A drop-down to draw, or null for "nothing is open now", which closes one clicked away from.
             selectMenu.value = message.menu ?? undefined;
         } else if (message.type === "saved") {
             emit("done");
@@ -145,7 +145,7 @@ watch(
 );
 onBeforeUnmount(close);
 
-// Map a pointer event to the daemon viewport's coordinate space — viewportCoords is the shared rule, and this
+// Map a pointer event to the daemon viewport's coordinate space: viewportCoords is the shared rule, and this
 // only supplies the image and the size the `ready` frame reported. Nothing to map before the first frame paints.
 const coords = (event: MouseEvent): { x: number; y: number } =>
     imgEl.value === undefined ? { x: 0, y: 0 } : viewportCoords(event, imgEl.value, viewW.value, viewH.value);
@@ -188,19 +188,19 @@ const askSelection = (): Promise<string> =>
     });
 
 /* COPY AND CUT, ACROSS THE GAP. Copying inside that Chromium puts text on the SANDBOX's clipboard, which the
- * user's machine can't read — so the selection is fetched and written to their own clipboard here. The chord
+ * user's machine can't read, so the selection is fetched and written to their own clipboard here. The chord
  * still goes to the page afterwards (its own handlers may care), and only afterwards: a cut that ran first
  * would have deleted the very text being read. */
 const copyOut = async (chord: KeyFrame): Promise<void> => {
     const text = await askSelection();
     if (text !== "") {
-        // Unavailable outside a secure context, and refusable — a failed write must not eat the keystroke.
+        // Unavailable outside a secure context, and refusable: a failed write must not eat the keystroke.
         await navigator.clipboard?.writeText(text).catch(() => undefined);
     }
     sendMsg(chord);
 };
 
-// Which half of the keyboard this keystroke belongs to is keyIntent's decision — see that module for why a
+// Which half of the keyboard this keystroke belongs to is keyIntent's decision: see that module for why a
 // paste is left to the host and a select-all is not.
 const onKeyDown = (event: KeyboardEvent): void => {
     const intent = keyIntent(event);
@@ -230,7 +230,7 @@ const onPaste = (event: ClipboardEvent): void => {
     sendMsg({ type: "text", text });
 };
 
-// A typed address is a place, not a URL — "reddit.com/r/rust" is what a person writes, so assume https rather
+// A typed address is a place, not a URL: "reddit.com/r/rust" is what a person writes, so assume https rather
 // than handing the daemon something Chromium would refuse to navigate to.
 const go = (): void => {
     const typed = address.value.trim();
@@ -263,16 +263,16 @@ const finish = (): void => {
         :open="visible"
         size="xl"
         :dismissable="false"
-        :header="browsing ? `${label} — your browser` : `Log in to ${label}`"
+        :header="browsing ? `${label}, your browser` : `Log in to ${label}`"
         @update:open="!$event && cancel()"
     >
         <p class="mb-3 text-xs text-muted">
             <template v-if="browsing">
-                This is the signed-in browser the agent uses for {{ label }} — do whatever you need in it. The agent can't use it while this window is
+                This is the signed-in browser the agent uses for {{ label }}: do whatever you need in it. The agent can't use it while this window is
                 open, and anything you change here it sees next time.
             </template>
             <template v-else>
-                Sign in as you would normally — including any 2FA. When you're on your logged-in home page, click
+                Sign in as you would normally: including any 2FA. When you're on your logged-in home page, click
                 <b>I'm done</b> and the agent will act as you here. Your session stays inside your sandbox.
             </template>
         </p>
@@ -335,7 +335,7 @@ const finish = (): void => {
                 <Icon name="spinner" spin />
                 <span>{{ status === "error" ? "Couldn't start the browser." : "Starting the browser…" }}</span>
             </div>
-            <!-- An open drop-down, which the picture itself can never show — see BrowserSelectMenu. -->
+            <!-- An open drop-down, which the picture itself can never show: see BrowserSelectMenu. -->
             <BrowserSelectMenu
                 v-if="selectMenu"
                 :menu="selectMenu"
@@ -348,7 +348,7 @@ const finish = (): void => {
         </div>
 
         <template #footer>
-            <!-- Browsing ends by closing, and the daemon flushes the profile on the way out — so there is one
+            <!-- Browsing ends by closing, and the daemon flushes the profile on the way out, so there is one
                  button, not a Cancel that would suggest the visit could be undone. -->
             <Button v-if="browsing" label="Close" :loading="status === 'saving'" @click="finish">
                 <template #icon><Icon name="check" /></template>

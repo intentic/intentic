@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  *
  * A vue-query key is a path, and a path is easy to type twice. It used to be: a query registered under
  * `sandboxKey("git","changes")` and six other files invalidated `["git","changes"]`, a literal nothing held to
- * the first. The failure that costs is silent — a key that matches nothing invalidates nothing, so the screen
+ * the first. The failure that costs is silent: a key that matches nothing invalidates nothing, so the screen
  * keeps showing what it had and no error is raised anywhere. Worse, the two spellings are not equivalent:
  * `sandboxKey` APPENDS the active sandbox id, so the bare literal reaches EVERY sandbox's entry and the scoped
  * one reaches only the active sandbox's. Both were in use and neither said which it meant.
@@ -31,13 +31,13 @@ const registry = resolve(here, `queryKeys.ts`);
  * inconvenient: apiImpl hands `sandboxKey` to EXTENSIONS as `api.key(...)`. Their key paths are theirs,
  * declared in their own packages; a registry in this app cannot enumerate them and should not try.
  *
- * useSandbox needs no entry — it DEFINES `sandboxKey` rather than importing it, and holds the one key with no
+ * useSandbox needs no entry: it DEFINES `sandboxKey` rather than importing it, and holds the one key with no
  * family (the sandbox list, which is the registry of all sandboxes rather than data from one). */
 const EXEMPT = new Map<string, string>([[`extension-host/apiImpl.ts`, `hands sandboxKey to extensions as api.key()`]]);
 
-/* Whether a file reaches for the scoping rule, asked as "does it IMPORT it". Prose mentions it too — the
+/* Whether a file reaches for the scoping rule, asked as "does it IMPORT it". Prose mentions it too: the
  * comment in sandboxScope explaining why client state needs its own re-scoping is a useful sentence, not a
- * violation — and an import is the only way to actually get at it. */
+ * violation, and an import is the only way to actually get at it. */
 const importsSandboxKey = (text: string): boolean => /import\s*\{[^}]*\bsandboxKey\b[^}]*\}/.test(text);
 
 const sourceFiles = (dir: string): string[] => {
@@ -62,10 +62,10 @@ const appSources = sourceFiles(appRoot)
     .filter((file) => !AUTHORITIES.has(file))
     .map((file) => ({ path: relative(appRoot, file).replaceAll(`\\`, `/`), text: readFileSync(file, `utf8`) }));
 
-// Nothing to guard is a broken guard, not a passing one — a moved directory would otherwise read as green.
+// Nothing to guard is a broken guard, not a passing one: a moved directory would otherwise read as green.
 const MIN_SCANNED = 200;
 
-/* The array literal that follows a `queryKey`, read by balancing brackets rather than by regex — a key can span
+/* The array literal that follows a `queryKey`, read by balancing brackets rather than by regex: a key can span
  * lines and can hold nested arrays, and a lazy `\[[^\]]*\]` silently stops at the first inner bracket. */
 const queryKeyArrays = (text: string): string[] => {
     const found: string[] = [];
@@ -103,7 +103,7 @@ describe(`cache key registry`, () => {
     });
 
     /* Tests are the deliberate exception, and for the opposite reason to the rule. A test that pins the SHAPE a
-     * family produces — the sandbox predicate matching ["workspace","tree","all","sbx-1"] and not "sbx-2" — has
+     * family produces (the sandbox predicate matching ["workspace","tree","all","sbx-1"] and not "sbx-2") has
      * to spell that shape out, or it restates the implementation and can never disagree with it. */
     it(`keeps every cache key out of inline literals`, () => {
         const offenders = appSources
@@ -131,7 +131,7 @@ describe(`cache key registry`, () => {
     /* THE OTHER END OF THE WIRE. The daemon pushes staleness BY NAME: a write to `.intentic/config/personas.json`
      * carries `invalidates: ["personas","capabilities","manifests"]` from the contract's WORKSPACE_STATE_FILES,
      * and systemEvents hands that bare name to invalidateQueries. A name on that list with no family here is a
-     * push that lands on nothing — the file changes, the daemon reports it, and the screen does not move. It is
+     * push that lands on nothing: the file changes, the daemon reports it, and the screen does not move. It is
      * the same silent failure as an inline literal, arriving from the other side of the contract, so it is
      * checked the same way rather than left to be noticed.
      *

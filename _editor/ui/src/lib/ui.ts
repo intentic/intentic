@@ -21,7 +21,7 @@ import { twMerge } from "tailwind-merge";
  *
  * TWO THINGS ARE RETIRED, and both grew back once already:
  *
- *   • `outlined`, which was the boring button's SECOND spelling — 30 call sites of transparent-and-hard-bordered
+ *   • `outlined`, which was the boring button's SECOND spelling: 30 call sites of transparent-and-hard-bordered
  *     against the neutral fill's own, chosen by which file you were in rather than by what the button did. The
  *     settings pages were outlined throughout and the sandbox pages filled throughout, and the two tone-less
  *     ones ("New extension", "See what changed…") came out wearing a full-strength accent border, so the same
@@ -44,7 +44,7 @@ import { twMerge } from "tailwind-merge";
  * this app's tinted language, leaving success/warn/danger as Aura's solid fills; with no way to write a tinted
  * destructive button as a <Button>, the recipes were written here instead. The result was two action buttons
  * that looked alike, sized differently (text-xs at py-1 here, text-sm at py-1.5 there) and were chosen between
- * arbitrarily — 201 <Button> against 31 of these, sometimes both in one header.
+ * arbitrarily: 201 <Button> against 31 of these, sometimes both in one header.
  *
  * primeng.css now tints every solid severity, so `<Button severity="danger">` IS what buttonDanger drew. One
  * action button: <Button>, with `severity` for tone and `class` for geometry.

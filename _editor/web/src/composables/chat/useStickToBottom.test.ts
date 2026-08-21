@@ -6,13 +6,13 @@ import { useStickToBottom } from "./useStickToBottom";
 /* The follow rule, and the fact underneath it that has no other way of being stated: the observer that reports
  * the transcript growing belongs to the WINDOW its boxes live in. The chat panel is teleported into a real
  * pop-out window while its code stays in the opener, and an observer built in the opener is driven by the
- * opener's rendering loop — which a browser stops running for a window that is minimized, occluded or in a
+ * opener's rendering loop, which a browser stops running for a window that is minimized, occluded or in a
  * background tab, i.e. the app window whenever the user is working in the chat window in front of it. The
  * symptom was a message sent from the pop-out landing below the fold with nothing to bring it up.
  *
  * jsdom lays nothing out and has no ResizeObserver, so both are stood in for: the geometry is the handful of
  * numbers the rule actually reads (and the clamp the browser applies to a scrollTop write), and the observer is
- * a recording stub installed per window — which is what makes "built by the right window" assertable at all. */
+ * a recording stub installed per window, which is what makes "built by the right window" assertable at all. */
 
 interface FakeObserver {
     readonly targets: Element[];
@@ -77,7 +77,7 @@ const mountPanel = (): { scroller: HTMLElement; poppedOut: Ref<boolean>; pin: ()
     return { scroller: scroller.value as HTMLElement, poppedOut, pin: () => pin(), follow: () => follow() };
 };
 
-// A second window to be teleported into — an iframe is the one document jsdom gives with a defaultView of its
+// A second window to be teleported into: an iframe is the one document jsdom gives with a defaultView of its
 // own, which is the only thing the composable asks a pop-out window for.
 const otherWindow = (): Window => {
     const frame = document.createElement(`iframe`);
@@ -132,7 +132,7 @@ it(`rebuilds the growth observer in the window the panel is teleported into`, as
     // Both boxes again: the transcript growing, and the room it is read in shrinking.
     expect((popoutObservers[0] as FakeObserver).targets).toHaveLength(2);
 
-    // The pop-out window's own report is what follows the transcript now — the opener's is gone, and in a real
+    // The pop-out window's own report is what follows the transcript now: the opener's is gone, and in a real
     // browser it would have stopped being delivered the moment that window stopped painting.
     box.scrollHeight = 1400;
     (popoutObservers[0] as FakeObserver).fire();

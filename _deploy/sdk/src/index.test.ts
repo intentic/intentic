@@ -103,7 +103,7 @@ test("the derived platform trio slices to a cloudflare-free subgraph", () => {
     }, "example.com");
 
     // The hermetic e2e applies exactly this slice with no Cloudflare credentials. It only holds while the
-    // trio's inputs reference nothing but the host (zone lands as string literals) — a cloudflare/cf-route/
+    // trio's inputs reference nothing but the host (zone lands as string literals): a cloudflare/cf-route/
     // tunnel ref added to any of them must fail here, in the unit tier, not minutes into the e2e.
     const sliced = subgraph(graph, ["host-git", "host-git-runner", "host-deploy"]);
     expect(Object.keys(sliced.resources).toSorted()).toEqual(["host", "host-deploy", "host-git", "host-git-runner"]);

@@ -5,29 +5,29 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 
-/* THE COMPOSER'S PERSONA PICKER — "who is this chat when it reaches the outside world".
+/* THE COMPOSER'S PERSONA PICKER: "who is this chat when it reaches the outside world".
  *
  * WHY THE COMPOSER IS THE RIGHT PLACE. The persona layer was born on the unattended side: an automation that
  * wakes at 3am names a card, and everything about the rule was written for the wake nobody is watching. But a
- * person at a composer has the same question and no way to answer it — "reply to this as Work, not as me" was a
+ * person at a composer has the same question and no way to answer it: "reply to this as Work, not as me" was a
  * sentence you could only write in the prompt and hope, while the automations form two screens away had a
  * dropdown that MEANT it. The bound is per turn in the daemon (turnPersona), so the chat was one control short
  * of a feature it already had.
  *
  * ANYONE IS A REAL ROW, not the absence of a pick. Attended and unattended mean opposite things by an empty
- * persona — a chat with none keeps every connected account, a wake with none reaches nothing — and the one
+ * persona: a chat with none keeps every connected account, a wake with none reaches nothing, and the one
  * place a reader can be told which of those they are looking at is the row that says it in words.
  *
  * A CARD THAT CANNOT ACT IS STILL OFFERED, marked rather than hidden. A persona whose accounts are all signed
  * out is the ordinary state of a freshly cloned workspace: hiding it would answer "where did Work go" with
- * silence, and picking it is still meaningful — the turn is bounded, it simply cannot post yet. */
+ * silence, and picking it is still meaningful: the turn is bounded, it simply cannot post yet. */
 
 const { picked } = defineProps<{ picked?: string }>();
 const emit = defineEmits<{ picked: [persona: string | undefined] }>();
 
 const { personas, isConnected } = usePersonas();
 
-// Whether a card can act at all right now. One signed-in account is enough — a persona naming three and
+// Whether a card can act at all right now. One signed-in account is enough: a persona naming three and
 // holding one still reaches that one, so only the card that reaches nothing is marked.
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
 
@@ -37,7 +37,7 @@ const accountsOf = (persona: Persona): string => persona.capabilities.join(` · 
 
 const empty = computed(() => personas.value.length === 0);
 
-/* The two rows that lead to the personas page are LINKS — the page has an address, so hovering one shows it,
+/* The two rows that lead to the personas page are LINKS: the page has an address, so hovering one shows it,
  * the browser's own menu can copy it, and Ctrl/⌘-click opens it beside the chat instead of navigating away
  * from the message half-written in the composer. Re-emitting `picked` is only how this menu closes itself, so
  * it happens on the plain click alone: a click that opens another tab must leave this one exactly as it was. */
@@ -50,13 +50,13 @@ const closeMenu = (event: MouseEvent): void => {
 
 <template>
     <!-- A hairline between rows so a picked row and the row you are hovering next to it read as two highlights
-         rather than one merged block — the same seam the other picker lists keep. -->
+         rather than one merged block: the same seam the other picker lists keep. -->
     <div class="flex flex-col gap-0.5 p-1">
         <!-- Nothing set up is the ordinary state, not an error, and the sentence's job is to say what that
              MEANS here (this chat can reach everything) and where personas come from. -->
         <template v-if="empty">
             <p class="px-2.5 py-3 text-2xs text-subtle">
-                No personas yet, so this chat speaks through every account you've connected. Set one up to send a message as one person — with only
+                No personas yet, so this chat speaks through every account you've connected. Set one up to send a message as one person: with only
                 that person's accounts in reach.
             </p>
             <RouterLink
@@ -71,7 +71,7 @@ const closeMenu = (event: MouseEvent): void => {
 
         <template v-else>
             <!-- THE TICK IS WHY THIS LIST GREW A THIRD COLUMN. Picked and merely-hovered were painted the same
-                 tint, and the pointer is resting on a row the entire time the menu is open — so the one question
+                 tint, and the pointer is resting on a row the entire time the menu is open, so the one question
                  the list exists to answer ("who is it set to?") was the one it could not answer while you were
                  reading it. Every other picker in the app already ticks its current row; this one now agrees.
                  It also has to be on ANYONE, which is a real choice here rather than the absence of one: a chat
@@ -100,12 +100,12 @@ const closeMenu = (event: MouseEvent): void => {
                 :aria-selected="persona.id === picked"
                 @click="emit(`picked`, persona.id)"
             >
-                <!-- The same face this persona wears on its own page and in the chat rail — assembled from its
+                <!-- The same face this persona wears on its own page and in the chat rail: assembled from its
                      name, so one persona is one character wherever you meet it. Smaller here, and that is the
                      only thing this row gets to say about it: a picker is a list of rows that happen to name
                      personas, not a place you go to look at them.
                      It is drawn at FULL COLOUR even when the card cannot post yet. That was the one place a
-                     dimmed face could still be argued for — you are choosing who to send as — but the line
+                     dimmed face could still be argued for: you are choosing who to send as, but the line
                      underneath already says "not signed in yet" in words, and a greyed face said it in a way
                      that read as "this row is disabled" about a row that is perfectly pickable. -->
                 <PersonaFace :persona :size="28" class="mt-0.5" />
@@ -118,10 +118,10 @@ const closeMenu = (event: MouseEvent): void => {
                          post anywhere, which is true and is not the reader's problem at the moment they are
                          picking who to speak as: an account-less persona still bounds the turn and still names
                          the speaker, so it is an ordinary row rather than a broken one. What genuinely blocks a
-                         send — a signed-out account, a card that no longer exists — is said by the composer,
+                         send (a signed-out account, a card that no longer exists) is said by the composer,
                          once, where the send is about to happen (ChatPane's personaNotice). -->
                     <span v-if="persona.capabilities.length > 0" class="truncate text-2xs" :class="ready(persona) ? `text-subtle` : `text-muted`">
-                        {{ accountsOf(persona) }}<template v-if="!ready(persona)"> — not signed in yet</template>
+                        {{ accountsOf(persona) }}<template v-if="!ready(persona)">, not signed in yet</template>
                     </span>
                 </span>
                 <Icon v-if="persona.id === picked" name="check" class="ml-auto mt-1 shrink-0 text-2xs text-primary-500" aria-hidden="true" />

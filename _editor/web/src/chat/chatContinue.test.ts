@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 //
-// THE WAY BACK FROM A TURN THAT STOPPED, asserted through the real composer and read off the DOM — because the
+// THE WAY BACK FROM A TURN THAT STOPPED, asserted through the real composer and read off the DOM, because the
 // whole feature is an affordance, and a flag on the conversation that no surface offers is worth nothing.
 //
 // It comes from the report behind it: a turn ends ("agent did not complete"), or the user declines a tool and
 // the agent halts waiting to be told what to do, and the only way on is to type the word "Continue" into the
-// box. Every time. The three things that have to be true for that to stop are all here — the strip appears with
+// box. Every time. The three things that have to be true for that to stop are all here: the strip appears with
 // its button, Enter on an empty composer does the same thing, and neither of them shows up on a chat where
 // continuing would be wrong.
 import { VueQueryPlugin } from "@tanstack/vue-query";
@@ -20,7 +20,7 @@ import { useLayout } from "../composables/useLayout";
 import { router } from "../router";
 import ChatPanel from "./ChatPanel.vue";
 
-// The import-time globals a mounted chat surface needs — see chatPanelPanes.test.ts, which explains each.
+// The import-time globals a mounted chat surface needs: see chatPanelPanes.test.ts, which explains each.
 vi.hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
@@ -31,7 +31,7 @@ vi.hoisted(() => {
 });
 
 // The fleet roster and the workflow ledger, which the pane asks about on mount and neither of which this file
-// is about — an empty answer costs nothing and keeps the polling out of it.
+// is about: an empty answer costs nothing and keeps the polling out of it.
 vi.mock(`../composables/agents/useAgents`, async () => {
     const { computed } = await import(`vue`);
     return {
@@ -51,7 +51,7 @@ vi.mock(`../composables/agents/useWorkflowRuns`, async (importOriginal) => ({
 }));
 /* THE COMPOSER ONLY EXISTS WHEN THE SANDBOX DOES: unreachable, the whole footer yields to "Chat is available
  * once your sandbox is connected", and every assertion below would pass against a pane with no controls in it
- * at all. So this one is mocked ONLINE — the state the feature lives in. */
+ * at all. So this one is mocked ONLINE: the state the feature lives in. */
 vi.mock(`../composables/sandbox/useSandbox`, async (importOriginal) => {
     const { computed } = await import(`vue`);
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
@@ -96,12 +96,12 @@ const mountPanel = async (): Promise<void> => {
     await settle();
 };
 
-// A button by the words on it, or nothing — how every affordance here is read off the DOM.
+// A button by the words on it, or nothing: how every affordance here is read off the DOM.
 const button = (label: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll<HTMLButtonElement>(`button`)].find((element) => element.textContent?.trim().startsWith(label));
 // The offer, as the DOM has it: the button that carries the word, or nothing.
 const continueButton = (): HTMLButtonElement | undefined => button(`Continue`);
-// The one hint slot under the box — how anyone learns the key exists.
+// The one hint slot under the box: how anyone learns the key exists.
 const composerText = (): string => document.querySelector(`.chat-pane`)?.textContent ?? ``;
 const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>(`.chat-pane textarea`)!;
 
@@ -124,7 +124,7 @@ beforeEach(async () => {
     app = undefined;
     localStorage.clear();
     resetChat();
-    // `connected` is the composer's own gate — with no account on the provider the box is inert and says so.
+    // `connected` is the composer's own gate: with no account on the provider the box is inert and says so.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, email: `a@b.c` }] as never };
     useLayout().setChatWidth(2000);
     await nextTick();
@@ -152,7 +152,7 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
 });
 
 /* THE WHOLE POINT, in one keystroke. Enter on an empty box did nothing at all before this, so there is no habit
- * being broken — and the hint slot has to say so, because a shortcut nothing advertises is a shortcut only its
+ * being broken, and the hint slot has to say so, because a shortcut nothing advertises is a shortcut only its
  * author uses. */
 it(`makes Enter on an empty composer continue, and says so under the box`, async () => {
     const conversation = stoppedChat();
@@ -167,7 +167,7 @@ it(`makes Enter on an empty composer continue, and says so under the box`, async
 });
 
 /* WHAT THE OFFER MUST NOT DO. Typing is the user saying what happens next in their own words, so the strip goes
- * and the key goes back to sending the draft — a Continue that fired over a half-written message, or an Enter
+ * and the key goes back to sending the draft: a Continue that fired over a half-written message, or an Enter
  * that sent "continue" instead of what was in the box, would be worse than the typing it replaced. */
 it(`stands down the moment the user types something of their own`, async () => {
     const conversation = stoppedChat();
@@ -185,7 +185,7 @@ it(`stands down the moment the user types something of their own`, async () => {
     expect(enqueue).toHaveBeenCalledWith(`actually, run the tests first`, [], undefined);
 });
 
-/* THE STANDING VERSION OF THE PRESS, offered at the moment anyone wishes for it — reading "this turn stopped
+/* THE STANDING VERSION OF THE PRESS, offered at the moment anyone wishes for it: reading "this turn stopped
  * before it finished" again. Arming it is one click from there, and the strip then says what the chat is doing
  * about itself, because a switch with no readout and no way off is a trap rather than an automation. */
 it(`offers to keep continuing by itself, and says so once it is on`, async () => {
@@ -199,7 +199,7 @@ it(`offers to keep continuing by itself, and says so once it is on`, async () =>
 
     expect(conversation.autoContinue.value).toBe(true);
     expect(composerText()).toContain(`Auto-continue is on`);
-    // The offer is not repeated once taken — the armed strip is where the state and the way out of it live now.
+    // The offer is not repeated once taken: the armed strip is where the state and the way out of it live now.
     expect(button(`Auto-continue`)).toBeUndefined();
     expect(continueButton()).toBeDefined();
 
@@ -227,7 +227,7 @@ it(`keeps the armed line up on a chat with nothing to continue`, async () => {
 });
 
 // A chat that ended cleanly is not offered anything: the strip is for work left hanging, and one that showed up
-// after every finished answer would be noise the reader learns to look past — including on the turns it matters.
+// after every finished answer would be noise the reader learns to look past: including on the turns it matters.
 it(`says nothing on a chat whose turn finished`, async () => {
     const chat = useChat();
     chat.active.value.restoreMessages([

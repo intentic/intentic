@@ -5,7 +5,7 @@ import { useRouter } from "vue-router";
 
 /* THE ONE PLACE THE SESSION'S NAME IS SHOWN WHOLE, and in every form anyone pastes it in. Raised from the
  * agent page's chip (a popover on desktop, a sheet on a phone), because that page is where a name is looked UP
- * — the board is where it is glanced at, and glancing wants one gesture, not a menu.
+ *: the board is where it is glanced at, and glancing wants one gesture, not a menu.
  *
  * Three forms, because the same name is asked for by three different things and only one of them is on screen
  * anywhere today:
@@ -15,7 +15,7 @@ import { useRouter } from "vue-router";
  * Spelling all three out beats a single value plus a rule the reader has to remember ("drop the agent/ off the
  * front"), and it is what makes the copy honest: what you press is beside the exact text it hands over.
  *
- * The values stay selectable text rather than becoming buttons themselves — a row you can drag a caret through
+ * The values stay selectable text rather than becoming buttons themselves: a row you can drag a caret through
  * is the escape hatch for the half of a name someone actually wants, and nesting a copy button inside a copy
  * target would make the row answer one press two ways. */
 
@@ -23,7 +23,7 @@ const { agentId, branch } = defineProps<{ agentId: string; branch: string }>();
 
 const router = useRouter();
 // Through the router, so the app's own base path is part of the link rather than something the reader has to
-// add back. Same origin the user is already on — which is the sandbox this agent lives in.
+// add back. Same origin the user is already on, which is the sandbox this agent lives in.
 const link = computed(() => `${globalThis.location.origin}${router.resolve({ name: `agent`, params: { id: agentId } }).href}`);
 
 const ROW = `flex items-start gap-2 rounded-lg px-2.5 py-1.5`;
@@ -31,7 +31,7 @@ const ROW = `flex items-start gap-2 rounded-lg px-2.5 py-1.5`;
 
 <template>
     <!-- No hover labels down this column. Each row already reads "<what it is> <the value> [copy]", so a hint
-         on the button could only repeat the label six pixels to its left — and three of them stacked is a
+         on the button could only repeat the label six pixels to its left, and three of them stacked is a
          column that pops a box wherever the pointer rests on its way to the one you want. -->
     <div class="flex flex-col p-1">
         <div :class="ROW">

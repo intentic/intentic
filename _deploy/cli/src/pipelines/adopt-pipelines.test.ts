@@ -53,7 +53,7 @@ test("the apply workflow injects every secret, diffs against the applied tag, an
 });
 
 // The workflows are rendered from .eta templates; a stray space or dropped newline would produce a file that
-// still "looks" right but no longer parses. Parse both as YAML and assert the structure the runner depends on —
+// still "looks" right but no longer parses. Parse both as YAML and assert the structure the runner depends on:
 // this is the durability guard the templating switch is for.
 test("both rendered workflows are valid YAML with the expected job structure", () => {
     const intent = parse(intentWorkflowYaml(inputs)) as {
@@ -62,7 +62,7 @@ test("both rendered workflows are valid YAML with the expected job structure", (
     };
     expect(intent.on.push.branches).toEqual(["main"]);
     expect(intent.jobs.resolve["runs-on"]).toBe("docker");
-    // The env block's indentation must nest under the job — a mis-indented entry would land at the wrong level.
+    // The env block's indentation must nest under the job: a mis-indented entry would land at the wrong level.
     expect(intent.jobs.resolve.env["GIT_USER"]).toBe(`\${{ secrets.${GIT_USER_SECRET} }}`);
     expect(intent.jobs.resolve.env["CLOUDFLARE_API_TOKEN"]).toBe(`\${{ secrets.CLOUDFLARE_API_TOKEN }}`);
 

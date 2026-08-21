@@ -5,7 +5,7 @@ const { getSessionToken, rejectSessionToken } = useSandboxSession();
 
 export class SandboxUnaddressedError extends Error {
     constructor() {
-        super(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
+        super(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
     }
 }
 

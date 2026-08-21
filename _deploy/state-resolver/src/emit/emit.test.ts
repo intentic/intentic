@@ -13,7 +13,7 @@ import { emit } from "./emit.js";
 const host: HostIntent = { id: "host", input: { address: "203.0.113.10", user: "deploy", sshKey: env("HOST_SSH_KEY") } };
 const cloudflare: CloudflareIntent = { id: "cf", input: { apiToken: env("CLOUDFLARE_API_TOKEN") } };
 
-// The full single-combination assignment for an intent under the default catalog — the one combo emit
+// The full single-combination assignment for an intent under the default catalog: the one combo emit
 // supports today.
 const assign = (intent: IntentSet, catalog: Catalog = forgejoCatalog): Assignment => {
     const byNeed = new Map<string, string>();
@@ -147,7 +147,7 @@ test("the GitLab stack derives gl-repo + one app-scoped gl-ci + per-env Komodo d
     // The CI's notify step reaches Komodo through its PUBLIC url (hosted runners are external).
     expect(byId.get("app-gl-ci")?.inputs["komodoUrl"]).toEqual(makeRef("host-deploy", "url"));
 
-    // Komodo is unconditional (the deploy orchestrator on every stack); Forgejo + its runner are not derived —
+    // Komodo is unconditional (the deploy orchestrator on every stack); Forgejo + its runner are not derived:
     // GitLab is the git/CI/registry. Komodo pulls from the GitLab registry with the account's PAT.
     const types = nodes.map((node) => node.type);
     expect(types).not.toContain("forgejo");
@@ -281,7 +281,7 @@ test("notification sinks are derived only for apps that wire notify, while the p
     };
 
     const types = emit(intent, assign(intent), "example.com").map((node) => node.type);
-    // Only "one" wires notify — "two" opts out.
+    // Only "one" wires notify: "two" opts out.
     expect(types.filter((type) => type === "forgejo-notify")).toHaveLength(1);
     expect(types.filter((type) => type === "komodo-notify")).toHaveLength(1);
     expect(types.filter((type) => type === "forgejo")).toHaveLength(1);
@@ -310,7 +310,7 @@ test("a services-only intent emits the service + its route + tunnel, but no app 
     const signoz = nodes.find((node) => node.id === "obs");
     expect(signoz?.type).toBe("signoz");
     expect(signoz?.inputs["domain"]).toBe("signoz.example.com");
-    // The build platform exists only to ship apps from source — a services-only intent skips it.
+    // The build platform exists only to ship apps from source: a services-only intent skips it.
     expect(nodes.some((node) => node.type === "forgejo")).toBe(false);
     expect(nodes.some((node) => node.type === "komodo")).toBe(false);
     // The service's dashboard port is aggregated onto the host tunnel's ingress.
@@ -589,7 +589,7 @@ test("a workspace-only intent emits the sandbox node + its wildcard preview rout
     expect(nodes.some((node) => node.type === "forgejo")).toBe(false);
     expect(nodes.some((node) => node.type === "komodo")).toBe(false);
     // The wildcard hostname flows unchanged into the cf-route (id slugged) and routes to the sandbox's preview
-    // proxy on the host tunnel's ingress (the daemon stays host-internal — preview-only).
+    // proxy on the host tunnel's ingress (the daemon stays host-internal: preview-only).
     expect(nodes.find((node) => node.type === "cf-route")?.inputs["hostname"]).toBe("*.example.com");
     expect(nodes.find((node) => node.id === "host-tunnel")?.inputs["ingress"]).toEqual([{ hostname: "*.example.com", port: 5173 }]);
 });
@@ -608,7 +608,7 @@ test("a workspace exposing a service wires it as an MCP tool (domain URL + gener
 
     const sandbox = emit(intent, assign(intent), "example.com").find((node) => node.id === "workspace");
     // The tool is addressed by its routed domain (works cross-host), with an intentic-generated bearer (raw
-    // SecretRef here — the $secret form is the compiled shape). The token key is shared with the tool itself.
+    // SecretRef here: the $secret form is the compiled shape). The token key is shared with the tool itself.
     expect(sandbox?.inputs["tools"]).toEqual([
         { name: "obs", url: "https://signoz.example.com/mcp", token: { kind: "secret", source: "generated", key: "SIGNOZ_MCP_TOKEN" } },
     ]);
@@ -640,7 +640,7 @@ test('a host with via:"cloudflared" threads the transport onto every node deploy
         apps: [oneApp],
     };
     const nodes = emit(intent, assign(intent), "example.com");
-    // Every SSH-deploying node — not just the host — must carry via, so the executor tunnels to a NAT'd self
+    // Every SSH-deploying node, not just the host: must carry via, so the executor tunnels to a NAT'd self
     // host for the control plane, its runner, the backup job, and the tunnel connector alike.
     for (const id of ["host", "host-git", "host-git-runner", "host-deploy", "host-backup", "host-tunnel"]) {
         expect(nodes.find((node) => node.id === id)?.inputs["via"], id).toBe("cloudflared");

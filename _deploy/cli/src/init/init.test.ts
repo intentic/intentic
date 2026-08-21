@@ -10,7 +10,7 @@ describe("selfHostConfig", () => {
         expect(config).toContain(`i.have.cloudflare("cf"`);
         expect(config).not.toContain("203.0.113.10");
         expect(config).not.toContain(`i.have.host(`);
-        // The zero-dependency starter app needs no database — keep the scaffold provisionable without extra secrets.
+        // The zero-dependency starter app needs no database: keep the scaffold provisionable without extra secrets.
         expect(config).not.toContain("PRODUCTION_DATABASE_URL");
     });
 

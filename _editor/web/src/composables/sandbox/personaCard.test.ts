@@ -20,7 +20,7 @@ describe(`personaSlug`, () => {
 });
 
 describe(`storedPowers`, () => {
-    /* THE COMMITTED FILE IS A RECORD OF DECISIONS. A card nobody has bounded must store no powers at all —
+    /* THE COMMITTED FILE IS A RECORD OF DECISIONS. A card nobody has bounded must store no powers at all:
      * otherwise the diff on a card someone DID bound is buried in noise on every other card. */
     it(`stores nothing for a card that grants everything`, () => {
         expect(storedPowers(FULL_POWERS)).toBeUndefined();
@@ -37,7 +37,7 @@ describe(`storedPowers`, () => {
         expect(storedPowers({ ...FULL_POWERS, connectors: [`github`] })).toMatchObject({ connectors: [`github`] });
     });
 
-    // An untouched group must not appear at all — a written-out list of today's ids would silently drop whatever
+    // An untouched group must not appear at all: a written-out list of today's ids would silently drop whatever
     // is connected tomorrow.
     it(`leaves an all-granted group off the stored block`, () => {
         const stored = storedPowers({ ...FULL_POWERS, web: false });
@@ -77,7 +77,7 @@ describe(`personasStartingIn`, () => {
     });
 
     /* Matched exactly. A card starting in a subfolder is not this folder's, and a card that merely PREFERS this
-     * repo (a chat default) has not been told to start here — claiming either would make the row assert work the
+     * repo (a chat default) has not been told to start here: claiming either would make the row assert work the
      * card does not do. */
     it(`claims neither a subfolder's card nor one that only prefers the repo`, () => {
         const found = personasStartingIn(cards, `intentic/_editor`).map((persona) => persona.id);

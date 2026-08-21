@@ -20,7 +20,7 @@ const CATALOG: readonly PickerEntry[] = [
 
 test("offers a typed id no catalog row covers, so a model that already serves turns is reachable", () => {
     // The gap this fills: Claude Code's tier aliases lag a release by design and a REST /v1/models entry has to
-    // roll out to the account, yet the CLI itself accepts an arbitrary model string — so the picker must too.
+    // roll out to the account, yet the CLI itself accepts an arbitrary model string, so the picker must too.
     expect(customEntryFor(CATALOG, `claude-opus-6`, `claude`)).toEqual({
         key: `claude:claude-opus-6`,
         provider: `claude`,
@@ -34,7 +34,7 @@ test("stays silent when the target provider already publishes the id, so it neve
     expect(customEntryFor(CATALOG, `claude-opus-5`, `claude`)).toBeUndefined();
 });
 
-test("still offers an id only ANOTHER provider publishes — model ids are provider-scoped", () => {
+test("still offers an id only ANOTHER provider publishes: model ids are provider-scoped", () => {
     expect(customEntryFor(CATALOG, `gpt-5.1`, `claude`)?.provider).toBe(`claude`);
 });
 
@@ -63,7 +63,7 @@ test("offers nothing for an empty query, so simply focusing the search box adds 
 });
 
 /* FAMILY-MAJOR BROWSING. The catalog arrives as a release timeline, which opened the picker on five straight
- * Opus versions and left Haiku — a whole tier — below the fold. A group must open on one row per family. */
+ * Opus versions and left Haiku (a whole tier) below the fold. A group must open on one row per family. */
 
 // Claude's account catalog in its own (newest-first) order, the shape the screenshot showed.
 const CLAUDE: readonly PickerEntry[] = [
@@ -86,7 +86,7 @@ test("groups versions into families by id, so a date suffix or a point release n
 });
 
 test("orders families frontier-first, which the catalog's own order cannot express", () => {
-    // Catalog order alone would seat Fable — a frontier model the SDK publishes no alias for — under Sonnet.
+    // Catalog order alone would seat Fable (a frontier model the SDK publishes no alias for) under Sonnet.
     expect(familyGroups(CLAUDE).map((group) => group.label)).toEqual([`Claude Opus`, `Claude Fable`, `Claude Sonnet`, `Claude Haiku`]);
 });
 
@@ -105,7 +105,7 @@ test("breaks a tier tie by release, so the family that shipped last leads the on
 
 test("keeps catalog order between families that tie on BOTH, since Anthropic's catalog is itself a ranking", () => {
     // Opus 5 and Fable 5: same tier, same version. Nothing derived can separate them, so the order the provider
-    // reported stands — which is the one place this module still defers to the catalog, and the only place it can.
+    // reported stands, which is the one place this module still defers to the catalog, and the only place it can.
     const opus = entry(`claude`, `claude-opus-5`, `Claude Opus 5`);
     const fable = entry(`claude`, `claude-fable-5`, `Claude Fable 5`);
 
@@ -114,7 +114,7 @@ test("keeps catalog order between families that tie on BOTH, since Anthropic's c
 });
 
 /* THE OTHER PROVIDERS. Anthropic's catalog arrives ranked newest-first; Codex, Gemini, Kimi and Grok arrive from
- * an OpenAI-compatible /v1/models in registry order — alphabetical in practice. Reading that as a preference is
+ * an OpenAI-compatible /v1/models in registry order: alphabetical in practice. Reading that as a preference is
  * what opened the Codex group on GPT 5.4 Mini, and it put the NEWEST member of a family behind the "show older"
  * disclosure, since the collapsed band shows each family's first catalog row. Both facts now come off the id. */
 
@@ -141,7 +141,7 @@ test("opens a registry-ordered group with Sol first and the remaining Codex tier
 
 test("shows a family's NEWEST version collapsed, not whichever version the endpoint listed first", () => {
     // Alphabetically gpt-5.1 leads its family, so the band used to offer it and hide gpt-5.6 behind the
-    // disclosure — the picker's one row for that family naming its oldest member.
+    // disclosure: the picker's one row for that family naming its oldest member.
     const gpt = [entry(`codex`, `gpt-5.1`, `GPT 5.1`), entry(`codex`, `gpt-5.6`, `GPT 5.6`)];
 
     expect(familyGroups(gpt)[0]).toMatchObject({ latest: gpt[1], older: [gpt[0]] });
@@ -165,7 +165,7 @@ test("opens Kimi on K3 when its live catalog also contains K2.x releases", () =>
     expect(pickerBlocks(familyGroups(kimi), undefined, false)[0]?.entries.map((row) => row.value)).toEqual([`kimi-k3`, `kimi-k2.7-code`]);
 });
 
-test("opens a group at one row per family — every tier visible, no version history", () => {
+test("opens a group at one row per family: every tier visible, no version history", () => {
     expect(pickerBlocks(familyGroups(CLAUDE), `claude-opus-5`, false)).toEqual([
         { key: `latest`, entries: [CLAUDE[0], CLAUDE[2], CLAUDE[1], CLAUDE[6]] },
     ]);
@@ -184,7 +184,7 @@ test("ignores a selected id the group does not publish, rather than padding the 
     expect(pickerBlocks(familyGroups(CLAUDE), `claude-opus-9`, false)[0]?.entries).toHaveLength(4);
 });
 
-test("expands into per-family blocks, because the intent is 'Opus, an older one' — never 'row 11'", () => {
+test("expands into per-family blocks, because the intent is 'Opus, an older one': never 'row 11'", () => {
     expect(pickerBlocks(familyGroups(CLAUDE), undefined, true).map((block) => [block.label, block.entries.map((row) => row.value)])).toEqual([
         [undefined, [`claude-opus-5`, `claude-fable-5`, `claude-sonnet-5`, `claude-haiku-4-5-20251001`]],
         [`Claude Opus`, [`claude-opus-4-8`, `claude-opus-4-7`]],
@@ -198,8 +198,8 @@ test("gives a single-version provider no older blocks, so a short group never gr
     expect(pickerBlocks(familyGroups(codex), undefined, false)).toEqual([{ key: `latest`, entries: [codex[0]] }]);
 });
 
-/* ACCESS ORDER. Every provider's catalog is non-empty whether or not its credential is connected — the daemon
- * serves a seed floor so a turn always resolves a model — so nothing in the list itself distinguishes a model
+/* ACCESS ORDER. Every provider's catalog is non-empty whether or not its credential is connected: the daemon
+ * serves a seed floor so a turn always resolves a model, so nothing in the list itself distinguishes a model
  * that can run from one that cannot. Readiness is that distinction, and it outranks every other ordering rule
  * here: a user scanning the top of the picker must be looking at models they can actually send to. */
 
@@ -215,14 +215,14 @@ const readyOnly =
         connected.includes(provider);
 
 test("seats connected providers above the ones that still need a credential", () => {
-    // PROVIDERS order alone put Kimi — with no Kimi Code subscription — above a connected Gemini purely by position.
+    // PROVIDERS order alone put Kimi (with no Kimi Code subscription) above a connected Gemini purely by position.
     const sections = pickerSections(MIXED, `claude`, undefined, readyOnly(`claude`, `gemini`));
 
     expect(sections.slice(0, 3).map((section) => section.provider)).toEqual([`claude`, `gemini`, `codex`]);
 });
 
 test("keeps the ACTIVE provider first even when it is the locked one", () => {
-    // It is the provider the composer will send on, so burying it hides the selection the user is sitting on —
+    // It is the provider the composer will send on, so burying it hides the selection the user is sitting on:
     // and picking a locked model is how they reach the connect gate in the first place.
     expect(pickerSections(MIXED, `kimi`, undefined, readyOnly(`claude`))[0]?.provider).toBe(`kimi`);
 });

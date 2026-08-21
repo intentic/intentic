@@ -79,7 +79,7 @@ export async function manageMachineSandbox(
         }
     }
     if (outcome === undefined) {
-        throw new Error(`Lost contact with that computer while this was running — it may still have finished. Refresh to see where it got to.`);
+        throw new Error(`Lost contact with that computer while this was running: it may still have finished. Refresh to see where it got to.`);
     }
     return outcome;
 }

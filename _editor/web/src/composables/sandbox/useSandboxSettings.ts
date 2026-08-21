@@ -37,7 +37,7 @@ const droppedFieldsReason = (sent: SandboxSettings, stored: SandboxSettings): st
     }
     // The two audiences differ only in what they can do about it, same split staleDaemonReason draws.
     const remedy = import.meta.env.DEV
-        ? `Your dev image predates it — run 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
+        ? `Your dev image predates it: run 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
         : `Update the sandbox to a newer image to use it.`;
     return `This sandbox's daemon didn't keep ${droppedKeys.join(`, `)}. ${remedy}`;
 };

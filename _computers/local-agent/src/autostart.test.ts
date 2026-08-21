@@ -12,7 +12,7 @@ import {
 } from "./autostart.js";
 import type { CliLauncher } from "./launcher.js";
 
-/* The three OS autostart entries are string/argv builders — the side-effecting register/unregister spawn the OS
+/* The three OS autostart entries are string/argv builders: the side-effecting register/unregister spawn the OS
  * tools and are exercised in the field. What is pinned here is that each launches the spec's command at login
  * with the launcher it was handed, VERBATIM. Both launcher shapes are covered because the released install is
  * the compiled one, and it is exactly the shape a hardcoded `execPath + argv[1]` used to corrupt. */
@@ -56,7 +56,7 @@ describe("macLaunchAgentXml", () => {
 });
 
 /* The mechanism that actually works on the machines that need autostart most. An XDG entry is started by the
- * desktop session at graphical login, so on a headless box — a server, a container, every WSL distro — it can
+ * desktop session at graphical login, so on a headless box (a server, a container, every WSL distro) it can
  * never fire; a user unit is what systemd is for. */
 describe("systemdUserUnit", () => {
     it("runs the launcher with the FOREGROUND args, since systemd supervises what it starts", () => {
@@ -73,7 +73,7 @@ describe("systemdUserUnit", () => {
         expect(systemdUserUnit(SPEC, BINARY)).toContain("WantedBy=default.target");
     });
 
-    // A deliberate `systemctl --user stop` must stay stopped — the same call the macOS LaunchAgent makes by
+    // A deliberate `systemctl --user stop` must stay stopped: the same call the macOS LaunchAgent makes by
     // omitting KeepAlive. `always` would fight the user.
     it("restarts on failure but not on a clean stop", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
@@ -90,7 +90,7 @@ describe("systemdUserUnit", () => {
     });
 
     /* THE LOG THE AGENT ADVERTISES, not the journal. A unit without these lines sends the loop's output to
-     * journald while `intentic-sync status`, every failure note and the docs all name the agent's own file — so on
+     * journald while `intentic-sync status`, every failure note and the docs all name the agent's own file, so on
      * a systemd machine (most Linux desktops, every WSL distro with systemd on) that file stopped growing the day
      * autostart started working, and a watcher whose loop had died was diagnosable only by someone who already
      * knew to reach for journalctl. `append:` and not `file:`, or each restart truncates the pass that explains
@@ -116,7 +116,7 @@ describe("linuxDesktopEntry", () => {
     });
 });
 
-// Windows registers through the CURRENT USER's Run key — the same mechanism Mutagen's `daemon register` uses,
+// Windows registers through the CURRENT USER's Run key: the same mechanism Mutagen's `daemon register` uses,
 // and the reason it kept succeeding where a schtasks call could not: `/SC ONLOGON` triggers for any user on the
 // machine (elevation), and schtasks always wants a password it has no stdin to read.
 const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
@@ -140,7 +140,7 @@ describe("windowsRunAddArgs", () => {
         expect(windowsRunAddArgs(SPEC, BINARY).at(-2)).toBe('"/home/dev/.intentic/sync/bin/intentic-sync" "mirror"');
     });
 
-    it("never registers the foreground loop — Explorer would leave its console window on screen all session", () => {
+    it("never registers the foreground loop: Explorer would leave its console window on screen all session", () => {
         expect(windowsRunAddArgs(SPEC, BINARY).join(" ")).not.toContain("--watch");
     });
 

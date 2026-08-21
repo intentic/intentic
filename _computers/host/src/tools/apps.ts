@@ -24,7 +24,7 @@ export const describeWindows = (windows: readonly WindowInfo[]): string => {
     }
     const rows = windows.map(
         (window) =>
-            `${window.focused ? "* " : "  "}[${window.id}] ${window.app} — ${window.title}  (${window.bounds.width}×${window.bounds.height} at ${window.bounds.x},${window.bounds.y})`,
+            `${window.focused ? "* " : "  "}[${window.id}] ${window.app}, ${window.title}  (${window.bounds.width}×${window.bounds.height} at ${window.bounds.x},${window.bounds.y})`,
     );
     return [`${windows.length} window${windows.length === 1 ? "" : "s"} (* = focused). Pass the id in brackets to focus_window.`, ...rows].join("\n");
 };
@@ -40,18 +40,18 @@ export const listWindows = async (screen: Desktop, scopes: HostScopes): Promise<
 export const focusWindow = async (screen: Desktop, id: string, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (id === "") {
-        throw new DesktopError(`"id" is required — take a window list first and pass the id in brackets.`);
+        throw new DesktopError(`"id" is required: take a window list first and pass the id in brackets.`);
     }
     await screen.focusWindow(id);
     const focused = (await screen.windows().catch(() => [])).find((window) => window.focused);
-    return focused === undefined ? `Asked this computer to focus window ${id}.` : `Focused: ${focused.app} — ${focused.title}. Typing now goes here.`;
+    return focused === undefined ? `Asked this computer to focus window ${id}.` : `Focused: ${focused.app}, ${focused.title}. Typing now goes here.`;
 };
 
 export const openTarget = async (screen: Desktop, target: string, scopes: HostScopes): Promise<string> => {
     // Starting a program is what the shell switch is about, whichever verb gets it started.
     assertScope(scopes, "shell");
     if (target === "") {
-        throw new DesktopError(`"target" is required — an application name, a file path, or a URL.`);
+        throw new DesktopError(`"target" is required: an application name, a file path, or a URL.`);
     }
     await screen.launch(target);
     return `Opened ${target}. Give it a moment, then take a screenshot or list the windows to see it.`;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The rule that keeps the strip clean: the surfaces WORK runs on (an agent's Bash shell, a daemon job) are
-// records, not places. They tab only while someone is watching, and they let go of that tab when they finish —
+// records, not places. They tab only while someone is watching, and they let go of that tab when they finish:
 // which is why a panel reopened after a night of agent turns has nothing in it to tidy up.
 //
 // The pane is mocked wholesale: every case here is about which names reach `order`/`groups` and which one is
@@ -55,7 +55,7 @@ const panel = (initial: Listed[]) => {
         }
         if (holdOnce) {
             holdOnce = false;
-            // The answer is decided NOW and delivered later — a list of what the sandbox held at the moment it
+            // The answer is decided NOW and delivered later: a list of what the sandbox held at the moment it
             // was asked, arriving after the world has moved on.
             const snapshot = listed;
             return new Promise<Listed[]>((resolve) => {
@@ -75,7 +75,7 @@ const panel = (initial: Listed[]) => {
         daemonLists: (next: Listed[]) => {
             listed = next;
         },
-        // The next list comes back as a rejection — the tunnel dropping one request under load.
+        // The next list comes back as a rejection: the tunnel dropping one request under load.
         failNextList: () => {
             failOnce = true;
         },
@@ -121,7 +121,7 @@ test("a job tabs while it is being watched and lets go once it has finished and 
     await tabs.focus(`job-capability-demo`);
     expect(names()).toEqual([`web-1`, `job-capability-demo`]);
 
-    // It finishes while the user is still reading it — the pill must NOT vanish under them.
+    // It finishes while the user is still reading it: the pill must NOT vanish under them.
     daemonLists([shell(`web-1`), job(`capability-demo`, false)]);
     await tabs.refresh();
     expect(names()).toEqual([`web-1`, `job-capability-demo`]);
@@ -133,7 +133,7 @@ test("a job tabs while it is being watched and lets go once it has finished and 
 });
 
 // The reveal and the first list that carries the session land together, so retiring on that same pass would
-// make the chat's "watch this turn's shell" — clicked on a turn that has since ended — do nothing at all.
+// make the chat's "watch this turn's shell" (clicked on a turn that has since ended) do nothing at all.
 test("opening an ALREADY-finished terminal from the chat's Bash card still tabs and focuses it", async () => {
     const { tabs, attach, names } = panel([shell(`web-1`), agent(`aaaa1111`, false)]);
     await attach();
@@ -153,7 +153,7 @@ test("the panel opens onto a live tab, never onto the dead pane it was last left
     expect(tabs.activeName.value).toBe(`web-1`);
 });
 
-// THE reported bug behind the wait: a flow NAMES its terminal before that terminal exists — the daemon says
+// THE reported bug behind the wait: a flow NAMES its terminal before that terminal exists, the daemon says
 // "I will work in job-capability-github", and tmux creates that session with the install's first command a beat
 // later. Asking once meant the answer was always "no such session", so the user sat in front of an empty panel
 // (or the shell they had open) while the install ran to completion somewhere they couldn't see.
@@ -170,7 +170,7 @@ test("a job the daemon has only just announced still tabs and focuses once it ex
     expect(tabs.activeName.value).toBe(`job-capability-github`);
 });
 
-/* THE PUSH BUG. The wait used to be a race — a handful of relists a quarter-second apart — run at the busiest
+/* THE PUSH BUG. The wait used to be a race (a handful of relists a quarter-second apart) run at the busiest
  * moment there is: the pre-push suite pinning the sandbox it is asking. When the session lost that race the tab
  * was not late, it was gone, because a work terminal tabs only while its reveal stands. The check then ran to
  * completion in a terminal nothing ever showed, behind a spinner that had already given up. */
@@ -178,12 +178,12 @@ test("a check that takes its time to reach tmux still surfaces whenever it gets 
     const { tabs, daemonLists, attach, names } = panel([]);
     await attach(`job-checks`);
 
-    // The panel asks, and the session simply is not there yet — for far longer than any retry window.
+    // The panel asks, and the session simply is not there yet: for far longer than any retry window.
     await tabs.focus(`job-checks`);
     expect(names()).toEqual([]);
     expect(tabs.pending.value).toBe(`job-checks`);
 
-    // Whenever it does land, the daemon's own `terminals` frame relists — and the tab is waiting for it.
+    // Whenever it does land, the daemon's own `terminals` frame relists, and the tab is waiting for it.
     daemonLists([job(`checks`, true)]);
     await tabs.refresh();
 
@@ -192,7 +192,7 @@ test("a check that takes its time to reach tmux still surfaces whenever it gets 
     expect(tabs.pending.value).toBeUndefined();
 });
 
-/* THE PUSH BUG'S LAST FORM — the one that survived the standing wait. Everything asks for a list at once when a
+/* THE PUSH BUG'S LAST FORM: the one that survived the standing wait. Everything asks for a list at once when a
  * push starts (the panel mounting, the daemon's frame, the focus request itself), and the answers used to be
  * written in whatever order they came back. A list taken before the session existed, landing after the one that
  * carried it, put the strip back to empty and left the panel saying nothing runs under that name. */
@@ -207,7 +207,7 @@ test("a list taken before the check existed cannot un-list it by arriving late",
     // The session lands, and the focus request's own relist sees it.
     daemonLists([job(`checks`, true)]);
     const focusing = tabs.focus(`job-checks`);
-    // Let that request get as far as it can while the early one is still out — this is the window where the tab
+    // Let that request get as far as it can while the early one is still out: this is the window where the tab
     // was mounted, and where the late answer used to land on top of it.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -220,7 +220,7 @@ test("a list taken before the check existed cannot un-list it by arriving late",
     expect(tabs.pending.value).toBeUndefined();
 });
 
-// The other half of that failure: one dropped list — the tunnel under load, mid-suite — used to strand the
+// The other half of that failure: one dropped list (the tunnel under load, mid-suite) used to strand the
 // panel on its spinner for good, because the wait was a promise and nothing ever settled it.
 test("a list that fails mid-wait does not strand the panel", async () => {
     const { tabs, daemonLists, failNextList, attach, names } = panel([]);
@@ -239,7 +239,7 @@ test("a list that fails mid-wait does not strand the panel", async () => {
 /* THE WORST SHAPE THE PUSH BUG EVER TOOK, and the reason attaching swallows a refused list.
  *
  * The panel's mount does two things in order: attach, then go and ask for the session it was opened FOR. When
- * attaching rethrew the list that dropped — which is exactly what a suite pinning its own sandbox makes likely —
+ * attaching rethrew the list that dropped, which is exactly what a suite pinning its own sandbox makes likely:
  * the second half was skipped wholesale. The strip then retried its way back to looking perfectly healthy while
  * nothing anywhere was asking for the check, so the suite ran to the end in a terminal nothing ever showed. */
 test("a first list that drops still lets the panel go and ask for the check it was opened for", async () => {
@@ -248,7 +248,7 @@ test("a first list that drops still lets the panel go and ask for the check it w
     failNextList();
     await expect(attach(`job-checks`)).resolves.toBe(false);
 
-    // The mount's second half now runs, so the standing wait is placed — and the check arrives when it arrives.
+    // The mount's second half now runs, so the standing wait is placed, and the check arrives when it arrives.
     await tabs.focus(`job-checks`);
     daemonLists([job(`checks`, true)]);
     await tabs.refresh();
@@ -269,15 +269,15 @@ test("a first list that drops opens no shell of its own", async () => {
     expect(names()).toEqual([]);
 });
 
-/* THE WEDGE. Relists used to run one at a time to keep a stale answer from landing on a fresh one — so a list
+/* THE WEDGE. Relists used to run one at a time to keep a stale answer from landing on a fresh one, so a list
  * that never came back (a fetch paused against a tunnel the browser thinks is offline settles neither way) held
  * up every relist after it for the life of the panel. The strip sat on its standing wait forever, while the work
- * popover — reading the same shared list directly — showed the very job it was waiting for as running. */
+ * popover (reading the same shared list directly) showed the very job it was waiting for as running. */
 test("a list that never comes back cannot hold up the ones asked after it", async () => {
     const { tabs, daemonLists, attach, names, holdNextList } = panel([]);
     await attach(`job-checks`);
 
-    // Asked, and simply never answered. Nothing releases this one — it is still out there at the end of the test.
+    // Asked, and simply never answered. Nothing releases this one: it is still out there at the end of the test.
     holdNextList();
     void tabs.refresh();
 

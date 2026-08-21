@@ -7,7 +7,7 @@ import { computed, reactive, ref } from "vue";
 import { useVpn } from "../composables/sandbox/useVpn";
 
 /* The sandbox's VPN tunnels: what is carrying traffic right now, and the connect/disconnect controls for it.
- * This is the answer to "is the sandbox on the VPN, and which one" — the assigned address and the routed
+ * This is the answer to "is the sandbox on the VPN, and which one": the assigned address and the routed
  * networks, not just a green dot, because "connected" alone doesn't tell you whether your internal host is
  * actually reachable through it.
  *
@@ -20,12 +20,12 @@ const listNotice = computed<NoticeModel | undefined>(() =>
     listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list your VPN links.`, detail: listError.value },
 );
 
-// Per-tunnel local UI state: the in-flight action, the last streamed line, and any error — keyed by id so one
+// Per-tunnel local UI state: the in-flight action, the last streamed line, and any error, keyed by id so one
 // failing tunnel never blanks another's row.
 const busy = reactive(new Set<string>());
 const progress = reactive<Record<string, string>>({});
 const failures = reactive<Record<string, string>>({});
-// The tunnel whose one-time-code field is open, and its current value. A code is never stored — it goes
+// The tunnel whose one-time-code field is open, and its current value. A code is never stored: it goes
 // straight into the dial and is cleared afterwards.
 const otpFor = ref<string>();
 const otp = ref(``);
@@ -39,9 +39,9 @@ const PROVIDER_LABEL: Record<VpnLink["provider"], string> = {
     ipsec: `IPsec`,
 };
 
-/* "14m" / "3h 20m" / "2d 4h" — HOW LONG THIS TUNNEL HAS BEEN UP, read at a glance. A duration, not an age: it
+/* "14m" / "3h 20m" / "2d 4h", HOW LONG THIS TUNNEL HAS BEEN UP, read at a glance. A duration, not an age: it
  * carries two units so the answer is precise at every scale, and no "ago", because the number describes a span
- * the tunnel has been holding rather than a moment that has passed. Named for what it measures — it was `ago`,
+ * the tunnel has been holding rather than a moment that has passed. Named for what it measures: it was `ago`,
  * which is the kit's `timeAgo` vocabulary for a different question, and the collision invited exactly the
  * substitution that would be wrong here. */
 const uptime = (since: number | undefined): string | undefined => {
@@ -56,7 +56,7 @@ const uptime = (since: number | undefined): string | undefined => {
     return hours < 24 ? `${hours}h ${minutes % 60}m` : `${Math.floor(hours / 24)}d ${hours % 24}h`;
 };
 
-// The facts that answer "what does this tunnel actually carry" — full-tunnel is called out by name, because
+// The facts that answer "what does this tunnel actually carry": full-tunnel is called out by name, because
 // "0.0.0.0/0" is the single most consequential thing a connected VPN can be doing to the sandbox.
 const factsOf = (link: VpnLink): string[] =>
     [
@@ -92,17 +92,17 @@ const onConnect = async (link: VpnLink): Promise<void> => {
 
 const onDisconnect = (link: VpnLink): Promise<void> => run(link.id, () => disconnect(link.id));
 
-// A gateway that wants a token says so in the failure — offer the code field right where the user just failed
+// A gateway that wants a token says so in the failure: offer the code field right where the user just failed
 // rather than making them guess that a retry needs one.
 const wantsCode = (id: string): boolean => /one-time code|2FA|token/i.test(failures[id] ?? ``);
 
 /* The consequence worth stating once, beside the group's NAME rather than as a last child of the list: while a
- * tunnel is up, everything the sandbox does — agent turns, git, package installs — leaves through it. It used
+ * tunnel is up, everything the sandbox does (agent turns, git, package installs) leaves through it. It used
  * to sit under the rows, where RowGroup's `divide-y` gave a paragraph a row's hairline and it read as a
  * half-drawn fourth row. */
 const caption = computed(() =>
     links.value.some((link) => link.state === `connected`)
-        ? `traffic matching a connected tunnel's routes leaves the sandbox through it — including the agent's`
+        ? `traffic matching a connected tunnel's routes leaves the sandbox through it: including the agent's`
         : undefined,
 );
 </script>
@@ -125,7 +125,7 @@ const caption = computed(() =>
                 <template #description>
                     <span v-if="factsOf(link).length > 0" class="font-mono">{{ factsOf(link).join(" · ") }}</span>
                     <span v-else-if="link.state === 'unavailable'">
-                        Needs a sandbox rebuild to install its client —
+                        Needs a sandbox rebuild to install its client:
                         <RouterLink to="/sandbox/environment" class="text-link hover:underline">finish setup →</RouterLink>
                     </span>
                     <span v-else-if="link.autoConnect">Connects automatically after a sandbox restart.</span>

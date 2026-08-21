@@ -1,19 +1,19 @@
-<!-- THE DRAG SEAM — the strip between two panes that sizes one of them.
+<!-- THE DRAG SEAM: the strip between two panes that sizes one of them.
 
      IT IS IN THE KIT BECAUSE IT WAS WRITTEN FOUR TIMES. The workspace explorer, the terminal panel, the chat
      rail and the agent review list each grew their own: same 6px strip, same pointer-capture drag, same
      `is-resizing` tint, same double-click reset, four slightly different spellings of each. And the fifth
-     caller — the workflow designer, which lives in an EXTENSION — could not have reached any of them. That is
+     caller (the workflow designer, which lives in an EXTENSION) could not have reached any of them. That is
      the same fault <SplitView> was extracted for: the one implementation that had solved a shape sat in the web
      app, where the code that needed it next could not import it.
 
-     POINTER CAPTURE, NOT WINDOW LISTENERS. A drag that outruns the strip (and every drag does — the pointer
+     POINTER CAPTURE, NOT WINDOW LISTENERS. A drag that outruns the strip (and every drag does: the pointer
      leaves a 6px target in the first frame) still tracks, because the events keep coming to the seam itself.
      Nothing is bound to the window, so nothing has to be unbound.
 
      IT REPORTS A SIZE, NOT A POSITION. Reading the pane's rect at every move is what made two of the four
      copies subtly different: one measured the pane, one used the raw viewport coordinate, and each was right
-     only for its own layout. The size at pointer-down plus the distance dragged since is neither — it is
+     only for its own layout. The size at pointer-down plus the distance dragged since is neither: it is
      correct wherever the seam sits, in a pop-out window as much as in the page. `pane` says which side of the
      seam the pane being sized is on, and that is the whole of the geometry. -->
 <script setup lang="ts">
@@ -28,7 +28,7 @@ const {
 } = defineProps<{
     /** Which way the seam is dragged: `x` sizes a column, `y` sizes a row. */
     axis?: `x` | `y`;
-    /** Which side of the seam the pane being sized is on — i.e. which way dragging makes it bigger. */
+    /** Which side of the seam the pane being sized is on: i.e. which way dragging makes it bigger. */
     pane?: `before` | `after`;
     min: number;
     max: number;

@@ -1,9 +1,9 @@
-/* WHAT THE NEXT PRESS OF SEND MEANS, asserted as a table — because the four surfaces that answer that question
+/* WHAT THE NEXT PRESS OF SEND MEANS, asserted as a table, because the four surfaces that answer that question
  * used to answer it four times over, and the bug they produced is the one shape a unit test can pin: two of them
  * disagreeing about the same chat.
  *
  * So the assertions here are mostly about PRECEDENCE. Every state below can hold at the same time as the ones
- * under it — a plan can be pending while a turn streams while an edit is armed — and each of those pairs was
+ * under it: a plan can be pending while a turn streams while an edit is armed, and each of those pairs was
  * reachable in the app before this was one decision. */
 import { expect, it } from "vitest";
 import {
@@ -18,7 +18,7 @@ import {
     sendRefusal,
 } from "./composerIntent";
 
-// A settled chat with an account, an empty box and nothing armed — every test states the part it is about.
+// A settled chat with an account, an empty box and nothing armed: every test states the part it is about.
 const SETTLED: ComposerSituation = {
     staged: false,
     attached: false,
@@ -46,7 +46,7 @@ it(`names the press by the most specific thing armed, in one order`, () => {
     expect(sendIntentOf(chat({ streaming: true, steerable: true, awaitingDecision: true }))).toBe(`parked`);
     // A plan awaiting an answer turns the composer into the revision field, whatever the turn is doing.
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true }))).toBe(`plan`);
-    // The user pointed at one message in this transcript — the most specific act of the lot, so it wins over
+    // The user pointed at one message in this transcript: the most specific act of the lot, so it wins over
     // every standing posture below it.
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true, editing: true }))).toBe(`edit`);
     // …and the agent's voice is not a turn at all, so nothing about a turn can outrank it.
@@ -58,7 +58,7 @@ it(`gives every intent its own sentence in both slots`, () => {
     const placeholders = intents.map((intent) => placeholderFor(intent, WORDS));
     const hints = intents.map((intent) => sendHintFor(intent, WORDS));
 
-    // The point of the tables: no intent can be added without words for it, and no two share a sentence — the
+    // The point of the tables: no intent can be added without words for it, and no two share a sentence, the
     // reader learns what the press does from either slot, and they cannot contradict each other.
     expect(new Set(placeholders).size).toBe(intents.length);
     expect(new Set(hints).size).toBe(intents.length);
@@ -69,7 +69,7 @@ it(`counts what an edit costs, and says it in the singular where only one messag
     expect(sendHintFor(`edit`, { ...WORDS, editDropped: 4 })).toBe(`Replace this message and the 3 below it`);
 });
 
-it(`asks nobody by name on the trial — the product's own channel has no vendor`, () => {
+it(`asks nobody by name on the trial: the product's own channel has no vendor`, () => {
     expect(placeholderFor(`idle`, WORDS)).toBe(`Ask Claude…`);
     expect(placeholderFor(`idle`, { ...WORDS, onTrial: true })).toBe(`Ask anything…`);
 });
@@ -80,7 +80,7 @@ it(`refuses only what the daemon would, and only with something staged`, () => {
 
     expect(sendRefusal(chat({ staged: true, uploading: true }))).toContain(`uploading`);
     expect(sendRefusal(chat({ staged: true, uploadFailed: true }))).toContain(`failed to upload`);
-    // A rewind cannot be spent while a turn holds the conversation. The edit stays armed — this is the sentence
+    // A rewind cannot be spent while a turn holds the conversation. The edit stays armed: this is the sentence
     // that says so, in place of a Send greying itself out with no cause on screen anywhere.
     expect(sendRefusal(chat({ staged: true, editing: true, streaming: true }))).toContain(`once the turn ends`);
     expect(sendRefusal(chat({ staged: true, editing: true }))).toBeUndefined();
@@ -111,7 +111,7 @@ it(`offers to continue a stopped turn only when the press could mean nothing els
     expect(continueOffered({ ...stopped, connected: false })).toBe(false);
 });
 
-it(`sends the box, the queue or the continuation — but spends an edit or a placement on words only`, () => {
+it(`sends the box, the queue or the continuation, but spends an edit or a placement on words only`, () => {
     const sends = (state: ComposerSituation): boolean => sendable(state, sendIntentOf(state), sendRefusal(state));
 
     expect(sends(SETTLED)).toBe(false);

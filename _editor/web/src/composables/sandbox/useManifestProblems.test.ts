@@ -2,14 +2,14 @@ import { ManifestProblemsSchema } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 
 /* The wire shape the notice is built from. Parsed rather than asserted structurally, because the browser's
- * whole claim here is that it renders what the daemon actually said — a report that does not survive the
+ * whole claim here is that it renders what the daemon actually said: a report that does not survive the
  * contract's own schema is one the card would paint wrong. */
 
 describe(`ManifestProblemsSchema`, () => {
     it(`accepts the three kinds the daemon reports`, () => {
         const parsed = ManifestProblemsSchema.parse([
             { path: `.intentic/config/settings.json`, problems: [{ kind: `unreadable`, detail: `the file is not valid JSON` }] },
-            { path: `.intentic/config/capabilities.json`, problems: [{ kind: `invalidEntry`, detail: `gh — kind: required` }] },
+            { path: `.intentic/config/capabilities.json`, problems: [{ kind: `invalidEntry`, detail: `gh, kind: required` }] },
         ]);
         expect(parsed.map((report) => report.path)).toEqual([`.intentic/config/settings.json`, `.intentic/config/capabilities.json`]);
     });

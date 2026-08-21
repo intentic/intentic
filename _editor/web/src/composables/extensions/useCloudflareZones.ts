@@ -35,7 +35,7 @@ export function useCloudflareZones() {
             zones.value = found;
             selectedZone.value = found.length === 1 ? found[0] : undefined;
             if (found.length === 0) {
-                zonesError.value = `This token can't see any Cloudflare zones — add a domain to the account or broaden its Zone:Read scope.`;
+                zonesError.value = `This token can't see any Cloudflare zones: add a domain to the account or broaden its Zone:Read scope.`;
             }
         } catch (err) {
             if (token !== cfToken.value.trim()) {

@@ -130,12 +130,12 @@ export const acquireApplyLock = async (
         await releaseAll();
         if (outcome.startsWith("CANNOT_WRITE")) {
             throw new Error(
-                `cannot create /opt/intentic on ${lockKey(target)} — the deploy user lacks write permission on it. Re-run this host's connect script (connect.sh for the sandbox's own machine, connect-host.sh for an enrolled host) — it provisions /opt/intentic for the service user; or create it as root: mkdir -p /opt/intentic && chown <deploy-user> /opt/intentic`,
+                `cannot create /opt/intentic on ${lockKey(target)}, the deploy user lacks write permission on it. Re-run this host's connect script (connect.sh for the sandbox's own machine, connect-host.sh for an enrolled host), it provisions /opt/intentic for the service user; or create it as root: mkdir -p /opt/intentic && chown <deploy-user> /opt/intentic`,
             );
         }
         const who = outcome.replace(/^HELD\s*/, "");
         throw new Error(
-            `another intentic run holds the apply lock on ${lockKey(target)}${who !== "" ? ` (held by ${who})` : ""} — wait for it to finish, or if it crashed the lock frees after its TTL`,
+            `another intentic run holds the apply lock on ${lockKey(target)}${who !== "" ? ` (held by ${who})` : ""}, wait for it to finish, or if it crashed the lock frees after its TTL`,
         );
     }
 
@@ -145,7 +145,7 @@ export const acquireApplyLock = async (
                 const result = await run(executor, target, verifyScript(nonce, ttl));
                 if (!result.stdout.trim().startsWith("OK")) {
                     throw new Error(
-                        `apply lock on ${lockKey(target)} was taken over by another run — aborting before mutating to avoid concurrent writers`,
+                        `apply lock on ${lockKey(target)} was taken over by another run: aborting before mutating to avoid concurrent writers`,
                     );
                 }
             }

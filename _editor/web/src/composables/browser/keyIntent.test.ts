@@ -3,7 +3,7 @@
  * left to the host, where it selected the whole of Intentic instead of the field the person was looking at.
  *
  * So each case here is one half of that decision, and the ones left to the HOST matter as much as the ones sent
- * on — a window that swallowed Ctrl+W or Ctrl+V would be a worse bug than the one it fixed. */
+ * on: a window that swallowed Ctrl+W or Ctrl+V would be a worse bug than the one it fixed. */
 import { describe, expect, test } from "vitest";
 import { keyIntent } from "./keyIntent";
 
@@ -29,7 +29,7 @@ describe("typing", () => {
         expect(keyIntent(press(`Tab`))).toEqual({ kind: `key`, frame: { type: `key`, key: `Tab` } });
     });
 
-    /* THE QUIET HALF OF THE SAME BUG. Arrow keys were forwarded already, so Shift+ArrowLeft did reach the page —
+    /* THE QUIET HALF OF THE SAME BUG. Arrow keys were forwarded already, so Shift+ArrowLeft did reach the page:
      * with the Shift dropped, where it moved the caret instead of extending a selection. Doing the wrong thing
      * rather than nothing, which is the harder kind to notice. */
     test("shift travels with an arrow, or a selection collapses into a caret move", () => {
@@ -43,12 +43,12 @@ describe("typing", () => {
 });
 
 describe("editing chords", () => {
-    test("select all reaches the page — the whole point", () => {
+    test("select all reaches the page, the whole point", () => {
         expect(keyIntent(press(`a`, { ctrl: true }))).toEqual({ kind: `key`, frame: { type: `key`, key: `a`, ctrl: true } });
     });
 
     // A Mac's ⌘ is the same chord in a person's hands, and the browser at the far end is a Linux one where Meta
-    // means nothing — so it travels as ctrl rather than as a modifier that would be ignored on arrival.
+    // means nothing, so it travels as ctrl rather than as a modifier that would be ignored on arrival.
     test("command on a Mac is control on the wire", () => {
         expect(keyIntent(press(`a`, { meta: true }))).toEqual({ kind: `key`, frame: { type: `key`, key: `a`, ctrl: true } });
     });
@@ -87,7 +87,7 @@ describe("the clipboard", () => {
 });
 
 describe("what the host keeps", () => {
-    // These would be lost either way — a remote page driven this way ignores window-level chords — so taking
+    // These would be lost either way: a remote page driven this way ignores window-level chords, so taking
     // them would only cost the user their own browser.
     test("window shortcuts are not the page's to take", () => {
         for (const key of [`t`, `w`, `n`, `r`, `f`, `p`, `s`]) {
@@ -96,7 +96,7 @@ describe("what the host keeps", () => {
         expect(keyIntent(press(`F5`))).toEqual({ kind: `host` });
     });
 
-    /* Adding Shift moves a letter chord into the browser's own territory — devtools, reopen tab, incognito —
+    /* Adding Shift moves a letter chord into the browser's own territory: devtools, reopen tab, incognito:
      * and `i` sits in both worlds: Ctrl+I italicizes, Ctrl+Shift+I opens devtools. Redo is the exception the
      * caret keeps. */
     test("shifted letter chords are the browser's, redo excepted", () => {
@@ -109,7 +109,7 @@ describe("what the host keeps", () => {
         });
     });
 
-    // But Shift with a control key is a selection, not a browser shortcut — that half has to survive.
+    // But Shift with a control key is a selection, not a browser shortcut: that half has to survive.
     test("shift still reaches the page on the control keys", () => {
         expect(keyIntent(press(`ArrowLeft`, { ctrl: true, shift: true }))).toEqual({
             kind: `key`,

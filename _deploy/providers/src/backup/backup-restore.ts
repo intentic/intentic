@@ -90,7 +90,7 @@ export const restoreBackup = async (args: RestoreArgs): Promise<void> => {
         }
         // Drop the scratch restore volume; the repo + snapshots are untouched.
         await session.exec(`docker volume rm ${RESTORE_VOLUME} 2>/dev/null || true`);
-        args.log('restore complete — run "intentic deploy apply" to bring the services back up on the restored data');
+        args.log('restore complete: run "intentic deploy apply" to bring the services back up on the restored data');
     } finally {
         await session.dispose();
     }

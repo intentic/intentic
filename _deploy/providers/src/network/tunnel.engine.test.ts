@@ -17,7 +17,7 @@ const fakeCloudflare = (): CloudflareApi => {
     let ingress: IngressRule[] | undefined;
     let seq = 0;
     // `satisfies` keeps the literal contextually typed (so each method's args are inferred and checked)
-    // while `unstubbed` supplies the rest of the interface — this fake models the calls the engine drives.
+    // while `unstubbed` supplies the rest of the interface: this fake models the calls the engine drives.
     const modelled = {
         getZone: async () => ({ id: "zone-123", accountId: "acct-1" }),
         listZones: async () => [{ id: "zone-123", name: "example.com", accountId: "acct-1" }],

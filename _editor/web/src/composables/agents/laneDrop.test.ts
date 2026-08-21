@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-// No mocks. laneDrop reads the lane machine from agentStatus — a leaf of pure functions — and its only tie to
+// No mocks. laneDrop reads the lane machine from agentStatus: a leaf of pure functions, and its only tie to
 // the fleet store is a type-only import, which the transform erases. Nothing here reaches the app shell.
 import { dropActionFor, dropActionLabel, dropRejection, type DropAction } from "./laneDrop";
 import type { FleetAgent } from "./useAgents";
 
-// A drop can't assign a status — the lanes are projections — so it runs the action that CAUSES one, and most
+// A drop can't assign a status: the lanes are projections, so it runs the action that CAUSES one, and most
 // drops have no action behind them at all.
 describe("dropActionFor", () => {
     const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
@@ -28,7 +28,7 @@ describe("dropActionFor", () => {
     });
 
     // An errored turn never reached its auto-land, so the drop has a FIRST land to try. A conflicted one has
-    // already had that land refused, and check mode is atomic — pressing it again against an unchanged
+    // already had that land refused, and check mode is atomic: pressing it again against an unchanged
     // workspace fails identically, which is what made this drop a guaranteed no-op.
     it("lands work whose turn errored out before it could land", () => {
         expect(dropActionFor(agent({ status: `error` }), `finished`)).toBe(`land`);
@@ -60,13 +60,13 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `idle`, attention: { ...none, conflict: true } }), `finished`)).toBe(`resolve`);
     });
 
-    it("refuses to land an agent that is blocked on the user — it is mid-task, not done", () => {
+    it("refuses to land an agent that is blocked on the user: it is mid-task, not done", () => {
         expect(dropActionFor(agent({ status: `awaiting` }), `finished`)).toBeUndefined();
         expect(dropActionFor(agent({ status: `idle`, attention: { ...none, plan: true } }), `finished`)).toBeUndefined();
         expect(dropActionFor(agent({ status: `idle`, attention: { ...none, question: true } }), `finished`)).toBeUndefined();
     });
 
-    it("refuses the attention and active lanes outright — neither is something a user can assign", () => {
+    it("refuses the attention and active lanes outright: neither is something a user can assign", () => {
         for (const status of [`running`, `awaiting`, `conflict`, `error`, `idle`, `landed`] as const) {
             expect(dropActionFor(agent({ status }), `attention`)).toBeUndefined();
             expect(dropActionFor(agent({ status }), `active`)).toBeUndefined();
@@ -78,7 +78,7 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `idle` }), `finished`)).toBeUndefined();
     });
 
-    it("discards anything that isn't running — the daemon refuses a running turn's worktree", () => {
+    it("discards anything that isn't running, the daemon refuses a running turn's worktree", () => {
         expect(dropActionFor(agent({ status: `idle` }), `discard`)).toBe(`discard`);
         expect(dropActionFor(agent({ status: `awaiting` }), `discard`)).toBe(`discard`);
         expect(dropActionFor(agent({ status: `running` }), `discard`)).toBeUndefined();
@@ -86,8 +86,8 @@ describe("dropActionFor", () => {
 
     // Both client-only standings, because they refuse for one reason: the daemon has no entry for either, so
     // every action behind a drop addresses an id it has never heard of. A refused send is the one that looks
-    // most like it should work — it sits in Attention, where a drop on Finished otherwise lands the work.
-    it("refuses every target for a draft and a refused send — no registry entry, no worktree, no turn", () => {
+    // most like it should work: it sits in Attention, where a drop on Finished otherwise lands the work.
+    it("refuses every target for a draft and a refused send: no registry entry, no worktree, no turn", () => {
         for (const status of [`draft`, `failed`] as const) {
             for (const target of [`attention`, `active`, `finished`, `discard`] as const) {
                 expect(dropActionFor(agent({ status }), target)).toBeUndefined();
@@ -103,7 +103,7 @@ describe("dropActionFor", () => {
         }
     });
 
-    // The hint is the only thing that teaches the board's rules, so a refusal must always carry one — and an
+    // The hint is the only thing that teaches the board's rules, so a refusal must always carry one, and an
     // accepted drop must never carry one.
     it("explains exactly the refusals it makes, and only those", () => {
         const cases: readonly FleetAgent[] = [
@@ -130,7 +130,7 @@ describe("dropActionFor", () => {
     });
 
     // The hint is the ghost's whole promise, so an action with no verb of its own would silently borrow
-    // another's — which is how "Discard this agent" came to be the fallback for anything unnamed.
+    // another's, which is how "Discard this agent" came to be the fallback for anything unnamed.
     it("names every action it can return", () => {
         const labels = ([`land`, `resolve`, `stop`, `discard`] as const satisfies readonly DropAction[]).map(dropActionLabel);
         expect(labels).toEqual([`Land the work`, `Ask the agent to resolve it`, `Stop the turn`, `Discard this agent`]);

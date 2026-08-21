@@ -1,24 +1,24 @@
-<!-- THE APP'S COLOUR — a row of colours it can actually wear, and nothing else.
+<!-- THE APP'S COLOUR: a row of colours it can actually wear, and nothing else.
 
      THE SET IS THE CONTROL. There is no wheel, no square, no hex field, because the choice this makes is
-     narrower than any of them can express: the accent always sits at one fixed lightness (see themeColor.ts —
+     narrower than any of them can express: the accent always sits at one fixed lightness (see themeColor.ts:
      that lightness is what every contrast promise in semantic-colors.css is made of), so two thirds of a
      general colour picker offers choices the app cannot honour and then silently corrects. What is genuinely
      free is the hue and how loud it is, and a dozen points around the wheel cover that at the resolution
      anyone actually decides at: nobody wants a workspace 8° warmer, they want the green one.
 
-     EACH SWATCH IS THE ACCENT ITSELF, not a sample of it — computed through the same gamut mapping the ramps
+     EACH SWATCH IS THE ACCENT ITSELF, not a sample of it: computed through the same gamut mapping the ramps
      go through, at the same lightness, so the circle is exactly the colour the buttons and links will be.
      Their saturations are per-hue rather than one number, because sRGB holds nearly three times more chroma at
      magenta than at cyan: one figure across the row would make half of it shout and the other half whisper.
 
      THE ORDER IS THE WHEEL, starting at the default and running backwards through red, magenta, violet, blue,
-     teal and green to gold — so neighbours are neighbours, and the grey that ends the row (an app with a
+     teal and green to gold, so neighbours are neighbours, and the grey that ends the row (an app with a
      colour in it, rather than an app made OF one) reads as the deliberate exception it is. -->
 <script setup lang="ts">
 import { type Accent, accentHex } from "../lib/themeColor.js";
 
-/** The accent, as `#rrggbb` — always one of the swatches below. */
+/** The accent, as `#rrggbb`: always one of the swatches below. */
 const model = defineModel<string>({ required: true });
 
 const PRESETS: readonly (Accent & { readonly label: string })[] = [

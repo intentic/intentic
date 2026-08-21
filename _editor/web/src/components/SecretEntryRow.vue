@@ -7,11 +7,11 @@ import type { SecretRow } from "../pages/sandbox/secretRows";
 import { reveal, useSecrets } from "../composables/secrets/useSecrets";
 import SecretField from "./SecretField.vue";
 
-/* ONE SECRET, on one line until asked otherwise — the extension row's shape, for the extension row's reason:
+/* ONE SECRET, on one line until asked otherwise: the extension row's shape, for the extension row's reason:
  * this is a list read by scanning, and everything below the fold was being paid for on every row of it.
  *
  * THE LINE ANSWERS "WHICH ONE IS THIS", AND NOTHING ELSE. A mark, the name, what tells it apart (what uses it,
- * or whose account it is), and — only when there is one — the fact that something is owed. The provenance, the
+ * or whose account it is), and (only when there is one) the fact that something is owed. The provenance, the
  * revealed value and the editor open below it. A healthy row carries no badge and no dot: the tab used to print
  * a green dot beside every one of nineteen connected credentials, which is nineteen pixels of ink saying
  * "normal" and nothing left to notice the one that isn't.
@@ -19,11 +19,11 @@ import SecretField from "./SecretField.vue";
  * THE FOUR BUTTONS WAIT TO BE REACHED FOR. Reveal, copy, set and remove are identical on every row and rarely
  * the reason anyone opened the tab, so at twenty rows they are eighty pieces of furniture between the reader and
  * the name they came to find. They fade in on hover and on keyboard focus, and they are simply THERE on a touch
- * screen and on an open row — so the path that never needs a pointer (tap the row, act in the panel) is whole.
+ * screen and on an open row, so the path that never needs a pointer (tap the row, act in the panel) is whole.
  *
  * EXPANSION IS THE PARENT'S, not the row's: the tab keeps one row open at a time, so a list being scanned never
- * grows unpredictably under the pointer. Everything the row opened WITH — a revealed value, a half-typed
- * replacement, a remove waiting to be confirmed — is dropped when it closes, because none of those should be
+ * grows unpredictably under the pointer. Everything the row opened WITH: a revealed value, a half-typed
+ * replacement, a remove waiting to be confirmed: is dropped when it closes, because none of those should be
  * lying in wait behind a chevron the next time somebody clicks it. */
 
 const { row, expanded } = defineProps<{ row: SecretRow; expanded: boolean }>();
@@ -38,7 +38,7 @@ const confirming = ref(false);
 const error = ref<NoticeModel | undefined>(undefined);
 
 const entry = computed(() => row.entry);
-// A value exists and this viewer is allowed to read it — gates both Reveal and Copy.
+// A value exists and this viewer is allowed to read it: gates both Reveal and Copy.
 const canReveal = computed(() => entry.value.status !== `missing` && entry.value.revealable);
 // What the open panel shows: provenance only, the revealed value, or the editor (reveal ⊕ edit).
 const panelMode = computed<`info` | `reveal` | `edit`>(() => (editing.value ? `edit` : revealedValue.value !== undefined ? `reveal` : `info`));
@@ -93,10 +93,10 @@ const removeKey = async (): Promise<void> => {
     }
 };
 
-/* The app's bare icon button rather than a tenth hand-rolled spelling of it — and here that is a fix, not
+/* The app's bare icon button rather than a tenth hand-rolled spelling of it, and here that is a fix, not
  * tidying. A glyph left to INLINE layout rides the row's text baseline, and Icon.vue nudges every svg down
  * 0.125em so an icon sits right beside words; in a button whose only child is that icon there are no words, so
- * the nudge is just a drop of a pixel or two — by an amount that moves with whatever font-size the button
+ * the nudge is just a drop of a pixel or two: by an amount that moves with whatever font-size the button
  * happens to inherit. The copy button beside these already centred its glyph with flex, so the four actions in
  * one cluster did not agree on where the middle was. `ui.iconButton` centres with flex in a fixed 24px box,
  * which is exactly zero offset under every type scale, so they cannot drift apart again. */
@@ -105,7 +105,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
 
 <template>
     <!-- Header and panel share one tint while open, so an expanded row reads as a single block rather than as a
-         row that happens to have grown something under it — the extension row's treatment, same wash. -->
+         row that happens to have grown something under it: the extension row's treatment, same wash. -->
     <div class="group @container" :class="expanded ? `bg-content/6` : `transition-colors hover:bg-content/4`">
         <div class="flex items-center gap-2 pl-2.5 pr-3">
             <button
@@ -219,8 +219,8 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                 <span class="font-mono text-subtle">{{ row.entry.storedAt }}</span>
                 <template v-if="row.entry.ci !== undefined"> · CI {{ row.entry.ci.synced ? `synced` : `out of date` }}</template>
             </p>
-            <!-- The use ledger's newest row: when the agent last actually spent this — put into a command, or
-                 typed into a page — and where it went. Absent for a secret that has only ever sat here. -->
+            <!-- The use ledger's newest row: when the agent last actually spent this, put into a command, or
+                 typed into a page, and where it went. Absent for a secret that has only ever sat here. -->
             <p v-if="row.entry.lastUse" class="pt-0.5 text-2xs text-muted">
                 used by the agent {{ timeAgo(row.entry.lastUse.at, { days: true }) }}
                 <template v-if="row.entry.lastUse.detail">

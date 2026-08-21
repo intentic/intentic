@@ -5,7 +5,7 @@
      PLUGINS ONLY, now. It used to serve the extension card too, and that was the whole of extension discovery in
      this product: a collapsed block on a form, five clicks from the rail, presented as a way to pre-fill a text
      field. Extensions have a surface of their own (the Sandbox screen's Discover row), and that card links to it
-     rather than growing a second, worse copy of it. What stays here is a genuinely different object — a plugin
+     rather than growing a second, worse copy of it. What stays here is a genuinely different object: a plugin
      loads into the agent rather than running in this browser, its registries are usually somebody else's, and
      its install form is the one below. -->
 <script setup lang="ts">
@@ -21,24 +21,24 @@ import { formatCredits } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";
 import { checksOk, checksProblem } from "../pages/sandbox/discoverListing";
 
-/** What this card installs — the rows of any other kind are not its to offer. */
+/** What this card installs: the rows of any other kind are not its to offer. */
 const props = defineProps<{ kind: CapabilityKind }>();
 
-/* A premium row's price, from the platform rather than from a sentence typed here — the same figure the
+/* A premium row's price, from the platform rather than from a sentence typed here: the same figure the
  * extension catalogue quotes, since it is the same donation. This card only PRE-FILLS the install form, so the
  * spend is still a step away; naming the number here is what stops it being a surprise at the end of it. */
 const { donationCredits } = useMembership();
 
 const premiumHint = computed(() =>
     donationCredits.value > 0
-        ? `Premium — installing pays its creator ${formatCredits(donationCredits.value)} credits from your daily allowance, once a month`
-        : `Premium — needs an intentic membership; installing donates credits to its creator`,
+        ? `Premium: installing pays its creator ${formatCredits(donationCredits.value)} credits from your daily allowance, once a month`
+        : `Premium, needs an intentic membership; installing donates credits to its creator`,
 );
 
 const emit = defineEmits<{
     /** A row's install coordinates, ready for the form. */
     pick: [answers: { name: string; url: string; ref: string; path: string; token: string }];
-    /** Why the browse failed, on the page's own notice — or null to clear it before a fresh attempt. */
+    /** Why the browse failed, on the page's own notice, or null to clear it before a fresh attempt. */
     notice: [notice: NoticeModel | null];
 }>();
 
@@ -67,7 +67,7 @@ const browse = async (): Promise<void> => {
 // offering an extension row on the plugin form would pre-fill a config the daemon then refuses.
 const entries = computed<RegistryEntry[]>(() => market.value?.plugins.filter((entry) => entry.kind === props.kind) ?? []);
 
-/* Why a row can't be clicked, in the words the reader needs — the button is disabled either way, and a disabled
+/* Why a row can't be clicked, in the words the reader needs: the button is disabled either way, and a disabled
  * row with no reason reads as a broken page. Blocked leads: it is the one case where the entry is fine
  * mechanically and the answer is still no. The sha rule bites only extensions (their code runs trusted in this
  * browser), so a plugin row pinned to a branch stays installable. */
@@ -135,13 +135,13 @@ const pick = (entry: RegistryEntry): void => {
                     >
                     <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
                     <!-- Evidence, not endorsement: the nightly scan re-read this row's pinned commit and found
-                         (or didn't) a thing that loads. Silent when there are no checks at all — absence of
+                         (or didn't) a thing that loads. Silent when there are no checks at all: absence of
                          evidence is not a warning. -->
                     <Icon
                         v-if="checksOk(entry)"
                         name="check"
                         class="shrink-0 text-success"
-                        v-tooltip.top="`Loads — re-checked at the pinned commit by the registry's nightly scan`"
+                        v-tooltip.top="`Loads: re-checked at the pinned commit by the registry's nightly scan`"
                     />
                     <Icon
                         v-else-if="checksProblem(entry)"

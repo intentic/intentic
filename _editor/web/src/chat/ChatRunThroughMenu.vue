@@ -5,11 +5,11 @@ import { computed } from "vue";
 import { useLoopDesigns } from "../composables/agents/useLoopDesigns";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 
-/* THE COMPOSER'S "RUN THROUGH" PICKER — the one answer to "what happens to this message when I press send".
+/* THE COMPOSER'S "RUN THROUGH" PICKER: the one answer to "what happens to this message when I press send".
  *
  * IT USED TO BE TWO PILLS AND TWO MENUS, and the split is worth keeping written down because it looked
- * principled and wasn't. A loop and a workflow are different machines — one repeats this message in this chat
- * until a bar is cleared, the other fans it across sessions that are not this one — but they are answers to the
+ * principled and wasn't. A loop and a workflow are different machines: one repeats this message in this chat
+ * until a bar is cleared, the other fans it across sessions that are not this one, but they are answers to the
  * SAME question, and the composer can only take one of them. The old row said so in the weakest way available:
  * arming a workflow greyed the loop pill out. So the exclusivity was a thing you discovered by watching a
  * neighbour dim, two bare glyphs sat side by side with nothing to tell them apart until you hovered one, and
@@ -17,7 +17,7 @@ import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
  *
  * One control, one list, two headed sections. The exclusivity stops being a rule that greys something out and
  * becomes the shape of the thing: picking is picking, and a pick replaces a pick. The headings do the teaching
- * the two glyphs never could — you read what the difference IS at the moment you are choosing between them,
+ * the two glyphs never could: you read what the difference IS at the moment you are choosing between them,
  * which is the only moment it matters.
  *
  * WHAT DOESN'T COLLAPSE is the sentence under each row. A loop row still carries its stop condition and its
@@ -32,7 +32,7 @@ const emit = defineEmits<{ loop: [design: LoopDesign | undefined]; workflow: [de
 const { designs: loops } = useLoopDesigns();
 const { designs: workflows } = useWorkflowRuns();
 
-// The shape, in the words the workflows page uses for it — so a design recognised there is the same one here.
+// The shape, in the words the workflows page uses for it, so a design recognised there is the same one here.
 const shapeOf = (design: Workflow): string => {
     const roots = design.steps.filter((step) => step.needs.length === 0).length;
     const widest = Math.max(1, ...design.steps.map((step) => design.steps.filter((other) => other.needs.includes(step.id)).length));
@@ -54,16 +54,16 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
 <template>
     <div class="flex flex-col p-1">
         <!-- Nothing saved anywhere is the ordinary state of a workspace that has never needed either, not an
-             error — so the sentence says what the two things ARE rather than reporting an absence twice.
+             error, so the sentence says what the two things ARE rather than reporting an absence twice.
              Somebody reading this has just pressed a control whose glyph told them nothing. -->
         <p v-if="empty" class="px-2.5 py-3 text-2xs text-subtle">
-            Nothing saved yet. A <strong class="font-medium text-muted">loop</strong> sends your message over and over — fixing, checking, fixing —
+            Nothing saved yet. A <strong class="font-medium text-muted">loop</strong> sends your message over and over: fixing, checking, fixing:
             until something you can state is true. A <strong class="font-medium text-muted">workflow</strong> hands it to a design of several sessions
             instead of to this chat.
         </p>
 
         <!-- The way back to an ordinary message, and it has to be a row: the pill is a badge, so unpicking
-             belongs in the list the pick was made in. ONE row for both kinds — which is the whole point of the
+             belongs in the list the pick was made in. ONE row for both kinds, which is the whole point of the
              merge, since "no loop" and "no workflow" were never two states a person could be in at once. -->
         <button
             v-if="picked"
@@ -82,8 +82,8 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
         </button>
 
         <!-- THE TWO SECTIONS ARE HEADED, and the heading is the sentence that separates them rather than a
-             label. This is where the difference between the machines gets taught — at the moment of choosing,
-             which is the only moment anyone cares — and it is what the two bare glyphs in the old row could
+             label. This is where the difference between the machines gets taught: at the moment of choosing,
+             which is the only moment anyone cares, and it is what the two bare glyphs in the old row could
              never say. Each heading hides with its section: a workspace with loops and no workflows reads as a
              loop picker, not as a half-empty pair. -->
         <template v-if="loops.length > 0">
@@ -130,7 +130,7 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
             </button>
         </template>
 
-        <!-- The way to the page that owns BOTH kinds, at the bottom where a list's "manage" always is — and the
+        <!-- The way to the page that owns BOTH kinds, at the bottom where a list's "manage" always is, and the
              only door to the long loop form, which is written once per loop instead of once per use. One row
              rather than two because the Workflows page is where both are authored; sending someone to "manage
              loops" and "manage workflows" separately would invent a split the app doesn't have. -->

@@ -51,7 +51,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
         const graph = await readArtifact(artifact);
         // Services-only (and github/gitlab-backed) intents provision no Forgejo control plane, nothing to adopt.
         if (!Object.values(graph.resources).some((node) => node.type === "forgejo")) {
-            out.text("no forgejo in the artifact (no control plane) — nothing to adopt");
+            out.text("no forgejo in the artifact (no control plane): nothing to adopt");
             out.result({ repos: [], reason: "no control plane" });
             return;
         }

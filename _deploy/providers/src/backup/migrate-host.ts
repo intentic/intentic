@@ -36,7 +36,7 @@ export const quiesceHost = async (session: SshSession): Promise<void> => {
 export const snapshotNow = async (session: SshSession, log: (message: string) => void): Promise<boolean> => {
     const running = (await session.exec(`docker ps --filter "name=^${BACKUP_CONTAINER}$" --format '{{.Names}}'`)).stdout.trim();
     if (running !== BACKUP_CONTAINER) {
-        log(`${BACKUP_CONTAINER} is not running on the old host — migrating from the latest existing snapshot instead`);
+        log(`${BACKUP_CONTAINER} is not running on the old host: migrating from the latest existing snapshot instead`);
         return false;
     }
     const result = await session.exec(`docker exec ${BACKUP_CONTAINER} /bin/sh ${BACKUP_SCRIPT}`);
@@ -59,7 +59,7 @@ export const streamRepoVolume = async (
     log: (message: string) => void,
 ): Promise<void> => {
     if (oldSession.download === undefined || newSession.upload === undefined) {
-        throw new Error("migrate: the SSH executor cannot transfer files (no SFTP download/upload) — cannot stream the repo");
+        throw new Error("migrate: the SSH executor cannot transfer files (no SFTP download/upload), cannot stream the repo");
     }
     const pack = await oldSession.exec(
         `docker run --rm --entrypoint sh -v ${REPO_VOLUME}:/repo:ro -v /opt/intentic:/out ${image} -c 'tar czf /out/migrate-repo.tgz -C /repo .'`,

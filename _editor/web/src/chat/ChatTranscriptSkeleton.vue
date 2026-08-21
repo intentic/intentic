@@ -2,13 +2,13 @@
 import { Icon } from "@intentic/ui";
 import { onScopeDispose, ref } from "vue";
 
-/* The outline of a conversation that has not arrived yet — what replaced the centred spinner.
+/* The outline of a conversation that has not arrived yet: what replaced the centred spinner.
  *
  * A spinner says only "wait". Over a transcript that is worth saying more than: this column is always the same
  * three shapes stacked (a prompt against the right edge, the tool rows a turn ran, the answer it wrote), so the
  * wait can be drawn as the layout the content will occupy. Two things come out of that. The reader knows what
  * is coming and roughly how much of it, and the arrival is content filling in its own outline rather than a
- * spinner in the middle of the panel being replaced by text that starts at the top — the eye is not asked to
+ * spinner in the middle of the panel being replaced by text that starts at the top: the eye is not asked to
  * re-anchor once the data lands.
  *
  * It is anchored to the BOTTOM because that is where a restored transcript lands: useStickToBottom follows the
@@ -30,7 +30,7 @@ const TURNS = [
 // is what a placeholder looks like anyway.
 const OUTLINE = [...TURNS, ...TURNS];
 
-/* Past this the outline has stopped being informative — it promised content and the promise is overdue, and a
+/* Past this the outline has stopped being informative: it promised content and the promise is overdue, and a
  * placeholder left pulsing at that point is indistinguishable from one that is stuck. This component's
  * lifetime IS the visible wait (ChatPanel mounts it through useLoadingReveal), so a timer armed at setup
  * measures exactly how long the user has been looking at it. */
@@ -48,7 +48,7 @@ onScopeDispose(() => clearTimeout(timer));
          column it sits in: in flow, that height became .chat-turns' content-based minimum, which grew the single
          scroller the panel shares with its composer and pushed the composer off the bottom of the window. An
          absolutely positioned box contributes no intrinsic size, so the column stays exactly as tall as the space
-         it was given and the overflow is clipped here rather than scrolled — a transcript with nothing in it yet
+         it was given and the overflow is clipped here rather than scrolled: a transcript with nothing in it yet
          must not have a scrollbar. -->
     <div class="relative min-h-0 flex-1" role="status" aria-busy="true">
         <span class="sr-only">Loading conversation…</span>
@@ -60,7 +60,7 @@ onScopeDispose(() => clearTimeout(timer));
                         <span v-for="(line, lineIndex) in turn.prompt" :key="lineIndex" class="h-3 rounded bg-content/10" :class="line" />
                     </div>
                 </div>
-                <!-- Tool calls are bare rows at the meta tier — a glyph, a name, a target — not cards. -->
+                <!-- Tool calls are bare rows at the meta tier: a glyph, a name, a target, not cards. -->
                 <div class="flex flex-col gap-0.5">
                     <span v-for="(target, toolIndex) in turn.tools" :key="toolIndex" class="flex items-center gap-1.5">
                         <span class="h-2.5 w-2.5 shrink-0 rounded bg-content/25" />

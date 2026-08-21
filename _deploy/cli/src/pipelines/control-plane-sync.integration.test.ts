@@ -62,7 +62,7 @@ test("a newly-required generated secret is pushed to Forgejo; existing ones are 
             api,
         });
 
-        // Only the new key is pushed — never FORGEJO_ADMIN_PASSWORD, which already exists in Forgejo.
+        // Only the new key is pushed: never FORGEJO_ADMIN_PASSWORD, which already exists in Forgejo.
         expect(calls).toEqual([{ name: "desired-state", secretName: "APP_DATABASE_PASSWORD", data: "db-secret" }]);
         expect(result.pushed).toEqual(["APP_DATABASE_PASSWORD"]);
         const apply = await readFile(join(dir, APPLY_WORKFLOW_PATH), "utf8");

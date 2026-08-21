@@ -1,20 +1,20 @@
 // @vitest-environment jsdom
 //
-// The open-chat list is a SCROLL BOX — a lane-grouped column of cards, in a sheet the docked header drops or in
-// the pop-out rail — and almost nothing that focuses a chat is inside it: a card on /agents, a history row, a
+// The open-chat list is a SCROLL BOX: a lane-grouped column of cards, in a sheet the docked header drops or in
+// the pop-out rail, and almost nothing that focuses a chat is inside it: a card on /agents, a history row, a
 // chord, a brand-new agent appended to the end. Each of those lands on the store's setActive, and unless the
 // list follows, the card it is highlighting can sit scrolled out of sight while the panel swaps its transcript
 // underneath. The docked case is worse still: the sheet mounts on open, so the card it must show is one that
 // was chosen long before this list existed.
 // Driven through setActive and through mounting rather than through a mounted /agents board: the board's card,
 // the history row and the panel's own select all reach the list through that one write. jsdom lays nothing out,
-// so what is asserted is the CALL — which card the list asked to reveal, and that it asked for the cheapest
+// so what is asserted is the CALL, which card the list asked to reveal, and that it asked for the cheapest
 // scroll (`nearest`, a no-op on a card already visible).
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { draftConversation, resetChat, reveal, useChat } from "../composables/chat/useChat";
-// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
 // suites open extra tabs with.
 const newChat = () => {
     const conversation = draftConversation();
@@ -39,7 +39,7 @@ const { reveals } = vi.hoisted(() => {
     return { reveals: recorded };
 });
 
-// Mounted per test, because MOUNTING is half of what is under test here — the docked sheet is built and torn
+// Mounted per test, because MOUNTING is half of what is under test here: the docked sheet is built and torn
 // down with every open. The list registers no commands, so nothing objects to being stood up twice.
 let app: App | undefined;
 const mountList = async (): Promise<void> => {
@@ -86,7 +86,7 @@ it(`scrolls a chat focused from outside the list back into view`, async () => {
     await mountList();
     reveals.length = 0;
 
-    // The first card is rows above the focus that opening six left on the last one — this is the /agents click.
+    // The first card is rows above the focus that opening six left on the last one: this is the /agents click.
     chat.setActive(ids[0]!);
     await settle();
 
@@ -108,7 +108,7 @@ it(`reveals again when the chat already in focus is selected once more`, async (
     expect(reveals.at(-1)?.tab).toBe(ids[0]);
 });
 
-it(`opens already showing the active chat — the docked sheet's whole first frame`, async () => {
+it(`opens already showing the active chat: the docked sheet's whole first frame`, async () => {
     const chat = useChat();
     const ids = openTabs(6);
     chat.setActive(ids[0]!);

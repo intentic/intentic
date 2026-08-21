@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 //
-// jsdom because the whole subject is what survives a reload, and that is localStorage — under `node` the
+// jsdom because the whole subject is what survives a reload, and that is localStorage: under `node` the
 // storage boundary degrades to in-memory (browserStorage.ts) and every persistence assertion here would pass
 // for the wrong reason.
 import { beforeEach, expect, it, vi } from "vitest";
 
 /* THE TWO SCOPES, which are the only thing worth pinning here: a yes belongs to the browser and a no belongs to
- * the sandbox. Get them the wrong way round and the product misbehaves in ways nobody would file a bug for —
+ * the sandbox. Get them the wrong way round and the product misbehaves in ways nobody would file a bug for:
  * a browser-wide no silently costs every future sandbox the shortcut with no way back, and a sandbox-scoped
  * yes re-raises a permission the browser already granted, every time the user adds a sandbox. */
 
@@ -35,7 +35,7 @@ it(`asks about a sandbox once, and only while the user is looking at it`, async 
     expect(question.value).toBe(LAPTOP);
 
     // Switched away mid-question: the card would now be offering to speed up something the user has navigated
-    // off. It is dropped rather than re-pointed — whether the new sandbox is worth asking about is the probe's
+    // off. It is dropped rather than re-pointed, whether the new sandbox is worth asking about is the probe's
     // call, and it makes it on arrival.
     activeSandboxId.value = DESKTOP;
     expect(question.value).toBeUndefined();
@@ -67,7 +67,7 @@ it(`keeps a no for that sandbox alone, so the answer can change when the user's 
     expect(first.question.value).toBeUndefined();
     expect(first.answerFor(DESKTOP)).toBe(`declined`);
     // The sandbox they set up on the laptop in front of them tomorrow is a different question, and it still
-    // gets asked — this is what stands in for a settings page nobody would find.
+    // gets asked: this is what stands in for a settings page nobody would find.
     expect(first.answerFor(LAPTOP)).toBe(`unasked`);
 
     const reloaded = await load();

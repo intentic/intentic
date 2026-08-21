@@ -15,11 +15,11 @@ import { APPLY_WORKFLOW_PATH, forgejoSecretName, GIT_TOKEN_SECRET, GIT_USER_SECR
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 
 // The hermetic Tier-1 run: the same DinD host + real CLI as cli.e2e.test.ts, but with ZERO external
-// dependencies — no Cloudflare token, no zone, no DNS, no tunnel. Two existing seams make that possible:
+// dependencies: no Cloudflare token, no zone, no DNS, no tunnel. Two existing seams make that possible:
 // an authored `zone` resolves the full artifact offline (no token/network), and `apply --target` over the
 // derived platform trio (forgejo + runner + komodo) reconciles a slice whose inputs reference nothing but
-// the host. This covers exactly the deployment path that breaks in the field — the derived control plane
-// coming up on a real Docker host, gated by the engine-level SSH readiness probe — plus `adopt` against the
+// the host. This covers exactly the deployment path that breaks in the field: the derived control plane
+// coming up on a real Docker host, gated by the engine-level SSH readiness probe: plus `adopt` against the
 // real Forgejo, idempotent re-runs, and a reproduced readiness failure asserting the diagnostic sweep.
 // Gated behind INTENTIC_E2E_HERMETIC (needs a privileged local Docker daemon); runs as a non-blocking MR
 // sidecar in CI, while the Cloudflare-backed cli.e2e stays nightly.
@@ -56,7 +56,7 @@ export const intent = defineIntent((i) => {
         port: ${port},
     });
 
-    // The authored zone makes resolve fully offline — the dummy token is never sent anywhere.
+    // The authored zone makes resolve fully offline: the dummy token is never sent anywhere.
     const cf = i.have.cloudflare("cf", {
         apiToken: env("CLOUDFLARE_API_TOKEN"),
         zone: ${JSON.stringify(ZONE)},
@@ -96,7 +96,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
                 .withExposedPorts(22, FORGEJO_PORT)
                 .withCopyContentToContainer([{ content: keys.public, target: "/root/.ssh/authorized_keys", mode: 0o600 }])
                 // Port 3000 stays silent until apply boots Forgejo, so waiting on listening ports would
-                // hang — wait for sshd instead (the entrypoint starts it only after dockerd accepts commands).
+                // hang: wait for sshd instead (the entrypoint starts it only after dockerd accepts commands).
                 .withWaitStrategy(Wait.forSuccessfulCommand("nc -z 127.0.0.1 22"))
                 .withStartupTimeout(180_000);
 
@@ -120,7 +120,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 300_000);
 
     afterAll(async () => {
-        // Nothing external exists — stop the host and remove the scaffold, done.
+        // Nothing external exists: stop the host and remove the scaffold, done.
         await host?.stop().catch(() => {});
         if (tmp !== undefined) {
             await rm(tmp, { recursive: true, force: true }).catch(() => {});
@@ -198,7 +198,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(running).toContain("komodo-core");
 
         // Re-verify the engine's readiness gate independently: the derived internalUrl must be fetchable
-        // FROM THE HOST at the discovered internalIp — the exact check that timed out in the field.
+        // FROM THE HOST at the discovered internalIp: the exact check that timed out in the field.
         const internalIp = (await sshRun(INTERNAL_IP_COMMAND)).stdout.trim();
         expect(internalIp).not.toBe("");
         expect((await sshRun(`wget -q -T 10 -O /dev/null http://${internalIp}:${FORGEJO_PORT}`)).code).toBe(0);
@@ -234,7 +234,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(await forgejoApi.readFile({ ...onMain, name: "intent", path: INTENT_WORKFLOW_PATH })).toBeDefined();
         expect(await forgejoApi.readFile({ ...onMain, name: "desired-state", path: APPLY_WORKFLOW_PATH })).toBeDefined();
 
-        // Actions secrets landed on both repos (list via the raw API — the provider client only writes).
+        // Actions secrets landed on both repos (list via the raw API: the provider client only writes).
         const listSecrets = async (name: string): Promise<string[]> => {
             const response = await fetch(`${baseUrl}/api/v1/repos/${adminUsername}/${name}/actions/secrets`, {
                 headers: { Authorization: `Basic ${Buffer.from(`${adminUsername}:${password}`).toString("base64")}` },
@@ -246,7 +246,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(intentSecrets).toContain(GIT_USER_SECRET);
         expect(intentSecrets).toContain(GIT_TOKEN_SECRET);
         const applySecrets = await listSecrets("desired-state");
-        // Reserved-prefix keys (FORGEJO_*) are stored under their INTENTIC_-prefixed name — assert the
+        // Reserved-prefix keys (FORGEJO_*) are stored under their INTENTIC_-prefixed name: assert the
         // same transform the PUT and the workflow reference use.
         for (const key of ["HOST_SSH_KEY", "CLOUDFLARE_API_TOKEN", "FORGEJO_ADMIN_PASSWORD", "KOMODO_ADMIN_PASSWORD"]) {
             expect(applySecrets).toContain(forgejoSecretName(key));
@@ -264,7 +264,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it("a readiness-gate failure self-explains with the SSH diagnostic sweep", async () => {
         // Reproduce the field failure class: the service is healthy in-container (the provider's own
         // localhost healthcheck passes) but unreachable at the discovered internalIp (the engine gate's
-        // host-side probe). An iptables DROP on the internalIp:3000 INPUT path creates exactly that split —
+        // host-side probe). An iptables DROP on the internalIp:3000 INPUT path creates exactly that split:
         // the provider probes http://localhost:3000 (dst 127.0.0.1, unmatched), the gate probes
         // http://<internalIp>:3000 (matched, dropped). readyWhen sits outside `inputs`, so shrinking the
         // timeout does not perturb the stamp hash; removing the container forces a create so the gate
@@ -296,7 +296,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(output).toMatch(/LISTEN.*:3000/);
         expect(output).toContain("$ ip -4 -o addr");
 
-        // Recovery: lift the block, restore the timeout, re-apply — the recreated forgejo reads healthy.
+        // Recovery: lift the block, restore the timeout, re-apply, the recreated forgejo reads healthy.
         expect((await sshRun(`iptables -D INPUT ${spec}`)).code).toBe(0);
         readyWhen.timeout = "120s";
         await writeFile(artifactPath, JSON.stringify(artifact, undefined, 4));

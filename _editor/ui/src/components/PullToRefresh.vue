@@ -1,5 +1,5 @@
 <!-- Pull-to-refresh scroll container. When its content is at the top and a touch drags down past the
-     threshold, releasing fires `onRefresh` and a spinner tracks the pull. Touch only — a mouse never triggers
+     threshold, releasing fires `onRefresh` and a spinner tracks the pull. Touch only: a mouse never triggers
      it. Wrap a list's scroll area with this and pass the query's refetch. -->
 <script setup lang="ts">
 import { ref } from "vue";
@@ -18,7 +18,7 @@ let startY = 0;
 let active = false;
 
 const onTouchStart = (event: TouchEvent): void => {
-    // Only arm when already scrolled to the very top — otherwise this is a normal scroll.
+    // Only arm when already scrolled to the very top: otherwise this is a normal scroll.
     if (refreshing.value || scroller.value === undefined || scroller.value.scrollTop > 0) {
         active = false;
         return;

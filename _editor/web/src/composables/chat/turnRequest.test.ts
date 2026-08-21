@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { turnRequestBody } from "./turnRequest";
 
-// The turn selection a send runs under — the same shape the composer captures.
+// The turn selection a send runs under: the same shape the composer captures.
 const settings = {
     agent: `claude`,
     harness: `native`,
@@ -51,8 +51,8 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, isolated: true }))).toMatchObject({ isolated: true });
     });
 
-    /* An omitted session id is the whole of what a switched turn says. No transcript rides with it — the daemon
-     * seeds the replacement from its own record of the conversation — so "starts a fresh session" and "resumes"
+    /* An omitted session id is the whole of what a switched turn says. No transcript rides with it: the daemon
+     * seeds the replacement from its own record of the conversation, so "starts a fresh session" and "resumes"
      * are one key present or absent, with nothing to keep consistent between them. */
     it(`carries a resumed session id, and nothing at all in its place when there is none`, () => {
         const resumed = wire(turnRequestBody({ ...base, resume: { id: `s-1`, provider: `claude`, account: undefined, harness: `native` } }));
@@ -62,7 +62,7 @@ describe(`turnRequestBody`, () => {
     });
 
     // A fork is the one turn that has to say where its conversation came from: it is new daemon-side, so
-    // nothing there knows what it should start with until this names the cut — nor which files it starts on.
+    // nothing there knows what it should start with until this names the cut, nor which files it starts on.
     it(`names a fork's origin and its file choice, and only for the fork's own first turn`, () => {
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`forkOf`);
         expect(wire(turnRequestBody({ ...base, forkOf: { conversationId: `c0`, keep: 4, files: `then` } }))).toMatchObject({
@@ -72,7 +72,7 @@ describe(`turnRequestBody`, () => {
 
     /* THE PERSONA IS THE ONE OMISSION THAT IS NOT A DEFAULT BUT A POSTURE. An absent `actsAs` on an attended
      * turn keeps every connected account; the same absence on an unattended wake reaches none. So this key must
-     * be missing when nobody is picked rather than sent as an empty string — a named card the daemon cannot
+     * be missing when nobody is picked rather than sent as an empty string: a named card the daemon cannot
      * find is the fail-closed case, and "" names nothing at all. */
     it(`carries the persona only once one is picked`, () => {
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`actsAs`);

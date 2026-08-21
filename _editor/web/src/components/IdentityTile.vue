@@ -1,12 +1,12 @@
-<!-- THE SESSION'S IDENTITY TILE — the leading mark on a session card, in both of the card's frames (the fleet
+<!-- THE SESSION'S IDENTITY TILE: the leading mark on a session card, in both of the card's frames (the fleet
      board's AgentCard, the chat rail's ChatTabList) and on the rail's "Not open" search hits. One component
      because the two cards are one card in two skins, and the tile is exactly the part that must never drift
      between them: same category reading, same tint formula, same fallback.
 
      What it shows is the best fact known about the session, in order of how much it says:
-       · a CATEGORY (sessionCategory over the title) — the kind-of-work glyph on the category's tint, colour
+       · a CATEGORY (sessionCategory over the title): the kind-of-work glyph on the category's tint, colour
          and shape carrying the same fact twice. The board's tooltip names it; the rail's hover note does.
-       · otherwise the PROVIDER mark on neutral chrome (Avatar's own) — an unnamed draft or an unreadable
+       · otherwise the PROVIDER mark on neutral chrome (Avatar's own): an unnamed draft or an unreadable
          title has no category yet, and "whose runtime" is the most a tile can truthfully say about it.
 
      Size comes from the host (h/w and a text size on the class attr): the glyphs render at 1em, so one

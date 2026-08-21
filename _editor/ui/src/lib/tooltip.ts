@@ -51,9 +51,9 @@ import type { Directive, DirectiveBinding } from "vue";
  *      never reaches a touch device, and it is gone the moment the pointer moves, see AgentConflictReport,
  *      which pairs every button with the sentence that qualifies it. */
 
-const GAP = 6; // px between the anchor and the box — leaves room for the arrow
+const GAP = 6; // px between the anchor and the box: leaves room for the arrow
 const EDGE = 8; // px of viewport kept clear on every side
-const ARROW = 4; // px — half the arrow's width, mirrored by the border-width in tooltip.css
+const ARROW = 4; // px: half the arrow's width, mirrored by the border-width in tooltip.css
 
 type Placement = "top" | "bottom" | "left" | "right";
 type Modifier = Placement | "overflow";

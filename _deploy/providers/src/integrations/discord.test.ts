@@ -154,7 +154,7 @@ test("apply reuses an existing guild instead of creating a new one", async () =>
 
     await provider.apply!(baseInputs, undefined, ctx);
 
-    // No new guild was created — the existing one is reused.
+    // No new guild was created: the existing one is reused.
     expect(guilds).toHaveLength(1);
     expect(guilds[0]!.id).toBe(GUILD_ID);
 

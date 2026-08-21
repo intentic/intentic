@@ -13,11 +13,11 @@ import {
 } from "./useDaemonRoutes";
 
 // A daemon level with this browser advertises the whole contract; an older one is that set minus what it
-// predates. Both are supported states — the point of the store is telling them apart.
+// predates. Both are supported states: the point of the store is telling them apart.
 const LEVEL = [...SANDBOX_ROUTE_NAMES];
 const withoutVpn = LEVEL.filter((name) => !name.startsWith(`vpn.`));
 
-// The shapes a level daemon publishes, and the same set with named routes shaped differently — an image built
+// The shapes a level daemon publishes, and the same set with named routes shaped differently: an image built
 // before a field was added to them.
 const SHAPES = { ...SANDBOX_ROUTE_SHAPES };
 const reshaped = (...names: string[]): Record<string, string> => ({ ...SHAPES, ...Object.fromEntries(names.map((name) => [name, `different`])) });
@@ -33,7 +33,7 @@ describe(`useDaemonRoutes`, () => {
 
     it(`assumes support from a daemon too old to advertise routes at all`, () => {
         // A daemon built before the hello frame carried `routes` sends none. Silence is not evidence of a gap,
-        // so nothing may be gated on it — the pre-existing 404 behaviour is what such a daemon gets.
+        // so nothing may be gated on it: the pre-existing 404 behaviour is what such a daemon gets.
         setDaemonRoutes(undefined);
         expect(supportsRoute(`vpn.list`)).toBe(true);
         expect(daemonBehind.value).toBe(false);
@@ -64,7 +64,7 @@ describe(`useDaemonRoutes`, () => {
         setDaemonRoutes(withoutVpn);
         expect(supportsRoute(`vpn.list`)).toBe(false);
         resetDaemonRoutes();
-        // Another sandbox runs another image — attributing the old one would hide a feature it really has.
+        // Another sandbox runs another image: attributing the old one would hide a feature it really has.
         expect(supportsRoute(`vpn.list`)).toBe(true);
     });
 });
@@ -78,7 +78,7 @@ describe(`driftedRoutes`, () => {
     });
 
     it(`reports no drift from a daemon too old to advertise shapes`, () => {
-        // It sent route names but no shapes — silence is not evidence, exactly as for the names themselves.
+        // It sent route names but no shapes: silence is not evidence, exactly as for the names themselves.
         setDaemonRoutes(LEVEL);
         expect(driftedRoutes.value).toEqual([]);
         expect(daemonDrifted.value).toBe(false);
@@ -96,7 +96,7 @@ describe(`driftedRoutes`, () => {
         expect(daemonDrifted.value).toBe(true);
     });
 
-    it(`is independent of the missing-route check — a daemon can be level on names and drifted on shapes`, () => {
+    it(`is independent of the missing-route check: a daemon can be level on names and drifted on shapes`, () => {
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
         expect(daemonBehind.value).toBe(false);
         expect(daemonDrifted.value).toBe(true);
@@ -162,7 +162,7 @@ describe(`staleDaemonReason`, () => {
         expect(staleDaemonReason(`GET`, `/vpn`)).toContain(`vpn.list`);
     });
 
-    it(`stays silent for a route the daemon advertises — that 404 is a real 404`, () => {
+    it(`stays silent for a route the daemon advertises: that 404 is a real 404`, () => {
         setDaemonRoutes(LEVEL);
         expect(staleDaemonReason(`GET`, `/vpn`)).toBeUndefined();
     });

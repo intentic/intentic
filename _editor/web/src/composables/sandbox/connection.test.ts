@@ -20,7 +20,7 @@ const failed = (failure = network(), at = 1_000): ConnectionSignal => ({ kind: `
 
 describe(`classifyFailure`, () => {
     it(`tells our own watchdog apart from a network failure`, () => {
-        // Both surface as an aborted fetch — the watchdog aborts the stream itself — so the DRIVER has to say
+        // Both surface as an aborted fetch: the watchdog aborts the stream itself, so the DRIVER has to say
         // which one it was. This is the sniff (`error.name === "AbortError"`) the machine replaces.
         expect(watchdog().kind).toBe(`timeout`);
         expect(network().kind).toBe(`network`);
@@ -141,7 +141,7 @@ describe(`applyConnectionSignal`, () => {
 
     it(`lets the optimistic paint survive the reconnect it exists to cover`, () => {
         // The driver signals `connect` immediately after a switch. Demoting the paint there would blank the
-        // workspace and disable every daemon query for the round trip — undoing the whole point of it.
+        // workspace and disable every daemon query for the round trip: undoing the whole point of it.
         expect(drive({ kind: `switched`, lastKnownOnline: true }, { kind: `connect` }).phase).toBe(`online`);
     });
 
@@ -156,7 +156,7 @@ describe(`applyConnectionSignal`, () => {
         expect(state.generation).toBe(2);
     });
 
-    it(`treats a changed ADDRESS as a retry, not an outage — in either direction`, () => {
+    it(`treats a changed ADDRESS as a retry, not an outage, in either direction`, () => {
         // Promotion: the loopback shortcut qualified mid-stream, so the driver aborts to reconnect onto it.
         // That abort is deliberate; recording it as a failure would put a "reconnecting" gate over a workspace
         // that is about to get FASTER, and would make the first attempt on the new address wait out a backoff.
@@ -166,12 +166,12 @@ describe(`applyConnectionSignal`, () => {
         expect(promoted.retryDelayMs).toBe(0);
 
         // Demotion: the shortcut died after a run of real failures. The tunnel is known-good, so the ladder
-        // those failures built must not be carried onto it — the next attempt goes out immediately.
+        // those failures built must not be carried onto it: the next attempt goes out immediately.
         const demoted = drive(failed(network(), 1_000), failed(network(), 2_000), { kind: `retargeted` });
         expect(demoted.attempt).toBe(0);
         expect(demoted.retryDelayMs).toBe(0);
 
-        // The sandbox did not change, so nothing keyed to it goes stale — unlike a switch, which bumps.
+        // The sandbox did not change, so nothing keyed to it goes stale: unlike a switch, which bumps.
         expect(drive({ kind: `retargeted` }).generation).toBe(0);
     });
 

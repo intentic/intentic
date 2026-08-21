@@ -55,7 +55,7 @@ describe(`vscodeThemeToTokens`, () => {
             type: `dark`,
             colors: {
                 "editor.background": `#000000`,
-                // 50% white border — the WRONG answer would be #ffffff (alpha stripped); the right one is grey.
+                // 50% white border: the WRONG answer would be #ffffff (alpha stripped); the right one is grey.
                 "panel.border": `#ffffff80`,
             },
         });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Resolving a keystroke now reads the focused surface off the event's target (contextKeys.ts), so the registry
-// cannot be exercised without a DOM — the dispatch it backs never runs outside one either.
+// cannot be exercised without a DOM: the dispatch it backs never runs outside one either.
 import { afterEach, describe, expect, it } from "vitest";
 import { ref } from "vue";
 import { publishContextKey } from "./contextKeys";
@@ -8,7 +8,7 @@ import { boundCommand, type CommandRegistration, commands, executeCommand, regis
 
 /* The command registry backs the palette's `>` command mode: the shell's built-in commands and every extension's
  * contributed ones register here, and Quick Open filters + runs them by id. These pin the invariants the palette
- * relies on — unique ids, dispose really removes, and execute reaches the live handler. */
+ * relies on: unique ids, dispose really removes, and execute reaches the live handler. */
 
 const entry = (command: string, handler: CommandRegistration[`handler`]): CommandRegistration => ({
     owner: `builtin`,
@@ -44,7 +44,7 @@ describe(`command registry`, () => {
         const disposable = registerCommand(entry(`chat.togglePopout`, () => undefined));
         disposable.dispose();
         expect(commands.value).toHaveLength(0);
-        // Re-registering the same id must now succeed — this is what lets the shell remount without colliding.
+        // Re-registering the same id must now succeed: this is what lets the shell remount without colliding.
         expect(() => registerCommand(entry(`chat.togglePopout`, () => undefined))).not.toThrow();
     });
 
@@ -54,7 +54,7 @@ describe(`command registry`, () => {
 });
 
 // The one matching loop shared by the window dispatcher and the terminal's key-forwarding hook. Same minimal
-// event stub as keybindings.test — boundCommand reads only the modifier flags and `key`.
+// event stub as keybindings.test: boundCommand reads only the modifier flags and `key`.
 const keydown = (init: Partial<KeyboardEvent>): KeyboardEvent =>
     ({ ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...init }) as KeyboardEvent;
 

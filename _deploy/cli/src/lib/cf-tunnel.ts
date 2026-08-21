@@ -17,12 +17,12 @@ export const resolveZone = async (
     const zones = await api.listZones({ apiToken });
     const [only, ...rest] = zones;
     if (only === undefined) {
-        throw new Error("the Cloudflare API token sees no zones — add a domain to the account, or broaden the token's Zone:Read scope");
+        throw new Error("the Cloudflare API token sees no zones: add a domain to the account, or broaden the token's Zone:Read scope");
     }
     if (rest.length > 0) {
         const names = [only, ...rest].map((zone) => zone.name);
         throw new Error(
-            `the Cloudflare API token sees multiple zones (${names.join(", ")}) — set the ZONE env var or pass --zone to choose one, e.g. --zone ${only.name}`,
+            `the Cloudflare API token sees multiple zones (${names.join(", ")}): set the ZONE env var or pass --zone to choose one, e.g. --zone ${only.name}`,
         );
     }
     return only;

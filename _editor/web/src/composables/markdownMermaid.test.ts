@@ -2,12 +2,12 @@
 //
 // What a ```mermaid fence does once it is mounted. figures.test.ts covers the fence as data; this file covers the
 // half of the contract that only exists at render time, because mermaid's own parser is the validator and it
-// arrives behind a lazy import — a body it accepts is drawn, a body it refuses becomes an ordinary code block
+// arrives behind a lazy import: a body it accepts is drawn, a body it refuses becomes an ordinary code block
 // with the source still in it.
 //
 // Mermaid is the REAL one here, not a stub. Mocking it would have left the interesting half untested: whether a
 // diagram draws at all is the entire point of the feature, and a mock that resolves with an <svg> string proves
-// only that v-html works. What the mock would have bought — a jsdom that can render SVG — costs three lines of
+// only that v-html works. What the mock would have bought (a jsdom that can render SVG) costs three lines of
 // text metrics instead (below).
 import { describe, expect, it, vi } from "vitest";
 import { createApp, h } from "vue";
@@ -17,13 +17,13 @@ import { createApp, h } from "vue";
  * loaded, where a beforeAll would run too late; the rest are this file's own, below.
  *
  * `matchMedia`: the design-system barrel has import-time side effects (useDevice reads it while Picker's module
- * body evaluates) — which is exactly why the markdown ENGINE ships on its own subpath. This file needs the
+ * body evaluates), which is exactly why the markdown ENGINE ships on its own subpath. This file needs the
  * component, so it pays the barrel's cost. `ResizeObserver`: Vue Flow measures its container on mount.
  *
- * The SVG metrics are what mermaid lays a diagram out with — it measures every label by rendering it and asking
+ * The SVG metrics are what mermaid lays a diagram out with: it measures every label by rendering it and asking
  * for its box. jsdom has no layout, so it ships none of these, and without them every diagram takes the refusal
  * path. The boxes are fictional, which is fine: what is asserted below is that a diagram is DRAWN, never where
- * anything landed. `getContext` is stubbed to null (jsdom's own answer, minus the "not implemented" noise) —
+ * anything landed. `getContext` is stubbed to null (jsdom's own answer, minus the "not implemented" noise):
  * that is the no-canvas path in mermaidTheme.ts, where mermaid's built-in palette stands in for the app's. */
 
 import { Markdown } from "@intentic/ui";
@@ -52,7 +52,7 @@ const render = (source: string): HTMLElement => {
 //
 // The budget bounds a HANG; it does not measure that latency, which is why it sits far above the ~0.4s the
 // first diagram costs on an idle machine. Almost all of that 0.4s is mermaid's megabyte of grammars arriving
-// on this test's own clock — the second diagram, drawn once the module is in the registry, costs a tenth of
+// on this test's own clock: the second diagram, drawn once the module is in the registry, costs a tenth of
 // it. `vi.waitFor` defaults to 1s, so the first test was the only budget in this package still sized for an
 // idle machine while vitest.config.ts had already raised every other one for exactly this reason: a full run
 // loads 242 files at once, and an import with every core busy costs roughly ten times its idle self. It duly
@@ -70,7 +70,7 @@ describe(`<Markdown> with a mermaid fence`, () => {
     it(`draws the diagram, and keeps the prose either side of it`, async () => {
         const host = render(`Before.\n\n\`\`\`mermaid\nflowchart LR\n    a["One"] --> b["Two"]\n\`\`\`\n\nAfter.`);
         await settled(host, `.md-mermaid svg`);
-        // A flowchart, not mermaid's error card — which this build cannot produce anyway (suppressErrorRendering),
+        // A flowchart, not mermaid's error card, which this build cannot produce anyway (suppressErrorRendering),
         // but the class is what says the fence was understood as the diagram type it named.
         expect(host.querySelector(`.md-mermaid svg`)?.getAttribute(`class`)).toContain(`flowchart`);
         expect(host.querySelector(`.md-mermaid`)?.textContent).toContain(`One`);
@@ -85,7 +85,7 @@ describe(`<Markdown> with a mermaid fence`, () => {
         await settled(host, `code`);
         expect(host.querySelector(`svg`)).toBeNull();
         expect(host.querySelector(`code`)?.textContent).toContain(`flowchart LR`);
-        // Same chrome as any other fenced block, copy button included — the reader can take the source away.
+        // Same chrome as any other fenced block, copy button included: the reader can take the source away.
         expect(host.querySelector(`.md-code-copy`)).not.toBeNull();
     });
 

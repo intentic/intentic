@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import type { ChatAttachment } from "../composables/chat/transcript";
 
-/* The floating card a truncated name gets on hover — one component for every surface that shows an agentic
+/* The floating card a truncated name gets on hover: one component for every surface that shows an agentic
  * session under a width it doesn't fit in: the chat tab strip and the Changes panel's origin chips today.
  *
  * It exists because those names are DERIVED (sandbox-contract's deriveTitle) and then truncated a SECOND time
@@ -16,21 +16,21 @@ import type { ChatAttachment } from "../composables/chat/transcript";
  * out, else <body>) to escape its trigger's overflow clipping, and places itself with the room in THAT window.
  *
  * It opens BESIDE its anchor, never over/under it. Every surface that raises this card is a narrow column of
- * stacked rows — the chat tab rail down a pop-out window's left edge, the Changes panel's origin chips above
- * its file list — so a card above or below the anchor lands on the very rows the user is reading past. Beside
+ * stacked rows: the chat tab rail down a pop-out window's left edge, the Changes panel's origin chips above
+ * its file list, so a card above or below the anchor lands on the very rows the user is reading past. Beside
  * it, the card spills into the wide area next door (the transcript, the editor) and the column stays legible.
  *
- * Trigger side: ONE card per surface, driven by every anchor on it — mouseenter calls show(event, content),
+ * Trigger side: ONE card per surface, driven by every anchor on it, mouseenter calls show(event, content),
  * mouseleave calls hide(). The card owns the placement, so a strip of forty tabs costs one node, not forty. */
 
 const { to = `body` } = defineProps<{
-    // Where the card mounts, escaping the trigger's clipping — the pop-out body while popped out, else <body>.
+    // Where the card mounts, escaping the trigger's clipping: the pop-out body while popped out, else <body>.
     to?: HTMLElement | "body";
 }>();
 
 /* ONE OF THE USER'S OWN MESSAGES, as the card draws it: the words, the pictures that came with them, and an
  * optional eyebrow saying which message this is. A LIST of these rather than one `body` string because the
- * question a hover answers about a long-running session is "what did I ask for, and what did I ask for last" —
+ * question a hover answers about a long-running session is "what did I ask for, and what did I ask for last":
  * two ends that a single blob cannot state (see the caller for why those two).
  *
  * The attachments are the message's own, unresolved: a path's bytes may still be in flight when the card opens
@@ -45,7 +45,7 @@ interface HoverCardMessage {
 // What one anchor reveals. `label` is the muted eyebrow ("Landed by"), `title` the full derived title,
 // `messages` the fuller thing it came from when the surface has the transcript in hand.
 //
-// `note` is the one line about the session's state RIGHT NOW rather than its identity — what a glanceable mark
+// `note` is the one line about the session's state RIGHT NOW rather than its identity: what a glanceable mark
 // on the anchor stands for, spelled out ("Running · turn 2 · editing ReviewPanel.vue · 2m"). It sits between
 // the title and the messages because it qualifies the title: it is the difference between "this is what that
 // session was for" and "and it is still doing it".
@@ -57,23 +57,23 @@ interface HoverCardContent {
 }
 
 /* THE CARD'S WIDTH IS THE ROOM IT HAS, not a number. It was a flat 320px, which is the width of the narrow
- * column it opens NEXT TO — and next to that column is the widest empty area on the screen. So a hover over a
+ * column it opens NEXT TO, and next to that column is the widest empty area on the screen. So a hover over a
  * chat whose prompt was a screenshot drew that screenshot into a 320px slot with half the window free beside
  * it, at which size a screenshot is a grey rectangle: the one thing pictures were put on this card to do,
  * undone by the width.
  *
- * A SHARE of the room rather than all of it — the card is a thing that has appeared over the top of something,
+ * A SHARE of the room rather than all of it: the card is a thing that has appeared over the top of something,
  * and one that runs edge to edge reads as a page rather than a peek. MIN is the width it always had, and also
  * the width below which opening beside the anchor isn't worth doing (see the placement). MAX is what keeps a
  * preview a preview on a wide monitor, where four fifths of the room would be most of the desk.
  *
  * These are the ONLY statement of the size: the template binds `maxWidth` from the placement rather than
  * repeating a number as a utility class. Two spellings of one width is how a card ends up placed for a size it
- * isn't drawn at — the placement measures the room against MIN to choose a side and then hands the width back
+ * isn't drawn at: the placement measures the room against MIN to choose a side and then hands the width back
  * out, so a class disagreeing with it would put the card off the edge it just checked.
  *
  * `maxWidth`, not `width`: the room is a ceiling, and short content should still draw a small card. What
- * actually reaches for the ceiling is a long prompt and, above all, a picture — an image's own width is far
+ * actually reaches for the ceiling is a long prompt and, above all, a picture: an image's own width is far
  * past any of these, so a card carrying one always takes the whole of what it was allowed. */
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 640;
@@ -91,11 +91,11 @@ const says = (message: HoverCardMessage): boolean => (message.text ?? ``).trim()
 const show = (event: MouseEvent, content: HoverCardContent): void => {
     if ((content.title ?? ``).trim() === `` && !(content.messages ?? []).some(says)) return; // nothing to reveal
     const el = event.currentTarget as HTMLElement;
-    // The anchor may live in the pop-out window, whose viewport (and fixed-position origin) is its own — measure
+    // The anchor may live in the pop-out window, whose viewport (and fixed-position origin) is its own: measure
     // and clamp against that window, not the main realm's globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();
-    /* Right first — every surface here is a column with the app's wide area on its right. Left is the mirror
+    /* Right first: every surface here is a column with the app's wide area on its right. Left is the mirror
      * for an anchor in a panel docked to the window's right edge (the docked chat's tab strip). Each side is
      * measured, not tested against one number, because the room is now what the card is SIZED from as well as
      * where it goes: a side qualifies at MIN and the card then takes its share of whatever it actually found. */
@@ -105,7 +105,7 @@ const show = (event: MouseEvent, content: HoverCardContent): void => {
     if (room === undefined) {
         // No room either side (a window narrower than the card plus its anchor): fall back to under/over the
         // anchor, whichever has more room, so the card is at least on screen. Nothing to take a share of out
-        // here — the window itself is the constraint — so it spends the width it is given.
+        // here: the window itself is the constraint, so it spends the width it is given.
         const width = Math.min(MAX_WIDTH, win.innerWidth - GAP * 2);
         const left = Math.min(Math.max(GAP, rect.left), win.innerWidth - width - GAP);
         const over = rect.top >= win.innerHeight - rect.bottom;
@@ -120,12 +120,12 @@ const show = (event: MouseEvent, content: HoverCardContent): void => {
         return;
     }
     /* Beside, the card's height is unknown until it renders, so it hangs from the anchor's top while the room
-     * below that edge is the larger, and rises from the anchor's bottom otherwise — no measurement needed, and
+     * below that edge is the larger, and rises from the anchor's bottom otherwise: no measurement needed, and
      * an anchor at either end of a full-height rail still gets a card that fits.
      *
      * What it may NOT do is grow past the edge it was placed against, which pictures made a live risk: text
      * clamps itself to a known number of lines, an image is however tall the user's screenshot was. So the
-     * corner the card hangs from also states how far it may reach from there, and the card clips at that —
+     * corner the card hangs from also states how far it may reach from there, and the card clips at that:
      * nothing can scroll a card the pointer passes straight through, so the cap has to be a cap. */
     const width = widthIn(room);
     const left = room === roomRight ? rect.right + GAP : rect.left - GAP - width;
@@ -143,14 +143,14 @@ const hide = (): void => {
     placement.value = undefined;
 };
 
-/* THE MESSAGES AS DRAWN — the blocks that have something left to say, each with its pictures resolved.
+/* THE MESSAGES AS DRAWN: the blocks that have something left to say, each with its pictures resolved.
  *
  * A block whose words merely repeat the title is dropped, because a one-line first message IS its own derived
- * title and printing it twice reads as a rendering bug — but only its WORDS go: a message that also carried a
+ * title and printing it twice reads as a rendering bug, but only its WORDS go: a message that also carried a
  * screenshot still has a picture to show, so it keeps its block and loses the duplicate line.
  *
  * The src comes from the send-time object URL where this page made one, and from the workspace bytes otherwise
- * (a transcript restored from history) — the same pair of sources the sent bubble draws from, so the picture in
+ * (a transcript restored from history): the same pair of sources the sent bubble draws from, so the picture in
  * the hover and the picture in the chat are the same picture. Non-images resolve to nothing and are simply not
  * drawn: the card is a glance, and a row of file-name chips is not what it is for. */
 const messages = computed(() => {
@@ -180,8 +180,8 @@ defineExpose({ show, hide });
         <!-- overflow-hidden does two jobs: it holds the content to the height the placement allowed, and it is
              what lets the full-bleed pictures below sit flush against the card's rounded corners.
              A FLEX COLUMN, which is what shares the card's height out: the words are `shrink-0` and keep every
-             line they have, and the picture underneath takes whatever is left over — all of a tall window, a
-             sliver of a short one — instead of being drawn at a computed height and clipped by the edge above. -->
+             line they have, and the picture underneath takes whatever is left over: all of a tall window, a
+             sliver of a short one: instead of being drawn at a computed height and clipped by the edge above. -->
         <div
             v-if="placement"
             class="pointer-events-none fixed z-50 flex min-w-[12rem] flex-col overflow-hidden rounded-lg border border-line-strong bg-card px-3 py-2 shadow-lg"
@@ -217,7 +217,7 @@ defineExpose({ show, hide });
                      on the argument that a picture should stop where a long line of words stops. That bargain
                      does not survive a screenshot: prose puts its most telling part first, a screenshot puts
                      nothing anywhere in particular. The common case here is a portrait capture of one panel,
-                     whose subject sits in the lower half — so the top slice the card kept was the empty canvas
+                     whose subject sits in the lower half, so the top slice the card kept was the empty canvas
                      above it, cut through a line of the app's own text, which is the one picture that identifies
                      nothing. Contained, the card shows a smaller whole thing, and small-but-whole is what
                      recognition actually needs.

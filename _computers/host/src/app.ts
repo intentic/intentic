@@ -8,7 +8,7 @@ import { commands } from "./commands.js";
 export const app = buildApplication(
     buildRouteMap({
         routes: commands,
-        docs: { brief: "intentic-host — let your intentic sandbox work on this computer" },
+        docs: { brief: "intentic-host, let your intentic sandbox work on this computer" },
     }),
     {
         name: "intentic-host",

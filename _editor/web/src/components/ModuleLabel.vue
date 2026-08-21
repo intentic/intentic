@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/* HOW A MODULE IS SAID — in every list that groups changed files under one. There are two of those (the
+/* HOW A MODULE IS SAID: in every list that groups changed files under one. There are two of those (the
  * workspace's Changes panel and the fleet's agent review) and each used to spell this out itself, which is how
  * a shared reading turns into two readings that almost match.
  *

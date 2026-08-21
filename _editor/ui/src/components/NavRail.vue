@@ -1,10 +1,10 @@
-<!-- THE INDEX COLUMN — a filter, some pinned rows, grouped selectable rows, a footnote. The activity source
+<!-- THE INDEX COLUMN: a filter, some pinned rows, grouped selectable rows, a footnote. The activity source
      rail, the memory index and the documentation contents were three implementations of this, and they
      disagreed on every part a reader can see: three selection tints (two `bg-overlay`, one primary-at-13%
      against the app's canonical 15%), two scrollbars, two group-heading treatments, and three filter fields.
 
-     WHAT THIS OWNS IS THE CHROME, NOT THE ROW. A rail's rows differ for good reasons — one carries a gateway
-     dot and two counts, one a draft mark and a timestamp, one a path split at its last slash — so the row is a
+     WHAT THIS OWNS IS THE CHROME, NOT THE ROW. A rail's rows differ for good reasons: one carries a gateway
+     dot and two counts, one a draft mark and a timestamp, one a path split at its last slash, so the row is a
      scoped slot and stays the caller's. What was never worth three answers is everything around it: where the
      filter sits, how a heading looks, what "selected" is tinted with, and which scrollbar a 16rem column gets.
 
@@ -12,8 +12,8 @@
      so `stickyHeadings` keeps the answer to "what am I looking at" on screen. Off by default: it costs a
      stacking context and a background, and a rail with six rows in two groups has nothing to keep.
 
-     IT NEVER DRAWS A BORDER, and that is not configurable. It used to be — `framed` for a rail sitting beside
-     another panel, bare for one sitting beside a document — and each reading was defensible on its own page.
+     IT NEVER DRAWS A BORDER, and that is not configurable. It used to be: `framed` for a rail sitting beside
+     another panel, bare for one sitting beside a document, and each reading was defensible on its own page.
      Together they meant three adjacent screens with three different index columns, which is how a shared
      component still produced an app that looked unshared. An index is chrome pointing AT something; boxing it
      makes it compete with the thing it points at, and in a 16rem column every stroke counts double. One
@@ -39,7 +39,7 @@ const {
 }>();
 
 /* UNNAMED, and it has to stay that way: a NAMED defineModel silently breaks generic threading in this
- * vue-tsc — `T` and every destructured prop stop resolving, in the script as well as the template. The rail
+ * vue-tsc: `T` and every destructured prop stop resolving, in the script as well as the template. The rail
  * has one model anyway (the selection is the row slot's business, not this component's). */
 const query = defineModel<string>({ default: `` });
 
@@ -65,15 +65,15 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 bg-canv
 
         <!-- Its own scroller: a 55-entry index and the document beside it have no reason to share one scrollbar,
              and sharing it means you cannot keep your place in either. The right gutter keeps the thumb off the
-             rightmost few pixels of every row — which is exactly where the trailing marks sit. -->
+             rightmost few pixels of every row, which is exactly where the trailing marks sit. -->
         <div class="ui-softscroll min-h-0 flex-1 overflow-y-auto pr-2">
             <!-- THE GAP BETWEEN GROUPS RIDES THE SECTION, not the heading. It was `pt-3 first:pt-0` on the <h3>
-                 below, which reads as "space every heading off the group above it, except the first" — and did
+                 below, which reads as "space every heading off the group above it, except the first", and did
                  the opposite: an <h3> is by definition the FIRST CHILD of its own <section>, so `first:` matched
                  on every group and the `pt-3` never applied anywhere. Every heading sat 6px under the last row
                  of the previous group and 10px above its own, which is proximity backwards: the label was
                  nearer to the group it does not describe. Four groups then read as one long list with words in
-                 it. On the <section>, `first:` means what it says — only the rail's opening group is flush. -->
+                 it. On the <section>, `first:` means what it says, only the rail's opening group is flush. -->
             <section v-for="group in groups" :key="group.key" class="pt-3 first:pt-0">
                 <h3 v-if="group.label !== undefined" class="flex items-center gap-2 pb-1 pl-2 pr-1" :class="headingClass">
                     <span
@@ -88,7 +88,7 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 bg-canv
                 <!-- A HAIRLINE BETWEEN ROWS, because these rows are ROUNDED AND TINTED. Butted together, the
                      selected row and the one under the pointer paint two tints that touch along a straight
                      edge, and the pair reads as one taller block with a colour change in it rather than as two
-                     rows — the rounding says "separate object" and the shared edge says the opposite. 2px is
+                     rows: the rounding says "separate object" and the shared edge says the opposite. 2px is
                      enough to part them and is not enough to loosen a fifty-row column into a list of cards. -->
                 <div class="flex flex-col gap-0.5">
                     <slot v-for="(item, index) in group.items" name="row" :item="item" :index="index" :group="group" />

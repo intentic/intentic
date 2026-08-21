@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// ASKING A TURN AGAIN, DIFFERENTLY — asserted through the real composer and read off the DOM, because the whole
+// ASKING A TURN AGAIN, DIFFERENTLY: asserted through the real composer and read off the DOM, because the whole
 // feature is an affordance and a mode on the conversation that no surface offers is worth nothing.
 //
 // THE ORDER OF EVENTS IS THE FEATURE. A pencil that rewound on the click would destroy the answer before the
@@ -9,8 +9,8 @@
 // and the SEND is the confirmation. Everything below is one of those three claims: what arming does (nothing),
 // what the box says while it is armed, and what the send finally spends.
 //
-// The conversation-level half — that the send rewinds before it enqueues, and sends nothing if the rewind is
-// refused — is pinned in conversation.test.ts. This file is about the composer.
+// The conversation-level half: that the send rewinds before it enqueues, and sends nothing if the rewind is
+// refused: is pinned in conversation.test.ts. This file is about the composer.
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
@@ -22,7 +22,7 @@ import { useLayout } from "../composables/useLayout";
 import { router } from "../router";
 import ChatPanel from "./ChatPanel.vue";
 
-// The import-time globals a mounted chat surface needs — see chatPanelPanes.test.ts, which explains each.
+// The import-time globals a mounted chat surface needs: see chatPanelPanes.test.ts, which explains each.
 vi.hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
@@ -99,10 +99,10 @@ const button = (label: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll<HTMLButtonElement>(`button`)].find((element) => element.textContent?.trim().startsWith(label));
 const paneText = (): string => document.querySelector(`.chat-pane`)?.textContent ?? ``;
 const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>(`.chat-pane textarea`)!;
-// The rows the transcript has struck through — what an armed edit would spend, drawn on the messages themselves.
+// The rows the transcript has struck through: what an armed edit would spend, drawn on the messages themselves.
 const struck = (): number => document.querySelectorAll(`.chat-doomed`).length;
 
-/* A settled two-turn chat whose prompts the daemon still holds states for — the starting position an edit needs,
+/* A settled two-turn chat whose prompts the daemon still holds states for: the starting position an edit needs,
  * reached without going near the network. The checkpoint is what carries the anchor: restoreMessages stamps a
  * rewind index on every row the daemon gave one to, and a message with no anchor has nothing to put the files
  * back to, so no edit is offered on it at all. */
@@ -150,7 +150,7 @@ it(`loads the old prompt into the box and destroys nothing`, async () => {
 
 /* THE COUNT, in the two places it has to be. On the ROWS, because an edit aimed three prompts up spends however
  * much has happened since and that is precisely the quantity nobody holds in their head; and over the BOX,
- * because an edit aimed twenty turns back leaves nothing struck anywhere near the composer — and a box that has
+ * because an edit aimed twenty turns back leaves nothing struck anywhere near the composer, and a box that has
  * silently changed what Send does with no mark on it is the trap this mode is arranged to avoid. */
 it(`strikes what the send would replace and names the cost over the box`, async () => {
     const conversation = editableChat();
@@ -185,7 +185,7 @@ it(`lifts the strikes and returns the displaced draft on cancel`, async () => {
 });
 
 // Escape is the plainest way out of a mode, and it is free to mean that here precisely because leaving costs
-// nothing — there is no turn to stop and no transcript to put back.
+// nothing: there is no turn to stop and no transcript to put back.
 it(`abandons the edit on Escape`, async () => {
     const conversation = editableChat();
     await mountPanel();
@@ -200,7 +200,7 @@ it(`abandons the edit on Escape`, async () => {
     expect(struck()).toBe(0);
 });
 
-/* THE SEND, which is the one press that spends anything — and it goes down submitEdit rather than the ordinary
+/* THE SEND, which is the one press that spends anything, and it goes down submitEdit rather than the ordinary
  * send, because an edit appended to the end of the conversation would land after the very turns it was meant to
  * replace. */
 it(`sends the replacement through the edit path, not as a new message`, async () => {
@@ -222,7 +222,7 @@ it(`sends the replacement through the edit path, not as a new message`, async ()
     expect(composer().value).toBe(``);
 });
 
-/* An edit replaces a prompt, so it needs one. An empty box would drop the turns and then ask nothing — a rewind
+/* An edit replaces a prompt, so it needs one. An empty box would drop the turns and then ask nothing: a rewind
  * the user never asked for, wearing an edit's confirmation. Cancel is how an edit ends with nothing sent, and it
  * is on screen the whole time. */
 it(`refuses to spend an edit on an empty box`, async () => {
@@ -243,7 +243,7 @@ it(`refuses to spend an edit on an empty box`, async () => {
 });
 
 /* THE COMPOSER CANNOT PROMISE TWO THINGS AT ONCE. The agent's voice and the run-through badge's picks answer
- * the same question an edit does — what happens when I press Send — and submit() has to choose one of them. Any
+ * the same question an edit does: what happens when I press Send, and submit() has to choose one of them. Any
  * arrangement where the loser stays lit is a composer showing a promise it will not keep, so arming an edit
  * clears them where the user can see it happen. */
 it(`clears the other things that rewrite what Send means`, async () => {

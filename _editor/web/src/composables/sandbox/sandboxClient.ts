@@ -23,7 +23,7 @@ export async function sandboxRequest(path: string, init?: RequestInit): Promise<
     return trackPerf(`rpc.request`, { path: path.split(`?`)[0] ?? path, method: init?.method ?? `GET` }, async () => {
         const target = currentSandboxTarget();
         if (target === undefined) {
-            throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
+            throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
         }
         return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target);
     });
@@ -113,7 +113,7 @@ const UPLOAD_STALL_MS = 60_000;
 export async function sandboxUpload(path: string, body: Blob, opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal }): Promise<void> {
     const target = currentSandboxTarget();
     if (target === undefined) {
-        throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
+        throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
     }
     const signal = opts?.signal;
     for (let offset = 0; offset === 0 || offset < body.size; offset += CHUNK_BYTES) {
@@ -165,7 +165,7 @@ const sendPart = (
         const arm = (): void => {
             clearTimeout(stall);
             stall = setTimeout(() => {
-                reject(new Error(`Upload stalled — no progress for ${UPLOAD_STALL_MS / 1000}s.`));
+                reject(new Error(`Upload stalled: no progress for ${UPLOAD_STALL_MS / 1000}s.`));
                 xhr.abort();
             }, UPLOAD_STALL_MS);
         };
@@ -194,7 +194,7 @@ const sendPart = (
             })();
             reject(new SandboxHttpError(xhr.status, detail?.error ?? `Request failed (${xhr.status}).`));
         });
-        xhr.addEventListener(`error`, () => reject(new Error(`Upload failed — the sandbox was unreachable.`)));
+        xhr.addEventListener(`error`, () => reject(new Error(`Upload failed: the sandbox was unreachable.`)));
         // Aborted either by the caller's signal (cancel) or by the stall watchdog. If the watchdog already rejected
         // with its message, this second reject is ignored (a promise settles once).
         xhr.addEventListener(`abort`, () => reject(new DOMException(`Upload canceled`, `AbortError`)));

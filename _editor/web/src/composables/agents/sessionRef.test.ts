@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sessionIdFrom } from "./sessionRef";
 
 const ID = `a8b5f00f-cf24-40d4-aaea-525d2a5086f0`;
-// What a workflow calls its steps' sessions — proof that ids are opaque, and the case the uuid shape misses.
+// What a workflow calls its steps' sessions: proof that ids are opaque, and the case the uuid shape misses.
 const STEP = `wf-a3f19c22-review-perf`;
 
 describe(`sessionIdFrom`, () => {
@@ -20,7 +20,7 @@ describe(`sessionIdFrom`, () => {
     });
 
     /* An id is whatever minted it. A workflow's step sessions are named, not uuids, so the costume has to be
-     * what carries them — a shape check alone would take the branch chip's own value and refuse it. */
+     * what carries them: a shape check alone would take the branch chip's own value and refuse it. */
     it(`carries an id that is not a uuid, on the strength of its costume`, () => {
         expect(sessionIdFrom(`agent/${STEP}`)).toBe(STEP);
         expect(sessionIdFrom(`https://sandbox.example.com/agents/${STEP}`)).toBe(STEP);

@@ -75,7 +75,7 @@ test("diff is noop when the live env matches the authored env", () => {
     });
 });
 
-test("diff ignores server + image drift (Komodo owns the rollout) — only env drives it", () => {
+test("diff ignores server + image drift (Komodo owns the rollout): only env drives it", () => {
     const drifted = { ...observedConfig, server_id: "elsewhere", image: { type: "Image", params: { image: "other:tag" } } };
     expect(createDeploymentProvider(api({}), sshForward).diff(inputs, { outputs: {}, detail: { config: drifted } })).toEqual({ action: "noop" });
 });

@@ -616,7 +616,7 @@ export class Conversation {
         // Unconditional now: what carries over is the DAEMON's record of this conversation, not what this window
         // happens to have painted. The notice used to hedge for a restored codex/grok tab, whose transcript no
         // reader could reach, that gap closed when the daemon started recording every runtime's turns itself.
-        const text = `Switched to ${label} — your next message starts a fresh session with the conversation so far carried over.`;
+        const text = `Switched to ${label}: your next message starts a fresh session with the conversation so far carried over.`;
         const noticeId = this.pendingSwitchNoticeId;
         if (noticeId !== undefined) {
             this.transcript.write((state) => ({
@@ -719,7 +719,7 @@ export class Conversation {
         const response = await sandboxRequest(`/agent/rewind`, jsonBody(`POST`, { conversationId: this.conversationId, index }));
         if (!response.ok) {
             this.error.value =
-                response.status === 409 ? `This agent is running a turn — stop it before going back.` : `That message can no longer be gone back to.`;
+                response.status === 409 ? `This agent is running a turn, stop it before going back.` : `That message can no longer be gone back to.`;
             return false;
         }
         const dropped = this.messages.value.length - bubble;
@@ -744,8 +744,8 @@ export class Conversation {
             role: `notice`,
             text:
                 reason === `edit`
-                    ? `Edited this message — ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`
-                    : `Went back to here — ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`,
+                    ? `Edited this message, ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`
+                    : `Went back to here, ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`,
         });
         this.session.value = undefined;
         this.error.value = null;
@@ -851,10 +851,10 @@ export class Conversation {
         if (!response.ok) {
             this.error.value =
                 response.status === 409
-                    ? `This agent is running a turn — wait for it to finish before speaking as it.`
+                    ? `This agent is running a turn: wait for it to finish before speaking as it.`
                     : response.status === 404
-                      ? `Could not place the message — this conversation hasn't run a turn yet.`
-                      : `Could not place the message — ${(await sandboxError(response, { method: `POST`, path })).message}`;
+                      ? `Could not place the message: this conversation hasn't run a turn yet.`
+                      : `Could not place the message, ${(await sandboxError(response, { method: `POST`, path })).message}`;
             return false;
         }
         this.transcript.append({ role: `assistant`, text, placed: true });
@@ -872,7 +872,7 @@ export class Conversation {
      * problem (the transcript is intact, only the disk moved), which is exactly why it is a notice and not a
      * truncation, what the reader needs is to know that the next turn starts somewhere else. */
     noteWorkspaceRestored(): void {
-        this.transcript.append({ role: `notice`, text: `The workspace was restored to an earlier point — the files below this line have changed.` });
+        this.transcript.append({ role: `notice`, text: `The workspace was restored to an earlier point, the files below this line have changed.` });
         this.persist(true);
     }
 
@@ -1048,12 +1048,12 @@ export class Conversation {
              * as steering, and the queue has to stay free to flush into it the moment it settles. */
             if (!response.ok) {
                 if (response.status === 409) {
-                    this.error.value = `This agent already has a turn running — wait for it to finish.`;
+                    this.error.value = `This agent already has a turn running: wait for it to finish.`;
                     return;
                 }
                 const refusal = await sandboxError(response, { method: `POST`, path: `/agent` });
                 this.requeueUndelivered(userMessageId);
-                this.error.value = `${refusal.message} Your message is held below — send it again once that's sorted.`;
+                this.error.value = `${refusal.message} Your message is held below: send it again once that's sorted.`;
                 return;
             }
             // The ack means the turn is running daemon-side regardless of what happens to this tab; from here
@@ -1078,7 +1078,7 @@ export class Conversation {
              * session whose first message is the word "Continue". */
             if (!this.turnAccepted) {
                 this.requeueUndelivered(userMessageId);
-                this.error.value = stopped ? null : `${errorMessage(err, `Chat failed.`)} Your message is held below — send it again to deliver it.`;
+                this.error.value = stopped ? null : `${errorMessage(err, `Chat failed.`)} Your message is held below, send it again to deliver it.`;
                 return;
             }
             if (!stopped) {
@@ -1158,7 +1158,7 @@ export class Conversation {
             // a chat that is no longer waiting on anything.
             this.autoContinue.value = false;
             this.transcript.notice(
-                `Auto-continue stopped — ${AUTO_CONTINUE_TRIES} turns in a row ended without getting anywhere. Press Continue to carry on.`,
+                `Auto-continue stopped: ${AUTO_CONTINUE_TRIES} turns in a row ended without getting anywhere. Press Continue to carry on.`,
             );
             this.persist();
             return;
@@ -1529,7 +1529,7 @@ export class Conversation {
         const landed = await this.decide(
             message.id,
             { kind: `plan`, requestId: plan.requestId, approve, feedback: written.length > 0 ? written : undefined },
-            `Could not record your plan decision — the turn may have ended.`,
+            `Could not record your plan decision: the turn may have ended.`,
             { plan: { ...plan, status: approve ? `approved` : `rejected` } },
         );
         if (!landed) {
@@ -1555,7 +1555,7 @@ export class Conversation {
         const landed = await this.decide(
             message.id,
             { kind: `question`, requestId: question.requestId, answers },
-            `Could not submit your answers — the turn may have ended.`,
+            `Could not submit your answers: the turn may have ended.`,
             { question: { ...question, status: `answered`, answers } },
         );
         if (landed) {
@@ -1583,7 +1583,7 @@ export class Conversation {
         const landed = await this.decide(
             message.id,
             { kind: `question`, requestId: question.requestId, cancelled: true },
-            `Could not dismiss the question — the turn may have ended.`,
+            `Could not dismiss the question: the turn may have ended.`,
             { question: { ...question, status: `cancelled` } },
         );
         if (!landed) {
@@ -1608,7 +1608,7 @@ export class Conversation {
         const landed = await this.decide(
             message.id,
             { kind: `permission`, requestId: permission.requestId, decision, feedback },
-            `Could not record your decision — the turn may have ended.`,
+            `Could not record your decision: the turn may have ended.`,
             { permission: { ...permission, status } },
         );
         if (!landed) {
@@ -1633,7 +1633,7 @@ export class Conversation {
         const landed = await this.decide(
             message.id,
             { kind: `service_offer`, requestId: offer.requestId, approve },
-            `Could not record your decision — the offer may have expired.`,
+            `Could not record your decision: the offer may have expired.`,
             { serviceOffer: { ...offer, status: approve ? `approved` : `skipped` } },
         );
         if (landed) {
@@ -1654,7 +1654,7 @@ export class Conversation {
         const landed = await this.decide(
             message.id,
             { kind: `payment_offer`, requestId: offer.requestId, approve },
-            `Could not record your decision — the offer may have expired.`,
+            `Could not record your decision: the offer may have expired.`,
             { paymentOffer: { ...offer, status: approve ? `approved` : `skipped` } },
         );
         if (landed) {
@@ -1675,7 +1675,7 @@ export class Conversation {
         const landed = await this.decide(
             message.id,
             { kind: `capability_offer`, requestId: offer.requestId, connect },
-            `Could not record your decision — the ask may have expired.`,
+            `Could not record your decision: the ask may have expired.`,
             { capabilityOffer: { ...offer, status: connect ? `connecting` : `skipped` } },
         );
         if (landed) {
@@ -1695,7 +1695,7 @@ export class Conversation {
         const landed = await this.decide(
             message.id,
             { kind: `browser_help`, requestId: help.requestId, helped: false },
-            `Could not send that — the turn may have ended.`,
+            `Could not send that: the turn may have ended.`,
             { browserHelp: { ...help, status: `declined` } },
         );
         if (landed) {
@@ -1715,7 +1715,7 @@ export class Conversation {
         const landed = await this.decide(
             message.id,
             { kind: `terminal_help`, requestId: help.requestId, helped: false },
-            `Could not send that — the turn may have ended.`,
+            `Could not send that: the turn may have ended.`,
             { terminalHelp: { ...help, status: `declined` } },
         );
         if (landed) {
@@ -1757,7 +1757,7 @@ export class Conversation {
                 if (effect.unenforced === true && !this.warnedUnenforced) {
                     this.warnedUnenforced = true;
                     this.transcript.notice(
-                        `This sandbox can't isolate agent turns at the filesystem level (it was created without CAP_SYS_ADMIN). Work is redirected into ${effect.branch}, but a command that builds its own paths can still reach the shared workspace — recreate the sandbox to restore full isolation.`,
+                        `This sandbox can't isolate agent turns at the filesystem level (it was created without CAP_SYS_ADMIN). Work is redirected into ${effect.branch}, but a command that builds its own paths can still reach the shared workspace: recreate the sandbox to restore full isolation.`,
                     );
                 }
                 return;

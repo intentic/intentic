@@ -5,7 +5,7 @@ import { type ScriptSource, scriptSource } from "../environments/scriptCommand";
 
 /* LOCAL DEV ONLY: which of the two script deliveries the command beside this one uses (see scriptCommand.ts).
  *
- * It sits on every command block that is READ here and PASTED somewhere else — a computer, a server, a laptop
+ * It sits on every command block that is READ here and PASTED somewhere else: a computer, a server, a laptop
  * being synced. Those are the ones the choice bites on: a dev build renders every script by repo path, which is
  * right when the command runs on the dev machine and simply cannot run anywhere else. The blocks whose command
  * is pasted on the machine the sandbox already runs on (a rebuild, a cleanup) don't carry it; they follow the
@@ -17,8 +17,8 @@ import { type ScriptSource, scriptSource } from "../environments/scriptCommand";
  * whoever is developing intentic itself, and renders nothing at all for anyone else. */
 
 const OPTIONS: { label: string; value: ScriptSource; title: string }[] = [
-    { label: `Local`, value: `checkout`, title: `Runs the script from your checkout — only on a machine that has the repo` },
-    { label: `Standard`, value: `published`, title: `Fetches the released script from intentic.dev — runs on any machine` },
+    { label: `Local`, value: `checkout`, title: `Runs the script from your checkout, only on a machine that has the repo` },
+    { label: `Standard`, value: `published`, title: `Fetches the released script from intentic.dev, runs on any machine` },
 ];
 </script>
 

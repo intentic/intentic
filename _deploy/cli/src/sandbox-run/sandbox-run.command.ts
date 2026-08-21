@@ -64,7 +64,7 @@ export const sandboxRunCommandCli = buildCommand<{
                 kind: "parsed",
                 parse: String,
                 optional: true,
-                brief: "The overlay's '# intentic:runtime' directive lines, verbatim — validated against the allowlist here",
+                brief: "The overlay's '# intentic:runtime' directive lines, verbatim, validated against the allowlist here",
             },
             mounts: {
                 kind: "parsed",
@@ -81,13 +81,13 @@ export const sandboxRunCommandCli = buildCommand<{
             format: { kind: "parsed", parse: String, optional: true, brief: "sh (default): one quoted command line; json: the docker argv" },
             noLocalPublish: {
                 kind: "boolean",
-                brief: "Drop the loopback shortcut's -p — what a flow re-asks for when docker refused the derived port",
+                brief: "Drop the loopback shortcut's -p, what a flow re-asks for when docker refused the derived port",
             },
             unsupported: {
                 kind: "parsed",
                 parse: String,
                 optional: true,
-                brief: "Optional directive tokens this host failed its probe for (see `sandbox host-probes`) — dropped, and why recorded",
+                brief: "Optional directive tokens this host failed its probe for (see `sandbox host-probes`), dropped, and why recorded",
             },
         },
     },

@@ -10,7 +10,7 @@ const CF_PAGE = /<title>[^<]*Cloudflare[^<]*<\/title>/i;
 const CF_CODE = /errorCode:\s*(\d+)/;
 
 const CF_HINTS: Record<string, string> = {
-    "1033": "the tunnel has no connected connector — cloudflared on the host is down or still re-registering",
+    "1033": "the tunnel has no connected connector, cloudflared on the host is down or still re-registering",
 };
 
 export const responseDetail = async (response: Response): Promise<string> => {

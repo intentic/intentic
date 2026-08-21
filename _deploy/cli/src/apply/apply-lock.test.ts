@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { acquireApplyLock } from "./apply-lock.js";
 
 // A fake host fleet that simulates the lock dir per host, driven by the `#APPLYLOCK <op> <nonce> <ttl>` header
-// every lock script starts with — the same line a real host shell treats as a no-op comment. A shared mutable
+// every lock script starts with: the same line a real host shell treats as a no-op comment. A shared mutable
 // clock lets tests age locks past their TTL to exercise stale takeover. `commands` records the order ops hit
 // each host so we can assert deterministic acquisition ordering.
 interface FakeHost {

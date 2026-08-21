@@ -3,14 +3,14 @@ import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { describe, expect, it } from "vitest";
 
 /* The two halves of "one voice per problem": what a caught thing turns into, and which of several the user
- * reads first. Both live in leaves — @intentic/ui ships no test runner (same reason as dagLayout.test.ts), and
+ * reads first. Both live in leaves: @intentic/ui ships no test runner (same reason as dagLayout.test.ts), and
  * useAsyncAction's helpers are pure functions over a caught value. */
 
 const notice = (tone: NoticeModel[`tone`], title: string, key?: string): NoticeModel => ({ tone, title, key });
 
 describe(`noticeFrom`, () => {
     it(`leads with the app's sentence and keeps the caught message as evidence`, () => {
-        // path-literals: content — the OS's own error text, quoted as the kernel emits it, not a path this test builds.
+        // path-literals: content, the OS's own error text, quoted as the kernel emits it, not a path this test builds.
         const built = noticeFrom(new Error(`EACCES: permission denied, open '/work/.env'`), `Couldn't save your changes.`);
         expect(built.title).toBe(`Couldn't save your changes.`);
         expect(built.detail).toBe(`EACCES: permission denied, open '/work/.env'`);

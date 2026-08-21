@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 
 /* A REAL page refresh, which no amount of resetChat() quite models: the module graph is new, so useChat's
- * restore runs at module scope against nothing but what is on disk — before any daemon has answered, before
+ * restore runs at module scope against nothing but what is on disk: before any daemon has answered, before
  * `accountsLoaded` is anything but false. That is the exact window the account pick used to be lost in, and the
  * only way to sit in it is to seed the stores and then import the singleton fresh. */
 
@@ -10,7 +10,7 @@ vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../analytics", () => ({ track: vi.fn() }));
 vi.mock("../sandbox/useSandbox", async () => {
     const { ref } = await import("vue");
-    // Already bound when the module graph loads — the ordinary case for a refresh of an open sandbox.
+    // Already bound when the module graph loads: the ordinary case for a refresh of an open sandbox.
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }) };
@@ -35,7 +35,7 @@ const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
 // What the window wrote before it was closed: two chats, each on its own Claude account, and "second" as the
-// last pick — the preference a brand-new tab should open on.
+// last pick: the preference a brand-new tab should open on.
 session.set(
     `intentic.chatTabs.sb1`,
     JSON.stringify({
@@ -88,7 +88,7 @@ vi.mocked(sandboxJson).mockImplementation((path: string) =>
 
 // Imported last, so the seeded stores are what its module-scope restore reads.
 const { draftConversation, loadAccountStatus, reveal, useChat } = await import("./useChat");
-// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
 // suites open extra tabs with.
 const newChat = () => {
     const conversation = draftConversation();
@@ -101,7 +101,7 @@ it(`comes back from a refresh on the accounts the tabs were using, and opens a n
     const accountOf = (id: string): string | undefined =>
         chat.conversations.value.find((conversation) => conversation.conversationId === id)?.account.value;
 
-    // Before the daemon has said a word — the frame the user actually looks at first, and the one that used to
+    // Before the daemon has said a word: the frame the user actually looks at first, and the one that used to
     // show every chat reset to the provider's first account.
     expect(accountOf(`tab-a`)).toBe(`first`);
     expect(accountOf(`tab-b`)).toBe(`second`);

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The one place a changed file gets its NAME, for both review lists — so what it draws is worth pinning
+// The one place a changed file gets its NAME, for both review lists, so what it draws is worth pinning
 // directly rather than through whichever panel happens to mount it. The two lists had each written this out
 // themselves and had already drifted: one drew a middle-truncated full path where the other drew a name and a
 // dimmed directory, which is a file called two things on two screens.

@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("./sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
 // The real useEndpoint rides on top of this mock: with no loopback shortcut resolved for the sandbox, its
-// daemonBase falls through to daemonUrl — which is the behaviour every call here depends on.
+// daemonBase falls through to daemonUrl, which is the behaviour every call here depends on.
 vi.mock("./useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
 }));
@@ -11,7 +11,7 @@ const { sandboxError, sandboxJson } = await import("./sandboxClient");
 const { resetDaemonRoutes, setDaemonRoutes } = await import("./useDaemonRoutes");
 const { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } = await import("@intentic/sandbox-contract");
 
-// A daemon that accepts the request but never answers — settles only when the caller's signal aborts, like
+// A daemon that accepts the request but never answers: settles only when the caller's signal aborts, like
 // real fetch. Guards the contract ConnectHost's mint timeout relies on: a signal in the init reaches
 // fetch through sandboxRequest, and its expiry rejects the hung call with a TimeoutError.
 const fetchMock = vi.fn(
@@ -31,7 +31,7 @@ it("a caller-passed timeout signal reaches fetch and rejects the hung request", 
 });
 
 // The two skew branches sandboxError adds on top of the daemon's own text. Both only fire on POSITIVE evidence
-// from the hello frame — with none, the daemon's message is always the more useful of the two.
+// from the hello frame: with none, the daemon's message is always the more useful of the two.
 const json = (status: number, body: unknown): Response => new Response(JSON.stringify(body), { status });
 
 afterEach(() => resetDaemonRoutes());

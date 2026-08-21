@@ -16,24 +16,24 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { extensionUiNames } from "../names.mjs";
 
-/* Builds the PUBLISHED @intentic/extension-ui — the artifact an author outside this monorepo compiles against.
+/* Builds the PUBLISHED @intentic/extension-ui: the artifact an author outside this monorepo compiles against.
  *
  * The kit is host-provided at run time: the app maps this module name into its import map, so a bundle that
  * marks it external lands on the shell's own component instances. That half has always worked. What an outside
- * author has never had is the other half — anything to compile against. `@intentic/ui`, where every one of
+ * author has never had is the other half: anything to compile against. `@intentic/ui`, where every one of
  * these components actually lives, is private and unpublishable (it is the whole app design system, and
  * publishing it would put a semver promise on all of it rather than on the curated slice the kit IS).
  *
  * So this produces two things and no source:
  *
- *   dist/index.js    the host bridge — the same re-export-from-the-global shim the app already serves at
+ *   dist/index.js    the host bridge: the same re-export-from-the-global shim the app already serves at
  *                    /ext-shims/extension-ui.js, generated from the same names.mjs. Shipping it means an
  *                    author who FORGETS to mark the kit external still gets working code instead of a bundled
  *                    second copy of components that must be the shell's own to work at all.
  *   dist/types/      declarations only, for the slice this kit re-exports.
  *
  * THE PRUNED BARREL is the trick that makes the types shippable. `@intentic/ui`'s own barrel exports far more
- * than the kit does, and following it drags in `shiki` (the code highlighter) and `@primeuix/themes` — two
+ * than the kit does, and following it drags in `shiki` (the code highlighter) and `@primeuix/themes`: two
  * heavy dependencies an extension author would have to install to typecheck a screen that never highlights
  * code. Rewriting that barrel down to the names the kit actually re-exports drops both, and the published
  * package's whole external surface becomes `vue` (the host's own, already a peer) and `primevue` (six
@@ -42,11 +42,11 @@ import { extensionUiNames } from "../names.mjs";
  *   node scripts/build.mjs
  *
  * WIRED TO `prepack` AS WELL AS `build`, because the alternative fails silently and does so on the one day it
- * matters. Everything this package publishes lives under `dist/` — `main`, `types` and every `exports` target —
+ * matters. Everything this package publishes lives under `dist/`: `main`, `types` and every `exports` target:
  * and `dist/` is gitignored. Pack a clean checkout without having built, and npm produces a perfectly valid
  * tarball containing `src/` and `names.mjs` and nothing else: no error, no warning, a real version number on
  * the registry, and an install whose `main` resolves to a file that is not there. That is verified rather than
- * feared — it is what packing this package did before `prepack` existed. The release does run `turbo run build`
+ * feared: it is what packing this package did before `prepack` existed. The release does run `turbo run build`
  * first, so this is usually a three-second no-op; it is here so that being usually-true is not what the
  * correctness of a published artifact rests on.
  */
@@ -60,7 +60,7 @@ const DIST = join(PKG, "dist");
 const log = (message) => process.stdout.write(`${message}\n`);
 
 /* EMPTY A DIRECTORY WITHOUT REMOVING IT. `rmSync(dir, { recursive: true })` on `dist/` is what this used to do,
- * and it fails with EBUSY wherever that path is a MOUNT POINT rather than an ordinary directory — which is the
+ * and it fails with EBUSY wherever that path is a MOUNT POINT rather than an ordinary directory, which is the
  * normal case in an agent sandbox, where build output is an overlay so it survives without entering the repo.
  * The build then died before emitting anything, and the failure read as a broken package rather than as a
  * directory that could not be unlinked. Clearing the contents is the same thing to every consumer and works
@@ -107,9 +107,9 @@ const UI_BARREL = join(OUT, "ui/src/index.d.ts");
 
 // ── 2. Prune the design system's barrel to what the kit re-exports ───────────────────────────────────────
 // Each barrel line is `export { … } from "./somewhere.js"`. Keep a line only if it still names something the
-// kit hands out, and drop the names on it that the kit does not — otherwise the reachable graph is the whole
+// kit hands out, and drop the names on it that the kit does not: otherwise the reachable graph is the whole
 // design system rather than the slice.
-/* What the kit re-exports, values AND types, read off its own emitted declaration rather than off names.mjs —
+/* What the kit re-exports, values AND types, read off its own emitted declaration rather than off names.mjs:
  * that list is the shim generator's, so it carries only the runtime names, and a barrel pruned to it would
  * drop every type the kit hands out (`IconName`, `NavGroup`, `StatusVariant`…). Reading the declaration is
  * also the only version that cannot drift: it IS what the package exports. */
@@ -161,7 +161,7 @@ const resolveRelative = (from, spec) => {
     return undefined;
 };
 // A bare `@intentic/ui…` specifier points at the sibling tree emitted above, not at anything a consumer will
-// install — step 4 rewrites it to a relative path, and the walk has to follow it the same way.
+// install: step 4 rewrites it to a relative path, and the walk has to follow it the same way.
 const resolveUi = (spec) => {
     const rest = spec === `@intentic/ui` ? `index` : spec.slice(`@intentic/ui/`.length);
     for (const candidate of [join(OUT, `ui/src`, `${rest}.d.ts`), join(OUT, `ui/src`, rest, `index.d.ts`)]) {
@@ -234,15 +234,15 @@ const bridgeNames = extensionUiNames.filter((name) => isIdentifier(name)).toSort
 writeFileSync(
     join(DIST, `index.js`),
     [
-        `// Generated by scripts/build.mjs — do not edit.`,
-        `/* The kit is HOST-PROVIDED. These components must be the shell's own instances — a second copy would`,
-        ` * render unthemed, outside the app's reactivity and outside its one query cache — so this module reads`,
+        `// Generated by scripts/build.mjs: do not edit.`,
+        `/* The kit is HOST-PROVIDED. These components must be the shell's own instances: a second copy would`,
+        ` * render unthemed, outside the app's reactivity and outside its one query cache, so this module reads`,
         ` * them off the bridge the host publishes rather than containing any. Marking "@intentic/extension-ui"`,
         ` * external in your bundler is the tidier route (the app's import map answers it); this file is what makes`,
         ` * forgetting to do that harmless instead of silent. */`,
         `const host = globalThis.__intenticHost;`,
         `if (host === undefined) {`,
-        `    throw new Error("@intentic/extension-ui was loaded outside an intentic host — its components come from the app, not from this package.");`,
+        `    throw new Error("@intentic/extension-ui was loaded outside an intentic host: its components come from the app, not from this package.");`,
         `}`,
         `const m = host.modules["@intentic/extension-ui"];`,
         ...bridgeNames.map((name) => `export const ${name} = m[${JSON.stringify(name)}];`),
@@ -250,7 +250,7 @@ writeFileSync(
     ].join(`\n`),
 );
 
-/* `@intentic/extension-ui/format` is the same bridge narrowed to the date and size helpers — the subpath
+/* `@intentic/extension-ui/format` is the same bridge narrowed to the date and size helpers: the subpath
  * exists because an extension's pure logic wants them without pulling a component graph in behind them, and a
  * published entry that quietly handed back the whole kit would defeat exactly that. Its names are read from
  * the emitted declaration rather than listed here, so the two cannot disagree. */
@@ -260,11 +260,11 @@ const formatNames = [...exportedNames(readFileSync(join(DIST, `types/extension-u
 writeFileSync(
     join(DIST, `format.js`),
     [
-        `// Generated by scripts/build.mjs — do not edit.`,
+        `// Generated by scripts/build.mjs: do not edit.`,
         `// The formatting half of the kit, off the same host bridge as ./index.js.`,
         `const host = globalThis.__intenticHost;`,
         `if (host === undefined) {`,
-        `    throw new Error("@intentic/extension-ui was loaded outside an intentic host — its helpers come from the app, not from this package.");`,
+        `    throw new Error("@intentic/extension-ui was loaded outside an intentic host: its helpers come from the app, not from this package.");`,
         `}`,
         `const m = host.modules["@intentic/extension-ui"];`,
         ...formatNames.map((name) => `export const ${name} = m[${JSON.stringify(name)}];`),

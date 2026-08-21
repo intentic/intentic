@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-// No mocks and no mount. Every rule takes rows and a viewed set and returns a value — the panel's own reactivity
+// No mocks and no mount. Every rule takes rows and a viewed set and returns a value: the panel's own reactivity
 // is what these were extracted OUT of, so a group here is just a list of keys.
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 
@@ -31,7 +31,7 @@ describe("groupPassOn", () => {
 });
 
 describe("groupCountLabel", () => {
-    it("shows a fraction mid-pass — the answer to 'how far into this package am I'", () => {
+    it("shows a fraction mid-pass: the answer to 'how far into this package am I'", () => {
         expect(groupCountLabel(rows(`a`, `b`, `c`), seen(`b`))).toBe(`1/3`);
     });
 
@@ -41,7 +41,7 @@ describe("groupCountLabel", () => {
     });
 });
 
-/* Where ⇧V lands. `visible` is render order across every repo — so these cases are the real ones: a group in the
+/* Where ⇧V lands. `visible` is render order across every repo, so these cases are the real ones: a group in the
  * middle of the list, the group at the tail, and a group that is drawing nothing because its repo is collapsed. */
 describe("rowAfterGroup", () => {
     const visible = rows(`a1`, `a2`, `b1`, `b2`, `c1`);
@@ -54,7 +54,7 @@ describe("rowAfterGroup", () => {
         expect(rowAfterGroup(visible, rows(`c1`))).toBeUndefined();
     });
 
-    // Ticking a collapsed repo's group off is legitimate — the selection survives a collapse — and moves nothing.
+    // Ticking a collapsed repo's group off is legitimate: the selection survives a collapse, and moves nothing.
     it("stays put when the group draws no visible rows at all", () => {
         expect(rowAfterGroup(visible, rows(`hidden1`, `hidden2`))).toBeUndefined();
     });

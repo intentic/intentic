@@ -6,14 +6,14 @@ import { useHostConnect } from "../composables/sandbox/useHostConnect";
 import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
 
 /* "Connect this computer" for a `host`-kind capability. The counterpart of the browser-profile dialog: that one
- * signs a session in FOR the user, this one hands them a command to run ON the machine they want connected —
+ * signs a session in FOR the user, this one hands them a command to run ON the machine they want connected:
  * because the one thing a browser tab cannot do is install something on a computer that isn't this one.
  *
  * The dialog is deliberately blunt about what the command does and what the machine will then be allowed to do,
  * since it is the moment a person decides to give an agent hands on their computer. The permissions shown are
  * the capability's own config, so the sentence they read here is the same grant the machine will enforce.
  *
- * Once the machine connects, this flips to a confirmation without a refresh — the composable polls while a
+ * Once the machine connects, this flips to a confirmation without a refresh: the composable polls while a
  * pairing is live, and the machine coming online is exactly what the user is standing there waiting for. */
 
 const props = defineProps<{ visible: boolean; id: string; platform: string; permissions: string }>();
@@ -54,7 +54,7 @@ onBeforeUnmount(stop);
     <Modal :open="visible" size="lg" :header="`Connect ${id}`" @update:open="emit(`update:visible`, $event)">
         <div class="flex flex-col gap-4">
             <p class="text-sm text-content">
-                Run this on <b>{{ id }}</b> — in {{ shell }}, as yourself. It installs a small agent that dials this sandbox and keeps one outbound
+                Run this on <b>{{ id }}</b>: in {{ shell }}, as yourself. It installs a small agent that dials this sandbox and keeps one outbound
                 connection open. No ports are opened on your network and there is nothing to configure on your router.
             </p>
 
@@ -77,7 +77,7 @@ onBeforeUnmount(stop);
 
             <div class="rounded-md border border-subtle px-3 py-2">
                 <p class="text-2xs text-muted">
-                    Once connected, the agent may: <b>{{ permissions }}</b> — and nothing else. Those switches live on this card, the computer
+                    Once connected, the agent may: <b>{{ permissions }}</b>, and nothing else. Those switches live on this card, the computer
                     enforces them itself, and Revoke here cuts it off immediately.
                 </p>
             </div>

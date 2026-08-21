@@ -1,6 +1,6 @@
 // The summons channel's contract: a chat summoned ANYWHERE is on screen EVERYWHERE. The app runs as a full
 // copy per browser window and a popped-out chat is drawn by whichever window opened it, so the guarantee under
-// test is the receiving half — a window that never saw the click applies the identical reveal — plus the two
+// test is the receiving half (a window that never saw the click applies the identical reveal) plus the two
 // rules the wire form carries: queued messages never ride it (another window would send them again), and a
 // summons for another sandbox's chats is ignored whole.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -42,7 +42,7 @@ beforeEach(() => {
     local.clear();
     session.clear();
     resetChat();
-    // A daemon with nothing to say unless a test says otherwise — reveal hydrates the tabs it opens.
+    // A daemon with nothing to say unless a test says otherwise: reveal hydrates the tabs it opens.
     sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
 });
 
@@ -51,7 +51,7 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-// What another window would receive for this summons — the poster and the receiver in one process, which is
+// What another window would receive for this summons: the poster and the receiver in one process, which is
 // exactly what the channel does between two windows of the same origin.
 it(`applies a broadcast reveal to a window that never saw the click`, () => {
     const chat = useChat();
@@ -64,7 +64,7 @@ it(`applies a broadcast reveal to a window that never saw the click`, () => {
     receiveSummons(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
 
     // The receiving window rebuilt the tab from the snapshot (a different instance, the same identity) and
-    // focused it — with `show` collapsing to it, exactly as the clicking window did.
+    // focused it: with `show` collapsing to it, exactly as the clicking window did.
     expect(chat.activeId.value).toBe(clicked.conversationId);
     expect(chat.active.value.title.value).toBe(`Board card`);
     expect(chat.panes.value).toEqual([clicked.conversationId]);
@@ -80,7 +80,7 @@ it(`carries the caret with a New agent summons, so every window's composer is re
 });
 
 /* THE QUEUE NEVER RIDES THE WIRE. Queued messages are user-written turns waiting to be SENT, and a window
- * restoring them would send them again when its own queue drains — one press, two identical turns. The summons
+ * restoring them would send them again when its own queue drains: one press, two identical turns. The summons
  * carries the tab without them; the turn the queue becomes reaches every window from the daemon. */
 it(`strips queued messages from the wire form`, () => {
     const conversation = new Conversation();
@@ -102,7 +102,7 @@ it(`ignores a summons for another sandbox's chats`, () => {
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(foreign.conversationId);
 });
 
-// The same summons landing twice (a re-click, a replayed message) focuses the tab it already made — identity
+// The same summons landing twice (a re-click, a replayed message) focuses the tab it already made: identity
 // rides the wire, so no window can end up with twins.
 it(`is idempotent: a summons repeated focuses the tab it opened rather than minting a twin`, () => {
     const chat = useChat();
@@ -114,7 +114,7 @@ it(`is idempotent: a summons repeated focuses the tab it opened rather than mint
 });
 
 // A history row's summons carries the session and the tab identity the summoner minted, so every window
-// agrees on the tab — and a window already showing that session under another tab keeps its own.
+// agrees on the tab, and a window already showing that session under another tab keeps its own.
 it(`resolves a session summons onto the tab already showing that session`, () => {
     const chat = useChat();
     const showing = chat.active.value;
@@ -138,7 +138,7 @@ it(`points every window's panel at a summoned run`, () => {
     expect(chatRun.value).toEqual({ runId: `run-7`, mode: `live` });
 });
 
-// summonChat with no channel (this environment) is still the whole local gesture — the single-window app.
+// summonChat with no channel (this environment) is still the whole local gesture: the single-window app.
 it(`applies locally even where no channel exists`, () => {
     const chat = useChat();
     const clicked = new Conversation();

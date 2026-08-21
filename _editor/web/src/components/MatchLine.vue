@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/* WHY a filtered row survived — the line the query hit, with the term marked and the side of the conversation
+/* WHY a filtered row survived: the line the query hit, with the term marked and the side of the conversation
  * that said it named in front of it.
  *
  * The speaker label is not decoration. The filter matches the agent's own replies as well as the user's
@@ -7,7 +7,7 @@
  * "landAgent lives in laneDrop.ts" under a card they never opened is a sentence they would go looking for in
  * their own memory. One word in front of it settles that before it can happen.
  *
- * Renders the LINE only — the wrapper, its icon and its clamp belong to whatever is showing it, because a card
+ * Renders the LINE only: the wrapper, its icon and its clamp belong to whatever is showing it, because a card
  * in a lane and a row in a history list frame the same evidence differently.
  */
 import type { MatchSnippet } from "@intentic/sandbox-contract";
@@ -19,7 +19,7 @@ const props = defineProps<{
     // The filter's term, folded the way the filter folded it. Absent while nothing is typed, which renders the
     // line unmarked.
     needle?: string;
-    // The filter's `Aa` switch — the marks obey it, so a lowercase twin of the term is never lit as a hit the
+    // The filter's `Aa` switch: the marks obey it, so a lowercase twin of the term is never lit as a hit the
     // search did not make.
     matchCase?: boolean;
 }>();

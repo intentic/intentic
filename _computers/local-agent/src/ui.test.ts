@@ -29,7 +29,7 @@ describe("mode detection", () => {
         expect(fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_UI: "nested" } }).ui.mode).toBe("nested");
         expect(fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_UI: "plain" } }).ui.mode).toBe("plain");
         expect(fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_PLAIN: "1" } }).ui.mode).toBe("plain");
-        // A value nobody recognises is not a mode — fall back to asking the terminal.
+        // A value nobody recognises is not a mode: fall back to asking the terminal.
         expect(fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_UI: "fancy" } }).ui.mode).toBe("rich");
     });
 });
@@ -55,9 +55,9 @@ describe("the plain contract", () => {
         expect(out()).toBe(
             [
                 "  ok    Docker",
-                "  warn  Disk space — 12 GiB free",
+                "  warn  Disk space, 12 GiB free",
                 "  FAIL  Platform reachable",
-                "  skip  Public URL — no public URL to probe",
+                "  skip  Public URL, no public URL to probe",
                 "intentic: resolving the Cloudflare zone…",
                 "",
             ].join("\n"),
@@ -85,7 +85,7 @@ describe("the plain contract", () => {
 
 describe("nested mode", () => {
     it("contributes detail rather than a second install", () => {
-        // No banner, no numbered checklist, no ending block — the parent owns all three.
+        // No banner, no numbered checklist, no ending block: the parent owns all three.
         const { ui, out } = fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_UI: "nested", NO_COLOR: "1" } });
         ui.begin("intentic - setting up sync", [{ phase: "p", label: "L", weight: 5 }]);
         ui.step("p", "enrolling this machine…");
@@ -115,7 +115,7 @@ describe("rich mode", () => {
         expect(text).toContain("2 steps, roughly 1 minute.");
         expect(text).toContain("First");
         expect(text).toContain("Second");
-        // Three announcements, three ordinals — the ordinal counts what happened, the plan only labels it.
+        // Three announcements, three ordinals: the ordinal counts what happened, the plan only labels it.
         expect(text).toContain(" 3  The first thing again");
         // Every repaint returns to column one rather than scrolling.
         expect(text).toContain("\r");

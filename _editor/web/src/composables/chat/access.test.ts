@@ -1,6 +1,6 @@
 /* THE ONE RULE THAT DECIDES WHETHER A TURN CAN BE SENT, on the axis the free trial added.
  *
- * Two things are asserted here and they are the two that were wrong. First, an endpoint provider is ready — the
+ * Two things are asserted here and they are the two that were wrong. First, an endpoint provider is ready: the
  * composer used to keep its own copy of this rule that knew nothing about endpoints, so a sandbox running the
  * free trial listed a trial row with an allowance badge on it and refused to send the moment anybody chose it.
  * Second, the trial is the one endpoint whose readiness is a MEASUREMENT: a spent allowance is not ready, which
@@ -14,7 +14,7 @@ import { acpProviders, endpointProviders, perProvider, trialStatus } from "./pro
 
 const OLLAMA = `endpoint/ollama`;
 
-// Nothing connected, no capabilities, no trial — every test states the part of the picture it is about.
+// Nothing connected, no capabilities, no trial: every test states the part of the picture it is about.
 beforeEach(() => {
     providerAccounts.value = perProvider(() => []);
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
@@ -23,13 +23,13 @@ beforeEach(() => {
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
 });
 
-it(`counts a configured endpoint as ready — it carries its own credential`, () => {
+it(`counts a configured endpoint as ready: it carries its own credential`, () => {
     expect(providerReady(OLLAMA)).toBe(false);
 
     endpointProviders.value = [{ id: OLLAMA, label: `ollama` }];
 
     expect(providerReady(OLLAMA)).toBe(true);
-    // The composer's gate is this same rule, so it cannot disagree — which it did, and that disagreement is
+    // The composer's gate is this same rule, so it cannot disagree, which it did, and that disagreement is
     // the whole reason this file exists.
     expect(providerReadyOn(OLLAMA, `claude-code`)).toBe(true);
     expect(providerReadyOn(OLLAMA, `native`)).toBe(true);

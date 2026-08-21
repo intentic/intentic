@@ -90,7 +90,7 @@ export function useSandboxAttention() {
                   {
                       icon: `sparkles` as const,
                       tone: `warning` as const,
-                      message: `No AI account connected — the agent can't run a turn`,
+                      message: `No AI account connected, the agent can't run a turn`,
                       to: `/sandbox/agent`,
                       kind: `needs` as const,
                   },
@@ -127,7 +127,7 @@ export function useSandboxAttention() {
                   {
                       icon: `desktop` as const,
                       tone: `warning` as const,
-                      message: `Desktop sync stopped on ${stoppedOn.value.join(`, `)} — its folder isn't syncing`,
+                      message: `Desktop sync stopped on ${stoppedOn.value.join(`, `)}, its folder isn't syncing`,
                       to: `/sandbox/computers`,
                       kind: `needs` as const,
                   },

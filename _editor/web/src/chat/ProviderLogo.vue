@@ -6,7 +6,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract";
 import { PROVIDER_BRAND_PATHS, providerFillRule, type ProviderBrand } from "@intentic/constants";
 
 const props = defineProps<{ provider: AgentProvider }>();
-// A provider with a brand mark draws it; anything else is an installed ACP agent — a generic glyph.
+// A provider with a brand mark draws it; anything else is an installed ACP agent: a generic glyph.
 // Rendered as currentColor so the glyph tracks the surrounding text color (light/dark) like a font icon.
 const path = computed(() => PROVIDER_BRAND_PATHS[props.provider as ProviderBrand]);
 </script>

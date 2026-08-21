@@ -20,7 +20,7 @@ Preserve my wording verbatim where possible, especially for instructions and pre
 ## Tools, stack & environment
 ## Other useful context
 
-Output only the Markdown — no preamble or closing remarks.`;
+Output only the Markdown: no preamble or closing remarks.`;
 
 // HTML-comment fences so the block is invisible in rendered markdown yet locatable for replace-on-reimport.
 const START = `<!-- intentic:imported-memory:start -->`;

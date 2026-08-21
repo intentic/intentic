@@ -1,7 +1,7 @@
-<!-- SHARE THIS CONVERSATION — the one screen between a private chat and a link anyone can open.
+<!-- SHARE THIS CONVERSATION: the one screen between a private chat and a link anyone can open.
      Everything about it is shaped by that being irreversible in the way that matters: a link can be withdrawn,
-     but not un-read. So the two decisions it asks for are the two that change what a stranger sees — what it is
-     called, and how much of it travels — and both are stated in the words of what happens, not of what is
+     but not un-read. So the two decisions it asks for are the two that change what a stranger sees: what it is
+     called, and how much of it travels, and both are stated in the words of what happens, not of what is
      configured. The consequence line changes with the choice rather than sitting under it as fine print,
      because "this publishes your code" is only true of one of the two answers and reads as noise on the other.
 
@@ -24,7 +24,7 @@ const busy = ref(false);
 const error = ref<string>();
 const result = ref<SharedConversation>();
 
-// Opening seeds the field with the chat's own name and clears whatever the last share left behind — the
+// Opening seeds the field with the chat's own name and clears whatever the last share left behind: the
 // dialog is reused across conversations, and a link from the previous one still on screen would be read as
 // this one's.
 watch(
@@ -46,7 +46,7 @@ const DETAILS: readonly { readonly value: ShareDetail; readonly label: string; r
     {
         value: `everything`,
         label: `Everything`,
-        note: `Adds the work the agent did — the files it read and changed, what it ran, and its thinking. This publishes the code and command output that appear in those cards.`,
+        note: `Adds the work the agent did, the files it read and changed, what it ran, and its thinking. This publishes the code and command output that appear in those cards.`,
     },
 ];
 
@@ -133,7 +133,7 @@ const share = async (): Promise<void> => {
                  this is the moment a private conversation stops being private. -->
             <p class="flex items-start gap-1.5 text-2xs text-warning">
                 <Icon name="globe" class="mt-0.5 shrink-0 text-2xs" />
-                <span>Anyone with the link can read it — no sign-in. Secrets are stripped, but nothing else is.</span>
+                <span>Anyone with the link can read it: no sign-in. Secrets are stripped, but nothing else is.</span>
             </p>
         </form>
 

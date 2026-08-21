@@ -1,32 +1,32 @@
-<!-- ONE SESSION, AS A CARD IN A RAIL — the fleet board's AgentCard in a column one card wide, and the one
+<!-- ONE SESSION, AS A CARD IN A RAIL: the fleet board's AgentCard in a column one card wide, and the one
      component every rail in this app draws its rows with: the popped-out chat's open chats and its search
      hits (ChatTabList), the workflow runs above them, and the agents this sandbox's agents started
      (pages/Subagents.vue).
 
      ONE CARD, NOT A RESEMBLANCE. Those lists are read minutes apart by the same eye, so anything they drew
-     differently read as two different products — and they did drift: the Subagents area had its own row, with
+     differently read as two different products, and they did drift: the Subagents area had its own row, with
      its own status glyphs, its own facts in its own order and no card surface at all, so the agents an agent
      started looked like a different KIND of thing from the agents the user started. Everything below is the
      board's own vocabulary, and a caller picks which parts it has facts for rather than picking how they look.
 
      The rows, top to bottom:
-       · the LEADING mark is the IDENTITY TILE (IdentityTile) — the kind-of-work glyph on a tint of the
+       · the LEADING mark is the IDENTITY TILE (IdentityTile): the kind-of-work glyph on a tint of the
          session's CATEGORY hue, falling back to the provider mark. A row that is not a session (a workflow
          run) passes a plain `icon` instead.
        · the title is the card's one piece of CONTENT and takes the content tier (text-xs, semibold) over a
          card of text-2xs meta. A card set entirely in one size is a card with no first line to land on.
          Marked in place when the host is filtering (`needle`), never coloured: the status colour lives in the
          glyph beside it, and a column of orange titles is one where nothing stands out.
-       · `trailing` is the slot beside the status glyph — the chat's × and its presence avatars.
+       · `trailing` is the slot beside the status glyph: the chat's × and its presence avatars.
        · the STATUS glyph closes the title row, in a fixed slot, at the board's size.
        · `meta` is the card's facts, one wrapping line at the board's own picks. Passed as a slot rather than
          as data because the chips in it are components (provenance marks, the coloured diff) and because
          which facts a card HAS is the caller's question. Conditional (`<template v-if=… #meta>`) on a card
          that can have nothing to say, so a fresh draft draws no empty strip.
-       · the LIVE LINE, in link — what the turn is doing this second and how long it has been at it. The one
+       · the LIVE LINE, in link: what the turn is doing this second and how long it has been at it. The one
          accent that makes a working card findable in a column of stopped ones. `now` ticks from the host, so
          every card's elapsed advances together without a per-card timer.
-       · the SNIPPET — why this card survived the filter, when the reason isn't its title. A result the user
+       · the SNIPPET: why this card survived the filter, when the reason isn't its title. A result the user
          can't see the cause of is one they stop believing.
 
      Colour is spent the way the board spends it: the work's category in the tile, status in the glyph, the
@@ -43,7 +43,7 @@ import MatchLine from "./MatchLine.vue";
 
 const props = defineProps<{
     title: string;
-    // The filter's term, folded the way the filter folded it, when the host has one — the title and the snippet
+    // The filter's term, folded the way the filter folded it, when the host has one: the title and the snippet
     // are marked with it, under the same `Aa` rule the search ran.
     needle?: string;
     matchCase?: boolean;
@@ -55,15 +55,15 @@ const props = defineProps<{
     status?: { name: IconName; spin?: boolean; class: string; "aria-label"?: string };
     live?: { icon: IconName; text: string; since?: number };
     now?: number;
-    /* A card whose chat has a COLUMN on screen — a ring and a lifted surface.
+    /* A card whose chat has a COLUMN on screen: a ring and a lifted surface.
      *
      * ONE WEIGHT, however many columns there are. A split used to be drawn as a ranking: the focused chat wore
      * this, and the others a half-strength version of the same two channels. Nothing about a split makes one
-     * column subordinate — the reader put two chats up to read them together — so the list was quietly
+     * column subordinate: the reader put two chats up to read them together, so the list was quietly
      * answering a question ("which is the real one?") that has no answer, and a second, muddier accent weight
      * was the whole cost of it. Every chat on screen is on screen. */
     selected?: boolean;
-    // This session needs the user — a bar down the left edge. A CHANNEL OF ITS OWN so it stacks with
+    // This session needs the user: a bar down the left edge. A CHANNEL OF ITS OWN so it stacks with
     // selection: drawing both as an outline meant opening the card that needed you erased the very cue that
     // put it in the lane.
     attention?: boolean;
@@ -77,8 +77,8 @@ const props = defineProps<{
      *
      * Both kinds exist and they are genuinely different: a chat tab PICKS a conversation inside the panel you
      * are already looking at (no URL changes, nothing to open in a tab), while a subagent row is a page with
-     * an address. Given `to` the card renders as a real link and everything a link brings comes with it — the
-     * address in the status bar, the browser's own menu, Ctrl/⌘-click into a second tab — at not one pixel of
+     * an address. Given `to` the card renders as a real link and everything a link brings comes with it: the
+     * address in the status bar, the browser's own menu, Ctrl/⌘-click into a second tab: at not one pixel of
      * difference in how it looks. Without it the card stays the button it has always been. */
     to?: RouteLocationRaw;
 }>();
@@ -97,7 +97,7 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
             $slots[`aside`] ? `items-stretch gap-2.5` : `flex-col gap-1.5`,
         ]"
     >
-        <!-- A MARK BESIDE THE WHOLE CARD rather than inside its title row — the persona rail's rows are people,
+        <!-- A MARK BESIDE THE WHOLE CARD rather than inside its title row: the persona rail's rows are people,
              and a face is the thing you find them by, so it stands at the card's own height instead of sitting
              at the size of a status glyph. Only the rows that pass one are laid out this way; every other card
              keeps the column it has always been, which is why this is a slot's presence and not a prop. -->
@@ -109,7 +109,7 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
                 <span v-else-if="icon !== undefined" class="flex h-4 shrink-0 items-center">
                     <Icon :name="icon" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
                 </span>
-                <!-- Two lines before the clamp — a card has the width for most titles whole. -->
+                <!-- Two lines before the clamp: a card has the width for most titles whole. -->
                 <span class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4" :class="quiet ? 'text-muted' : 'text-content'">
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
@@ -143,24 +143,24 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
 </template>
 
 <style scoped>
-/* The card's surface — AgentCard's skin: a visible border and an OPAQUE fill. A transparent pill blends into
+/* The card's surface, AgentCard's skin: a visible border and an OPAQUE fill. A transparent pill blends into
  * a column of pills; a bordered card is what makes each session a countable thing.
  *
  * `--color-card` over the LANE's fill, exactly as the board's cards sit on their lanes: a card has to be
  * LIGHTER than what it lies on to read as an object rather than as an outline, and `.lane` is mixed to land
  * between canvas and card in both schemes precisely so this holds. The fill this replaced was a 45% wash of
- * the canvas colour, which in the pop-out — whose body IS canvas — composited to the ground it was drawn on,
+ * the canvas colour, which in the pop-out, whose body IS canvas: composited to the ground it was drawn on,
  * leaving nothing but the 1px border.
  *
  * Border WIDTH is the utility's (so `border-dashed` can restyle it); the colour is here, where the states
  * below can move it.
  *
- * EVERY STATE IS A VARIABLE, not a property — border colour, fill, and the three shadows. Written as plain
+ * EVERY STATE IS A VARIABLE, not a property: border colour, fill, and the three shadows. Written as plain
  * properties, `.rail-card:hover` (a class AND a pseudo-class) outranked `.rail-card-on` (one class), so
  * putting the pointer on the SELECTED card repainted its accent border grey: the list erased the mark for
  * the chat it was pointing at, for as long as the cursor rested there. Through variables the states can be
  * ordered after hover and win the tie, and hover keeps a channel of its own on a card that already wears the
- * accent — the halo below, rather than a second opinion about the edge. */
+ * accent: the halo below, rather than a second opinion about the edge. */
 .rail-card {
     color: var(--color-muted);
     cursor: pointer;
@@ -171,15 +171,15 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
     /* Three independent marks on one box-shadow: the attention bar (left edge), the selection ring, and the
        halo that lifts a selected card off its lane. Held as variables because a second box-shadow rule would
        REPLACE the first, which is what once forced the first two into an either/or.
-       All three keep their INSET-NESS across every state — `inset 0 0 #0000` rather than a bare `0 0 #0000`
-       for the two inset slots — because box-shadow only interpolates between lists that agree on it, and a
+       All three keep their INSET-NESS across every state: `inset 0 0 #0000` rather than a bare `0 0 #0000`
+       for the two inset slots, because box-shadow only interpolates between lists that agree on it, and a
        transition that cannot interpolate snaps. */
     --rail-accent: inset 0 0 #0000;
     --rail-ring: inset 0 0 #0000;
     --rail-lift: 0 0 #0000;
     box-shadow: var(--rail-accent), var(--rail-ring), var(--rail-lift);
     /* The shadows transition WITH the colours. They used not to, so selecting a card faded its border over
-       150ms while the ring snapped in on the first frame — one gesture arriving as two. The curve is the
+       150ms while the ring snapped in on the first frame: one gesture arriving as two. The curve is the
        app's standard one (Tailwind's `transition-*` default), so a card animates like every other control. */
     transition:
         color 150ms cubic-bezier(0.4, 0, 0.2, 1),
@@ -194,12 +194,12 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
 }
 /* THE SELECTION RING IS INSET, and that is what keeps it whole. Drawn outwards it lay OUTSIDE the card's own
  * box, where two things ate it: the lane's pinned header, which is opaque and painted over the top of the
- * first card in every lane — the reported "the top border is cut" — and the 6px between cards, which a 2px
+ * first card in every lane: the reported "the top border is cut", and the 6px between cards, which a 2px
  * ring on each neighbour closed to 2. Inside the box nothing can clip it, it follows the card's radius
  * exactly, and the accent is one even weight the whole way round.
  *
  * The ring is a hairline against a border of the same colour, so the edge reads as a solid 2px of accent
- * rather than as the old 1px line under a 50%-opacity wash — a translucent ring picks up whatever it lies on,
+ * rather than as the old 1px line under a 50%-opacity wash: a translucent ring picks up whatever it lies on,
  * which is why the edge looked soft on the lane and muddy between cards. */
 .rail-card.rail-card-on {
     color: var(--color-content);
@@ -217,7 +217,7 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
     --rail-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
 }
 /* An inset shadow rather than a wider left border: no layout shift, so a lane's cards keep their text on one
-   axis whether or not one of them needs the user. First in the list, so it paints OVER the selection ring —
+   axis whether or not one of them needs the user. First in the list, so it paints OVER the selection ring:
    a card that is both selected and waiting on you must not lose the reason it is in the lane.
    A HAIRLINE-AND-A-HALF in a settled amber, not 3px of the full role colour: these cards stack six pixels
    apart, and at that spacing the old bar read as one ragged stripe down the lane rather than as a mark on each

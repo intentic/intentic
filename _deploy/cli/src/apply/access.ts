@@ -65,7 +65,7 @@ const summaryPassword = (password: AccessEntry["password"]): string => {
     if (password.source === "generated") {
         return password.value !== undefined
             ? `   password: ${password.value}  (saved in .secrets.json)`
-            : "   password: (generated — see .secrets.json)";
+            : "   password: (generated, see .secrets.json)";
     }
     return `   password: $${password.key}`;
 };

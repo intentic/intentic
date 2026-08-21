@@ -117,7 +117,7 @@ export const runCommand = async (
 export const describeResult = (result: CommandResult, timeoutMs: number): string =>
     [
         result.timedOut
-            ? `The command was killed after ${Math.round(timeoutMs / 1000)}s. It either takes longer than that, or it is waiting for input that nobody can type — there is no terminal on this end.`
+            ? `The command was killed after ${Math.round(timeoutMs / 1000)}s. It either takes longer than that, or it is waiting for input that nobody can type: there is no terminal on this end.`
             : `Exit code ${result.exitCode ?? "unknown"}${result.exitCode === 0 ? " (success)" : " (failed)"}.`,
         result.stdout.trim() === "" ? "" : `\n--- stdout ---\n${result.stdout.trimEnd()}`,
         result.stderr.trim() === "" ? "" : `\n--- stderr ---\n${result.stderr.trimEnd()}`,

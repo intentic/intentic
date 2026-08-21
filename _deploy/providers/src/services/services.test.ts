@@ -21,7 +21,7 @@ const fakeSsh = (
             commands.push(command);
             // Simulate an unwritable state dir (e.g. non-root user on root-owned /opt): the mkdir/cat writes exit non-zero.
             if (opts.writeFails && (command.startsWith("mkdir -p /opt/intentic") || command.startsWith("cat > /opt/intentic"))) {
-                // path-literals: content — the stderr a real mkdir would print, quoted as the kernel spells it.
+                // path-literals: content, the stderr a real mkdir would print, quoted as the kernel spells it.
                 return res("", 1, "mkdir: cannot create directory '/opt/intentic': Permission denied");
             }
             if (command.includes("com.docker.compose.project")) {
@@ -207,7 +207,7 @@ for (const svc of cases) {
         await expect(svc.make(ssh.executor).apply(svc.inputs, undefined, ctx())).rejects.toThrow(
             new RegExp(`${svc.kind}: create /opt/intentic/${svc.kind} failed \\(exit 1\\): mkdir: cannot create`),
         );
-        // The real error must not be masked as "compose.yaml: no such file" — we never reach `up -d`.
+        // The real error must not be masked as "compose.yaml: no such file", we never reach `up -d`.
         expect(ssh.commands.some((c) => c.includes("docker compose") && c.includes("up -d"))).toBe(false);
     });
 
@@ -272,6 +272,6 @@ test("infisical: apply bootstraps the instance admin via the one-shot API and to
     const seed = ssh.commands.find((c) => c.includes("/api/v1/admin/bootstrap"));
     expect(seed).toContain("http://10.0.0.5:8084/api/v1/admin/bootstrap");
     expect(seed).toContain('"email":"intentic@example.com"');
-    // The fake answers the curl with no status — the seed logs and the apply still succeeds.
+    // The fake answers the curl with no status: the seed logs and the apply still succeeds.
     expect(logs.some((message) => message.includes("bootstrap returned"))).toBe(true);
 });

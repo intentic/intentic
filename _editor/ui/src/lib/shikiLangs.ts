@@ -33,7 +33,7 @@ export const LANGS = {
     ini: () => import(`@shikijs/langs/ini`),
     docker: () => import(`@shikijs/langs/docker`),
     dotenv: () => import(`@shikijs/langs/dotenv`),
-    // Local grammar — @shikijs/langs has none for ignore files.
+    // Local grammar: @shikijs/langs has none for ignore files.
     gitignore: () => import(`./gitignoreGrammar`),
     make: () => import(`@shikijs/langs/make`),
     prisma: () => import(`@shikijs/langs/prisma`),

@@ -62,7 +62,7 @@ test("a re-apply does not health-gate unchanged (noop) resources", async () => {
     await apply(graph, { providers, env: fullEnv, probe: trueProbe, log: silent });
 
     // Second apply finds the same world (all noop). A never-passing probe would make any readyWhen gate
-    // time out — so the only way this succeeds is if noop resources are not health-gated at all.
+    // time out, so the only way this succeeds is if noop resources are not health-gated at all.
     const second = await apply(graph, { providers, env: fullEnv, probe: async () => false, log: silent });
     expect(second.steps.every((step) => step.action === "noop")).toBe(true);
 });

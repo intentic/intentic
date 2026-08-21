@@ -13,12 +13,12 @@ const {
 } = defineProps<{
     // badge: a small count chip after the label (e.g. unreviewed changes on a tab); hidden at 0/undefined.
     // mark: an icon in that same chip INSTEAD of a number, for a pending action whose size is not what the user
-    // acts on (committed work still to push). Takes precedence — one chip states one thing.
-    // title / markTitle: the pill's hover label, raised through `v-tooltip` like every other hint in the app — a
+    // acts on (committed work still to push). Takes precedence: one chip states one thing.
+    // title / markTitle: the pill's hover label, raised through `v-tooltip` like every other hint in the app, a
     // native `title=` looked nothing like the rest and sat behind the browser's ~1s delay. BOTH ride the PILL,
     // never the chip inside it: a tooltip on a descendant of a tooltipped element opens a second box on top of
     // the first (see tooltip.ts, rule 5). markTitle wins while there is a mark, on the same "one chip states one
-    // thing" reasoning. Leave title out where the label already says it — a segmented control's whole point is
+    // thing" reasoning. Leave title out where the label already says it: a segmented control's whole point is
     // that its options are readable.
     // The array is `readonly` so a shared preset can be declared `as const` / `readonly` at its source and
     // spread straight in (TIME_WINDOWS is, and every feed that shows it would otherwise need a copy).
@@ -31,7 +31,7 @@ const {
      * The compact default is deliberate everywhere else: at ~20px tall it is a mouse control, and on a phone
      * its labels wrap to two lines each and the row stops reading as one control at all. */
     stretch?: boolean;
-    /* Lets the ROW break between pills when the options outrun the container — the pill itself stays one line
+    /* Lets the ROW break between pills when the options outrun the container: the pill itself stays one line
      * either way. Off by default because the compact control mostly rides fixed-height toolbar rows, where a
      * second line would stand taller than the bar holding it; on for pickers sitting in a form column, where
      * the option list is data-driven (a sandbox's identities) and an unwrapping row would run off the edge
@@ -42,8 +42,8 @@ const {
 const model = defineModel<T>({ required: true });
 
 /* THE COMPACT PILL IS A MOUSE CONTROL, and this component has said so in prose since it was written: "at ~20px
- * tall it is a mouse control". What it did not do was act on it. Every compact call site — the mobile
- * workspace's Files|Changes switch, its Name|Text|Smart scope switch, the sandbox and settings sub-navs —
+ * tall it is a mouse control". What it did not do was act on it. Every compact call site: the mobile
+ * workspace's Files|Changes switch, its Name|Text|Smart scope switch, the sandbox and settings sub-navs:
  * rendered 22px pills on a phone, which a sweep at 390px found to be most of that form factor's undersized
  * targets in one component.
  *
@@ -79,10 +79,10 @@ const { coarse } = useDevice();
                 model === option.value ? `bg-overlay text-content` : `text-muted hover:text-content`,
                 // Only the compact pill needs it. The stretch track is already ≥36px and its pills sit edge to
                 // edge inside a bordered box, so an overlay reaching 44px would spill past that border and
-                // over the pill beside it — the one shape where a bigger hit area buys a wrong press.
+                // over the pill beside it: the one shape where a bigger hit area buys a wrong press.
                 stretch ? `` : `touch-target`,
                 stretch
-                    ? /* THE FULL-WIDTH TRACK STILL HAS A DENSITY, which it used to ignore — `size` only reached
+                    ? /* THE FULL-WIDTH TRACK STILL HAS A DENSITY, which it used to ignore: `size` only reached
                        * the compact pill, so any surface wanting the track's shape was handed a thumb-sized one
                        * whether or not a thumb was ever going to press it. `sm` keeps the 36px target the setup
                        * flow's steps need on a phone; `xs` is the same track at a pointer's height, for a
@@ -90,11 +90,11 @@ const { coarse } = useDevice();
                        * column's height saying two words. */
                       [`flex flex-1 items-center justify-center text-center`, size === `xs` ? `min-h-6 px-1.5 text-2xs` : `min-h-9 px-2 text-xs`]
                     : // A compact pill is ONE line, always. It rides fixed-height toolbar rows (.view-header is
-                      // 2.25rem), so a pill that breaks doesn't merely look wrong — it stands taller than the bar
+                      // 2.25rem), so a pill that breaks doesn't merely look wrong: it stands taller than the bar
                       // holding it and than every bar beside it. Only the MARK chip could do this: an icon is an
                       // atomic inline box, so a line may break before it, where a numeric badge is plain text
                       // welded to the label with no space to break at. Nowrap also fixes the cause rather than the
-                      // symptom — an unbreakable pill's min-content IS its full width, so the flex row can no
+                      // symptom: an unbreakable pill's min-content IS its full width, so the flex row can no
                       // longer squeeze it narrower than its own label and chip. The stretch variant keeps
                       // wrapping: it owns a full-width track with room to grow, and its labels are sentences.
                       [`whitespace-nowrap py-0.5 text-2xs`, size === `xs` ? `px-1.5` : `px-2.5`],

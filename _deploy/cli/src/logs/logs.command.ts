@@ -16,7 +16,7 @@ const SAFE_NAME = /^[a-zA-Z0-9_.-]+$/;
 
 // The host-side fetch: compose stacks (forgejo/komodo/signoz/outline/…) keep their project at
 // /opt/intentic/<type>, everything docker-run directly (workspace, runner, backup, backing services) carries
-// an intentic.id label — <id> for direct runs, intentic-<type> for compose dashboards. `2>&1` folds each
+// an intentic.id label: <id> for direct runs, intentic-<type> for compose dashboards. `2>&1` folds each
 // container's stderr log stream into the tap.
 const logsScript = (id: string, type: string, tail: number): string =>
     [
@@ -68,7 +68,7 @@ export const logsCommand = buildCommand({
         }
         const node = graph.resources[id];
         if (node === undefined) {
-            throw new Error(`no resource "${id}" in the artifact — run \`intentic deploy logs\` to list them`);
+            throw new Error(`no resource "${id}" in the artifact: run \`intentic deploy logs\` to list them`);
         }
         if (!SAFE_NAME.test(node.id) || !SAFE_NAME.test(node.type)) {
             throw new Error(`resource id/type contains characters unsafe for a remote shell: "${node.id}" (type "${node.type}")`);
@@ -78,7 +78,7 @@ export const logsCommand = buildCommand({
         const resolved = resolveInputs(node.inputs, createStore(), process.env, { lenient: true });
         const parsedSsh = sshSchema.safeParse(resolved);
         if (!parsedSsh.success) {
-            throw new Error(`"${id}" (type "${node.type}") has no host SSH target — its runtime logs are not host-fetchable`);
+            throw new Error(`"${id}" (type "${node.type}") has no host SSH target: its runtime logs are not host-fetchable`);
         }
         const ssh = createSshExecutor(createKnownHostsStore(dir));
         const session = await ssh.connect(sshTarget(parsedSsh.data));

@@ -10,7 +10,7 @@ import PresenceAvatars from "../presence/PresenceAvatars.vue";
 import PastChatList from "./PastChatList.vue";
 
 /* The mobile counterpart of ChatTabs: a compact header naming the active conversation, with the open-tab
- * strip and the searchable history folded into one bottom sheet. Same emit contract as ChatTabs — the panel
+ * strip and the searchable history folded into one bottom sheet. Same emit contract as ChatTabs: the panel
  * owns the side effects of switching, and "New agent" runs the one shared startAgent action (which on this
  * form factor also routes to the new agent's screen, since there is no dock to reveal it). */
 
@@ -24,7 +24,7 @@ const { conversations, activeId, sessions, loadSessions } = useChat();
 const active = computed(() => conversations.value.find((c) => c.conversationId === activeId.value));
 
 // Archiving closes an agent's chat (see the archive note in useAgents), but one opened from the archive is still
-// off the board, so the sheet marks those — the panel's own line only speaks for whichever chat is open.
+// off the board, so the sheet marks those: the panel's own line only speaks for whichever chat is open.
 const { agentById } = useAgents();
 const isArchived = (conversationId: string): boolean => agentById(conversationId)?.archivedAt !== undefined;
 
@@ -59,7 +59,7 @@ const openFromHistory = (id: string): void => {
 
 <template>
     <header class="flex items-center gap-1 border-b border-line px-2 py-1.5">
-        <!-- The whole title area opens the conversation sheet — the biggest possible touch target. -->
+        <!-- The whole title area opens the conversation sheet: the biggest possible touch target. -->
         <button type="button" class="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left active:bg-overlay" @click="openSheet">
             <Icon v-if="active" v-bind="statusIcon(active.status.value)" />
             <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">{{
@@ -93,7 +93,7 @@ const openFromHistory = (id: string): void => {
                     <!-- Archived: off the agents board, but the conversation is still open right here. -->
                     <Icon v-if="isArchived(c.conversationId)" name="box" class="shrink-0 text-2xs text-subtle" />
                     <PresenceAvatars v-if="c.session.value !== undefined" :members="viewersOfSession(c.session.value.id)" label="in this chat" />
-                    <!-- span, not button — a real button can't nest inside the row button. -->
+                    <!-- span, not button: a real button can't nest inside the row button. -->
                     <span
                         v-if="conversations.length > 1"
                         role="button"

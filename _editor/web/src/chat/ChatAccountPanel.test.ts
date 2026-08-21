@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// WHEN THE GATE ABOVE THE COMPOSER IS THERE AT ALL — what the card SAYS is ConnectOffer's own test. Three
+// WHEN THE GATE ABOVE THE COMPOSER IS THERE AT ALL: what the card SAYS is ConnectOffer's own test. Three
 // states decide it and each one has a way of going wrong that a user notices immediately: claiming "nothing is
 // connected" before the daemon has answered puts a pitch in front of somebody with a perfectly good
 // subscription, and NOT standing down for the empty board puts the same offer on screen twice, a hand's width
@@ -10,7 +10,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // The kit's barrel reaches for matchMedia at import time (its device tracker), which jsdom does not have.
-// matches:false keeps the device DESKTOP — the one form factor where the board and this gate share a screen.
+// matches:false keeps the device DESKTOP: the one form factor where the board and this gate share a screen.
 
 const connected = ref(false);
 const accountsLoaded = ref(true);
@@ -20,7 +20,7 @@ const chatWide = ref(false);
 const nativeConnectFlow = ref<undefined>(undefined);
 const translatorConnectFlow = ref<undefined>(undefined);
 
-// The pane's view, which the real panel injects from its ChatPane — mounted bare here, so it is handed over.
+// The pane's view, which the real panel injects from its ChatPane: mounted bare here, so it is handed over.
 // The connect surface underneath it reads the live handshake off the same store, so the flows come along.
 vi.mock(`../composables/chat/useChat`, () => ({
     useChat: () => ({
@@ -109,7 +109,7 @@ it(`stands down while the empty board is making the same offer, without going si
     offerOnBoard.value = true;
     const element = mount();
 
-    // The board owns the whole empty screen this gate would sit against, so it takes the ARGUMENT — the pitch,
+    // The board owns the whole empty screen this gate would sit against, so it takes the ARGUMENT: the pitch,
     // the button, and the wait in front of them, or the two columns would spin at each other.
     expect(element.textContent).not.toContain(`Try free with Google`);
     // But standing down is not the same as saying nothing, and it used to be: the composer below this is behind

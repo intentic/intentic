@@ -1,14 +1,14 @@
-<!-- THE REASONING-EFFORT METER — the little ladder of segments beside the model pill, and the word for the rung
+<!-- THE REASONING-EFFORT METER: the little ladder of segments beside the model pill, and the word for the rung
      it is on. Two composers draw it (the chat's, and the suggested-session box's), which is why it is a
      component: the two used to carry their own copies of the scale, the lit-segment index, the label lookup AND
-     the fill ramp, line for line, down to the `50 + (i / top) * 45` curve — four things that had to be changed in
+     the fill ramp, line for line, down to the `50 + (i / top) * 45` curve: four things that had to be changed in
      two places to stay one control, in files far enough apart that nobody would.
 
      THE RAMP IS THE POINT. A segment is not on-or-off: the lit ones climb from ~50% brand at Low to ~95% at the
      top, so the ladder reads as "how hard" at a glance rather than as a count of boxes. A copy that lit every
      segment the same colour would look right in a screenshot and wrong in use.
 
-     IT DRAWS NOTHING when the runtime doesn't take an effort — an ACP agent owns its own reasoning settings, and
+     IT DRAWS NOTHING when the runtime doesn't take an effort: an ACP agent owns its own reasoning settings, and
      OpenCode drops the field entirely (see `capabilities.effort`). Segments there are buttons that change
      nothing, which is worse than no segments.
 
@@ -16,7 +16,7 @@
      per pointer. A rung is 9–14px wide. Making the strip 44px tall (chat.css) fixes the axis a thumb misses on
      and cannot fix the axis that matters here: five rungs a thumb can distinguish is 120px of a composer row
      that has a model pill, a persona, a microphone and a send button already. Widening them would also stop
-     them being a ladder — a meter whose rungs are button-sized is a row of buttons, and the ramp that makes
+     them being a ladder: a meter whose rungs are button-sized is a row of buttons, and the ramp that makes
      this readable at a glance is gone.
 
      So the phone gets the same ladder as a PICTURE, the level's word beside it, and one 44px target over the
@@ -34,7 +34,7 @@ const {
     labelClass = ``,
 } = defineProps<{
     conversation: Conversation;
-    /** Greyed and inert — the chat composer's controls go quiet under a workflow badge. */
+    /** Greyed and inert: the chat composer's controls go quiet under a workflow badge. */
     disabled?: boolean;
     /** Extra classes on the level word, for a composer that drops it in a narrow container. */
     labelClass?: string;
@@ -57,7 +57,7 @@ const { coarse } = useDevice();
 const sheetOpen = ref(false);
 const trigger = ref<HTMLButtonElement | null>(null);
 
-// How far up the ladder a row sits, so the sheet's own rows carry the same ramp the meter does — the list is
+// How far up the ladder a row sits, so the sheet's own rows carry the same ramp the meter does: the list is
 // then readable as the same control rather than as an unrelated menu of five words.
 const pick = (value: string): void => {
     sheetOpen.value = false;
@@ -74,7 +74,7 @@ const pick = (value: string): void => {
                 type="button"
                 class="flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-1 transition-colors active:bg-overlay"
                 :disabled="disabled"
-                :aria-label="`Reasoning effort — ${effortLabel}`"
+                :aria-label="`Reasoning effort: ${effortLabel}`"
                 @click="sheetOpen = true"
             >
                 <span class="flex items-center" aria-hidden="true">

@@ -1,7 +1,7 @@
 // The thumbnail a restored transcript re-mints for itself, and specifically its behaviour when the first ask
 // CANNOT work: these chips render on the first frame, before the app knows the sandbox's address, so "the fetch
 // failed" is the ordinary case here rather than the exceptional one. What is pinned is which failures are worth
-// another go and which are final — the difference between a screenshot that comes back and a permanent
+// another go and which are final: the difference between a screenshot that comes back and a permanent
 // `image.png` chip.
 import { beforeEach, expect, it, vi } from "vitest";
 import { nextTick, ref } from "vue";
@@ -63,7 +63,7 @@ it("fetches once for a path however many bubbles ask", async () => {
 });
 
 // THE REPORTED BUG. The chips paint before there is anywhere to send the request, and the answer used to park
-// the path for good — a killed and restarted dev server showed `image.png` where the screenshot had been.
+// the path for good: a killed and restarted dev server showed `image.png` where the screenshot had been.
 it("recovers the thumbnail once an address resolves after the first ask failed unreachable", async () => {
     const path = freshPath();
     blob.mockRejectedValueOnce(new Error(`Your sandbox isn't reachable yet`));

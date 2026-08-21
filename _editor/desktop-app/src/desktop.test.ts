@@ -5,7 +5,7 @@ import { EXIT_NEEDS_CONSENT, EXIT_NEEDS_RESTART, expectedStop, parseRequirement,
  *
  * These are the readings a Windows install's whole diagnosis passes through, and the reason they are pinned
  * is a real report: a PC with no WSL2, no Docker Desktop, no docker-users membership and no running engine
- * named all four, printed the four `intentic-requirement:` lines below verbatim, exited — and the window
+ * named all four, printed the four `intentic-requirement:` lines below verbatim, exited, and the window
  * showed a spinner on "checking Docker" and never mentioned any of it.
  *
  * The fixtures are that machine's actual output, pasted unedited. A parser that stops matching it is a
@@ -33,7 +33,7 @@ describe(`the reported install, read back`, () => {
         expect(found.map((requirement) => requirement.action)).toEqual([`fixElevated`, `fix`, `fixElevated`, `fix`]);
         expect(found[0]?.title).toBe(`WSL2`);
         expect(found[1]?.remedy).toContain(`600 MB`);
-        // `"detail":null` is what the installer prints when there is no long form — it must not become the
+        // `"detail":null` is what the installer prints when there is no long form: it must not become the
         // string "null" under a row.
         expect(found.every((requirement) => requirement.detail === undefined)).toBe(true);
     });
@@ -88,7 +88,7 @@ describe(`how one requirement is going`, () => {
 describe(`which non-zero exits are failures`, () => {
     /* Every Windows install that needs anything ends its first pass non-zero on purpose: the installer
      * reports what it would change and stops, because there is no terminal here to ask the one question on.
-     * Reporting that as a crash is this screen calling its own design broken — and on the run that was
+     * Reporting that as a crash is this screen calling its own design broken, and on the run that was
      * reported to us, the red box was the only thing with anything to say. */
     it(`treats the two designed stops as stops and everything else as a failure`, () => {
         expect(expectedStop(EXIT_NEEDS_CONSENT)).toBe(true);

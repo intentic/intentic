@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createSegmenter, resampleTo16k, TARGET_RATE, wavOf16k } from "./voiceAudio";
 
-// A frame of constant-amplitude 16kHz samples — RMS of a constant signal IS the amplitude, so the segmenter's
+// A frame of constant-amplitude 16kHz samples: RMS of a constant signal IS the amplitude, so the segmenter's
 // thresholds can be exercised with plain numbers.
 const frame = (ms: number, amplitude: number): Float32Array => new Float32Array((ms / 1000) * TARGET_RATE).fill(amplitude);
 
@@ -84,7 +84,7 @@ describe(`createSegmenter`, () => {
         expect((utterances[0]?.length ?? 0) / TARGET_RATE).toBeCloseTo(2, 1);
     });
 
-    it(`discard drops the in-flight segment — a mic turned off mid-sentence sends nothing`, () => {
+    it(`discard drops the in-flight segment: a mic turned off mid-sentence sends nothing`, () => {
         const utterances: Float32Array[] = [];
         const segmenter = createSegmenter((samples) => utterances.push(samples));
         for (let i = 0; i < 10; i += 1) {

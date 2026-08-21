@@ -20,7 +20,7 @@ const { scriptSource } = await import("../environments/scriptCommand");
 
 /* PrimeVue's Dialog teleports to the body, so the dialog's own content is never under the mount point.
  * `visible` starts FALSE and is flipped, which is not ceremony: minting hangs off the transition, exactly as
- * on the card — a dialog that was born open never asks for a token, and would sit on "Preparing…" forever. */
+ * on the card: a dialog that was born open never asks for a token, and would sit on "Preparing…" forever. */
 const mount = (): { open: () => void } => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -39,7 +39,7 @@ const mount = (): { open: () => void } => {
     );
     app.directive(`tooltip`, {});
     // PrimeVue's Dialog reads its own config off the plugin; without it the header fails to render at all.
-    // The bare plugin, not installUi — the theme preset and the bundled icon sets are not what is on trial.
+    // The bare plugin, not installUi: the theme preset and the bundled icon sets are not what is on trial.
     app.use(PrimeVue);
     app.mount(el);
     return {
@@ -64,7 +64,7 @@ it(`rewrites the command between the working-tree script and the released one`, 
     pill(`Standard`).click();
     await nextTick();
 
-    // Same env, fetched delivery — the form that runs on a machine that has never seen the repo.
+    // Same env, fetched delivery: the form that runs on a machine that has never seen the repo.
     expect(document.body.textContent).toContain(`curl -fsSL https://intentic.dev/computer |`);
     expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`);
     expect(document.body.textContent).not.toContain(`_site/site/public/scripts/computer.sh`);

@@ -42,7 +42,7 @@ describe(`facetsOf`, () => {
 
     /* The property the old counts line was written for and this one has to keep: a contribution point added to
      * the schema must show up WITHOUT an edit here. The enumerated version that preceded it silently omitted six
-     * kinds, so this is pinned rather than trusted — the cast is the point, standing in for a manifest built
+     * kinds, so this is pinned rather than trusted: the cast is the point, standing in for a manifest built
      * against a newer schema than this app knows. */
     it(`still surfaces a contribution kind it has never been taught`, () => {
         expect(labels({ telemetry: [{ probe: `latency` }, { probe: `errors` }] } as unknown as ExtensionManifest["contributes"])).toEqual([
@@ -56,7 +56,7 @@ describe(`facetsOf`, () => {
 });
 
 describe(`searchTextOf`, () => {
-    // The filter has to find an extension by what it GIVES you, not only by the id it was published under —
+    // The filter has to find an extension by what it GIVES you, not only by the id it was published under:
     // nobody looking for the GitHub connector remembers it lives in `intentic.connectors`.
     it(`matches on a contributed card's catalog name, not just the extension id`, () => {
         const connectors = manifest({

@@ -14,7 +14,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * answer is, that is the truth on every tab, after every refresh, tomorrow morning.
  *
  * The poll follows the work rather than the clock. While something is packing the list is the only channel
- * carrying its progress (a `.part` file's size, which no watcher reports — /history is deliberately outside the
+ * carrying its progress (a `.part` file's size, which no watcher reports: /history is deliberately outside the
  * one that pushes), so it ticks every couple of seconds. With nothing packing there is nothing to learn: a
  * finished bundle does not change, so the poll stops entirely and the card costs one request per open.
  */
@@ -62,7 +62,7 @@ export const bundleDownloadUrl = async (name: string): Promise<string> => {
     const { ticket } = await sandboxJson<{ ticket: string }>(`/bundles/ticket?name=${encodeURIComponent(name)}`, { method: `POST` });
     const base = useEndpoint().daemonBase.value;
     if (base === undefined || base === ``) {
-        throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
+        throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
     }
     return `${base}/bundles/download?${new URLSearchParams({ name, ticket }).toString()}`;
 };

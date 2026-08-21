@@ -10,7 +10,7 @@ import { useSecrets } from "../composables/secrets/useSecrets";
 /* The one way a secret value enters the app: a masked input with an eye toggle that writes KEY=value straight
  * to the sandbox daemon's .env (never the platform), plus the shared provenance line. Used by the Sandbox Secrets tab
  * and every credential form (Cloudflare/GitHub/GitLab/Stripe), so the wording and behavior stay identical.
- * `collect` mode skips the write and only emits the value — for flows that need the raw value first (e.g.
+ * `collect` mode skips the write and only emits the value: for flows that need the raw value first (e.g.
  * Cloudflare zone discovery) and write it themselves. */
 
 const props = withDefaults(
@@ -25,7 +25,7 @@ const props = withDefaults(
         noHint?: boolean;
         // Set = the value replaces this capability's secret (POST /capabilities/{id}/secret) instead of .env.
         capabilityId?: string;
-        // Show a Cancel button beside Save that emits `cancel` — for editors that open in place.
+        // Show a Cancel button beside Save that emits `cancel`: for editors that open in place.
         cancellable?: boolean;
         // Externally block saving (e.g. the add-secret row gates Save on a valid key typed alongside).
         disabled?: boolean;
@@ -36,7 +36,7 @@ const props = withDefaults(
 const value = defineModel<string>({ default: `` });
 const emit = defineEmits<{ saved: []; cancel: [] }>();
 
-// Dev autofill (inert in prod): offer the last value saved under this key — mount-only and only when empty, so
+// Dev autofill (inert in prod): offer the last value saved under this key, mount-only and only when empty, so
 // the post-save clear stays cleared and collect-mode callers receive the prefill through v-model.
 if (value.value === ``) {
     const remembered = devFillGet(`secret.${props.secretKey}`);
@@ -112,7 +112,7 @@ const onEnter = (event: KeyboardEvent): void => {
         </div>
         <Notice v-if="notice" :of="notice" />
         <p v-else-if="!noHint" class="text-xs text-muted">
-            Stored in your sandbox's <span class="font-mono">.env</span> as <span class="font-mono">{{ secretKey }}</span> — never on the platform.
+            Stored in your sandbox's <span class="font-mono">.env</span> as <span class="font-mono">{{ secretKey }}</span>: never on the platform.
         </p>
     </div>
 </template>

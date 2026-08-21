@@ -1,30 +1,30 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
-/* THE ONE SURFACE THAT SHOWS A PICTURE — the file viewer's images, the SVG preview and both sides of a binary
+/* THE ONE SURFACE THAT SHOWS A PICTURE: the file viewer's images, the SVG preview and both sides of a binary
  * diff all render through here, so zoom, pan and the transparency checkerboard behave identically wherever an
  * image appears. Two behaviours forced a component where an <img> in a scroller used to do:
  *
  * ZOOM. An image is opened to look closely at something inside it, and the only zoom within reach of a plain
- * <img> is the browser's own Ctrl+scroll — which scales the whole application (tab strip, tree, chat) and
+ * <img> is the browser's own Ctrl+scroll, which scales the whole application (tab strip, tree, chat) and
  * leaves the picture exactly as large, relative to its pane, as it was. Ctrl+scroll is taken here instead:
  * preventDefault keeps it from the browser, and it magnifies about the POINTER, so whatever is under the cursor
  * stays under the cursor. A trackpad pinch arrives as the same event, so pinching works for free. Plain scroll
  * pans once there is something off-screen to pan to, and is left to the page otherwise.
  *
  * THE GHOST DRAG. Every <img> is a drag source by default, and Chromium types the payload of an in-page image
- * drag as `Files` — indistinguishable, at a drop target, from a file dragged in off the desktop. So grabbing
+ * drag as `Files`: indistinguishable, at a drop target, from a file dragged in off the desktop. So grabbing
  * the picture to move it raised the workspace's "drop files to add to the workspace root" hint, and letting go
  * uploaded a copy of the file being LOOKED at into the repo root. Here the grab IS the pan: the image is
  * draggable=false and pointerdown is prevented, so no native drag can start. (WorkspaceDesktop also declines
- * drags that began inside the document — same bug, reachable from an image in a markdown preview.)
+ * drags that began inside the document: same bug, reachable from an image in a markdown preview.)
  *
  * The picture is drawn at its natural size and moved by a transform, not laid out inside a scroller: one
  * compositor property carries both zoom and pan, so a wheel gesture never reflows the pane. */
 
 const { src } = defineProps<{ src: string }>();
 
-// Zoom range, and the ladder the +/− controls and the keyboard step through — stops rather than a fixed
+// Zoom range, and the ladder the +/− controls and the keyboard step through: stops rather than a fixed
 // multiplier, so the magnifications worth landing on exactly (½, 1:1, 2×) are always hit and never stepped past.
 const MIN_SCALE = 0.02;
 const MAX_SCALE = 32;
@@ -33,14 +33,14 @@ const STOPS = [0.05, 0.1, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 
 const FIT_PADDING = 16;
 // Wheel delta → zoom factor. A mouse notch (~100px) lands on ~1.22×; a trackpad pinch's small deltas stay smooth.
 const WHEEL_ZOOM = 0.002;
-// deltaMode 1 is lines, 2 is pages — normalise both to pixels so Firefox pans and zooms at the same rate.
+// deltaMode 1 is lines, 2 is pages: normalise both to pixels so Firefox pans and zooms at the same rate.
 const LINE_HEIGHT = 16;
 
 const viewport = ref<HTMLElement>();
 // Set from the <img> once it decodes; everything below is inert until then.
 const natural = ref<{ readonly w: number; readonly h: number }>();
 // The pane's size, observed rather than measured once: the sidebar resizes, the diff flips split↔unified, the
-// window changes — and a fitted image should still be fitted afterwards.
+// window changes, and a fitted image should still be fitted afterwards.
 const box = ref({ w: 0, h: 0 });
 const scale = ref(1);
 // Offset of the image's top-left inside the pane, in pane pixels (transform-origin is the corner).
@@ -55,7 +55,7 @@ const fitScale = computed(() => {
     if (size === undefined || box.value.w === 0) {
         return 1;
     }
-    // Never blow a 16px favicon up to fill the pane — "fit" tops out at 1:1, which is that icon's honest size.
+    // Never blow a 16px favicon up to fill the pane: "fit" tops out at 1:1, which is that icon's honest size.
     return Math.min(1, Math.max(box.value.w - FIT_PADDING * 2, 1) / size.w, Math.max(box.value.h - FIT_PADDING * 2, 1) / size.h);
 });
 const rendered = computed(() => ({ w: (natural.value?.w ?? 0) * scale.value, h: (natural.value?.h ?? 0) * scale.value }));
@@ -66,7 +66,7 @@ const atNatural = computed(() => Math.abs(scale.value - 1) < 0.005);
 
 const clampScale = (value: number): number => Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
 
-// The single writer of the view: clamps the scale, then keeps the image reachable — centred on any axis where it
+// The single writer of the view: clamps the scale, then keeps the image reachable, centred on any axis where it
 // is smaller than the pane, and flush to the edges on any axis where it is bigger, so it can never be flung into
 // the void and lost.
 const place = (nextScale: number, x: number, y: number): void => {
@@ -89,7 +89,7 @@ const fit = (): void => {
     fitted.value = true;
 };
 
-// Zoom keeping the image point under (clientX, clientY) pinned there — the reason a magnifier feels like one.
+// Zoom keeping the image point under (clientX, clientY) pinned there: the reason a magnifier feels like one.
 const zoomAround = (nextScale: number, clientX: number, clientY: number): void => {
     const rect = viewport.value?.getBoundingClientRect();
     if (rect === undefined) {
@@ -102,7 +102,7 @@ const zoomAround = (nextScale: number, clientX: number, clientY: number): void =
     place(clampScale(nextScale), px - (px - offset.value.x) * factor, py - (py - offset.value.y) * factor);
 };
 
-// The controls and the keyboard zoom about the pane's centre — there is no pointer to pin to.
+// The controls and the keyboard zoom about the pane's centre: there is no pointer to pin to.
 const zoomCentre = (nextScale: number): void => {
     const rect = viewport.value?.getBoundingClientRect();
     if (rect !== undefined) {
@@ -149,7 +149,7 @@ const onPointerDown = (event: PointerEvent): void => {
     if (natural.value === undefined || event.button !== 0) {
         return;
     }
-    // Cancels the browser's native image drag AND the text-selection drag — this gesture is a pan now. Focus is
+    // Cancels the browser's native image drag AND the text-selection drag: this gesture is a pan now. Focus is
     // taken explicitly because preventDefault would otherwise deny it, and the keyboard shortcuts need it.
     event.preventDefault();
     viewport.value?.focus();
@@ -230,7 +230,7 @@ const onLoad = (event: Event): void => {
     fit();
 };
 
-// A new file in the same pane starts over — otherwise the next image inherits the last one's magnification.
+// A new file in the same pane starts over: otherwise the next image inherits the last one's magnification.
 watch(
     () => src,
     () => {
@@ -284,7 +284,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
         :class="dragging ? `cursor-grabbing` : pannable ? `cursor-grab` : `cursor-default`"
         tabindex="0"
         role="group"
-        aria-label="Image preview — Ctrl and scroll to zoom, drag to pan"
+        aria-label="Image preview: Ctrl and scroll to zoom, drag to pan"
         @wheel="onWheel"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"

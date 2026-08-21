@@ -2,7 +2,7 @@
 import type { Workflow, WorkflowRun, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
-/* The arithmetic under test is pure, but it reaches dagre through `@intentic/ui`'s index — hence jsdom, and
+/* The arithmetic under test is pure, but it reaches dagre through `@intentic/ui`'s index: hence jsdom, and
  * hence the globals vitest.setup.ts stands up before this file loads. Real modules rather than `vi.mock`ed
  * stand-ins, because the LAYOUT is the thing being tested: mocking the graph out would leave these assertions
  * checking a stand-in's idea of where the columns are.
@@ -11,7 +11,7 @@ import { modeForSessions, paneShowsRun, runOnFocus, runToFollow, showingRunGraph
 import { runColumns } from "./runColumns";
 
 /* WHICH SESSIONS A COLUMN OPENS. The graph's one gesture is "click a step, get its whole column", so this is
- * the arithmetic between a click and a pane set — and it is the part that cannot be checked by looking, since
+ * the arithmetic between a click and a pane set, and it is the part that cannot be checked by looking, since
  * being wrong shows up as the right number of panes holding the wrong chats.
  */
 
@@ -48,7 +48,7 @@ const run = (steps: readonly WorkflowStep[], runs: readonly Partial<WorkflowStep
 };
 
 /* THE FAN-OUT IS THE CASE THIS EXISTS FOR: two attempts at one brief are drawn as one band, and clicking
- * either of them has to open BOTH — that comparison is the whole reason somebody designed the workflow.
+ * either of them has to open BOTH: that comparison is the whole reason somebody designed the workflow.
  */
 test("steps that fan out from one predecessor share a column", () => {
     const columns = runColumns(
@@ -57,7 +57,7 @@ test("steps that fan out from one predecessor share a column", () => {
     expect(columns.get(`a`)?.stepIds).toEqual(columns.get(`b`)?.stepIds);
     expect([...(columns.get(`a`)?.stepIds ?? [])].toSorted()).toEqual([`a`, `b`]);
     expect(columns.get(`a`)?.sessions.map((session) => session.conversationId)).toEqual([`wf-r1-a`, `wf-r1-b`]);
-    // The brief and the merge are their own bands — a column is what is drawn side by side, not the whole run.
+    // The brief and the merge are their own bands: a column is what is drawn side by side, not the whole run.
     expect(columns.get(`brief`)?.stepIds).toEqual([`brief`]);
     expect(columns.get(`merge`)?.stepIds).toEqual([`merge`]);
 });
@@ -73,13 +73,13 @@ test("a column holding a continued step opens one conversation, not two", () => 
 
 /* THE REGRESSION THE USER HIT: clicking most of a failed run's diagram did nothing at all.
  *
- * `skipped` reads like a state that ran, and it is the opposite — the step never started, because something
+ * `skipped` reads like a state that ran, and it is the opposite: the step never started, because something
  * upstream did not finish. Its conversation id was written into the record before the run began and nothing
  * ever opened it, so every one of those nodes offered a chat that had never existed: no fleet card, no
  * transcript, and a click that resolved to an empty set in silence. A workflow that fails early is mostly made
  * of these, which is exactly when someone opens the diagram to find out why.
  */
-test("a skipped step has no session — it never started", () => {
+test("a skipped step has no session, it never started", () => {
     const columns = runColumns(
         run(
             [step(`brief`), step(`a`, { needs: [`brief`] }), step(`b`, { needs: [`brief`] })],
@@ -92,7 +92,7 @@ test("a skipped step has no session — it never started", () => {
 });
 
 // The design's pin rides along, so a session the fleet has swept off the roster can still be opened on the
-// provider it actually ran — the seed for a composer whose transcript comes from the daemon either way.
+// provider it actually ran: the seed for a composer whose transcript comes from the daemon either way.
 test("a column carries the provider its step was pinned to", () => {
     const columns = runColumns(run([step(`a`, { agent: `codex` })], []));
     expect(columns.get(`a`)?.sessions[0]?.agent).toBe(`codex`);
@@ -101,7 +101,7 @@ test("a column carries the provider its step was pinned to", () => {
 /* THE REGRESSION THE TWO TESTS BELOW EXIST FOR: the diagram was a trap.
  *
  * It covers the panes, so with it up every other way of choosing a chat moved the focus under a picture that
- * did not move — the rail's cards, the board's cards, New agent. Every one of those clicks landed and none of
+ * did not move: the rail's cards, the board's cards, New agent. Every one of those clicks landed and none of
  * them reached the screen, which reads as the whole panel having frozen.
  */
 test("focusing a chat of this run leaves the diagram for its sessions", () => {
@@ -119,7 +119,7 @@ test("focusing a chat of this run does not put the panel back on the run's tail"
 });
 
 // Already on the panes, a focus moving between the columns of the band being followed is not a decision about
-// the run at all — so the mode is left exactly where it was, in either direction.
+// the run at all, so the mode is left exactly where it was, in either direction.
 test("focusing inside the run from a pane mode changes nothing about the mode", () => {
     const design = run([step(`a`), step(`b`)], []);
     expect(runOnFocus(design, `wf-r1-a`, `live`)?.mode).toBe(`live`);
@@ -134,7 +134,7 @@ test("focusing a chat outside the run leaves the run", () => {
 });
 
 /* A step that has not started names a conversation the daemon has not opened. Offering it would put an empty
- * chat on screen that explains neither itself nor the run — so the column knows it has nothing to show, which
+ * chat on screen that explains neither itself nor the run, so the column knows it has nothing to show, which
  * is what lets the graph say so instead of swallowing the click.
  */
 test("steps that never started contribute no session", () => {
@@ -143,7 +143,7 @@ test("steps that never started contribute no session", () => {
     expect(columns.get(`later`)?.sessions).toEqual([]);
 });
 
-/* FOLLOWING A RUN — the rule behind `live`, and the regression it exists for.
+/* FOLLOWING A RUN: the rule behind `live`, and the regression it exists for.
  *
  * The panel used to read the run's live sessions ONCE, at the press, and fall back to the diagram when there
  * were none. That is every run started from a composer: the daemon acks with every step still `pending`, so the
@@ -152,7 +152,7 @@ test("steps that never started contribute no session", () => {
  * click away. So the reading is per-POLL rather than per-press, and these are the polls it has to act on.
  */
 /* THE PRESS ITSELF, which is the case the whole thing exists for. The daemon acks with every step `pending`, so
- * "what is running" is empty at exactly the moment the reader is looking hardest — and answering that with the
+ * "what is running" is empty at exactly the moment the reader is looking hardest, and answering that with the
  * diagram is what put a picture of two sessions on screen instead of the two sessions.
  */
 test("a run that has only just been acked opens on its first steps", () => {
@@ -169,7 +169,7 @@ test("a run that has only just been acked opens on its first steps", () => {
     expect(runToFollow(design, [`the-composer-they-typed-into`])?.map((session) => session.conversationId)).toEqual([`wf-r1-a`, `wf-r1-b`]);
 });
 
-// Once the turns actually begin, the same sessions are what is live — so the set does not change and the panes
+// Once the turns actually begin, the same sessions are what is live, so the set does not change and the panes
 // are not disturbed. The press and the first poll must agree, or the panel would reshuffle a second later.
 test("the first poll after the turns begin changes nothing", () => {
     const design = run([step(`a`), step(`b`)], [{}, {}]);
@@ -190,7 +190,7 @@ test("a band giving way to the next moves the panes on", () => {
     expect(runToFollow(design, [`wf-r1-a`, `wf-r1-b`])?.map((session) => session.conversationId)).toEqual([`wf-r1-after`]);
 });
 
-// Most polls. The set is already up, so there is nothing to do — and doing it anyway would reset the panes
+// Most polls. The set is already up, so there is nothing to do, and doing it anyway would reset the panes
 // (and the focus with them) every few seconds for the entire length of a run.
 test("a live band already on screen is left alone, whatever order it is in", () => {
     const design = run([step(`a`), step(`b`)], [{}, {}]);
@@ -199,7 +199,7 @@ test("a live band already on screen is left alone, whatever order it is in", () 
 });
 
 /* THE BAND ON SCREEN IS HELD UNTIL THE NEXT ONE ACTUALLY STARTS. The merge becomes READY the instant the second
- * attempt lands, which is seconds before the scheduler picks it up — and following the ready-set there took two
+ * attempt lands, which is seconds before the scheduler picks it up, and following the ready-set there took two
  * transcripts a reader was comparing away and replaced them with an empty pane. */
 test("a band that has finished is kept until the step after it is really working", () => {
     const design = run(
@@ -207,12 +207,12 @@ test("a band that has finished is kept until the step after it is really working
         [{ state: `done` }, { state: `done` }, { state: `pending`, iterations: 0 }],
     );
     expect(runToFollow(design, [`wf-r1-a`, `wf-r1-b`])).toBeUndefined();
-    // Nothing of the run on screen is the other case, and it still fills from the ready set — that is what puts
+    // Nothing of the run on screen is the other case, and it still fills from the ready set: that is what puts
     // the first sessions up on the press instead of a diagram.
     expect(runToFollow(design, [`the-composer-they-typed-into`])?.map((session) => session.conversationId)).toEqual([`wf-r1-after`]);
 });
 
-// Two attempts never land together, and the one still going is not a new band — narrowing the panes to it
+// Two attempts never land together, and the one still going is not a new band: narrowing the panes to it
 // would close the finished transcript out from under whoever was reading it.
 test("the pane of an attempt that has landed stays open while its partner finishes", () => {
     const design = run([step(`a`), step(`b`)], [{ state: `done` }, { state: `running` }]);
@@ -221,7 +221,7 @@ test("the pane of an attempt that has landed stays open while its partner finish
 
 /* A RUN THAT HAS ENDED KEEPS ITS LAST BAND ON SCREEN. "Nothing live" is true at both ends of a run and wants
  * opposite answers: at the start the panes hold chats that are not about the run, and at the end they hold the
- * work itself — which is exactly when the transcripts finally have the answer in them.
+ * work itself, which is exactly when the transcripts finally have the answer in them.
  */
 test("a finished run does not clear the panes that hold its work", () => {
     const design = run([step(`a`), step(`b`)], [{ state: `done` }, { state: `done` }]);

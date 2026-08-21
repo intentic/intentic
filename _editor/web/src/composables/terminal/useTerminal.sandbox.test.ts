@@ -2,14 +2,14 @@
 //
 // SWITCHING SANDBOXES, and the one thing the strip must never do.
 //
-// How the strip is arranged — which shells sit side by side, which tab you were on — is remembered per sandbox,
+// How the strip is arranged, which shells sit side by side, which tab you were on: is remembered per sandbox,
 // because each sandbox is a machine with its own terminals. The sessions themselves belong to ONE daemon, and
 // they arrive over a tunnel that a switch has just repointed. So the arrangement is known instantly and the
 // session list is not, which is the seam the reported bug lived in: coming back to a sandbox painted terminal
 // "1" out of storage, the list behind it failed on a daemon that was still waking, and the pill sat there
 // unclickable over a panel that said no terminals were open.
 //
-// The pane is mocked wholesale — every case here is about which names reach `order`/`groups` and which one is
+// The pane is mocked wholesale: every case here is about which names reach `order`/`groups` and which one is
 // mounted, none of which needs a real terminal.
 import { beforeEach, expect, test, vi } from "vitest";
 import { nextTick, ref } from "vue";
@@ -48,7 +48,7 @@ type Listed = { name: string; kind: "shell"; running: boolean };
 const shell = (name: string): Listed => ({ name, kind: `shell`, running: true });
 
 // Every panel this test has opened. A real one is always unmounted in the end (a v-if, a route, a reload), and
-// an attached instance that is never detached goes on relisting into the shared storage every other case reads —
+// an attached instance that is never detached goes on relisting into the shared storage every other case reads:
 // so the teardown below is what keeps each case a clean sandbox rather than the last one's leftovers.
 const opened: { detach: () => void }[] = [];
 
@@ -72,7 +72,7 @@ const panel = (initial: Listed[]) => {
         daemonLists: (next: Listed[]) => {
             listed = next;
         },
-        // The next N lists come back as rejections — a daemon that hasn't answered yet, which is what a switch
+        // The next N lists come back as rejections: a daemon that hasn't answered yet, which is what a switch
         // lands on.
         failNextLists: (count = 1) => {
             failures = count;
@@ -95,7 +95,7 @@ beforeEach(() => {
     for (const tabs of opened.splice(0)) {
         tabs.detach();
     }
-    // The session cache outlives any one instance — that is the whole point of it — so a case that never switched
+    // The session cache outlives any one instance: that is the whole point of it, so a case that never switched
     // away leaves its shells in there for the next one to trip over.
     disposeAllSessions(undefined);
     store.clear();
@@ -104,8 +104,8 @@ beforeEach(() => {
     activeSandboxId.value = `sbx-a`;
 });
 
-// THE reported bug. Nothing may be on the strip that the daemon has not listed — however confidently storage
-// remembers it — because a pill with no session behind it cannot be opened by clicking it.
+// THE reported bug. Nothing may be on the strip that the daemon has not listed: however confidently storage
+// remembers it, because a pill with no session behind it cannot be opened by clicking it.
 test("coming back to a sandbox whose list has not landed yet shows no tabs at all", async () => {
     const first = panel([shell(`web-1`)]);
     await first.attach();
@@ -151,7 +151,7 @@ test("the split arrangement survives a switch, and a list that failed on the way
 
 /* AND IT ASKS AGAIN, BY ITSELF. The bug's second act, reported once the dead pill was gone: coming back to a
  * sandbox left the pane empty over shells that were running the whole time, and the only way to see them was to
- * click + — whose new tab nudges the shared list, at which point every pre-existing terminal appeared at once.
+ * click +, whose new tab nudges the shared list, at which point every pre-existing terminal appeared at once.
  * A refused list is the one failure nothing else recovers from, because everything else reacts to a list that
  * arrived. */
 test("a list refused on the way in is asked again, and the terminals arrive on their own", async () => {
@@ -184,7 +184,7 @@ test("the re-asking is bounded", async () => {
 
         await vi.advanceTimersByTimeAsync(60_000);
 
-        // The attach's own list, and a handful of retries — not a list every few seconds forever.
+        // The attach's own list, and a handful of retries, not a list every few seconds forever.
         expect(back.asked()).toBe(4);
     } finally {
         vi.useRealTimers();
@@ -210,7 +210,7 @@ test("the re-asking stops when the panel closes", async () => {
     }
 });
 
-// One sandbox's strip is not the other's — the arrangement is remembered per sandbox, so the shells of the one
+// One sandbox's strip is not the other's: the arrangement is remembered per sandbox, so the shells of the one
 // you left cannot tab in the one you arrive at.
 test("each sandbox keeps its own strip", async () => {
     const first = panel([shell(`web-1`), shell(`web-2`)]);
@@ -226,8 +226,8 @@ test("each sandbox keeps its own strip", async () => {
     expect(other.tabs.groups.value).toEqual([[`web-9`]]);
 });
 
-/* THE UNKNOWN MOMENT HAS TO BE SAYABLE. An empty strip is three different facts — nothing runs here, we have not
- * asked yet, and we asked and got nothing back — and the panel drew all three as "No terminals open.", an answer
+/* THE UNKNOWN MOMENT HAS TO BE SAYABLE. An empty strip is three different facts: nothing runs here, we have not
+ * asked yet, and we asked and got nothing back, and the panel drew all three as "No terminals open.", an answer
  * it then took back when the list landed. */
 test("an empty strip says whether this sandbox has actually answered", async () => {
     const { tabs, attach } = panel([shell(`web-1`)]);
@@ -274,7 +274,7 @@ test("the strip the sandbox was left with is offered as shapes, before any sessi
     switchTo(`sbx-a`);
 
     const back = panel([shell(`web-1`), shell(`web-2`), shell(`web-3`)]);
-    // Nothing listed yet: no tabs, but two shapes — a wide one for the split pair, then a single.
+    // Nothing listed yet: no tabs, but two shapes, a wide one for the split pair, then a single.
     expect(back.tabs.groups.value).toEqual([]);
     expect(back.tabs.remembered.value).toEqual([[`web-1`, `web-2`], [`web-3`]]);
 
@@ -282,7 +282,7 @@ test("the strip the sandbox was left with is offered as shapes, before any sessi
     expect(back.tabs.groups.value).toEqual([[`web-1`, `web-2`], [`web-3`]]);
 });
 
-// Leaving a sandbox is not the end of its terminals, so what each one had on screen is kept — filed under the
+// Leaving a sandbox is not the end of its terminals, so what each one had on screen is kept: filed under the
 // sandbox being LEFT, which is the only bucket it will ever be looked for in again.
 test("each terminal's scrollback is kept for the sandbox it belongs to", async () => {
     const { attach } = panel([shell(`web-1`), shell(`web-2`)]);

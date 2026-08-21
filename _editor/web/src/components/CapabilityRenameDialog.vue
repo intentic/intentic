@@ -1,17 +1,17 @@
 <!-- RENAME ONE CONNECTION.
      A dialog rather than an edit-in-place on the row, because the name is not a caption: it is the handle the
-     agent holds this connection by — the skill it loads, the prefix on its tools, the variable its credential
+     agent holds this connection by: the skill it loads, the prefix on its tools, the variable its credential
      arrives in, the alias `ssh <name>` resolves. A field that changes all of that under a single click deserves
      a sentence saying so and a button to press, which is exactly what a dialog is.
 
-     WHAT IT PROMISES IS THAT NOTHING IS LOST. The daemon carries the state the old name keyed — a signed-in
-     browser profile, a paired computer's enrollment, an extension's checkout — and repoints whatever named it.
+     WHAT IT PROMISES IS THAT NOTHING IS LOST. The daemon carries the state the old name keyed: a signed-in
+     browser profile, a paired computer's enrollment, an extension's checkout, and repoints whatever named it.
      That promise is the whole reason this is a route and not an add-then-remove, so the dialog says it plainly:
      the alternative people would otherwise reach for silently signs accounts out.
 
      IT REFUSES WHAT THE ADD FORM REFUSES, in the same words (nameError), so a name that is rejected here would
      have been rejected there. What it cannot know is which kinds refuse a rename outright and which names are
-     already taken elsewhere in the sandbox — those are the daemon's answers, and they arrive as its sentence. -->
+     already taken elsewhere in the sandbox: those are the daemon's answers, and they arrive as its sentence. -->
 <script setup lang="ts">
 import { ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
@@ -24,7 +24,7 @@ const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (eve
 const name = ref(``);
 const touched = ref(false);
 
-// Opening seeds the field with the current name and selects it — the common edit is a word changed, not a name
+// Opening seeds the field with the current name and selects it: the common edit is a word changed, not a name
 // typed from nothing.
 watch(
     () => props.visible,
@@ -61,7 +61,7 @@ const unchanged = computed(() => name.value.trim() === props.id);
                 </span>
             </label>
             <p class="text-2xs text-muted">
-                This is the name your agent knows the connection by, so its skill and tools are renamed with it. Everything else is kept — a signed-in
+                This is the name your agent knows the connection by, so its skill and tools are renamed with it. Everything else is kept: a signed-in
                 browser stays signed in, a connected computer stays paired, and anything pointing at this connection is updated to follow it.
             </p>
         </form>

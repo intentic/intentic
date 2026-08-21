@@ -267,7 +267,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     // "Re-measure plan limits" tells a screen-reader user what the control does and nothing about whether to press
     // it, which is the only question the sighted version answers at a glance.
     const remeasureLabel = computed(() =>
-        measuredAt.value === undefined ? `Measure plan limits` : `Re-measure plan limits — measured ${formatAge(measuredAt.value)}`,
+        measuredAt.value === undefined ? `Measure plan limits` : `Re-measure plan limits, measured ${formatAge(measuredAt.value)}`,
     );
     const remeasure = async (): Promise<void> => {
         measuring.value = true;

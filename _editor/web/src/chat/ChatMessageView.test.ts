@@ -9,17 +9,17 @@ const clock = vi.hoisted(() => ({ turnStartedAt: undefined as number | undefined
 const roster = vi.hoisted(() => ({ running: 0 }));
 /* The pane state the EDIT pencil reads. Both matter to whether it is offered at all: a chat mid-turn hides it
  * (the daemon will not move files under a running agent) and a message whose own edit is armed hides it (the
- * composer is already holding that one) — so both are settable rather than baked into the stub. */
+ * composer is already holding that one), so both are settable rather than baked into the stub. */
 const pane = vi.hoisted(() => ({ streaming: true, editing: undefined as ChatMessage | undefined }));
 const beginEdit = vi.hoisted(() => vi.fn());
-// What the markdown engine hands this row for the message under test — prose runs, and the figures between them
+// What the markdown engine hands this row for the message under test: prose runs, and the figures between them
 // (see useMarkdown). Empty for every test that is not about the answer's body.
 const markdown = vi.hoisted(() => ({
     parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string } }[],
 }));
 
 vi.hoisted(() => {
-    /* The prompt bubble watches its own box twice — a ResizeObserver for whether the clamp is doing anything, an
+    /* The prompt bubble watches its own box twice: a ResizeObserver for whether the clamp is doing anything, an
      * IntersectionObserver for whether it has stuck to the top of the scroller. jsdom has layout for neither.
      * Stubs that never fire leave both flags at their defaults, which is exactly what the component shows before
      * its first measurement, so a user bubble renders here as it does on screen the instant it mounts. */
@@ -67,7 +67,7 @@ vi.mock("@intentic/sandbox-contract", async () => {
     };
 });
 vi.mock("../composables/chat/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
-// formatElapsed is the real one — the loader's readout IS that format, so mocking it would test nothing.
+// formatElapsed is the real one: the loader's readout IS that format, so mocking it would test nothing.
 vi.mock("../composables/agents/agentStatus", async () => {
     const { formatElapsed } = await vi.importActual<typeof import("../composables/agents/agentStatus")>("../composables/agents/agentStatus");
     return { effectiveAutoLand: () => false, effectiveOutageResume: () => false, formatElapsed };
@@ -88,7 +88,7 @@ vi.mock("./ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
 vi.mock("./ChatToolCard.vue", () => ({ default: { render: () => undefined } }));
 vi.mock("./ChatToolGroup.vue", () => ({ default: { render: () => undefined } }));
 
-// The row reads its PANE's conversation, not the focused one (useChat's PANE_VIEW) — so what stands in for the
+// The row reads its PANE's conversation, not the focused one (useChat's PANE_VIEW), so what stands in for the
 // store here is the pane's view, and `conversation` is the chat this row belongs to.
 vi.mock("../composables/chat/useChat", async () => {
     const { computed, ref, shallowRef } = await import("vue");
@@ -116,7 +116,7 @@ vi.mock("../composables/chat/useChat", async () => {
     };
 });
 
-// The roster's count of this conversation's live children — what the loader says it is waiting on.
+// The roster's count of this conversation's live children: what the loader says it is waiting on.
 vi.mock("../composables/agents/useAgents", () => ({
     useAgents: () => ({
         agentById: () => ({ subagents: { running: roster.running, total: roster.running } }),
@@ -197,7 +197,7 @@ describe(`ChatMessageView loader`, () => {
 
     /* THE ONE STRETCH THE CYCLING WORDS ARE WRONG ABOUT. A turn that delegated has written its "I'll come back
      * with their results" and gone quiet: nothing of its own is running, and the only thing between it and the
-     * end is agents working elsewhere. "Percolating… (6m 12s)" over that reads as a model that has hung — so
+     * end is agents working elsewhere. "Percolating… (6m 12s)" over that reads as a model that has hung, so
      * the line says what it is actually waiting for, and goes back to the words once they are all in. */
     it(`names the children it is waiting on instead of cycling a word`, () => {
         roster.running = 2;
@@ -213,7 +213,7 @@ describe(`ChatMessageView loader`, () => {
         expect(mount().textContent).not.toContain(`Waiting on`);
     });
 
-    // The counter ticks off a `now` the interval refreshes — a turn whose start is unknown gets no parenthetical
+    // The counter ticks off a `now` the interval refreshes: a turn whose start is unknown gets no parenthetical
     // at all rather than a stuck "(0s)".
     it(`ticks while the turn runs and drops the readout when the start is unknown`, async () => {
         const element = mount();
@@ -257,7 +257,7 @@ describe(`ChatMessageView question card`, () => {
     const marks = (element: HTMLElement): (string | null)[] =>
         [...element.querySelectorAll(`button[role="checkbox"] i, button[role="radio"] i`)].map((icon) => icon.getAttribute(`name`));
 
-    // Picks are mirrored to localStorage per requestId — each case starts from an empty card.
+    // Picks are mirrored to localStorage per requestId: each case starts from an empty card.
     afterEach(() => localStorage.clear());
 
     it(`offers a multi-select question as a checkbox list and counts the picks back`, async () => {
@@ -271,7 +271,7 @@ describe(`ChatMessageView question card`, () => {
         rows[1]?.click();
         await nextTick();
 
-        // Both picks stand — and the line says so, which is what tells a user habituated to radios that the
+        // Both picks stand, and the line says so, which is what tells a user habituated to radios that the
         // second click was not going to cost them the first.
         expect(marks(element)).toEqual([`check-square`, `check-square`, `square`]);
         expect(rows[0]?.getAttribute(`aria-checked`)).toBe(`true`);
@@ -295,10 +295,10 @@ describe(`ChatMessageView question card`, () => {
 });
 
 /* An errand is the app's prompt, not the user's (errands.ts): the row says what was asked for, and the words
- * the agent actually got are behind one press rather than gone — the audit trail is the whole reason this is a
+ * the agent actually got are behind one press rather than gone: the audit trail is the whole reason this is a
  * fold rather than a suppression. */
 /* THE ANSWER'S BODY, which is prose AND the pictures drawn in it. A turn is rendered as parts precisely so a
- * ```mermaid an agent writes becomes a diagram in the chat rather than a wall of arrow syntax — for a long time
+ * ```mermaid an agent writes becomes a diagram in the chat rather than a wall of arrow syntax: for a long time
  * the file preview drew the diagrams and the answer that wrote them did not. */
 describe(`ChatMessageView answer body`, () => {
     const body = { id: 3, role: `assistant`, text: `Here it is.` } as const satisfies ChatMessage;
@@ -347,7 +347,7 @@ describe(`ChatMessageView errand row`, () => {
     });
 });
 
-/* THE NOTES ROW — the same bargain the errand row strikes, for text the daemon put in FRONT of the user's
+/* THE NOTES ROW: the same bargain the errand row strikes, for text the daemon put in FRONT of the user's
  * message rather than instead of it. Collapsed so a turn that was told four things does not bury the answer;
  * openable because an agent visibly acting on instructions the reader cannot reach is the thing this replaces. */
 describe(`ChatMessageView added-notes row`, () => {
@@ -375,7 +375,7 @@ describe(`ChatMessageView added-notes row`, () => {
         expect(element.textContent).not.toContain(`Reading the message below`);
     });
 
-    // A turn nobody added anything to says nothing — no row, no chevron, nothing to click.
+    // A turn nobody added anything to says nothing: no row, no chevron, nothing to click.
     it(`stays out of the way of an ordinary message`, () => {
         expect(mount({ id: 5, role: `user`, text: `fix the bug` }).textContent).not.toContain(`Sent with your message`);
     });
@@ -383,10 +383,10 @@ describe(`ChatMessageView added-notes row`, () => {
 
 /* WHEN THE MESSAGE WAS SENT, in the margin beside the bubble it belongs to. Hover-only and out of flow, because
  * the hour a turn was sent at is worth nothing to someone reading the answer and everything to someone scrolling
- * back for "what did I ask on Tuesday" — so it costs the transcript no height and the reader no attention. */
+ * back for "what did I ask on Tuesday", so it costs the transcript no height and the reader no attention. */
 describe(`ChatMessageView sent time`, () => {
     // 2026-08-10T14:32 UTC. Rendered in the runner's zone, so the assertion is on the SHAPE of the label rather
-    // than on an hour — every zone agrees it is a two-digit 24-hour clock and nothing else.
+    // than on an hour: every zone agrees it is a two-digit 24-hour clock and nothing else.
     const sentAt = Date.UTC(2026, 7, 10, 14, 32);
 
     it(`shows the minute a message was sent, revealed by hovering it`, () => {
@@ -395,12 +395,12 @@ describe(`ChatMessageView sent time`, () => {
         // The clock alone: the day is carried by the transcript's own marker row (see dayMarksOf), which is what
         // keeps this label narrow enough for the margin it hangs in.
         expect(label?.textContent?.trim()).toMatch(/^\d{2}:\d{2}$/u);
-        // Out of flow and hidden until the pointer arrives — the two halves of costing the transcript nothing.
+        // Out of flow and hidden until the pointer arrives: the two halves of costing the transcript nothing.
         expect(label?.className).toContain(`absolute`);
         expect(label?.className).toContain(`opacity-0`);
         // BESIDE the bubble, not under it: below it the label sat in the gap between two turns, touching both.
         expect(label?.className).toContain(`right-full`);
-        // And centred on the message rather than pinned to its first line — it spans the message's height and
+        // And centred on the message rather than pinned to its first line: it spans the message's height and
         // aligns in the middle of it, which is what keeps it off the top corner of a six-line prompt.
         expect(label?.className).toContain(`inset-y-0`);
         expect(label?.className).toContain(`items-center`);
@@ -413,13 +413,13 @@ describe(`ChatMessageView sent time`, () => {
     });
 });
 
-/* THE EDIT PENCIL — "ask this turn again, differently", on the user's own bubble.
+/* THE EDIT PENCIL: "ask this turn again, differently", on the user's own bubble.
  *
  * It is deliberately NOT the pencil that was removed from here once: that one forked the chat into a new tab
  * and left the files alone while calling itself an edit. This one arms the composer against this message and
  * commits nothing (see Conversation.editing), which is why these assert that a click merely ARMS. */
 describe(`ChatMessageView edit control`, () => {
-    // Anchored (the daemon still holds a state for it) and settled — the two conditions an edit needs.
+    // Anchored (the daemon still holds a state for it) and settled: the two conditions an edit needs.
     const prompt: ChatMessage = { id: 8, role: `user`, text: `fix the bug`, rewindIndex: 2 };
     const pencil = (element: HTMLElement): HTMLElement | null => element.querySelector(`button[aria-label="Edit this message"]`);
 
@@ -428,7 +428,7 @@ describe(`ChatMessageView edit control`, () => {
         const button = pencil(mount(prompt));
 
         expect(button).not.toBeNull();
-        // In the column's RIGHT margin, the same gutter the fork mark stands in at the other end of the turn —
+        // In the column's RIGHT margin, the same gutter the fork mark stands in at the other end of the turn:
         // and out of flow, so a prompt is exactly as tall with this control as without it.
         expect(button?.className).toContain(`absolute`);
         expect(button?.className).toContain(`left-full`);
@@ -453,7 +453,7 @@ describe(`ChatMessageView edit control`, () => {
         expect(pencil(mount(prompt))).toBeNull();
     });
 
-    // The composer is already holding this one — a second way to start what is running describes a state the
+    // The composer is already holding this one: a second way to start what is running describes a state the
     // user left a moment ago.
     it(`offers nothing on the message whose own edit is armed`, () => {
         pane.streaming = false;
@@ -465,13 +465,13 @@ describe(`ChatMessageView edit control`, () => {
         expect(pencil(mount({ id: 10, role: `user`, text: `and this`, rewindIndex: 4 }))).not.toBeNull();
     });
 
-    // The agent's words are not the user's to rewrite — that is what the composer's agent voice is for.
+    // The agent's words are not the user's to rewrite: that is what the composer's agent voice is for.
     it(`offers nothing on the agent's own bubble`, () => {
         pane.streaming = false;
         expect(pencil(mount({ id: 11, role: `assistant`, text: `done`, rewindIndex: 2 }))).toBeNull();
     });
 
-    /* WHAT AN ARMED EDIT WOULD SPEND, drawn on the rows themselves — struck AND faded, because fading alone is
+    /* WHAT AN ARMED EDIT WOULD SPEND, drawn on the rows themselves: struck AND faded, because fading alone is
      * this transcript's word for "quiet" and the thing these rows need to say is "about to be deleted".
      * Nothing has happened to them: the class is a preview, and cancelling restores them in place. */
     it(`strikes the rows an armed edit would replace`, () => {

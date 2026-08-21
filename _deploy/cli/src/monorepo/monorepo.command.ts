@@ -19,7 +19,7 @@ export const monorepoCommand = buildCommand<MonorepoFlags>({
     parameters: {
         flags: {
             dir: { kind: "parsed", parse: String, optional: true, brief: "Directory holding the workspace repos (default: .)" },
-            name: { kind: "parsed", parse: String, brief: "Monorepo name — becomes the repo directory name" },
+            name: { kind: "parsed", parse: String, brief: "Monorepo name, becomes the repo directory name" },
             source: { kind: "parsed", parse: String, optional: true, brief: `Template source git URL (default: ${DEFAULT_TEMPLATE_SOURCE})` },
             ref: { kind: "parsed", parse: String, optional: true, brief: `Template source branch/tag (default: ${DEFAULT_TEMPLATE_REF})` },
         },

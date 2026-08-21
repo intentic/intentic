@@ -351,7 +351,7 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
     }
     return lane === `active`
         ? { dot: `bg-link ring-2 ring-link/30`, label: `Still working` }
-        : // Named by the same reason the board's chip wears. The fallback covers a bare `awaiting` — a turn
+        : // Named by the same reason the board's chip wears. The fallback covers a bare `awaiting`, a turn
           // parked with no flag yet raised, which has nothing more specific to say than that it stopped.
           { dot: `bg-primary-500`, label: attentionReason(agent) ?? `Waiting on you` };
 };
@@ -455,7 +455,7 @@ export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string
         icon: source.icon,
         label: source.label,
         detail: origin.author,
-        hint: `Opened by the "${origin.automationId}" automation${where} — its first prompt is not yours`,
+        hint: `Opened by the "${origin.automationId}" automation${where}, its first prompt is not yours`,
     };
 };
 
@@ -550,7 +550,7 @@ export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly te
         // Each of these says what to DO about it, because the state name alone does not: an exhausted loop
         // wants more room, a stalled one wants a better prompt, and an overspent one wants a decision.
         exhausted: { text: `Ran out of iterations after ${loop.iteration}`, class: `text-warning` },
-        stalled: { text: `Stalled after ${loop.iteration} — nothing changed`, class: `text-warning` },
+        stalled: { text: `Stalled after ${loop.iteration}, nothing changed`, class: `text-warning` },
         overspent: { text: `Hit the spend ceiling after ${loop.iteration}`, class: `text-warning` },
         stopped: { text: `Loop stopped after ${loop.iteration}`, class: `text-muted` },
         error: { text: `Loop failed after ${loop.iteration}`, class: `text-danger` },

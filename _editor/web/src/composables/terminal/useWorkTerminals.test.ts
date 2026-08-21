@@ -6,10 +6,10 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { beforeEach, expect, test, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 
-/* The terminals work runs in — an agent's shells AND the daemon's job sessions — are hidden by default, and
- * these tests hold the two halves of that honest: the popover has to LIST what the strip is no longer tabbing —
+/* The terminals work runs in (an agent's shells AND the daemon's job sessions) are hidden by default, and
+ * these tests hold the two halves of that honest: the popover has to LIST what the strip is no longer tabbing:
  * the work that is RUNNING, named after the conversation that owns it, whatever spoke last on top, and nothing
- * that has already exited — and the rail's badge has to stop counting what the panel stopped showing, since a
+ * that has already exited, and the rail's badge has to stop counting what the panel stopped showing, since a
  * badge reading 3 over a strip showing 1 is the exact drift terminalsQuery exists to prevent. */
 
 const store = new Map<string, string>();
@@ -83,14 +83,14 @@ test("the popover lists the agent's shells AND the daemon's jobs, named after th
     const { rows } = mounted(() => useWorkTerminals());
     await vi.waitFor(() => expect(rows.value).toHaveLength(3));
 
-    // The user's own shell is not work — it's a place, and it keeps its tab.
+    // The user's own shell is not work: it's a place, and it keeps its tab.
     expect(rows.value.map((row) => row.session)).not.toContain(`web-1`);
     expect(rows.value.map((row) => [row.name, row.kind])).toContainEqual([`capability-demo`, `job`]);
     expect(rows.value.map((row) => row.name)).toContain(`Redesign the chat rail`);
 });
 
 // THE reported nonsense: a popover holding every dead shell of the day, with a broom beside it to sweep them.
-// A finished session is a pane that will never say another word — the logs on disk are the record — so the
+// A finished session is a pane that will never say another word: the logs on disk are the record, so the
 // list answers one question, what is running right now, and there is nothing in it to clear.
 test("work that has exited is not listed, whether it succeeded or failed", async () => {
     const now = Date.now();
@@ -104,7 +104,7 @@ test("work that has exited is not listed, whether it succeeded or failed", async
     await vi.waitFor(() => expect(rows.value.map((row) => row.session)).toEqual([`job-capability-demo`]));
 });
 
-test("whatever spoke last is on top — the only ordering that says anything once every row is alive", async () => {
+test("whatever spoke last is on top: the only ordering that says anything once every row is alive", async () => {
     const now = Date.now();
     daemonLists(
         job(`capability-demo`, true, { activityAt: now - 20 * 60_000 }),

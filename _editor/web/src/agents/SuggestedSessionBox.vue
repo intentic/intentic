@@ -6,7 +6,7 @@ import ComposerEffort from "../chat/ComposerEffort.vue";
 import ComposerModelPill from "../chat/ComposerModelPill.vue";
 import type { Conversation } from "../composables/chat/conversation";
 
-/* THE COMPOSER, LIFTED OUT OF THE CHAT — the box a suggested session is edited in before it is started.
+/* THE COMPOSER, LIFTED OUT OF THE CHAT: the box a suggested session is edited in before it is started.
  *
  * It is the chat composer's controls over a different Conversation, and deliberately not a lookalike: the same
  * model picker (ChatModelPicker, which is why that component takes the conversation it edits), the same effort
@@ -16,7 +16,7 @@ import type { Conversation } from "../composables/chat/conversation";
  *
  * WHAT IT LEAVES OUT is as deliberate. No attachments, no @-mentions, no slash commands, no dictation, no mode
  * menu: those are for composing a task from nothing, and this box opens with the task already written. What
- * remains is exactly the two axes the user is being asked to approve — what to say, and what to spend saying it.
+ * remains is exactly the two axes the user is being asked to approve: what to say, and what to spend saying it.
  */
 
 const { conversation, action, busy = false } = defineProps<{ conversation: Conversation; action: string; busy?: boolean }>();
@@ -27,10 +27,10 @@ const { mobile } = useDevice();
 const input = ref<HTMLTextAreaElement | null>(null);
 // The pill IS the anchor, which is why the component hands its element back: the overlay derives the document
 // it teleports into, the viewport it measures the room against, and the click that never dismisses it, all from
-// that element — so this box works unchanged wherever it is mounted (the app-wide dialog, the push dialog, a
+// that element, so this box works unchanged wherever it is mounted (the app-wide dialog, the push dialog, a
 // popped-out window).
 const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
-// ONE flag for both hosts. It was two — one for the sheet, one for the panel — which is the shape a
+// ONE flag for both hosts. It was two: one for the sheet, one for the panel, which is the shape a
 // hand-written pair grows into and the reason the swap is a component now.
 const modelOpen = ref(false);
 
@@ -54,7 +54,7 @@ const start = (): void => {
 };
 
 /* Ctrl/Cmd+Enter sends; a bare Enter is a newline. The chat composer has this the other way round, and the
- * inversion is right here: this box opens with text already in it, so the first thing a user does is EDIT —
+ * inversion is right here: this box opens with text already in it, so the first thing a user does is EDIT:
  * and a bare Enter that fired a frontier-model turn mid-sentence is the one mistake this dialog must not
  * make. The button's hint says so. */
 const onKeydown = (event: KeyboardEvent): void => {
@@ -107,7 +107,7 @@ onMounted(() => {
             </button>
         </div>
 
-        <!-- The same picker body the chat composer raises, over THIS conversation, in the same overlay — no
+        <!-- The same picker body the chat composer raises, over THIS conversation, in the same overlay: no
              height cap, because the overlay measures the room its side of the pill actually has and passes that
              cap down to the picker's list. Remounted per open, which is what lets ChatModelPicker bind its
              conversation's refs once. -->

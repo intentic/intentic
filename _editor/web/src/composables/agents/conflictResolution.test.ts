@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ERRANDS, errandOf } from "../chat/errands";
 import { agentBlockers, blockerLabel, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
 
-/* The prompt is a UI artifact — it is what the panel's primary button DOES — so the parts of it that decide
+/* The prompt is a UI artifact: it is what the panel's primary button DOES, so the parts of it that decide
  * whether the turn works are pinned here rather than left to review. Everything asserted below is something a
  * turn fails without: the commit that lets a rebase start, the self-discovery of the user's checkout, the
  * instruction not to resolve by dropping a side, and the fence around paths the agent cannot touch. */
@@ -31,7 +31,7 @@ describe(`blockers`, () => {
         ]);
     });
 
-    it(`reads an absent report as no blockers — a repo-unavailable conflict carries no paths at all`, () => {
+    it(`reads an absent report as no blockers: a repo-unavailable conflict carries no paths at all`, () => {
         expect(blockersOf(undefined)).toEqual([]);
         expect(blockersOf([{ repo: `root`, clean: 0, paths: [] }])).toEqual([]);
     });
@@ -53,19 +53,19 @@ describe(`blockers`, () => {
 describe(`resolvePrompt`, () => {
     const prompt = resolvePrompt(conflicts);
 
-    it(`tells the agent to commit first — a rebase refuses to start on the dirty worktree it always has`, () => {
+    it(`tells the agent to commit first: a rebase refuses to start on the dirty worktree it always has`, () => {
         expect(prompt).toContain(`git add -A && git commit`);
         expect(prompt).toContain(`refuses to start on a dirty tree`);
     });
 
-    it(`falls back to self-discovery when the report carries no branch — a detached main checkout has no name`, () => {
+    it(`falls back to self-discovery when the report carries no branch: a detached main checkout has no name`, () => {
         expect(prompt).toContain(`git worktree list`);
         expect(prompt).toContain(`git rebase <branch>`);
         // The escape hatch, so a rebase that goes badly has somewhere to go other than improvisation.
         expect(prompt).toContain(`git rebase --abort`);
     });
 
-    // `git worktree list` is one line per live agent — 65 of them in this workspace — and every conflicted
+    // `git worktree list` is one line per live agent: 65 of them in this workspace, and every conflicted
     // session spent its opening calls on it. When the daemon read the name, the prompt says it.
     it(`names the main line when the report carries it, and drops the listing the agent would have to read`, () => {
         const named = resolvePrompt([
@@ -77,7 +77,7 @@ describe(`resolvePrompt`, () => {
         expect(named).not.toContain(`git worktree list`);
     });
 
-    it(`goes back to self-discovery when the repos disagree — one instruction is the point`, () => {
+    it(`goes back to self-discovery when the repos disagree: one instruction is the point`, () => {
         const mixed = resolvePrompt([
             { repo: `root`, clean: 1, paths: [{ path: `a.ts`, reason: `diverged` }], mainBranch: `main` },
             { repo: `docs`, clean: 0, paths: [{ path: `b.md`, reason: `diverged` }], mainBranch: `trunk` },
@@ -85,14 +85,14 @@ describe(`resolvePrompt`, () => {
         expect(mixed).toContain(`git rebase <branch>`);
     });
 
-    it(`refuses the cheap resolution — taking one side is how a change silently disappears`, () => {
+    it(`refuses the cheap resolution: taking one side is how a change silently disappears`, () => {
         expect(prompt).toContain(`the intent of BOTH sides`);
         expect(prompt).toContain(`Do not take one side wholesale`);
     });
 
     it(`names every blocked path under its repo, with the cause in the agent's terms`, () => {
-        expect(prompt).toContain(`  - src/auth/session.ts — the main line's committed content moved under you since you branched`);
-        expect(prompt).toContain(`  - assets/logo.png — git has no automatic merge for a binary file`);
+        expect(prompt).toContain(`  - src/auth/session.ts, the main line's committed content moved under you since you branched`);
+        expect(prompt).toContain(`  - assets/logo.png, git has no automatic merge for a binary file`);
         // Grouped by repo rather than repo-qualified per line: the agent works one checkout at a time.
         expect(prompt).toContain(`docs\n  - README.md`);
     });
@@ -104,7 +104,7 @@ describe(`resolvePrompt`, () => {
         expect(prompt.indexOf(`src/config.ts`)).toBeGreaterThan(prompt.indexOf(`Leave these alone`));
     });
 
-    it(`says nothing about the user's paths when there are none — no empty section, no dangling heading`, () => {
+    it(`says nothing about the user's paths when there are none: no empty section, no dangling heading`, () => {
         expect(resolvePrompt([{ repo: `root`, clean: 3, paths: [{ path: `a.ts`, reason: `diverged` }] }])).not.toContain(`Leave these alone`);
     });
 
@@ -113,7 +113,7 @@ describe(`resolvePrompt`, () => {
         expect(prompt).toContain(`re-lands automatically when your turn ends`);
     });
 
-    /* The transcript recognises this prompt as an ERRAND — the app's words, not the user's — by its opening
+    /* The transcript recognises this prompt as an ERRAND (the app's words, not the user's) by its opening
      * paragraph, which is the only marker that survives a hydrate (errands.ts). Asserted on the composed
      * prompt, so rewording the opening fails here rather than silently restoring the behaviour this replaced:
      * a paragraph of machine prose pinned over the question the agent was actually asked. */

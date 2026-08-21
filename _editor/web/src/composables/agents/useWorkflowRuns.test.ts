@@ -11,7 +11,7 @@ vi.mock("../analytics", () => ({ track: vi.fn() }));
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
 vi.mock("../sandbox/useSandboxQuery", () => ({ useSandboxQuery: vi.fn() }));
 
-/* The grouping rule, on its own. These are the pure half of the run row — the half three surfaces share (the
+/* The grouping rule, on its own. These are the pure half of the run row: the half three surfaces share (the
  * board's lanes, the board's archive, the popped-out rail) and the half that was getting the answer wrong,
  * so it is tested here rather than through any one of them.
  */
@@ -69,7 +69,7 @@ describe("runMatches", () => {
         expect(runMatches(run(`r1`, { request: `Write the greeting` }), `greeting`, [], never)).toBe(true);
     });
 
-    // The step half, asked through the board's own predicate — so a hit the daemon found in a step's transcript
+    // The step half, asked through the board's own predicate, so a hit the daemon found in a step's transcript
     // still surfaces, as the run it belongs to.
     it("matches through a step, and only that run's steps", () => {
         expect(runMatches(run(`r1`), `nothing`, [agent(`a1`, `r1`)], always)).toBe(true);
@@ -95,7 +95,7 @@ describe("laneOfRun", () => {
     });
 });
 
-/* The Finished cap. It is the CALLER's now — a capped run takes its steps into hiding with it, so the surface
+/* The Finished cap. It is the CALLER's now: a capped run takes its steps into hiding with it, so the surface
  * that lifts the window for its agents has to lift it here in the same breath.
  */
 describe("runsInLane", () => {

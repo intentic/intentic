@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { gapAfter, runBackgroundLoader, type LoaderBeat, type LoaderGates, type LoaderPace } from "./backgroundLoader";
 import type { WarmBand, WarmTask } from "./warmPlan";
 
-/* The loop is driven by hand here — every idle callback and every wait is released by the test rather than
- * waited out — so the pacing is ASSERTED instead of slept through. `now` is a counter the test advances, which
+/* The loop is driven by hand here: every idle callback and every wait is released by the test rather than
+ * waited out, so the pacing is ASSERTED instead of slept through. `now` is a counter the test advances, which
  * is a complete implementation of what the loop uses it for (durations, and nothing else). */
 
 interface Harness {
@@ -51,7 +51,7 @@ const OPEN: LoaderGates = { paused: () => false, busy: () => false };
 
 const BANDS: readonly WarmBand[] = [`now`, `near`, `work`, `rail`];
 
-// A wish that is satisfied once it has been read — the shape every real source builds, since `have` is a cache
+// A wish that is satisfied once it has been read: the shape every real source builds, since `have` is a cache
 // lookup and the read is what fills the cache. Reads append to `log`, which is what every assertion below is
 // about: WHAT the loop read, and in WHAT ORDER.
 const task = (log: string[], key: string, band: WarmBand, onRead: () => void = () => undefined): WarmTask => {
@@ -71,7 +71,7 @@ const task = (log: string[], key: string, band: WarmBand, onRead: () => void = (
 
 const dead = (key: string): WarmTask => ({ key, band: `now`, have: () => false, read: () => Promise.reject(new Error(`daemon said no`)) });
 
-// A wish whose read SUCCEEDS and leaves it exactly as cold as it was — the shape a wish takes when the key it
+// A wish whose read SUCCEEDS and leaves it exactly as cold as it was: the shape a wish takes when the key it
 // says it is satisfied by is not the key its read fills. Every real wish used to be free to be this (its read
 // was a separate callback), and eight of them were; warmQuery now builds both halves out of one query so it
 // cannot be said in the app. The loop still has to survive being handed one, because an extension can.
@@ -178,7 +178,7 @@ describe(`the background loader`, () => {
         const only = task(read, `a`, `now`);
         void runBackgroundLoader(
             () => [only],
-            // Permanently busy — a hung daemon read with nothing to time it out.
+            // Permanently busy: a hung daemon read with nothing to time it out.
             { paused: () => false, busy: () => true },
             bench.pace,
             () => stopped,
@@ -256,13 +256,13 @@ describe(`the background loader`, () => {
             },
         );
 
-        // Read, answered, and no closer to warm — reported as its own outcome rather than as a read.
+        // Read, answered, and no closer to warm: reported as its own outcome rather than as a read.
         await bench.step();
         expect(read).toEqual([`never-settles`]);
         expect(beats.at(-1)).toEqual({ outcome: `stalled`, key: `never-settles` });
 
         // THE POINT: the walk carries on past it. Before, the loop took the first unsatisfied wish every beat,
-        // so this second one was never reached — on the real plan that was everything behind the agent board.
+        // so this second one was never reached: on the real plan that was everything behind the agent board.
         await bench.step();
         expect(read).toEqual([`never-settles`, `settles`]);
 

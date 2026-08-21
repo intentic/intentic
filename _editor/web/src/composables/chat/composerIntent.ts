@@ -87,7 +87,7 @@ export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
 // While a plan is pending the composer is the revision field, so an armed edit is read for what it is rather
 // than for the plan behind it, which is why these are two entries and not one.
 const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
-    place: (words) => `Write as ${words.provider} — placed into the transcript, no reply…`,
+    place: (words) => `Write as ${words.provider}, placed into the transcript, no reply…`,
     // An edit arrives with the old prompt already in the box, so this is only ever read once the user has
     // cleared it, which is precisely the moment "what was I doing?" needs answering.
     edit: () => `Ask this turn again, differently…`,
@@ -99,7 +99,7 @@ const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
 };
 
 const SEND_HINT: Record<SendIntent, (words: ComposerWords) => string> = {
-    place: (words) => `Place into the transcript as ${words.provider} — no reply`,
+    place: (words) => `Place into the transcript as ${words.provider}, no reply`,
     // Names the COST, because this is the press that pays it and the count is what the struck rows are on
     // screen to make legible. Singular where only the edited prompt itself goes.
     edit: (words) => (words.editDropped === 1 ? `Replace this message` : `Replace this message and the ${words.editDropped - 1} below it`),
@@ -113,7 +113,7 @@ const SEND_HINT: Record<SendIntent, (words: ComposerWords) => string> = {
 };
 
 /** A viewer's composer is present but inert, the daemon floors every turn route at collaborator. */
-export const VIEWER_PLACEHOLDER = `You're viewing — ask the owner for a collaborator role to drive agents`;
+export const VIEWER_PLACEHOLDER = `You're viewing: ask the owner for a collaborator role to drive agents`;
 
 export const placeholderFor = (intent: SendIntent, words: ComposerWords): string => PLACEHOLDER[intent](words);
 
@@ -134,13 +134,13 @@ export const sendRefusal = (situation: ComposerSituation): string | undefined =>
      * no shape of transcript in which the agent attached a file to its own reply. */
     if (situation.voiceAgent) {
         if (situation.streaming) {
-            return `The agent is running — its words can be placed once the turn ends.`;
+            return `The agent is running: its words can be placed once the turn ends.`;
         }
         if (situation.pendingPlan) {
-            return `A plan is awaiting your answer — decide it before speaking as the agent.`;
+            return `A plan is awaiting your answer: decide it before speaking as the agent.`;
         }
         if (situation.attached) {
-            return `An attachment can't be placed as the agent's words — remove it (×) or switch back to your own voice.`;
+            return `An attachment can't be placed as the agent's words: remove it (×) or switch back to your own voice.`;
         }
     }
     /* An edit spends a rewind, and the daemon refuses one while a turn holds the conversation (agent/rewind.ts).
@@ -149,13 +149,13 @@ export const sendRefusal = (situation: ComposerSituation): string | undefined =>
      * going out, a colleague's press, and the composer is the only thing on screen that can explain why the
      * send it is holding will not land. The edit stays armed; the press works the moment the turn ends. */
     if (situation.editing && situation.streaming) {
-        return `The agent is running — this edit can be sent once the turn ends.`;
+        return `The agent is running: this edit can be sent once the turn ends.`;
     }
     if (situation.uploading) {
         return `Waiting for the attachment to finish uploading…`;
     }
     if (situation.uploadFailed) {
-        return `An attachment failed to upload — remove it (×) to send.`;
+        return `An attachment failed to upload: remove it (×) to send.`;
     }
     return undefined;
 };

@@ -1,11 +1,11 @@
-<!-- ONE MARKDOWN NOTE, read and curated — the frame two extensions had each built around <ScrollFrame>.
+<!-- ONE MARKDOWN NOTE, read and curated: the frame two extensions had each built around <ScrollFrame>.
 
      WHAT IT OWNS is everything that is the same wherever a note is edited: the Copy/Edit/Delete cluster and the
      Cancel/Save pair that replaces it, the in-place delete confirmation, the error strip, the loading line, and
-     the one surface the file is both READ and WRITTEN on. What it does not own is the note — the body, the
+     the one surface the file is both READ and WRITTEN on. What it does not own is the note: the body, the
      badges, the meta line and any extra control are the caller's, because that is where two notes differ.
 
-     SOURCE AND EDIT ARE ONE SURFACE (<CodeField>, `readonly` or not) — the memory pane's rule, and its reason.
+     SOURCE AND EDIT ARE ONE SURFACE (<CodeField>, `readonly` or not): the memory pane's rule, and its reason.
      They used to be two there: a coloured block to read the markdown in and a bare grey <textarea> to change it
      in. So the file changed typeface, colour, leading and size at the moment you picked up the pen, and the
      textarea's `h-full min-h-64` in a panel with no height to be full OF also shrank it to seven visible lines.
@@ -13,9 +13,9 @@
 
      THE CONFIRMATION RIDES #strips rather than the body, so a long note cannot scroll the question away from the
      answer, and it is in place rather than in a <ConfirmDialog> because the sentence names the note you are
-     looking at. `verb` is the whole of what differs between callers — "Delete" for a knowledge note, whose
+     looking at. `verb` is the whole of what differs between callers: "Delete" for a knowledge note, whose
      neighbours are left linking to something nobody has written, "Forget" for a memory note, which the agent
-     stops recalling — and it spells the button, the tooltip and the accessible name from one word. -->
+     stops recalling, and it spells the button, the tooltip and the accessible name from one word. -->
 <script setup lang="ts">
 import Button from "primevue/button";
 import { ui } from "../lib/ui.js";
@@ -28,17 +28,17 @@ import StatusBadge from "./StatusBadge.vue";
 const { verb = `Delete` } = defineProps<{
     /** The note's name, in the frame's header. */
     title: string;
-    /** The file as it stands on disk — what Copy copies, whatever is on screen. */
+    /** The file as it stands on disk: what Copy copies, whatever is on screen. */
     raw: string;
     /** Is a draft open. Swaps the action cluster, and forces the source surface whatever `showSource` says. */
     editing: boolean;
-    /** The caller's view mode says "show me the file" — the same surface, read-only. */
+    /** The caller's view mode says "show me the file": the same surface, read-only. */
     showSource?: boolean;
     /** Nothing has arrived yet. Suppressed while editing: a draft is already on screen. */
     loading?: boolean;
     saving?: boolean;
     removing?: boolean;
-    /** Whatever went wrong — the read or either write. */
+    /** Whatever went wrong: the read or either write. */
     error?: string;
     /** What deleting this kind of note is CALLED. Spells the tooltip, the accessible name and the confirm
      *  button ("Forget", "Forget it", "Forget this note"). */
@@ -49,7 +49,7 @@ const emit = defineEmits<{ edit: []; cancel: []; save: []; remove: [] }>();
 
 /** The source surface's text. The caller binds its draft-or-file computed straight to this. */
 const source = defineModel<string>(`source`, { required: true });
-/** Whether the delete confirmation is showing — a model because this component's own trash button opens it. */
+/** Whether the delete confirmation is showing: a model because this component's own trash button opens it. */
 const confirming = defineModel<boolean>(`confirming`, { default: false });
 </script>
 
@@ -108,7 +108,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
 
         <p v-if="loading && !editing" class="px-4 py-6 text-xs text-subtle">Loading…</p>
         <template v-else>
-            <!-- The whole file, in markdown's own colours — read with `readonly`, written without it. Ctrl/Cmd-S
+            <!-- The whole file, in markdown's own colours: read with `readonly`, written without it. Ctrl/Cmd-S
                  and Escape are bound here because the caret is in this field, and a save shortcut that only works
                  when the field has been left is not a save shortcut. -->
             <CodeField

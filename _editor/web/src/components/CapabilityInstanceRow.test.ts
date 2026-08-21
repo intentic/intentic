@@ -2,7 +2,7 @@
 //
 // THE ONE THING ON THIS ROW THAT IS READ OFF THE SCREEN AND TYPED SOMEWHERE ELSE: WhatsApp's link-a-device
 // code, transcribed into a phone standing next to the reader. It is pinned here because it went missing in the
-// least visible way possible — the daemon knew the code, the card was on screen, and the row simply had nowhere
+// least visible way possible: the daemon knew the code, the card was on screen, and the row simply had nowhere
 // to put it, so an owner who added WhatsApp was shown a connection badge and never a code at all.
 import PrimeVue from "primevue/config";
 import { expect, it, vi } from "vitest";
@@ -44,12 +44,12 @@ it("sets the pairing code out where it can be read and copied, with the phone's 
     });
     expect(html).toContain(`ABCDEFGH`);
     expect(html).toContain(`Link with phone number instead`);
-    // The wide tracking IS the feature — it is what makes a run of eight characters transcribable by hand — so
+    // The wide tracking IS the feature: it is what makes a run of eight characters transcribable by hand, so
     // it is asserted rather than left to a class list nobody would notice going quiet.
     expect(html).toContain(`tracking-[0.3em]`);
 });
 
-it("says what it is waiting for before any code exists — the seconds that used to read as connected", () => {
+it("says what it is waiting for before any code exists: the seconds that used to read as connected", () => {
     const html = render({ state: `pending`, detail: `waiting for WhatsApp to issue a pairing code…` });
     expect(html).toContain(`waiting for WhatsApp to issue a pairing code`);
 });

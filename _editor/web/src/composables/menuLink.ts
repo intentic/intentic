@@ -3,8 +3,8 @@ import { type RouteLocationRaw, useRouter } from "vue-router";
 
 /* A CONTEXT-MENU ROW THAT IS A PLACE, not a verb.
  *
- * <ContextMenu> renders its rows as anchors and honours `url` — the address the browser needs for its own
- * menu, for the status bar, for Ctrl/⌘-click and for middle-click — while `command` stays what an ordinary
+ * <ContextMenu> renders its rows as anchors and honours `url`: the address the browser needs for its own
+ * menu, for the status bar, for Ctrl/⌘-click and for middle-click, while `command` stays what an ordinary
  * click does. Both halves describe the same destination, so writing them apart is how they drift: a row would
  * keep pushing `/sandbox/status` long after the tab moved.
  *
@@ -17,7 +17,7 @@ import { type RouteLocationRaw, useRouter } from "vue-router";
  *     const link = useMenuLink();
  *     { label: `Connect / disconnect`, icon: `wifi`, ...link(`/sandbox/status`) }
  *
- * `after` is for the row that has TIDYING to do on its way out — dismissing the popover it was opened from —
+ * `after` is for the row that has TIDYING to do on its way out: dismissing the popover it was opened from:
  * and it runs on the plain click only. A modified click is answered by the browser opening another tab, and
  * closing the menu the user is still reading (and still clicking rows in) is not part of that. */
 export const useMenuLink = (): ((to: RouteLocationRaw, after?: () => void) => Pick<MenuItem, `url` | `command`>) => {

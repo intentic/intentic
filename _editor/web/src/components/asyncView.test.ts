@@ -2,7 +2,7 @@
 //
 // The routing rule "navigation never waits", at its mechanism. A route registered through asyncView must
 // complete its navigation while the chunk is still in flight, draw its outline only once the wait is long
-// enough to deserve being seen (loadingReveal's thresholds), swap to the real view the moment the code lands —
+// enough to deserve being seen (loadingReveal's thresholds), swap to the real view the moment the code lands:
 // and own the failure path the router can no longer see: a dead chunk answers with the stale-window reload,
 // anything else with a notice that carries the retry.
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
@@ -11,7 +11,7 @@ import { createMemoryHistory, createRouter, RouterView, type Router } from "vue-
 import { asyncView } from "./asyncView";
 
 // jsdom's window.location is unforgeable, so the reload the recovery performs is observed through a replaced
-// global — same trick as the router's own staleChunk suite.
+// global: same trick as the router's own staleChunk suite.
 const assign = vi.fn();
 beforeAll(() => {
     Object.defineProperty(globalThis, `location`, {
@@ -34,7 +34,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-// A real router at a real wrapped route — the claim under test is about NAVIGATION, not just rendering.
+// A real router at a real wrapped route: the claim under test is about NAVIGATION, not just rendering.
 const mountAt = async (view: Component): Promise<{ router: Router; el: HTMLElement }> => {
     const router = createRouter({
         history: createMemoryHistory(),
@@ -54,7 +54,7 @@ const mountAt = async (view: Component): Promise<{ router: Router; el: HTMLEleme
 };
 
 // The loader's promise settles through a few microtask hops (start's reset, attempt's catch, the finally) and
-// Vue's flush rides the same queue — a handful of beats drains all of it without touching the fake timers.
+// Vue's flush rides the same queue: a handful of beats drains all of it without touching the fake timers.
 const settle = async (): Promise<void> => {
     for (let beat = 0; beat < 8; beat += 1) {
         await nextTick();
@@ -67,7 +67,7 @@ it(`completes the navigation before the chunk arrives, reveals the outline only 
     const { router, el } = await mountAt(view);
 
     await router.push(`/target`);
-    // The click landed — URL flipped — while the loader is still pending…
+    // The click landed: URL flipped, while the loader is still pending…
     expect(router.currentRoute.value.path).toBe(`/target`);
     // …and a wait shorter than the reveal delay paints NO placeholder: a warm chunk must not flash grey.
     expect(el.querySelector(`[data-outline]`)).toBeNull();
@@ -81,7 +81,7 @@ it(`completes the navigation before the chunk arrives, reveals the outline only 
     expect(el.querySelector(`[data-outline]`)).toBeNull();
 });
 
-it(`a revisit renders synchronously — the chunk is fetched once and kept`, async () => {
+it(`a revisit renders synchronously: the chunk is fetched once and kept`, async () => {
     const load = vi.fn(() => Promise.resolve({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) }));
     const view = asyncView(load);
     const { router, el } = await mountAt(view);
@@ -99,17 +99,17 @@ it(`a revisit renders synchronously — the chunk is fetched once and kept`, asy
     expect(load).toHaveBeenCalledTimes(1);
 });
 
-it(`answers a dead chunk with one reload landed on the destination — and a notice once that reload is spent`, async () => {
+it(`answers a dead chunk with one reload landed on the destination, and a notice once that reload is spent`, async () => {
     const dead = (): Promise<never> => Promise.reject(new TypeError(`Failed to fetch dynamically imported module: http://x/assets/View-a1b2.js`));
     const first = await mountAt(asyncView(dead));
     await first.router.push(`/target`);
     await settle();
     expect(assign).toHaveBeenCalledWith(`/target`);
-    // The page is being replaced — no failure surface flashed at it.
+    // The page is being replaced: no failure surface flashed at it.
     expect(first.el.textContent).not.toContain(`couldn't load`);
 
     // The reloaded window (fresh wrapper, same sessionStorage) fails again: the chunk is GENUINELY gone.
-    // One reload per destination — this time the failure is said, with the retry.
+    // One reload per destination: this time the failure is said, with the retry.
     const second = await mountAt(asyncView(dead));
     await second.router.push(`/target`);
     await settle();

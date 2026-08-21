@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// jsdom because every claim here is about what the published page RENDERS — and the load-bearing half of that
+// jsdom because every claim here is about what the published page RENDERS, and the load-bearing half of that
 // is what it does NOT render. A shared conversation is the one surface of this product an outsider ever
 // touches, so "there is nothing on it that reaches back into the workspace" has to be checked against real
 // output rather than argued from the source.
@@ -9,7 +9,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h } from "vue";
 
 // The app's chat components read browser globals at import time (useDevice reads matchMedia, its refs are
-// module-level). jsdom provides no matchMedia, so it is stood up before the imports evaluate — the same
+// module-level). jsdom provides no matchMedia, so it is stood up before the imports evaluate: the same
 // hoist the app's own card test does.
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({
@@ -68,7 +68,7 @@ afterEach(() => {
     document.head.innerHTML = ``;
 });
 
-it(`draws the conversation it was published with — the prompt, the answer's prose, and the work behind it`, () => {
+it(`draws the conversation it was published with: the prompt, the answer's prose, and the work behind it`, () => {
     const element = publish(
         conversation([
             { role: `user`, text: `fix the login redirect loop`, sentAt: 1786372320000 },
@@ -84,14 +84,14 @@ it(`draws the conversation it was published with — the prompt, the answer's pr
     expect(element.textContent).toContain(`fix the login redirect loop`);
     // Prose goes through the shared markdown engine, so emphasis is rendered rather than printed.
     expect(element.querySelector(`.chat-markdown strong`)?.textContent).toBe(`re-ran`);
-    // The agent's work is drawn by the app's own tool card — the file it edited is on the page.
+    // The agent's work is drawn by the app's own tool card: the file it edited is on the page.
     expect(element.textContent).toContain(`auth/guard.ts`);
 });
 
 /* THE PAGE'S ONE SECURITY CLAIM, checked rather than asserted: a card here reaches nothing. In the app the
  * same card's path opens the workspace, its command attaches to a shell and its delegation links to a
- * transcript — every one of those is a door, and a published page has no building behind it. */
-it(`leaves nothing on a tool card to click — no workspace, no shell, no links out`, () => {
+ * transcript: every one of those is a door, and a published page has no building behind it. */
+it(`leaves nothing on a tool card to click: no workspace, no shell, no links out`, () => {
     const element = publish(
         conversation([
             {
@@ -114,7 +114,7 @@ it(`leaves nothing on a tool card to click — no workspace, no shell, no links 
         ]),
     );
 
-    // The path is on the page — it is the record of what ran — but it is not a control.
+    // The path is on the page: it is the record of what ran, but it is not a control.
     expect(element.textContent).toContain(`auth/guard.ts`);
     // The fold toggle is the only button a card may carry here.
     const buttons = [...element.querySelectorAll(`button`)];

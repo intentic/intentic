@@ -83,7 +83,7 @@ test("is a no-op when nothing was removed", async () => {
 });
 
 test("pruning to an empty graph (destroy) resolves a removed node's refs from other removed nodes' live outputs", async () => {
-    // repo's delete needs forgejo's url — forgejo is ALSO being removed, so its outputs must be seeded by
+    // repo's delete needs forgejo's url: forgejo is ALSO being removed, so its outputs must be seeded by
     // reading it live before any deletion (reverse order then deletes repo while forgejo is still up).
     const order: Array<{ id: string; url?: unknown }> = [];
     const forgejo: Provider = {

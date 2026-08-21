@@ -7,20 +7,20 @@ import ChatCodeBody from "./ChatCodeBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
 import { present } from "./toolPresentation";
 
-/* One tool call in an assistant turn. All per-tool knowledge — icon, result summary, how the output is
- * shaped, whether the card starts open — comes from the presentation registry (toolPresentation.ts); this
+/* One tool call in an assistant turn. All per-tool knowledge: icon, result summary, how the output is
+ * shaped, whether the card starts open: comes from the presentation registry (toolPresentation.ts); this
  * component only renders what it returns and owns the interaction (fold, open-in-workspace). Adding a tool to
  * the taxonomy is a table entry there, never a branch here.
  *
- * Everything that leads OFF the card — opening a file, attaching to the shell a command ran in, the picture
- * bytes themselves — comes from the injected surface (chatSurface.ts) rather than from the app's own
+ * Everything that leads OFF the card: opening a file, attaching to the shell a command ran in, the picture
+ * bytes themselves: comes from the injected surface (chatSurface.ts) rather than from the app's own
  * singletons, because this same card draws a conversation published to the public, where none of those exist.
  * Each affordance is drawn only where the surface offers it, so the read-only case is the ordinary case with
  * nothing to click rather than a second component. */
 
 const props = defineProps<{
     tool: ChatTool;
-    // Whether the turn this card belongs to is still streaming — the only state in which the card may animate.
+    // Whether the turn this card belongs to is still streaming: the only state in which the card may animate.
     live: boolean;
 }>();
 
@@ -30,7 +30,7 @@ const failed = computed(() => props.tool.status === `failed`);
 
 // A call that never reported back: a Stop cut the turn off mid-flight, the stream dropped, or the session was
 // restored from a file whose tool_use block has no matching result (see readWorkspaceSession). `in_progress` is
-// the honest record of that, but it is FROZEN — nothing is going to move it — so the card must not keep
+// the honest record of that, but it is FROZEN: nothing is going to move it, so the card must not keep
 // spinning, which is a claim about right now rather than about what happened.
 const unfinished = computed(() => running.value && !props.live);
 
@@ -46,7 +46,7 @@ const statusIcon = computed<{ name: IconName; spin: boolean; class: string }>(()
     return { name: view.value.icon, spin: false, class: failed.value ? `text-danger` : `text-link` };
 });
 
-// Whether there's anything to fold — an output-less call (a pending tool, or a command that printed nothing)
+// Whether there's anything to fold: an output-less call (a pending tool, or a command that printed nothing)
 // shows just its header, no chevron. A sub-agent card folds over its nested transcript (children + thinking)
 // too, so the whole delegation collapses to one line once it settles.
 const hasContent = computed(
@@ -73,24 +73,24 @@ const toggleOpen = (): void => {
 const location = computed(() => props.tool.locations?.[0]);
 
 /* Everything this card can lead to, from whoever is showing it (see chatSurface.ts). In the app that is the
- * pane's own conversation — with two chats side by side, each card offers ITS chat's shell and browser; on a
+ * pane's own conversation: with two chats side by side, each card offers ITS chat's shell and browser; on a
  * published conversation it is a surface that offers nothing at all. */
 const surface = useChatSurface();
 const openFile = surface.openFile;
 
 /* The shell behind a command card. An agent's Bash runs in a real tmux session that the terminal panel can
- * attach to, but those sessions no longer tab themselves into the strip (useWorkTerminals) — so this card is
+ * attach to, but those sessions no longer tab themselves into the strip (useWorkTerminals), so this card is
  * where watching one is offered, which is also where the question ("what is it actually doing?") gets asked.
  * Only command-shaped cards get it, and only while the surface has a shell recorded. */
 const agentTerminal = computed(() => (view.value.body?.kind === `command` ? surface.commandTerminal?.() : undefined));
 
 /* The BROWSER behind a browser card, on the same terms but through a different door: its Chromium is not a
  * pane in the terminal panel but a surface of its own, so this jumps to the Browsers area with that session
- * already selected. Every browser tool gets the button, not just the ones that returned a picture — a click or
+ * already selected. Every browser tool gets the button, not just the ones that returned a picture: a click or
  * a form fill is precisely when watching is worth more than reading. */
 const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`browser `) ? surface.commandBrowser?.() : undefined));
 
-/* THE AGENT THIS CALL STARTED — the third door of the same kind, onto the one thing a subagent has instead of a
+/* THE AGENT THIS CALL STARTED: the third door of the same kind, onto the one thing a subagent has instead of a
  * process: its transcript. The card's own id IS the subagent's id in the registry (see ChatTool.subagent), so the
  * link needs nothing the card doesn't already hold.
  *
@@ -136,7 +136,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
         <!-- The row is muted, not subtle: the target it carries (a path, a command) is the one thing a folded
              card still says, and at the meta tier subtle sits too close to the surface to read at a glance. -->
         <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted">
-            <!-- Header doubles as the fold toggle when there's output — same chevron affordance as the
+            <!-- Header doubles as the fold toggle when there's output: same chevron affordance as the
                  turn's Thinking block. Output-less calls keep a plain, non-clickable header. -->
             <button
                 v-if="hasContent"
@@ -160,10 +160,10 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 </span>
             </template>
             <!-- A delegation says WHO it handed the work to and WHAT it asked for, in the slot a path would take:
-                 `Explore · Locate claimIndexer definition`. Not mono — this is a sentence, not an identifier. -->
+                 `Explore · Locate claimIndexer definition`. Not mono: this is a sentence, not an identifier. -->
             <span v-if="subagentTitle" class="min-w-0 truncate">{{ subagentTitle }}</span>
             <!-- The path is a button only where there is a workspace to open it in. Published to the public
-                 there is none, and it stays exactly what it always was — the record of which file was read. -->
+                 there is none, and it stays exactly what it always was: the record of which file was read. -->
             <button
                 v-else-if="location && openFile"
                 type="button"
@@ -183,10 +183,10 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                  straight from its own CLI's hooks). The one live state worth shouting on the card: the terminal
                  button one slot over is where to go answer it. -->
             <span v-if="subagent?.status === `blocked`" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-warning">needs input</span>
-            <!-- The result phrase stays visible while collapsed — a folded card should still say what
+            <!-- The result phrase stays visible while collapsed: a folded card should still say what
                  happened. Pushed right so it reads as a trailing annotation, not part of the target. A call
                  that never reported back says so, which is what the clock in its place means. -->
-            <!-- What the CHILD is doing and what it has spent — a subagent's own progress, which its parent's
+            <!-- What the CHILD is doing and what it has spent: a subagent's own progress, which its parent's
                  result summary cannot report because the result is the thing being waited for. Takes the trailing
                  slot while the child is live and gives it back to the ordinary summary once it settles. -->
             <span v-if="subagentFacts.length > 0 && subagentLive" class="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-subtle">
@@ -196,8 +196,8 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             <span v-else-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{
                 view.summary
             }}</span>
-            <!-- Attach to the shell this command runs in. Present while the call is genuinely in flight — that's
-                 when "what is it doing right now?" is asked, and the answer is one click away — and hover-only
+            <!-- Attach to the shell this command runs in. Present while the call is genuinely in flight: that's
+                 when "what is it doing right now?" is asked, and the answer is one click away, and hover-only
                  afterwards, so a settled transcript stays as quiet as it was before work terminals stopped tabbing
                  themselves into the panel. -->
             <button
@@ -224,7 +224,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 <Icon name="globe" class="text-2xs" />
             </button>
             <!-- And the third: onto the child's own transcript. Unlike the two above this one is NOT hover-only
-                 once settled — a finished delegation's transcript is the record of work the parent only summarized,
+                 once settled: a finished delegation's transcript is the record of work the parent only summarized,
                  which is exactly what somebody scrolling back is looking for. -->
             <a
                 v-if="subagent && surface.subagentRoute"
@@ -238,7 +238,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             </a>
         </div>
         <template v-if="isOpen">
-            <!-- WHAT THE CHILD CONCLUDED — its own last words (a subagent's) or the tail of what it printed (a
+            <!-- WHAT THE CHILD CONCLUDED: its own last words (a subagent's) or the tail of what it printed (a
                  delegation's). Above the nested calls on purpose: the answer is what the delegation was for, and
                  the work it did to get there is the detail underneath it. For a backgrounded child this arrives
                  well before the tool result, and is the only report there is until then. -->
@@ -256,7 +256,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs italic leading-relaxed text-subtle"
                 >{{ tool.thinking }}</pre>
             <!-- A sub-agent's nested transcript: the tool calls it made, indented under the delegation card so
-                 the whole Agent run reads as one unit. Recursive — a sub-agent that itself delegates nests one
+                 the whole Agent run reads as one unit. Recursive: a sub-agent that itself delegates nests one
                  level deeper (ChatToolCard renders itself). -->
             <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1 border-l border-line pl-2">
                 <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" :live="live" />

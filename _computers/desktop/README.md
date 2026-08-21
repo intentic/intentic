@@ -25,35 +25,35 @@ await screen.writeClipboard("some text");
 
 It knows nothing about agents, capabilities, permissions or sandboxes. It takes coordinates and text and makes a
 computer do something; *whether that is allowed* is a question asked before these methods are ever called. Its
-one consumer today is `@intentic/host`, which owns that question — and the split is what makes the policy
+one consumer today is `@intentic/host`, which owns that question: and the split is what makes the policy
 testable, since a real click can only be verified by a human watching a screen.
 
 ## How it works, per platform
 
-**Windows** — PowerShell into `user32.dll`. `SetCursorPos` + `mouse_event` for the pointer, `keybd_event` for
+**Windows**: PowerShell into `user32.dll`. `SetCursorPos` + `mouse_event` for the pointer, `keybd_event` for
 chords, and `SendKeys` for text only. The split is deliberate: SendKeys is the only one that handles arbitrary
-unicode sensibly, and the only one that *cannot press the Windows key* — so text uses it and chords do not.
+unicode sensibly, and the only one that *cannot press the Windows key*: so text uses it and chords do not.
 Screen capture is `System.Drawing`. No install step, nothing left resident.
 
-**Linux** — two backends behind one interface. X11 lets any client synthesise input, so `xdotool` does
+**Linux**: two backends behind one interface. X11 lets any client synthesise input, so `xdotool` does
 everything with no privileges. Wayland does not, so the pointer goes through `ydotool` (which needs
 `/dev/uinput`) and text/keys prefer `wtype` (which does not). Missing tools raise a `DesktopError` carrying the
 one-line install for the specific thing that is absent.
 
-**macOS** — capture works, input does not. The methods throw rather than silently doing nothing.
+**macOS**: capture works, input does not. The methods throw rather than silently doing nothing.
 
-**Windows enumeration** — `EnumWindows` supplies every visible top-level window, including several owned by one
+**Windows enumeration**: `EnumWindows` supplies every visible top-level window, including several owned by one
 process; process lookup adds the app name, and the remaining P/Invokes supply bounds and foreground state.
 `Get-Process.MainWindowHandle` is intentionally not used because it collapses a workspace and its dialog into
 one row.
 
 **Taking focus on Windows needs more than `SetForegroundWindow`.** Windows refuses that call from a process
-that is not already in the foreground, and refuses it *quietly* — it flashes the taskbar button and leaves the
+that is not already in the foreground, and refuses it *quietly*: it flashes the taskbar button and leaves the
 keyboard where it was, so the next `type` or `key` goes to whatever the person at that desk had open. A backend
 running from a fresh `powershell.exe` misses every qualifying condition at once, and a machine whose
 foreground-lock timeout has been raised (gaming and anti-focus-stealing utilities do this) closes the last of
 them for good. So `focusWindow` briefly attaches its input queue to the foreground window's thread and the
-target's, which is what earns the right, and then *checks* — it raises a `DesktopError` rather than returning
+target's, which is what earns the right, and then *checks*: it raises a `DesktopError` rather than returning
 to a caller that is about to type into the wrong window.
 
 **Wayland enumeration mostly cannot happen**, and that is a design decision rather than a gap: a compositor does
@@ -65,20 +65,20 @@ open".
 ## Two details worth knowing
 
 **Coordinates are screenshot pixels.** `frame()` also reports the virtual desktop's `origin`, which is not
-always (0,0) — a second monitor to the left of the primary one gives Windows a negative left edge. The backends
+always (0,0): a second monitor to the left of the primary one gives Windows a negative left edge. The backends
 add it back, so callers work in screenshot pixels throughout and multi-monitor setups stop being a source of
 silent misclicks.
 
 **One key vocabulary, three renderings.** `keys.ts` fixes the names (X11 keysyms: `Return`, `Escape`,
-`BackSpace`, `Page_Up`, plus `ctrl`/`alt`/`shift`/`super` and the aliases people actually type — `enter`, `esc`,
+`BackSpace`, `Page_Up`, plus `ctrl`/`alt`/`shift`/`super` and the aliases people actually type: `enter`, `esc`,
 `win`, `cmd`) and each backend translates. Without it every caller would be platform-aware, which is the exact
 coupling this package exists to remove.
 
 ## Key files
 
-- [src/index.ts](src/index.ts) — the public surface.
-- [src/input-linux.ts](src/input-linux.ts) / [src/input-windows.ts](src/input-windows.ts) — pointer, keys and text, per platform.
-- [src/apps-linux.ts](src/apps-linux.ts) / [src/apps-windows.ts](src/apps-windows.ts) — windows, focus, launching and the clipboard, per platform.
-- [src/screen.ts](src/screen.ts) — capturing the screen.
-- [src/keys.ts](src/keys.ts) — chord and key-name parsing, shared by both platforms.
-- [src/run.ts](src/run.ts) — how commands are invoked without a native module.
+- [src/index.ts](src/index.ts): the public surface.
+- [src/input-linux.ts](src/input-linux.ts) / [src/input-windows.ts](src/input-windows.ts): pointer, keys and text, per platform.
+- [src/apps-linux.ts](src/apps-linux.ts) / [src/apps-windows.ts](src/apps-windows.ts): windows, focus, launching and the clipboard, per platform.
+- [src/screen.ts](src/screen.ts): capturing the screen.
+- [src/keys.ts](src/keys.ts): chord and key-name parsing, shared by both platforms.
+- [src/run.ts](src/run.ts): how commands are invoked without a native module.

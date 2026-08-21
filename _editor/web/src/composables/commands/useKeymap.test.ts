@@ -20,7 +20,7 @@ describe(`effectiveKeybinding`, () => {
         expect(effectiveKeybinding(`workspace.goToFile`, `Mod+P`)).toBe(`Mod+E`);
     });
 
-    it(`treats a null override as unbound — the declared default is suppressed`, () => {
+    it(`treats a null override as unbound: the declared default is suppressed`, () => {
         useKeymap().unbindKeybinding(`terminal.toggle`);
         expect(effectiveKeybinding(`terminal.toggle`, `Ctrl+\``)).toBeUndefined();
     });

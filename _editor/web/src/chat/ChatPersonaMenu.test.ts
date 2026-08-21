@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // jsdom because this picker's whole job is what it SAYS about a card before the message goes: which persona a
-// chat is about to speak as, and — the two the daemon then treats very differently — whether that persona can
+// chat is about to speak as, and: the two the daemon then treats very differently, whether that persona can
 // actually reach an account, and what "no persona at all" means on the attended side of the line.
 import type { Persona } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -23,7 +23,7 @@ vi.mock(`../composables/sandbox/usePersonas`, () => ({
 }));
 
 // The "manage personas" rows are links to the personas page. The stub keeps their href, which is what the test
-// below checks — a spy on a push would no longer see them at all.
+// below checks: a spy on a push would no longer see them at all.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRouter: () => ({ push: vi.fn() }) as never,
@@ -47,7 +47,7 @@ const events: (string | undefined)[] = [];
 const text = (element: HTMLElement): string => element.textContent ?? ``;
 const rowLabelled = (element: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...element.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).includes(label));
-// The rows that GO somewhere are anchors, not buttons — that is the whole point of them.
+// The rows that GO somewhere are anchors, not buttons: that is the whole point of them.
 const linkLabelled = (element: HTMLElement, label: string): HTMLAnchorElement | undefined =>
     [...element.querySelectorAll(`a`)].find((link) => (link.textContent ?? ``).includes(label));
 
@@ -77,13 +77,13 @@ it(`offers anyone as a pick, and says what it means here`, () => {
 });
 
 // The ordinary state of a freshly cloned workspace: the card is real, its accounts are not signed in yet. It
-// stays PICKABLE — the bound is still meaningful — but a picker that didn't mark it would read as ready.
+// stays PICKABLE: the bound is still meaningful, but a picker that didn't mark it would read as ready.
 it(`marks a persona whose every account is still signed out`, () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
     expect(text(mount())).toContain(`not signed in yet`);
 
     connected.value = [`x-company`];
-    // One signed-in account is enough to act, so the mark must go — the turn simply reaches that one.
+    // One signed-in account is enough to act, so the mark must go: the turn simply reaches that one.
     app?.unmount();
     expect(text(mount())).not.toContain(`not signed in yet`);
 });
@@ -101,7 +101,7 @@ it(`names the accounts a card holds, and picks it by id`, () => {
     expect(events).toEqual([`work`]);
 });
 
-// A bounded card says so where it is picked, in the contract's own words — the same phrase the personas page
+// A bounded card says so where it is picked, in the contract's own words: the same phrase the personas page
 // puts on its row, so a card recognised there is the same card here.
 it(`says how bounded a card is`, () => {
     personas.value = [

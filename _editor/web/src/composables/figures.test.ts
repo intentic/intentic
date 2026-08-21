@@ -3,7 +3,7 @@ import { type BarsFigure, type DagFigure, parseFigure, splitFigureSegments, type
 
 /* The figure fences generated documentation is authored with. Lives here rather than in @intentic/ui
  * because the design system ships no test runner and the markdown engine's other tests (renderMarkdown.test.ts)
- * are already in this suite. The module is pure — no DOM — so this file stays on the default `node` environment.
+ * are already in this suite. The module is pure: no DOM, so this file stays on the default `node` environment.
  *
  * The invariant under nearly every case below: a figure that cannot be understood must DEGRADE to a code block,
  * never throw and never vanish. A reader who sees the JSON source can still act on it; a reader who sees a blank
@@ -38,7 +38,7 @@ describe(`parseFigure`, () => {
     it(`defaults direction to LR and only accepts TB as the alternative`, () => {
         expect(dag({ nodes: [{ id: `a` }] })?.direction).toBe(`LR`);
         expect(dag({ nodes: [{ id: `a` }], direction: `TB` })?.direction).toBe(`TB`);
-        // Anything else is not a third layout — it is a typo, and LR is the honest fallback.
+        // Anything else is not a third layout: it is a typo, and LR is the honest fallback.
         expect(dag({ nodes: [{ id: `a` }], direction: `sideways` })?.direction).toBe(`LR`);
     });
 
@@ -106,7 +106,7 @@ describe(`parseFigure`, () => {
     });
 
     it(`rejects a stat whose value is a number rather than authored text`, () => {
-        // The renderer sets the type, never the content — so the author writes the string they mean.
+        // The renderer sets the type, never the content, so the author writes the string they mean.
         expect(stats({ items: [{ label: `Packages`, value: 42 }] })).toBeUndefined();
     });
 
@@ -130,7 +130,7 @@ describe(`parseFigure`, () => {
     /* Mermaid is the one kind this module does not read: its body is a diagram language, and only mermaid's own
      * parser (a lazy import, so nowhere near here) can say whether it is valid. So the body is carried whole and
      * the ONLY thing rejected is emptiness. Syntax that is obvious nonsense still becomes a figure here, and
-     * degrades to a code block at render time instead — same contract, later. */
+     * degrades to a code block at render time instead: same contract, later. */
     it(`carries a mermaid body through verbatim and rejects only an empty one`, () => {
         const diagram = `flowchart LR\n    a["One"] --> b["Two"]`;
         expect(parseFigure(`mermaid`, diagram)).toEqual({ kind: `mermaid`, code: diagram });
@@ -208,7 +208,7 @@ describe(`splitFigureSegments`, () => {
     it(`does not lose text when a fence is never closed`, () => {
         const source = `Before.\n\n\`\`\`dag\n{ "nodes": [{ "id": "a" }] }`;
         const segments = splitFigureSegments(source);
-        // The fence is unterminated, so its content is still being written — it stays prose, whole.
+        // The fence is unterminated, so its content is still being written: it stays prose, whole.
         expect(segments.map((segment) => segment.kind)).toEqual([`prose`]);
         expect(segments[0]).toMatchObject({ text: source });
     });

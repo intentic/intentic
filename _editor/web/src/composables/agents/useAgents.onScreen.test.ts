@@ -22,13 +22,13 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { resetAgents, setAgents } from "./useAgents";
 
 /* READING A CHAT IN A POP-OUT IS READING IT. A turn that lands while you are watching its conversation is not
- * news, so the card must not badge under your cursor — and the only thing that used to count as watching was
+ * news, so the card must not badge under your cursor, and the only thing that used to count as watching was
  * the app's TAB being visible. A popped-out chat is drawn by that tab's realm from a window of its own (see
  * composables/usePopout.ts), so a chat opened out there while the tab sat behind another one kept its "Updated"
  * badge until the user clicked back to the tab, where it then cleared on its own. */
 
 // jsdom answers `visible` for the page's own document and `prerender` for a detached one, and neither can be
-// set — so both windows are dressed by hand, the way the browser would report them.
+// set, so both windows are dressed by hand, the way the browser would report them.
 const show = (doc: Document, visible: boolean): void => {
     Object.defineProperty(doc, `visibilityState`, { value: visible ? `visible` : `hidden`, configurable: true });
     doc.dispatchEvent(new Event(`visibilitychange`));

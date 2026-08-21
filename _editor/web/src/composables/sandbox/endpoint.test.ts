@@ -24,7 +24,7 @@ it(`derives the sandbox id from the connect TOKEN, matching what the container p
     expect(await sandboxIdOf(`other`)).not.toBe(id);
 });
 
-it(`orders candidates certified, plain, tunnel — the last one always dialable`, async () => {
+it(`orders candidates certified, plain, tunnel: the last one always dialable`, async () => {
     const id = await sandboxIdOf(TOKEN);
     const withToken = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere });
     // HTTPS leads because it is the only form Safari will touch; plain http follows for the window before a
@@ -33,7 +33,7 @@ it(`orders candidates certified, plain, tunnel — the last one always dialable`
     expect(withToken[0]?.base).toBe(localDaemonUrl(id, ZONE));
     expect(withToken[1]?.base).toBe(localDaemonUrlInsecure(id));
     expect(withToken[2]?.base).toBe(TUNNEL);
-    // Both loopback forms are the SAME published port — one mapping, and what the daemon serves decides.
+    // Both loopback forms are the SAME published port: one mapping, and what the daemon serves decides.
     expect(new URL(withToken[0]!.base).port).toBe(new URL(withToken[1]!.base).port);
 
     // No token ⇒ no derivable id ⇒ no address to guess. The tunnel is the only way in.
@@ -42,7 +42,7 @@ it(`orders candidates certified, plain, tunnel — the last one always dialable`
 
 it(`offers no loopback candidate for a machine the platform put somewhere this browser is not`, async () => {
     // The two lanes where the platform created the machine itself and knows where it is. Probing either would
-    // spend the browser's Local Network Access prompt — the "is this app looking around my computer" dialog —
+    // spend the browser's Local Network Access prompt: the "is this app looking around my computer" dialog:
     // on an address that could never have answered.
     const hosted = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: { state: `started` } });
     expect(hosted).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
@@ -67,7 +67,7 @@ it(`never reaches for the machine when the sandbox cannot be on it`, async () =>
 });
 
 it(`drops the certified candidate when the sandbox's URL carries no zone to certify under`, async () => {
-    // A two-label host has no zone suffix to strip — an attached sandbox behind someone's own bare domain.
+    // A two-label host has no zone suffix to strip: an attached sandbox behind someone's own bare domain.
     const candidates = await candidatesFor({ daemonUrl: `https://example.com`, token: TOKEN, ...anywhere });
     expect(candidates.map((candidate) => candidate.kind)).toEqual([`local-insecure`, `tunnel`]);
 });
@@ -83,7 +83,7 @@ it(`accepts a loopback candidate only when the daemon behind it names THIS sandb
             vi.fn(async () => health(id)),
         ),
     ).toBe(true);
-    // Something is listening, but it is another sandbox — adopting it would point this sandbox's session,
+    // Something is listening, but it is another sandbox: adopting it would point this sandbox's session,
     // uploads and terminals at a different daemon. This is the case a liveness-only probe gets wrong.
     expect(
         await probeEndpoint(
@@ -92,7 +92,7 @@ it(`accepts a loopback candidate only when the daemon behind it names THIS sandb
             vi.fn(async () => health(`0123456789ab`)),
         ),
     ).toBe(false);
-    // A daemon predating the id (nothing to match) is not adopted either — silence is not agreement.
+    // A daemon predating the id (nothing to match) is not adopted either: silence is not agreement.
     expect(
         await probeEndpoint(
             local,
@@ -121,14 +121,14 @@ it(`treats every way a loopback call can be refused as the same instruction: use
     const id = await sandboxIdOf(TOKEN);
     const local = { kind: `local` as const, base: localDaemonUrl(id, ZONE)! };
     // Safari refusing it as mixed content, Chrome's Local Network Access permission being declined, and
-    // nothing listening all surface as a rejected fetch — none of them are worth telling apart.
+    // nothing listening all surface as a rejected fetch: none of them are worth telling apart.
     const refused = vi.fn(async () => {
         throw new TypeError(`Failed to fetch`);
     });
     expect(await probeEndpoint(local, id, refused)).toBe(false);
 });
 
-it(`never probes the tunnel — it is the fallback, not a candidate to qualify`, async () => {
+it(`never probes the tunnel: it is the fallback, not a candidate to qualify`, async () => {
     const fetchMock = vi.fn();
     expect(await probeEndpoint({ kind: `tunnel`, base: TUNNEL }, `abc`, fetchMock)).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -147,7 +147,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     });
 
     // A daemon serving the shortcut in plain http (no certificate yet) fails the https probe and passes the
-    // next one — the browsers that allow loopback http are accelerated without waiting on issuance.
+    // next one: the browsers that allow loopback http are accelerated without waiting on issuance.
     const httpOnly = vi.fn(async (input: string | URL | Request) => {
         if (String(input).startsWith(`https://local-`)) {
             throw new TypeError(`Failed to fetch`);

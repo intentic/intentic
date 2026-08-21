@@ -4,17 +4,17 @@ import { DiffStat } from "@intentic/ui";
 import { type DiffRow, diffRows, diffStat } from "./chatToolDiff";
 
 /* Inline unified diff for one structured diff content entry of a tool card. The header path opens the file
- * where there is a workspace to open it in; rows come from the lightweight line differ — Monaco stays the
+ * where there is a workspace to open it in; rows come from the lightweight line differ: Monaco stays the
  * full-screen reviewer. */
 
 const props = defineProps<{
     path: string;
     oldText?: string;
     newText: string;
-    // The daemon clipped a side at the wire cap — the rendered diff may be incomplete.
+    // The daemon clipped a side at the wire cap: the rendered diff may be incomplete.
     truncated?: boolean;
     // Whether the header leads anywhere. False on a conversation published to the public, which has no
-    // workspace behind it — the diff is the same record either way, so only the affordance is withdrawn.
+    // workspace behind it: the diff is the same record either way, so only the affordance is withdrawn.
     openable?: boolean;
 }>();
 

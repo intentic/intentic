@@ -50,7 +50,7 @@ export const destroy = buildCommand<DestroyFlags>({
                 out.text(node.inputs["protect"] === true ? `keep\t${node.type}\t${node.id}\t(protected)` : `delete\t${node.type}\t${node.id}`);
             }
             out.text(
-                `destroy is destructive — re-run with --yes to tear down these ${order.filter((node) => node.inputs["protect"] !== true).length} resource(s)`,
+                `destroy is destructive: re-run with --yes to tear down these ${order.filter((node) => node.inputs["protect"] !== true).length} resource(s)`,
             );
             out.result({
                 steps: order.map((node) => ({ id: node.id, type: node.type, protected: node.inputs["protect"] === true })),

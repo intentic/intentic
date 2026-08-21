@@ -1,24 +1,24 @@
 <!-- THE INSTRUMENT ABOVE A LIST: free text on the left, the controls that narrow the same list on the right,
-     and any bare action furthest right. Six views had written this row by hand and no two agreed — three
+     and any bare action furthest right. Six views had written this row by hand and no two agreed: three
      different field treatments (a shrunken `ui.input`, a framed <SearchBar>, and a bare `relative` +
      absolutely-positioned icon at three different paddings), two different heights, and two different ideas
      about whether the field grows.
 
      THE FIELD TAKES THE ROW'S SLACK. That is the one layout decision here worth stating: the bar then spans the
-     same width as the list under it — one left edge and one right edge down the whole view — instead of a
+     same width as the list under it (one left edge and one right edge down the whole view) instead of a
      control cluster huddled in a corner above a full-width list. `#controls` sits in its own matched track so
      the two read as one instrument; `#actions` stays chromeless beside them because reloading or clearing is
      not a narrowing of anything.
 
-     The field is <SearchBar> rather than a fresh input, so the one line of hard-won CSS in it — `text-base`
-     below `md`, the threshold under which iOS Safari zooms the whole page on focus — keeps having exactly one
+     The field is <SearchBar> rather than a fresh input, so the one line of hard-won CSS in it: `text-base`
+     below `md`, the threshold under which iOS Safari zooms the whole page on focus: keeps having exactly one
      home. The border SearchBar deliberately lacks (it is normally a panel's first row) is this wrapper's. -->
 <script setup lang="ts">
 import SearchBar from "./SearchBar.vue";
 
 /* `busy` and `clearable` are the field's own two states, forwarded rather than re-implemented. They ship
  * because the first bar over a SERVER-backed list (the knowledge base's search) had both and this component
- * had neither, so adopting it would have cost a spinning magnifier and an Escape-to-clear — and a shared
+ * had neither, so adopting it would have cost a spinning magnifier and an Escape-to-clear, and a shared
  * component you have to give something up to use is one the next view hand-rolls instead. Neither is a style
  * fork: they say what the field is DOING, which only the caller knows. */
 const {
@@ -27,9 +27,9 @@ const {
     clearable = false,
 } = defineProps<{
     placeholder?: string;
-    /** Shown at the field's trailing edge while a query is active — "how much did I just narrow this to". */
+    /** Shown at the field's trailing edge while a query is active: "how much did I just narrow this to". */
     count?: number;
-    /** The answer is in flight — for a bar whose list is fetched rather than filtered in the page. */
+    /** The answer is in flight: for a bar whose list is fetched rather than filtered in the page. */
     busy?: boolean;
     /** Offer a clear affordance, and let Escape take the query back. */
     clearable?: boolean;

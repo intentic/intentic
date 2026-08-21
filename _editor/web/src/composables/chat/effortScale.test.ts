@@ -31,7 +31,7 @@ describe(`the effort scale`, () => {
     });
 
     // The daemon reports a model's tiers without knowing this turn's thinking setting, so the live list needs
-    // the same filter as the static fallback — otherwise the constraint only holds until a catalog loads.
+    // the same filter as the static fallback: otherwise the constraint only holds until a catalog loads.
     it(`filters the daemon's live tier list by thinking too`, () => {
         providerModels.value = { ...providerModels.value, claude: [{ label: `Opus 5`, value: `claude-opus-5`, efforts: [`high`, `xhigh`, `max`] }] };
         expect(values(effortsFor(`claude`, `claude-opus-5`, true))).toEqual([`high`, `xhigh`, `max`]);
@@ -61,7 +61,7 @@ describe(`the effort scale`, () => {
         conversation.effortPick.value = `xhigh`;
         expect(conversation.effort.value).toBe(`high`);
 
-        // Back on a model whose scale has it, the user's own pick returns — a smaller model borrows the
+        // Back on a model whose scale has it, the user's own pick returns: a smaller model borrows the
         // selection, it doesn't ratchet it down.
         conversation.provider.value = `claude`;
         conversation.model.value = `claude-opus-5`;
@@ -82,7 +82,7 @@ describe(`the effort scale`, () => {
         expect(conversation.effort.value).toBe(`high`);
     });
 
-    // 'max' leaves Claude's own scale the moment extended thinking goes off — the API rejects the pair with a 400.
+    // 'max' leaves Claude's own scale the moment extended thinking goes off: the API rejects the pair with a 400.
     it(`drops Max when thinking is switched off`, () => {
         const conversation = new Conversation(`c-thinking`);
         conversation.model.value = `claude-opus-5`;

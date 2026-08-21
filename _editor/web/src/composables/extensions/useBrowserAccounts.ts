@@ -11,7 +11,7 @@ import { useExtensions } from "./useExtensions";
  *
  * The brand comes from the same place /capabilities gets it (the enabled extensions' contributed cards), so an
  * account wears one mark across the app instead of one here and another there. Everything is optional the whole
- * way down — <BrandMark> falls to the glyph and then to initials, which is what makes it safe to ask a
+ * way down: <BrandMark> falls to the glyph and then to initials, which is what makes it safe to ask a
  * manifest that may not have loaded yet, or may describe a site this build has never heard of. */
 
 // What every browser capability falls back to on /capabilities when its card names no glyph of its own.

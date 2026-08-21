@@ -2,7 +2,7 @@ import { nextTick, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /* Switching sandboxes as a change of SCREEN, not just of daemon: what each sandbox was last showing is what it
- * comes back to. The router is a stub — what is under test is which fullPath is filed under which sandbox and
+ * comes back to. The router is a stub: what is under test is which fullPath is filed under which sandbox and
  * what a switch does with it, and the real router would only add a history implementation to that. */
 
 // The node test environment has neither storage; windowStore itself is real (its own two-store rules are what
@@ -78,7 +78,7 @@ describe(`landing on a switched-to sandbox`, () => {
         expect(replace).toHaveBeenLastCalledWith(`/agents`);
     });
 
-    it(`keeps each sandbox's screen apart — switching back and forth lands on both`, async () => {
+    it(`keeps each sandbox's screen apart: switching back and forth lands on both`, async () => {
         navigate(shellRoute(`/sandbox/secrets`));
         await switchTo(`sb2`);
         navigate(shellRoute(`/workspace/src/foo.ts`));
@@ -116,7 +116,7 @@ describe(`landing on a switched-to sandbox`, () => {
 });
 
 describe(`what counts as a sandbox's screen`, () => {
-    it(`never records a page outside the shell — /setup belongs to the account`, async () => {
+    it(`never records a page outside the shell: /setup belongs to the account`, async () => {
         navigate(outsideRoute(`/setup`));
         await switchTo(`sb2`);
         navigate(shellRoute(`/agents`));
@@ -126,7 +126,7 @@ describe(`what counts as a sandbox's screen`, () => {
         expect(replace).toHaveBeenLastCalledWith(`/`);
     });
 
-    it(`does not land while the user is outside the shell — the setup flow makes its new sandbox active`, async () => {
+    it(`does not land while the user is outside the shell: the setup flow makes its new sandbox active`, async () => {
         navigate(shellRoute(`/agents`));
         navigate(outsideRoute(`/setup`));
 
@@ -135,7 +135,7 @@ describe(`what counts as a sandbox's screen`, () => {
         expect(replace).not.toHaveBeenCalled();
     });
 
-    it(`does not record a navigation that failed — the screen nobody reached`, async () => {
+    it(`does not record a navigation that failed: the screen nobody reached`, async () => {
         navigate(shellRoute(`/agents`));
         navigate(shellRoute(`/workspace/src/foo.ts`), { type: 8 });
         await switchTo(`sb2`);

@@ -1,26 +1,26 @@
-<!-- THE SOURCE SURFACE — a file's own text, coloured, and typed into.
+<!-- THE SOURCE SURFACE: a file's own text, coloured, and typed into.
 
      <Code> is the read-only block: a bordered card you drop a command into. <ProseField> is the writing field
      for SENTENCES. Neither is what a surface that shows somebody a markdown file and lets them correct it
-     needs, so a view that wanted one reached for a bare <textarea> — mono, grey, a fixed number of rows —
+     needs, so a view that wanted one reached for a bare <textarea>: mono, grey, a fixed number of rows:
      which meant the same file was coloured while it was being read and colourless the moment it was edited.
      This is one surface for both: `readonly` is the only difference between reading source and writing it.
 
      HOW IT IS COLOURED WHILE STILL BEING A TEXTAREA. Shiki's markup and a real caret cannot live in the same
      element, so the two are stacked in one grid cell: the highlighted <pre> underneath, and above it a
      textarea whose TEXT is transparent and whose caret and selection are not. What you see is the <pre>; what
-     you type into is the textarea; they line up because both are handed the same box (`ui-code-field-box` —
+     you type into is the textarea; they line up because both are handed the same box (`ui-code-field-box`:
      one CSS rule applied to both, for the same reason ProseField's typography is a variant rather than a class
      string the caller passes twice: a caller that can spell the two halves differently eventually will, and
      the failure here is text drifting off its own colours).
 
-     IT SIZES TO ITS CONTENT, and the <pre> is what does it — being real, in-flow content, it makes the grid
+     IT SIZES TO ITS CONTENT, and the <pre> is what does it: being real, in-flow content, it makes the grid
      row as tall as the file and the textarea stretches to that. So a note is shown WHOLE and whatever frame it
      sits in decides when to scroll, instead of a `rows="8"` box showing eight lines of it. Nothing measures
      anything, so a webfont landing late or a container resizing cannot leave a stale height behind.
 
      IT ALWAYS WRAPS. A horizontal scrollbar on a writing surface hides the end of the line being written, and
-     a wrapped <pre> beside an unwrapped textarea is two different line counts — i.e. the colours sliding off
+     a wrapped <pre> beside an unwrapped textarea is two different line counts: i.e. the colours sliding off
      the text. Same reason ProseField refuses to be an <input>.
 
      UNCOLOURED IS A STATE, NOT A FAILURE: until the grammar chunk lands (and permanently for a language we
@@ -36,7 +36,7 @@ const {
     readonly = false,
     placeholder = ``,
 } = defineProps<{
-    /** Shiki language id — typed against the grammars we ship, like <Code>'s. Omit to render as plain text. */
+    /** Shiki language id: typed against the grammars we ship, like <Code>'s. Omit to render as plain text. */
     lang?: ShikiLang;
     /** Reading rather than writing: the same rendering, with the caret off and the text locked. */
     readonly?: boolean;
@@ -46,7 +46,7 @@ const {
 const value = defineModel<string>({ required: true });
 
 // The caller's `class` belongs on the WRAPPER (its margins, its minimum height, where it sits in a column);
-// everything else it passes — listeners, aria, autofocus — belongs on the field itself. ProseField's split,
+// everything else it passes (listeners, aria, autofocus) belongs on the field itself. ProseField's split,
 // and the reason the field is rendered even when it cannot be typed into: a readonly surface that quietly
 // dropped its caller's `aria-label` and Escape handler would be a different component wearing the same name.
 defineOptions({ inheritAttrs: false });
@@ -57,10 +57,10 @@ const forwarded = computed(() => {
 });
 
 /* A trailing zero-width space on the COLOURED copy only. A <pre> gives a final newline no line box, so a file
- * ending in one would size the field a line short of the line the caret is actually on — ProseField's TAIL,
+ * ending in one would size the field a line short of the line the caret is actually on: ProseField's TAIL,
  * for the same reason. It is invisible, it is not in the model, and it never reaches disk. */
 const TAIL = `​`;
-// An empty field still has to be worth clicking on, so what gets measured is whatever is DISPLAYED — again
+// An empty field still has to be worth clicking on, so what gets measured is whatever is DISPLAYED: again
 // ProseField's rule: mirroring only the value sizes a fresh field to nothing and hides its own instructions.
 const empty = computed(() => value.value === ``);
 const shown = computed(() => (empty.value ? placeholder : value.value) + TAIL);
@@ -68,7 +68,7 @@ const shown = computed(() => (empty.value ? placeholder : value.value) + TAIL);
 const { highlight } = useHighlighter();
 const html = ref<string | undefined>(undefined);
 
-// v-html trusts Shiki's own output — it HTML-escapes the text, so the only markup is its <span style=…>
+// v-html trusts Shiki's own output: it HTML-escapes the text, so the only markup is its <span style=…>
 // colour tokens. Same contract as <Code>, including dropping a result that arrived after the input moved on.
 let seq = 0;
 watch(

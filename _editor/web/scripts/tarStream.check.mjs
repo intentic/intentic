@@ -86,7 +86,7 @@ assert.deepEqual(started, ["a.txt", "dir/b.txt", "empty.txt", longPath]);
 assert.equal(bytes, 14);
 
 // Drift: a File whose declared .size disagrees with what .stream() yields (the backing file changed between the
-// drop scan and the upload — e.g. a rebuilt build artifact). The packer must still emit EXACTLY .size body bytes
+// drop scan and the upload: e.g. a rebuilt build artifact). The packer must still emit EXACTLY .size body bytes
 // so framing stays aligned and a trailing entry is never corrupted. `chunks` is what .stream() emits; `errorAtEnd`
 // makes the read throw partway (a replaced/unreadable file).
 const enc = new TextEncoder();

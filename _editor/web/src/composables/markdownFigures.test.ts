@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // Rendering, not parsing: figures.test.ts covers the fence vocabulary as data, and this file is the proof that a
-// document carrying those fences actually reaches the DOM as components — and, just as important, that a document
+// document carrying those fences actually reaches the DOM as components, and, just as important, that a document
 // WITHOUT them still renders in the single-root shape every existing surface depends on.
 //
 // Mounted with plain Vue rather than @vue/test-utils, which this workspace does not depend on and which is not
@@ -9,12 +9,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApp, h } from "vue";
 
-/* Two jsdom gaps this file depends on, both filled for the whole package by vitest.setup.ts — which runs before
+/* Two jsdom gaps this file depends on, both filled for the whole package by vitest.setup.ts, which runs before
  * this file is loaded, where a beforeAll would run too late. Both are the environment's fault rather than the
  * code's, and left unstubbed they fail at import or mount time in a way that reads as a figure bug.
  *
  * `matchMedia`: the design-system barrel has import-time side effects (useDevice's `track` calls it while Picker's
- * module body evaluates) — which is exactly why the markdown ENGINE ships on its own subpath. This file needs the
+ * module body evaluates), which is exactly why the markdown ENGINE ships on its own subpath. This file needs the
  * component, so it pays the barrel's cost.
  * `ResizeObserver`: Vue Flow measures its container on mount, reached here through DagGraph. */
 
@@ -70,7 +70,7 @@ describe(`<Markdown> with figures`, () => {
 
     /* A dag figure is asserted down to its FRAME and no further. Vue Flow refuses to lay out nodes in a container it
      * measures as zero-sized ("The Vue Flow parent container needs a width and a height"), and jsdom reports zero for
-     * everything — so the node cards genuinely cannot render here, and asserting on them would be asserting on jsdom.
+     * everything, so the node cards genuinely cannot render here, and asserting on them would be asserting on jsdom.
      * What is checked is everything up to that boundary: the fence became a figure, it is captioned, and it mounted a
      * graph with an explicit height. The node mapping itself is covered by typing plus figures.test.ts, and the
      * rendering below it is DagGraph's, which the app already relies on elsewhere. */
@@ -78,7 +78,7 @@ describe(`<Markdown> with figures`, () => {
     // it arrives a microtask after mount rather than with it (see DagFigure.vue for what that buys).
     //
     // The budget bounds a HANG; it does not measure that latency, which is a single SFC arriving off the module
-    // graph. `vi.waitFor` defaults to 1s — an idle machine's number, and the same one markdownMermaid.test.ts
+    // graph. `vi.waitFor` defaults to 1s: an idle machine's number, and the same one markdownMermaid.test.ts
     // already had to raise for its own lazy import: a full run loads this package's 298 files while every other
     // package's vitest runs beside it, and an import with every core busy costs roughly ten times its idle self.
     // This assertion duly passed alone and lost the race in the suite. Kept under `testTimeout` (vitest.config.ts)

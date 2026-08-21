@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { laneOfRun, runningTitles, spentOn } from "../composables/agents/useWorkflowRuns";
 import { liveSessions } from "../composables/chat/chatRun";
 
-/* A WORKFLOW RUN, ON THE BOARD — the row that was missing while a five-step run arrived as five unrelated
+/* A WORKFLOW RUN, ON THE BOARD: the row that was missing while a five-step run arrived as five unrelated
  * agents that happened to start together.
  *
  * IT IS AN AGENT CARD'S SIBLING, NOT AN AGENT CARD. It borrows the shell (same radius, border, lane bar,
@@ -15,7 +15,7 @@ import { liveSessions } from "../composables/chat/chatRun";
  * exist. What it has instead is the only thing a run has: how far through the graph it is, what is burning
  * right now, and a Stop.
  *
- * CLICKING IT OPENS THE SESSIONS IT IS RUNNING, side by side — which is the answer to "what is my workflow
+ * CLICKING IT OPENS THE SESSIONS IT IS RUNNING, side by side, which is the answer to "what is my workflow
  * doing" that no single navigation could give before. A run of two attempts becomes two panes; a run with one
  * live step becomes one. That is why the card exists on this board rather than only on the workflows page:
  * this board is where the panes are.
@@ -31,7 +31,7 @@ const spent = computed(() => spentOn(run));
 const done = computed(() => run.steps.filter((step) => step.state === `done`).length);
 
 // The state word, in the vocabulary the rest of the board uses. `running` is the only one that earns a colour
-// of its own here — the three that mean "you have to look at this" are already saying so with the lane bar.
+// of its own here: the three that mean "you have to look at this" are already saying so with the lane bar.
 const TONE: Record<WorkflowRun["state"], string> = {
     running: `text-link`,
     done: `text-success`,
@@ -51,7 +51,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         :class="[
             /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it
                rather than one of them. The attention bar is the agent card's, unchanged in colour and
-               width — but SOLID, because a dashed left edge at twice the weight of the rest is not one bar, it
+               width, but SOLID, because a dashed left edge at twice the weight of the rest is not one bar, it
                is a column of ticks beside a dashed outline, and the two dashed rhythms at different weights
                read as a rendering fault. `border-style` is per-side in CSS; Tailwind has no per-side utility
                for it.
@@ -77,38 +77,38 @@ const TONE: Record<WorkflowRun["state"], string> = {
             </span>
             <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ run.workflow.name }}</span>
             <!-- A step inside this card is waiting on an answer. It wears the agent card's own attention chip,
-                 because that step no longer has a card of its own to wear it on — hiding the sessions inside
+                 because that step no longer has a card of its own to wear it on: hiding the sessions inside
                  the run means the run answers for them. -->
             <span
                 v-if="needsYou"
-                v-tooltip.top="`A step is waiting on you — open the run to answer it`"
+                v-tooltip.top="`A step is waiting on you: open the run to answer it`"
                 class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning"
                 >needs you</span
             >
             <button
                 type="button"
                 aria-label="Open the run's graph"
-                v-tooltip.top="`Open the graph — every step, and what each one decided`"
+                v-tooltip.top="`Open the graph: every step, and what each one decided`"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`graph`)"
             >
                 <Icon name="external-link" class="text-2xs" />
             </button>
             <!-- The ENDED run's exit, in the slot Stop occupies while it is going and on the agent card's own
-                 hover-action terms — because it IS the agent card's Archive, aimed at a whole graph. The lane
+                 hover-action terms, because it IS the agent card's Archive, aimed at a whole graph. The lane
                  needs one: nothing about a run transitions once it is over, so a failed run sits in Attention
                  until fifty more roll it off the ledger.
                  It takes the run's SESSIONS with it, which is what makes it an archive rather than the
                  dismissal it used to be: the steps have no cards of their own, so dropping the record alone
                  was the press that scattered a finished job's conversations back across the lanes. Lossless on
-                 the agent card's terms — branches, transcripts and counters stay, and Restore below is
-                 permanent rather than a receipt that has to still be on screen — which is what earns the
+                 the agent card's terms: branches, transcripts and counters stay, and Restore below is
+                 permanent rather than a receipt that has to still be on screen, which is what earns the
                  missing dialog. -->
             <button
                 v-if="run.state !== `running` && run.archivedAt === undefined"
                 type="button"
                 aria-label="Archive this run"
-                v-tooltip.top="`Archive — takes the run and its sessions off the board. Branches and transcripts are kept.`"
+                v-tooltip.top="`Archive: takes the run and its sessions off the board. Branches and transcripts are kept.`"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`archive`)"
             >
@@ -133,7 +133,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 v-if="run.state === `running`"
                 type="button"
                 aria-label="Stop this workflow run"
-                v-tooltip.top="`Stop the run — its steps are cut off where they are and nothing new starts.`"
+                v-tooltip.top="`Stop the run: its steps are cut off where they are and nothing new starts.`"
                 :disabled="stopping"
                 class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-40"
                 @click.stop="emit(`stop`)"

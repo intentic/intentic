@@ -11,13 +11,13 @@ import { loadTrialStatus, usePaneView } from "../composables/chat/useChat";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import ChatAccountPanel from "./ChatAccountPanel.vue";
 
-/* WHAT THIS CHAT'S STANDING IS, said above the composer — the strips that report a state the conversation
+/* WHAT THIS CHAT'S STANDING IS, said above the composer: the strips that report a state the conversation
  * arrived at by itself, each with the one press that answers it.
  *
  * They are together because they are the same kind of thing and share one slot's worth of the reader's
  * attention, in this order: what this agent IS (archived), what it can send with (the account gate, the trial,
- * an expired credential), and what happened to the last turn (an outage). What the composer is FOR — a
- * continuation waiting on a press, an armed edit — stays with the composer: those describe the box, not the
+ * an expired credential), and what happened to the last turn (an outage). What the composer is FOR: a
+ * continuation waiting on a press, an armed edit, stays with the composer: those describe the box, not the
  * chat.
  *
  * Everything here reads this pane's own conversation through the injected view, never the focused one: with two
@@ -28,15 +28,15 @@ const { reachable } = useSandbox();
 const { agentById, archived, loadArchived, restore, busyIds, setResumeAfterOutage } = useAgents();
 
 /* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be
- * READ in a tab — opened from the archive view, or filed away by the daemon's retention sweep while it sat open.
+ * READ in a tab: opened from the archive view, or filed away by the daemon's retention sweep while it sat open.
  * Such a tab must not look live, so the pane says the agent is off the board and offers the one press back. The
  * line also spends its second half on the fact nothing else here could tell the user: a message sent from this
- * tab un-archives the agent (the daemon rebuilds the entry without its marker — registry.begin), which is a
+ * tab un-archives the agent (the daemon rebuilds the entry without its marker: registry.begin), which is a
  * feature, not a surprise to walk into.
  *
  * Archived agents ride their own list rather than the live roster, so it has to be asked for. On the REACHABLE
  * seam, not at setup: this pane mounts with the shell, long before the daemon is answering, and a read fired
- * then simply fails — leaving every archived tab in the app looking live until the user happened to open the
+ * then simply fails: leaving every archived tab in the app looking live until the user happened to open the
  * board. Only while the list is empty, so the one request is not repeated per reconnect once it has landed. */
 watch(
     reachable,
@@ -55,8 +55,8 @@ const activeArchived = computed(() => {
 /* What the trial strip says, or nothing at all when this conversation isn't on the trial.
  *
  * Two sentences, because there are two states worth interrupting for and they want opposite things from the
- * reader. While there is allowance left the message LEADS WITH THE COUNT and then discloses — these messages
- * pass through intentic — which the user needs before typing, not after. Once it is spent the disclosure is moot
+ * reader. While there is allowance left the message LEADS WITH THE COUNT and then discloses: these messages
+ * pass through intentic, which the user needs before typing, not after. Once it is spent the disclosure is moot
  * and the only useful sentence is where to go next, which is the free Google sign-in: no daily cap, still no
  * subscription.
  *
@@ -70,23 +70,23 @@ const trialNotice = computed(() => {
         return undefined;
     }
     if (trialExhausted(provider.value)) {
-        return `Free trial used up for today. Connect a Google account to keep going free — no subscription, no daily cap.`;
+        return `Free trial used up for today. Connect a Google account to keep going free: no subscription, no daily cap.`;
     }
     if (trialStatus.value.health === `unavailable`) {
-        return `Free trial temporarily unavailable — failed messages aren’t counted.`;
+        return `Free trial temporarily unavailable: failed messages aren't counted.`;
     }
     if (trialStatus.value.health === `degraded`) {
-        return `Free trial service is degraded — another upstream key may still answer, and failed messages aren’t counted.`;
+        return `Free trial service is degraded: another upstream key may still answer, and failed messages aren't counted.`;
     }
     const remaining = trialStatus.value.remaining;
     const left = `${remaining} free ${remaining === 1 ? `message` : `messages`} left today`;
     /* WHICH MODEL ANSWERED, once one has. The trial publishes a single row and picks a real model per message
      * (the platform's trial-ladder.ts), so without this the user cannot tell a weak answer from a fallback rung
-     * — and neither can we, reading their bug report. It leads the sentence only after a turn has run: before
+     *, and neither can we, reading their bug report. It leads the sentence only after a turn has run: before
      * that there is nothing true to say, and a placeholder would be a promise about a choice not yet made. */
     const served = trialStatus.value.servedModel;
     const answered = served === undefined ? `` : `Last answer: ${served}. `;
-    return `${answered}${left} — a step of an agent's turn spends one. ${TRIAL_NOTICE}`;
+    return `${answered}${left}: a step of an agent's turn spends one. ${TRIAL_NOTICE}`;
 });
 const retryTrial = async (): Promise<void> => {
     if (!reachable.value) {
@@ -96,7 +96,7 @@ const retryTrial = async (): Promise<void> => {
     await conversation.value.resume();
 };
 
-// This conversation's account when its stored credential can no longer be refreshed — surfaced as a pre-send
+// This conversation's account when its stored credential can no longer be refreshed: surfaced as a pre-send
 // banner so the user reconnects before hitting an opaque failure mid-turn (Codex today).
 const activeAccountReauth = computed(() => {
     const id = account.value ?? accounts.value[0]?.id;
@@ -105,19 +105,19 @@ const activeAccountReauth = computed(() => {
 
 /* The outage banner (Conversation.failures.outageResume). A spent usage limit gets no equivalent: it has a known
  * reset instant and nothing anyone can do before it, so the transcript notice naming that instant says
- * everything there is to say. An outage has no known end, which is why it needs a live banner — its whole job is
+ * everything there is to say. An outage has no known end, which is why it needs a live banner: its whole job is
  * to answer "is anything still happening?", which during an outage is the only question anyone has. When the
  * resume is off it is instead the offer to arm it, which arms the very turn that bounced (the daemon remembered
  * it either way).
  *
  * THE PRESS ARMS THIS CHAT AND NOTHING ELSE. It used to write the sandbox-wide setting, and the gap between what
- * the button looked like — one line in one conversation, under one dead turn — and what it did was the whole
+ * the button looked like: one line in one conversation, under one dead turn, and what it did was the whole
  * bug: a person finishing one piece of work at midnight silently signed every agent on the board up to re-run
  * its turns on their allowance. So it writes this conversation's own override (agents.resumeAfterOutage) and the
  * sandbox default stays where a standing policy belongs, in Sandbox ▸ Agent.
  *
  * …and the same press pointing the other way. `false`, not null: somebody stopping a retry they can watch
- * counting down means THIS chat, now — handing it back to a default that may well say "resume" would restart the
+ * counting down means THIS chat, now: handing it back to a default that may well say "resume" would restart the
  * very thing they just stopped. The daemon keeps the stranded turn either way; it simply stops offering it to
  * the breaker, and the hour-long staleness sweep retires it. */
 const outageResume = computed(() => conversation.value.failures.outageResume.value);
@@ -135,7 +135,7 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
         }
         conversation.value.failures.disarmOutageResume();
     } catch {
-        // Left as it stands, in both directions — the offer stays up to press again and the countdown stays
+        // Left as it stands, in both directions: the offer stays up to press again and the countdown stays
         // honest until the daemon has actually been told otherwise. A banner that vanished on a failed write
         // would claim a resume nobody armed.
     } finally {
@@ -146,16 +146,16 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
 
 <template>
     <!-- This conversation's agent is off the board. Muted, not a warning: archiving loses nothing (the branch,
-         the diff, the transcript and every counter stay — this tab is the proof), so the line states a fact
-         rather than raising an alarm. It carries the one thing no other surface could tell the user in time —
-         that sending from here un-archives the agent — and the press that does it deliberately, without sending
+         the diff, the transcript and every counter stay: this tab is the proof), so the line states a fact
+         rather than raising an alarm. It carries the one thing no other surface could tell the user in time:
+         that sending from here un-archives the agent, and the press that does it deliberately, without sending
          anything. -->
     <div
         v-if="activeArchived !== undefined"
         class="flex items-center gap-2 rounded-xl border border-line bg-overlay/60 px-3 py-2 text-2xs text-muted"
     >
         <Icon name="box" class="shrink-0" />
-        <span class="min-w-0 flex-1">Archived — off the agents board. Sending a message puts it back.</span>
+        <span class="min-w-0 flex-1">Archived: off the agents board. Sending a message puts it back.</span>
         <button
             type="button"
             class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
@@ -170,7 +170,7 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
     <!-- THE TRIAL'S STANDING DISCLOSURE. The picker says it once, at the moment of choosing; this says it for as
          long as the choice is in force, because the person typing may not be the person who picked, and a
          conversation can outlive the click that started it. Exhausted, the same strip becomes the signpost to
-         the free Google sign-in — the next rung, and the one with no daily cap. -->
+         the free Google sign-in: the next rung, and the one with no daily cap. -->
     <div
         v-if="trialNotice"
         class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line bg-overlay/40 px-3 py-2 text-left text-2xs text-muted"
@@ -196,7 +196,7 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
         </RouterLink>
     </div>
     <!-- Proactive re-auth prompt: the account is connected (a credential exists) but can no longer be refreshed,
-         so surface it here — before a send fails opaquely — with a jump to reconnect. -->
+         so surface it here (before a send fails opaquely) with a jump to reconnect. -->
     <RouterLink
         v-if="activeAccountReauth"
         :to="{ path: '/sandbox/agent', query: { connect: provider } }"
@@ -208,7 +208,7 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
         >
     </RouterLink>
     <!-- Provider-outage banner: the turn is coming back on an escalating backoff, and this says when and how
-         many tries are left. Naming the bound is the point — an automation spending the user's allowance while
+         many tries are left. Naming the bound is the point: an automation spending the user's allowance while
          they watch has to account for itself, or the reasonable response is to switch it back off. -->
     <div
         v-if="outageResume"
@@ -216,7 +216,7 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
     >
         <Icon name="clock" class="mt-0.5 shrink-0" />
         <span v-if="outageResume.scheduled" class="min-w-0 flex-1"
-            >This chat is picking the turn back up by itself in {{ formatWait(outageResume.retryAt) }} — attempt {{ outageResume.attempt }} of
+            >This chat is picking the turn back up by itself in {{ formatWait(outageResume.retryAt) }}: attempt {{ outageResume.attempt }} of
             {{ outageResume.maxAttempts }} since the provider failed it. Sending again yourself works too.</span
         >
         <!-- THE WAY BACK OUT, in the surface that armed it. Symmetry is the point: a press that starts something
@@ -231,7 +231,7 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
         >
             Stop
         </button>
-        <!-- The button arms THIS CHAT and nothing else, which is the one thing about it worth saying — so the
+        <!-- The button arms THIS CHAT and nothing else, which is the one thing about it worth saying, so the
              sentence says it, in the words the press is made of ("this chat", "keep going") rather than in the
              name of a setting. The old copy admitted the sandbox-wide blast radius in a parenthesis, which is
              exactly the place nobody reads before pressing; the honest fix was to make the press smaller, not

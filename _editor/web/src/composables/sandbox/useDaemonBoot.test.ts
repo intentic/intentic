@@ -16,7 +16,7 @@ describe(`useDaemonBoot`, () => {
     });
 
     it(`assumes ready from a daemon too old to report a boot at all`, () => {
-        // Silence is not evidence of a warm-up — such a daemon behaves exactly as it did before the frame.
+        // Silence is not evidence of a warm-up: such a daemon behaves exactly as it did before the frame.
         setDaemonBoot(undefined);
         expect(daemonReady.value).toBe(true);
     });
@@ -44,7 +44,7 @@ describe(`useDaemonBoot`, () => {
     it(`forgets the previous sandbox's boot on switch`, () => {
         setDaemonBoot(progress(false, { key: `registry`, label: `Loading conversations`, state: `running` }));
         resetDaemonBoot();
-        // Another sandbox is on its own clock — carrying this over would gate a daemon that is long since up.
+        // Another sandbox is on its own clock: carrying this over would gate a daemon that is long since up.
         expect(daemonReady.value).toBe(true);
         expect(bootSteps.value).toEqual([]);
     });

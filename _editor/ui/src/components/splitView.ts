@@ -1,7 +1,7 @@
 import { computed, inject, provide, type ComputedRef, type InjectionKey } from "vue";
 import { useDevice } from "../composables/useDevice.js";
 
-/* IS THE SPLIT FOLDED — <SplitView>'s own answer, published to whatever it renders in its rail.
+/* IS THE SPLIT FOLDED: <SplitView>'s own answer, published to whatever it renders in its rail.
  *
  * The rail and the shell have to agree, and only one of them can measure. A rail that swaps itself to a compact
  * control (a Picker instead of a column of rows) used to ask `useDevice().mobile`, which is a fact about the

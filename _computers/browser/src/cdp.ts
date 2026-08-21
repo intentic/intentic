@@ -104,7 +104,7 @@ export const attach = async (wsUrl: string): Promise<CdpSession> => {
     socket.addEventListener("close", () => {
         for (const [, waiter] of pending) {
             clearTimeout(waiter.timer);
-            waiter.reject(new BrowserError("The browser closed the connection — the tab was probably closed."));
+            waiter.reject(new BrowserError("The browser closed the connection: the tab was probably closed."));
         }
         pending.clear();
     });

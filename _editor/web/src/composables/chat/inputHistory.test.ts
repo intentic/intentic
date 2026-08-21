@@ -34,7 +34,7 @@ describe(`InputHistory`, () => {
         expect(history.previous(``)).toBe(`two`);
         expect(history.previous(``)).toBe(`one`);
         expect(history.recalling).toBe(true);
-        // Already at the oldest — undefined leaves the key to the browser rather than re-pasting `one`.
+        // Already at the oldest: undefined leaves the key to the browser rather than re-pasting `one`.
         expect(history.previous(``)).toBeUndefined();
     });
 
@@ -118,7 +118,7 @@ describe(`InputHistory`, () => {
 });
 
 describe(`recallStep`, () => {
-    // Long enough to wrap over several rows in the composer while still being ONE line of text — the draft the
+    // Long enough to wrap over several rows in the composer while still being ONE line of text: the draft the
     // caret step exists for.
     const wrapped = `please review the diff and tell me whether the caching layer still makes sense`;
     const stocked = (): InputHistory => {

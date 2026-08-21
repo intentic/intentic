@@ -8,19 +8,19 @@ import { manageMachineSandbox, useHostRunning } from "../composables/sandbox/use
 import { DESKTOP_DOWNLOADS, desktopRecreateLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
 
-/* RECREATING THE SANDBOX — which the browser cannot do itself, but no longer has to hand to a terminal.
+/* RECREATING THE SANDBOX, which the browser cannot do itself, but no longer has to hand to a terminal.
  *
  * The daemon holds no HOST Docker socket (its own engine is nested), so it can never recreate its own
- * container. Both moments that need one — an update to a newer image, and building an owner-approved
- * environment overlay — therefore end here, on the machine the container runs on. Two cards used to state
+ * container. Both moments that need one: an update to a newer image, and building an owner-approved
+ * environment overlay: therefore end here, on the machine the container runs on. Two cards used to state
  * that separately and hand out a bash-only one-liner each; this is the one place that says it.
  *
  * Four renderings of the same operation, in the order of how little work they ask for:
- *   • the machine is a CONNECTED COMPUTER — a button, from any browser on any device, with the machine's own
+ *   • the machine is a CONNECTED COMPUTER: a button, from any browser on any device, with the machine's own
  *     output streaming in beneath it. Nothing about this needs the user to be at that computer.
- *   • inside the desktop app — a button, because the app IS a process on that machine (intentic://recreate)
- *   • in a browser on Windows/Linux/macOS — the command, for the shell that machine actually has
- *   • in a browser with no app — the same command, plus where to get the app so the next one is a button
+ *   • inside the desktop app: a button, because the app IS a process on that machine (intentic://recreate)
+ *   • in a browser on Windows/Linux/macOS: the command, for the shell that machine actually has
+ *   • in a browser with no app: the same command, plus where to get the app so the next one is a button
  *
  * The first is preferred over the second even inside the app: the deep link hands the window over to the
  * launcher face, and staying on the page you were reading is worth more than that handoff.
@@ -31,7 +31,7 @@ import { bashCommand, psCommand } from "../environments/scriptCommand";
  * The mode rides the ARGUMENT SHAPE, not a flag, exactly as recreate.sh has always read it: a hash means
  * "build the approved overlay pinned to this digest", no hash means "pull the fresh :stable base".
  *
- * ——— AND ONE ACTION THAT IS NOT A RECREATE AT ALL ———
+ * --- AND ONE ACTION THAT IS NOT A RECREATE AT ALL ---
  *
  * `Download` runs the same flow up to the point where the container would be touched, and stops: it pulls the
  * new image and rebuilds the environment recipe, leaving the sandbox running exactly what it was running.
@@ -40,16 +40,16 @@ import { bashCommand, psCommand } from "../environments/scriptCommand";
  * It is here rather than on a component of its own because it needs all four renderings for the same reasons
  * the others do, and because splitting it out would be the second implementation of "ask this machine to run
  * `ic`". What it changes is the sentence underneath: with the download already done, an update stops being an
- * unbounded wait and becomes a restart of about half a minute — which is the whole point of offering it. */
+ * unbounded wait and becomes a restart of about half a minute, which is the whole point of offering it. */
 
 type Action = `Download` | `Update` | `Rebuild` | `Roll back`;
 
 const props = defineProps<{
     slug: string;
-    /// The approved overlay's sha256 — present for a rebuild, absent for everything else.
+    /// The approved overlay's sha256: present for a rebuild, absent for everything else.
     hash?: string;
-    /// What the button says. The command block is labelled from the same word, and — for the three modes that
-    /// share the update script — it is also what selects between them.
+    /// What the button says. The command block is labelled from the same word, and: for the three modes that
+    /// share the update script: it is also what selects between them.
     action: Action;
     /// Whether the image this action needs is already on that machine, so the wait it describes is the restart
     /// alone. Supplied by the update card, which is where the fact lives.
@@ -63,7 +63,7 @@ const desktop = computed(() => desktopVersion() !== undefined);
 const hostId = useHostRunning(() => props.slug);
 const OP: Record<Action, MachineSandboxOp> = { Download: `prepare`, Update: `update`, Rebuild: `rebuild`, "Roll back": `rollback` };
 
-/* WHAT IT COSTS, said in the one place all four renderings read from — and said accurately, which it was not.
+/* WHAT IT COSTS, said in the one place all four renderings read from, and said accurately, which it was not.
  *
  * This used to promise "a few minutes and this page loses the sandbox" for every mode. That is the download's
  * duration attached to the restart's description: the sandbox is up and serving through the pull and the
@@ -71,10 +71,10 @@ const OP: Record<Action, MachineSandboxOp> = { Download: `prepare`, Update: `upd
  * was being quoted an outage several times longer than the one that actually happens. */
 const cost = computed(() => {
     if (props.action === `Download`) {
-        return `It downloads and builds the update in the background. Nothing restarts and nothing is interrupted — your sandbox keeps working throughout.`;
+        return `It downloads and builds the update in the background. Nothing restarts and nothing is interrupted: your sandbox keeps working throughout.`;
     }
     if (props.ready === true) {
-        return `It is already downloaded, so this is just the restart — about half a minute. Your files (in /work) are kept.`;
+        return `It is already downloaded, so this is just the restart: about half a minute. Your files (in /work) are kept.`;
     }
     return `It downloads and builds first, which interrupts nothing, then restarts your sandbox for about half a minute. Your files (in /work) are kept.`;
 });
@@ -84,13 +84,13 @@ const lines = ref<string[]>([]);
 const failure = ref<NoticeModel | undefined>(undefined);
 const done = ref<string | undefined>(undefined);
 
-/* Recreating THIS sandbox ends this page's connection to it, every time — that is what recreating means, and it
+/* Recreating THIS sandbox ends this page's connection to it, every time: that is what recreating means, and it
  * is why the command this replaces was always run somewhere else. Said before it starts rather than discovered
  * when the page goes quiet.
  *
  * `Download` is asked nothing, because it takes nothing: it never touches the container, so there is no
  * interruption to warn about and an abandoned one costs only bandwidth. A confirmation on it would be a dialog
- * whose honest text is "this changes nothing, proceed?" — and it would make the safe option feel like the
+ * whose honest text is "this changes nothing, proceed?", and it would make the safe option feel like the
  * dangerous one, which is the exact opposite of why it is offered. */
 const runOnMachine = async (): Promise<void> => {
     const id = hostId.value;
@@ -121,7 +121,7 @@ const runOnMachine = async (): Promise<void> => {
     }
 };
 
-/* Rollback rides the update script with a flag — one script, three ways in, exactly as rebuild does with its
+/* Rollback rides the update script with a flag: one script, three ways in, exactly as rebuild does with its
  * hash (see recreate.sh's argument-shape dispatch, and recreate.ps1's `-Rollback` switch beside its `-Hash`).
  * Windows used to fall through to the plain update command here, which is the one spelling where "Roll back"
  * printed a command that would have moved the sandbox the other way. */
@@ -151,7 +151,7 @@ const command = computed(() => {
 
 <template>
     <div class="flex flex-col gap-2">
-        <!-- The machine is reachable from here, so this is a button wherever you are reading it — a phone on
+        <!-- The machine is reachable from here, so this is a button wherever you are reading it: a phone on
              another continent included. -->
         <template v-if="hostId">
             <Button
@@ -169,7 +169,7 @@ const command = computed(() => {
                 :lines="lines"
                 :running="running"
                 empty="Starting on that computer…"
-                note="Running on that computer — it keeps going even if you leave this page."
+                note="Running on that computer: it keeps going even if you leave this page."
             />
             <Notice v-if="failure" :of="failure" />
             <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
@@ -179,7 +179,7 @@ const command = computed(() => {
              the verb now, so the link that hands one over no longer has a mode it cannot express.
 
              Downloading is the one it cannot, because `intentic://recreate` has no parameter for "stop before
-             the container is touched" — so that action falls through to the command below, which the app's own
+             the container is touched", so that action falls through to the command below, which the app's own
              machine can run as it stands. A button that quietly performed the whole update instead would be
              the worst possible outcome of clicking the safe option. -->
         <template v-else-if="desktop && action !== `Download`">
@@ -207,7 +207,7 @@ const command = computed(() => {
             <!-- Offered here rather than only at setup: this is the card someone reaches for the third time,
                  which is the moment "there is an app that does this" is worth reading. -->
             <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
-                <span>Skip the terminal next time —</span>
+                <span>Skip the terminal next time:</span>
                 <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">Intentic for Windows</a>
                 <span>·</span>
                 <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="text-link hover:underline">Linux</a>

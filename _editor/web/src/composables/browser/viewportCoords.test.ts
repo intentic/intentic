@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { pictureRect, viewportCoords } from "./viewportCoords";
 
-// The remote viewport both screencast surfaces map onto (screencast.ts VIEW_WIDTH/VIEW_HEIGHT) — 8:5.
+// The remote viewport both screencast surfaces map onto (screencast.ts VIEW_WIDTH/VIEW_HEIGHT): 8:5.
 const WIDTH = 1280;
 const HEIGHT = 800;
 
@@ -19,7 +19,7 @@ test("a pane of the remote shape maps one-for-one", () => {
 });
 
 /* THE BUG THIS RULE EXISTS FOR. The frame is object-contain'd, so in a pane wider than 8:5 it paints in a
- * centred column with black either side — and measuring the PANE instead of that column drags every x toward
+ * centred column with black either side, and measuring the PANE instead of that column drags every x toward
  * the middle. Here the picture occupies 1280 of a 2560-wide pane: a click 640px in is its left edge, which the
  * old rule (clientX / paneWidth * 1280) called x=320, a third of the way into the page. */
 test("a pane wider than the remote shape measures the picture, not the letterbox", () => {
@@ -41,7 +41,7 @@ test("the pane's own offset on the page is subtracted", () => {
 });
 
 test("scaled panes divide back out", () => {
-    // Half size — a click 100px in is 200 remote px.
+    // Half size: a click 100px in is 200 remote px.
     expect(at({ left: 0, top: 0, width: WIDTH / 2, height: HEIGHT / 2 }, 100, 50)).toEqual({ x: 200, y: 100 });
 });
 
@@ -65,7 +65,7 @@ const placed = (box: { left: number; top: number; width: number; height: number 
     );
 
 /* WHERE THE DROP-DOWN MENU GOES. A <select> is reported in the page's own coordinates and the menu has to open
- * over it, so this is viewportCoords run backwards — and it has to letterbox identically or the menu drifts off
+ * over it, so this is viewportCoords run backwards, and it has to letterbox identically or the menu drifts off
  * the control that opened it, by exactly the half-letterbox the forward rule exists to subtract. */
 test("a rect from the page lands on the picture, letterbox and all", () => {
     // One-for-one pane: the control is where it says it is.

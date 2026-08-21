@@ -3,7 +3,7 @@
 // The card two surfaces share (the chat tab strip, the Changes panel's origin chips). Driven through the real
 // component, because the rules worth pinning are the ones a caller can't see: where it lands relative to its
 // anchor, that it declines to open on content that says nothing, that it drops a message that only repeats the
-// title — the common case, since a one-line first message IS its own derived title — and that a prompt's
+// title: the common case, since a one-line first message IS its own derived title, and that a prompt's
 // pictures are drawn at the card's full width rather than inside its padding.
 import { expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
@@ -63,7 +63,7 @@ it(`reveals the full title, and the first message under it`, async () => {
 
 // The pair the chat rail hovers on: what the conversation was for, and what it is about NOW. The title is
 // derived from the first message and stops being a description of a long session hours ago, so the last prompt
-// is the only line on the card that says where it has got to — and it is labelled, because two unmarked blocks
+// is the only line on the card that says where it has got to, and it is labelled, because two unmarked blocks
 // of the user's own words don't say which end is which.
 it(`shows the latest message under the first, labelled`, async () => {
     const { card, text } = await mount();
@@ -149,7 +149,7 @@ it(`drops a message that only repeats the title, and stays shut with nothing to 
 });
 
 /* THE PICTURES A PROMPT CAME WITH, drawn edge to edge. A screenshot is often the whole of what was asked, and at
- * 320px a card that also paid its own padding out of the image would be showing a thumbnail of a thumbnail — so
+ * 320px a card that also paid its own padding out of the image would be showing a thumbnail of a thumbnail, so
  * the row breaks back out through the padding it sits in.
  *
  * A message whose words merely repeat the title keeps its block here rather than being dropped with them: the
@@ -170,12 +170,12 @@ it(`draws a prompt's images at the card's full width, past its padding`, async (
 });
 
 /* A PICTURE IS NEVER CUT, and never sized by arithmetic. It used to be `object-cover` from the top under a
- * computed ceiling, which on the common case — a portrait capture of one panel, subject in the lower half —
+ * computed ceiling, which on the common case: a portrait capture of one panel, subject in the lower half:
  * kept the empty canvas above the subject and threw away the subject.
  *
  * So there is no height on the picture at all now: the card is a flex column, the words hold their lines, and
  * the picture takes what is left and shrinks into it. That is the whole rule, and jsdom lays nothing out, so
- * what is pinned here is the arrangement that produces it — including `min-h-0`, without which a replaced
+ * what is pinned here is the arrangement that produces it: including `min-h-0`, without which a replaced
  * element refuses to shrink and gets clipped by the card's edge instead, which is the old bug in a new place. */
 it(`draws a picture whole, sized by the room the card has left`, async () => {
     const { card, style } = await mount();
@@ -192,7 +192,7 @@ it(`draws a picture whole, sized by the room the card has left`, async () => {
     card.hide();
 });
 
-// The send-time object URL wins where the page still has one — the same picture the sent bubble is showing,
+// The send-time object URL wins where the page still has one: the same picture the sent bubble is showing,
 // without a second trip to the daemon for bytes this browser already holds.
 it(`prefers an attachment's own preview url over refetching it`, async () => {
     const { card } = await mount();
@@ -207,7 +207,7 @@ it(`prefers an attachment's own preview url over refetching it`, async () => {
 
 /* A card may not grow past the edge it was placed against. Text clamps itself to a known number of lines; an
  * image is however tall the user's screenshot was, so without a cap a two-screenshot hover near the bottom of a
- * rail runs off the window — and nothing can scroll a card the pointer passes straight through. */
+ * rail runs off the window, and nothing can scroll a card the pointer passes straight through. */
 it(`caps its height at the room its corner leaves`, async () => {
     const { card, style } = await mount();
     card.show(anchorEvent({ left: 40, top: 600, width: 120 }), { title: `Fix the tab strip` });

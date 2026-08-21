@@ -1,7 +1,7 @@
 import type { ChatTool } from "../composables/chat/transcript";
 import { diffStat } from "./chatToolDiff";
 
-/* Consecutive tool calls that do exactly the same thing — 30 edits to the same file, a batch of reads against
+/* Consecutive tool calls that do exactly the same thing: 30 edits to the same file, a batch of reads against
  * one directory, are noise when each gets its own card. This module groups them into a single collapsed row
  * that shows the count and aggregated stats, expandable to the individual cards. The grouping is RENDERING
  * only: the transcript model stays flat, and a group unfolds to the same cards it would have shown ungrouped.

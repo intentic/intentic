@@ -111,7 +111,7 @@ export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> =>
  * listening: none of them are worth telling apart, and none of them are errors the user should see. */
 export const probeEndpoint = async (endpoint: Endpoint, expectedSandboxId: string, fetchImpl: typeof fetch = fetch): Promise<boolean> => {
     if (endpoint.kind === `tunnel`) {
-        return true; // the registry's own address — the fallback, never something we qualify
+        return true; // the registry's own address: the fallback, never something we qualify
     }
     try {
         const response = await fetchImpl(`${endpoint.base}/health`, { cache: `no-store`, signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });

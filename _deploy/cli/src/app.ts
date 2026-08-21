@@ -45,7 +45,7 @@ const tunnel = buildRouteMap({
         sandbox: sandboxTunnel,
         host: hostSshTunnel,
     },
-    docs: { brief: "Sandbox reachability — mint the sandbox's own Cloudflare tunnels (used by connect.sh)" },
+    docs: { brief: "Sandbox reachability, mint the sandbox's own Cloudflare tunnels (used by connect.sh)" },
 });
 
 const deploy = buildRouteMap({
@@ -61,7 +61,7 @@ const deploy = buildRouteMap({
         deployments: deploymentsCommand,
         logs: logsCommand,
     },
-    docs: { brief: "The bundled deployment engine — declare intent, reconcile your own infrastructure" },
+    docs: { brief: "The bundled deployment engine, declare intent, reconcile your own infrastructure" },
 });
 
 // The image speaking its own run contract (see sandbox-run.command.ts): connect.sh/recreate.sh execute what
@@ -72,7 +72,7 @@ const sandbox = buildRouteMap({
         runCommand: sandboxRunCommandCli,
         hostProbes: hostProbesCli,
     },
-    docs: { brief: "The sandbox container's own run contract — print the canonical docker-run command" },
+    docs: { brief: "The sandbox container's own run contract, print the canonical docker-run command" },
 });
 
 const scaffold = buildRouteMap({
@@ -80,13 +80,13 @@ const scaffold = buildRouteMap({
         monorepo: monorepoCommand,
         addApp: addAppCommand,
     },
-    docs: { brief: "Scaffold app repositories — a pnpm+turbo monorepo and its apps" },
+    docs: { brief: "Scaffold app repositories, a pnpm+turbo monorepo and its apps" },
 });
 
 export const app = buildApplication(
     buildRouteMap({
         routes: { tunnel, sandbox, deploy, scaffold },
-        docs: { brief: "intentic — the sandbox toolbox: tunnel · sandbox · deploy · scaffold" },
+        docs: { brief: "intentic, the sandbox toolbox: tunnel · sandbox · deploy · scaffold" },
     }),
     {
         name: "intentic",

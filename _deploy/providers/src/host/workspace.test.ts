@@ -131,7 +131,7 @@ test("apply ensures the network, then runs the sandbox unprivileged with interna
     expect(outputs).toEqual(OUTPUTS);
     expect(ssh.commands.some((c) => c.includes("docker network") && c.includes("intentic-workspace"))).toBe(true);
     const run = ssh.commands.find((c) => c.includes("docker run")) ?? "";
-    // Unprivileged by default — the HOST's docker socket is never mounted, no root override, and no
+    // Unprivileged by default: the HOST's docker socket is never mounted, no root override, and no
     // privileges or devices without an overlay carrying runtime directives.
     expect(run).not.toContain("--privileged");
     expect(run).not.toContain("--user root");
@@ -203,7 +203,7 @@ test("apply rejects a runtime directive outside the allowlist before touching th
     await expect(
         createWorkspaceProvider(ssh.executor).apply({ ...inputs, dockerfile: `${DOCKERFILE}# intentic:runtime --pid=host\n` }, undefined, ctx()),
     ).rejects.toThrow("unsupported runtime directive");
-    // Validation runs before the build — the host was never touched.
+    // Validation runs before the build: the host was never touched.
     expect(ssh.commands).toHaveLength(0);
 });
 

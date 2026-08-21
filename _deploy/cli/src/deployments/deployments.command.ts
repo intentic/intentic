@@ -13,7 +13,7 @@ export const deploymentsCommand = buildCommand<{ artifact?: string }>({
     async func(this: CommandContext, flags: { artifact?: string }) {
         const out = createOutput(withRunLog(this.process.stdout, "deployments"), loadConfig().intenticOutput);
         const { deployments, komodoReachable } = await collectDeployments(flags.artifact ?? ARTIFACT_PATH, out.log);
-        out.text(`${deployments.length} deployment(s)${komodoReachable === false ? " — komodo not reachable, desired config only" : ""}`);
+        out.text(`${deployments.length} deployment(s)${komodoReachable === false ? ", komodo not reachable, desired config only" : ""}`);
         // Omitted entirely when no komodo is declared, absence must not read as "down" anywhere downstream.
         out.result({ deployments, ...(komodoReachable !== undefined ? { komodoReachable } : {}) });
     },

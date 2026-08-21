@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-// Statically imported for its LOAD COST alone — every test re-imports it through `load()` below, and the first
+// Statically imported for its LOAD COST alone: every test re-imports it through `load()` below, and the first
 // of those used to pull the whole graph (useEndpoint, the storage layer, vue) inside the first test's 20s
 // budget: ~0.6s idle, but ten times that on a runner where every core is busy, which is how this file failed
 // with the first test timing out and the other eleven passing in a second each. Collection is bounded by the
@@ -47,7 +47,7 @@ vi.mock("./useSandbox", () => ({
 }));
 vi.mock("./useDaemonRoutes", () => ({ routeAdvertised: () => state.advertised }));
 
-// Storage stub for the node test environment — the standard Storage surface, backed by a Map.
+// Storage stub for the node test environment: the standard Storage surface, backed by a Map.
 const stubStorage = (): void => {
     const map = new Map<string, string>();
     vi.stubGlobal(`localStorage`, {
@@ -97,7 +97,7 @@ it(`serves a valid stored session with no Google mint and no network`, async () 
     expect(state.minted).toBe(0);
 });
 
-it(`establishes a session from a Google proof — one exchange, persisted, then served from cache`, async () => {
+it(`establishes a session from a Google proof: one exchange, persisted, then served from cache`, async () => {
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => sessionResponse());
     vi.stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
@@ -125,7 +125,7 @@ it(`shares one in-flight establish across concurrent calls`, async () => {
     expect(state.minted).toBe(1);
 });
 
-it(`falls back to the raw ID token on a 404 exchange and stops probing — until the route is advertised`, async () => {
+it(`falls back to the raw ID token on a 404 exchange and stops probing, until the route is advertised`, async () => {
     const fetchMock = vi.fn(async () => new Response(`not found`, { status: 404 }));
     vi.stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
@@ -218,7 +218,7 @@ it(`a late establishment cannot repopulate credentials after clearSessions`, asy
     expect(localStorage.getItem(`intentic.session.sb-1`)).toBeNull();
 });
 
-it(`resolves undefined when the user dismisses the sign-in gate — nothing to exchange`, async () => {
+it(`resolves undefined when the user dismisses the sign-in gate. nothing to exchange`, async () => {
     state.idToken = undefined;
     const fetchMock = vi.fn();
     vi.stubGlobal(`fetch`, fetchMock);

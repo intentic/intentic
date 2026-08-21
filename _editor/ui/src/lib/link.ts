@@ -1,8 +1,8 @@
-/* WHOSE CLICK IS IT — the app's, or the browser's.
+/* WHOSE CLICK IS IT: the app's, or the browser's.
  *
  * Every row, tile and menu item in this app that goes somewhere is a real anchor, so the browser already knows
  * how to open it in a background tab (Ctrl/⌘), in a window (Shift) or as a download (Alt). What it does not
- * know is that the element ALSO carries app work — a router push, a popover to dismiss, a selection to move —
+ * know is that the element ALSO carries app work: a router push, a popover to dismiss, a selection to move:
  * and running that alongside is how a Ctrl-click ends up opening the tab AND navigating the tab you were
  * reading, which is the one outcome nobody asked for.
  *
@@ -10,10 +10,10 @@
  * written three different ways: hand it to the browser, and stand down.
  *
  * MIDDLE-CLICK IS NOT IN IT. A middle press fires `auxclick`, never `click`, so an anchor opens its own tab
- * without any handler hearing about it — the app's work simply never runs, which is already the right answer. */
+ * without any handler hearing about it: the app's work simply never runs, which is already the right answer. */
 export const browserOwnsClick = (event: MouseEvent): boolean => event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
 
-/* The rule above, as the two attributes an anchor needs — for the surfaces that cannot reach the app's router
+/* The rule above, as the two attributes an anchor needs: for the surfaces that cannot reach the app's router
  * and so cannot use a <RouterLink>: an extension view holds an app PATH and two functions from its host, and
  * nothing else.
  *

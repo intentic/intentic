@@ -1,7 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
 // The guarantee under test is the QUALITY CONTRACT of "Synthesize N": every source rides whole (reasoning,
-// tools, diffs, notices — not a summary), the preparation refuses WHOLE when any source can't be captured
-// completely, and the composed chat opens as a draft — prompt in the composer, transcripts as chips, nothing
+// tools, diffs, notices, not a summary), the preparation refuses WHOLE when any source can't be captured
+// completely, and the composed chat opens as a draft: prompt in the composer, transcripts as chips, nothing
 // sent until the user decides what to spend on it.
 import type { RestoredMessage } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +18,7 @@ vi.mock("../sandbox/useSandbox", async () => {
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }) };
 });
-// agentActions reaches ui's useDevice, which reads window.matchMedia at module scope — and the reveal is the
+// agentActions reaches ui's useDevice, which reads window.matchMedia at module scope, and the reveal is the
 // one thing this module takes from it, so the mock is also the assertion hook that the composed chat is shown.
 vi.mock("./agentActions", () => ({ revealConversation: vi.fn() }));
 
@@ -44,7 +44,7 @@ const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxUploadMock = vi.mocked(sandboxUpload);
 const { revealConversation } = await import("./agentActions");
 const { draftConversation, resetChat, reveal, useChat } = await import("../chat/useChat");
-// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
 // suites open extra tabs with.
 const newChat = () => {
     const conversation = draftConversation();
@@ -58,7 +58,7 @@ beforeEach(() => {
     local.clear();
     session.clear();
     resetChat();
-    // A daemon with nothing to say, unless the test says otherwise — an unmocked background call resolving to
+    // A daemon with nothing to say, unless the test says otherwise: an unmocked background call resolving to
     // `undefined` surfaces as an unhandled rejection attributed to whichever test happens to be running.
     sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
     sandboxUploadMock.mockResolvedValue(undefined);
@@ -68,7 +68,7 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-// Two settled conversations side by side — the board state the button appears for. Each gets a restored
+// Two settled conversations side by side: the board state the button appears for. Each gets a restored
 // transcript (so it reads as having completed turns) and a column of its own.
 const openTwoPanes = (): readonly [string, string] => {
     const chat = useChat();
@@ -89,7 +89,7 @@ const openTwoPanes = (): readonly [string, string] => {
     return [first.conversationId, second.conversationId];
 };
 
-// The daemon's record for each source, keyed by conversation id — what /agents/:id/transcript answers.
+// The daemon's record for each source, keyed by conversation id: what /agents/:id/transcript answers.
 const mockTranscripts = (byId: Record<string, RestoredMessage[]>): void => {
     sandboxRequestMock.mockImplementation((path: string) => {
         const match = /^\/agents\/([^/]+)\/transcript$/u.exec(path);
@@ -130,21 +130,21 @@ describe(`renderTranscript`, () => {
         ]);
 
         // The citation labels the synthesis prompt asks for, one per message, in order.
-        expect(rendered).toContain(`## A.1 — User`);
-        expect(rendered).toContain(`## A.2 — Assistant`);
-        expect(rendered).toContain(`## A.3 — Notice`);
-        // Everything the record retained rides along — nothing is summarized away.
+        expect(rendered).toContain(`## A.1: User`);
+        expect(rendered).toContain(`## A.2: Assistant`);
+        expect(rendered).toContain(`## A.3: Notice`);
+        // Everything the record retained rides along: nothing is summarized away.
         expect(rendered).toContain(`fix the build`);
         expect(rendered).toContain(`[attached: shot.png]`);
-        expect(rendered).toContain(`> Note — Turn context`);
+        expect(rendered).toContain(`> Note: Turn context`);
         expect(rendered).toContain(`### Thinking\nthe failure is in the config`);
-        expect(rendered).toContain(`▸ Bash — npm test (completed)`);
+        expect(rendered).toContain(`▸ Bash, npm test (completed)`);
         expect(rendered).toContain(`output:\n1 passed`);
         expect(rendered).toContain(`edit src/a.ts:`);
         expect(rendered).toContain(`--- before ---\nconst a = 1;`);
         expect(rendered).toContain(`--- after ---\nconst a = 2;`);
         expect(rendered).toContain(`[image: out/shot.png]`);
-        expect(rendered).toContain(`▸▸ Read — src/a.ts (completed)`);
+        expect(rendered).toContain(`▸▸ Read, src/a.ts (completed)`);
         expect(rendered).toContain(`the turn was refused`);
         // The guard framing: a source's own instructions are quotes, not orders to the synthesizer.
         expect(rendered).toContain(`QUOTED EVIDENCE`);
@@ -159,8 +159,8 @@ describe(`synthesisPrompt`, () => {
         ]);
 
         expect(prompt).toContain(`Synthesize the 2 attached agent conversations`);
-        expect(prompt).toContain(`- Source A — "Approach one" — .intentic/records/artifacts/attachments/u1/source-A-approach-one.md`);
-        expect(prompt).toContain(`- Source B — "Approach two" — .intentic/records/artifacts/attachments/u2/source-B-approach-two.md`);
+        expect(prompt).toContain(`- Source A: "Approach one", .intentic/records/artifacts/attachments/u1/source-A-approach-one.md`);
+        expect(prompt).toContain(`- Source B: "Approach two", .intentic/records/artifacts/attachments/u2/source-B-approach-two.md`);
         // The quality instructions the feature exists for: whole-transcript reads, independent analysis first,
         // evidence-based reconciliation, one integrated result with checkable citations, visible uncertainty.
         expect(prompt).toContain(`Read every transcript completely`);
@@ -194,7 +194,7 @@ describe(`synthesizeSessions`, () => {
         expect(sandboxUploadMock).not.toHaveBeenCalled();
     });
 
-    it(`refuses whole when any source's transcript cannot be captured — no partial synthesis`, async () => {
+    it(`refuses whole when any source's transcript cannot be captured: no partial synthesis`, async () => {
         const [first] = openTwoPanes();
         // Only the first source answers; the second has no record to snapshot.
         mockTranscripts({ [first]: [{ role: `user`, text: `try approach one` }] });
@@ -227,11 +227,11 @@ describe(`synthesizeSessions`, () => {
         expect(sandboxUploadMock).toHaveBeenCalledTimes(2);
         const uploads = await Promise.all(sandboxUploadMock.mock.calls.map(async ([path, body]) => ({ path, text: await (body as Blob).text() })));
         expect(uploads[0]!.path).toContain(encodeURIComponent(`.intentic/records/artifacts/attachments/`));
-        expect(uploads[0]!.text).toContain(`# Source A — "Approach one"`);
+        expect(uploads[0]!.text).toContain(`# Source A: "Approach one"`);
         expect(uploads[0]!.text).toContain(`done it one way`);
-        expect(uploads[1]!.text).toContain(`# Source B — "Approach two"`);
+        expect(uploads[1]!.text).toContain(`# Source B: "Approach two"`);
         // The composed chat is the focused draft: prompt in the composer, chips staged and done, an ordinary
-        // chat posture — and NOTHING enqueued. The user picks the model and presses send.
+        // chat posture, and NOTHING enqueued. The user picks the model and presses send.
         const composed = useChat().active.value;
         expect(composed.conversationId).not.toBe(first);
         expect(composed.conversationId).not.toBe(second);
@@ -245,7 +245,7 @@ describe(`synthesizeSessions`, () => {
         expect(composed.messages.value).toHaveLength(0);
         expect(composed.streaming.value).toBe(false);
         expect(revealConversation).toHaveBeenCalledWith(composed);
-        // The sources are untouched — a synthesis reads them, it never rewrites them.
+        // The sources are untouched: a synthesis reads them, it never rewrites them.
         const source = useChat().conversations.value.find((conversation) => conversation.conversationId === first)!;
         expect(source.messages.value).toHaveLength(2);
     });

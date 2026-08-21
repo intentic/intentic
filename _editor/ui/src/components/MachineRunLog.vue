@@ -1,11 +1,11 @@
-<!-- WHAT A COMPUTER IS SAYING WHILE IT WORKS — and, for a log tail, what it said.
+<!-- WHAT A COMPUTER IS SAYING WHILE IT WORKS, and, for a log tail, what it said.
      An update pulls an image and recreates a container: minutes in which the only honest thing a button can do
-     is show the machine's own output. The lines are the machine's, verbatim and unsummarised — a step this view
+     is show the machine's own output. The lines are the machine's, verbatim and unsummarised: a step this view
      invented would be a second account of the flow, and the two would drift.
      In the kit because both surfaces that drive a machine's sandboxes render this pane under the row that is
      working: the web's Computers tab and the desktop app's manager window. The one thing that differs between
      them is which computer "there" is, so that sentence is the caller's.
-     Follows the tail while it runs, and stops following the moment the reader scrolls up — someone reading an
+     Follows the tail while it runs, and stops following the moment the reader scrolls up: someone reading an
      error that went past should not be dragged back down by the next line. -->
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";

@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { appendMessage } from "./turnReducer";
 import { applyTurnFrame, emptyTurnState, flushPending, revealPending, type TurnEffect, type TurnState } from "./turnReducer";
 
-/* The frame rules, exercised directly. Every one of these used to require driving a whole Conversation — a
- * mocked fetch, an SSE body, a rAF — to observe a decision the reducer now makes in one call. */
+/* The frame rules, exercised directly. Every one of these used to require driving a whole Conversation: a
+ * mocked fetch, an SSE body, a rAF: to observe a decision the reducer now makes in one call. */
 
 // A turn always opens with the user's bubble and an empty assistant bubble (what Conversation.send builds).
 const started = (): TurnState => {
@@ -75,7 +75,7 @@ describe(`text_end`, () => {
 
     it(`counts text still buffered in the typewriter as prose`, () => {
         // The delta has been accepted but not yet revealed. Asking the transcript alone would say "empty" and
-        // strand the bubble — which is why the buffer is part of the state.
+        // strand the bubble, which is why the buffer is part of the state.
         const { state } = run(started(), { kind: `delta`, text: `queued` });
         expect(state.messages[1]!.text).toBe(``);
         expect(applyTurnFrame(state, { kind: `text_end` }, context).state.bubbleId).toBeNull();
@@ -129,7 +129,7 @@ describe(`tool calls`, () => {
     });
 
     /* THE AGENT THE CALL STARTED, folded onto that same card. The frame's id IS the spawning call's, so it lands
-     * through the lookup the nesting above already uses — and the state it carries is the only account a card has
+     * through the lookup the nesting above already uses, and the state it carries is the only account a card has
      * of a BACKGROUNDED child, whose tool result may be minutes away. */
     it(`wears the subagent its call started, and keeps its state current`, () => {
         const { state } = run(
@@ -242,7 +242,7 @@ describe(`interactive cards`, () => {
     });
 });
 
-/* A card the user answered in ANOTHER window — or in this one, before a reload replayed the run from seq 0 —
+/* A card the user answered in ANOTHER window, or in this one, before a reload replayed the run from seq 0:
  * is decided, and a transcript that rebuilt it from its own frame has no way to know that. The resolution
  * frame is that record, and these are the shapes it has to freeze. */
 describe(`resolved cards`, () => {
@@ -267,7 +267,7 @@ describe(`resolved cards`, () => {
         expect(state.messages[1]!.question).toMatchObject({ status: `cancelled` });
     });
 
-    it(`freezes a card nobody answered as cancelled — a turn that died under it is no one's decision`, () => {
+    it(`freezes a card nobody answered as cancelled: a turn that died under it is no one's decision`, () => {
         const { state } = run(asked(), { kind: `resolved`, requestId: `q1` });
         expect(state.messages[1]!.question).toMatchObject({ status: `cancelled` });
         expect(state.messages[1]!.question).not.toHaveProperty(`answers`);
@@ -291,8 +291,8 @@ describe(`resolved cards`, () => {
         expect(state.messages).toEqual(before.messages);
     });
 
-    /* THE TWO HANDOVERS are the cards whose answering surface is usually NOT this transcript — the owner acts
-     * on /browsers or in the terminal panel — so the resolution frame is the only thing that ever freezes them
+    /* THE TWO HANDOVERS are the cards whose answering surface is usually NOT this transcript: the owner acts
+     * on /browsers or in the terminal panel, so the resolution frame is the only thing that ever freezes them
      * here, and getting it wrong leaves a live-looking card with buttons behind an agent that has moved on. */
     const stuck = (): TurnState =>
         run(started(), { kind: `terminal_help`, requestId: `t1`, session: `agent-abc12345`, message: `npm wants the one-time password` }).state;
@@ -300,7 +300,7 @@ describe(`resolved cards`, () => {
     it(`raises a terminal handover as a pending card carrying the session to open`, () => {
         const card = stuck().messages[1]!.terminalHelp;
         expect(card).toMatchObject({ requestId: `t1`, session: `agent-abc12345`, message: `npm wants the one-time password`, status: `pending` });
-        // The frame's discriminator is not part of the card — it named the branch, and rendering it would be noise.
+        // The frame's discriminator is not part of the card: it named the branch, and rendering it would be noise.
         expect(card).not.toHaveProperty(`kind`);
     });
 
@@ -313,7 +313,7 @@ describe(`resolved cards`, () => {
             run(stuck(), { kind: `resolved`, requestId: `t1`, reply: { kind: `terminal_help`, requestId: `t1`, helped: false } }).state.messages[1]!
                 .terminalHelp,
         ).toMatchObject({ status: `declined` });
-        // The turn dying under it — the owner never decided anything, so it must not read as a decision.
+        // The turn dying under it: the owner never decided anything, so it must not read as a decision.
         expect(run(stuck(), { kind: `resolved`, requestId: `t1` }).state.messages[1]!.terminalHelp).toMatchObject({ status: `cancelled` });
     });
 });
@@ -331,7 +331,7 @@ describe(`turn boundaries`, () => {
     });
 
     /* A STEER IS A BOUNDARY. The harness absorbs it between tool calls and the model carries on in the SAME
-     * turn, so there is no `usage` to close the open bubble — and the words the agent writes next are its answer
+     * turn, so there is no `usage` to close the open bubble, and the words the agent writes next are its answer
      * to this message. Left in the bubble above, the answer printed over the question. */
     it(`retires the bubble on a steered message so the reply to it opens below`, () => {
         const { state } = run(
@@ -349,7 +349,7 @@ describe(`turn boundaries`, () => {
         ]);
     });
 
-    // Prose the model had already written finishes typing where it was written — the buffer is keyed by bubble,
+    // Prose the model had already written finishes typing where it was written: the buffer is keyed by bubble,
     // so a message arriving mid-type must not snap the rest of a sentence into place or drag it below.
     it(`leaves the typewriter draining into the bubble a steer retired`, () => {
         const { state } = run(started(), { kind: `delta`, text: `half a sentence` }, { kind: `steer`, text: `wait`, sentAt: 1 });
@@ -385,7 +385,7 @@ describe(`turn boundaries`, () => {
         const { state } = run(started(), { kind: `checkpoint`, id: `cp-1`, index: 4 });
         const user = state.messages.find((message) => message.id === USER_ID);
         expect(user?.checkpointId).toBe(`cp-1`);
-        // The DAEMON's transcript position, which is what the rewind route addresses — not the bubble's own.
+        // The DAEMON's transcript position, which is what the rewind route addresses, not the bubble's own.
         expect(user?.rewindIndex).toBe(4);
     });
 
@@ -414,7 +414,7 @@ describe(`effects`, () => {
         expect(state.messages).toEqual(started().messages);
     });
 
-    /* The pre-turn rebase is announced, never asked (daemon: agents/sync.ts) — one muted line where the turn
+    /* The pre-turn rebase is announced, never asked (daemon: agents/sync.ts), one muted line where the turn
      * begins, so the human can see why the branch moved without being stopped to approve it. */
     it(`says the branch was rebased onto the workspace, and still reports the worktree`, () => {
         const { state, effects } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 4, blocked: [] } });
@@ -427,7 +427,7 @@ describe(`effects`, () => {
         expect(notice?.noticeAction).toBeUndefined();
     });
 
-    /* It reads as the answer to the message ABOVE it, so it sits directly under that message — not at the end
+    /* It reads as the answer to the message ABOVE it, so it sits directly under that message, not at the end
      * of a transcript that already holds this turn's (still empty) answer bubble. Getting this wrong put a line
      * about the turn's starting conditions below the first block of the reply. */
     it(`places the rebase line under the user's message, above the answer it precedes`, () => {
@@ -453,12 +453,12 @@ describe(`effects`, () => {
     });
 
     /* THE SECOND EMISSION, in the frame order a real answered question produces: the daemon rebases when the
-     * card settles, so this line is about something that happened HALFWAY DOWN the turn and must read there —
+     * card settles, so this line is about something that happened HALFWAY DOWN the turn and must read there:
      * under the question it followed, not above the turn's first word.
      *
      * It sorts itself out rather than being switched on: the card cleared the open bubble on its way in, so the
      * placement above finds nothing to sit atop and appends. That is why neither the frame nor the reducer
-     * carries a "which moment is this" flag — the transcript already knows. */
+     * carries a "which moment is this" flag: the transcript already knows. */
     it(`places a mid-turn rebase under the card that was just answered`, () => {
         const { state } = run(
             started(),
@@ -489,7 +489,7 @@ describe(`effects`, () => {
     });
 
     /* WHAT THE AGENT WAS TOLD, kept where the user can find it. The muted line above is a paraphrase of one of
-     * these notes; this frame carries every note's exact text, and the two are deliberately both present — a
+     * these notes; this frame carries every note's exact text, and the two are deliberately both present: a
      * summary that reads well and the words behind it, rather than a summary standing in for them. */
     it(`hangs the turn's notes off the message they were added to`, () => {
         const notes = [{ title: `Dependencies are behind`, text: `## Dependencies are behind\n\nRun \`pnpm install\` in intentic.` }];
@@ -536,7 +536,7 @@ describe(`effects`, () => {
     });
 
     it(`offers "keep future work on the branch" on the landed notice, and only there`, () => {
-        // The moment the auto-land just fired is when "stop doing that" is worth one press — the same
+        // The moment the auto-land just fired is when "stop doing that" is worth one press: the same
         // pattern as the outage banner's opt-out. A held or conflicted outcome has nothing to regret, so no offer.
         const landed = run(started(), { kind: `landed`, landed: true });
         expect(landed.state.messages.at(-1)).toMatchObject({ role: `notice`, noticeAction: `landHold` });

@@ -291,9 +291,9 @@ export const portNote = (port: MachinePortRow, holder?: MachineSandboxGroup | un
     // The command on a contended port belongs to the SANDBOX's own listener, not to whoever won the number, so
     // it is never the answer to "who has it", only a busy port's command is the program holding it.
     if (port.heldBy === undefined) {
-        return `not on localhost — ${program ?? `another program here`} has it`;
+        return `not on localhost: ${program ?? `another program here`} has it`;
     }
-    return `not on localhost — ${holder?.title ?? port.heldBy} has it`;
+    return `not on localhost: ${holder?.title ?? port.heldBy} has it`;
 };
 
 // Interpreters are the only commands whose real subject is their ARGUMENT: `node` on its own says nothing about

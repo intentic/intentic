@@ -225,7 +225,7 @@ export const ICONS: Record<IconName, string> = {
     "plus-circle": "ri:add-circle-line",
     "question-circle": "ri:question-line",
     refresh: "ri:refresh-line",
-    /* The Agents area's glyph. AT RAIL SIZE AN ICON IS ITS SILHOUETTE — 18px of 1.5px stroke resolves the outer
+    /* The Agents area's glyph. AT RAIL SIZE AN ICON IS ITS SILHOUETTE: 18px of 1.5px stroke resolves the outer
      * shape and roughly how full the middle is, and nothing finer. Agents wore `comments` and Workspace wore
      * `folder`, which are the same silhouette: a thin outlined box filling the tile, told apart only by a bump
      * two pixels wide (a bubble's tail, a folder's tab). They sit adjacent in the rail's Work band, so the two

@@ -29,7 +29,7 @@ const sandboxListQuery = {
     queryKey: SANDBOX_LIST_KEY,
     queryFn: async (): Promise<SandboxSummary[]> => (await apiClient.sandbox.list()).sandboxes.filter((sandbox) => !removing.has(sandbox.id)),
     // The list only changes via local mutations (which write the cache directly) or a daemon's lastSeenAt/
-    // daemonUrl update (onboarding only, where refresh() forces fresh) — 30s dedups the shell's per-navigation
+    // daemonUrl update (onboarding only, where refresh() forces fresh): 30s dedups the shell's per-navigation
     // refetch with no staleness that matters.
     staleTime: 30_000,
     // Observer-less entry (fetchQuery-only, mirrored via the cache subscription below): the default gcTime
@@ -196,7 +196,7 @@ watch(
 // same sandbox everywhere: /setup renames the row it just created while `reconcileActive` can still be moving
 // the selection off it (a just-created row is briefly absent from a server list read), and renaming whichever
 // sandbox happens to be selected would quietly rename a different one of the user's machines. The updated row
-// is handed back for the same reason — /setup holds its own reference to it, and everything the install command
+// is handed back for the same reason: /setup holds its own reference to it, and everything the install command
 // derives from the name (the sync folder) would otherwise go on describing the old one.
 const update = async (sandboxId: string, input: { name?: string; image?: string | null }): Promise<SandboxSummary> => {
     const updated = await apiClient.sandbox.update({ sandboxId, ...input });

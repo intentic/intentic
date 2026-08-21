@@ -71,7 +71,7 @@ export const createCfRouteProvider = (
         // The route exists but its tunnel is a pending create, the target cname is not derivable yet.
         // Report drift; apply resolves the real cname once the tunnel exists.
         if (typeof inputs["cname"] !== "string") {
-            return { action: "update", reason: "tunnel not created yet — its cname is not derivable" };
+            return { action: "update", reason: "tunnel not created yet, its cname is not derivable" };
         }
         const { cname } = parse(inputs);
         const content = observed.detail?.["content"];

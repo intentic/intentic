@@ -409,7 +409,7 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
                                 if (outcome === "mismatch") {
                                     reject(
                                         new Error(
-                                            `host key mismatch for ${target.address}:${target.port} — refusing to connect (possible MITM, or the host was rebuilt; remove its entry from .known-hosts.json to re-trust)`,
+                                            `host key mismatch for ${target.address}:${target.port}: refusing to connect (possible MITM, or the host was rebuilt; remove its entry from .known-hosts.json to re-trust)`,
                                         ),
                                     );
                                 }

@@ -3,7 +3,7 @@ import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contra
 /* Both by FILE rather than through the barrel, which is boot.ts's rule and this is what enforces it: the barrel
  * statically imports every component in the kit, and among them is the graph canvas, whose stylesheet import is
  * a side effect no bundler will drop. Reached through the barrel, prose costs this page a fifth of a megabyte of
- * Vue Flow — in the bundle a stranger downloads to read someone's transcript, for a canvas a conversation almost
+ * Vue Flow: in the bundle a stranger downloads to read someone's transcript, for a canvas a conversation almost
  * never contains. Reached by file, a `dag` figure loads it on demand and nothing else pays. */
 import Icon from "@intentic/ui/src/components/Icon.vue";
 import Markdown from "@intentic/ui/src/components/Markdown.vue";
@@ -16,12 +16,12 @@ import { shareSurface } from "./shareSurface";
 
 /* THE PUBLISHED CONVERSATION, as the person the link was sent to reads it.
  *
- * The transcript is drawn by the app's own pieces — the same markdown engine every surface renders prose with,
+ * The transcript is drawn by the app's own pieces: the same markdown engine every surface renders prose with,
  * and the same tool card the chat draws work with (with nothing to click, see shareSurface.ts). What this file
  * adds is only what the app's chat does around them: the bubble, the thinking fold, the day markers.
  *
- * It deliberately does NOT reuse ChatMessageView. That component is the LIVE row — plan approvals, question
- * cards, permission prompts, pinning, the streaming loader, an errand's reveal — and every one of those is a
+ * It deliberately does NOT reuse ChatMessageView. That component is the LIVE row: plan approvals, question
+ * cards, permission prompts, pinning, the streaming loader, an errand's reveal, and every one of those is a
  * control, a decision or a claim about right now. A record has none: no card is pending, nothing is streaming,
  * and there is nobody here who could answer anything. Rendering the live row read-only would mean disabling a
  * dozen affordances one at a time and getting all of them right forever; drawing the record directly is both
@@ -30,13 +30,13 @@ import { shareSurface } from "./shareSurface";
 const result = readPayload();
 const payload = computed(() => (result.ok ? result.payload : undefined));
 
-// The cards on this page reach nothing beyond their own pictures — the whole difference between the app's
+// The cards on this page reach nothing beyond their own pictures: the whole difference between the app's
 // transcript and a published one, stated once here (chatSurface.ts).
 provide(CHAT_SURFACE, shareSurface);
 
 /* Prose goes through the shared component with NO decorator. The app passes one that turns file mentions into
  * links into the workspace; here there is no workspace, and a link that navigated nowhere would be a promise the
- * page cannot keep. Everything else about the answer is the app's — including the figures in it, so a
+ * page cannot keep. Everything else about the answer is the app's: including the figures in it, so a
  * conversation shared for the diagram it drew shows the diagram. */
 
 const subtitle = computed(() => {
@@ -48,7 +48,7 @@ const subtitle = computed(() => {
     return `${count} message${count === 1 ? "" : "s"} · shared ${formatDate(shared.sharedAt)}`;
 });
 
-/* WHERE THE DAY CHANGES, so a conversation that ran across a week reads as one — the same marker the app's
+/* WHERE THE DAY CHANGES, so a conversation that ran across a week reads as one: the same marker the app's
  * transcript draws. Only user rows carry a stamp (RestoredMessage.sentAt), which is enough: a turn's answers
  * belong to the day its question was asked, and a conversation recorded before stamps existed simply gets no
  * markers rather than a row of guesses. */
@@ -103,7 +103,7 @@ const toggleThinking = (index: number): void => {
                  which is why a shared page's type, spacing and code blocks match the chat rather than
                  approximating it. -->
             <!-- No copy delegation up here: a code block's button lives inside rendered prose, and <Markdown>
-                 binds its own — a second listener on this element would copy the same text twice. -->
+                 binds its own: a second listener on this element would copy the same text twice. -->
             <main class="chat-turns flex flex-1 flex-col">
                 <template v-for="(message, index) in payload.messages" :key="index">
                     <div v-if="dayMarks.get(index)" class="flex items-center gap-2 py-1 text-2xs text-subtle">
@@ -179,7 +179,7 @@ const toggleThinking = (index: number): void => {
              seen it. Bottom of the page, after the thing they came for. -->
         <footer class="chat-footer mt-2 border-t border-line pt-3 text-center text-2xs text-subtle">
             <a href="https://intentic.dev" target="_blank" rel="noopener" class="text-link hover:underline">
-                Shared from <b>Intentic</b> — run your own agents →
+                Shared from <b>Intentic</b>: run your own agents →
             </a>
         </footer>
     </div>

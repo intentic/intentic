@@ -5,7 +5,7 @@
  * both fail badly if handed the address too early: an iframe that error-pages never retries, and a tab
  * navigated to an unresolvable host shows the browser's own "site can't be reached" with nothing to retry from.
  *
- * `no-cors` IS THE PROBE. It resolves on ANY HTTP response — 200, 404, 500, a redirect, an opaque response with
+ * `no-cors` IS THE PROBE. It resolves on ANY HTTP response: 200, 404, 500, a redirect, an opaque response with
  * nothing readable in it, and rejects only on DNS or socket failure. That is exactly the question being asked
  * ("does this name resolve to something listening yet?") and no narrower request can ask it cross-origin.
  *
@@ -107,7 +107,7 @@ export const openForwardedPort = ({ port, path = "", forward, onError }: Forward
             show(`Waiting for ${previewUrl} to come up…`);
             const outcome = await probeUntilReachable(previewUrl, { stillWanted: () => live() !== undefined });
             if (outcome === "gaveUp") {
-                fail(`The preview address didn't come up — the server may have stopped, or DNS is still propagating. Close this tab and try again.`);
+                fail(`The preview address didn't come up: the server may have stopped, or DNS is still propagating. Close this tab and try again.`);
                 return;
             }
             const arrived = live();

@@ -37,7 +37,7 @@ export const guardedUpdate = async (opts: GuardedUpdateOpts): Promise<void> => {
         const snapshot = await opts.session.exec(resticRun(opts, volume, ":ro", `backup /v --tag ${opts.tag}`));
         if (snapshot.code !== 0) {
             throw new Error(
-                `guarded update: pre-update snapshot of ${volume} failed (exit ${snapshot.code}): ${snapshot.stderr.trim()} — ` +
+                `guarded update: pre-update snapshot of ${volume} failed (exit ${snapshot.code}): ${snapshot.stderr.trim()}, ` +
                     "refusing to update without a recovery point (is i.have.backup applied?)",
             );
         }
@@ -46,7 +46,7 @@ export const guardedUpdate = async (opts: GuardedUpdateOpts): Promise<void> => {
     try {
         await opts.recreate();
     } catch (error) {
-        opts.log(`guarded update: new image failed health — rolling back image + data: ${String(error)}`);
+        opts.log(`guarded update: new image failed health, rolling back image + data: ${String(error)}`);
         await opts.stop();
         for (const volume of opts.volumes) {
             // Restore the snapshot's copy of /v back into the (now-stopped) live volume.

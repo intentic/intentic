@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 //
 // jsdom because this picker's whole job is what it SAYS before the message goes: which of two very different
-// machines the next send is handed to, what stops the one that spends money round after round, and — the thing
-// the two menus it replaced could never say — that choosing either of them is choosing INSTEAD of the other.
+// machines the next send is handed to, what stops the one that spends money round after round, and: the thing
+// the two menus it replaced could never say: that choosing either of them is choosing INSTEAD of the other.
 import type { LoopDesign, Workflow } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
@@ -71,7 +71,7 @@ afterEach(() => {
 });
 
 /* THE MERGE ITSELF: both kinds in one list, under headings that say what separates them. This is the whole
- * reason the control stopped being two pills — "where is the shape I saved" had two places to look before it
+ * reason the control stopped being two pills: "where is the shape I saved" had two places to look before it
  * had an answer, and two bare glyphs told nobody which was which. */
 it(`lists loops and workflows together, each under a heading that says what it does`, () => {
     loops.value = [aLoop()];
@@ -95,7 +95,7 @@ it(`hides the heading of a kind this workspace has none of`, () => {
 });
 
 /* THE STOP CONDITION AND THE CEILINGS, on the row, computed from the loop. A control that starts paid work in
- * a loop has to say what ends it at the moment of choosing — not behind a hover no touch device will show. */
+ * a loop has to say what ends it at the moment of choosing, not behind a hover no touch device will show. */
 it(`says what ends a loop and how far it may go, on the row`, () => {
     loops.value = [aLoop()];
     const row = rowLabelled(mount(), `Until green`)!;
@@ -118,7 +118,7 @@ it(`says a workflow's shape and the models it pins`, () => {
 });
 
 /* ONE WAY BACK, not two. "No loop" and "no workflow" were never two states a person could be in at once, and
- * the single row has to clear BOTH — otherwise unpicking depends on remembering which kind you armed. */
+ * the single row has to clear BOTH: otherwise unpicking depends on remembering which kind you armed. */
 it(`offers one way back to an ordinary message, and it clears both kinds`, () => {
     loops.value = [aLoop()];
     workflows.value = [aWorkflow()];
@@ -139,7 +139,7 @@ it(`keeps the way back out of the list while nothing is armed`, () => {
 
 /* Nothing saved anywhere is the ordinary state of a new workspace, and the reason this control looked like
  * decoration: the empty picker has to say what the two things ARE and offer the way to the page that makes
- * them — one door, because one page owns both. */
+ * them: one door, because one page owns both. */
 it(`explains the empty workspace and offers a single way in`, () => {
     const element = mount();
 

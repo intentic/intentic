@@ -24,7 +24,7 @@ describe(`present: icons`, () => {
 
     it(`lets a per-name presenter override the category icon`, () => {
         // The subagent tool categorizes as `other` but reads as a delegation. The Claude SDK
-        // names it `Agent`; native backends emit lowercase `task` — both resolve to the delegation icon.
+        // names it `Agent`; native backends emit lowercase `task`: both resolve to the delegation icon.
         expect(present(tool({ name: `Agent`, category: `other` })).icon).toBe(`users`);
         expect(present(tool({ name: `Task`, category: `other` })).icon).toBe(`users`);
     });
@@ -45,7 +45,7 @@ describe(`present: bodies`, () => {
         expect(result.body).toEqual({ kind: `command`, command: `echo hello`, output: `hello\n` });
     });
 
-    it(`keeps a Bash body even when the command printed nothing — the command line is the point`, () => {
+    it(`keeps a Bash body even when the command printed nothing: the command line is the point`, () => {
         const result = present(tool({ name: `Bash`, target: `rm -rf /tmp/x`, category: `execute` }));
         expect(result.body).toEqual({ kind: `command`, command: `rm -rf /tmp/x`, output: `` });
     });
@@ -205,7 +205,7 @@ describe(`present: fold policy`, () => {
         expect(present(withText(`Bash`, `…`, { status: `pending` })).defaultOpen).toBe(true);
     });
 
-    it(`starts a failed call expanded — the error is what the user needs`, () => {
+    it(`starts a failed call expanded: the error is what the user needs`, () => {
         expect(present(withText(`Bash`, `boom`, { status: `failed` })).defaultOpen).toBe(true);
     });
 
@@ -218,7 +218,7 @@ describe(`present: diffs`, () => {
     it(`hands the structured diffs through and keeps the card foldable even with no text`, () => {
         const result = present(tool({ name: `Write`, category: `edit`, content: [{ type: `diff`, path: `a.ts`, newText: `hello` }] }));
         expect(result.diffs).toEqual([{ type: `diff`, path: `a.ts`, newText: `hello` }]);
-        // No text body, but the diffs are content — the card must still offer its fold affordance.
+        // No text body, but the diffs are content: the card must still offer its fold affordance.
         expect(result.body).toBeUndefined();
     });
 });

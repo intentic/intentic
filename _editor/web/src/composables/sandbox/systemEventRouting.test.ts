@@ -53,7 +53,7 @@ describe(`daemonRebuilt`, () => {
     });
 
     it(`a daemon that advertises no build neither reports nor forgets`, () => {
-        // Too old to interrogate — the silence must not read as a change, and must not overwrite what a newer
+        // Too old to interrogate: the silence must not read as a change, and must not overwrite what a newer
         // daemon on the same sandbox already told us.
         daemonRebuilt(`sbx-1`, `0.0.0:1000`);
         expect(daemonRebuilt(`sbx-1`, undefined)).toBe(false);
@@ -90,7 +90,7 @@ describe(`dropSandboxLocalState`, () => {
     });
 
     it(`sweeps the window's own sessionStorage copy too`, () => {
-        // windowStore reads sessionStorage FIRST — a sweep that missed it would restore the swept tabs anyway.
+        // windowStore reads sessionStorage FIRST: a sweep that missed it would restore the swept tabs anyway.
         sessionStorage.setItem(`intentic.workspaceTabs.sbx-1`, `{}`);
         dropSandboxLocalState(`sbx-1`);
         expect(sessionStorage.getItem(`intentic.workspaceTabs.sbx-1`)).toBeNull();

@@ -30,7 +30,7 @@ import {
 const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: `seven_day`, utilization: 42.4, ...over });
 const usage = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: 0, ...over });
 // The projection every surface draws from. Undefined is reserved for an account nobody has measured, which is
-// its own case below — everywhere else the reading exists, so unwrapping it here keeps the assertions readable.
+// its own case below: everywhere else the reading exists, so unwrapping it here keeps the assertions readable.
 const headroom = (over: Partial<AccountUsage> = {}): PlanHeadroom => {
     const projected = planHeadroom(usage(over));
     if (projected === undefined) {
@@ -40,7 +40,7 @@ const headroom = (over: Partial<AccountUsage> = {}): PlanHeadroom => {
 };
 
 describe(`usageWindowLabel`, () => {
-    it(`keeps every weekly pool distinguishable — folding them is the bug it exists to prevent`, () => {
+    it(`keeps every weekly pool distinguishable, folding them is the bug it exists to prevent`, () => {
         expect(usageWindowLabel(window({ kind: `five_hour` }))).toBe(`5-hour session`);
         expect(usageWindowLabel(window({ kind: `seven_day` }))).toBe(`Weekly · all models`);
         expect(usageWindowLabel(window({ kind: `seven_day_opus` }))).toBe(`Weekly · Opus`);
@@ -77,7 +77,7 @@ describe(`orderedWindows`, () => {
 });
 
 describe(`bindingWindow`, () => {
-    it(`is the FULLEST pool — the account is as constrained as its tightest allowance`, () => {
+    it(`is the FULLEST pool, the account is as constrained as its tightest allowance`, () => {
         const picked = bindingWindow(
             usage({ windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 98 })] }),
         );
@@ -127,8 +127,8 @@ describe(`isStale / formatUtilization`, () => {
     });
 });
 
-/* The sentence a screen reader hears in place of the card. It is the ONLY string form of the breakdown left —
- * the sighted reader gets a list of meters (UsageRing.vue) — so what is pinned here is that the spoken version
+/* The sentence a screen reader hears in place of the card. It is the ONLY string form of the breakdown left:
+ * the sighted reader gets a list of meters (UsageRing.vue), so what is pinned here is that the spoken version
  * still carries every fact the card draws. */
 describe(`usageDetail`, () => {
     it(`lists EVERY pool, because which one is binding is what a single number can't say`, () => {
@@ -141,7 +141,7 @@ describe(`usageDetail`, () => {
         expect(detail).toBe(`5-hour session 12% · Weekly · all models 98% · measured just now`);
     });
 
-    it(`names each pool's reset beside its figure — "wait 20 minutes" and "wait until Thursday" are different answers`, () => {
+    it(`names each pool's reset beside its figure, "wait 20 minutes" and "wait until Thursday" are different answers`, () => {
         const resetsAt = 1_700_000_000;
         const detail = usageDetail(
             headroom({
@@ -160,7 +160,7 @@ describe(`usageDetail`, () => {
 });
 
 /* The outage retry's wait, which is the one instant in the app a wall-clock time would misreport: it is seconds
- * to minutes out, not hours, and it grows with every attempt. Coarse on purpose — the daemon's schedule carries
+ * to minutes out, not hours, and it grows with every attempt. Coarse on purpose: the daemon's schedule carries
  * jitter and polls on its own cadence, so second-accurate wording here would promise precision it cannot keep. */
 describe(`formatWait`, () => {
     const now = 1_000_000_000;
@@ -175,13 +175,13 @@ describe(`formatWait`, () => {
         expect(formatWait(now / 1000 + 1_200, now)).toBe(`about 20 min`);
     });
 
-    it(`never counts backwards past zero — a due-but-unfired retry reads as imminent, not overdue`, () => {
+    it(`never counts backwards past zero, a due-but-unfired retry reads as imminent, not overdue`, () => {
         expect(formatWait(now / 1000 - 60, now)).toBe(`about 5s`);
     });
 });
 
-/* The account row's ring, and the card behind it. Every provider reaches this the same way — the daemon
- * attaches the same AccountUsage to a native account and to a routed subscription alike — so what is pinned
+/* The account row's ring, and the card behind it. Every provider reaches this the same way: the daemon
+ * attaches the same AccountUsage to a native account and to a routed subscription alike, so what is pinned
  * here is the meaning of the projection itself, which the Agent tab, the picker and the composer all have to
  * agree on. */
 describe(`planHeadroom`, () => {
@@ -192,7 +192,7 @@ describe(`planHeadroom`, () => {
     });
 
     it(`reads a spent account as a full red ring rather than a healthy dot`, () => {
-        // The exact shape a used-up Google or ChatGPT subscription arrives in — the bug this feature exists for.
+        // The exact shape a used-up Google or ChatGPT subscription arrives in: the bug this feature exists for.
         const spent = headroom({ windows: [window({ kind: `google:weekly`, utilization: 100 })] });
         expect(spent.percent).toBe(100);
         expect(spent.tone).toBe(`text-danger`);
@@ -209,7 +209,7 @@ describe(`planHeadroom`, () => {
     });
 
     it(`carries every pool, with the one that bites first named as the binding one`, () => {
-        // The card draws all of them and the ring draws this one — from a single projection, so the arc and the
+        // The card draws all of them and the ring draws this one: from a single projection, so the arc and the
         // row it highlights can never come from different arithmetic.
         const mixed = headroom({
             windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 91, resetsAt: 1_700_000_000 })],
@@ -223,7 +223,7 @@ describe(`planHeadroom`, () => {
 // One definition of "spent", because three surfaces act on it: the ring turns red, the row dims, and the list
 // sinks the account below the ones with headroom. They disagreed while each carried its own threshold.
 describe(`isSpent`, () => {
-    it(`is false for an account with no reading — unknown is not exhausted`, () => {
+    it(`is false for an account with no reading, unknown is not exhausted`, () => {
         expect(isSpent(undefined)).toBe(false);
     });
 
@@ -267,7 +267,7 @@ describe(`liveUsage`, () => {
     });
 });
 
-/* The same merge for the surfaces that hold only an id — the composer chip, the picker's account rows, the
+/* The same merge for the surfaces that hold only an id: the composer chip, the picker's account rows, the
  * sentence a refused turn prints. They used to read the streamed map alone, which is why a chat left open
  * reported an hours-old floor while the account rows on the next route showed the current number. */
 describe(`usageStatusFor`, () => {
@@ -320,7 +320,7 @@ describe(`planLimitRows`, () => {
         ]);
     });
 
-    it(`sinks an unmeasured account below every measured one — unknown is not headroom`, () => {
+    it(`sinks an unmeasured account below every measured one: unknown is not headroom`, () => {
         const rows = planLimitRows(
             {
                 claude: [
@@ -350,7 +350,7 @@ describe(`planLimitRows`, () => {
     });
 });
 
-/* The aggregate the panel is built on. A row list stops answering anything at 36 accounts — these are the three
+/* The aggregate the panel is built on. A row list stops answering anything at 36 accounts: these are the three
  * questions that replace it: how much of the fleet can serve a turn, where, and what is broken. */
 describe(`plan-limit aggregates`, () => {
     const at = (percent: number | undefined, over: Partial<PlanLimitRow> = {}): PlanLimitRow => ({
@@ -400,7 +400,7 @@ describe(`plan-limit aggregates`, () => {
         expect(planLimitSummary([past], 5_000_000).nextResetAt).toBeUndefined();
     });
 
-    /* The refusal, which is the only OBSERVED fact on this screen — everything else is a poll. What these guard
+    /* The refusal, which is the only OBSERVED fact on this screen: everything else is a poll. What these guard
      * is that it is read as such: it survives a week in the store, so the question "is this still describing the
      * situation" has to be answered here rather than by whether a record exists. */
     it(`hands each provider its own last refusal, and points it at the account it names`, () => {
@@ -408,7 +408,7 @@ describe(`plan-limit aggregates`, () => {
         const groups = planLimitGroups([at(20, { id: `k`, provider: `kimi` }), at(95, { id: `c` })], refusals, 5_000);
         expect(groups.map((group) => [group.provider, group.refusal?.line])).toEqual([
             [`claude`, undefined],
-            [`kimi`, `Hit its usage limit just now — You've reached your usage limit`],
+            [`kimi`, `Hit its usage limit just now, You've reached your usage limit`],
         ]);
         // The row it belongs to, so the panel can draw it under that account rather than over the provider.
         expect(groups[1]?.refusedRow?.id).toBe(`k`);
@@ -416,7 +416,7 @@ describe(`plan-limit aggregates`, () => {
 
     /* A REFUSAL IS ANSWERED BY ITS OWN KIND OF EVIDENCE, FROM ITS OWN ACCOUNT. Headroom answers a spent pool and
      * says nothing about a rejected token; a working credential answers a 401 and says nothing about a pool. And
-     * both questions are about the account the daemon named, never about whichever sibling happens to be idle —
+     * both questions are about the account the daemon named, never about whichever sibling happens to be idle:
      * that conflation is what left a healed 401 standing over three accounts it did not describe. */
     const reading = (over: Partial<RefusalReading> = {}): RefusalReading => ({
         account: `a`,
@@ -432,7 +432,7 @@ describe(`plan-limit aggregates`, () => {
         // Nothing measured at all, and a reading from BEFORE the refusal: neither can contradict it.
         expect(current([])).toBe(true);
         expect(current([reading({ measuredAt: 500 })])).toBe(true);
-        // Measured since, and still spent — the refusal is exactly what that pool is saying.
+        // Measured since, and still spent: the refusal is exactly what that pool is saying.
         expect(current([reading({ percent: 99 })])).toBe(true);
         // Measured since, with room: the pool reopened and the refusal is history.
         expect(current([reading()])).toBe(false);
@@ -446,7 +446,7 @@ describe(`plan-limit aggregates`, () => {
         // last reading predates the refusal. The sibling cannot speak for the credential that was rejected, and
         // letting it was what quietly dismissed a live 401.
         expect(current([reading({ account: `b` }), reading({ measuredAt: 500 })])).toBe(true);
-        // The named account itself, read since — every reading is taken through that same credential, so it
+        // The named account itself, read since: every reading is taken through that same credential, so it
         // worked. This is the state the daemon's own re-mint leaves behind seconds after a token is refused.
         expect(current([reading({ account: `b` }), reading()])).toBe(false);
         // Read since, but the store has given up on the credential: a reconnect is the only thing that fixes it.
@@ -459,55 +459,55 @@ describe(`plan-limit aggregates`, () => {
      * turned Claude Code off for a seat leaves everything a reading can see untouched: the token authenticates,
      * so `needsReauth` stays false, and the plan's own endpoint keeps publishing pools, so a fresh measurement
      * lands within the minute with room to spare. Filed as `auth` that is precisely the shape of "authenticated
-     * fine since" — so the very next quota sweep dismissed a live refusal and the account picker went back to
+     * fine since", so the very next quota sweep dismissed a live refusal and the account picker went back to
      * drawing a full green ring over the one account that could not run a single turn.
      *
      * The evidence that DOES settle it is a turn actually running, which only the daemon can witness (it drops
-     * the record itself — see the refusal store's `clear`). Nothing this side may pre-empt that. */
+     * the record itself: see the refusal store's `clear`). Nothing this side may pre-empt that. */
     it(`keeps a revoked seat standing under a reading that would answer any other refusal`, () => {
         const refusal = { at: 1_000, kind: `entitlement` as const, message: `organization has disabled`, account: `a` };
         const current = (readings: RefusalReading[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
-        // Read since, healthy credential, pools wide open — an `auth` refusal would be answered by this, and a
+        // Read since, healthy credential, pools wide open: an `auth` refusal would be answered by this, and a
         // `limit` one too. Neither says anything about whether the seat is allowed to run Claude Code.
         expect(current([reading({ measuredAt: 2_000, percent: 3, needsReauth: false })])).toBe(true);
         // Not even a reading taken long after it, which is the state a five-minute sweep guarantees.
         expect(current([reading({ measuredAt: 4_999 })])).toBe(true);
-        // Its own sentence stays the headline for as long as it stands — it is the only part naming the fix.
-        expect(refusalNote(refusal, [reading()], 5_000)?.line).toBe(`Turned this account away just now — organization has disabled`);
+        // Its own sentence stays the headline for as long as it stands: it is the only part naming the fix.
+        expect(refusalNote(refusal, [reading()], 5_000)?.line).toBe(`Turned this account away just now, organization has disabled`);
     });
 
     it(`settles a refusal whose account has been disconnected, instead of shouting about one nobody holds`, () => {
         const refusal = { at: 1_000, kind: `auth` as const, message: `401 OAuth access token has been revoked.`, account: `a` };
         const note = refusalNote(refusal, [reading({ account: `b`, measuredAt: 500 })], 5_000);
         expect(note?.current).toBe(false);
-        expect(note?.line).toBe(`Refused its credential just now — that account is no longer connected.`);
+        expect(note?.line).toBe(`Refused its credential just now, that account is no longer connected.`);
     });
 
     /* The condition is read off the record's `kind`, which the daemon derived from the SENTENCE rather than from
-     * the frame code — this is the whole reason a spent Kimi plan stops telling the user to reconnect a healthy
+     * the frame code: this is the whole reason a spent Kimi plan stops telling the user to reconnect a healthy
      * account. While it stands, the provider's own words are printed verbatim: they are the only part naming
-     * which pool. Once answered, the line says what has happened since and the words move to the hover — a
+     * which pool. Once answered, the line says what has happened since and the words move to the hover: a
      * quoted 401 over an account that has been serving turns all afternoon is an alarm the reader learns to
      * ignore. */
     it(`quotes the provider while the refusal stands, and says what answered it once one has`, () => {
         const message = `API Error: 403 You've reached your usage limit for this billing cycle.`;
-        expect(refusalNote({ at: 0, kind: `limit`, message }, [], 300_000)?.line).toBe(`Hit its usage limit 5m ago — ${message}`);
+        expect(refusalNote({ at: 0, kind: `limit`, message }, [], 300_000)?.line).toBe(`Hit its usage limit 5m ago, ${message}`);
         expect(refusalNote({ at: 0, kind: `auth`, message: `token revoked` }, [], 300_000)?.line).toBe(
-            `Refused its credential 5m ago — token revoked`,
+            `Refused its credential 5m ago, token revoked`,
         );
 
         const answered = refusalNote({ at: 0, kind: `auth`, message: `token revoked` }, [reading({ measuredAt: 1_000 })], 300_000);
-        expect(answered?.line).toBe(`Refused its credential 5m ago — has authenticated fine since.`);
+        expect(answered?.line).toBe(`Refused its credential 5m ago, has authenticated fine since.`);
         // Kept whole, either way: the sentence is what a hover is for once it stops being the headline.
         expect(answered?.detail).toBe(`token revoked`);
         expect(refusalNote({ at: 0, kind: `limit`, message }, [reading({ measuredAt: 1_000 })], 300_000)?.line).toBe(
-            `Hit its usage limit 5m ago — has had room since.`,
+            `Hit its usage limit 5m ago, has had room since.`,
         );
     });
 
     /* A SPENT POOL IS NOT AN ALARM, and this is where that is enforced. It refills on the provider's own
      * schedule, the translator routes around it in the meantime, and spend is what a fleet looks like at the end
-     * of a week — so raising it made this list grow to one line per account precisely when nothing was wrong,
+     * of a week, so raising it made this list grow to one line per account precisely when nothing was wrong,
      * burying the one entry (a credential that cannot be refreshed) that no amount of waiting fixes. Spend is
      * still counted and still dated; it is just counted, in the band it belongs to. */
     it(`raises only a credential that cannot be refreshed, never a pool that will reopen on its own`, () => {
@@ -523,7 +523,7 @@ describe(`plan-limit aggregates`, () => {
         expect(summary.accounts).toBe(4);
     });
 
-    // Even a spent account whose credential IS dead belongs here — on the reauth, not on the spend.
+    // Even a spent account whose credential IS dead belongs here: on the reauth, not on the spend.
     it(`raises a dead credential whatever its pools say`, () => {
         const summary = planLimitSummary([at(99, { id: `both`, needsReauth: true }), at(99, { id: `justSpent` })]);
         expect(summary.attention.map((row) => row.id)).toEqual([`both`]);

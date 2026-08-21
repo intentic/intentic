@@ -1,28 +1,28 @@
 <!-- Inline info affordance: a small (i) icon that reveals a richly formatted card on hover/focus. Purely
-     presentational — the card body is projected via <slot>, so each call site supplies its own heading/
+     presentational: the card body is projected via <slot>, so each call site supplies its own heading/
      bullets/accents. The card is teleported out of the flow and positioned from the trigger's rect, so it
-     escapes ancestor `overflow` clipping (e.g. the workspace scroll column) and the rail — it always paints on
+     escapes ancestor `overflow` clipping (e.g. the workspace scroll column) and the rail: it always paints on
      top and clamps into the viewport regardless of where the icon sits. Keyboard accessible: the icon is
-     focusable and Tab reveals the card (focusin), which is why show/hide is wired explicitly — Teleport breaks
+     focusable and Tab reveals the card (focusin), which is why show/hide is wired explicitly: Teleport breaks
      the CSS group-hover/focus-within chain. The surface uses the role tokens, so it tracks light/dark like
      every other card.
 
      WHERE IT GOES IS `placeAnchored`'S ANSWER, not this file's. It used to carry its own copy of the flip-above
      and the horizontal clamp, written against the module-scope `window` and teleported to the module-scope
-     `document.body` — which is the bug anchorPlacement.ts opens by describing: a hint inside a popped-out chat
+     `document.body`, which is the bug anchorPlacement.ts opens by describing: a hint inside a popped-out chat
      or terminal panel measured its room against the OPENER's viewport and landed in the pop-out's. It is the
      third implementation of that geometry the app had (AnchoredOverlay and the tooltip directive were the
      others), and the only one nobody had noticed was wrong, because a hint that opens slightly off is a hint
      you assume you mis-hovered.
 
      It does NOT use <AnchoredOverlay>, which owns the same geometry, and that is deliberate: that component is
-     a dialog — it dismisses on outside pointerdown, takes Escape, and hands the keyboard back on close. This is
+     a dialog: it dismisses on outside pointerdown, takes Escape, and hands the keyboard back on close. This is
      a hover card. It shares the maths and nothing else. -->
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, reactive, ref } from "vue";
 import { placeAnchored } from "../lib/anchorPlacement.js";
 
-// `text` renders a small visible label next to the icon — use it when the hint carries content
+// `text` renders a small visible label next to the icon: use it when the hint carries content
 // users shouldn't have to discover by hovering a bare (i).
 const { label, text = `` } = defineProps<{ label: string; text?: string }>();
 
@@ -35,12 +35,12 @@ const card = ref<HTMLElement>();
 const open = ref(false);
 const pos = reactive({ top: 0, left: 0 });
 
-/* KEEP THE WHOLE CARD ON SCREEN, which needs its rendered HEIGHT and therefore cannot be done in one pass — the
+/* KEEP THE WHOLE CARD ON SCREEN, which needs its rendered HEIGHT and therefore cannot be done in one pass: the
  * content is a slot, so nothing here knows how tall it is until it exists. `placeAnchored` flips it above when
  * that buys real room and clamps it horizontally; the one thing left here is the SLIDE, which is this card's
  * own answer rather than the shared one.
  *
- * A panel slides nowhere — it caps its height and scrolls. This cannot: it is pointer-events-none, so an inner
+ * A panel slides nowhere, it caps its height and scrolls. This cannot: it is pointer-events-none, so an inner
  * scrollbar would be unreachable. So a card that fits in the window but not below its trigger slides up until
  * it does, and a card taller than the window pins to the top edge and overflows the bottom, because the opening
  * lines are the ones worth guaranteeing. */
@@ -67,7 +67,7 @@ const place = (): void => {
     pos.top = height === 0 ? placement.top : Math.max(EDGE, Math.min(placement.top, view.innerHeight - height - EDGE));
 };
 
-// What is armed while the card is up, and on WHICH document — remembered so the same pair is disarmed even
+// What is armed while the card is up, and on WHICH document: remembered so the same pair is disarmed even
 // after the trigger has moved to another window (a panel docking mid-hover) or gone away entirely.
 let armed: { readonly doc: Document; readonly view: Window } | undefined;
 

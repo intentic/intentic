@@ -14,7 +14,7 @@ describe(`sessionCategory`, () => {
         expect(sessionCategory(`fix: pnpm lock`)?.icon).toBe(`wrench`);
     });
 
-    test(`a title that reads as nothing wears no category — neutral is information, not a fallback guess`, () => {
+    test(`a title that reads as nothing wears no category: neutral is information, not a fallback guess`, () => {
         expect(sessionCategory(`New chat`)).toBeUndefined();
         expect(sessionCategory(`Why is the tree red?`)).toBeUndefined();
         // A tag in no verb table is the title's last noun, not an action.

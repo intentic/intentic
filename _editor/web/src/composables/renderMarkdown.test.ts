@@ -3,14 +3,14 @@
 // DOMPurify needs a real document: without one it exposes no `sanitize` at all, so under the suite's default
 // `node` environment every render here threw into renderMarkdown's crash fallback and the assertions below
 // were really checking escaped raw markdown. jsdom rather than happy-dom because DOMPurify misbehaves badly
-// on the latter — it strips every tag and keeps <script> CONTENT, which would make these tests worse than
+// on the latter: it strips every tag and keeps <script> CONTENT, which would make these tests worse than
 // useless. This is the only file that needs a document; the rest of the suite stays on `node`.
 import { beforeEach, describe, expect, it, test } from "vitest";
 import { watchEffect } from "vue";
 import { copyCodeFromEvent, escapeHtml } from "@intentic/ui/markdown";
 import { createStreamingMarkdown, markdownParseCount, renderMarkdown, type RenderedMarkdown, settledEnd } from "./renderMarkdown";
 
-/* A rendered document is a list of parts — prose runs as HTML, figures as data (see renderMarkdownParts). These
+/* A rendered document is a list of parts: prose runs as HTML, figures as data (see renderMarkdownParts). These
  * two read it the way the assertions below want to talk about it: what a reader would SEE, and which run is
  * which. `prose` is deliberately not the whole document: a figure has no html, and a test that stringified one
  * would be asserting on the fence source the surface no longer shows. */
@@ -18,7 +18,7 @@ const prose = (parts: RenderedMarkdown): string => parts.flatMap((part) => (part
 const runs = (parts: RenderedMarkdown): number => parts.filter((part) => part.kind === `html`).length;
 
 // The one invariant that keeps a streamed chat bubble alive: renderMarkdown must NEVER throw and must always
-// return a string, whatever it's handed — the assistant bubble re-runs it on every partial-markdown delta, so a
+// return a string, whatever it's handed: the assistant bubble re-runs it on every partial-markdown delta, so a
 // single throw would blank the turn (the reported "undefined is not an object" crash class).
 const INPUTS: unknown[] = [
     ``,
@@ -37,14 +37,14 @@ const INPUTS: unknown[] = [
 
 test("renderMarkdown never throws and always returns a string for any input", () => {
     for (const input of INPUTS) {
-        // @ts-expect-error — deliberately exercising non-string inputs that could slip in mid-stream.
+        // @ts-expect-error: deliberately exercising non-string inputs that could slip in mid-stream.
         const output = renderMarkdown(input);
         expect(typeof output).toBe(`string`);
     }
 });
 
 /* The placeholder the code renderer emits and the pattern that substitutes it are two halves of one seam, in
- * two different modules, joined across a round-trip through the sanitizer's DOM — these pin all three
+ * two different modules, joined across a round-trip through the sanitizer's DOM: these pin all three
  * together. Colour has not landed on a FIRST render (the grammar is imported on demand), which is exactly the
  * fallback state these assert; the describe below waits for it instead. */
 describe(`code blocks`, () => {
@@ -66,7 +66,7 @@ describe(`code blocks`, () => {
         const html = renderMarkdown("```\nplain\n```");
         expect(html).toContain(`md-code`);
         expect(html).toContain(`plain`);
-        // Nothing to name it with, so nothing is emitted to name it — the controls are an overlay, and an
+        // Nothing to name it with, so nothing is emitted to name it: the controls are an overlay, and an
         // empty chip in one would still be a box hanging over the code.
         expect(html).not.toContain(`md-code-lang`);
         expect(html).toContain(`aria-label="Copy code"`);
@@ -85,13 +85,13 @@ describe(`code blocks`, () => {
 });
 
 /* A fence info is what an author wrote, not a grammar id: a document names its dialect (`jsonc`), and a FIGURE
- * fence (figures.ts) names a picture — which reaches this renderer as a code block whenever the surface cannot
+ * fence (figures.ts) names a picture, which reaches this renderer as a code block whenever the surface cannot
  * hold a component (one v-html string) or the body does not parse. Both bodies are JSON, so both are mapped onto
  * the grammar we ship rather than left grey. Colour is what proves the mapping: it appears only once a real
  * Shiki grammar has run over the block. */
 describe(`fence infos mapped onto a shipped grammar`, () => {
     // Highlighting is asynchronous (the grammar is imported on demand) and lands by invalidating the render, so
-    // this re-renders until colour shows up — false means it never did.
+    // this re-renders until colour shows up: false means it never did.
     const colours = async (source: string): Promise<boolean> => {
         let html = ``;
         const stop = watchEffect(
@@ -116,14 +116,14 @@ describe(`fence infos mapped onto a shipped grammar`, () => {
     });
 
     // The chip names what the author wrote, so a reader can tell which fence produced the block they are looking
-    // at — aliasing decides the grammar, never the label.
+    // at: aliasing decides the grammar, never the label.
     it(`still names the fence's own info string`, () => {
         expect(renderMarkdown('```jsonc\n{ "a": 1 }\n```')).toContain(`>jsonc</span>`);
     });
 });
 
 /* A whole answer that is nothing but a block marker parses to markup with no text in it, and the bubble then
- * renders an empty box — the turn reads as if the model never replied. Observed with a Haiku turn whose entire
+ * renders an empty box: the turn reads as if the model never replied. Observed with a Haiku turn whose entire
  * answer was "4."; these pin the fallback that shows the source instead, and the markup it must NOT swallow. */
 describe(`markup that would render invisibly`, () => {
     it(`shows a bare ordered-list marker as the text it is`, () => {
@@ -153,7 +153,7 @@ describe(`markup that would render invisibly`, () => {
     });
 });
 
-/* Headings — ATX headers at every level the prose styles (h1–h4), plus h5/h6 which marked produces but
+/* Headings: ATX headers at every level the prose styles (h1–h4), plus h5/h6 which marked produces but
  * prose.css does not style. A heading with text in it must come through as its element, not as escaped
  * source, so the prose surface can style it and the outline can find it. */
 describe(`headings`, () => {
@@ -205,7 +205,7 @@ describe(`streaming split`, () => {
         expect(settledOf(text)).toBe("```ts\nconst a = 1;\n```\n\n");
     });
 
-    it(`refuses to split two list blocks — an ordered list would restart at 1`, () => {
+    it(`refuses to split two list blocks: an ordered list would restart at 1`, () => {
         expect(settledOf(`1. first\n\n2. second\n\n3. third`)).toBe(``);
     });
 
@@ -219,7 +219,7 @@ describe(`streaming split`, () => {
 
     /* The settled prefix and the still-writing tail are separate PARTS, and the first must come back
      * byte-identical while it stands: an identical v-html string is what Vue skips patching, which is what
-     * leaves the DOM — and any text the user has selected in it — alone while the turn writes on. */
+     * leaves the DOM, and any text the user has selected in it: alone while the turn writes on. */
     it(`renders the settled part byte-identically across frames and only grows the tail`, () => {
         const stream = createStreamingMarkdown(() => undefined);
         const first = stream.render(`Done paragraph.\n\nStill wri`);
@@ -242,7 +242,7 @@ describe(`streaming split`, () => {
     });
 
     /* The reason the split exists. Streaming a message one character at a time, the settled prefix must be
-     * re-parsed once per COMPLETED BLOCK, never once per frame — otherwise the cost of a turn is quadratic in
+     * re-parsed once per COMPLETED BLOCK, never once per frame: otherwise the cost of a turn is quadratic in
      * its own length. Only the short tail may be re-parsed every frame.
      *
      * Asserted as an exact count rather than a bound: if the prefix memo is ever dropped, this jumps from
@@ -269,7 +269,7 @@ describe(`streaming split`, () => {
 });
 
 /* FIGURES IN A TURN THAT IS STILL BEING WRITTEN. The transcript renders an answer as parts precisely so an
- * agent's ```mermaid draws in the chat and not only in the file it later saves — and a live turn is where that
+ * agent's ```mermaid draws in the chat and not only in the file it later saves, and a live turn is where that
  * has to hold, because a diagram is usually the last thing an answer contains and the turn it belongs to can
  * run for minutes after writing it.
  *
@@ -287,14 +287,14 @@ describe(`streaming a document with a figure in it`, () => {
     });
 
     /* The reason the TAIL is split into parts too. A diagram nothing follows never settles, so a tail left whole
-     * would hold it as arrow syntax until the turn ended — and an answer that ends on its diagram is the common
+     * would hold it as arrow syntax until the turn ended, and an answer that ends on its diagram is the common
      * case, not the corner one. */
     it(`draws a closed fence the answer ends on, without waiting for a block after it`, () => {
         const stream = createStreamingMarkdown(() => undefined);
         const parts = stream.render(`Here it is.\n\n${DIAGRAM}`);
         expect(parts.filter((part) => part.kind === `figure`)).toHaveLength(1);
         expect(prose(parts)).toContain(`Here it is.`);
-        // The fence source is gone from the prose — the figure replaced it rather than joining it.
+        // The fence source is gone from the prose: the figure replaced it rather than joining it.
         expect(prose(parts)).not.toContain(`flowchart LR`);
     });
 
@@ -322,7 +322,7 @@ describe(`streaming a document with a figure in it`, () => {
 });
 
 /* A document's colour must not cost a re-render per code block. Each landing highlight bumps the shared
- * `highlightVersion`, which invalidates every markdown computed that read it — so a per-highlight bump made a
+ * `highlightVersion`, which invalidates every markdown computed that read it, so a per-highlight bump made a
  * document re-render once per block, each pass re-scheduling the next. Measured on a 1.9 MiB file with 3353
  * blocks (~500ms of script and 1283ms of layout per pass, all in microtasks), the tab never came back.
  *
@@ -342,7 +342,7 @@ describe(`code block highlighting is bounded`, () => {
             },
             { flush: `sync` },
         );
-        // A timer only fires if the render loop actually yields — the storm ran entirely in microtasks and
+        // A timer only fires if the render loop actually yields: the storm ran entirely in microtasks and
         // starved timers outright, so reaching this line at all is part of what's being asserted.
         await new Promise((resolve) => setTimeout(resolve, 500));
         stop();
@@ -404,7 +404,7 @@ describe(`code block copy`, () => {
         container.innerHTML = renderMarkdown(`${source}\n\nAnd the next sentence arrives.`);
         container.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
         await Promise.resolve();
-        // Once — the click that followed the press asked for the same text, which the copied state absorbs.
+        // Once: the click that followed the press asked for the same text, which the copied state absorbs.
         expect(written).toEqual([`export const streamed = 2;`]);
     });
 
@@ -417,7 +417,7 @@ describe(`code block copy`, () => {
         const after = renderMarkdown(source);
         expect(after).toContain(`md-code-copied`);
         expect(after).toContain(`>Copied</button>`);
-        // Only the block that was copied — a document's other blocks are untouched by it.
+        // Only the block that was copied: a document's other blocks are untouched by it.
         expect(renderMarkdown("```ts\nexport const other = 4;\n```")).not.toContain(`md-code-copied`);
     });
 
@@ -429,7 +429,7 @@ describe(`code block copy`, () => {
     });
 
     /* THE POP-OUT. A popped-out panel's DOM is teleported into a second real window while this realm keeps
-     * running the JS, so the module-global `navigator` belongs to a document the user is NOT focused on — and
+     * running the JS, so the module-global `navigator` belongs to a document the user is NOT focused on, and
      * Chrome refuses a clipboard write from an unfocused document, silently, which is exactly what "the Copy
      * button does nothing out here" was. The write must therefore go through the button's OWN window. An
      * iframe stands in for the pop-out: a second same-origin realm with its own document and navigator. */

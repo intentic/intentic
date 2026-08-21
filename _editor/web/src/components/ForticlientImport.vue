@@ -5,8 +5,8 @@
      was the step that made this feature not worth using.
 
      NOTHING IS STORED by any of this. The picked connection is handed to the form as an answer the user can
-     still change, and the ordinary add below is what saves it. Credentials are never among the answers —
-     FortiClient encrypts them with a key tied to the machine that exported them — so each row says which fields
+     still change, and the ordinary add below is what saves it. Credentials are never among the answers:
+     FortiClient encrypts them with a key tied to the machine that exported them, so each row says which fields
      are still waiting. -->
 <script setup lang="ts">
 import { type ForticlientConnection } from "@intentic/sandbox-contract";
@@ -18,18 +18,18 @@ import { importForticlient } from "../composables/sandbox/useVpn";
 const emit = defineEmits<{
     /** The connection to fill the form with. */
     pick: [connection: ForticlientConnection];
-    /** What went wrong reading the file, on the page's own notice — or null to clear it before a fresh read. */
+    /** What went wrong reading the file, on the page's own notice, or null to clear it before a fresh read. */
     notice: [notice: NoticeModel | null];
 }>();
 
 const connections = ref<ForticlientConnection[]>([]);
-// The file the list came from — named back at the user, so a picker full of unfamiliar connections is
+// The file the list came from: named back at the user, so a picker full of unfamiliar connections is
 // attributable to what they dropped. Empty until one has been read successfully.
 const fileName = ref(``);
 const importing = ref(false);
 const chooseFile = ref<HTMLInputElement>();
 
-// A FortiClient backup is tens of KB of XML. Far past that, the drop was a slip — reading the file into this tab
+// A FortiClient backup is tens of KB of XML. Far past that, the drop was a slip: reading the file into this tab
 // and posting it is the wrong answer to one.
 const MAX_BYTES = 4_000_000;
 
@@ -41,13 +41,13 @@ const readFile = async (file: File | undefined): Promise<void> => {
     fileName.value = ``;
     connections.value = [];
     if (file.size > MAX_BYTES) {
-        emit(`notice`, noticeOf(`${file.name} is far too big to be a FortiClient configuration — that looks like the wrong file.`));
+        emit(`notice`, noticeOf(`${file.name} is far too big to be a FortiClient configuration: that looks like the wrong file.`));
         return;
     }
     importing.value = true;
     try {
         const xml = await file.text();
-        // An empty file is "nothing to import", which the line under the zone already says — posting it would
+        // An empty file is "nothing to import", which the line under the zone already says: posting it would
         // trade that sentence for the route's validation error, which answers a question nobody asked.
         connections.value = xml.trim().length === 0 ? [] : await importForticlient(xml);
         fileName.value = file.name;
@@ -101,7 +101,7 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
         <div class="flex flex-col gap-2 px-4 py-3">
             <p class="text-2xs text-muted">
                 Drop an exported FortiClient configuration (File ▸ Settings ▸ Backup) here to fill the form from one of its connections. Passwords in
-                that file are encrypted by FortiClient and can't be read — you'll still type those.
+                that file are encrypted by FortiClient and can't be read: you'll still type those.
             </p>
             <!-- The zone IS the button, so the drag and the click share one target and there is no small "browse"
                  link beside it to aim at. -->
@@ -134,7 +134,7 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
             <input ref="chooseFile" type="file" accept=".conf,.xml,text/xml,application/xml" class="hidden" @change="onPick" />
             <p v-if="fileName !== '' && connections.length === 0" class="text-2xs text-warning">No VPN connections found in {{ fileName }}.</p>
             <template v-if="connections.length > 0">
-                <p class="text-2xs text-subtle">From {{ fileName }} — pick the connection to fill the form with.</p>
+                <p class="text-2xs text-subtle">From {{ fileName }}: pick the connection to fill the form with.</p>
                 <div class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
                     <button
                         v-for="connection in connections"

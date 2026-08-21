@@ -52,7 +52,7 @@ export const VERB_LABEL: Record<Exclude<SandboxVerb, `logs`>, string> = {
 export const sandboxVerbPrompt = (verb: SandboxVerb, name: string): string | undefined => {
     switch (verb) {
         case `remove`:
-            return `Remove ${name}?\n\nThis deletes it and everything in it — its files and its history — from that computer. This cannot be undone.`;
+            return `Remove ${name}?\n\nThis deletes it and everything in it: its files and its history, from that computer. This cannot be undone.`;
         case `update`:
             return `Update ${name}?\n\nIt restarts onto the newest image and is unavailable for a few minutes. Its files are kept.`;
         case `rollback`:

@@ -139,7 +139,7 @@ export class TurnFailures {
                  * rather than a recovery. The turn did teach it the list, so the user's own next send is the one
                  * that goes through. */
                 this.host.requeue(turn.userMessageId);
-                this.host.transcript.notice(`${message} Your message is held below — send it again and it goes as written.`);
+                this.host.transcript.notice(`${message} Your message is held below: send it again and it goes as written.`);
                 return;
             case `session-not-found`:
                 /* The runtime could not pick this chat's session back up mid-turn, drop the dead id so the next
@@ -273,7 +273,7 @@ export class TurnFailures {
         this.outageResume.value = { ...outage, scheduled };
         this.host.transcript.notice(
             scheduled
-                ? `${message} Retrying by itself in ${formatWait(outage.retryAt)} — attempt ${outage.attempt} of ${outage.maxAttempts}.`
+                ? `${message} Retrying by itself in ${formatWait(outage.retryAt)}: attempt ${outage.attempt} of ${outage.maxAttempts}.`
                 : `${message} Nothing is retrying it, so the turn is waiting: keep this chat going and it continues from here.`,
             scheduled ? { noticeAction: `outageOptOut` } : undefined,
         );
@@ -342,7 +342,7 @@ export class TurnFailures {
         }
         this.outageResume.value = { ...pending, scheduled: true };
         this.host.transcript.notice(
-            `This chat picks itself back up in ${formatWait(pending.retryAt)} and keeps doing so through provider outages. Only this chat — Sandbox ▸ Agent sets the default for the rest.`,
+            `This chat picks itself back up in ${formatWait(pending.retryAt)} and keeps doing so through provider outages. Only this chat: Sandbox ▸ Agent sets the default for the rest.`,
         );
         this.scheduleReattach(pending.retryAt * 1000, OUTAGE_PROBE);
         this.host.persist();
@@ -361,7 +361,7 @@ export class TurnFailures {
         }
         this.cancelProbe();
         this.outageResume.value = { ...pending, scheduled: false };
-        this.host.transcript.notice(`Stopped — this chat no longer picks itself back up. The turn is still here to resume by hand.`);
+        this.host.transcript.notice(`Stopped: this chat no longer picks itself back up. The turn is still here to resume by hand.`);
         this.host.persist();
     }
 
@@ -415,7 +415,7 @@ export class TurnFailures {
             return;
         }
         this.credentialRenewal.value = undefined;
-        const detail = `Claude sign-in could not be renewed — reconnect the account.`;
+        const detail = `Claude sign-in could not be renewed: reconnect the account.`;
         this.markReauth(detail);
         this.host.transcript.notice(`${detail} This turn stopped where it was; sending again picks the conversation back up.`);
         this.host.persist();

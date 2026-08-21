@@ -6,7 +6,7 @@ import { NOTICE_GRACE_MS, useNoticeGrace } from "./noticeGrace";
 const lost: NoticeModel = { tone: `danger`, title: `Lost contact with your sandbox.` };
 const other: NoticeModel = { tone: `danger`, title: `Couldn't read your changes.` };
 
-// The composable registers an onScopeDispose, so it needs a scope to belong to — and running each case inside
+// The composable registers an onScopeDispose, so it needs a scope to belong to, and running each case inside
 // one also proves the timer is cleaned up rather than left to fire into a torn-down view.
 const inScope = async <T>(body: () => T): Promise<{ value: T; stop: () => void }> => {
     const scope = effectScope();

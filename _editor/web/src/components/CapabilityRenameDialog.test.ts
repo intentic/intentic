@@ -2,7 +2,7 @@
 //
 // The name is the agent's handle for a connection, and this dialog is the only place it can be changed. What is
 // pinned is the part a user can get wrong: the field starts from the name they are looking at, the button stays
-// down until the name is both different and legal, and what leaves is the trimmed name — the daemon refuses a
+// down until the name is both different and legal, and what leaves is the trimmed name: the daemon refuses a
 // stray space, and it should never get the chance to.
 import PrimeVue from "primevue/config";
 import { expect, it } from "vitest";

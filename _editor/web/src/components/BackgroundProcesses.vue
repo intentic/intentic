@@ -3,17 +3,17 @@ import { AnchoredOverlay, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../composables/terminal/useBackgroundProcesses";
 
-/* The terminal panel's background-processes control (pm2-style): managed processes — extension gateways,
- * dockerd — surface HERE with status, read-only log views, and explicit start/stop, not as killable terminal
+/* The terminal panel's background-processes control (pm2-style): managed processes, extension gateways,
+ * dockerd: surface HERE with status, read-only log views, and explicit start/stop, not as killable terminal
  * tabs, so a stray tab × can't take an automation's gateway down. Mounted in the panel toolbar; hidden until
  * there is anything to show.
  *
  * The power-user shortcut, NOT the canonical surface: an extension's process also renders on the capability
  * card its connector belongs to, which is where someone asking "why did my bot stop answering?" actually
- * looks. Same rows, same actions — useBackgroundProcesses owns both. */
+ * looks. Same rows, same actions: useBackgroundProcesses owns both. */
 
 const { rows, busy, start, stop } = useBackgroundProcesses();
-/* The panel must open in the floating window while the terminal is popped out there, not the main document —
+/* The panel must open in the floating window while the terminal is popped out there, not the main document:
  * and it must be MEASURED against that window too. PrimeVue's Popover only ever got the first half (it took an
  * `append-to`, which the pop-out target satisfied) and went on asking the opener's `window` how much room was
  * below the trigger, so out there it opened off the bottom edge over its own button. <AnchoredOverlay> derives

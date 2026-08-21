@@ -25,7 +25,7 @@ const entryLine = (entry: SecretInventoryEntry): string => {
 };
 
 const list = buildCommand<{ artifact?: string }>({
-    docs: { brief: "List every secret the workspace knows about — status, consumers, and CI sync state (never values)" },
+    docs: { brief: "List every secret the workspace knows about, status, consumers, and CI sync state (never values)" },
     parameters: {
         flags: { artifact: { kind: "parsed", parse: String, optional: true, brief: `Path to the artifact (default: ${ARTIFACT_PATH})` } },
     },
@@ -47,7 +47,7 @@ export const pushSecrets = async (out: Output, artifact: string, api: ForgejoApi
     const targetDir = dirname(artifact);
     const sync = await readSyncState(targetDir);
     if (Object.keys(sync).length === 0) {
-        out.text("not adopted (no CI secret record) — nothing to push");
+        out.text("not adopted (no CI secret record): nothing to push");
         out.result({ pushed: [], reason: "not adopted" });
         return;
     }
@@ -96,7 +96,7 @@ export const pushSecrets = async (out: Output, artifact: string, api: ForgejoApi
             forgejoPasswordKey: ref.key,
         };
         await writeWorkflow(targetDir, APPLY_WORKFLOW_PATH, applyWorkflowYaml(inputs));
-        out.text(`regenerated ${APPLY_WORKFLOW_PATH} for the new key set — commit and push desired-state to activate it`);
+        out.text(`regenerated ${APPLY_WORKFLOW_PATH} for the new key set: commit and push desired-state to activate it`);
     }
 
     const pushedAt = new Date().toISOString();
@@ -124,5 +124,5 @@ const push = buildCommand<{ artifact?: string }>({
 
 export const secretsCommand = buildRouteMap({
     routes: { list, push },
-    docs: { brief: "Inspect and sync the workspace's secrets (keys and status only — values never print)" },
+    docs: { brief: "Inspect and sync the workspace's secrets (keys and status only, values never print)" },
 });

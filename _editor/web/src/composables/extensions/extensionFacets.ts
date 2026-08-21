@@ -112,7 +112,7 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
     ]);
     take(`bin`, (bin) => [{ kind: `bin`, label: `agent CLI`, names: [`executables from ${bin}/, on the agent's PATH`], surface: true }]);
     take(`environment`, (environment) => [
-        { kind: `environment`, label: `image layer`, names: [`${environment.fragment} — applied at the next environment rebuild`], surface: true },
+        { kind: `environment`, label: `image layer`, names: [`${environment.fragment}, applied at the next environment rebuild`], surface: true },
     ]);
     take(`settings`, (settings) => [
         { kind: `settings`, label: counted(settings.length, `setting`), names: settings.map((setting) => setting.title), surface: true },

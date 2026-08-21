@@ -1,4 +1,4 @@
-<!-- The Picker's open panel (internal — hosts are Picker.vue's Popover/BottomSheet): an optional filter box
+<!-- The Picker's open panel (internal, hosts are Picker.vue's Popover/BottomSheet): an optional filter box
      over a grouped listbox. Rows carry icon · label · quiet description · check; keyboard follows the
      QuickOpen pattern (arrows wrap, Enter picks, Esc clears the query before it closes). The host remounts
      this per open, so the query and highlight reset for free and onMounted is the open moment. -->
@@ -35,7 +35,7 @@ const optionCount = computed(() => groups.value.reduce((count, group) => count +
 const searchable = computed(() => optionCount.value >= searchThreshold);
 
 // The visible list: groups filtered by the query (a group's label counts as a match for all its rows, so
-// "claude" finds every model under the Claude Code header), each row carrying its index in visual order —
+// "claude" finds every model under the Claude Code header), each row carrying its index in visual order:
 // the keyboard highlight's coordinate system.
 const shown = computed(() => {
     const needle = query.value.trim().toLowerCase();
@@ -56,13 +56,13 @@ const shown = computed(() => {
 });
 const flat = computed<readonly PickerOption<T>[]>(() => shown.value.flatMap((group) => group.rows.map((row) => row.option)));
 
-/* Hinted rows are two lines, so the whole LIST switches to top-alignment — per-row would step the icons and
+/* Hinted rows are two lines, so the whole LIST switches to top-alignment: per-row would step the icons and
  * checks up and down the column as the reader's eye travels it. One list, one baseline. */
 const hinted = computed(() => flat.value.some((option) => option.hint !== undefined));
 
 /* And for the same reason, one list, one row HEIGHT once anything in it wears a face. A face is taller than the
  * line of text beside it, so a list of people with a "Nobody" glyph at the top came out with one short row and
- * five tall ones — a visible hitch at exactly the row a reader lands on first. Applied to the whole list rather
+ * five tall ones: a visible hitch at exactly the row a reader lands on first. Applied to the whole list rather
  * than per row, so the column steps evenly whichever rows happen to be filtered out. */
 const faced = computed(() => flat.value.some((option) => option.face !== undefined));
 
@@ -188,7 +188,7 @@ onMounted(() => {
                             :class="[row.option.value === selectedValue ? `text-link` : `text-content`, row.option.mono === true ? `font-mono` : ``]"
                             >{{ row.option.label }}</span
                         >
-                        <!-- Wraps on purpose — a sentence cut off mid-clause teaches nothing, and the panel is
+                        <!-- Wraps on purpose: a sentence cut off mid-clause teaches nothing, and the panel is
                              already width-capped, so the only thing left to spend is height. -->
                         <span v-if="row.option.hint !== undefined" class="text-2xs leading-snug text-subtle">{{ row.option.hint }}</span>
                     </span>

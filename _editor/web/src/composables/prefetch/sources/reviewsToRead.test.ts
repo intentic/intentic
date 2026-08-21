@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { reviewsToRead } from "./reviewsToRead";
 
 /* WHICH REVIEWS ARE READ BEFORE THEY ARE OPENED, and how deeply. Worth pinning because nothing else can catch a
- * regression here: drop a lane and the app still works — reviews just open with their numbers unsettled and fill in
+ * regression here: drop a lane and the app still works, reviews just open with their numbers unsettled and fill in
  * while the reader scans them, which is the exact fault the reading-ahead exists to prevent. And read every lane
  * deeply and the plan's ceiling silently drops the workspace review's own rows, which fails the same way somewhere
  * else. */
@@ -26,7 +26,7 @@ describe(`reviewsToRead`, () => {
 
     it(`still reaches the likely-next reviews when the reader is nowhere near an agent page`, () => {
         // Standing in the workspace, or on the board itself: nothing is open, and this is the case the counts used
-        // to have no chance in — a review was read only after its own page had been opened.
+        // to have no chance in: a review was read only after its own page had been opened.
         expect(reviewsToRead(undefined, undefined, [`waiting`]).map((review) => review.agentId)).toEqual([`waiting`]);
     });
 
@@ -50,7 +50,7 @@ describe(`reviewsToRead`, () => {
     });
 
     /* WORK THAT HAS LANDED IS READ ONCE, through the workspace review. The two reads are different questions over
-     * the same file (see the header), so this is not a cache sharing its answer — it is the plan declining to buy
+     * the same file (see the header), so this is not a cache sharing its answer: it is the plan declining to buy
      * the same bytes twice under two different names, on the surface that is no longer the one being reviewed. */
     it(`leaves a landed agent's review to the workspace review that now holds the same work`, () => {
         expect(reviewsToRead(undefined, `chatting`, [`waiting`], new Set([`chatting`, `waiting`]))).toEqual([]);
@@ -70,7 +70,7 @@ describe(`reviewsToRead`, () => {
     });
 
     it(`fills the attention lane's three places from the reviews it is still reading`, () => {
-        // The cap is on what is WORTH reading, so a landed card must not spend one of its places — the lane would
+        // The cap is on what is WORTH reading, so a landed card must not spend one of its places: the lane would
         // otherwise go shallow for the agents that are actually waiting on the user.
         const read = reviewsToRead(
             undefined,

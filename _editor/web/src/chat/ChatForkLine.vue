@@ -6,13 +6,13 @@ import { openAgentConversation, useChat, usePaneView } from "../composables/chat
 /* WHERE THIS CHAT CAME FROM, at the top of the transcript it inherited.
  *
  * A fork opens holding somebody else's turns. Without a line saying so, those turns read as this conversation's
- * own beginning — and the two chats, which exist to be COMPARED, look unrelated. So the relationship is stated
+ * own beginning, and the two chats, which exist to be COMPARED, look unrelated. So the relationship is stated
  * exactly where the inherited history starts, and it is a link: the reason to have forked is to go back and
  * forth between the two answers.
  *
  * Read from the fleet rather than from the tab, because the tab is the half that does not last. Closing this
  * chat and reopening it from history builds a new tab that knows nothing, while the registry entry has carried
- * the fork's source since its first turn — and it is the same read from either end (see the source's own mark
+ * the fork's source since its first turn, and it is the same read from either end (see the source's own mark
  * in ChatForkCut). */
 
 const { conversation } = usePaneView();
@@ -29,7 +29,7 @@ const label = computed(() => source.value?.title ?? `the chat this was forked fr
 
 /* AND WHICH FILES IT STARTED ON. Said out loud, permanently, because it is the half of a fork that has no other
  * evidence: the inherited turns are on screen, but whether the workspace under them is the one those turns
- * describe or the one that exists today is invisible — and getting it wrong is how an agent ends up reasoning
+ * describe or the one that exists today is invisible, and getting it wrong is how an agent ends up reasoning
  * about edits that are not there. */
 const files = computed(() =>
     forkedFrom.value?.files === `then` ? `on the files as they were at that point` : `on the files as they stood when it was forked`,

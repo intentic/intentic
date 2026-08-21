@@ -1,7 +1,7 @@
 {
     "name": "@intentic/local-agent",
     "version": "0.0.0",
-    "description": "The plumbing every intentic CLI that lives on a user's own computer needs — state home, login autostart, self-relaunch, detached background loop",
+    "description": "The plumbing every intentic CLI that lives on a user's own computer needs, state home, login autostart, self-relaunch, detached background loop",
     "license": "MIT",
     "type": "module",
     "repository": {

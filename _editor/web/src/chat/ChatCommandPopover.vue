@@ -4,16 +4,16 @@ import ComposerPopover from "./ComposerPopover.vue";
 import type { AgentCommand } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 
-/* The composer's `/` command picker: the provider's own slash commands — an ACP agent's available_commands,
+/* The composer's `/` command picker: the provider's own slash commands, an ACP agent's available_commands,
  * or a Claude session's supportedCommands() (its built-ins plus the workspace's .claude/commands and any
- * plugin/skill commands). Same shell as the mention popover — the parent owns the keyboard flow and calls
+ * plugin/skill commands). Same shell as the mention popover: the parent owns the keyboard flow and calls
  * move/pickActive.
  *
  * Rows only, and only when the parent has matches to show. It used to filter the list itself and answer an
- * empty result with "No command matches" — a warning raised over prose, which is the case that needs no
+ * empty result with "No command matches": a warning raised over prose, which is the case that needs no
  * warning at all: `/workspace view …` is a sentence, and a box telling the user it names no command reads as
  * an error over text that is about to send perfectly well. The parent owns the match now because it also has
- * to answer the harder question the popover never could — whether the draft will RUN as a command. */
+ * to answer the harder question the popover never could, whether the draft will RUN as a command. */
 
 const props = defineProps<{ commands: readonly AgentCommand[] }>();
 const emit = defineEmits<{ pick: [name: string] }>();

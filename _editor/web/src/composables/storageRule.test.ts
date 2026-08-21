@@ -6,24 +6,24 @@
 import { describe, expect, it } from "vitest";
 import { mirrors, UNPERSISTED } from "./queryPersistence";
 // Statically imported, not awaited inside a hook: these builders' graph is app-wide, and compiling it cold on a
-// runner with every core busy takes longer than a hook is allowed to (vitest's hookTimeout) — the same work at
+// runner with every core busy takes longer than a hook is allowed to (vitest's hookTimeout): the same work at
 // import time is simply the file's load, paid during collection. The browser globals that graph reads at module
 // scope (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env) are already in
-// place — vitest.setup.ts installs them for the package, before any test file is loaded.
+// place: vitest.setup.ts installs them for the package, before any test file is loaded.
 import { agentTranscriptKey } from "./chat/agentTranscript";
 import { agentFileDiffKey } from "./agents/useAgentChanges";
 import { changesKey, fileDiffKey } from "./workspace/useChanges";
 
 /* THE STORAGE RULE, ASSERTED.
  *
- * The query cache is mirrored to disk WHOLE — one structured clone of everything the app has ever cached, per
- * write — so a single megabyte-scale entry that slips into it is charged to every other write for the rest of
+ * The query cache is mirrored to disk WHOLE: one structured clone of everything the app has ever cached, per
+ * write, so a single megabyte-scale entry that slips into it is charged to every other write for the rest of
  * the session, and shows up as the app stuttering every couple of seconds while apparently doing nothing. The
  * marker on the key is what keeps such an entry out, and a marker is exactly the kind of thing that gets
  * dropped in a refactor by someone who has no way to know what it was for.
  *
  * Now that a background loader fills this cache on the app's behalf rather than only the screen in front of the
- * user, the volume is no longer bounded by what someone clicked — which is what makes this worth a test rather
+ * user, the volume is no longer bounded by what someone clicked, which is what makes this worth a test rather
  * than a comment. */
 
 const keys = {
@@ -34,7 +34,7 @@ const keys = {
 };
 
 describe(`what may go to disk`, () => {
-    it(`keeps a working-tree file diff out — two whole file texts, one per changed file`, () => {
+    it(`keeps a working-tree file diff out: two whole file texts, one per changed file`, () => {
         expect(keys.workingDiff).toContain(UNPERSISTED);
         expect(mirrors(keys.workingDiff)).toBe(false);
     });
@@ -44,7 +44,7 @@ describe(`what may go to disk`, () => {
         expect(mirrors(keys.agentDiff)).toBe(false);
     });
 
-    it(`keeps a conversation transcript out — it has a per-record store of its own`, () => {
+    it(`keeps a conversation transcript out: it has a per-record store of its own`, () => {
         expect(keys.transcript).toContain(UNPERSISTED);
         expect(mirrors(keys.transcript)).toBe(false);
     });

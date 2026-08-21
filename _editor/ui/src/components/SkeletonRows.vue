@@ -2,7 +2,7 @@
      <RowGroup> where the real <Row>s are about to go.
 
      IT RENDERS REAL ROWS. The bars go into <Row>'s own slots rather than into a hand-built div, so the outline
-     inherits that component's padding, gap and density tiers by construction — an outline that merely LOOKS like
+     inherits that component's padding, gap and density tiers by construction: an outline that merely LOOKS like
      the list is one that drifts from it the first time a tier changes, and the list then jumps as it lands. This
      is the difference between a placeholder and a promise the content keeps.
 
@@ -11,7 +11,7 @@
      fixed uneven set walked in order: real names are uneven, and an outline that reshuffles on every re-render
      is an animation nobody asked for.
 
-     The bars are decoration — `aria-hidden` here, with the caller owning the one `role="status"` for the region,
+     The bars are decoration: `aria-hidden` here, with the caller owning the one `role="status"` for the region,
      since a list is rarely the only thing on a loading page and five status regions announce a wait five times. -->
 <script setup lang="ts">
 import Row from "./Row.vue";
@@ -23,7 +23,7 @@ const {
     description = false,
     control = false,
 } = defineProps<{
-    /** How many placeholder rows. Match the shortest list worth promising — not the longest one seen. */
+    /** How many placeholder rows. Match the shortest list worth promising, not the longest one seen. */
     rows?: number;
     /** The tier of the rows that are coming. See <Row>. */
     density?: `comfortable` | `compact` | `dense`;
@@ -31,19 +31,19 @@ const {
     lead?: boolean;
     /** A second, shorter line under the title, for lists whose rows are titled AND described. */
     description?: boolean;
-    /** A trailing control's block — a switch, a badge, a button. */
+    /** A trailing control's block: a switch, a badge, a button. */
     control?: boolean;
 }>();
 
 // Walked in order and wrapped, so two rows are never the same length and eight rows do not read as a pattern.
 const TITLE_WIDTHS = [`w-40`, `w-28`, `w-48`, `w-32`, `w-36`, `w-24`];
 const DESCRIPTION_WIDTHS = [`w-56`, `w-64`, `w-44`, `w-52`];
-// The glyph square scales with the tier — a dense rail's icon is `text-xs`, and a square sized for a settings
+// The glyph square scales with the tier: a dense rail's icon is `text-xs`, and a square sized for a settings
 // row would make the outline wider in the gutter than the list it stands in for.
 const LEAD = { comfortable: `h-4.5 w-4.5`, compact: `h-3.5 w-3.5`, dense: `h-3 w-3` } as const;
 // A BAR IS THINNER THAN THE TEXT IT REPLACES, which is what `min-h-[1lh]` below is for and why the bar's own
 // height can stay a matter of looks. Left to itself a 14px bar standing in for a 22px line makes every row
-// shorter than the row that lands, and the list then jumps as it fills — measured at 58px against 67px before
+// shorter than the row that lands, and the list then jumps as it fills: measured at 58px against 67px before
 // this. `1lh` is one line box of whatever text the slot inherits (Row puts the tier's font and leading on the
 // wrapper around it), so the row keeps the height of the row it is promising, in every tier, for free.
 const BAR = { comfortable: `h-3.5`, compact: `h-3`, dense: `h-2.5` } as const;

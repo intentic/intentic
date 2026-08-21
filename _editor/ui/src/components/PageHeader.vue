@@ -1,4 +1,4 @@
-<!-- The standard title block for every rail panel — one h1 with an optional inline info hint / status badge
+<!-- The standard title block for every rail panel: one h1 with an optional inline info hint / status badge
      (#info), an optional right-aligned action cluster (#actions), and a muted description line. Unifies the
      hand-rolled <header> blocks that had drifted across mb-4/mb-5/mb-6 and disagreed on whether the info hint
      sat inline with the title. Sits inside a <Page>; the page owns width, the header owns nothing but its own

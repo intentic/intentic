@@ -174,7 +174,7 @@ export const freeOffer = (): FreeOffer | undefined => {
     return {
         provider,
         headline: `Try free with ${label}`,
-        copy: `No subscription needed — runs ${PROVIDER_ACCESS[provider].runs}.`,
+        copy: `No subscription needed, runs ${PROVIDER_ACCESS[provider].runs}.`,
         action: `Continue with ${label}`,
     };
 };

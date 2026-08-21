@@ -48,8 +48,8 @@ export const ERRANDS = {
     landConflict: {
         icon: `sync`,
         label: `Resolving the land conflict`,
-        detail: `Sent by the app — landing this work refused`,
-        opening: `Landing your work hit a merge conflict — none of it reached the user's workspace; it is all still on your branch. Rebase onto the main line and resolve the conflicts yourself. In each repo below (\`root\` is your working directory, any other name that subdirectory of it):`,
+        detail: `Sent by the app, landing this work refused`,
+        opening: `Landing your work hit a merge conflict, none of it reached the user's workspace; it is all still on your branch. Rebase onto the main line and resolve the conflicts yourself. In each repo below (\`root\` is your working directory, any other name that subdirectory of it):`,
     },
 } as const satisfies Record<string, Errand>;
 

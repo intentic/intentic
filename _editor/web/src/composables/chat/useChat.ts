@@ -784,7 +784,7 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
         return;
     }
     if (Date.now() > deadline) {
-        error.value = `The ${translatorProviderLabel(target)} sign-in expired — start the connection again.`;
+        error.value = `The ${translatorProviderLabel(target)} sign-in expired: start the connection again.`;
         translatorConnectFlow.value = undefined;
         return;
     }
@@ -821,7 +821,7 @@ const connectTranslator = async (target: KeyedProvider): Promise<void> => {
         };
         translatorPollTimer = setTimeout(() => void pollTranslatorOnce(target, Date.now() + CODEX_POLL_DEADLINE_MS), 3_000);
     } catch (caught) {
-        error.value = errorMessage(caught, `Could not start the subscription connection — is your sandbox online?`);
+        error.value = errorMessage(caught, `Could not start the subscription connection: is your sandbox online?`);
     } finally {
         accountBusy.value = undefined;
     }
@@ -845,7 +845,7 @@ const completeTranslator = async (redirectUrl: string): Promise<void> => {
         );
         await refreshTranslatorAccounts();
     } catch (caught) {
-        error.value = errorMessage(caught, `That sign-in link could not be completed — copy the whole URL and try again.`);
+        error.value = errorMessage(caught, `That sign-in link could not be completed: copy the whole URL and try again.`);
     } finally {
         accountBusy.value = undefined;
     }
@@ -1150,7 +1150,7 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
         return;
     }
     if (Date.now() > deadline) {
-        error.value = `The Grok sign-in expired — start the connection again.`;
+        error.value = `The Grok sign-in expired: start the connection again.`;
         cancelConnect();
         return;
     }
@@ -1900,12 +1900,12 @@ const startConnect = async (): Promise<void> => {
         try {
             response = await sandboxRequest(`${providerBase(target)}/oauth/start`, { method: `POST` });
         } catch (err) {
-            error.value = errorMessage(err, `Could not start the ${providerLabel(target)} connection — is your sandbox online?`);
+            error.value = errorMessage(err, `Could not start the ${providerLabel(target)} connection: is your sandbox online?`);
             return;
         }
         if (!response.ok) {
             const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
-            error.value = body?.error ?? `Could not start the ${providerLabel(target)} connection — is your sandbox online?`;
+            error.value = body?.error ?? `Could not start the ${providerLabel(target)} connection: is your sandbox online?`;
             return;
         }
         if (target === `grok`) {
@@ -2059,11 +2059,11 @@ const completeConnect = async (code: string): Promise<boolean> => {
                 jsonBody(`POST`, { code, ...flow.pkce, label: connectLabel.value.trim() || undefined }),
             );
         } catch {
-            error.value = `Could not connect your Claude account — check the code and try again.`;
+            error.value = `Could not connect your Claude account: check the code and try again.`;
             return false;
         }
         if (!response.ok) {
-            error.value = `Could not connect your Claude account — check the code and try again.`;
+            error.value = `Could not connect your Claude account: check the code and try again.`;
             return false;
         }
         addAccount(`claude`, (await response.json()) as OauthAccount);
@@ -2112,7 +2112,7 @@ const renameAccount = async (id: string, label: string): Promise<void> => {
     try {
         response = await sandboxRequest(`${providerBase(target)}/account/rename`, jsonBody(`POST`, { id, label: typed }));
     } catch (err) {
-        error.value = errorMessage(err, `Could not rename that account — is your sandbox online?`);
+        error.value = errorMessage(err, `Could not rename that account: is your sandbox online?`);
         replaceAccount(target, current);
         return;
     }

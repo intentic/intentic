@@ -24,7 +24,7 @@ export const readTextFile = async (path: string, scopes: HostScopes): Promise<st
     const target = assertPath(path, scopes, "read");
     const info = await stat(target);
     if (info.isDirectory()) {
-        throw new Error(`"${path}" is a directory — use list_dir for it.`);
+        throw new Error(`"${path}" is a directory: use list_dir for it.`);
     }
     if (info.size > MAX_READ_BYTES) {
         throw new Error(`"${path}" is ${Math.round(info.size / 1_000_000)} MB, too large to read whole. Read part of it with a command instead.`);

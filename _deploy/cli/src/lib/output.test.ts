@@ -42,7 +42,7 @@ test("text mode renders prune/orphan and apply progress events as human strings;
     expect(s.chunks).toEqual([
         `prune: deleted "old" (type "forgejo")\n`,
         `applying "host" (type "host")\n`,
-        `applied "host" (type "host") — create (not observed)\n`,
+        `applied "host" (type "host"): create (not observed)\n`,
         `waiting for "wiki" at https://wiki.example.com\n`,
         `"wiki" ready\n`,
         "provider says hi\n",

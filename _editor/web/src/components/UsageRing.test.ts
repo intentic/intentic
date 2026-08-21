@@ -2,7 +2,7 @@
 //
 // The usage circle and the card it opens. Driven through the real component, because the two things worth
 // pinning are the two the old tooltip got wrong: that the breakdown arrives as a READABLE structure (a line and
-// a meter per pool, each with its reset) rather than one run-on label, and that it lands BESIDE the ring — every
+// a meter per pool, each with its reset) rather than one run-on label, and that it lands BESIDE the ring: every
 // surface that draws one is a column of rows, so a box over or under the ring covers the rows being compared.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
@@ -10,7 +10,7 @@ import { formatReset, type PlanHeadroom } from "../composables/chat/usageStatus"
 import UsageRing from "./UsageRing.vue";
 
 // The @intentic/ui barrel this component reaches for (the ring, the placement) calls window.matchMedia at
-// import time, through useDevice — and jsdom ships no such thing.
+// import time, through useDevice, and jsdom ships no such thing.
 
 const CARD = { width: 240, height: 180 };
 // jsdom lays nothing out, so both boxes are handed the rects they would have had on screen: the ring where the
@@ -35,7 +35,7 @@ const headroom = (over: Partial<PlanHeadroom> = {}): PlanHeadroom => ({
     ...over,
 });
 
-// The ring, mounted — the element a pointer arrives on.
+// The ring, mounted: the element a pointer arrives on.
 const mount = async (over: Partial<PlanHeadroom> = {}, flank?: `left` | `right`): Promise<HTMLElement> => {
     const host = document.createElement(`div`);
     document.body.append(host);
@@ -74,7 +74,7 @@ it(`lists every pool with its own figure and reset, and says how old the reading
     expect(panel.textContent).toContain(`56%`);
     expect(panel.textContent).toContain(`Weekly · all models`);
     expect(panel.textContent).toContain(`91%`);
-    // A pool with no reset instant simply doesn't claim one — the other's is still named.
+    // A pool with no reset instant simply doesn't claim one: the other's is still named.
     expect(panel.textContent).toContain(`resets`);
     expect(panel.textContent).toContain(`measured just now`);
     // One meter per pool, so which allowance is about to bite is seen rather than parsed.
@@ -83,7 +83,7 @@ it(`lists every pool with its own figure and reset, and says how old the reading
 
 it(`speaks the whole breakdown beside the arc, since a card raised by a pointer never reaches a screen reader`, async () => {
     const anchor = await mount();
-    // The weekday and clock are fixed, but they still land in the runner's timezone — so the expectation goes
+    // The weekday and clock are fixed, but they still land in the runner's timezone, so the expectation goes
     // through the same formatter rather than hardcoding an hour.
     const reset = formatReset(RESETS_AT);
     expect(anchor.querySelector(`.sr-only`)?.textContent).toBe(`5-hour session 56% (resets ${reset}) · Weekly · all models 91% · measured just now`);
@@ -112,7 +112,7 @@ it(`mirrors to the left flank for a ring against the window's right edge`, async
 });
 
 it(`falls back to above the ring only when neither flank can hold the card`, async () => {
-    // A pop-out window narrower than the card plus its gaps — the one case where sideways is impossible.
+    // A pop-out window narrower than the card plus its gaps: the one case where sideways is impossible.
     Object.defineProperty(window, `innerWidth`, { value: 300, configurable: true });
     ring = { left: 100, top: 400, width: 14, height: 14 };
     const panel = await card();

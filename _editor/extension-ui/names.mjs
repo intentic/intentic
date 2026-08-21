@@ -1,4 +1,4 @@
-// The kit's export names — the single source consumed by the web app's shim generator
+// The kit's export names: the single source consumed by the web app's shim generator
 // (_editor/web/scripts/generate-ext-shims.mjs) and hostModules' dev-time coverage assertion. Update alongside
 // src/index.ts; the assertion catches drift on the next dev boot.
 export const extensionUiNames = [

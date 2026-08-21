@@ -25,7 +25,7 @@ export const hostProbesCli = buildCommand<{ runtime?: string }>({
                 kind: "parsed",
                 parse: String,
                 optional: true,
-                brief: "The overlay's '# intentic:runtime' directive lines, verbatim — same input as run-command",
+                brief: "The overlay's '# intentic:runtime' directive lines, verbatim, same input as run-command",
             },
         },
     },

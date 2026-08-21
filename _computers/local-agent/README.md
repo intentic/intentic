@@ -26,7 +26,7 @@ Three agents ship to a user's machine and have nothing in common except how they
 | [`@intentic/sync`](../../_sandbox/sync) | mirrors files and ports between machine and sandbox | home, launcher, autostart, detached, ui |
 | [`@intentic/acp-bridge`](../../_sandbox/acp-bridge) | lets an editor talk to the sandbox | home |
 
-They were written months apart, and each copy of that plumbing was made from the last one — a shape with a known
+They were written months apart, and each copy of that plumbing was made from the last one: a shape with a known
 ending. The second copy is a snapshot of the first on the day it was taken, and every fix after that lands in
 only one of them. It already had:
 
@@ -35,48 +35,48 @@ only one of them. It already had:
 - **host has no macOS autostart.** It was copied from a sync that did not have one yet, and on macOS it wrote an
   XDG entry that nothing reads.
 - **The Windows console rule, the compiled-binary argv rule and "report what the tool actually said"** were each
-  written out at length in two files, in prose, cross-referencing the other agent by name — including in
+  written out at length in two files, in prose, cross-referencing the other agent by name: including in
   ARCHITECTURE.md, which said host's spawns behave "for the reason `@intentic/sync` documents".
 - **Each agent grew its own `out()` closure** writing straight to stdout, so every improvement to how one of
-  them reads landed in exactly one of them — while the install a user actually experiences is `ic` and these
+  them reads landed in exactly one of them: while the install a user actually experiences is `ic` and these
   agents in sequence, three voices deep.
 
 This package is those lessons as code, so the fourth agent inherits them by importing rather than by reading.
 
 ## The five pieces
 
-**`home.ts`** — `agentHome(name)` gives `{ dir, configPath }` under `~/.intentic/<name>`; `writeSecretFile`
+**`home.ts`**: `agentHome(name)` gives `{ dir, configPath }` under `~/.intentic/<name>`; `writeSecretFile`
 writes through a 0700 directory to a 0600 file. Both modes are re-applied on every write, because `mkdir` does
-not tighten a directory that already exists — an agent installed before this floor existed would otherwise keep
+not tighten a directory that already exists: an agent installed before this floor existed would otherwise keep
 its old permissions forever.
 
-**`launcher.ts`** — `cliLauncher(cliName)` answers how to re-invoke this CLI. The subtlety is the compiled
+**`launcher.ts`**: `cliLauncher(cliName)` answers how to re-invoke this CLI. The subtlety is the compiled
 binary: `bun build --compile` reports an `argv[1]` inside its own virtual filesystem and re-injects it on every
 launch, so passing it again shifts the command to `argv[2]` where the parser never looks.
 
-**`autostart.ts`** — `registerAutostart(spec, launcher, log)` against an `AutostartSpec` the agent declares.
+**`autostart.ts`**: `registerAutostart(spec, launcher, log)` against an `AutostartSpec` the agent declares.
 Windows gets the **detached** command (Explorer starts a Run entry in the interactive session, where the
 foreground loop would park a black console window on the desktop from login until shutdown); launchd and the
-desktop session, which supervise what they start, get the **foreground** one. `launchAgent` is optional — an
+desktop session, which supervise what they start, get the **foreground** one. `launchAgent` is optional: an
 agent that has not been exercised on macOS says so and gets a note, rather than a file macOS never reads.
 
-**`detached.ts`** — `spawnDetached`, `livePid`, `isProcessAlive`. The loop is spawned `detached` on **every**
+**`detached.ts`**: `spawnDetached`, `livePid`, `isProcessAlive`. The loop is spawned `detached` on **every**
 platform: on POSIX for its own session, on Windows because without it the loop is torn down the moment its
-parent exits — measured on the compiled binary, and the reason "connected in the background (pid N)" was a lie
+parent exits: measured on the compiled binary, and the reason "connected in the background (pid N)" was a lie
 there for every release that passed `windowsHide` instead. The two cannot be combined to get both properties
 (`CREATE_NO_WINDOW` is ignored alongside `DETACHED_PROCESS`), so a detached loop on Windows has no console at
 all, and Windows hands a console child of a console-less process a new console *with a window*. That is why
-every spawn inside a loop — git and ssh in sync's bridge, docker and PowerShell in host's tools — passes
+every spawn inside a loop (git and ssh in sync's bridge, docker and PowerShell in host's tools) passes
 `windowsHide` itself; the flag applies whether or not the parent has a console, where inheritance did not.
 
 `spawnDetached` also answers only once the loop has **survived** a short settle window, and throws naming its log
 otherwise. A pid proves the OS created a process; every caller turns it straight into a sentence promising the
 user their machine is now doing something.
 
-**`ui.ts`** — `createUi(process)` is the whole of what an agent writes to a person, and the TypeScript twin of
+**`ui.ts`**: `createUi(process)` is the whole of what an agent writes to a person, and the TypeScript twin of
 `ic`'s `_sandbox/ic/src/ui.rs`. One question decides everything: is stdout a terminal. A **pipe** gets the
 `intentic: [phase] message` marker stream and nothing else, because the desktop app parses it into a progress
-bar and CI reads it out of a log — that shape is a contract, written down in
+bar and CI reads it out of a log: that shape is a contract, written down in
 [docs/cli-output-protocol.md](../../docs/cli-output-protocol.md). A **terminal** gets a banner, a numbered
 checklist with durations, one repainting status line and a ranked ending. And a third mode, **nested**, is what
 makes an install read as one program rather than three: `ic` runs these agents inside its own checklist and
@@ -84,20 +84,20 @@ sets `INTENTIC_UI=nested`, so their output lands as detail under its step instea
 the middle of somebody's setup.
 
 The live region is deliberately **one line**, repainted with a carriage return. Redrawing a whole checklist in
-place needs the cursor moved up N lines, which needs to know when a line wrapped — and these run under
+place needs the cursor moved up N lines, which needs to know when a line wrapped: and these run under
 `curl | sh` on terminals of unknown width. Everything already settled scrolls above it.
 
 ## What this package is not
 
 It knows nothing about sandboxes, tunnels, enrollment or MCP. It takes a name, a launcher and a spec, and makes a
 CLI survive a reboot with its credentials readable only by its owner. *What* the agent then does is the agent's
-business — which is why host's scopes and sync's Mutagen sessions are nowhere near here.
+business: which is why host's scopes and sync's Mutagen sessions are nowhere near here.
 
 ## Key files
 
-- [src/index.ts](src/index.ts) — the public surface.
-- [src/home.ts](src/home.ts) — the `~/.intentic/<agent>` directory and its 0600 floor.
-- [src/autostart.ts](src/autostart.ts) — login autostart, per platform.
-- [src/detached.ts](src/detached.ts) — the background loop, and surviving a closed terminal.
-- [src/launcher.ts](src/launcher.ts) — `cliLauncher()`, including the compiled-binary argv case.
-- [src/ui.ts](src/ui.ts) — the renderer: the pipe/terminal/nested split, the checklist, the ranked ending.
+- [src/index.ts](src/index.ts): the public surface.
+- [src/home.ts](src/home.ts): the `~/.intentic/<agent>` directory and its 0600 floor.
+- [src/autostart.ts](src/autostart.ts): login autostart, per platform.
+- [src/detached.ts](src/detached.ts): the background loop, and surviving a closed terminal.
+- [src/launcher.ts](src/launcher.ts): `cliLauncher()`, including the compiled-binary argv case.
+- [src/ui.ts](src/ui.ts), the renderer: the pipe/terminal/nested split, the checklist, the ranked ending.

@@ -44,9 +44,9 @@ interface BadgeWords {
 const ICON: Record<RunThroughState, IconName> = { running: `repeat`, workflow: `sitemap`, loop: `repeat`, idle: `fork` };
 
 const HINT: Record<RunThroughState, (words: BadgeWords) => string> = {
-    running: (words) => `Stop looping — iteration ${words.iteration} finishes first. Use Stop to cut it short.`,
-    workflow: (words) => `Send runs “${words.name}” with this message as its request`,
-    loop: (words) => `Send runs “${words.name}” — this message is the goal, repeated until it is met`,
+    running: (words) => `Stop looping, iteration ${words.iteration} finishes first. Use Stop to cut it short.`,
+    workflow: (words) => `Send runs "${words.name}" with this message as its request`,
+    loop: (words) => `Send runs "${words.name}", this message is the goal, repeated until it is met`,
     idle: () => `Repeat this message until a goal is met, or run it through a workflow`,
 };
 

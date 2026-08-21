@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { isProcessAlive, spawnDetached } from "./detached.js";
 
 /* The contract these cover is the one a user reads as a sentence: "connected in the background (pid N)". It was
- * false on Windows for every release that spawned the loop without `detached` — the pid was real, the process
+ * false on Windows for every release that spawned the loop without `detached`: the pid was real, the process
  * was already gone, and the caller had no way to tell. So the test is not "which flags does it pass" (the flags
  * are the runtime's business and the reason they are right is measured, not asserted) but "does it hand back a
  * pid only when something is still running under it". */

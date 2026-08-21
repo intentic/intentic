@@ -5,7 +5,7 @@ beforeEach(() => {
     resetStreamBudget();
 });
 
-// A slot taken and immediately dropped on the floor — the shape most of these assertions need.
+// A slot taken and immediately dropped on the floor: the shape most of these assertions need.
 const take = async (signal?: AbortSignal): Promise<(() => void) | undefined> => acquireStreamSlot(signal);
 
 describe(`streamCapacity`, () => {
@@ -14,7 +14,7 @@ describe(`streamCapacity`, () => {
         expect(streamCapacity(`local`)).toBe(Number.POSITIVE_INFINITY);
         expect(streamCapacity(`tunnel`)).toBe(Number.POSITIVE_INFINITY);
         expect(streamCapacity(undefined)).toBe(Number.POSITIVE_INFINITY);
-        // Plain http loopback is HTTP/1.1 and always will be — no browser speaks cleartext h2.
+        // Plain http loopback is HTTP/1.1 and always will be: no browser speaks cleartext h2.
         expect(streamCapacity(`local-insecure`)).toBe(4);
     });
 
@@ -54,7 +54,7 @@ describe(`acquireStreamSlot`, () => {
         expect(second).toBeDefined();
     });
 
-    it(`serves the newest waiter first — the conversation the user just acted on`, async () => {
+    it(`serves the newest waiter first: the conversation the user just acted on`, async () => {
         setStreamCapacity(() => 1);
         const held = await take();
         const order: string[] = [];
@@ -106,13 +106,13 @@ describe(`acquireStreamSlot`, () => {
         expect(await take(AbortSignal.abort())).toBeUndefined();
     });
 
-    it(`answers the free path without queuing — the abort gap there is the caller's to close`, async () => {
+    it(`answers the free path without queuing: the abort gap there is the caller's to close`, async () => {
         /* Deliberately NOT "refuses a caller aborted during the acquire". On the unbounded path this function
          * runs to completion before the caller resumes, so an abort landing in that hop cannot be seen from in
-         * here — no check inside would help. Closing it is the CALLER's job: conversation.ts re-reads the
+         * here, no check inside would help. Closing it is the CALLER's job: conversation.ts re-reads the
          * signal after awaiting, because attaching on an already-aborted one parks forever instead of failing
          * (its producer wired teardown to an event that has already fired). This asserts the half that IS this
-         * module's — the free path hands back a slot immediately, and releasing returns the capacity. */
+         * module's: the free path hands back a slot immediately, and releasing returns the capacity. */
         setStreamCapacity(() => Number.POSITIVE_INFINITY);
         const controller = new AbortController();
         const release = await take(controller.signal);

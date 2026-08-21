@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 //
 // THE SELECTED CARD, when the board's own Finished window would have dropped it. The ring the board draws is a
-// cross-reference between two panes — this card is what the docked chat is pointing at — so a lane that culls
+// cross-reference between two panes: this card is what the docked chat is pointing at, so a lane that culls
 // it leaves the ring nowhere, and the board reads as "this chat is not an agent" rather than "that card is
 // further down". Neither half of the fix can be seen from the store: whether the card is in the DOM at all, and
 // whether the board scrolls to a selection it did not make itself.
 //
 // Driven through the real surfaces, like the chat strip's own reveal test (chatTabsReveal.test.ts): a chat
 // opened from outside stands for a tab click, a history row and a deep link alike, since all three land on the
-// same write. jsdom lays nothing out, so the scroll is asserted as the CALL — which card, and the cheapest
+// same write. jsdom lays nothing out, so the scroll is asserted as the CALL, which card, and the cheapest
 // scroll (`nearest`, a no-op on a card already on screen).
 //
 // The board's OTHER selection is at the foot of the file: the several cards a split rings at once, and what a
@@ -24,8 +24,8 @@ import { router } from "../router";
 import AgentsView from "./AgentsView.vue";
 
 // The import-time globals a mounted board needs (see startAgent.test.ts, which mounts this same view):
-// useDevice reads matchMedia at module scope — matches:false keeps the device DESKTOP, the only form factor
-// with a dock for "selected" to be about — and environment.ts reads window.env. The unreported ResizeObserver
+// useDevice reads matchMedia at module scope: matches:false keeps the device DESKTOP, the only form factor
+// with a dock for "selected" to be about, and environment.ts reads window.env. The unreported ResizeObserver
 // leaves the board on its unmeasured default of three columns. scrollIntoView is jsdom's biggest hole and this
 // file's subject, so it is installed as the recorder the assertions read.
 const { reveals } = vi.hoisted(() => {
@@ -75,12 +75,12 @@ afterEach(() => {
     app = undefined;
 });
 
-// A lane of ten finished agents, newest first — the order the board itself sorts them into, so `a0` heads the
+// A lane of ten finished agents, newest first: the order the board itself sorts them into, so `a0` heads the
 // lane and `a8` sits two below the window's edge. Built per call: the store stamps its entries in place (seenAt
 // on open), so a shared fixture would carry one test's reads into the next.
 //
-// Seeded at a high revision, so the board's own refresh() at mount — which reaches a daemon that is not there
-// and answers nothing — cannot be mistaken for a newer roster.
+// Seeded at a high revision, so the board's own refresh() at mount, which reaches a daemon that is not there
+// and answers nothing: cannot be mistaken for a newer roster.
 const seed = (): void =>
     setAgents(
         Array.from({ length: 10 }, (_unused, at): AgentSummary => ({
@@ -107,7 +107,7 @@ const finishedCards = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)[2]!.querySelectorAll(`[aria-label^="Focus agent:"]:not(.lane-leave-active)`)].map((card) =>
         card.getAttribute(`aria-label`)!.replace(`Focus agent: `, ``),
     );
-// The lane's tail row — a direct child of the section, unlike the header's own buttons.
+// The lane's tail row: a direct child of the section, unlike the header's own buttons.
 const tailRow = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.querySelector(`:scope > button`)!.textContent!.trim();
 
 it(`keeps the card the docked chat is reading, however far down the lane it is`, async () => {
@@ -138,7 +138,7 @@ it(`lets the card go again when the chat moves on`, async () => {
     expect(tailRow(board)).toBe(`3 earlier`);
 });
 
-it(`scrolls to a card selected off the board — a ring drawn outside the scrollport is a board ignoring the click`, async () => {
+it(`scrolls to a card selected off the board: a ring drawn outside the scrollport is a board ignoring the click`, async () => {
     seed();
     const board = await mountBoard();
     reveals.length = 0;
@@ -150,7 +150,7 @@ it(`scrolls to a card selected off the board — a ring drawn outside the scroll
     expect(board.isConnected).toBe(true);
 });
 
-it(`stays put when the selection was made ON the board — the card is already under the cursor`, async () => {
+it(`stays put when the selection was made ON the board: the card is already under the cursor`, async () => {
     seed();
     const board = await mountBoard();
     openFromOutside(`a8`);
@@ -165,7 +165,7 @@ it(`stays put when the selection was made ON the board — the card is already u
     expect(reveals).toEqual([]);
 });
 
-it(`scrolls again to a card the board once selected itself — the mark is one selection, not a claim forever`, async () => {
+it(`scrolls again to a card the board once selected itself: the mark is one selection, not a claim forever`, async () => {
     seed();
     const board = await mountBoard();
     board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent 0"]`)!.click();
@@ -182,12 +182,12 @@ it(`scrolls again to a card the board once selected itself — the mark is one s
 });
 
 /* --- The split, and the click that ends it ------------------------------------------------------
- * Alt/Ctrl/Shift on a card build the set of chats on screen, which makes the cards a multi-selection — and a
+ * Alt/Ctrl/Shift on a card build the set of chats on screen, which makes the cards a multi-selection, and a
  * selection you cannot replace by pointing at something else is not one. Before this, every later click merely
  * swapped the column it landed in: the split outlived the comparison that wanted it and had to be taken apart
  * one × at a time, with actions scoped to "what is on screen" (Synthesize) still counting the leftover.
  *
- * Asserted on the PANE SET rather than on the rings, because the rings are drawn from it — and driven as real
+ * Asserted on the PANE SET rather than on the rings, because the rings are drawn from it, and driven as real
  * clicks with real modifier flags, since the whole question is which of them the board tells apart. */
 const cardEl = (board: HTMLElement, at: number): HTMLElement => board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent ${at}"]`)!;
 
@@ -205,7 +205,7 @@ it(`collapses a split back to the one card clicked without a modifier`, async ()
     await settle();
 
     expect(useChat().panes.value).toEqual([`a2`]);
-    // The two that left the screen are still open — one click in the rail brings either back.
+    // The two that left the screen are still open: one click in the rail brings either back.
     expect(useChat().conversations.value.map((c) => c.conversationId)).toEqual(expect.arrayContaining([`a0`, `a1`, `a2`]));
 });
 

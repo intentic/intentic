@@ -57,19 +57,19 @@ import {
     type SetupArgs,
 } from "./desktop";
 
-/* THE APP'S OWN FACE — the other half of the one window, and deliberately not a wizard.
+/* THE APP'S OWN FACE: the other half of the one window, and deliberately not a wizard.
  *
  * The workspace face shows the real product (the hosted SPA), so everything about naming a sandbox, picking
  * reachability and minting a setup code stays there, where it already works and where a change ships without
  * an app release. What is left for this one is the two things a web page on another origin cannot do:
  *
  *   • run the setup the SPA just handed over (an `intentic://setup` link), showing what the script says
- *   • manage the containers on THIS machine afterwards — the sandbox rows and their verbs
+ *   • manage the containers on THIS machine afterwards: the sandbox rows and their verbs
  *
  * They are two SCREENS rather than two sections, and they are not the same KIND of thing. The manager is
  * somewhere you go: an ordinary window, in the frame the workspace was filling. A setup is something that
  * happens to the app you are already in, so it is a small window in FRONT of the workspace, which stays on
- * screen behind it (windows.rs) — movable and minimisable like any other, because an install runs for
+ * screen behind it (windows.rs): movable and minimisable like any other, because an install runs for
  * minutes and nothing here is worth taking someone's screen for.
  *
  * Nothing of the manager shows under it either way: a container list, a version and an "Open workspace"
@@ -82,10 +82,10 @@ import {
  * ONE LIST, AND IT IS THE WEB'S. This screen and the SPA's Computers tab manage the same containers on the same
  * machine, and they had drifted into two answers: this one printed its sandboxes as cards with their own buttons
  * and then printed the SAME sandboxes again underneath as folders and ports, under a second heading, with
- * nothing on screen relating the two — the exact double-rendering the Computers tab was rebuilt to remove. It
+ * nothing on screen relating the two: the exact double-rendering the Computers tab was rebuilt to remove. It
  * now hands its containers to <MachineDetail>, the way that tab does, so a sandbox is one row carrying its
  * folder, its ports, its image and its verbs. The verbs are the kit's too (<SandboxVerbs>), so "which buttons
- * exist here" is no longer a thing two apps can disagree about — this window had a log tail and no Restart, the
+ * exist here" is no longer a thing two apps can disagree about: this window had a log tail and no Restart, the
  * tab had a Restart and no log tail, and neither offered the rollback both of their backends could already do. */
 
 const info = ref<DesktopInfo | undefined>(undefined);
@@ -98,8 +98,8 @@ const reportError = ref<string | undefined>(undefined);
 const busy = ref<{ slug: string; verb: SandboxVerb } | undefined>(undefined);
 const updateVersion = ref<string | undefined>(undefined);
 
-/* WHAT ONE ROW IS SHOWING BELOW ITSELF. The log tail is the only thing here that outlives its own run — every
- * other verb's lines are progress, and a container's last two hundred lines are read after they arrive — so the
+/* WHAT ONE ROW IS SHOWING BELOW ITSELF. The log tail is the only thing here that outlives its own run: every
+ * other verb's lines are progress, and a container's last two hundred lines are read after they arrive, so the
  * open pane is remembered by slug rather than following whatever is busy. One at a time, because `activeRun`
  * already allows exactly one operation on this machine at a time. */
 const openLog = ref<string | undefined>(undefined);
@@ -107,7 +107,7 @@ const logLines = ref<Record<string, string[]>>({});
 // The machine's own words when a row's verb failed, kept beside that row rather than at the foot of the screen.
 const rowFailure = ref<{ slug: string; message: string } | undefined>(undefined);
 
-// How much of a container's tail to ask docker for — the same figure the machine agent uses for the same button.
+// How much of a container's tail to ask docker for: the same figure the machine agent uses for the same button.
 const LOG_TAIL_LINES = 200;
 
 // The setup the SPA handed over, and the run it turns into.
@@ -121,13 +121,13 @@ const activeRun = ref<string | undefined>(undefined);
  * This used to be `pending !== undefined || activeRun === 'setup'`, which reads as a definition and behaves
  * as a race. `pending` is cleared by the run that starts (so a link cannot be run twice) and re-read from
  * two directions, so any of several perfectly ordinary orderings ends with both halves false WHILE a failed
- * setup is on screen — and this screen then hands the window to the manager face, taking the failure, the
+ * setup is on screen, and this screen then hands the window to the manager face, taking the failure, the
  * requirements and the log with it. Nothing about "is this window a setup" is in doubt: a setup arrived, and
  * it is a setup until it finishes or the user closes it. So it is stated, and only those two things clear it.
  */
 const setupOpen = ref(false);
 
-/* WHAT EACH REQUIREMENT IS DOING — keyed by id, fed by the installer's own state markers (desktop.ts).
+/* WHAT EACH REQUIREMENT IS DOING: keyed by id, fed by the installer's own state markers (desktop.ts).
  * Cleared with the list it belongs to. */
 const requirementState = ref<Record<string, RequirementProgress>>({});
 
@@ -138,15 +138,15 @@ const stopping = ref(false);
 const setupExit = ref<number | null | undefined>(undefined);
 /* A run the USER ended. It is neither a failure nor a success, and it needs its own state for one reason:
  * every way out of this card is drawn off "did something go wrong", so a stop with no error text left the
- * screen with no error, no requirements and no buttons — the same dead end, reached politely. */
+ * screen with no error, no requirements and no buttons: the same dead end, reached politely. */
 const wasStopped = computed(() => stopping.value && setupExit.value !== undefined);
 
-/* WHAT THIS COMPUTER STILL NEEDS — the Windows half of a failed setup, and the reason one exists at all.
+/* WHAT THIS COMPUTER STILL NEEDS: the Windows half of a failed setup, and the reason one exists at all.
  *
  * On Linux and macOS a setup that stops has usually hit something unforeseeable, and four lines of stderr is
  * the right thing to show. On Windows the common stops are none of them accidental: WSL2 is not turned on,
  * this PC has no package manager, virtualization is switched off in firmware. The installer knows all of
- * that specifically, and says so in `intentic-requirement:` lines (desktop.ts) — so those get a list with a
+ * that specifically, and says so in `intentic-requirement:` lines (desktop.ts), so those get a list with a
  * button rather than a red box with a paragraph.
  *
  * Cleared at the START of every attempt, not at the end: a re-run that fixed two of three problems has to
@@ -155,8 +155,8 @@ const requirements = ref<Requirement[]>([]);
 /// Whether what is on screen is the PREVIOUS run's list, kept up while this one re-examines the machine. The
 /// first requirement of the new run clears it and takes the list over. See `runSetup`.
 const carried = ref(false);
-/* Whether the user has answered the list. It is the second pass of a setup — the first deliberately changes
- * nothing — and it lives here rather than in the args because it is about this WINDOW's conversation, not
+/* Whether the user has answered the list. It is the second pass of a setup: the first deliberately changes
+ * nothing, and it lives here rather than in the args because it is about this WINDOW's conversation, not
  * about the link the SPA handed over. */
 const consented = ref(false);
 // A setup this app is finishing after restarting Windows for it, and how stale its code is.
@@ -164,7 +164,7 @@ const resuming = ref(false);
 const expired = ref(false);
 
 /* WHERE THE OTHER HALF OF THIS SCREEN LIVES. The SPA's Computers tab manages the same containers on the same
- * machine — through the machine's own connection rather than natively — and it shows every computer the sandbox
+ * machine: through the machine's own connection rather than natively, and it shows every computer the sandbox
  * can see, not only this one. Linked rather than duplicated, which is the same argument the manager makes for
  * handing its rows to <MachineDetail>: one screen per subject, reachable from wherever the reader started. */
 const COMPUTERS_PATH = `/sandbox/computers`;
@@ -175,7 +175,7 @@ const openWorkspace = (path?: string): void => void workspaceOpen(path);
 
 const eventsOf = (run: string): RunEvent[] => runs.value[run] ?? [];
 const running = computed(() => activeRun.value !== undefined);
-// A handed-over setup owns the window from the moment it arrives until it hands the window back — which
+// A handed-over setup owns the window from the moment it arrives until it hands the window back, which
 // includes having failed, because a failure is the one state the user most needs undivided. See `setupOpen`
 // for why that is held rather than inferred.
 const setupMode = computed(() => setupOpen.value || activeRun.value === `setup`);
@@ -183,7 +183,7 @@ const setupMode = computed(() => setupOpen.value || activeRun.value === `setup`)
 /* THE WINDOW FOLLOWS THE CARD, RATHER THAN THE CARD BEING TRUSTED TO FIT ONE.
  *
  * The setup frame was measured against what this card draws, and the version of it that matters most is the
- * tallest one there is: a ten-step plan, and under it everything wrong with this PC — four rows, each with a
+ * tallest one there is: a ten-step plan, and under it everything wrong with this PC, four rows, each with a
  * problem, a remedy and a badge, plus the button that fixes them. That does not fit 640 logical pixels, so
  * on exactly the machines this screen exists for, the list and its button sat below the fold of a small
  * window, in a scroll container with no visible affordance. One reported install ended there: the diagnosis
@@ -191,7 +191,7 @@ const setupMode = computed(() => setupOpen.value || activeRun.value === `setup`)
  *
  * So the card measures itself and Rust grows the window to it, capped at what the screen can hold
  * (windows.rs). A ResizeObserver rather than a watcher on the state, because the height that matters is the
- * rendered one — a requirement with a long remedy wraps to three lines on a narrow window and to one on a
+ * rendered one: a requirement with a long remedy wraps to three lines on a narrow window and to one on a
  * wide one, and no amount of counting rows knows that. */
 const card = ref<HTMLElement | undefined>(undefined);
 let cardSize: ResizeObserver | undefined;
@@ -202,20 +202,20 @@ watch(card, (element) => {
         return;
     }
     cardSize = new ResizeObserver(() => {
-        // The card's own height plus the padding either side of it — what the WINDOW has to be, not what the
+        // The card's own height plus the padding either side of it: what the WINDOW has to be, not what the
         // card is.
         void setupFit(element.getBoundingClientRect().height + 32);
     });
     cardSize.observe(element);
 });
 
-/* WHETHER THIS SCREEN KNOWS YET WHICH FACE IT IS — and the reason the frame below waits for it.
+/* WHETHER THIS SCREEN KNOWS YET WHICH FACE IT IS, and the reason the frame below waits for it.
  *
  * `setupMode` is derived from a handed-over setup that is READ, asynchronously, after this component mounts
  * (`loadPending`). Until that read lands it is `false`, which is not "the manager is up" but "nobody has
  * looked yet". Acting on that guess is what made an arriving setup flicker: Rust opens the window already
  * wearing the setup frame (windows.rs), this effect then fired on the pre-read `false` and asked for the
- * MANAGER frame — a full-sized window, with the manager's much larger minimum — and the read landing a
+ * MANAGER frame: a full-sized window, with the manager's much larger minimum, and the read landing a
  * moment later asked for the dialog frame all over again. What the user saw was a window snapping to one
  * size and back, and for as long as the read took, a second full-sized window over the one they were reading.
  *
@@ -225,17 +225,17 @@ const faceKnown = ref(false);
 
 /* The OS title follows the screen. Both faces of the app live in ONE frame (windows.rs), so the title is not
  * decoration: it is the taskbar entry, the alt-tab label, and the only thing outside this process that can
- * say which screen is up — which is what the desktop smoke tier asserts against, having deliberately no test
+ * say which screen is up, which is what the desktop smoke tier asserts against, having deliberately no test
  * hook to read instead.
  *
  * The FRAME follows it too, and for the same reason it is decided here: setup is a dialog-sized window in
  * front of the workspace and the manager fills the frame the workspace was in, and which of the two is up is
- * this file's state — a setup can arrive at a manager window, and a finished one hands the window back. */
+ * this file's state: a setup can arrive at a manager window, and a finished one hands the window back. */
 watchEffect(() => {
     if (!faceKnown.value) {
         return;
     }
-    void getCurrentWindow().setTitle(setupMode.value ? `Intentic — Setting up your sandbox` : `Intentic — This computer`);
+    void getCurrentWindow().setTitle(setupMode.value ? `Intentic, Setting up your sandbox` : `Intentic, This computer`);
     void setupFrame(setupMode.value);
 });
 
@@ -292,7 +292,7 @@ const refresh = async (): Promise<void> => {
 /* THE CONTAINERS, IN THE SHAPE THE SHARED VIEW READS. Docker's own answer carries `null` for the two facts it
  * may not have; the row type spells the same absence as an absent KEY, because absent and false are different
  * things there (no tunnel sidecar at all, versus a sidecar that is down). The join between a container and the
- * sync agent's pairing is <MachineDetail>'s own — this app used to make it here, by hand, into one line of text. */
+ * sync agent's pairing is <MachineDetail>'s own: this app used to make it here, by hand, into one line of text. */
 const sandboxRows = computed<MachineSandboxRow[]>(() =>
     sandboxes.value.map((sandbox) => ({
         slug: sandbox.slug,
@@ -307,15 +307,15 @@ const sandboxRows = computed<MachineSandboxRow[]>(() =>
 const slugOf = (group: MachineSandboxGroup): string | undefined => group.sandbox?.slug;
 
 /* Whether the shared view would draw anything at all. It groups containers, folders and ports, and a machine can
- * have the last two and none of the first (a pairing whose container is stopped and pruned) — so "is there a row"
+ * have the last two and none of the first (a pairing whose container is stopped and pruned), so "is there a row"
  * is all three, not just docker's answer. Below this, the screen says so in its own words rather than letting the
  * shared view fall through to a sentence written for the SPA's reader. */
 const hasRows = computed(() => sandboxes.value.length > 0 || (report.value?.pairings.length ?? 0) > 0 || (report.value?.ports.length ?? 0) > 0);
 
-/* HOW A FINISHED RUN IS REPORTED — the outcome, and where it stopped, and nothing else.
+/* HOW A FINISHED RUN IS REPORTED: the outcome, and where it stopped, and nothing else.
  *
  * The scripts narrate themselves in `intentic: [phase] …` lines (desktop.ts), so the last phase before a
- * failure is the most specific thing anybody can say about where an install died — and it is the PHASE ID
+ * failure is the most specific thing anybody can say about where an install died, and it is the PHASE ID
  * rather than the sentence, so the same failure reports the same word after the copy is next reworded, and
  * two releases' funnels can be compared at all. The log beside it is full of paths, names and tokens and
  * none of that leaves here. */
@@ -361,21 +361,21 @@ const runSetup = async (): Promise<void> => {
     const startedAt = Date.now();
     /* THE LIST SURVIVES THE START OF THE NEXT PASS, and is replaced rather than emptied.
      *
-     * It used to be cleared here, which is right in principle — a list belongs to the attempt that produced
-     * it — and wrong in practice on the one click that matters. "Install and continue" re-runs the setup, and
+     * It used to be cleared here, which is right in principle: a list belongs to the attempt that produced
+     * it, and wrong in practice on the one click that matters. "Install and continue" re-runs the setup, and
      * emptying the list means the four things the user just agreed to disappear off the screen for the
      * seconds it takes the installer to re-examine the machine and say them again. The reader who has just
      * consented to a 600 MB download watches their reason for consenting vanish.
      *
      * So the previous list stays on screen and the FIRST requirement of the new run replaces it wholesale
-     * (`carried`, below) — which is also what drops the ones the last pass fixed, since a run only announces
+     * (`carried`, below), which is also what drops the ones the last pass fixed, since a run only announces
      * what is still unmet. */
     carried.value = requirements.value.length > 0;
     requirementState.value = {};
     setupExit.value = undefined;
     stopping.value = false;
     expired.value = false;
-    /* The plan, before the first line of output — that is the point of it. A machine with Docker already up
+    /* The plan, before the first line of output: that is the point of it. A machine with Docker already up
      * is not shown the step that installs it, and a setup that carries no folder is not shown the one that
      * pairs one: the list on screen is what WILL run here, so nothing on it is ever skipped in front of the
      * reader. Rebuilt per run, so "Try again" starts a clean bar rather than resuming a dead one's. */
@@ -396,7 +396,7 @@ const runSetup = async (): Promise<void> => {
     });
     const failure = await start(`setup`, () => setupRun(args, consented.value));
     const ok = failure === undefined;
-    // Nothing was reported this time, so the list on screen is the last run's and is now a lie — this run got
+    // Nothing was reported this time, so the list on screen is the last run's and is now a lie: this run got
     // past the examination, and whatever stopped it is somewhere else entirely.
     if (carried.value) {
         requirements.value = [];
@@ -407,24 +407,24 @@ const runSetup = async (): Promise<void> => {
      * Every Windows install that needs anything at all ends its first pass non-zero, on purpose: the
      * installer reports what it would change and stops, because there is no terminal here to ask the one
      * question on. Reporting that as `connect.ps1 exited with status 3` in a red box is this screen calling
-     * its own design a crash — and on the run that was reported to us, the red box was the only thing that
+     * its own design a crash, and on the run that was reported to us, the red box was the only thing that
      * had anything to say. So the designed stops (desktop.ts) carry no error text: the requirements list IS
      * the message, and a stop the user asked for is not a failure either.
      *
      * …with one guard, because the whole point here is that a stopped run always says SOMETHING. A designed
-     * stop is silent only when the list it defers to actually arrived; if it did not — a marker that failed
-     * to parse, a CLI that never printed one — the raw failure is shown rather than nothing at all. That is
+     * stop is silent only when the list it defers to actually arrived; if it did not: a marker that failed
+     * to parse, a CLI that never printed one: the raw failure is shown rather than nothing at all. That is
      * the exact hole the reported install fell through, and it stays closed even if the list breaks again. */
     const deferredToTheList = expectedStop(setupExit.value ?? null) && requirements.value.length > 0;
     setupError.value = ok || stopping.value || deferredToTheList ? undefined : failure;
     /* THE DESKTOP FUNNEL'S LAST STEP, REPORTED FROM WHERE IT ACTUALLY HAPPENS. The SPA has its own
      * `sandbox_connected`, but on this path it is fired by a page that has been behind this window for the
-     * whole install — late at best, and never at all when the handover came from a browser tab the user then
+     * whole install: late at best, and never at all when the handover came from a browser tab the user then
      * closed. Exit zero here means the daemon booted and announced itself, which is the same fact that page
      * was waiting to observe. */
     track(`desktop_install_finished`, {
         ...runOutcome(`setup`, ok, startedAt),
-        // Which prerequisite stopped it, by id — the ids never change wording, so two releases' funnels can
+        // Which prerequisite stopped it, by id: the ids never change wording, so two releases' funnels can
         // be compared. Nothing else about the machine leaves here.
         ...(requirements.value.length === 0 ? {} : { requirements: requirements.value.map((requirement) => requirement.id) }),
     });
@@ -432,13 +432,13 @@ const runSetup = async (): Promise<void> => {
         pending.value = undefined;
         setupOpen.value = false;
         // The daemon announced itself to the platform on boot, which is exactly what the SPA's setup screen
-        // has been polling for — so handing the window back is one poll away from showing the workspace.
+        // has been polling for, so handing the window back is one poll away from showing the workspace.
         await workspaceOpen();
         return;
     }
     /* AND IF IT DID NOT FINISH, MAKE SURE SOMEBODY FINDS OUT.
      *
-     * This window is deliberately not topmost and deliberately minimisable — an install runs for minutes and
+     * This window is deliberately not topmost and deliberately minimisable: an install runs for minutes and
      * holding someone's screen for it would be indefensible. The price is exactly this case: a setup that
      * stops while the window is minimised, or behind the workspace, changes only pixels nobody is looking
      * at. A user reported that as "the error did not surface and did not notify user", and they were right.
@@ -447,7 +447,7 @@ const runSetup = async (): Promise<void> => {
     await setupAlert();
 };
 
-/* END THE RUN — the button this screen never had.
+/* END THE RUN: the button this screen never had.
  *
  * "You can close this, the install keeps going" was the whole of what was on offer: a run that had gone
  * wrong could be walked away from and not stopped, and the next attempt then raced the one still going.
@@ -466,7 +466,7 @@ const stopSetup = async (): Promise<void> => {
     }
 };
 
-/// Put the transcript on the clipboard — the thing somebody stuck on this actually needs to hand over.
+/// Put the transcript on the clipboard: the thing somebody stuck on this actually needs to hand over.
 const logCopied = ref(false);
 const copyLog = async (): Promise<void> => {
     const text = eventsOf(`setup`)
@@ -485,8 +485,8 @@ const openLogFolder = async (): Promise<void> => {
 
 /* WALKING AWAY FROM AN INSTALL, REPORTED AS ITS OWN THING.
  *
- * The × hands the window back to the workspace and stops NOTHING — the script is a process on this machine
- * (see the button itself) — so a run dismissed here still reports its own `desktop_install_finished` when it
+ * The × hands the window back to the workspace and stops NOTHING: the script is a process on this machine
+ * (see the button itself), so a run dismissed here still reports its own `desktop_install_finished` when it
  * ends. What this says is that nobody was watching any more, and that was invisible: a setup somebody left
  * ninety seconds into a four-minute pull and one they sat through to the end read identically.
  *
@@ -496,13 +496,13 @@ const dismissSetup = async (): Promise<void> => {
     const state = progress.value;
     const step = state?.plan[state.index]?.phase;
     track(`desktop_install_dismissed`, {
-        // A dismissal after the run ended is somebody closing a finished — or failed — card, which is the
+        // A dismissal after the run ended is somebody closing a finished, or failed: card, which is the
         // ordinary way out of this screen and not the same event at all.
         running: running.value,
         ...(state === undefined ? {} : { percent: Math.round(state.percent), elapsedMs: Date.now() - state.startedAt }),
         ...(step === undefined ? {} : { step }),
     });
-    // The one thing that closes this screen other than a setup finishing — see `setupOpen`.
+    // The one thing that closes this screen other than a setup finishing: see `setupOpen`.
     setupOpen.value = false;
     await workspaceOpen();
 };
@@ -512,7 +512,7 @@ const dismissSetup = async (): Promise<void> => {
  * This app's whole premise is that the sandbox runs on THIS computer, and for most people it should. But the
  * list this button sits under is the moment where that premise is being tested hardest: a PC with no WSL2
  * and no Docker is being asked for administrator, a 600 MB download and a restart, and some of those readers
- * are on a machine where none of that is going to happen — a work laptop, a locked-down build, a PC too
+ * are on a machine where none of that is going to happen: a work laptop, a locked-down build, a PC too
  * small for it. Until now the app had nothing to say to them, while the browser has offered a machine in
  * their own cloud account and one we host for them all along; it was hidden here on the argument that "this
  * computer" is the whole point of being in the app.
@@ -528,14 +528,14 @@ const setUpElsewhere = async (): Promise<void> => {
 
 /* THE ONE QUESTION THIS FLOW ASKS, ANSWERED. The first attempt reported what it would change and changed
  * nothing; this is the user saying go ahead, and it is the same pre-consent the terminal path takes as a
- * typed "y". It stays set for the rest of this window's conversation — a re-check after fixing something by
+ * typed "y". It stays set for the rest of this window's conversation: a re-check after fixing something by
  * hand should not put the question back. */
 const installRequirements = async (): Promise<void> => {
     consented.value = true;
     await runSetup();
 };
 
-/* Restart Windows — or sign out of it — and pick this setup up afterwards. The args go to disk before
+/* Restart Windows, or sign out of it, and pick this setup up afterwards. The args go to disk before
  * anything else happens, so a machine that goes down between here and the reboot still comes back to a setup
  * it can finish.
  *
@@ -591,15 +591,15 @@ const loadResumable = async (): Promise<void> => {
 };
 
 /* A parked setup RUNS on arrival rather than waiting to be asked. The SPA's "Set up on this computer" button
- * is the consent — it says what this does, in the sentence directly above it — and repeating the question on
+ * is the consent: it says what this does, in the sentence directly above it, and repeating the question on
  * a screen the user did not open is what made the handoff read as a second, unrelated installer. The guard in
  * `runSetup` is what keeps the two ways in here (the event, and the read below on mount) to one run.
  *
- * That consent only covers a link the SPA's own window navigated to. One arriving from the OS — which any page
- * can send, on nothing more than a browser's "Open Intentic?" — is asked about in windows.rs BEFORE it is
+ * That consent only covers a link the SPA's own window navigated to. One arriving from the OS, which any page
+ * can send, on nothing more than a browser's "Open Intentic?": is asked about in windows.rs BEFORE it is
  * parked, so anything that reaches this screen has been agreed to one way or the other. */
 const loadPending = async (): Promise<void> => {
-    /* TAKEN, and a `null` means somebody else took it — never "there is no setup here". Two callers race for
+    /* TAKEN, and a `null` means somebody else took it: never "there is no setup here". Two callers race for
      * a parked request (the arrival event, and this window's read on mount), and the loser used to write its
      * empty answer over the winner's state, which handed the window back to the manager face in the middle
      * of the run it had just started. */
@@ -654,7 +654,7 @@ const drainRecreate = async (): Promise<void> => {
 /* ONE CLICK ON ONE ROW, whichever of the shared verbs it was.
  *
  * The kit decides which buttons exist and what the destructive ones ask; this decides what each one DOES here,
- * which is the whole of what differs between this window and the SPA's Computers tab — there, a verb is a
+ * which is the whole of what differs between this window and the SPA's Computers tab: there, a verb is a
  * message to a machine over a socket; here it is a script or a docker call on the machine this window is on.
  *
  * The question is asked in the OS's own dialog rather than one this window draws, and its words are the kit's,
@@ -698,7 +698,7 @@ const act = async (group: MachineSandboxGroup, verb: SandboxVerb): Promise<void>
 };
 
 // Which of THIS row's buttons is the one spinning, and what its pane is showing. A run's lines are the script's
-// own output; a log tail's are the container's — one pane, because a row only ever has one thing to say.
+// own output; a log tail's are the container's: one pane, because a row only ever has one thing to say.
 const busyVerb = (group: MachineSandboxGroup): SandboxVerb | undefined => {
     const inFlight = busy.value;
     return inFlight !== undefined && inFlight.slug === slugOf(group) ? inFlight.verb : undefined;
@@ -720,11 +720,11 @@ let stop: Array<() => void> = [];
 onMounted(async () => {
     info.value = await desktopInfo();
     // Before the parked work below, because the first thing this screen does is often the setup it was opened
-    // to run — and an install that reports nothing is exactly what this is here to stop happening.
+    // to run, and an install that reports nothing is exactly what this is here to stop happening.
     initAnalytics(info.value);
     track(`desktop_app_opened`, { dockerReady: info.value.dockerReady });
     /* Listeners BEFORE the parked work, not after: `loadPending` starts the handed-over setup the moment it
-     * finds one, and a script reaches this screen only as events — so a run begun before `onRun` is listening
+     * finds one, and a script reaches this screen only as events, so a run begun before `onRun` is listening
      * would show an empty log through its first, most informative seconds. */
     stop = await Promise.all([
         onRun((event) => {
@@ -747,12 +747,12 @@ onMounted(async () => {
                 return;
             }
             // What this computer still needs, collected as the installer names it. Keyed by id so a run that
-            // reports the same requirement twice — the fixer re-examines between passes — draws one row.
+            // reports the same requirement twice (the fixer re-examines between passes) draws one row.
             const requirement = parseRequirement(event.text);
             if (requirement !== undefined) {
                 // The first one of a new run replaces whatever the last run left on screen; the rest of that
-                // run's requirements join it. Keyed by id, so a run that reports the same one twice — the
-                // fixer re-examines between passes — still draws one row.
+                // run's requirements join it. Keyed by id, so a run that reports the same one twice: the
+                // fixer re-examines between passes: still draws one row.
                 const kept = carried.value ? [] : requirements.value.filter((seen) => seen.id !== requirement.id);
                 carried.value = false;
                 requirements.value = [...kept, requirement];
@@ -770,11 +770,11 @@ onMounted(async () => {
         onUpdateAvailable((version) => (updateVersion.value = version)),
     ]);
     // A link that arrived while this screen was opening was PARKED rather than delivered, so it is picked up
-    // exactly once — by the event above or by these, whichever finds the request still there.
+    // exactly once: by the event above or by these, whichever finds the request still there.
     await Promise.all([refresh(), loadPending(), drainRecreate()]);
     /* THE FIRST READ HAS LANDED, so this screen may now say which face it is. Before this line `setupMode`
      * was the absence of an answer rather than an answer, and the frame effect stands down for exactly that
-     * window — see `faceKnown`. After it, every change is a real transition and drives the frame. */
+     * window: see `faceKnown`. After it, every change is a real transition and drives the frame. */
     faceKnown.value = true;
     // Only when nothing was handed over: a fresh link is about a setup the user is starting right now, and it
     // outranks one this app restarted the machine for at some point in the past.
@@ -790,9 +790,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <!-- SETUP — a small window of its own, in front of the workspace rather than instead of it (windows.rs).
-         It used to be a dim across the workspace's whole rectangle, which on the path that matters most — an
-         install started from the browser, with no workspace open yet — was a chromeless sheet over the entire
+    <!-- SETUP: a small window of its own, in front of the workspace rather than instead of it (windows.rs).
+         It used to be a dim across the workspace's whole rectangle, which on the path that matters most: an
+         install started from the browser, with no workspace open yet: was a chromeless sheet over the entire
          screen that could not be moved or minimised. So the card fills an ordinary movable window now, and
          the dim is gone with the sheet that needed it.
          `m-auto` rather than `items-center`: it centres the card the same way, and keeps the TOP of it
@@ -827,7 +827,7 @@ onUnmounted(() => {
                  the one thing that fixes it, instead of letting the run fail at the claim with something that
                  reads like a bad code. -->
                 <Notice v-if="expired" tone="warning" class="text-2xs">
-                    Your setup code ran out while this computer restarted. Open the setup page again for a fresh one — everything the restart was for
+                    Your setup code ran out while this computer restarted. Open the setup page again for a fresh one: everything the restart was for
                     is already done.
                 </Notice>
                 <p v-else-if="resuming" class="flex items-start gap-2 text-2xs text-subtle">
@@ -837,16 +837,16 @@ onUnmounted(() => {
                 <p v-if="info && !info.dockerReady && !expired && requirements.length === 0" class="flex items-start gap-2 text-2xs text-warning">
                     <Icon name="box" class="mt-0.5 shrink-0" />
                     <span v-if="info.os === `windows`"
-                        >Docker isn't running yet — this checks what your PC needs first, and asks before changing anything.</span
+                        >Docker isn't running yet: this checks what your PC needs first, and asks before changing anything.</span
                     >
-                    <span v-else>Docker isn't running yet — setup installs it first, so your system will ask for your password once.</span>
+                    <span v-else>Docker isn't running yet: setup installs it first, so your system will ask for your password once.</span>
                 </p>
 
-                <!-- WHAT STOPPED IT, WHEN THE INSTALLER KNOWS SPECIFICALLY — and ABOVE the progress list rather
+                <!-- WHAT STOPPED IT, WHEN THE INSTALLER KNOWS SPECIFICALLY, and ABOVE the progress list rather
                  than under it. This is the only thing on the card the reader has to act on, and it used to be
                  last: below a header, a caution, a bar and ten plan rows, in a 640-pixel window, inside a
                  scroll container with nothing on screen to say there was more. On the machines that produce
-                 this list — the ones with no WSL2 and no Docker — that is every pixel of it off the bottom.
+                 this list (the ones with no WSL2 and no Docker) that is every pixel of it off the bottom.
                  So it leads, and the plan it interrupted becomes the thing you scroll to.
                  It also replaces the red box rather than sitting beside it: "4 things are in the way, here is
                  the button" and the same text again as stderr underneath is one message written twice, and
@@ -865,7 +865,7 @@ onUnmounted(() => {
 
                 <Notice v-else-if="setupError && !expired" tone="danger" class="text-2xs">{{ setupError }}</Notice>
 
-                <!-- A run the user ended is not a failure and gets no red box — but it does get said out loud,
+                <!-- A run the user ended is not a failure and gets no red box, but it does get said out loud,
                      because a card that simply stops moving is the thing this whole screen is here to stop
                      being. -->
                 <p v-if="wasStopped" class="flex items-start gap-2 text-2xs text-subtle">
@@ -887,7 +887,7 @@ onUnmounted(() => {
                 </div>
 
                 <!-- THE FOOT OF EVERY SETUP: a way to end it, and a way to take the evidence with you.
-                 Stopping had no button at all — "you can close this, the install keeps going" was the whole
+                 Stopping had no button at all: "you can close this, the install keeps going" was the whole
                  offer, so a run that had gone wrong could be abandoned and not ended. The log is written for
                  every run whether or not anyone asks (scripts.rs); these are the two ways to reach it. -->
                 <div v-if="!expired" class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-2xs">
@@ -907,7 +907,7 @@ onUnmounted(() => {
     <div v-else class="h-dvh overflow-auto bg-surface text-content">
         <!-- A column, not a stretched form: this face inherits the workspace's frame (windows.rs), which is a
              wide window, and everything on this screen is a short list of short things. -->
-        <!-- THE MANAGER — what this machine is running, once nothing is being handed over. -->
+        <!-- THE MANAGER: what this machine is running, once nothing is being handed over. -->
         <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 p-5">
             <header class="flex items-center gap-3">
                 <h1 class="flex-1 text-base font-semibold">This computer</h1>
@@ -919,7 +919,7 @@ onUnmounted(() => {
 
             <!-- The app updates itself; this is the notice, not a gate. -->
             <Notice v-if="updateVersion" tone="info" class="items-center">
-                Intentic {{ updateVersion }} is available — it installs the next time you quit.
+                Intentic {{ updateVersion }} is available: it installs the next time you quit.
             </Notice>
 
             <p v-if="listError" class="flex items-start gap-2 text-2xs text-muted">
@@ -927,19 +927,19 @@ onUnmounted(() => {
                 <span>Docker isn't reachable, so there is nothing to show yet. Start Docker, or set a sandbox up from your workspace.</span>
             </p>
             <p v-else-if="!hasRows" class="text-2xs text-muted">
-                No sandboxes here yet. Set one up from your workspace — this screen is where you manage it afterwards.
+                No sandboxes here yet. Set one up from your workspace: this screen is where you manage it afterwards.
             </p>
 
-            <!-- WHAT THIS COMPUTER IS RUNNING — one row per sandbox, carrying its folder, its ports, its
+            <!-- WHAT THIS COMPUTER IS RUNNING: one row per sandbox, carrying its folder, its ports, its
                      image and its verbs, exactly as the SPA's Computers tab draws the same machine.
                      `syncDir` rides the setup link into connect.sh and was never heard from again, so the app
                      whose whole premise is not needing a terminal could say a container was up and nothing about
-                     the sync the same setup had just configured — the folders and ports below are that half, and
+                     the sync the same setup had just configured: the folders and ports below are that half, and
                      they belong ON the sandbox they are for rather than under a heading of their own. -->
             <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
                 <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
                 <MachineDetail :pairings="report?.pairings" :ports="report?.ports" :sandboxes="sandboxRows" :watcher="report?.watcher">
-                    <!-- What the list is, and the state of the agent behind it, on one line — the watcher is
+                    <!-- What the list is, and the state of the agent behind it, on one line: the watcher is
                              a fact about the MACHINE rather than about any row under it. -->
                     <template #heading>
                         <span class="flex items-center gap-2 text-2xs font-semibold tracking-wide text-subtle uppercase">
@@ -965,7 +965,7 @@ onUnmounted(() => {
                             :lines="paneLines(group)"
                             :running="busyVerb(group) !== undefined"
                             empty="Starting on this computer…"
-                            note="Running on this computer — it keeps going even if you close this window."
+                            note="Running on this computer: it keeps going even if you close this window."
                         />
                         <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
                             {{ rowFailure.message }}
@@ -980,7 +980,7 @@ onUnmounted(() => {
                 </Button>
                 <!-- THE OTHER SCREEN THAT MANAGES THESE SAME CONTAINERS. This window reaches them natively and
                      the SPA's Computers tab reaches them through the machine's own connection, and until now
-                     neither admitted the other existed — so a reader who found one concluded the product had
+                     neither admitted the other existed, so a reader who found one concluded the product had
                      only that one. Secondary and text: the workspace is still the way out of here. -->
                 <Button size="small" severity="secondary" :text="true" label="See all your computers" @click="openWorkspace(COMPUTERS_PATH)">
                     <template #icon><Icon name="desktop" /></template>

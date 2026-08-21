@@ -5,7 +5,7 @@ import { chordFromEvent, formatChord, matchesChord } from "./keybindings";
  * invariants a keymap lives or dies by: `Mod` resolves to the right physical key per platform, and modifiers match
  * EXACTLY so a broader chord (Mod+P) never swallows a narrower one (Mod+Shift+P). */
 
-// A minimal event stub — matchesChord reads only the four modifier flags and `key`, so a pure object keeps the
+// A minimal event stub: matchesChord reads only the four modifier flags and `key`, so a pure object keeps the
 // test free of a DOM environment. Modifiers default to false (an absent flag must read as "not held", not undefined).
 const keydown = (init: Partial<KeyboardEvent>): KeyboardEvent =>
     ({ ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...init }) as KeyboardEvent;
@@ -36,7 +36,7 @@ describe(`matchesChord`, () => {
     });
 
     it(`matches number/punctuation chords by physical key, so a Shift glyph or dead-key layout can't break them`, () => {
-        // New Terminal: under Shift the Backquote key reports "~" (US) or "Dead" (accent-composing layouts) —
+        // New Terminal: under Shift the Backquote key reports "~" (US) or "Dead" (accent-composing layouts):
         // the physical code carries the match either way.
         expect(matchesChord(`Ctrl+Shift+\``, keydown({ key: `~`, code: `Backquote`, ctrlKey: true, shiftKey: true }), false)).toBe(true);
         expect(matchesChord(`Ctrl+Shift+\``, keydown({ key: `Dead`, code: `Backquote`, ctrlKey: true, shiftKey: true }), false)).toBe(true);
@@ -48,7 +48,7 @@ describe(`matchesChord`, () => {
 
     it(`carries Alt+digit through the glyphs Option composes on Apple layouts`, () => {
         // THE REASON THE SANDBOX SWITCHER IS ON DIGITS. Option+1 composes "¡" on a US Apple layout (⌥2 "™",
-        // ⌥3 "£", …), so a produced-character match would leave Alt+1…9 dead on every Mac — the same trap that
+        // ⌥3 "£", …), so a produced-character match would leave Alt+1…9 dead on every Mac: the same trap that
         // rules Alt+LETTER out of this app entirely (WorkspaceDesktop's Reopen Closed Tab). The number row is
         // in CODE_TO_KEY, so the physical key carries it.
         expect(matchesChord(`Alt+1`, keydown({ key: `¡`, code: `Digit1`, altKey: true }), true)).toBe(true);
@@ -80,7 +80,7 @@ describe(`chordFromEvent`, () => {
     it(`rejects a lone modifier and a modifier-less non-function key`, () => {
         expect(chordFromEvent(keydown({ key: `Meta`, metaKey: true }), true)).toBeUndefined();
         expect(chordFromEvent(keydown({ key: `a` }), true)).toBeUndefined();
-        // Shift alone is not enough — a bare Shift+letter is still typing.
+        // Shift alone is not enough: a bare Shift+letter is still typing.
         expect(chordFromEvent(keydown({ key: `A`, shiftKey: true }), true)).toBeUndefined();
     });
 

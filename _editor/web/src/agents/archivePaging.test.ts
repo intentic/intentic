@@ -3,14 +3,14 @@
 // HOW MUCH OF THE ARCHIVE THE BOARD DRAWS WHEN THE DOOR OPENS.
 //
 // The live lanes are bounded by what the user is working on, and the Finished lane windows itself on top of
-// that. The archive is bounded by nothing — it is every session the workspace has ever finished — and it used
+// that. The archive is bounded by nothing: it is every session the workspace has ever finished, and it used
 // to be drawn whole: one full card per row, each with its own slot in the lane's TransitionGroup. So on a
 // workspace with a thousand sessions behind the door, the press that opened it built a thousand cards in a
 // single frame and the app looked hung, at the one moment the archive is meant to prove that filing things
 // away is cheap.
 //
 // Asserted through the real board rather than on the paging expression, because the count that matters is how
-// many CARDS exist in the DOM — and because the two halves that keep the page honest are only visible here:
+// many CARDS exist in the DOM, and because the two halves that keep the page honest are only visible here:
 // the tail row that adds the next page, and the header count, which must go on reporting the pile rather than
 // the page (a search answered "30 of 1030" is the pager talking over the search).
 import type { AgentSummary } from "@intentic/sandbox-contract";
@@ -23,7 +23,7 @@ import { resetAgents, resetArchive, setAgents, useAgents } from "../composables/
 import { router } from "../router";
 import AgentsView from "./AgentsView.vue";
 
-// The import-time globals a mounted board needs — the same set boardSelection.test.ts installs, and for the
+// The import-time globals a mounted board needs: the same set boardSelection.test.ts installs, and for the
 // same reasons: matchMedia keeps the device desktop, the unreported ResizeObserver leaves the board on three
 // columns, environment.ts reads window.env, and jsdom has no scrollIntoView at all.
 vi.hoisted(() => {
@@ -62,7 +62,7 @@ afterEach(() => {
     app = undefined;
 });
 
-/* A pile of filed-away sessions, newest first — written straight onto the store's archive half, which is where
+/* A pile of filed-away sessions, newest first: written straight onto the store's archive half, which is where
  * the daemon's own answer lands (loadArchived). The board still asks for it on opening the door; that request
  * reaches no daemon here and leaves what is already listed, which is exactly the failure mode the list is
  * written to survive. */
@@ -107,7 +107,7 @@ const archiveCards = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)[2]!.querySelectorAll(`[aria-label^="Focus agent:"]:not(.lane-leave-active)`)].map((card) =>
         card.getAttribute(`aria-label`)!.replace(`Focus agent: `, ``),
     );
-// The lane's tail — a direct child of the section, unlike the header's own buttons. Absent once the whole pile
+// The lane's tail: a direct child of the section, unlike the header's own buttons. Absent once the whole pile
 // is drawn, which is itself an assertion: a row offering nothing is a row that lies.
 const tailRow = (el: HTMLElement): HTMLElement | null => el.querySelectorAll(`section`)[2]!.querySelector(`:scope > button`);
 const laneCount = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.querySelector(`span.rounded-full`)!.textContent!.trim();
@@ -127,7 +127,7 @@ it(`draws one page of the archive, however deep the pile behind it`, async () =>
     expect(archiveCards(board)).toHaveLength(30);
     // Newest-archived first, and from the top: the page is the head of the list, not a sample of it.
     expect(archiveCards(board).slice(0, 3)).toEqual([`old 0`, `old 1`, `old 2`]);
-    // The header goes on counting the PILE — the page is a drawing decision, not a claim about what is filed.
+    // The header goes on counting the PILE: the page is a drawing decision, not a claim about what is filed.
     expect(laneCount(board)).toBe(`70`);
     expect(tailRow(board)?.textContent?.trim()).toBe(`40 more`);
 });

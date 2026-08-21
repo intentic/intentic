@@ -44,7 +44,7 @@ test("prints the canonical run command: replayed env filtered here, multi-line k
     expect(stdout).toContain("--cap-add=SYS_ADMIN");
     expect(stdout).toContain("-v shared:/agent-auth");
     expect(stdout).toContain("-e OWNER_EMAIL=a@b.c");
-    // The multi-line key rides as ONE quoted word — the whole reason the env channel is NUL-framed.
+    // The multi-line key rides as ONE quoted word: the whole reason the env channel is NUL-framed.
     expect(stdout).toContain("'HOST_SSH_KEY=l1\nl2'");
     // Image identity is never replayed from the container being replaced, and empty vars are dropped.
     expect(stdout).not.toContain("old:tag");
@@ -65,7 +65,7 @@ test("--format json prints the argv for PowerShell to splat", async () => {
 test("the loopback publish is derived from the connect token the env channel already carries", async () => {
     const port = localDaemonPort(sandboxIdFromToken("s3cret")!);
     const { stdout } = await runVerb(["--slug", "s4", "--image", "i", "--base-image", "i"], "CONNECT_TOKEN=s3cret\0");
-    // The loopback listener (8788), never the tunnel origin (8787) — that one must stay plain HTTP for the
+    // The loopback listener (8788), never the tunnel origin (8787): that one must stay plain HTTP for the
     // connector, while this one carries the TLS the browser needs.
     expect(stdout).toContain(`-p 127.0.0.1:${port}:8788`);
     // Bound to the id, not the slug: two sandboxes sharing a slug shape still get their own port.
@@ -75,19 +75,19 @@ test("the loopback publish is derived from the connect token the env channel alr
 test("--no-local-publish drops only the shortcut, so a port docker refused can't fail the launch twice", async () => {
     const { stdout } = await runVerb(["--slug", "s5", "--image", "i", "--base-image", "i", "--no-local-publish"], "CONNECT_TOKEN=s3cret\0");
     expect(stdout).not.toContain("-p ");
-    // Everything else about the run is untouched — the retry is the same sandbox, minus one optimization.
+    // Everything else about the run is untouched: the retry is the same sandbox, minus one optimization.
     expect(stdout).toContain("--cap-add=SYS_ADMIN");
     expect(stdout).toContain("-v intentic-workspace-s5:/work");
 });
 
-/* The two halves of the preflight protocol, end to end through the real bin — this is how a creation flow
+/* The two halves of the preflight protocol, end to end through the real bin: this is how a creation flow
  * negotiates an optional directive without knowing any token's name:
  *   1. `host-probes` says WHAT to ask this host (the table, shipped as data).
  *   2. `run-command --unsupported` takes the answer and emits a run without the flag but WITH the reason.
  * Anything less and the daemon inside would have to guess whether missing hardware means "not rebuilt yet" or
  * "this machine cannot", which are opposite instructions to give a person. */
 test("host-probes names what to ask the host, and only for what the overlay asked", async () => {
-    // Two independent invocations, so they go out together — the same reason the test below takes its three that
+    // Two independent invocations, so they go out together: the same reason the test below takes its three that
     // way. A tsx start is the only real cost this file has, and on a loaded runner one has been measured at 20s
     // against a local 0.4s; a test that spends two in sequence pays that twice for nothing, because neither call
     // reads what the other returned.
@@ -113,7 +113,7 @@ test("--unsupported drops those directives and records why, leaving the rest of 
         // ATTACHED, and this test is the reason the flows write it that way: the values are themselves docker
         // flags, so the detached spelling makes the parser read `--gpus=all` as a flag of ours that doesn't exist.
         runVerb([...args, "--unsupported=--gpus=all"], ""),
-        // Detached, it is refused outright rather than silently ignored — a flow that regresses to it prints
+        // Detached, it is refused outright rather than silently ignored: a flow that regresses to it prints
         // nothing, and every caller here treats an empty run command as a hard failure.
         runVerb([...args, "--unsupported", "--gpus=all"], ""),
     ]);
@@ -123,19 +123,19 @@ test("--unsupported drops those directives and records why, leaving the rest of 
 
     expect(unsupported.stdout).not.toContain("--gpus");
     expect(unsupported.stdout).toContain("SANDBOX_GPU=unsupported");
-    // The privilege the nested engine actually needs is not collateral damage — only the optional one comes off.
+    // The privilege the nested engine actually needs is not collateral damage: only the optional one comes off.
     expect(unsupported.stdout).toContain("--privileged");
 
     expect(detached.stdout).toBe("");
 });
 
-test("an unallowlisted runtime directive fails the whole verb — never a command minus a privilege", async () => {
+test("an unallowlisted runtime directive fails the whole verb: never a command minus a privilege", async () => {
     const { code, stdout, stderr } = await runVerb(
         ["--slug", "s3", "--image", "i", "--base-image", "i", "--runtime", "# intentic:runtime --cap-add=SYS_PTRACE"],
         "",
     );
     expect(code).not.toBe(0);
     expect(stdout).toBe("");
-    // Named, so the refusal is the allowlist speaking — not any other crash that happens to exit non-zero.
+    // Named, so the refusal is the allowlist speaking, not any other crash that happens to exit non-zero.
     expect(stderr).toContain("--cap-add=SYS_PTRACE");
 });

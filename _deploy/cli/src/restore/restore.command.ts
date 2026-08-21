@@ -39,7 +39,7 @@ export const restore = buildCommand<RestoreFlags>({
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, false, out.log), collectSecrets(graph).generated, process.env);
             const backupNode = Object.values(graph.resources).find((node) => node.type === "backup");
             if (backupNode === undefined) {
-                throw new Error("no backup resource in the artifact — declare one with i.have.backup and apply it first");
+                throw new Error("no backup resource in the artifact: declare one with i.have.backup and apply it first");
             }
             const scope = flags.only ?? "all";
             if (scope !== "forgejo" && scope !== "komodo" && scope !== "all") {

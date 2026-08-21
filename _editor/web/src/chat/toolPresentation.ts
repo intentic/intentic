@@ -150,7 +150,7 @@ export const numberedFileBody = (text: string): { readonly code: string; readonl
         const parsed = NUMBERED_LINE.exec(line);
         if (parsed === null) {
             if (firstLine === undefined) {
-                return undefined; // the very first line isn't numbered — not a file view
+                return undefined; // the very first line isn't numbered, not a file view
             }
             code.push(line); // a trailing marker / blank tail inside an already-established run
             continue;
@@ -159,7 +159,7 @@ export const numberedFileBody = (text: string): { readonly code: string; readonl
         if (firstLine === undefined) {
             firstLine = n;
         } else if (n !== next) {
-            return undefined; // a break in the +1 sequence — arbitrary numeric text, not a file view
+            return undefined; // a break in the +1 sequence: arbitrary numeric text, not a file view
         }
         next = n + 1;
         matched += 1;

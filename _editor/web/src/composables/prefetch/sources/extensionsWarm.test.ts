@@ -4,7 +4,7 @@ import { registerView } from "../../../core-views/registry";
 import { queryClient } from "../../queryPersistence";
 import { extensionsWarmSource } from "./extensionsWarm";
 
-/* The rail is mostly extensions — eight of its fourteen tiles — and before this source existed not one of them
+/* The rail is mostly extensions: eight of its fourteen tiles, and before this source existed not one of them
  * was warmed, because the registry the core pointed extensions at was never reachable from the extension API. */
 
 const view = (id: string, warm?: ViewRegistration[`warm`]): ViewRegistration => ({

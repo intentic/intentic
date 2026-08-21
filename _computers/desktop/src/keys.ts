@@ -168,6 +168,6 @@ export const windowsChord = (combo: string): WindowsChord => {
         }
     }
     throw new DesktopError(
-        `This computer cannot press "${chord.key}" — name it as a letter, a digit, F1–F24, or a key like Return, Tab, Escape, Page_Up.`,
+        `This computer cannot press "${chord.key}": name it as a letter, a digit, F1–F24, or a key like Return, Tab, Escape, Page_Up.`,
     );
 };

@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 //
-// jsdom because the subject is the real wish list, and reaching it pulls the review's own query builders in —
+// jsdom because the subject is the real wish list, and reaching it pulls the review's own query builders in:
 // which pull the app-wide singletons that read browser globals at import time (storageRule.test.ts says the same).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 
-/* WHERE THE WORKSPACE REVIEW SITS IN THE PLAN — pinned because getting it wrong is invisible until the one moment
+/* WHERE THE WORKSPACE REVIEW SITS IN THE PLAN: pinned because getting it wrong is invisible until the one moment
  * it matters, and then it is the whole product's slowest screen.
  *
  * This review is emptied on a schedule the user does not control: a turn ending invalidates the change list and
  * every diff filed under it at once (useChanges). So "how soon is it read back" is decided entirely by its band,
- * and the failure it guards against is silent — the panel still works, it just opens cold with git's counts, which
+ * and the failure it guards against is silent: the panel still works, it just opens cold with git's counts, which
  * is exactly what the reading-ahead exists to prevent. It sat in `work` once, behind the whole agents board, which
  * meant a turn ending on the board emptied this and then re-read it last. */
 
@@ -57,7 +57,7 @@ describe(`the workspace review's wish list`, () => {
 
     it(`is never filed below the agents board, wherever the reader is standing`, () => {
         // `work` is the band the board's own likely-next reviews sit in, so anything here at `work` or lower is
-        // behind them — which is the ordering that had this panel cold every time a turn ended.
+        // behind them, which is the ordering that had this panel cold every time a turn ended.
         for (const name of [`agents`, `agent`, `sandbox`, `extension`]) {
             stand(name);
 

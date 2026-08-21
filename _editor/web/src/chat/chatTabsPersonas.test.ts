@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 //
-// THE PERSONA RAIL — the chat list's other column, where a row is a PERSON this sandbox can be rather than a
+// THE PERSONA RAIL: the chat list's other column, where a row is a PERSON this sandbox can be rather than a
 // session it is running. Mounted through ChatTabList, because the switch between the two lists is half of what
 // is being asserted; the rows themselves are ChatPersonaRail's.
 //
 // WHY THIS FILE REPLACED ONE THAT TESTED GROUPING. The first build of this feature grouped the open chats under
 // persona headings, and every one of its tests passed while the feature was useless in the app: a chat's
 // persona is a composer pick that nobody makes, so a real workspace put all 56 of its chats under one "Anyone"
-// heading and the switch changed a word. The tests were green because they set `actsAs` by hand — they proved
+// heading and the switch changed a word. The tests were green because they set `actsAs` by hand: they proved
 // the grouping worked and could not have caught that there was nothing to group. So the assertions here are
 // about what the rail shows WITHOUT anyone having pinned anything: the cards, straight from the workspace.
 import { VueQueryPlugin } from "@tanstack/vue-query";
@@ -48,7 +48,7 @@ const mountList = async (): Promise<HTMLElement> => {
 };
 
 // The cards a workspace has made, seeded into the cache the rail reads them from. `connected` is what decides
-// whether a card can actually post — the rail marks the ones that cannot.
+// whether a card can actually post: the rail marks the ones that cannot.
 const withPersonas = (personas: { id: string; label?: string; capabilities: string[] }[], connected: string[] = []): void => {
     queryClient.setQueryData(PERSONAS.of(), { personas, connected });
 };
@@ -89,7 +89,7 @@ it("lists the workspace's personas without anyone having pinned a chat to them",
 });
 
 /* NO "ANYONE" ROW. The composer's picker has one and means something precise by it; as a row in a list of
- * PEOPLE it meant "every chat nobody pinned", which is nearly all of them — eleven conversations and their
+ * PEOPLE it meant "every chat nobody pinned", which is nearly all of them: eleven conversations and their
  * attention bar, at the bottom of a list about personas. Unpinned chats belong to the Agents cut. */
 it("lists no Anyone row", async () => {
     const el = await mountList();
@@ -98,7 +98,7 @@ it("lists no Anyone row", async () => {
 });
 
 /* A WORKSPACE WITH NO CARDS MUST STILL OFFER THE WAY IN. Showing a lone "Anyone" row is how this shipped the
- * first time, and it read as a mode that does nothing — so with nothing set up the rail offers the one press
+ * first time, and it read as a mode that does nothing, so with nothing set up the rail offers the one press
  * that makes one. Just the button now: the explanation paragraph it used to carry was removed as noise. */
 it("offers to set one up when the workspace has no personas", async () => {
     withPersonas([]);
@@ -107,7 +107,7 @@ it("offers to set one up when the workspace has no personas", async () => {
     expect(rows(el)).toEqual([]);
 });
 
-// Pressing a persona you have never talked to opens a chat ALREADY PINNED to them — the rail's whole promise,
+// Pressing a persona you have never talked to opens a chat ALREADY PINNED to them: the rail's whole promise,
 // and the one thing that makes the pick something other than a manual step in the composer.
 it("starts a chat pinned to a persona you have not talked to yet", async () => {
     const el = await mountList();
@@ -131,7 +131,7 @@ it("returns to the chat already acting as that persona", async () => {
     expect(useChat().conversations.value.filter((conversation) => conversation.actsAs.value === `work`)).toHaveLength(1);
 });
 
-// The accounts under the name, because a name alone cannot tell `reddit-work` from `reddit-personal` — and
+// The accounts under the name, because a name alone cannot tell `reddit-work` from `reddit-personal`, and
 // those being different accounts is the whole reason a persona exists.
 it("names the accounts a persona holds", async () => {
     withPersonas([{ id: `work`, label: `Work`, capabilities: [`reddit-work`] }], [`reddit-work`]);
@@ -140,7 +140,7 @@ it("names the accounts a persona holds", async () => {
 });
 
 /* A PERSONA HOLDING NO ACCOUNTS IS AN ORDINARY ROW, not a broken one. It still bounds what a chat can reach
- * and still names who is speaking, and it is the state every card is in for the minute after it is made — so
+ * and still names who is speaking, and it is the state every card is in for the minute after it is made, so
  * the rail says nothing at all rather than marking the row. This is pinned because the rail used to write
  * "No accounts yet" into that slot, which turned a normal state into a defect on every row of a new list. */
 it("says nothing about a persona that holds no accounts", async () => {
@@ -174,7 +174,7 @@ const pinTo = async (persona: string, ids: string[]): Promise<void> => {
 const disclosureFor = (el: HTMLElement, label: string): HTMLElement | undefined =>
     (el.querySelector(`[aria-label="Show ${label}'s chats"]`) as HTMLElement | null) ?? undefined;
 
-// The chats drawn UNDER a persona — everything the list holds that is not one of the persona rows themselves.
+// The chats drawn UNDER a persona: everything the list holds that is not one of the persona rows themselves.
 const sessionRows = (el: HTMLElement): string[] => {
     const personaNames = new Set([`Work`, `Inbox Manager`]);
     return [...el.querySelectorAll(`[data-chat-tab], .rail-card`)]
@@ -192,7 +192,7 @@ it("lists a persona's chats and switches to the one you pick", async () => {
     await settle();
     expect(sessionRows(el)).toHaveLength(2);
 
-    // A SESSION row, addressed by what it offers to do — the persona cards are also `.rail-card`, and pressing
+    // A SESSION row, addressed by what it offers to do: the persona cards are also `.rail-card`, and pressing
     // one of those would start a chat rather than switch to one.
     selected = [];
     el.querySelector(`[aria-label^="Open "]`)?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
@@ -213,8 +213,8 @@ it("collapses the list again from the same control", async () => {
     expect(sessionRows(el)).toEqual([]);
 });
 
-/* THE SEVENTH CHAT. Before this, a persona holding one chat could never be given another from the rail — the
- * card's press means "the latest, or a new one if there are none" — so starting a second meant pressing New
+/* THE SEVENTH CHAT. Before this, a persona holding one chat could never be given another from the rail: the
+ * card's press means "the latest, or a new one if there are none", so starting a second meant pressing New
  * agent and naming the persona by hand in the composer, which is the errand the rail exists to remove. */
 it("offers a new chat as that persona once its existing ones are on screen", async () => {
     const el = await mountList();
@@ -232,7 +232,7 @@ it("shows no disclosure on a persona with no chats", async () => {
 });
 
 /* THE PERSONA YOU OPENED FROM HERE expands itself, so the rail shows where the press landed. Keyed to this
- * rail's own pick rather than to the window's active chat — so once the list is up, a chat focused from
+ * rail's own pick rather than to the window's active chat, so once the list is up, a chat focused from
  * somewhere else never flings a group open under the reader. (Arrival is the one exception, and it is a
  * different act with its own tests above.) */
 it("expands the persona you press, and only then", async () => {
@@ -257,13 +257,13 @@ it("rings the persona of the chat you walk in from, and opens it on that chat", 
     useChatGrouping().set(`persona`);
     await settle();
     expect(rowFor(el, `Work`)?.classList.contains(`rail-card-on`)).toBe(true);
-    // ...and the chat itself, which means its group is open from the first frame — a ring on a row nobody can
+    // ...and the chat itself, which means its group is open from the first frame: a ring on a row nobody can
     // see is not a highlight.
     expect(sessionRows(el)).toHaveLength(1);
     expect(el.querySelector(`[aria-label^="Open "]`)?.classList.contains(`rail-card-on`)).toBe(true);
 });
 
-// An UNPINNED chat rings nobody, because there is nobody to ring — the seed is a fact the chat carries, never
+// An UNPINNED chat rings nobody, because there is nobody to ring: the seed is a fact the chat carries, never
 // a guess about which person you might have meant.
 it("rings nobody when the chat you walk in from names no persona", async () => {
     useChatGrouping().set(`lane`);

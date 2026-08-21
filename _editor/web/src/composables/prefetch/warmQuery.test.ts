@@ -3,7 +3,7 @@ import { queryClient } from "../queryPersistence";
 import { heldInCache, warmQuery } from "./warmQuery";
 
 /* THE ONE PROPERTY EVERY WISH IN THE APP RESTS ON: reading a wish fills the entry that wish says it is
- * satisfied by. It reads as too obvious to test, and it was false for eight of the app's twelve wishes — their
+ * satisfied by. It reads as too obvious to test, and it was false for eight of the app's twelve wishes: their
  * read was the surface's plain fetcher, which answers its caller and files nothing. `have` therefore stayed
  * "no" forever, the loader always takes the first unsatisfied wish, and so it re-read that one thing on every
  * beat and never reached the rail at all. */
@@ -62,7 +62,7 @@ describe(`a warm wish`, () => {
         const wish = warmQuery(`w`, `now`, { queryKey: KEY, queryFn, staleTime: Infinity });
 
         await wish.read();
-        // Warm, and immutable until something invalidates it — a second warm costs no round trip.
+        // Warm, and immutable until something invalidates it: a second warm costs no round trip.
         await wish.read();
 
         expect(queryFn).toHaveBeenCalledTimes(1);

@@ -11,7 +11,7 @@ import { createHostRouter } from "./router.js";
  * This is the test that would catch the two halves drifting: the machine's router and the daemon's client are
  * built from the same `hostContract`, so a procedure renamed on one side or an input schema tightened on the
  * other fails HERE rather than on somebody's laptop. It also stands in for the correlation tests this file
- * replaced — two calls in flight at once used to need a hand-rolled id remap in the daemon's hub, and the point
+ * replaced: two calls in flight at once used to need a hand-rolled id remap in the daemon's hub, and the point
  * of moving to oRPC was that the link does it. */
 
 // A pair of sockets wired to each other, carrying whatever `send` is given. Enough of the WebSocket surface for
@@ -30,7 +30,7 @@ class FakeSocket {
         this.listeners.get(type)?.delete(fn as (event: unknown) => void);
     }
     send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
-        // A microtask hop, so a call is never answered synchronously inside its own send — the shape a real
+        // A microtask hop, so a call is never answered synchronously inside its own send: the shape a real
         // socket has, and the one that would expose an ordering assumption if the code made any.
         queueMicrotask(() => this.peer.emit("message", { data }));
     }
@@ -56,7 +56,7 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     ...overrides,
 });
 
-// The whole wiring: machine hosts the contract, "daemon" holds the client — over one socket, as in production.
+// The whole wiring: machine hosts the contract, "daemon" holds the client, over one socket, as in production.
 const connectedPair = (initial: HostScopes = scopes()) => {
     const machineSocket = new FakeSocket();
     const daemonSocket = new FakeSocket();
@@ -121,7 +121,7 @@ test("the grant the machine enforces is the one it was last pushed, on the very 
     expect(response.result.content[0]?.text).toMatch(/Run commands.*switched off/);
 });
 
-test("concurrent calls do not cross — the link owns correlation now", async () => {
+test("concurrent calls do not cross: the link owns correlation now", async () => {
     const { client } = connectedPair();
     const [first, second, third] = await Promise.all([
         client.mcp({ jsonrpc: "2.0", id: 1, method: "ping" }),

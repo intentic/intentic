@@ -120,14 +120,14 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "describe",
         description:
-            "What this computer is: OS and version, CPU architecture, the exact shell run_command uses, the home directory, the folders you may touch, and which permissions are on. Call this once before your first command here — it is the difference between writing for this machine and guessing.",
+            "What this computer is: OS and version, CPU architecture, the exact shell run_command uses, the home directory, the folders you may touch, and which permissions are on. Call this once before your first command here, it is the difference between writing for this machine and guessing.",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await describeText(scopes)),
     }),
     tool({
         name: "run_command",
         description:
-            "Run a command on this computer and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user's login shell elsewhere (see describe). There is no terminal for anyone to type into: a command that prompts will fail rather than wait. Prefer one script that does the whole job over many small calls — every call is a network round trip to somebody's laptop.",
+            "Run a command on this computer and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user's login shell elsewhere (see describe). There is no terminal for anyone to type into: a command that prompts will fail rather than wait. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody's laptop.",
         input: z.object({
             command: required.describe("The command line to run, in this machine's shell."),
             cwd: required.optional().describe("Working directory. Must be inside the allowed folders. Defaults to the first allowed folder."),
@@ -154,7 +154,7 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "write_file",
         description:
-            "Create a file or replace its contents. Requires the 'Create and change files' permission, which is OFF unless the user turned it on. Overwrites whole — read first if you mean to edit.",
+            "Create a file or replace its contents. Requires the 'Create and change files' permission, which is OFF unless the user turned it on. Overwrites whole: read first if you mean to edit.",
         input: z.object({ path: required, content: z.string() }),
         run: async ({ path, content }, scopes) => textResult(await writeTextFile(path, content, scopes)),
     }),
@@ -174,7 +174,7 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "list_windows",
         description:
-            "Every window open on this computer: its app, title, size, position, and which one has focus. Call this before any GUI work — it is how you find the application you were asked about, and how you know where your typing will land. Requires the 'See the screen' permission.",
+            "Every window open on this computer: its app, title, size, position, and which one has focus. Call this before any GUI work, it is how you find the application you were asked about, and how you know where your typing will land. Requires the 'See the screen' permission.",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await listWindows(desktop(), scopes)),
     }),
@@ -188,14 +188,14 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "open",
         description:
-            "Start an application, or open a URL or file with whatever this computer has registered for it — the usual first step of a task ('open the browser at this page'). Use this rather than working out the platform's own incantation. Requires the 'Run commands' permission.",
+            "Start an application, or open a URL or file with whatever this computer has registered for it: the usual first step of a task ('open the browser at this page'). Use this rather than working out the platform's own incantation. Requires the 'Run commands' permission.",
         input: z.object({ target: required.describe("An application name, a file path, or a URL.") }),
         run: async ({ target }, scopes) => textResult(await openTarget(desktop(), target, scopes)),
     }),
     tool({
         name: "clipboard",
         description:
-            "Read or replace this computer's clipboard — the reliable way to move text between applications, and often easier than reading it off a screenshot. Reading needs 'See the screen'; writing needs 'Use the mouse and keyboard'.",
+            "Read or replace this computer's clipboard: the reliable way to move text between applications, and often easier than reading it off a screenshot. Reading needs 'See the screen'; writing needs 'Use the mouse and keyboard'.",
         /* `text` is required BY the write and meaningless to the read, which is a pairing rather than a shape,
          * so it rides as a rule on the object instead of splitting the tool into two schemas. A union would say
          * it more precisely and publish `anyOf` at the root, which is not the `type: "object"` an MCP client
@@ -206,7 +206,7 @@ const TOOLS: readonly Tool[] = [
                 text: z.string().min(1).optional().describe("The text to put on the clipboard (write)."),
             })
             .refine((args) => args.action !== "write" || args.text !== undefined, {
-                error: `"text" is what a write puts on the clipboard — a write without it would clear it, which read/write cannot express.`,
+                error: `"text" is what a write puts on the clipboard, a write without it would clear it, which read/write cannot express.`,
                 path: ["text"],
             }),
         run: async ({ action, text }, scopes) =>
@@ -217,21 +217,21 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "browser_open",
         description:
-            "Open a page in a browser on this computer and answer with what is on it: the page's title, its URL, and every element you can click or type into, each with a reference like [e12]. THIS IS THE RIGHT WAY TO USE A WEBSITE — act on elements by reference, never by clicking pixels, because references survive scrolling, resizing and re-rendering. The browser is a separate instance with its own profile, so the user's own tabs and session are untouched; the first time it opens they may need to sign in. Requires the 'Run commands' permission.",
+            "Open a page in a browser on this computer and answer with what is on it: the page's title, its URL, and every element you can click or type into, each with a reference like [e12]. THIS IS THE RIGHT WAY TO USE A WEBSITE, act on elements by reference, never by clicking pixels, because references survive scrolling, resizing and re-rendering. The browser is a separate instance with its own profile, so the user's own tabs and session are untouched; the first time it opens they may need to sign in. Requires the 'Run commands' permission.",
         input: z.object({ url: required.describe("The page to open. A bare host like example.com is fine.") }),
         run: async ({ url }, scopes) => textResult(await openPage(web(), url, scopes)),
     }),
     tool({
         name: "browser_snapshot",
         description:
-            "What the current page shows right now, with fresh [e…] references. Take one after anything that might have changed the page — references from an older snapshot are refused rather than clicking the wrong thing. Requires the 'See the screen' permission.",
+            "What the current page shows right now, with fresh [e…] references. Take one after anything that might have changed the page: references from an older snapshot are refused rather than clicking the wrong thing. Requires the 'See the screen' permission.",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await snapshotPage(web(), scopes)),
     }),
     tool({
         name: "browser_read",
         description:
-            "The current page as readable text — what a person would get by selecting all of it. Use this to ANSWER QUESTIONS about a page; use browser_snapshot when you intend to act on it. Requires the 'See the screen' permission.",
+            "The current page as readable text: what a person would get by selecting all of it. Use this to ANSWER QUESTIONS about a page; use browser_snapshot when you intend to act on it. Requires the 'See the screen' permission.",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await readPage(web(), scopes)),
     }),
@@ -245,7 +245,7 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "browser_fill",
         description:
-            "Type into a field by its [e…] reference — replaces what is there, and fires the events a page's own JavaScript listens for (setting a value without them is how a filled form submits empty). Set submit to press Enter afterwards. Requires the 'Use the mouse and keyboard' permission.",
+            "Type into a field by its [e…] reference: replaces what is there, and fires the events a page's own JavaScript listens for (setting a value without them is how a filled form submits empty). Set submit to press Enter afterwards. Requires the 'Use the mouse and keyboard' permission.",
         input: z.object({
             ref: required,
             text: z.string(),
@@ -256,7 +256,7 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "browser_key",
         description:
-            'Press a key on the page as a whole — "Return", "Escape", "Tab". For typing into a field use browser_fill. Requires the \'Use the mouse and keyboard\' permission.',
+            'Press a key on the page as a whole: "Return", "Escape", "Tab". For typing into a field use browser_fill. Requires the \'Use the mouse and keyboard\' permission.',
         input: z.object({ key: required }),
         run: async ({ key }, scopes) => textResult(await pressKey(web(), key, scopes)),
     }),
@@ -270,7 +270,7 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "computer",
         description:
-            "Use this computer's mouse and keyboard: click what is on the screen, type into the focused window, press a key combination, scroll, drag. Coordinates are PIXELS IN THE LAST SCREENSHOT — take one first and read them off it. Every action answers with a fresh screenshot so you can see what happened. Requires the 'Use the mouse and keyboard' permission, which is OFF unless the user turned it on. Prefer a command over the GUI when both would work: a command is exact, and a click is a guess about where something is.",
+            "Use this computer's mouse and keyboard: click what is on the screen, type into the focused window, press a key combination, scroll, drag. Coordinates are PIXELS IN THE LAST SCREENSHOT, take one first and read them off it. Every action answers with a fresh screenshot so you can see what happened. Requires the 'Use the mouse and keyboard' permission, which is OFF unless the user turned it on. Prefer a command over the GUI when both would work: a command is exact, and a click is a guess about where something is.",
         input: z.object({
             action: z.enum([
                 "mouse_move",
@@ -284,7 +284,7 @@ const TOOLS: readonly Tool[] = [
                 "scroll",
                 "wait",
             ]),
-            coordinate: point.optional().describe("[x, y] in screenshot pixels — required for every pointer action."),
+            coordinate: point.optional().describe("[x, y] in screenshot pixels, required for every pointer action."),
             to: point.optional().describe("[x, y] the drag ends at (left_click_drag)."),
             text: z.string().optional().describe('The text to type, or the key combination to press: "Return", "ctrl+c", "alt+Tab", "super+e".'),
             direction: z.enum(["up", "down", "left", "right"]).optional().describe("Scroll direction. Default down."),
@@ -316,14 +316,14 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "list_sandboxes",
         description:
-            "The Intentic sandboxes on this computer, as JSON — each one's slug, whether it is running, and whether its tunnel is up. Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this computer'.",
+            "The Intentic sandboxes on this computer, as JSON: each one's slug, whether it is running, and whether its tunnel is up. Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this computer'.",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await listSandboxes(scopes)),
     }),
     tool({
         name: "manage_sandbox",
         description:
-            "Start, stop or restart one Intentic sandbox on this computer, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it — and stopping the sandbox you are calling from severs your own connection. Requires the 'Manage sandboxes on this computer' permission, which is OFF unless the user turned it on.",
+            "Start, stop or restart one Intentic sandbox on this computer, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it, and stopping the sandbox you are calling from severs your own connection. Requires the 'Manage sandboxes on this computer' permission, which is OFF unless the user turned it on.",
         input: z.object({ op: SandboxOpSchema, slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ op, slug }, scopes) => textResult(await manageSandbox(op, slug, scopes)),
     }),
@@ -334,25 +334,25 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "swap_sandbox",
         description:
-            "Move one Intentic sandbox on this computer onto a different image: 'update' pulls the newest image of its release channel, 'rollback' returns it to the image it ran before its last update, and 'rebuild' rebuilds the owner-approved environment overlay. Files (/work) and history are kept in all three. Takes MINUTES — it pulls an image and recreates the container, and the sandbox is down while it happens. 'prepare' is the exception and the one to reach for first: it does the downloading and building of the next update WITHOUT touching the container, so the sandbox keeps running throughout and the 'update' that follows is a restart of seconds instead of a wait of minutes. Requires the 'Manage sandboxes on this computer' permission.",
+            "Move one Intentic sandbox on this computer onto a different image: 'update' pulls the newest image of its release channel, 'rollback' returns it to the image it ran before its last update, and 'rebuild' rebuilds the owner-approved environment overlay. Files (/work) and history are kept in all three. Takes MINUTES, it pulls an image and recreates the container, and the sandbox is down while it happens. 'prepare' is the exception and the one to reach for first: it does the downloading and building of the next update WITHOUT touching the container, so the sandbox keeps running throughout and the 'update' that follows is a restart of seconds instead of a wait of minutes. Requires the 'Manage sandboxes on this computer' permission.",
         input: z.object({
             op: SandboxSwapSchema,
             slug: required.describe("The sandbox's slug, from list_sandboxes."),
-            hash: required.optional().describe("sha256 of the approved overlay — required for 'rebuild', ignored otherwise."),
+            hash: required.optional().describe("sha256 of the approved overlay, required for 'rebuild', ignored otherwise."),
         }),
         run: async ({ op, slug, hash }, scopes) => textResult(await swapSandbox(op, slug, hash, scopes, () => {})),
     }),
     tool({
         name: "remove_sandbox",
         description:
-            "Delete one Intentic sandbox from this computer: its container, its network, and the volumes holding its files and its history. THIS CANNOT BE UNDONE and is not what stopping it does — confirm with the user before calling it. Requires the 'Remove sandboxes from this computer' permission, which is separate from managing them and OFF unless the user turned it on.",
+            "Delete one Intentic sandbox from this computer: its container, its network, and the volumes holding its files and its history. THIS CANNOT BE UNDONE and is not what stopping it does, confirm with the user before calling it. Requires the 'Remove sandboxes from this computer' permission, which is separate from managing them and OFF unless the user turned it on.",
         input: z.object({ slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ slug }, scopes) => textResult(await removeSandbox(slug, scopes, () => {})),
     }),
     tool({
         name: "sandbox_logs",
         description:
-            "The tail of one Intentic sandbox's container log on this computer — how you find out why it will not start or what it did before it stopped. Requires 'Run commands' or 'Manage sandboxes on this computer'.",
+            "The tail of one Intentic sandbox's container log on this computer: how you find out why it will not start or what it did before it stopped. Requires 'Run commands' or 'Manage sandboxes on this computer'.",
         input: z.object({
             slug: required.describe("The sandbox's slug, from list_sandboxes."),
             // The prose and the rule come off the same two numbers, so the sentence the model reads cannot

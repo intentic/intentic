@@ -1,17 +1,17 @@
 <script setup lang="ts">
-/* THE SESSION'S NAME, wherever it is printed — the branch an isolated agent works on, which is also the name of
+/* THE SESSION'S NAME, wherever it is printed: the branch an isolated agent works on, which is also the name of
  * its worktree and the id in its page's address. One component so the string looks the same on every surface,
  * because it is the only thing joining this app to git, the disk and the CLI: a name you have to retype off the
  * screen is not an identifier, it is a picture of one.
  *
  * IT IS A LABEL BY DEFAULT, AND THAT IS THE POINT. The board's card is one press (focus the agent) and one drag
  * (move it to a lane), and this line sits in the middle of it. Made pressable, it became a small target for a
- * rare want — copying — parked in the path of the press people make all day, and it was hit by accident far
+ * rare want (copying) parked in the path of the press people make all day, and it was hit by accident far
  * more often than on purpose. Copying moved to the card's right-click menu, where a once-in-a-while action does
  * not have to share a surface with an every-time one.
  *
  * `reveal` is the exception, and only on the agent's own page: there the chip opens the identity panel, which
- * is that page's subject rather than something in the way of it. The chevron is what marks it — a chip that
+ * is that page's subject rather than something in the way of it. The chevron is what marks it: a chip that
  * opens something has to look different from one that just says a name. That spelling prints the name WHOLE:
  * the detail page is the one surface whose subject is this agent, it has the width, and it is where somebody
  * goes when the exact string is what they came for.
@@ -34,7 +34,7 @@ const {
     compact = false,
 } = defineProps<{
     branch: string;
-    // Press to open the identity panel — the agent's own page, the one surface that shows every form of the name.
+    // Press to open the identity panel: the agent's own page, the one surface that shows every form of the name.
     reveal?: boolean;
     // Glyph only, for a header row with no width to spare (the detail page on a phone).
     compact?: boolean;
@@ -51,7 +51,7 @@ const CHROME = `inline-flex min-w-0 items-center gap-1 rounded font-mono text-2x
         v-if="reveal"
         type="button"
         :class="[CHROME, `transition-colors hover:text-content`, compact ? `h-7 w-7 shrink-0 justify-center hover:bg-overlay` : `max-w-full shrink`]"
-        :aria-label="`Session name — ${branch}`"
+        :aria-label="`Session name: ${branch}`"
         @click.stop="emit(`reveal`, $event)"
     >
         <Icon name="code" class="shrink-0 text-2xs" />

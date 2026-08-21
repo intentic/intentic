@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // jsdom because what this component IS is what it renders: a refused land's causes, grouped, each one saying
-// who can clear it. The two guarantees pinned here are the ones a reader of the code cannot check — that the
+// who can clear it. The two guarantees pinned here are the ones a reader of the code cannot check: that the
 // report and the file list below it name a cause in ONE vocabulary (REASON_COPY, shared), and that every path
 // it prints is a control that hands its ROW back rather than a string the user has to match by eye.
 import type { LandConflict } from "@intentic/sandbox-contract";
@@ -15,7 +15,7 @@ import { REASON_COPY } from "../composables/agents/conflictResolution";
 
 const { default: AgentConflictReport } = await import("./AgentConflictReport.vue");
 
-// All three causes at once, across two repos — the shape that makes every branch of the report render, and the
+// All three causes at once, across two repos: the shape that makes every branch of the report render, and the
 // one where a bare path is ambiguous (docs/README.md is a row in `docs`, not in `root`).
 const conflicts: readonly LandConflict[] = [
     {
@@ -32,7 +32,7 @@ const conflicts: readonly LandConflict[] = [
 
 let app: App | undefined;
 // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin. Icon
-// prints the glyph it was handed, because WHICH glyph is under test — it is the link between a group heading
+// prints the glyph it was handed, because WHICH glyph is under test: it is the link between a group heading
 // here and the marks on the rows below.
 const mount = (): { el: HTMLElement; selected: unknown[] } => {
     const el = document.createElement(`div`);
@@ -74,7 +74,7 @@ const pathButtons = (el: HTMLElement): HTMLButtonElement[] =>
 
 it(`says each cause in the words and the glyph the file list marks those rows with`, () => {
     const { el } = mount();
-    // Not a copy of the strings — a comparison against the module both surfaces read, so a reworded cause
+    // Not a copy of the strings: a comparison against the module both surfaces read, so a reworded cause
     // cannot leave the report and the rows disagreeing about the same refusal.
     for (const reason of [`diverged`, `workspace`, `binary`] as const) {
         expect(el.textContent).toContain(REASON_COPY[reason].title);
@@ -83,7 +83,7 @@ it(`says each cause in the words and the glyph the file list marks those rows wi
     }
 });
 
-it(`hands back the row a path names, repo and all — a label alone cannot be taken apart again`, () => {
+it(`hands back the row a path names, repo and all: a label alone cannot be taken apart again`, () => {
     const { el, selected } = mount();
     const nested = pathButtons(el).find((button) => button.textContent?.trim() === `docs/README.md`)!;
     nested.click();

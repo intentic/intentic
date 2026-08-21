@@ -28,19 +28,19 @@ const {
     nodeHeight?: number;
     direction?: `LR` | `TB`;
     // How far the reader may zoom out by hand. Raise the ceiling on that (i.e. lower this) for a graph whose
-    // whole shape is worth seeing even when the labels stop resolving — `fitAll` is bounded by it too.
+    // whole shape is worth seeing even when the labels stop resolving: `fitAll` is bounded by it too.
     minZoom?: number;
     /* THE FIT'S LOWER BOUND, the way `magnify` is its upper one, and the answer to a diagram that technically
      * contains everything and can be read by nobody. `fitView` shrinks until the graph is inside the frame; on
      * a long chain that lands near 0.3, where a 12px label renders at four pixels and the picture is a row of
      * grey smudges. A fit no one can read is not a fit.
      *
-     * Below this zoom, stop shrinking and show the graph's LEADING EDGE at exactly this size instead — the
+     * Below this zoom, stop shrinking and show the graph's LEADING EDGE at exactly this size instead: the
      * start of a left-to-right flow is where a reader starts. The rest is one drag away, and `fitAll` (handed
      * to the #overlay slot) is there for the whole shape at a glance, deliberately and once. Leave it undefined
      * to always fit, which is right for a graph that is never bigger than its frame. */
     readableZoom?: number;
-    /* Whether a graph SMALLER than the viewport is scaled up to fill it. True — the default — is right for
+    /* Whether a graph SMALLER than the viewport is scaled up to fill it. True (the default) is right for
      * this component's usual caller, which gives it a band a couple of hundred pixels tall where filling the
      * height is what a reader wants.
      *
@@ -63,7 +63,7 @@ defineSlots<{
     overlay(props: { fitAll: () => void }): unknown;
 }>();
 
-// Vue Flow scopes its injected state by id — unique per instance so two graphs can share a page.
+// Vue Flow scopes its injected state by id: unique per instance so two graphs can share a page.
 const flowId = useId();
 
 const flowNodes = computed<Node<DagNode<T>>[]>(() => {
@@ -98,7 +98,7 @@ const flowEdges = computed<Edge[]>(() => {
 const sourcePosition = computed(() => (direction === `LR` ? Position.Right : Position.Bottom));
 const targetPosition = computed(() => (direction === `LR` ? Position.Left : Position.Top));
 
-// The picture's own bounding box in graph units — measured from where the nodes actually landed rather than
+// The picture's own bounding box in graph units: measured from where the nodes actually landed rather than
 // guessed from their count, because it is what decides whether a fit can stay legible.
 const extent = computed(() => {
     const boxes = flowNodes.value.map((node) => node.position);
@@ -112,7 +112,7 @@ const extent = computed(() => {
     };
 });
 
-/* Refit whenever a DIFFERENT graph arrives — `fit-view-on-init` only covers mount, and mount is not when this
+/* Refit whenever a DIFFERENT graph arrives: `fit-view-on-init` only covers mount, and mount is not when this
  * usually happens. A caller that renders one DagGraph per page (a document's figures, keyed by position) has
  * Vue patch the same instance with new props rather than remount it, so the viewport transform survives from
  * the graph before it while the nodes underneath are replaced.
@@ -121,7 +121,7 @@ const extent = computed(() => {
  * apart, which is how a page could inherit the previous page's zoom. See layoutSignature for the failure that
  * produced. `nextTick` first because the container is often sized from the same render (a frame whose height
  * scales with node count), and fitView measures the container. */
-// Undefined is Vue Flow's own default fit — the magnifying one, and what every caller had until `magnify`
+// Undefined is Vue Flow's own default fit: the magnifying one, and what every caller had until `magnify`
 // existed. The capped pair is DagEditor's, down to the padding: two components fitting the same kind of
 // picture must not disagree about how much room it gets.
 // DagEditor's padding, kept the same here so two components fitting the same kind of picture do not disagree
@@ -132,7 +132,7 @@ const FIT = computed(() => (magnify ? undefined : { padding: PADDING, maxZoom: 1
 const flow = ref<VueFlowStore>();
 const root = ref<HTMLElement>();
 
-/* THE READER HAS TAKEN HOLD, and from here the viewport is theirs — nothing below fits over it. `@move-start`
+/* THE READER HAS TAKEN HOLD, and from here the viewport is theirs: nothing below fits over it. `@move-start`
  * says exactly that and only that: Vue Flow returns before emitting it when the transform came from code (no
  * `sourceEvent`), so our own fits can never trip it. The same rule ImageView keeps for a hand-zoomed image. */
 let held = false;
@@ -141,7 +141,7 @@ const hold = (): void => {
 };
 
 // The fit `readableZoom` describes: whichever of the two the graph's size calls for. The estimate mirrors
-// Vue Flow's own arithmetic closely enough to pick a branch — the branch it picks then does the real work.
+// Vue Flow's own arithmetic closely enough to pick a branch: the branch it picks then does the real work.
 const applyFit = (store: VueFlowStore): void => {
     if (readableZoom === undefined) {
         void store.fitView(FIT.value);
@@ -149,12 +149,12 @@ const applyFit = (store: VueFlowStore): void => {
     }
     /* THE FRAME MAY NOT BE MEASURED YET, and reaching into it when it isn't took the whole view down with a
      * `Cannot read properties of undefined (reading 'width')`. Vue Flow populates `dimensions` from its own
-     * observer, so a graph mounted into a container that has just appeared — a tab switched to, a pane
-     * revealed — can be ready before it has been measured. The graph mounted WITH its page (every caller until
+     * observer, so a graph mounted into a container that has just appeared: a tab switched to, a pane
+     * revealed: can be ready before it has been measured. The graph mounted WITH its page (every caller until
      * one wasn't) always won that race, which is why this only ever crashed for the one that didn't.
      *
      * Falling back to the plain fit is the right answer rather than a guard: `fitView` is itself a no-op until
-     * the boxes exist, and the resize observer below calls back the moment they do — at which point this runs
+     * the boxes exist, and the resize observer below calls back the moment they do: at which point this runs
      * again with a real frame and applies the readable fit properly. */
     const frame = store.dimensions.value;
     const box = extent.value;
@@ -174,7 +174,7 @@ const applyFit = (store: VueFlowStore): void => {
     });
 };
 
-// The whole shape at a glance, floor and all — what a "fit" control is for, and why it ignores `readableZoom`:
+// The whole shape at a glance, floor and all: what a "fit" control is for, and why it ignores `readableZoom`:
 // asking to see everything is asking to trade legibility for it, deliberately and for as long as you look.
 const fitAll = (): void => void flow.value?.fitView({ padding: PADDING });
 
@@ -191,7 +191,7 @@ const refit = (): void => {
 watch(
     () => layoutSignature(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight }),
     async () => {
-        // A DIFFERENT graph is not the reader's view any more — whatever they had panned to was a place in the
+        // A DIFFERENT graph is not the reader's view any more: whatever they had panned to was a place in the
         // picture this one replaced, so the hold is released with it and the new graph is fitted.
         held = false;
         await nextTick();
@@ -204,7 +204,7 @@ watch(
  *
  * WHY READY IS NOT ENOUGH ON ITS OWN, and this is the defect that left one card's diagram in the corner of its own
  * frame while the card under it was drawn perfectly: `fitView` reads each node's MEASURED box, and while none
- * of them has one it does nothing at all — returns false, leaves the viewport at the identity transform, and
+ * of them has one it does nothing at all: returns false, leaves the viewport at the identity transform, and
  * is never asked again. Boxes are measured by an observer, so whether they are in by `pane-ready` is a RACE: a
  * graph mounted with the page usually wins it, one mounted a moment later (a list that arrived from the daemon,
  * a card a query revealed) usually loses. `nodes-initialized` is Vue Flow saying the boxes are in, which is the
@@ -217,7 +217,7 @@ const onReady = async (store: VueFlowStore): Promise<void> => {
 
 /* AND AGAIN WHENEVER THE FRAME CHANGES SIZE, because a fit is a statement about the frame it was measured in.
  * Open the chat column beside a page of cards, resize the window, or reveal a pane that mounted hidden, and
- * every picture on it is still transformed for the frame it no longer has — off-centre, or spilling out of its
+ * every picture on it is still transformed for the frame it no longer has: off-centre, or spilling out of its
  * own box and clipped. Vue Flow observes this same element for its `dimensions` and registers first (a child's
  * onMounted runs before its parent's), so the store already knows the new size when this runs. */
 let observer: ResizeObserver | undefined;
@@ -239,7 +239,7 @@ const toggle = (id: string): void => {
 <template>
     <div ref="root" class="relative h-full w-full">
         <!-- `elements-selectable` is TRUE even though this component keeps its own selection and wants none of Vue
-             Flow's, and that is not a preference — it is what makes the nodes touchable at all. A node wrapper
+             Flow's, and that is not a preference: it is what makes the nodes touchable at all. A node wrapper
              takes pointer events only when something could want them (NodeWrapper's `hasPointerEvents`:
              `isSelectable || isDraggable || any node listener`), and with all of those off Vue Flow writes
              `pointer-events: none` onto every node. Which made the card below inert: the click-to-select this
@@ -284,7 +284,7 @@ const toggle = (id: string): void => {
 
 <style>
 /* Edge chrome mirrors the pre-Vue-Flow look: 1.5px currentColor curves at 0.45 opacity, full-strength when
-   accent-tinted. Handles exist only as edge anchors — invisible and inert. */
+   accent-tinted. Handles exist only as edge anchors: invisible and inert. */
 .dag-graph .vue-flow__edge-path {
     stroke: currentColor;
     stroke-opacity: 0.45;

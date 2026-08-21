@@ -3,8 +3,8 @@ import { defineConfig } from "vitest/config";
 /* The launcher's own suite, and it covers exactly one kind of thing: the PURE readings of what the installer
  * says (src/desktop.ts, src/setupPlan.ts).
  *
- * That is not an arbitrary line. Everything else in this package is either a Tauri command — a one-line
- * `invoke` whose behaviour is entirely on the Rust side, which has its own suite — or a Vue template whose
+ * That is not an arbitrary line. Everything else in this package is either a Tauri command: a one-line
+ * `invoke` whose behaviour is entirely on the Rust side, which has its own suite, or a Vue template whose
  * value is what it looks like on a real Windows screen. What sits between them is a set of parsers and a
  * progress model that decide whether a stopped install reports anything at all, and those are ordinary
  * functions over strings.

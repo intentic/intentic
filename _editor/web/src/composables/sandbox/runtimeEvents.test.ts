@@ -22,7 +22,7 @@ import { applySystemEvent } from "./systemEvents";
  *
  * These views hold no timer any more, so this frame is their entire live feed: whatever it fails to invalidate
  * simply stays wrong until the user navigates. The three properties below are what make dropping the polls safe
- * — the right views refresh, the wrong ones are left alone, and a reconnect re-asks the lot. */
+ *: the right views refresh, the wrong ones are left alone, and a reconnect re-asks the lot. */
 
 const SANDBOX = `sbx-1`;
 
@@ -44,7 +44,7 @@ it(`refreshes the terminal surfaces when the daemon says a session moved`, () =>
 });
 
 it(`refreshes the panels AND the per-repo apps from one dev-server frame`, () => {
-    // Both lists are drawn from the same managed process, so the domain names both keys — an app preview left
+    // Both lists are drawn from the same managed process, so the domain names both keys: an app preview left
     // reading "starting" after its server came up is the failure this covers.
     applySystemEvent({ kind: `runtimeChanged`, domains: [`panels`] }, SANDBOX);
     expect(invalidated).toEqual([[`panels`], [`apps`]]);
@@ -56,7 +56,7 @@ it(`asks nothing of a domain this build does not know`, () => {
     expect(invalidated).toEqual([]);
 });
 
-it(`leaves the file-backed views alone — a running thing moving is not a file changing`, () => {
+it(`leaves the file-backed views alone: a running thing moving is not a file changing`, () => {
     applySystemEvent({ kind: `runtimeChanged`, domains: [`browsers`, `subagents`] }, SANDBOX);
     expect(invalidated).toEqual([[`browsers`], [`subagents`]]);
 });
@@ -64,7 +64,7 @@ it(`leaves the file-backed views alone — a running thing moving is not a file 
 it(`re-asks every runtime-bound view on a new connection`, () => {
     /* The recovery that replaces the polls. A frame produced while the stream was down is a frame nobody will
      * resend, so a panel that finished starting or a session that exited while this browser was away would sit
-     * wrong indefinitely — these views have no clock of their own to catch up on. */
+     * wrong indefinitely: these views have no clock of their own to catch up on. */
     applySystemEvent({ kind: `hello`, workspaceId: `ws-a`, routes: [], build: `0.0.0:1`, boot: undefined }, SANDBOX);
     for (const key of [`terminals`, `panels`, `apps`, `ports`, `browsers`, `subagents`]) {
         expect(invalidated).toContainEqual([key]);

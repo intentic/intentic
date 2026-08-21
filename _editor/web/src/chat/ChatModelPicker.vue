@@ -7,7 +7,7 @@ import { usePickerAccounts } from "../composables/chat/pickerAccounts";
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "./PickerAccounts.vue";
 
-/* THE CHAT'S BINDING OF THE APP'S MODEL PICKER — the shared list (ModelPicker), the shared who-serves-the-turn
+/* THE CHAT'S BINDING OF THE APP'S MODEL PICKER: the shared list (ModelPicker), the shared who-serves-the-turn
  * block (PickerAccounts) and the footer controls that only mean something when there IS a conversation: Claude's
  * extended-thinking knob, fast speed, and what this runtime cannot do.
  *
@@ -17,19 +17,19 @@ import PickerAccounts from "./PickerAccounts.vue";
  * would have made the proposal's picker silently edit whatever chat happened to be open behind it.
  *
  * The harness (the provider's own / Claude Code) is a separate axis from the model, chosen via the footer chips
- * — codex/grok run the same subscription model ids under either harness. A mid-chat cross-provider pick just
- * re-points the selection — the fresh session starts lazily at the next send. */
+ *: codex/grok run the same subscription model ids under either harness. A mid-chat cross-provider pick just
+ * re-points the selection: the fresh session starts lazily at the next send. */
 
 const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
 
-/* Destructured ONCE, which is sound only because every host remounts this body per open — AnchoredOverlay
+/* Destructured ONCE, which is sound only because every host remounts this body per open: AnchoredOverlay
  * teleports behind a `v-if="open"` and BottomSheet does the same, in both ChatPanel and SuggestedSessionBox.
  * These are the refs of the conversation as it was at mount, so a host that swapped the prop in place would go
  * on editing the previous one. Remount, don't rebind. */
 const { provider, harness, model, thinking, fast, fastOffered, fastMode, streaming, account, capabilities } = conversation;
 
-// Whether the shared block has anything to say for this provider — the one thing this component needs from it
+// Whether the shared block has anything to say for this provider: the one thing this component needs from it
 // BEFORE rendering it, since the footer's border and padding belong to whoever draws them.
 const { hasContent } = usePickerAccounts(provider, harness);
 
@@ -43,17 +43,17 @@ const pick = (entry: PickerEntry): void => {
 
 /* What the selected provider/harness pair does NOT do, straight off its declared record. The picker is where
  * the choice is made, so it is where the trade-off belongs: picking Grok gives up mid-turn steering and per-tool
- * approvals, and nothing else in the app was ever going to say so — the controls simply stopped working. An
+ * approvals, and nothing else in the app was ever going to say so: the controls simply stopped working. An
  * empty list (the Claude Code loop, which is the ceiling) renders nothing at all. */
 const limitations = computed(() => limitationsOf(capabilities.value));
 
-/* WHY THE FAST TOGGLE DIDN'T DO WHAT IT SAYS — the sentence for each reason the harness can give (its own
+/* WHY THE FAST TOGGLE DIDN'T DO WHAT IT SAYS: the sentence for each reason the harness can give (its own
  * FastModeDisabledReason vocabulary, forwarded verbatim on the `fast_mode` frame).
  *
  * Every one of these is a state the user can be in with the control switched on and nothing visibly different
  * about the turn except the speed, so each needs to say what happened AND whether they can do anything about
  * it. An unrecognized reason is not swallowed: a newer harness may report something this build hasn't heard
- * of, and the raw word beats silence — it is at least searchable. */
+ * of, and the raw word beats silence: it is at least searchable. */
 const FAST_MODE_REASONS: Record<string, string> = {
     free: `Fast speed needs a paid plan.`,
     preference: `Fast speed is switched off in this account's Claude settings.`,
@@ -67,8 +67,8 @@ const FAST_MODE_REASONS: Record<string, string> = {
 };
 
 /* The one line under the toggle, and only when the answer DISAGREES with the ask. Three cases, in the order
- * they matter: cooldown (asked, had it, spent the separate fast-mode pool — it comes back by itself), refused
- * (asked, never got it — the reason says whether that is fixable), and served-anyway (didn't ask but got it,
+ * they matter: cooldown (asked, had it, spent the separate fast-mode pool, it comes back by itself), refused
+ * (asked, never got it: the reason says whether that is fixable), and served-anyway (didn't ask but got it,
  * which happens when the account's own Claude settings turn fast mode on, and is worth saying because it is
  * being billed). Agreement renders nothing: a notice confirming that a control did what it says is noise. */
 const fastSpeedNotice = computed<string | undefined>(() => {
@@ -77,10 +77,10 @@ const fastSpeedNotice = computed<string | undefined>(() => {
         return undefined;
     }
     if (state.state === `cooldown`) {
-        return `Fast speed is rate-limited right now — turns run at standard speed until it resets.`;
+        return `Fast speed is rate-limited right now: turns run at standard speed until it resets.`;
     }
     if (state.state === `on`) {
-        return fast.value ? undefined : `Ran at fast speed — this account has fast mode switched on by default.`;
+        return fast.value ? undefined : `Ran at fast speed, this account has fast mode switched on by default.`;
     }
     if (!fast.value) {
         return undefined;
@@ -101,19 +101,19 @@ const footerVisible = computed(() => hasContent.value || provider.value === `cla
         <template #footer>
             <!-- Session controls that have no place in the shared list: who serves the next turn (the shared
                  block), then Claude's extended-thinking knob, fast speed, and what this runtime cannot do.
-                 Controls and the state of them — no standing prose. -->
+                 Controls and the state of them: no standing prose. -->
             <!-- Padded on the model list's own 12px rhythm (ModelPicker's rows and section headers are all
                  `px-3`), because the two read as one column: at the footer's old 8px every label in it sat
                  four pixels inboard of the headings directly above, close enough to the panel edge to look
                  like a crop rather than a margin. The row groups below take that padding back with `-mx-3`
-                 so their tint spans the panel exactly as a model row's does — bleed is the LIST's idiom, and
+                 so their tint spans the panel exactly as a model row's does: bleed is the LIST's idiom, and
                  the text still lands on the 12px line. -->
             <!-- It SHRINKS AND SCROLLS rather than holding its natural height, which is the backstop behind the
                  model list's floor (ModelPicker): the two together mean a tall footer and a short window can
                  shorten each other but neither can erase the other. Nothing scrolls here until the window is
-                 genuinely too short — the account lists fold themselves long before that (PickerAccounts). -->
+                 genuinely too short: the account lists fold themselves long before that (PickerAccounts). -->
             <div v-if="footerVisible" class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line px-3 py-2">
-                <!-- WHO SERVES THE NEXT TURN — the account list and the harness axis, shared verbatim with the
+                <!-- WHO SERVES THE NEXT TURN: the account list and the harness axis, shared verbatim with the
                      shell's own picker (PickerAccounts). Bound to the conversation here: each row writes
                      straight through and the panel stays open, because these are settings of the session you
                      are in rather than an answer someone is waiting on. -->
@@ -144,7 +144,7 @@ const footerVisible = computed(() => hasContent.value || provider.value === `cla
                 </div>
 
                 <!-- FAST SPEED. Offered only where all three conditions hold (fastAllowed: the Claude Code loop, a
-                     first-party route, a model whose catalog row publishes the `fast` badge) — so it appears and
+                     first-party route, a model whose catalog row publishes the `fast` badge), so it appears and
                      disappears with the model rather than sitting greyed out with an explanation nobody reads. The
                      toggle stands on its own: a standing caption under a switch is read once and skipped from then
                      on, and the only line worth the space is the conditional one below it, which reports what the
@@ -171,7 +171,7 @@ const footerVisible = computed(() => hasContent.value || provider.value === `cla
                 </div>
 
                 <!-- The honest half of the choice: what this runtime can't do, named before the user relies on it.
-                     Chips rather than prose — the list is short, unordered, and each item is a control that would
+                     Chips rather than prose: the list is short, unordered, and each item is a control that would
                      otherwise appear to work. -->
                 <div v-if="limitations.length > 0" class="flex flex-col gap-1">
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Not available here</span>

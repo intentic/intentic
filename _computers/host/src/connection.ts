@@ -80,7 +80,7 @@ export const connect = (config: HostConfigFile, version: string, log: Log): Host
             }
             if (event.code === UNAUTHORIZED) {
                 log(
-                    "the sandbox refused this computer's enrollment — it was revoked there. Run `intentic-host uninstall` to clean up, or connect again from the sandbox.",
+                    "the sandbox refused this computer's enrollment: it was revoked there. Run `intentic-host uninstall` to clean up, or connect again from the sandbox.",
                 );
                 stopped = true;
                 resolveDone();

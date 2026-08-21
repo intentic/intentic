@@ -33,49 +33,49 @@ import { BUILD_IDEAS, buildPrompt } from "./buildIdeas";
 import AgentCard from "./AgentCard.vue";
 import HeldWakeCard from "./HeldWakeCard.vue";
 import WorkflowRunCard from "./WorkflowRunCard.vue";
-/* The fleet as a kanban: Attention | Active | Finished — attention leftmost because the board's whole job is
+/* The fleet as a kanban: Attention | Active | Finished, attention leftmost because the board's whole job is
  * routing the user to agents that need them. Lanes are pure projections of the registry status machine
  * (laneOf), so "finished" is automatic: the auto-land flow flips a cleanly-completed turn to landed/idle
- * within ms and the card glides over — a follow-up message glides it back. Cards animate with per-lane
+ * within ms and the card glides over: a follow-up message glides it back. Cards animate with per-lane
  * TransitionGroups: FLIP reorder within a lane, scale-fade across lanes. A wide board is three columns; a
  * narrow one stacks the same lanes down the page (see below).
  *
- * Cards drag between lanes, but because the lanes are projections a drop can't assign a status — it runs the
+ * Cards drag between lanes, but because the lanes are projections a drop can't assign a status: it runs the
  * action that causes one (laneDrop): onto Finished stops a running turn or lands a conflicted one, and the
  * drop zone that appears mid-drag discards outright. Targets with no action behind them dim and explain why
  * on the drag hint instead of silently bouncing the card.
  *
  * The board is sized by its OWN width, not the viewport's: /agents lives in the shell's middle column, which
- * the chat panel's drag handle squeezes to a few hundred pixels while the window stays wide — a case `mobile`
+ * the chat panel's drag handle squeezes to a few hundred pixels while the window stays wide: a case `mobile`
  * never sees. Below NARROW_BOARD_PX three columns can only be bought by shredding every card (a 190px card
  * truncates its title to "Ne…" and its branch to "agent/7…"), so the lanes stack instead and the cards take
  * the full width in their row form. The lanes, their order, their counts and their drop targets are identical
- * either way — the board is the same board, laid out down the page rather than across it.
+ * either way: the board is the same board, laid out down the page rather than across it.
  *
- * FINISHED is the one lane with no way out of its own — nothing transitions off landed/idle — so it needs the
+ * FINISHED is the one lane with no way out of its own: nothing transitions off landed/idle, so it needs the
  * three affordances the other two get for free from the status machine:
  *   · a WINDOW (FINISHED_WINDOW), because the lane's job is confirming what just completed, not holding the
  *     sandbox's whole history; everything older collapses behind one row rather than being hidden
  *   · "Clear", which archives the lane in one press
- *   · the ARCHIVE itself, which the lane header flips to in place — a separate route would be a bigger
+ *   · the ARCHIVE itself, which the lane header flips to in place: a separate route would be a bigger
  *     promise than a pile of retired agents deserves
- * Archiving is lossless (branch, transcript and counters all stay — see the daemon's agents/archive.ts), so
+ * Archiving is lossless (branch, transcript and counters all stay: see the daemon's agents/archive.ts), so
  * none of it asks for confirmation. Discard, which is not, keeps its drag gesture and its dialog.
  *
- * THE ARCHIVE HAS AN EXIT OF ITS OWN — "Delete all", in the same header slot "Clear" occupies on the live lane,
+ * THE ARCHIVE HAS AN EXIT OF ITS OWN: "Delete all", in the same header slot "Clear" occupies on the live lane,
  * because that slot is already read as this column's bulk exit. It is the board's only irreversible action, so
  * it inverts the archive's whole grammar: it confirms first, it reports even for one agent, and its receipt
- * carries no Undo (see purgeArchived in useAgents). Deliberately bulk-only — a per-card delete would put a
+ * carries no Undo (see purgeArchived in useAgents). Deliberately bulk-only: a per-card delete would put a
  * destructive button a pixel from Restore on the same hover row, and a single agent that must go for good
  * already has Discard on its review panel, where the diff it is about to lose is on screen beside it.
  *
  * WHAT AN ARCHIVE SAYS is graded to what it did (useAgents' receipt/notice split). Archiving one card says
  * nothing: the card is animated out of its lane and the header's archive counter lights up, and a strip
- * narrating that — while shoving the whole board down a line, and waiting to be dismissed — is a toll charged
+ * narrating that, while shoving the whole board down a line, and waiting to be dismissed: is a toll charged
  * on the most repeated action here. A SWEEP does report, because clearing twelve at once is the case with no
  * per-card animation to vouch for it, in a pill that floats over the board and retires itself. A FAILURE keeps
  * the strip, since an error is the one thing here that must be read. The way back is on the keyboard (Mod+Z)
- * and, permanently, on every card in the archive — so it never depended on the message being still on screen. */
+ * and, permanently, on every card in the archive, so it never depended on the message being still on screen. */
 const router = useRouter();
 const route = useRoute();
 const { mobile } = useDevice();
@@ -111,7 +111,7 @@ const {
 const chat = useChat();
 const { active, panes, closeTabs, connected, accountsLoaded } = chat;
 const { popOut: popOutChat, poppedOut } = useChatPopout();
-// A refusal lands on the board's notice strip — the preparation refuses whole (a running source, a transcript
+// A refusal lands on the board's notice strip: the preparation refuses whole (a running source, a transcript
 // that couldn't be captured), and a press that does nothing visible reads as a button that broke.
 const synthesize = async (): Promise<void> => {
     const result = await synthesizeSessions();
@@ -137,12 +137,12 @@ const {
     landNow,
     relandNow,
 } = useAgentDrag();
-// The card behind the resolve confirmation — looked up live rather than snapshotted with the drop, so a
+// The card behind the resolve confirmation: looked up live rather than snapshotted with the drop, so a
 // rename or a status change while the dialog is open is reflected in what it is asking about.
 const resolveTarget = computed(() => (pendingResolve.value === undefined ? undefined : agentById(pendingResolve.value)));
 /* WHAT A CARD IS WAITING ON, from the board's two sources of it: the press or drop this browser is running
  * (useAgentDrag, which names its action so the button that fired it can spin in place) and the archive/restore
- * batches, which are addressed by id alone — an id in flight there is being filed AWAY unless it is already
+ * batches, which are addressed by id alone: an id in flight there is being filed AWAY unless it is already
  * archived, in which case the only thing anyone can be doing to it is putting it back. */
 const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
     if (busy.value?.id === agent.id) {
@@ -154,17 +154,17 @@ const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
     return agent.archivedAt !== undefined ? `restore` : `archive`;
 };
 /* --- The filter ------------------------------------------------------------------------------------------
- * Matches what the USER wrote — the card's title (which IS their sanitized first prompt) and every later
+ * Matches what the USER wrote: the card's title (which IS their sanitized first prompt) and every later
  * prompt in that agent's transcript. Local for the tabs this browser holds, daemon-side for everything else;
  * see useAgentFilter for why the two tiers exist and why it's a factory rather than a singleton.
  *
  * The field is always on the header rather than hiding behind a glyph, so nobody has to learn that the board
- * can be searched at all. The cost is a header that WRAPS on a squeezed board — which is exactly what the
+ * can be searched at all. The cost is a header that WRAPS on a squeezed board, which is exactly what the
  * chat panel's drag handle produces (see NARROW_BOARD_PX below), so the bar is a .view-header-wrap. The field
  * keeps a useful, capped width on a roomy board and wraps rather than being crushed when the board narrows.
  *
  * `Aa` sits INSIDE the field, where every editor puts its match switches, and it is a preference rather than
- * part of this query — see useAgentFilter. Its whole visible consequence is on the cards: results, and the
+ * part of this query, see useAgentFilter. Its whole visible consequence is on the cards: results, and the
  * marks explaining them, both follow it. */
 const { query, needle, matchCase, active: filtering, matches, snippetOf, archivedMatches, sessionMatches, searching } = useAgentFilter();
 const filterField = ref<InstanceType<typeof SearchBar> | undefined>(undefined);
@@ -173,7 +173,7 @@ const filterField = ref<InstanceType<typeof SearchBar> | undefined>(undefined);
 const showAllFinished = ref(false);
 const archiveOpen = ref(false);
 // The Finished window is only in force while the lane is BROWSING its own recent tail. The archive is a
-// different list entirely, and both a filter and an explicit expand lift the cap outright — see cardsFor.
+// different list entirely, and both a filter and an explicit expand lift the cap outright: see cardsFor.
 const windowed = computed(() => !archiveOpen.value && !filtering.value && !showAllFinished.value);
 
 const { runs: workflowRuns, stop: stopWorkflowRun, archive: archiveWorkflowRun, unarchive: unarchiveWorkflowRun } = useWorkflowRuns();
@@ -184,7 +184,7 @@ const needingYou = computed(() => runsNeedingYou(fleet.value));
 const runKept = (run: WorkflowRun): boolean => !filtering.value || runMatches(run, needle.value, fleet.value, matches);
 // The two halves of the ledger, on the board's own terms: an archived run is off the board exactly as an
 // archived agent is, and the Finished lane's archive view is where it turns up instead. Each half is kept in
-// both its forms because the counts need them — a `n of m` whose denominator was itself filtered says nothing.
+// both its forms because the counts need them: a `n of m` whose denominator was itself filtered says nothing.
 const boardRunRows = computed(() => workflowRuns.value.filter((run) => run.archivedAt === undefined));
 const liveRuns = computed(() => boardRunRows.value.filter(runKept));
 const archivedRunRows = computed(() => workflowRuns.value.filter((run) => run.archivedAt !== undefined));
@@ -195,17 +195,17 @@ const runsFor = (lane: FleetLane): WorkflowRun[] => {
     if (archiveOpen.value) {
         return lane === `finished` ? archivedRuns.value : [];
     }
-    // The window caps Finished while it is being browsed and is lifted by a filter or the lane's own expand —
+    // The window caps Finished while it is being browsed and is lifted by a filter or the lane's own expand:
     // the agents' rule, and it has to be the runs' too now that a capped run takes its steps into hiding.
     return runsInLane(liveRuns.value, lane, windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY, needingYou.value);
 };
 
-/* THE STEPS OF A RUN ARE NOT ALSO CARDS — they are inside the run's row, which is the whole claim that row
+/* THE STEPS OF A RUN ARE NOT ALSO CARDS: they are inside the run's row, which is the whole claim that row
  * makes. A five-step workflow was arriving as a run card AND five agent cards for the same work, so the board
  * reported one job six times and the run's own row was the least informative of them.
  *
  * Gated on the LEDGER rather than on the run being drawn (insideRun says why at length): every reason a row
- * was not on screen — a filter, the Finished window, the archive being open — used to release that run's
+ * was not on screen (a filter, the Finished window, the archive being open) used to release that run's
  * conversations onto the board as loose cards.
  */
 const BOARD_LANES = [`attention`, `active`, `finished`] as const;
@@ -224,36 +224,36 @@ const boardLanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
 // The archive obeys the same rule, and needs to: a run's steps are filed away WITH it, so without this the
 // pile the archive shows would be one run row and the five conversations it already stands for.
 const archivedCards = computed(() => archived.value.filter((agent) => !insideRun(agent, ledgerRunIds.value)));
-// How big the archive READS — the rows it would draw, which is what the door promising to open it and the
+// How big the archive READS: the rows it would draw, which is what the door promising to open it and the
 // header counting it are both about. A run filed away with its four steps is one row there, not five.
 const archiveSize = computed(() => archivedCards.value.length + archivedRunRows.value.length);
 /* HOW MUCH OF THE ARCHIVE IS DRAWN AT ONCE.
  *
- * The live lanes are self-limiting — the board holds what the user is working on, and the Finished lane windows
- * itself (FINISHED_WINDOW) — but the archive is the pile everything ends up in, and it was drawn WHOLE. Every
+ * The live lanes are self-limiting: the board holds what the user is working on, and the Finished lane windows
+ * itself (FINISHED_WINDOW), but the archive is the pile everything ends up in, and it was drawn WHOLE. Every
  * row is a full card: its status, its cost, its diff, its own animation slot in the lane's TransitionGroup. So
  * opening the door on a workspace with a thousand sessions behind it built a thousand cards in one frame, and
- * the press that opened it looked like the app had hung — the one moment the archive is asked to prove it is
+ * the press that opened it looked like the app had hung: the one moment the archive is asked to prove it is
  * cheap to keep things in.
  *
  * A page rather than the Finished lane's fixed window, because the two lists are asked different questions: the
  * lane is confirming what just completed (seven is the whole answer), while the archive is browsed and searched.
- * So this GROWS — the tail row adds a page and never takes one back, since a reader who pressed for more has
+ * So this GROWS: the tail row adds a page and never takes one back, since a reader who pressed for more has
  * not asked to be walked back up the list.
  *
  * Sized to fill a tall column and no more: enough that scrolling starts before the tail is reached, small
  * enough that the frame lands immediately. */
 const ARCHIVE_PAGE = 30;
 const archiveShown = ref(ARCHIVE_PAGE);
-// The archive under the query, whole — the filter runs over the PILE and the page is taken from its results,
+// The archive under the query, whole: the filter runs over the PILE and the page is taken from its results,
 // never the other way round: paging first would search the thirty rows that happened to be drawn and answer
 // "no matches" for a session sitting nine hundred rows down.
 const archiveRows = computed(() => (filtering.value ? archivedCards.value.filter(matches) : archivedCards.value));
 const archiveHidden = computed(() => Math.max(0, archiveRows.value.length - archiveShown.value));
 
-// The run's DESIGN, on the workflows page — a different question from "what is it doing", and the only one
+// The run's DESIGN, on the workflows page: a different question from "what is it doing", and the only one
 // this board cannot answer: editing the graph belongs where the graph is authored.
-// The results that are OFF the board — expanded by the footer row below the lanes. Collapsed by default so a
+// The results that are OFF the board: expanded by the footer row below the lanes. Collapsed by default so a
 // query answers with the board first and its outskirts second; reset whenever the query changes, since "show
 // me the rest" was said about a set that no longer exists.
 const showBeyond = ref(false);
@@ -263,8 +263,8 @@ watch(needle, () => {
     showBeyond.value = false;
     archiveShown.value = ARCHIVE_PAGE;
 });
-/* WHICH CARD WEARS THE RING. Normally the docked chat's agent — desktop only, since a phone has no dock for
- * "selected" to be about — and, for a moment after a link named one, that card on either form factor (the
+/* WHICH CARD WEARS THE RING. Normally the docked chat's agent: desktop only, since a phone has no dock for
+ * "selected" to be about, and, for a moment after a link named one, that card on either form factor (the
  * focus block below sets `flashId`; it owns the timer that clears it).
  *
  * Board-wide state rather than a paint, because the ring is not the only thing that follows it: the Finished
@@ -272,14 +272,14 @@ watch(needle, () => {
  * scrolls it into view (revealCard). */
 const flashId = ref<string | undefined>(undefined);
 /* A RUN'S DIAGRAM ON SCREEN TAKES THE RING OFF EVERY AGENT, because in that state the chat is pointing at no
- * conversation at all — it is showing the map of one. The board went on ringing whichever card had the focus
+ * conversation at all: it is showing the map of one. The board went on ringing whichever card had the focus
  * before the run took the panel, which reads as "that chat is what you are looking at" while the panel shows
  * something else entirely, and the run card beside it wore nothing. The run's own sessions are a different
  * case and keep the ordinary rule: those ARE conversations, and the focused one is genuinely on screen.
  *
  * The predicate is the PANEL'S OWN (showingRunGraph), not a second reading of the mode, because the mode alone
  * stopped being the answer: a run being FOLLOWED draws its diagram too, for as long as it has nothing live to
- * put in the panes. Only popped out — docked, the panel shows the focused chat whatever the run is doing. */
+ * put in the panes. Only popped out: docked, the panel shows the focused chat whatever the run is doing. */
 const runGraphUp = computed(
     () =>
         poppedOut.value &&
@@ -290,8 +290,8 @@ const runGraphUp = computed(
         ),
 );
 const highlightId = computed(() => flashId.value ?? (mobile.value || runGraphUp.value ? undefined : active.value.conversationId));
-/* THE OTHER COLUMNS, ringed exactly as that one is. A split is not a ranking — the reader put two chats up to
- * read them together — so the board no longer draws the panes that don't hold the keyboard a step fainter than
+/* THE OTHER COLUMNS, ringed exactly as that one is. A split is not a ranking: the reader put two chats up to
+ * read them together, so the board no longer draws the panes that don't hold the keyboard a step fainter than
  * the one that does (AgentCard.selected has the rest of it; the chat rail dropped the same second weight). The
  * two states that take the ring off the focused chat take it off these as well, which is why this is read off
  * `highlightId`'s own conditions rather than off the pane set alone. */
@@ -301,12 +301,12 @@ const finishedWindow = computed(() => windowFinished(boardLanes.value.finished, 
 // self-emptying and show everything.
 //
 // A FILTER lifts the Finished window: that cap exists to keep a browsing list short (and to keep the
-// TransitionGroup off several hundred cards), and a result set is neither — hiding four of a query's six hits
+// TransitionGroup off several hundred cards), and a result set is neither: hiding four of a query's six hits
 // behind an "earlier" row would be the board deciding which of the user's own matches they meant.
 //
 // THE ARCHIVE KEEPS ITS PAGE UNDER A FILTER, which is the opposite call and the same reasoning: the pile it is
 // paging is unbounded, so a query matching four hundred filed-away sessions is exactly the case the cap is for.
-// Nothing is hidden by it either — the tail row says how many are behind it and adds them.
+// Nothing is hidden by it either: the tail row says how many are behind it and adds them.
 const cardsFor = (lane: FleetLane): FleetAgent[] => {
     if (lane === `finished` && archiveOpen.value) {
         return archiveRows.value.slice(0, archiveShown.value);
@@ -314,19 +314,19 @@ const cardsFor = (lane: FleetLane): FleetAgent[] => {
     const source = lane !== `finished` ? boardLanes.value[lane] : windowed.value ? finishedWindow.value.shown : boardLanes.value.finished;
     return filtering.value ? source.filter(matches) : source;
 };
-/* How many rows a lane's filter KEPT — the numerator the lane headers and the board's tally both report, and
+/* How many rows a lane's filter KEPT: the numerator the lane headers and the board's tally both report, and
  * deliberately not the length of what is DRAWN: the archive draws a page of its matches (see cardsFor), so
  * counting the cards would have a header reporting the pager's state as the search's answer ("30 of 1030" over
  * four hundred hits). Every other lane draws everything it kept, so the two readings are one number there. */
 const keptIn = (lane: FleetLane): number =>
     (lane === `finished` && archiveOpen.value ? archiveRows.value.length : cardsFor(lane).length) + runsFor(lane).length;
-/* How many of the lane's ROWS the filter kept, against how many it holds — the `3 of 12` on its header. The
+/* How many of the lane's ROWS the filter kept, against how many it holds: the `3 of 12` on its header. The
  * denominator is the lane, not the window: while filtering the window is lifted anyway, and a count that
  * disagreed with the cards under it would be worse than none.
  *
  * A run counts as the ONE row it is, on both sides, for exactly that reason: a query that a workflow answers
  * left the lane reading "0 of 3" with the run sitting under the header saying so, which is the count calling
- * the row beneath it a mistake. Its steps are not counted at all — they are inside that row.
+ * the row beneath it a mistake. Its steps are not counted at all: they are inside that row.
  */
 const laneCount = (lane: FleetLane): string => {
     const held =
@@ -336,7 +336,7 @@ const laneCount = (lane: FleetLane): string => {
     return filtering.value ? `${keptIn(lane)} of ${held}` : `${held}`;
 };
 /* What the tail row collapses: the window's own count, so a card pinned into the lane is counted out of it
- * rather than being both on screen and reported as hidden — PLUS the runs the same window capped.
+ * rather than being both on screen and reported as hidden: PLUS the runs the same window capped.
  *
  * The runs have to be in this number now that a hidden run hides its steps with it. Counting only the agents
  * would leave a whole workflow behind a row that does not know it is there, which is the one thing the window
@@ -349,7 +349,7 @@ const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.v
 // What a query found that the board isn't showing: agents in the archive, and conversations no agent owns
 // (a plain chat, or one whose registry entry is long gone). Without this the filter would answer "nothing"
 // for something sitting one click away, which is the failure a search is least forgiven for. Steps are left
-// out on the board's own rule — the archived run row they belong to is what the archive lists them under.
+// out on the board's own rule: the archived run row they belong to is what the archive lists them under.
 const archivedHits = computed(() => archivedMatches.value.filter((agent) => !insideRun(agent, ledgerRunIds.value)));
 const beyondCount = computed(() => archivedHits.value.length + sessionMatches.value.length);
 // Suppressed while the archive is the Finished column: those cards are already on screen there.
@@ -364,7 +364,7 @@ const beyondLabel = computed(() => {
     }
     return parts.join(` · `);
 });
-// A never-carded conversation opens as an ordinary tab — the board is a surface outside the panel, so the
+// A never-carded conversation opens as an ordinary tab: the board is a surface outside the panel, so the
 // open is a summons (every window, the popped-out chat included) with the tab's identity minted here.
 const openSession = (id: string): void => {
     const conversationId = crypto.randomUUID();
@@ -376,24 +376,24 @@ const openSession = (id: string): void => {
         caret: false,
     });
 };
-// What the board says to a screen reader, since neither of its two visual reports — the archive counter's
-// pulse, the receipt pill — is anything one can convey. Every archive lands here (see the archivedFlash watch
+// What the board says to a screen reader, since neither of its two visual reports: the archive counter's
+// pulse, the receipt pill: is anything one can convey. Every archive lands here (see the archivedFlash watch
 // below), and so does every deletion, so there is exactly one thing doing the announcing.
 const announcement = ref(``);
 /* --- Emptying the archive -------------------------------------------------------------------------------
  * The board's one irreversible act, so it is the one that stops and asks. It sits in the archive header's
- * trailing slot — where the Finished lane puts "Clear" — because that slot is already read as "this column's
+ * trailing slot, where the Finished lane puts "Clear", because that slot is already read as "this column's
  * bulk exit": Finished's exit is the archive, and the archive's is deletion. Same position, opposite weight,
  * which is what the danger styling and the dialog are for.
  *
  * Only "delete everything", never per card. The archive is the pile the user has already decided is over, so
- * cleaning it up is ONE intent with one confirmation — and a per-card delete would be a destructive button
+ * cleaning it up is ONE intent with one confirmation, and a per-card delete would be a destructive button
  * sitting a pixel from Restore on a hover row, which is the one place it must not be. A single agent that has
  * to go for good still goes through its review panel's Discard, where the diff it is about to lose is on
  * screen next to the button.
  *
  * The dialog names the branch count and says what survives, because the archive's whole promise up to this
- * point has been "nothing is lost" — the press that revokes it has to say so in those terms. */
+ * point has been "nothing is lost": the press that revokes it has to say so in those terms. */
 const pendingPurge = ref(false);
 const purging = ref(false);
 // Whether THIS visit emptied the archive, which is the difference between two identical-looking empty lists:
@@ -408,7 +408,7 @@ const confirmPurge = async (): Promise<void> => {
     try {
         await purgeArchived();
         purged.value = true;
-        // The receipt this raises is visual only, like the sweep's — and this is the one report on the board
+        // The receipt this raises is visual only, like the sweep's, and this is the one report on the board
         // that cannot be re-derived from anything left on screen, because what it is about is gone.
         announcement.value = `${aimedAt - archived.value.length} archived agents deleted`;
     } finally {
@@ -428,7 +428,7 @@ const toggleArchive = (): void => {
 /* --- Saying that an archive happened -------------------------------------------------------------------- */
 // The receipt retires itself: an archive is not something the user has to acknowledge, and one more thing to
 // dismiss is precisely what made the strip it replaces feel like a toll. The window restarts on each new
-// receipt and PAUSES while the pointer is on the pill — vanishing under the cursor that came for its Undo
+// receipt and PAUSES while the pointer is on the pill: vanishing under the cursor that came for its Undo
 // would fail the affordance at the only moment it is ever wanted. Timing lives here rather than in the store
 // so the fleet module stays a plain state container (and its unit tests stay timer-free).
 const RECEIPT_MS = 7_000;
@@ -455,18 +455,18 @@ watch(archivedFlash, () => {
     announcement.value = `${undoable.value.length} agent${undoable.value.length === 1 ? `` : `s`} archived`;
 });
 /* --- THE CARD A LINK NAMED: /agents?focus=<agent id> -----------------------------------------------------
- * Another surface can hand the user an agent it just started — ext-pipelines' "Fix with agent" is the first —
+ * Another surface can hand the user an agent it just started: ext-pipelines' "Fix with agent" is the first:
  * and what that hand-off wants is the BOARD, not the drill-in: a turn that began a second ago has no diff to
  * review, and the fleet is where the user watches it work beside everything else they have running.
  *
  * The id arrives BEFORE the card does: the agent was created by the click that navigated here, so the roster
  * frame carrying it lands a beat after this board mounts. Hence a held request resolved by a watcher rather
- * than a read at mount — it fires the moment the fleet knows the agent, and simply never fires for an id the
+ * than a read at mount: it fires the moment the fleet knows the agent, and simply never fires for an id the
  * fleet has no card for. Resolving is one-shot and consumes the parameter, so a reload or a Back does not
  * re-focus a card the user has since moved off.
  *
- * The focus itself is exactly what a click on the card does — the docked chat points at the agent, the card
- * takes the ring, it is marked read — plus the two things a click gets for free and a link cannot: the board
+ * The focus itself is exactly what a click on the card does: the docked chat points at the agent, the card
+ * takes the ring, it is marked read, plus the two things a click gets for free and a link cannot: the board
  * scrolls the card into view, and it OPENS WHATEVER IS HIDING IT first. A board hides three ways (a filter, the
  * archive, the Finished window), and a link that lands on none of the cards on screen is a link that silently
  * did nothing. Only two of the three are opened here: the window keeps the selected card by itself
@@ -491,14 +491,14 @@ const revealCard = async (id: string): Promise<void> => {
     cardEls.get(id)?.scrollIntoView({ block: `nearest` });
 };
 /* A SELECTION MADE OFF THE BOARD BRINGS THE BOARD WITH IT. Clicking a chat tab, or opening a conversation from
- * History, moves the ring to a card that may be a lane and a half further down — and a ring drawn outside the
+ * History, moves the ring to a card that may be a lane and a half further down, and a ring drawn outside the
  * scrollport is indistinguishable from the board ignoring the click. A selection made ON the board scrolls
  * nothing: the card is already under the cursor that made it, so `selectedHere` marks it and this stands down. */
 let selectedHere: string | undefined;
 watch(highlightId, (id) => {
     // Consumed on sight, whichever way it goes: the mark is about the ONE selection the board just made, not a
     // claim about that agent forever. Left standing, a card clicked here once would never scroll again when the
-    // user came back to it from the tab strip — which is the exact traffic this exists for.
+    // user came back to it from the tab strip, which is the exact traffic this exists for.
     const ours = id === selectedHere;
     selectedHere = undefined;
     if (id === undefined || ours) {
@@ -525,7 +525,7 @@ watch(
         requestedFocus.value = undefined;
         void router.replace({ query: { ...route.query, focus: undefined } });
         // Uncover the card. The filter is the user's own lens and the archive is a different list, so both have
-        // to be lifted by hand. The Finished window does it on its own — but only where a ring exists to pin the
+        // to be lifted by hand. The Finished window does it on its own, but only where a ring exists to pin the
         // card by: a phone has no dock, so `highlightId` goes undefined the moment the flash expires and the
         // lane would close over the very card the link was for. There, the whole lane opens instead.
         if (filtering.value && !matches(agent)) {
@@ -548,19 +548,19 @@ watch(
 );
 // Undo also lives on the keyboard, because an archive that says nothing has to be reversible by the reflex
 // people already have. Registered with the board and disposed with it, so the chord is only claimed while the
-// fleet is on screen; the `when` gate hands it straight back whenever it would be the wrong Mod+Z — nothing
+// fleet is on screen; the `when` gate hands it straight back whenever it would be the wrong Mod+Z: nothing
 // archived to put back, or a caret sitting in a field that owns its own undo (the docked chat's composer is
 // one column away from this board).
 const undoShortcut = computed(() => commandShortcut(`agents.undoArchive`));
 let boardCommands: readonly Disposable[] = [];
-// A lane's drop affordance, as ONE class string per state — two ring widths or two min-heights in the same
+// A lane's drop affordance, as ONE class string per state: two ring widths or two min-heights in the same
 // list would resolve by Tailwind's emit order rather than by intent. The min-height only exists mid-drag, to
 // give an empty lane something to aim at.
 const laneDropClass = (lane: FleetLane): string => {
     if (!dragging.value) {
         return ``;
     }
-    // While the archive occupies the Finished column it isn't a lane — it has no `data-drop`, so it must not
+    // While the archive occupies the Finished column it isn't a lane: it has no `data-drop`, so it must not
     // advertise one either.
     if (!accepts(lane) || (lane === `finished` && archiveOpen.value)) {
         return `min-h-24 opacity-40`;
@@ -577,7 +577,7 @@ const hint = computed(() => {
     }
     return dropRejection(dragged.value, over.value);
 });
-// Three columns need ~16rem each before a card starts truncating its title — below that the board stacks. The
+// Three columns need ~16rem each before a card starts truncating its title: below that the board stacks. The
 // shared measurement (useNarrow) rather than a CSS container query: `container-type` makes an element a
 // containing block for its fixed-position descendants, and the drag ghost is fixed at viewport coordinates.
 const NARROW_BOARD_REM = 48;
@@ -592,7 +592,7 @@ onMounted(() => {
     // anything, and an empty board would hide every agent they ever ran behind an unlabelled button.
     void loadArchived();
     boardCommands = [
-        // Published for as long as the board is mounted, and taken away with it — a condition naming a key no
+        // Published for as long as the board is mounted, and taken away with it: a condition naming a key no
         // surface publishes is false, which is what hands Mod+Z back the moment the fleet leaves the screen.
         publishContextKey(
             `agentsUndoable`,
@@ -610,7 +610,7 @@ onMounted(() => {
         // The field is on the header already, so this is an accelerator rather than the way in. Focus AND
         // select, so a chord pressed with a stale query in the box starts a new one by typing (VS Code's find
         // flow). Deliberately UNBOUND: Mod+F belongs to the browser's own find, and this registry is global to
-        // every window the app owns — so a binding claimed while the board is mounted swallowed Mod+F in the
+        // every window the app owns, so a binding claimed while the board is mounted swallowed Mod+F in the
         // popped-out chat too, where the board is not even on screen and the focus went to a hidden field.
         // Bindable in Settings → Keybindings by anyone who wants it, like every other command here.
         registerCommand({
@@ -642,14 +642,14 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
     { key: `finished`, label: `Finished`, dot: `bg-line-strong`, empty: `Finished agents land their work in your workspace.` },
 ];
 /* The board's own total, so it counts WHAT IS ON SCREEN: a run's steps are inside its row, not beside it, so
- * they are counted once — as the row. Without the run half a board showing a workflow and nothing else read
+ * they are counted once: as the row. Without the run half a board showing a workflow and nothing else read
  * "0 of 0" and then told the user their query matched nothing, with the match sitting above the sentence. */
-// Held wakes count toward the board having something to show — a fresh workspace whose only row is a hold
+// Held wakes count toward the board having something to show: a fresh workspace whose only row is a hold
 // must not hide it behind the "No agents yet" splash.
 const total = computed(
     () => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + heldWakes.value.length,
 );
-/* HAS ANYTHING EVER HAPPENED HERE — a different question from `total`, and the one the first-run screen turns
+/* HAS ANYTHING EVER HAPPENED HERE: a different question from `total`, and the one the first-run screen turns
  * on. The docked chat always holds one conversation, and a conversation the fleet has never heard of is a
  * `draft` CARD on this board (useAgents.fleet): so a workspace where nobody has done anything still counts one,
  * `total` is never 0 on it, and the first-run screen would be dead on exactly the workspace it exists for.
@@ -669,10 +669,10 @@ const started = computed(
 // with the `n of m` counts under it.
 const kept = computed(() => LANES.reduce((sum, lane) => sum + keptIn(lane.key), 0));
 const matchTally = computed(() => `${kept.value} of ${total.value}`);
-// Nothing on the board AND nothing beyond it — the filter's own empty state, which is a different thing from
+// Nothing on the board AND nothing beyond it: the filter's own empty state, which is a different thing from
 // an empty fleet (there ARE agents; none of them is this one).
 const noMatches = computed(() => filtering.value && !archiveOpen.value && kept.value === 0 && beyondCount.value === 0);
-// "Clear" only appears when it would do something — the Finished lane holds the archivable set exactly (it is
+// "Clear" only appears when it would do something: the Finished lane holds the archivable set exactly (it is
 // landed-or-idle by construction), so its length is the answer.
 const clearable = computed(() => lanes.value.finished.length);
 
@@ -680,15 +680,15 @@ const clearable = computed(() => lanes.value.finished.length);
  * A BARE BOARD IS THE ONE SCREEN THAT HAS TO TEACH. Mobile lands here (router/index.ts), and on desktop it is
  * the first thing anyone curious about what "agents" are presses, so what stands here is a first impression.
  *
- * IT ASKS FOR A TASK, IT IS NOT A PLACE TO TYPE ONE. There was a composer in the middle of this screen — its
- * own box, its own send — and it was wrong twice over. There is exactly one composer in this product and it is
+ * IT ASKS FOR A TASK, IT IS NOT A PLACE TO TYPE ONE. There was a composer in the middle of this screen: its
+ * own box, its own send, and it was wrong twice over. There is exactly one composer in this product and it is
  * the chat: docked on the right, or popped out into its own window. A second one an inch from the first, in a
  * column that is otherwise a board, teaches a shape the app does not have. And on the screen it was built for
  * it could not even send: a brand-new sandbox has no AI account connected yet, so the first thing the first
  * user ever met was a box that swallows a sentence and a button that goes nowhere.
  *
  * So this screen answers the question the user is actually at: what do I need before an agent can run. With
- * nothing connected it IS the connect offer — the same card the chat's own gate shows (ConnectOffer), taken
+ * nothing connected it IS the connect offer: the same card the chat's own gate shows (ConnectOffer), taken
  * over from it while this stands (connectOffer.ts), because two copies of one offer side by side read as two
  * different offers. Once something can send, it goes back to asking for the task, and the suggestions write
  * themselves into the real composer one column over.
@@ -696,29 +696,29 @@ const clearable = computed(() => lanes.value.finished.length);
  * A chip FILLS that composer, it does not send: it leaves the text there to be edited, which is the point of
  * suggesting it rather than doing it.
  *
- * THEY ARE ABOUT WORK THAT IS ALREADY HERE — with ONE exception, and the distinction is worth keeping
+ * THEY ARE ABOUT WORK THAT IS ALREADY HERE: with ONE exception, and the distinction is worth keeping
  * straight. Getting EXISTING code in is the workspace pane's job: it offers all three doors, and a pair of
  * chips here proposing the same thing in a sentence an agent has to interpret was the second, worse answer to
  * a question already answered one tab over. Those chips are gone and stay gone.
  *
  * What is here instead is the one task that needs no code at all: BUILDING something. It is not a restatement
- * of any door in the workspace pane — none of them makes anything — and it is the only suggestion on this
+ * of any door in the workspace pane: none of them makes anything, and it is the only suggestion on this
  * board that a user with an empty box can actually press and get an artifact from. A board that offered
  * literally nothing to somebody who has just connected an account is the silence this product is trying to
  * stop having; the ladder lives in buildIdeas.ts, beside this board. */
-// The workspace facts the suggestions turn on, both already in flight for the rail — the board adds no fetch.
+// The workspace facts the suggestions turn on, both already in flight for the rail: the board adds no fetch.
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
 // Whether there is anything here to work ON. Repos are the plain case; uncommitted changes cover the other one
-// — files dropped into /work without a git of their own still land as changes on the workspace's own repo, and
+//: files dropped into /work without a git of their own still land as changes on the workspace's own repo, and
 // telling that user their workspace is empty would be the suggestion contradicting what they are looking at.
 const hasWork = computed(() => workspaceRepos.value.length > 0 || workspaceChanges.count.value > 0);
 /* Tasks worth a first press, phrased as the ladder the quickstarts of this product's neighbours all use:
  * understand it, then a small safe change with a stop before anything is written. Concrete sentences rather
- * than feature names — "Explain this codebase" is a thing to press; "code understanding" is a brochure. */
+ * than feature names: "Explain this codebase" is a thing to press; "code understanding" is a brochure. */
 const starters = computed<readonly { readonly label: string; readonly prompt: string }[]>(() => {
     /* NOTHING TO WORK ON. Everything below this branch points an agent at code that has to exist, so none of
-     * it can be offered — but the one task that needs no code can: make something, and get a public link to
+     * it can be offered, but the one task that needs no code can: make something, and get a public link to
      * it. The built page lands in the outbox and shows up as the Preview area's "Public site" target. */
     if (!hasWork.value) {
         return BUILD_IDEAS.map((example) => ({ label: example.label, prompt: buildPrompt(example.idea) }));
@@ -730,7 +730,7 @@ const starters = computed<readonly { readonly label: string; readonly prompt: st
             : []),
         {
             label: `Explain this codebase`,
-            prompt: `Explain this codebase — what it does, where the entry points are, and which files I should read first.`,
+            prompt: `Explain this codebase, what it does, where the entry points are, and which files I should read first.`,
         },
         {
             label: `Find something to improve`,
@@ -738,45 +738,45 @@ const starters = computed<readonly { readonly label: string; readonly prompt: st
         },
     ];
 });
-/* WHETHER THIS SCREEN IS THE ONE ANSWERING "what can this chat send with" — which is what the chat's own gate
+/* WHETHER THIS SCREEN IS THE ONE ANSWERING "what can this chat send with", which is what the chat's own gate
  * stands down for. It covers the WAIT as well as the offer: "you have nothing connected" is a claim, and until
- * the daemon has answered neither surface may make it (accountsLoaded, below) — but two "Checking your AI
+ * the daemon has answered neither surface may make it (accountsLoaded, below), but two "Checking your AI
  * accounts…" lines a hand's width apart are the same duplication as two offers, so the board takes both halves.
  *
- * Held while that screen is up and dropped the moment it isn't — this route left, something connected, an agent
- * started — so the docked gate comes back on its own without anything having to remember to hand it back. */
+ * Held while that screen is up and dropped the moment it isn't: this route left, something connected, an agent
+ * started, so the docked gate comes back on its own without anything having to remember to hand it back. */
 const offering = computed(() => !started.value && !archiveOpen.value && !connected.value);
-/* THE SAME OFFER, DEMOTED — the state this screen is in when the platform serves a free trial: the chat one
+/* THE SAME OFFER, DEMOTED, the state this screen is in when the platform serves a free trial: the chat one
  * column over can already send, so the offer is no longer the only thing that can happen here and must not be
  * drawn as if it were. It goes below the starters, at the size the docked panel uses.
  *
  * It does not go AWAY, and that is the point of keeping it: the trial is a metered courtesy that runs through
- * intentic's servers, and the free Google sign-in is the rung above it — no daily cap, still no subscription.
+ * intentic's servers, and the free Google sign-in is the rung above it: no daily cap, still no subscription.
  * A screen that hid it until the allowance ran out would be hiding the better deal.
  *
  * `isTrialProvider` rather than a count of connected accounts, because the repoint pass (useChat) prefers a
  * real account over the trial in every case: a chat sitting ON the trial is exactly a chat with nothing else
  * to run. Once the allowance is spent the trial stops being ready, `connected` drops, and `offering` above
- * takes the screen back — which is how the card comes forward at the moment it becomes the only way on. */
+ * takes the screen back, which is how the card comes forward at the moment it becomes the only way on. */
 const trialOnly = computed(() => !started.value && !archiveOpen.value && connected.value && isTrialProvider(chat.provider.value));
 watch(offering, (on) => (offerOnBoard.value = on), { immediate: true });
 onUnmounted(() => (offerOnBoard.value = false));
-// Card click FOCUSES, it does not navigate: on desktop it only points the chat surface — this window's docked
-// panel and, through the summons channel, every other window's, the popped-out chat included — at this agent
+// Card click FOCUSES, it does not navigate: on desktop it only points the chat surface, this window's docked
+// panel and, through the summons channel, every other window's, the popped-out chat included: at this agent
 // and highlights the card. Cheap and reversible, so the user can click down a lane to skim. The view-change to
 // the review detail is a deliberate, separate act (reviewAgent, below). Mobile has no dock, so a tap there IS
-// the way into the conversation — it navigates.
+// the way into the conversation: it navigates.
 /* --- Cards into chat panes ----------------------------------------------------------------------
- * The chat rail's gestures (ChatTabList.onRowClick), on the board — because at N panes the two are the same
+ * The chat rail's gestures (ChatTabList.onRowClick), on the board, because at N panes the two are the same
  * act: what is selected IS what is on screen, so a card picked here is a chat given a column there.
  *
  * ALT carries "in addition" rather than Ctrl alone, and not because Ctrl is taken: a card is a drag source
  * (lanes, land, resolve), and on macOS Ctrl+click IS the secondary click. Alt collides with neither, so the
- * one-shot verb — the one most people will reach for — is the one that can never be misread. Ctrl/Cmd and
+ * one-shot verb (the one most people will reach for) is the one that can never be misread. Ctrl/Cmd and
  * Shift are there for whoever learned them on the strips.
  *
  * And a click with NO modifier is the reset (focusAgent's tail): these gestures make a selection, and a
- * selection you cannot replace by pointing somewhere else is not one — the split outlived every later click
+ * selection you cannot replace by pointing somewhere else is not one: the split outlived every later click
  * and had to be dismantled a × at a time.
  *
  * Every gesture here is a SUMMONS (summon.ts): the panel it composes may be another window's popped-out chat,
@@ -816,11 +816,11 @@ const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
     if (consumeSuppressedOpen()) {
         return;
     }
-    // The user is pointing the board somewhere themselves — whatever a deep link was highlighting is over.
+    // The user is pointing the board somewhere themselves: whatever a deep link was highlighting is over.
     flashId.value = undefined;
     // This board made this selection, so it does not also scroll to it (see the selection watch).
     selectedHere = agent.id;
-    // The click itself, before anything downstream can move it — the head of the focus trace (focusTrace.ts).
+    // The click itself, before anything downstream can move it: the head of the focus trace (focusTrace.ts).
     traceFocus(`board-click`, { id: agent.id, status: agent.status });
     // A modified click asks for a column rather than the focus, and says so itself. Desktop only: panes live
     // in the pop-out window, and a phone navigates to the conversation instead of pointing anything at it.
@@ -845,30 +845,30 @@ const reviewAgent = (agent: FleetAgent): void => {
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
 };
 /* The only exit a card with no registry entry has (AgentCard's `closable`): closing its TAB, which is the same
- * conversation this card is the other skin of, so the card leaves the board with it. Not `archive` — there is
- * nothing daemon-side to file — and deliberately the identical act the chat rail's × performs, down to asking
+ * conversation this card is the other skin of, so the card leaves the board with it. Not `archive`: there is
+ * nothing daemon-side to file, and deliberately the identical act the chat rail's × performs, down to asking
  * for no confirmation, so the two surfaces cannot come to mean different things by the same press. */
 const closeAgent = (agent: FleetAgent): void => {
     closeTabs(new Set([agent.id]));
 };
 
 /* --- The card's right-click menu ------------------------------------------------------------------
- * THE BOARD'S ONE MENU, driven by every card on it (the chat rail's tab menu, same shape) — forty cards cost
+ * THE BOARD'S ONE MENU, driven by every card on it (the chat rail's tab menu, same shape): forty cards cost
  * one node, and there is only ever one open.
  *
  * It exists because of what a card IS: a press that focuses the agent and a drag that moves it between lanes,
  * over a body that is otherwise all reading matter. Anything a user wants to do OCCASIONALLY therefore has
- * nowhere to sit — the session name spent a version as a small button in the middle of the card and was hit by
+ * nowhere to sit: the session name spent a version as a small button in the middle of the card and was hit by
  * accident far more often than on purpose. So the rare things live behind the gesture that means "about this
  * one", and the card's surface goes back to answering one press one way.
  *
  * Nothing here is new: every row is a press the card already offers (the glyphs in its header, its
- * double-click, its contextual buttons). What the menu adds is a place to FIND them — two of those glyphs
+ * double-click, its contextual buttons). What the menu adds is a place to FIND them: two of those glyphs
  * appear only on hover, which is no affordance at all until you have already found it. */
 const cardMenu = ref<{ show: (event: Event) => void } | undefined>();
 const menuAgent = ref<FleetAgent>();
 
-// Copied through the pressed CARD's document rather than this module's `navigator` — the app's one clipboard
+// Copied through the pressed CARD's document rather than this module's `navigator`: the app's one clipboard
 // accessor (clipboardOf), which asks the element the gesture actually happened in.
 const menuAnchor = ref<Element>();
 const copySessionName = async (branch: string): Promise<void> => {
@@ -880,8 +880,8 @@ const copySessionName = async (branch: string): Promise<void> => {
 };
 
 /* Written as GROUPS rather than one flat list with separators sprinkled through it. Almost every row here is
- * conditional — an agent holding a question offers no Archive, a main-tree conversation has no session name,
- * a draft has no review — so a separator written inline is a rule about rows that may not be rendered, and it
+ * conditional: an agent holding a question offers no Archive, a main-tree conversation has no session name,
+ * a draft has no review, so a separator written inline is a rule about rows that may not be rendered, and it
  * draws a line under the last item of a menu whose whole bottom group turned out to be empty. Grouping makes
  * the separator a property of the JOIN, which cannot dangle. */
 const cardMenuItems = computed<MenuItem[]>(() => {
@@ -896,11 +896,11 @@ const cardMenuItems = computed<MenuItem[]>(() => {
             { label: `Open`, icon: `arrow-right`, command: () => focusAgent(agent) },
             /* The agent's own page has an address, so this row is a link as well as a command: it can be
                hovered to read where it goes, and Ctrl/⌘-clicked to put the review in its own tab. The
-               plain click still goes through `reviewAgent`, which also points the chat dock at the agent —
+               plain click still goes through `reviewAgent`, which also points the chat dock at the agent:
                a second thing this window does that no URL can carry. */
             ...(review === undefined ? [] : [{ label: review, icon: `copy`, url: agentHref(agent), command: () => reviewAgent(agent) }]),
         ],
-        /* The whole reason this menu was built. It hands over the BRANCH, which is what the card prints — the
+        /* The whole reason this menu was built. It hands over the BRANCH, which is what the card prints: the
            other forms of the name are labelled and visible before the press, on the agent's own page. */
         branch === undefined ? [] : [{ label: `Copy session name`, icon: `code`, command: () => void copySessionName(branch) }],
         [
@@ -940,18 +940,18 @@ const openRunGraph = (run: WorkflowRun): void => {
     void router.push({ name: `extension`, params: { ext: `workflows` }, query: { run: run.runId } });
 };
 
-/* OPENING A RUN PUTS ITS SESSIONS IN THE CHAT PANEL, one column each — openRunInChat, shared with the rail's
+/* OPENING A RUN PUTS ITS SESSIONS IN THE CHAT PANEL, one column each: openRunInChat, shared with the rail's
  * row so the two doors into a run cannot drift.
  *
  * IT DOES NOT NAVIGATE, and that is the correction: sending the main view to the workflows extension answered
- * a question nobody asked. What a person wants from a run in flight is the transcripts — several at once,
- * which is precisely what the popped-out panel is for — and a page showing a picture of them is a detour on
+ * a question nobody asked. What a person wants from a run in flight is the transcripts: several at once,
+ * which is precisely what the popped-out panel is for, and a page showing a picture of them is a detour on
  * the way there. The picture is still one press away, as the panel's own back arrow (chatRun's two modes).
  */
 const openRun = (run: WorkflowRun): void => void openRunInChat(run);
 
 // Which runs have been asked to stop and have not settled yet. The abort reaches the turns at once, but the
-// LEDGER only says so once each step has unwound and the scheduler has written the run's outcome — and this
+// LEDGER only says so once each step has unwound and the scheduler has written the run's outcome, and this
 // card is drawn off the ledger, on a poll. Without the mark it looks untouched until then, which is exactly
 // how a Stop gets pressed four times.
 const stoppingRuns = ref(new Set<string>());
@@ -966,12 +966,12 @@ const stopRun = async (run: WorkflowRun): Promise<void> => {
         await stopWorkflowRun.mutateAsync(run.runId);
     } catch {
         // The usual cause is that it ended between the render and the press. Whatever it was, a stop that did
-        // not take must not leave the card disabled — the ask is over, and the run says the rest itself.
+        // not take must not leave the card disabled: the ask is over, and the run says the rest itself.
         forgetStopping(run.runId);
     }
 };
 // File an ended run away, sessions and all, and put one back. No confirmation on the agent card's own
-// argument: archiving is lossless — the branches, the transcripts and the counters all stay — and the way back
+// argument: archiving is lossless, the branches, the transcripts and the counters all stay, and the way back
 // is the archive itself, permanently, rather than a receipt that has to still be on screen.
 const archiveRun = async (run: WorkflowRun): Promise<void> => {
     await archiveWorkflowRun.mutateAsync(run.runId).catch(() => undefined);
@@ -990,7 +990,7 @@ watch(workflowRuns, (list) => {
 });
 
 /* --- Held wakes on the board ---------------------------------------------------------------------
- * The approvals queue's rows, in the Attention lane only — a hold's entire meaning is "waiting on you", and
+ * The approvals queue's rows, in the Attention lane only: a hold's entire meaning is "waiting on you", and
  * there is no conversation behind it yet to place anywhere else. Releasing one is detached daemon-side (the
  * turn outlives the request), so the row leaves on the store's optimistic remove; `busyHeld` covers the gap
  * between the press and that removal so a slow answer cannot collect two presses. */
@@ -1001,7 +1001,7 @@ const releaseWake = async (id: string, verb: `approve` | `reject`): Promise<void
         await releaseHeld(id, verb);
     } catch {
         // The usual cause is the countdown ran it (or another device answered) between the render and the
-        // press — refresh repaints the truth either way.
+        // press: refresh repaints the truth either way.
         void refresh();
     } finally {
         const rest = new Set(busyHeld.value);
@@ -1013,7 +1013,7 @@ const releaseWake = async (id: string, verb: `approve` | `reject`): Promise<void
 // A FILTERED board is a result set wearing the lanes' shape, so it does not drag. Half the lanes may be
 // reading "no matches", the archive's own matches sit in a group with no lane at all, and a card dropped onto
 // a lane that is currently a lens would be acted on for a reason the user never sees. The gesture comes
-// straight back when the query is cleared — nothing about the board's state changed, only how it is being
+// straight back when the query is cleared: nothing about the board's state changed, only how it is being
 // looked at.
 const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void => {
     if (filtering.value) {
@@ -1025,17 +1025,17 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
 <template>
     <!-- `relative` positions the receipt inside the BOARD rather than the viewport, so the pill clears the
          mobile tab bar and the docked terminal without either of them having to be measured. It is not a
-         containing block for the fixed drag ghost — only transforms and containment would be. -->
+         containing block for the fixed drag ghost: only transforms and containment would be. -->
     <div ref="boardEl" class="relative flex h-full min-h-0 flex-col">
         <!-- The bar WRAPS rather than shaving its contents: the filter field is permanent, and /agents lives in
              the shell's middle column, which the chat panel's drag handle squeezes to a few hundred pixels
              while the window stays wide. Given the choice between three shrunken controls on one line and the
-             field dropping to its own second row, the row wins — a 90px search box is not a search box. The
+             field dropping to its own second row, the row wins: a 90px search box is not a search box. The
              field stays compact on a roomy board, and it is the bar's centre rather than a left-hand
              afterthought: the two sides flank it on equal `flex-1 basis-0` tracks, so the field sits in the
              middle of the BAR and not merely in whatever space the left group happened to leave.
              That second row has to be ASKED for. `flex-1 basis-0` means the flanks measure zero, so the line
-             always "fits" (0 + 288 + 0) and nothing ever wraps — while their `shrink-0` contents render at full
+             always "fits" (0 + 288 + 0) and nothing ever wraps, while their `shrink-0` contents render at full
              width anyway, straight over the field. On a phone that put "New agent" across the field's right end
              and both pills UNDER it: invisible, and the unread pill is the only way to mark all read, so the
              board lost it entirely. Below the same width at which the lanes stack, the field takes a row of its
@@ -1045,7 +1045,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <span class="shrink-0 text-sm font-semibold text-content">Agents</span>
                 <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a
                      question, a conflict, an error) and earns the warning colour; "unread" is only "you haven't
-                     looked yet" and stays informational — with its own way out, so silencing the board never
+                     looked yet" and stays informational: with its own way out, so silencing the board never
                      means clicking through every card. -->
                 <span v-if="blocking > 0" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">
                     {{ blocking }} need{{ blocking === 1 ? "s" : "" }} you
@@ -1078,7 +1078,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                      that broke. Only while filtering: the lane headers already carry the unfiltered counts. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted">{{ matchTally }}</span>
                 <!-- The panes on screen ARE the selection (the ringed cards), so this appears exactly when two
-                     or more chats sit side by side — press it and a fresh draft chat opens over their full
+                     or more chats sit side by side: press it and a fresh draft chat opens over their full
                      transcripts, composed but NOT sent (synthesizeSessions.ts). -->
                 <Button v-if="panes.length >= 2" size="small" severity="secondary" :disabled="synthesizing" class="shrink-0" @click="synthesize">
                     <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />Synthesize {{ panes.length }}
@@ -1087,7 +1087,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             </div>
         </div>
         <!-- Failures only. This strip costs a layout shift and a dismissal, which is the right price for
-             something the user must read and the wrong one for a routine action's receipt — that floats
+             something the user must read and the wrong one for a routine action's receipt: that floats
              instead, at the bottom of the board. -->
         <p v-if="notice !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line bg-danger/10 px-3 py-1.5 text-2xs text-danger">
             <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
@@ -1109,7 +1109,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <div class="flex w-full max-w-xl flex-col gap-2">
                     <h2 class="text-sm font-semibold text-content">Start your first agent</h2>
                     <p class="text-2xs text-muted">
-                        Agents work on their own branch while you carry on — you review what they did before anything lands in your workspace.
+                        Agents work on their own branch while you carry on: you review what they did before anything lands in your workspace.
                     </p>
                 </div>
             </template>
@@ -1125,11 +1125,11 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <template v-if="!started">
                 <!-- THE WAY IN, on the screen that asks for a first agent: the chat's own card, in the middle
                      of the board rather than tucked into a side panel, because until it is answered nothing
-                     else on this screen can happen. The chat drops its copy while this stands — the wait in
+                     else on this screen can happen. The chat drops its copy while this stands: the wait in
                      front of it included, which is why the spinner is inside this branch and not beside it. -->
                 <!-- `prominent`, and wider than the card it used to be: on this screen the offer is not one
                      thing among several, it is the only thing that can happen, and it was drawn as the
-                     smallest — a `small` button on a 24rem card. The sign-in also runs inside this card now
+                     smallest: a `small` button on a 24rem card. The sign-in also runs inside this card now
                      rather than pushing the router at the settings tab, so it has a flow's worth of room to
                      grow into. -->
                 <div v-if="offering" class="w-full max-w-md rounded-xl border border-line bg-card px-5 py-6">
@@ -1153,14 +1153,14 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </button>
                 </div>
                 <!-- Running on the free trial: the chat beside this one works, so the way in is no longer the
-                     screen — it is a footnote under it, at the docked panel's own size. Not `prominent`, and
+                     screen: it is a footnote under it, at the docked panel's own size. Not `prominent`, and
                      deliberately below the starters: the first thing a user should do here is type, and the
                      better deal is the second. -->
                 <div v-if="trialOnly" class="w-full max-w-sm rounded-xl border border-line bg-card/60 px-4 py-4">
                     <ConnectOffer :view="chat" />
                 </div>
             </template>
-            <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too — it is
+            <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too: it is
                  the only archive affordance left on screen once the board is bare. -->
             <button
                 v-if="archiveSize > 0"
@@ -1180,7 +1180,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              right edge rather than the third of three. -->
         <div v-else class="scrollbar-thin scrollbar-stable min-h-0 flex-1 overflow-auto">
             <!-- Stacked, the lanes are rows of one grid that is still `h-full` (so a lane keeps a drop target
-                 when the board is empty) — `content-start` is what stops those rows from stretching to fill it
+                 when the board is empty): `content-start` is what stops those rows from stretching to fill it
                  and leaving a lane's cards floating a hundred pixels above the next header.
                  The one exception is a query that matched NOTHING: there is no card left on the board to drag,
                  so the full height buys nothing and costs the miss its explanation, which would otherwise be
@@ -1227,14 +1227,14 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         <span class="flex-1"></span>
                         <template v-if="lane.key === 'finished' && !archiveOpen">
                             <!-- The receipt for a quiet archive: the counter is where the card went, so it is
-                                 what acknowledges it — a highlight that fades, in the place the user would
+                                 what acknowledges it: a highlight that fades, in the place the user would
                                  already look to get it back. Its tooltip is where the reassurance the old
                                  strip repeated on every press now lives, read once and on demand. -->
                             <button
                                 v-if="archiveSize > 0"
                                 type="button"
                                 :aria-label="`Open the archive (${archiveSize})`"
-                                v-tooltip.bottom="'Taken off the board — branches and conversations are kept'"
+                                v-tooltip.bottom="'Taken off the board: branches and conversations are kept'"
                                 class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs transition-colors"
                                 :class="
                                     pulsing
@@ -1252,14 +1252,14 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 v-if="clearable > 0 && !filtering"
                                 type="button"
                                 aria-label="Archive every finished agent"
-                                v-tooltip.bottom="`Archive all ${clearable} — you can undo it`"
+                                v-tooltip.bottom="`Archive all ${clearable}: you can undo it`"
                                 class="touch-target shrink-0 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                                 @click="archive()"
                             >
                                 Clear
                             </button>
                         </template>
-                        <!-- The archive's own bulk exit, in the slot "Clear" occupies on the live lane — the
+                        <!-- The archive's own bulk exit, in the slot "Clear" occupies on the live lane: the
                              same position for the same kind of act, and the opposite weight. Danger only on
                              hover, so a column of retired agents doesn't read as a hazard while you browse it;
                              the dialog is what actually guards it. Gone while filtering, exactly as Clear is:
@@ -1273,7 +1273,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             type="button"
                             :aria-label="`Delete all ${archived.length} archived agents permanently`"
                             :disabled="purging"
-                            v-tooltip.bottom="`Delete all ${archived.length} permanently — branches and all. This can't be undone.`"
+                            v-tooltip.bottom="`Delete all ${archived.length} permanently: branches and all. This can't be undone.`"
                             class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-40"
                             @click="pendingPurge = true"
                         >
@@ -1281,7 +1281,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         </button>
                     </header>
                     <!-- The lane's HELD WAKES, first of all: a hold is the one row here that is WHOLLY waiting
-                         on you — everything below it is at least running. Attention lane only (HeldWakeCard
+                         on you: everything below it is at least running. Attention lane only (HeldWakeCard
                          says why), and outside the TransitionGroup for the runs' reason. -->
                     <div v-if="lane.key === 'attention' && !archiveOpen && heldWakes.length > 0" class="flex flex-col gap-2 px-2 pb-2">
                         <HeldWakeCard
@@ -1295,7 +1295,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </div>
                     <!-- The lane's WORKFLOW RUNS, above its agents: a run is the container of several of the
                          cards below it, and a container drawn under its contents is a heading in the wrong
-                         place. Outside the TransitionGroup below — that group's FLIP animation is over the
+                         place. Outside the TransitionGroup below: that group's FLIP animation is over the
                          fleet, and a row of another kind moving through it would drag the cards it holds.
                          In the archive it is the archived runs that list here, in the same slot: the steps
                          filed away with a run have no cards of their own there either. -->
@@ -1327,7 +1327,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <!-- An emptied lane keeps its header and says so on one line. It does NOT disappear: three
                          columns collapsing to one as the query lands makes the whole board jump under the
                          cursor mid-keystroke, and the lane you were about to read moves out from under it. A
-                         lane holding only a run — or, in Attention, only a held wake — is not empty, whatever
+                         lane holding only a run, or, in Attention, only a held wake: is not empty, whatever
                          the fleet half of it says. -->
                     <p
                         v-else-if="
@@ -1364,7 +1364,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         />
                     </TransitionGroup>
                     <!-- The lane's tail, not a pager: the count is the point ("there are 12 more"), and the row
-                         is what keeps them one press away instead of gone. Gone while filtering — the window is
+                         is what keeps them one press away instead of gone. Gone while filtering: the window is
                          lifted there (see cardsFor), so there is nothing behind it to offer. -->
                     <button
                         v-if="lane.key === 'finished' && !archiveOpen && !filtering && hiddenFinished > 0"
@@ -1376,7 +1376,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         {{ showAllFinished ? "Show fewer" : `${hiddenFinished} earlier` }}
                     </button>
                     <!-- The archive's own tail. One-way, unlike the lane's toggle above: this pile has no
-                         "fewer" worth offering — the reader pressed for more of a list they are searching, and
+                         "fewer" worth offering: the reader pressed for more of a list they are searching, and
                          collapsing it back under them would lose their place. The count is what the row is for,
                          so it stays honest under a query (archiveRows filters before the page is taken). -->
                     <button
@@ -1394,25 +1394,25 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                  them this one. Says what was searched, so a typo is visible without looking back up at the
                  field, and names the rule that produced the miss.
                  Under `Aa` that rule is the switch itself, and the way out is offered here rather than left as
-                 a hunt back up to a control the reader may not connect to the empty board in front of them — a
+                 a hunt back up to a control the reader may not connect to the empty board in front of them: a
                  mode is only fair if the screen it emptied says so and can undo it. It reads directly under the
                  emptied lanes, which is why the grid above drops its `h-full` for this one state: kept, the
                  line would start at the fold and the sentence explaining an empty board could only be found by
                  scrolling for something you don't know is there. -->
             <p v-if="noMatches" class="px-4 pb-6 text-center text-2xs text-subtle">
                 <template v-if="matchCase">
-                    No agent mentions “{{ query.trim() }}” with those exact capitals.
+                    No agent mentions "{{ query.trim() }}" with those exact capitals.
                     <button type="button" class="font-medium text-link underline-offset-2 hover:underline" @click="matchCase = false">
                         Ignore case
                     </button>
                 </template>
                 <template v-else
-                    >No agent of yours mentions “{{ query.trim() }}”. This searches the titles and what either side said in the chat.</template
+                    >No agent of yours mentions "{{ query.trim() }}". This searches the titles and what either side said in the chat.</template
                 >
             </p>
         </div>
-        <!-- WHAT THE QUERY FOUND OFF THE BOARD. The board hides by design — the Finished lane windows to a
-             handful and archived agents leave the roster entirely — so a filter confined to the lanes would
+        <!-- WHAT THE QUERY FOUND OFF THE BOARD. The board hides by design: the Finished lane windows to a
+             handful and archived agents leave the roster entirely, so a filter confined to the lanes would
              answer "no matches" for an agent sitting one click away, and the user only has to catch that
              once to stop believing the field. One row reports the count; expanding it puts the archive's
              hits on real cards (restore and all) and the never-carded conversations on history rows.
@@ -1443,8 +1443,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ archivedHits.length }}</span>
                     </div>
                     <!-- Real cards, not a stripped-down list: an archived agent keeps its branch, its diff
-                         and its transcript, so the thing the user wants to do with a hit here — read it,
-                         restore it — is exactly what the card already offers. -->
+                         and its transcript, so the thing the user wants to do with a hit here: read it,
+                         restore it: is exactly what the card already offers. -->
                     <div class="grid gap-2" :class="narrow ? '' : 'grid-cols-3 items-start lg:gap-4'">
                         <AgentCard
                             v-for="agent in archivedHits"
@@ -1470,7 +1470,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In earlier chats</span>
                         <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ sessionMatches.length }}</span>
                     </div>
-                    <!-- Conversations no agent entry owns — a plain chat, or one whose entry is long gone.
+                    <!-- Conversations no agent entry owns: a plain chat, or one whose entry is long gone.
                          There is no card to draw for them, so they read as history rows and open as tabs,
                          the same act the History menu performs. -->
                     <button
@@ -1494,7 +1494,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             </div>
         </div>
         <!-- The sweep's receipt. It OVERLAYS the board rather than sitting in the column, so the cards it is
-             reporting on don't move to make room for the report — and it expires, so acknowledging it is not
+             reporting on don't move to make room for the report, and it expires, so acknowledging it is not
              work. Hidden mid-drag: the discard target lands in the same place, and one of them is destructive.
              The wrapper is inert; only the pill takes the pointer, or it would eat clicks on the lane under it. -->
         <Transition name="receipt">
@@ -1534,7 +1534,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <Icon name="trash" class="text-2xs" />Discard
         </div>
         <!-- Dropping a conflicted card on Finished spends a turn, and a drag is the easiest gesture on this
-             board to make by accident — so unlike stop / land / discard it stops here first. The dialog is the
+             board to make by accident, so unlike stop / land / discard it stops here first. The dialog is the
              whole explanation of what the agent is about to do, because the drag hint that got here is four
              words long. -->
         <Modal :open="pendingResolve !== undefined" size="sm" header="Have the agent resolve the conflict?" @update:open="cancelResolve">
@@ -1549,13 +1549,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             </template>
         </Modal>
         <!-- The one dialog on this board that guards something unrecoverable. It says what GOES in the terms the
-             archive has been promising all along ("nothing is lost" — this is the press that revokes it) and
+             archive has been promising all along ("nothing is lost": this is the press that revokes it) and
              what STAYS, because the commonest fear here is about work already landed in the workspace, which is
              the one thing deletion cannot touch. The destructive button names the count rather than saying
              "Delete": the number is the whole difference between clearing three throwaways and twelve agents. -->
         <Modal :open="pendingPurge" size="sm" header="Delete every archived agent?" @update:open="pendingPurge = false">
             <p class="text-xs text-content">
-                {{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }} will be deleted for good — each one's branch, its
+                {{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }} will be deleted for good, each one's branch, its
                 conversation and its history. This cannot be undone.
             </p>
             <p class="mt-2 text-xs text-muted">
@@ -1582,13 +1582,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 {{ hint }}
             </p>
         </div>
-        <!-- One menu for every card on the board — see cardMenuItems. -->
+        <!-- One menu for every card on the board: see cardMenuItems. -->
         <ContextMenu ref="cardMenu" :model="cardMenuItems" :min-width="12" />
     </div>
 </template>
 <style scoped>
 /* Kanban motion: FLIP reorder within a lane (`lane-move`), scale-fade on lane entry/exit. The leaving card
- * is absolutely positioned so its siblings glide into place instead of jumping — the standard
+ * is absolutely positioned so its siblings glide into place instead of jumping: the standard
  * TransitionGroup requirement for smooth collapse. */
 .lane-move,
 .lane-enter-active,
@@ -1607,7 +1607,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     left: 0.5rem;
     right: 0.5rem;
 }
-/* The receipt rises into place and sinks out of it — the same direction both ways, so a pill that expires on
+/* The receipt rises into place and sinks out of it: the same direction both ways, so a pill that expires on
  * its own and one dismissed by an Undo read as the same object leaving. */
 .receipt-enter-active,
 .receipt-leave-active {

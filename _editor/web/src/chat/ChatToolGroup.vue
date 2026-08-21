@@ -8,7 +8,7 @@ import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
 import { present } from "./toolPresentation";
 
 /* A collapsed run of consecutive same-name+same-target tool calls. The header reads like a single ChatToolCard
- * row — same icon, same target chip, same right-aligned summary — with a count badge and aggregated stats.
+ * row (same icon, same target chip, same right-aligned summary) with a count badge and aggregated stats.
  * Expanding reveals the individual cards, indented under a left border like a sub-agent's nested transcript. */
 
 const props = defineProps<{
@@ -16,7 +16,7 @@ const props = defineProps<{
     live: boolean;
 }>();
 
-// Whose copy of the workspace the header's target chip names — the pane's conversation, exactly as the cards
+// Whose copy of the workspace the header's target chip names: the pane's conversation, exactly as the cards
 // underneath it answer (see ChatToolCard).
 const { conversation } = usePaneView();
 const linkScope = computed(() => ({ agent: conversation.value.isolated.value ? conversation.value.conversationId : undefined }));
@@ -29,7 +29,7 @@ const toggle = (): void => {
 // Use the first tool's presentation for the icon (all tools in the group share the same name).
 const icon = computed(() => present(props.group.tools[0]!).icon);
 
-// Whether any tool in the group is still running — shows the spinner instead of the icon.
+// Whether any tool in the group is still running: shows the spinner instead of the icon.
 const running = computed(() => props.group.tools.some((tool) => tool.status === `pending` || tool.status === `in_progress`));
 
 // Whether any tool in the group failed.
@@ -37,7 +37,7 @@ const failed = computed(() => props.group.tools.some((tool) => tool.status === `
 
 const summary = computed(() => groupDiffSummary(props.group.tools));
 
-// The location for the clickable target chip — same as ChatToolCard, from the first tool.
+// The location for the clickable target chip: same as ChatToolCard, from the first tool.
 const location = computed(() => props.group.tools[0]?.locations?.[0]);
 </script>
 

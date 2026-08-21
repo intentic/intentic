@@ -44,15 +44,15 @@ const enroll = async (
             if (attempt >= attempts) {
                 throw error;
             }
-            process.stderr.write(`connecting — the sandbox isn't reachable yet, retrying (${attempt}/${attempts})…\n`);
+            process.stderr.write(`connecting: the sandbox isn't reachable yet, retrying (${attempt}/${attempts})…\n`);
             await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs));
             continue;
         }
         if (response.status === 401) {
-            throw new Error("that pairing has expired — click Connect again on the computer's card in your sandbox for a fresh command.");
+            throw new Error("that pairing has expired: click Connect again on the computer's card in your sandbox for a fresh command.");
         }
         if (response.status >= 500 && attempt < attempts) {
-            process.stderr.write(`connecting — the sandbox is warming up (HTTP ${response.status}), retrying (${attempt}/${attempts})…\n`);
+            process.stderr.write(`connecting: the sandbox is warming up (HTTP ${response.status}), retrying (${attempt}/${attempts})…\n`);
             await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs));
             continue;
         }
@@ -204,7 +204,7 @@ const status = buildCommand<Record<string, never>>({
         const pid = await livePid(runPidPath);
         out(`Connected as: ${config.id}`);
         out(`Sandbox:      ${config.sandboxUrl}`);
-        out(`Agent:        v${HOST_VERSION} — ${pid === undefined ? "NOT running (start it with `intentic-host run`)" : `running (pid ${pid})`}`);
+        out(`Agent:        v${HOST_VERSION}, ${pid === undefined ? "NOT running (start it with `intentic-host run`)" : `running (pid ${pid})`}`);
         // The cached grant, flagged as such: the sandbox's card is the source of truth, and saying so here is
         // what stops a stale line in this output from being read as the current permissions.
         out(
@@ -233,7 +233,7 @@ const uninstall = buildCommand<Record<string, never>>({
         out(
             config === undefined
                 ? "Nothing was connected. Removed any leftovers."
-                : `Disconnected from ${config.sandboxUrl}. The sandbox still lists this computer until it is removed there — its access is already gone.`,
+                : `Disconnected from ${config.sandboxUrl}. The sandbox still lists this computer until it is removed there, its access is already gone.`,
         );
         out(`Your record of what this agent did stays at ${auditPath}.`);
     },

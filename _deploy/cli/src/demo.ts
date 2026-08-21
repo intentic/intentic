@@ -36,8 +36,8 @@ const stateDir = join(root, ".demo");
 const stateFile = join(stateDir, "state.json");
 
 const CONTAINER = "intentic-demo-host";
-const TUNNEL = "intentic-host"; // resolver's tunnelName(host.id) — what cleanup finds it by
-const ADMIN = "intentic"; // resolver's adminUsername — the Forgejo/Komodo admin login
+const TUNNEL = "intentic-host"; // resolver's tunnelName(host.id): what cleanup finds it by
+const ADMIN = "intentic"; // resolver's adminUsername: the Forgejo/Komodo admin login
 const APP = "app";
 const ENV = "production";
 const APP_BODY = "intentic-demo-live";
@@ -217,7 +217,7 @@ const up = async (): Promise<void> => {
     await writeFile(configPath, deployConfig());
     await writeFile(join(workspace, "desired-state", ".env"), envFile(privateKey, apiToken));
 
-    log("▶ resolve + apply — Forgejo + Komodo + tunnel + the app's CI/CD wiring …");
+    log("▶ resolve + apply: Forgejo + Komodo + tunnel + the app's CI/CD wiring …");
     await runCli("deploy", "resolve", "--config", configPath, "--out", artifactPath);
     await runCli("deploy", "apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8");
 
@@ -233,7 +233,7 @@ const up = async (): Promise<void> => {
             throw new Error(`platform container "${name}" is not running on the host:\n${running}`);
         }
     }
-    log(`✅ platform up — host containers: ${running.split("\n").filter(Boolean).join(", ")}`);
+    log(`✅ platform up, host containers: ${running.split("\n").filter(Boolean).join(", ")}`);
 
     log("▶ seeding the app repo (intentic/app @ main) with a Dockerfile …");
     let appDeployed = false;
@@ -252,7 +252,7 @@ const up = async (): Promise<void> => {
         // intentic only WIRES CI/CD, the apply above committed the Forgejo Actions workflow + repo secrets and
         // registered the Komodo deployment; it does NOT build or deploy. CI seeded a placeholder Dockerfile, so
         // pushing the real one above triggers the Action: build -> push to the registry -> Komodo rolls it out.
-        log(`▶ CI builds + pushes the image and Komodo rolls it out — polling http://127.0.0.1:${appPort} …`);
+        log(`▶ CI builds + pushes the image and Komodo rolls it out: polling http://127.0.0.1:${appPort} …`);
         const deadline = Date.now() + 5 * 60_000;
         while (!appDeployed && Date.now() < deadline) {
             const hit = (await ssh(`wget -q -T 5 -O- http://127.0.0.1:${appPort} 2>/dev/null || true`)).trim();
@@ -263,7 +263,7 @@ const up = async (): Promise<void> => {
         }
         log(
             appDeployed
-                ? `✅ app deployed by CI/CD — serving "${APP_BODY}" on the host`
+                ? `✅ app deployed by CI/CD: serving "${APP_BODY}" on the host`
                 : `⚠ app not live yet on :${appPort} (CI/CD may still be running)`,
         );
     } catch (error) {
@@ -274,7 +274,7 @@ const up = async (): Promise<void> => {
     log("════════════════════════════════════════════════════════════════════");
     log("  intentic demo is UP and will stay up until you run `pnpm demo:down`");
     log("════════════════════════════════════════════════════════════════════");
-    log("  Public (through the Cloudflare tunnel — DNS/edge may take ~1 min):");
+    log("  Public (through the Cloudflare tunnel: DNS/edge may take ~1 min):");
     log(`    Forgejo : ${GIT_URL}`);
     log(`    Komodo  : ${KOMODO_URL}`);
     if (appDeployed) {
@@ -308,7 +308,7 @@ interface DemoState {
 // never cache NXDOMAIN (which would make the domains look dead for up to the zone's negative-TTL). Use `clear`
 // to also purge the Cloudflare tunnel + DNS.
 const down = async (): Promise<void> => {
-    log(`▶ stopping the demo host container (${CONTAINER}) — leaving the Cloudflare tunnel + DNS for a fast re-up …`);
+    log(`▶ stopping the demo host container (${CONTAINER}): leaving the Cloudflare tunnel + DNS for a fast re-up …`);
     await quiet("docker", ["rm", "-f", CONTAINER]);
     log("✅ demo stopped. `pnpm demo:up` reconnects in seconds (tunnel + DNS reused); `pnpm demo:clear` tears down Cloudflare too.");
 };
@@ -353,7 +353,7 @@ const clear = async (): Promise<void> => {
     // intent/ + desired-state/ are gitignored scratch dirs holding the generated .secrets.json, left in place
     // so `intentic deploy adopt` can still run after teardown.
     await rm(stateDir, { recursive: true, force: true }).catch(() => {});
-    log("✅ demo cleared — host container, tunnel, and DNS records removed (intent/ + desired-state/ kept).");
+    log("✅ demo cleared: host container, tunnel, and DNS records removed (intent/ + desired-state/ kept).");
 };
 
 const mode = process.argv[2];

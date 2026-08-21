@@ -50,7 +50,7 @@ test("a backing instance is emitted as an internal-only node with no Cloudflare 
     const db = nodes.get("db");
     expect(db?.type).toBe("postgres");
     // Internal-only: the database/cache instances add NO cf-route. Only the platform's git/deploy routes and
-    // the app's own route exist — none reference the backing instances.
+    // the app's own route exist: none reference the backing instances.
     const routeIds = [...nodes.values()].filter((node) => node.type === "cf-route").map((node) => node.id);
     expect(routeIds).toEqual(["cf-git-example-com", "cf-deploy-example-com", "cf-app-example-com"]);
 });
@@ -153,7 +153,7 @@ test("an object-storage instance routes only when given a domain", () => {
     const nodes = nodesById(intentWithAuthAndStorage);
     expect(nodes.get("store")?.type).toBe("garage");
     expect(nodes.has("cf-s3-example-com")).toBe(true);
-    // Without a domain it is internal-only — no route.
+    // Without a domain it is internal-only: no route.
     const internal: IntentSet = {
         ...intentWithAuthAndStorage,
         workspaces: [],

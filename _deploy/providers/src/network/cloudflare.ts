@@ -33,6 +33,6 @@ export const createCloudflareProvider = (api: CloudflareApi = cloudflareApi): Pr
     },
     // The zone is OWNED, intentic never deletes it. Logged no-op so prune treats it as handled.
     delete: async (_inputs, ctx) => {
-        ctx.log(`cloudflare "${ctx.id}" removed from desired state — the owned zone is never deleted`);
+        ctx.log(`cloudflare "${ctx.id}" removed from desired state: the owned zone is never deleted`);
     },
 });

@@ -165,7 +165,7 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
         // on the same backoff as a dropped socket instead of parking the session forever.
         if (!s.down) {
             s.down = true;
-            s.term.writeln(`\x1b[31mSandbox isn't reachable, or you're not signed in — finish setup and sign in with Google.\x1b[0m`);
+            s.term.writeln(`\x1b[31mSandbox isn't reachable, or you're not signed in: finish setup and sign in with Google.\x1b[0m`);
         }
         scheduleRetry(s);
         return;

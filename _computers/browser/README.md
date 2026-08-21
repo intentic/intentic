@@ -20,8 +20,8 @@ const after = await web.snapshot();
 A browser can be operated by clicking pixels, and it is miserable: the coordinates move when the window moves, a
 scroll invalidates every one of them, and "the Submit button" is a guess about which grey rectangle is which.
 
-A browser will simply tell you what it is showing. So this asks it — one snapshot returns every visible element
-with its role (`link`, `button`, `textbox`), its accessible name, and what it currently holds — and every action
+A browser will simply tell you what it is showing. So this asks it: one snapshot returns every visible element
+with its role (`link`, `button`, `textbox`), its accessible name, and what it currently holds: and every action
 names an element rather than a position. The same instruction then works at any window size, on any machine,
 after any re-render.
 
@@ -49,7 +49,7 @@ it, watch it compile, and conclude this package exists for no reason.
 
 **It is that Playwright cannot reach a browser from Bun.** `chromium.connectOverCDP()` fetches the debugger's
 WebSocket URL over HTTP, then stalls on the upgrade and times out thirty seconds later. That happens compiled and
-uncompiled alike, so it is the runtime rather than the bundling — and the same script against the same Chrome on
+uncompiled alike, so it is the runtime rather than the bundling: and the same script against the same Chrome on
 Node drives the page and returns an accessibility snapshot. Bun's own global `WebSocket`, which is what this
 package is built on, connects from inside the compiled binary and gets a CDP reply back.
 
@@ -58,16 +58,16 @@ here are the subset that driving a page actually uses.
 
 **Worth re-testing rather than inheriting.** The above was measured against playwright-core 1.62.1 on Bun 1.3.14.
 If a later pair connects, Playwright's accessibility snapshot is a better instrument than the DOM walk in
-`snapshot.ts`, and this whole package is ~500 lines — the trade would be worth making, not merely tolerable.
+`snapshot.ts`, and this whole package is ~500 lines: the trade would be worth making, not merely tolerable.
 
 ## What is testable without a browser
 
-`snapshot.ts`'s renderer and ref parsing, and the per-platform browser search — all pure. The CDP calls end in a
+`snapshot.ts`'s renderer and ref parsing, and the per-platform browser search: all pure. The CDP calls end in a
 real Chrome painting a real page; those need a machine, not a test.
 
 ## Key files
 
-- [src/index.ts](src/index.ts) — the public surface.
-- [src/cdp.ts](src/cdp.ts) — the hand-rolled Chrome DevTools Protocol client.
-- [src/snapshot.ts](src/snapshot.ts) — a page as structured text with stable element references.
-- [src/launch.ts](src/launch.ts) — finding and starting a browser.
+- [src/index.ts](src/index.ts): the public surface.
+- [src/cdp.ts](src/cdp.ts): the hand-rolled Chrome DevTools Protocol client.
+- [src/snapshot.ts](src/snapshot.ts): a page as structured text with stable element references.
+- [src/launch.ts](src/launch.ts): finding and starting a browser.

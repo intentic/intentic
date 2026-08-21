@@ -34,7 +34,7 @@ describe(`<MatchLine>`, () => {
         expect([...plain.querySelectorAll(`span span`)].filter((span) => span.className.includes(`bg-primary`))).toEqual([]);
     });
 
-    it(`renders chat text as text — a prompt that looks like markup is not markup`, () => {
+    it(`renders chat text as text: a prompt that looks like markup is not markup`, () => {
         const host = render({ snippet: { text: `<img src=x onerror=alert(1)>`, speaker: `agent` }, needle: `img` });
         expect(host.querySelector(`img`)).toBeNull();
         expect(host.textContent).toContain(`<img src=x onerror=alert(1)>`);

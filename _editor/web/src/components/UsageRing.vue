@@ -3,37 +3,37 @@ import { placeAnchored, type Placement, ProgressRing, type Side } from "@intenti
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vue";
 import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDetail, usageTone } from "../composables/chat/usageStatus";
 
-/* THE USAGE CIRCLE, WHEREVER IT IS DRAWN — the composer's headroom chip, the model picker's account rows, the
- * Agent tab's connection rows — together with the panel that opens beside it. One component, because those four
+/* THE USAGE CIRCLE, WHEREVER IT IS DRAWN: the composer's headroom chip, the model picker's account rows, the
+ * Agent tab's connection rows: together with the panel that opens beside it. One component, because those four
  * surfaces had four copies of the same three lines (a ring, a tone class, a spoken percentage) and one shared
  * mistake: the per-pool breakdown was crammed into a hover LABEL.
  *
  * WHY IT IS NOT A TOOLTIP. A tooltip is a strip of text naming a control (see lib/tooltip.ts, which
- * says so and is right for everything else). This is a small TABLE — three or four separate allowances, each
- * with a figure and a reset instant — and pouring it into one line produced the box this replaces: four wrapped
+ * says so and is right for everything else). This is a small TABLE: three or four separate allowances, each
+ * with a figure and a reset instant, and pouring it into one line produced the box this replaces: four wrapped
  * lines of "5-hour session 56% (resets Mon 12:30 AM) · Weekly · all models 15% (resets Sun 5:00 AM) · …",
  * unreadable at a glance and, being centred over its anchor, laid across the very rows the reader was
  * comparing. As a card each pool gets a line, a meter and its reset, and the tightest one is found by looking
  * rather than by parsing.
  *
- * IT OPENS BESIDE THE RING — on the flank the row asks for (see `flank`) — and only falls back to above/below
- * when neither flank can hold it (a narrow pop-out). Every surface that draws this ring is a COLUMN of rows —
- * accounts stacked in the picker, connection rows down the Agent tab — so the one placement that never covers
+ * IT OPENS BESIDE THE RING: on the flank the row asks for (see `flank`), and only falls back to above/below
+ * when neither flank can hold it (a narrow pop-out). Every surface that draws this ring is a COLUMN of rows:
+ * accounts stacked in the picker, connection rows down the Agent tab, so the one placement that never covers
  * what the reader is comparing against is sideways, into the wide area next door.
  *
  * IN THE ANCHOR'S OWN WINDOW, like every other overlay here: the chat panel can be popped out into a real
  * `window.open` document while its JS stays in this realm, so the box is teleported into
  * `anchor.ownerDocument.body` and measured against that window (placeAnchored). It borrows AnchoredOverlay's
- * skin — the same surface, shadow and arrow the pickers use — so the app has one overlay language rather than
+ * skin: the same surface, shadow and arrow the pickers use, so the app has one overlay language rather than
  * a bespoke box per feature.
  *
  * A POINTER-ONLY REVEAL, so the facts must also exist without one: the sentence a screen reader hears is
- * rendered as sr-only text beside the arc (usageDetail), and the exhaustive version — every account, every
- * pool, what has been spent — is the Usage tab, one click from the composer chip. */
+ * rendered as sr-only text beside the arc (usageDetail), and the exhaustive version: every account, every
+ * pool, what has been spent: is the Usage tab, one click from the composer chip. */
 
 const { headroom, flank = `right` } = defineProps<{
     headroom: PlanHeadroom;
-    /* WHICH WAY THE CARD SPILLS — away from the row it belongs to, which only the row knows. A ring at the END
+    /* WHICH WAY THE CARD SPILLS: away from the row it belongs to, which only the row knows. A ring at the END
      * of its row (the picker's accounts, the composer's chip) spills right, into the app beside the panel; a
      * ring that IS the row's first element (the Agent tab's connection rows, where it stands in for the status
      * dot) spills left, into the page gutter, because everything to ITS right is the row's own name, state and
@@ -41,7 +41,7 @@ const { headroom, flank = `right` } = defineProps<{
     flank?: Side;
 }>();
 
-const GAP = 8; // px between the ring and the card — the arrow's height
+const GAP = 8; // px between the ring and the card: the arrow's height
 const EDGE = 8; // px of the window kept clear on every side
 // A pointer sweeping down a column of rings crosses several of them; opening on the first frame turns that into
 // a strobe of cards. Short enough that a deliberate hover feels instant, long enough that a pass-by shows nothing.
@@ -50,7 +50,7 @@ const OPEN_DELAY_MS = 120;
 const anchor = ref<HTMLElement>();
 const box = ref<HTMLElement>();
 const open = ref(false);
-// Undefined until the card has been measured — and PARKED off-screen for exactly that long, since it has to be
+// Undefined until the card has been measured, and PARKED off-screen for exactly that long, since it has to be
 // rendered before it can be measured and a card painted at the window's origin flashes there on every open.
 const placement = ref<Placement>();
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -76,7 +76,7 @@ const reposition = (): void => {
     const size = el.getBoundingClientRect();
     // Sideways whenever EITHER flank can hold the card; placeAnchored takes the asked-for one and flips only
     // when that helps. Above/below is the last resort a narrow pop-out forces, not the default a tooltip makes
-    // of it — over and under is where the rows the reader is comparing are.
+    // of it: over and under is where the rows the reader is comparing are.
     const beside = Math.max(rect.left, view.innerWidth - rect.right) >= size.width + GAP + EDGE;
     placement.value = placeAnchored({
         anchor: rect,
@@ -89,7 +89,7 @@ const reposition = (): void => {
     });
 };
 
-// A scroll or a resize moves the ring out from under a fixed box, and the pointer has left it anyway — so the
+// A scroll or a resize moves the ring out from under a fixed box, and the pointer has left it anyway, so the
 // card is dismissed rather than chased. Armed on the ANCHOR's document and window, which in a pop-out are not
 // this realm's; remembered as the pair they were armed on, so the same pair is disarmed even if the panel has
 // docked back in the meantime.
@@ -108,7 +108,7 @@ const hide = (): void => {
 
 const reveal = async (): Promise<void> => {
     open.value = true;
-    await nextTick(); // the card exists — and has a size — only after this render
+    await nextTick(); // the card exists, and has a size: only after this render
     reposition();
     const doc = anchor.value?.ownerDocument;
     const view = doc?.defaultView;
@@ -158,7 +158,7 @@ onBeforeUnmount(hide);
                     </div>
 
                     <!-- ONE LINE PER POOL, because "which allowance is about to bite" is the question the ring's
-                         single number cannot answer — and the pools are genuinely separate: an account can sit
+                         single number cannot answer, and the pools are genuinely separate: an account can sit
                          at 1% of its weekly Opus pool and 98% of its all-models one. The binding pool (the one
                          the ring draws) reads at full strength; the rest are context. -->
                     <div v-for="pool in headroom.pools" :key="pool.kind" class="flex flex-col gap-1">
@@ -184,11 +184,11 @@ onBeforeUnmount(hide);
 
                     <!-- Measured, and every pool has since reopened. Not the same as unmeasured, which draws no
                          ring at all. -->
-                    <p v-if="headroom.pools.length === 0" class="text-xs text-muted">Every pool has reset — the full allowance is available.</p>
+                    <p v-if="headroom.pools.length === 0" class="text-xs text-muted">Every pool has reset: the full allowance is available.</p>
 
                     <!-- What the ≥ on each figure means, said only when there is one. -->
                     <p v-if="headroom.stale" class="border-t border-line pt-2 text-2xs leading-relaxed text-subtle">
-                        ≥ these are floors — every device on the account spends the same pools.
+                        ≥ these are floors: every device on the account spends the same pools.
                     </p>
                 </div>
             </div>

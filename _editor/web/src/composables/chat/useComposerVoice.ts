@@ -41,13 +41,13 @@ const VOICE_SEND_DELAY_MS = 1200;
 const BUTTON_HINT: Record<VoiceState, string> = {
     preparing: `Preparing voice…`,
     listening: `Stop voice mode`,
-    idle: `Talk hands-free — pause to send, tap again to stop`,
+    idle: `Talk hands-free, pause to send, tap again to stop`,
 };
 
 // The hint slot is shared with the turn's own shortcuts, so an idle mic says nothing and yields it back.
 const SLOT_HINT: Record<VoiceState, string | undefined> = {
     preparing: `Preparing voice (first use)…`,
-    listening: `Listening — pause to send, Esc to stop`,
+    listening: `Listening, pause to send, Esc to stop`,
     idle: undefined,
 };
 
@@ -56,9 +56,9 @@ const SLOT_HINT: Record<VoiceState, string | undefined> = {
 const ERROR_LINE: Record<VoiceError, string> = {
     "mic-blocked": `Microphone access is blocked. Allow it in your browser's site settings, then try again.`,
     "no-mic": `No microphone was found.`,
-    "needs-rebuild": `Voice needs a one-time sandbox update — run the rebuild on the Sandbox page's Environment card first.`,
-    unavailable: `Voice isn't available on this sandbox — update it, then try again.`,
-    failed: `Couldn't transcribe that — try again.`,
+    "needs-rebuild": `Voice needs a one-time sandbox update, run the rebuild on the Sandbox page's Environment card first.`,
+    unavailable: `Voice isn't available on this sandbox, update it, then try again.`,
+    failed: `Couldn't transcribe that, try again.`,
 };
 
 export const useComposerVoice = (composer: {
@@ -118,7 +118,7 @@ export const useComposerVoice = (composer: {
          * these is the only place the user learns what the mode is doing right now. */
         slotHint: computed(() => {
             if (armed.value) {
-                return `Sending — Esc to edit`;
+                return `Sending: Esc to edit`;
             }
             if (pending.value > 0) {
                 return `Transcribing…`;

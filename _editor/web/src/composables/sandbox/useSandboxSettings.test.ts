@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// jsdom because these tests exercise the composable the way the settings PAGE does — from a mounted component,
+// jsdom because these tests exercise the composable the way the settings PAGE does: from a mounted component,
 // where its query is owned by that component's effect scope. (It no longer needs one to run: the client is
 // named rather than injected, so an agent-run button can read the same settings from a computed.) The rest of
 // the suite stays on `node`.
@@ -9,7 +9,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { beforeEach, expect, test, vi } from "vitest";
 import { createApp, defineComponent, h, ref } from "vue";
 
-/* The settings page binds every switch — its value AND its disabled state — to this one cached object, so a
+/* The settings page binds every switch (its value AND its disabled state) to this one cached object, so a
  * save that only lands once the daemon answers leaves the control the user just clicked showing stale state
  * for the whole round-trip. These tests pin the optimistic write and its rollback. */
 
@@ -26,7 +26,7 @@ const DEFAULTS: SandboxSettings = SandboxSettingsSchema.parse({});
 const NEVER = new Promise<never>(() => {});
 
 // One daemon per test: the first read answers with the stored settings, the save does whatever the test says,
-// and every LATER read hangs. That last part is what makes the rollback assertion mean something — otherwise
+// and every LATER read hangs. That last part is what makes the rollback assertion mean something: otherwise
 // the refetch that follows a failed save would restore the old values on its own and prove nothing.
 const daemon = (save: () => Promise<unknown>): void => {
     let reads = 0;
@@ -69,13 +69,13 @@ test("a save paints into the cache before the daemon answers, so the control nev
     save.mutate({ ...DEFAULTS, iqSearch: true });
 
     await vi.waitFor(() => expect(settings.value?.iqSearch).toBe(true));
-    // Still in flight — the switch moved on the click, not on the response.
+    // Still in flight: the switch moved on the click, not on the response.
     expect(save.isPending.value).toBe(true);
 });
 
 test("a field the daemon strips is NAMED, not just snapped back", async () => {
     // An older daemon: it accepts the POST and stores everything it understands, dropping the toggle its own
-    // copy of the schema predates — so the reconciling read comes back without it and the control springs back
+    // copy of the schema predates, so the reconciling read comes back without it and the control springs back
     // to 0 with no explanation. That is the bug this reports: "the input won't take a number".
     let reads = 0;
     jsonMock.mockImplementation((_path: string, init?: RequestInit) => {
@@ -104,7 +104,7 @@ test("a rejected save rolls back, so a switch never claims a setting the sandbox
     save.mutate({ ...DEFAULTS, iqSearch: true });
 
     // Painted first, then put back when the daemon refuses it. Asserted on the rendered value rather than on
-    // the mutation's status because onSettled returns its invalidate — so the mutation stays "pending" until
+    // the mutation's status because onSettled returns its invalidate, so the mutation stays "pending" until
     // the reconciling refetch lands, which this daemon deliberately never lets happen.
     await vi.waitFor(() => expect(settings.value?.iqSearch).toBe(true));
     await vi.waitFor(() => expect(settings.value).toEqual(DEFAULTS));
@@ -121,7 +121,7 @@ test("patch sends the whole settings object with just the named fields changed",
 
     patch({ iqSearch: true, terseOutput: true });
 
-    // The mutation reaches the client a tick later, and reads share the same mock — so wait for the POST and
+    // The mutation reaches the client a tick later, and reads share the same mock, so wait for the POST and
     // assert on that one rather than on whichever call happened to be last.
     const posted = async (): Promise<SandboxSettings> => {
         const call = jsonMock.mock.calls.findLast(([, init]) => init?.method === `POST`);

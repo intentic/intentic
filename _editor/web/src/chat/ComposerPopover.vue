@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { Icon, type IconName } from "@intentic/ui";
 
-/* The panel that opens ABOVE the composer while a trigger character is live — `@` for a file, `/` for a
+/* The panel that opens ABOVE the composer while a trigger character is live: `@` for a file, `/` for a
  * command. Chrome only: the raised surface, and the header that names what is being picked.
  *
  * The two pickers inside it were built by copying one into the other, which is visible in what they shared:
  * the same wrapper class string to the character, the same header, the same `MAX_ROWS = 8`, the same
- * `pickActive` — and the same `class="mp-row"` on every row, a class DEFINED IN NEITHER of them. It lived in
+ * `pickActive`, and the same `class="mp-row"` on every row, a class DEFINED IN NEITHER of them. It lived in
  * ChatModelPicker's `<style scoped>`, so Vue compiled it to `.mp-row[data-v-…]` and it matched nothing here:
  * both popovers had been shipping rows with no cursor and no hover tint since the day they were copied. That
- * is the failure mode this component exists to prevent — a copied class name looks identical in review and is
+ * is the failure mode this component exists to prevent: a copied class name looks identical in review and is
  * inert at runtime, and only one of the three copies had the stylesheet.
  *
  * Rows now wear the design system's `.ui-row-select`, which is a real global utility, so the hover the
@@ -22,7 +22,7 @@ import { Icon, type IconName } from "@intentic/ui";
 defineProps<{
     icon: IconName;
     title: string;
-    /** A lookup is in flight — the spinner rides the header rather than replacing the rows already shown. */
+    /** A lookup is in flight: the spinner rides the header rather than replacing the rows already shown. */
     busy?: boolean;
 }>();
 </script>

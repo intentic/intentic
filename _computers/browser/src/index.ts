@@ -37,7 +37,7 @@ const withElement = (ref: string, body: string): string => {
     return `(function () {
   var refs = window.__intenticRefs || [];
   var el = refs[${index}];
-  if (!el) throw new Error('${ref} is not on this page any more — take a new snapshot; the page has changed since the last one.');
+  if (!el) throw new Error('${ref} is not on this page any more: take a new snapshot; the page has changed since the last one.');
   ${body}
 })()`;
 };

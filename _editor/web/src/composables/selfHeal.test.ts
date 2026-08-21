@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 //
 // The last-line recovery: a crash inside the startup window reads as poisoned local state, so the app wipes
-// what this origin stored and reloads itself once — the mechanised version of the "clear site data" advice
+// what this origin stored and reloads itself once: the mechanised version of the "clear site data" advice
 // that used to be the fix. These tests pin the once-ness (a crash that survives the clean slate must surface,
 // not loop) and the split across the reload (this page only MARKS the database wipe; the next boot performs
 // it before anything holds a connection open).
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 
-// jsdom's window.location is unforgeable (see staleChunk.test.ts) — the reload is observed through a replaced
+// jsdom's window.location is unforgeable (see staleChunk.test.ts): the reload is observed through a replaced
 // global, resolved from the global scope at call time.
 const reload = vi.fn();
 
@@ -51,7 +51,7 @@ it(`does not wipe twice: a crash that survives the clean slate surfaces instead 
     expect(reload).not.toHaveBeenCalled();
 });
 
-it(`leaves an error outside the startup window alone — that is a bug, not poisoned storage`, async () => {
+it(`leaves an error outside the startup window alone: that is a bug, not poisoned storage`, async () => {
     vi.spyOn(performance, `now`).mockReturnValue(0);
     const { reportStartupError } = await load();
     vi.spyOn(performance, `now`).mockReturnValue(60_000);

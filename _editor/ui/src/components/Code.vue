@@ -1,6 +1,6 @@
 <!-- Highlighted code block. A thin design-system wrapper over useHighlighter: renders the dual-theme Shiki
      HTML (recolored for dark mode by [data-mode] in code.css) with a header label and a copy button. Falls
-     back to a plain <pre> while highlighting is in flight, and permanently for unsupported languages — so
+     back to a plain <pre> while highlighting is in flight, and permanently for unsupported languages, so
      the text is always readable. -->
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
@@ -27,7 +27,7 @@ const {
     wrap?: boolean;
     /* How many lines to show before cutting the block off with a fade and a "Show all" toggle. For the
      * surface where the code is something to COPY rather than to read (a phone-width install command wraps
-     * to nine ragged lines of env vars, burying the step after it) — the copy button works clamped, so the
+     * to nine ragged lines of env vars, burying the step after it): the copy button works clamped, so the
      * full text is one tap away for whoever actually wants to read it. Omit for no clamp. */
     clampLines?: number;
 }>();
@@ -40,7 +40,7 @@ const { highlight } = useHighlighter();
 const html = ref<string | undefined>(undefined);
 
 /* The clamp's HEIGHT is code.css's job (`.ui-code-clamp`, which owns the line-height it counts in); what is
- * left here is how many lines, whether the reader has asked for the rest — and whether there is a rest at all.
+ * left here is how many lines, whether the reader has asked for the rest, and whether there is a rest at all.
  * That last one has to be measured: whether a command overflows four lines is a question of wrapping, which
  * moves with the width the block is rendered at, so a toggle offering to reveal nothing is otherwise exactly
  * what a short command on a wide screen gets. Observed rather than computed, and re-observed on resize. */
@@ -48,7 +48,7 @@ const expanded = ref(false);
 const clamped = computed(() => clampLines !== undefined && !expanded.value);
 const block = ref<HTMLElement>();
 const overflowing = ref(false);
-// Kept visible once expanded — the measurement says "no more to show" the moment the clamp lifts, and a
+// Kept visible once expanded: the measurement says "no more to show" the moment the clamp lifts, and a
 // toggle that vanishes on use leaves the reader with no way back.
 const toggleable = computed(() => clampLines !== undefined && (expanded.value || overflowing.value));
 
@@ -72,7 +72,7 @@ watch(block, (el, _old, onCleanup) => {
 watch(html, () => void nextTick(measure));
 onUnmounted(() => observer?.disconnect());
 
-// v-html trusts Shiki's own output — it HTML-escapes the code text, so the only markup is its
+// v-html trusts Shiki's own output: it HTML-escapes the code text, so the only markup is its
 // <span style=…> color tokens, which is why rendering it raw is safe here.
 let seq = 0;
 watch(
@@ -102,7 +102,7 @@ watch(
     >
         <div class="flex flex-col gap-1.5">
             <!-- Only a LABEL earns a row of its own now. The copy button used to share one, which cost a
-                 block with no label an empty line of chrome above it — on a card whose whole content is one
+                 block with no label an empty line of chrome above it: on a card whose whole content is one
                  command, that row was taller than the gap it created between the sentence and the command it
                  belongs to. It sits on the block instead (below), where every code block anyone has used puts
                  it, and the block reserves room so it can never land on a glyph. -->
@@ -118,7 +118,7 @@ watch(
                     >{{ code }}</pre>
                 <!-- `bg-canvas` rather than a transparent chip: it sits over the code's own surface, and the
                      block's right padding (code.css, keyed off ui-code-copyable) keeps text from running
-                     under it — but a wrapped line's descender still passes behind the border without it. -->
+                     under it, but a wrapped line's descender still passes behind the border without it. -->
                 <CopyButton v-if="copyable" :text="code" label="Copy" class="absolute top-1.5 right-1.5 bg-canvas" @copied="emit(`copied`)" />
                 <!-- The fade is what says "there is more": a hard cut mid-command reads as a rendering bug. -->
                 <div

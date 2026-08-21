@@ -6,19 +6,19 @@ import type { Requirement, RequirementAction, RequirementProgress } from "../des
 /* WHAT THIS COMPUTER NEEDS, AS SOMETHING YOU CAN ACT ON.
  *
  * A stopped install used to end here as four lines of stderr in a red box. That is the right shape for a
- * failure nobody could have predicted — a network that dropped, an image that would not pull — and the wrong
+ * failure nobody could have predicted: a network that dropped, an image that would not pull, and the wrong
  * one for the failures that dominate a first Windows install, which are not accidents at all: WSL2 is not
  * turned on, this PC has no package manager, virtualization is switched off in firmware. Every one of those
  * has a known, specific answer, and three of the four we can simply do.
  *
  * So they are drawn as REQUIREMENTS rather than as an error: what is missing, what happens about it, and the
  * one button that does it. The user's consent for that button is the whole of the "ask once" this flow
- * promises — the installer's first pass deliberately changes nothing and reports the list, and this is where
+ * promises: the installer's first pass deliberately changes nothing and reports the list, and this is where
  * the list is answered.
  *
  * The rows that are NOT ours to fix are the reason this is a component and not a confirm dialog. Firmware
  * virtualization cannot be turned on from inside Windows by anything, ever, and the honest UI for it is the
- * walkthrough the installer already wrote — shown here in full, in a monospace block, because it is a list of
+ * walkthrough the installer already wrote: shown here in full, in a monospace block, because it is a list of
  * keys to press on a screen that is not this one. */
 
 const props = defineProps<{ requirements: Requirement[]; busy: boolean; progress?: Record<string, RequirementProgress> }>();
@@ -29,11 +29,11 @@ const emit = defineEmits<{ install: []; restart: []; signout: []; recheck: []; e
  * The list used to be a thing you read once and then replaced with a spinner: click "Install and continue"
  * and the whole card was swapped for one progress row reading "Set up Docker", which then sat there for as
  * long as it took to switch WSL2 on, download 600 MB, run an installer, start an engine and wait for a
- * daemon. Ten minutes of one spinner, on the machines that need the most work — the readers least likely to
+ * daemon. Ten minutes of one spinner, on the machines that need the most work: the readers least likely to
  * believe it is still going.
  *
  * So the rows stay, and each reports itself: the installer names what it is doing per requirement and what
- * it measures underneath (desktop.ts's requirement-state marker). Nothing here invents a state — a row with
+ * it measures underneath (desktop.ts's requirement-state marker). Nothing here invents a state: a row with
  * no report is simply still pending, which is exactly what it is. */
 const stateOf = (id: string): RequirementProgress | undefined => props.progress?.[id];
 
@@ -80,12 +80,12 @@ const STATE_BADGE: Record<string, string | undefined> = {
 const ours = computed(() => props.requirements.some((requirement) => requirement.action === `fix` || requirement.action === `fixElevated`));
 const restarting = computed(() => props.requirements.some((requirement) => requirement.action === `restart`));
 /* The one that had no button. Adding an account to `docker-users` succeeds immediately and does nothing at
- * all until Windows re-issues the login token, which it does on the next sign-in — so this row's only
+ * all until Windows re-issues the login token, which it does on the next sign-in, so this row's only
  * control was "Check again", which cannot possibly work, on a machine where everything else had. Same shape
  * as the restart: the setup is parked, Windows is asked to sign out, and the same RunOnce that survives a
  * reboot picks it up on the way back in. */
 const signingOut = computed(() => props.requirements.some((requirement) => requirement.action === `signOut`));
-// Nothing here is ours, and nothing we can drive: every button would be a lie, so only "Check again" remains —
+// Nothing here is ours, and nothing we can drive: every button would be a lie, so only "Check again" remains:
 // it is the honest one, because the user is about to go and change something we cannot see from here.
 const stuck = computed(() => !ours.value && !restarting.value && !signingOut.value);
 const needsAdmin = computed(() => props.requirements.some((requirement) => requirement.action === `fixElevated`));
@@ -128,7 +128,7 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
                         </div>
                         <p class="text-2xs text-muted">{{ requirement.problem }}</p>
                         <!-- While something is happening, the installer's own words about THIS row replace the
-                             remedy — the remedy describes what will happen, and it already is. -->
+                             remedy: the remedy describes what will happen, and it already is. -->
                         <p v-if="stateOf(requirement.id)?.detail" class="text-2xs text-subtle">{{ stateOf(requirement.id)?.detail }}</p>
                         <p v-else-if="requirement.remedy" class="text-2xs text-subtle">{{ requirement.remedy }}</p>
                         <button
@@ -168,13 +168,13 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
                 <template #icon><Icon name="refresh" /></template>
             </Button>
         </div>
-        <p v-if="restarting || signingOut" class="text-2xs text-subtle">Your setup is saved — this window picks it up again once you're back.</p>
+        <p v-if="restarting || signingOut" class="text-2xs text-subtle">Your setup is saved: this window picks it up again once you're back.</p>
 
         <!-- THE WAY OUT THAT IS NOT GIVING UP, and the only place in this app that offers one.
              Everything above is a machine being asked for administrator, a 600 MB download and a restart, and
              some of the people reading it are on a PC where none of that is going to happen. The browser has
              offered a cloud machine and a hosted one all along; the app hid them on the argument that "this
-             computer" is the whole point of being here — true until this computer cannot, and then it is a
+             computer" is the whole point of being here: true until this computer cannot, and then it is a
              dead end. One quiet line, under the loud default. -->
         <button
             type="button"

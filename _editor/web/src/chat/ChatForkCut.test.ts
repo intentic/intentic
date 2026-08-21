@@ -5,7 +5,7 @@ import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import type { MenuItem } from "primevue/menuitem";
 import type { ChatMessage } from "../composables/chat/transcript";
 
-/* THE CUT'S MENU IS THE WHOLE FEATURE — three outcomes that differ in what happens to the conversation and to
+/* THE CUT'S MENU IS THE WHOLE FEATURE: three outcomes that differ in what happens to the conversation and to
  * the files, and the user picks between them by reading three rows. So what is asserted here is the menu: which
  * rows it offers at a given cut, which of them a cut with no saved state is allowed to offer at all, and that
  * the one destructive row will not fire on a single press. */
@@ -17,12 +17,12 @@ const state = vi.hoisted(() => ({
     messages: [] as ChatMessage[],
     streaming: false,
     isolated: true,
-    // The message an edit is already armed on, if any — the row for it drops out of its own cut's menu.
+    // The message an edit is already armed on, if any: the row for it drops out of its own cut's menu.
     editing: undefined as ChatMessage | undefined,
     fleet: [] as { id: string; title?: string; forkedFrom?: { conversationId: string; index: number } }[],
 }));
 const opened = vi.hoisted(() => ({ ids: [] as string[] }));
-// What the ContextMenu was last handed — the component under test builds it, PrimeVue only draws it.
+// What the ContextMenu was last handed: the component under test builds it, PrimeVue only draws it.
 const shown = vi.hoisted(() => ({ model: [] as MenuItem[], opened: 0 }));
 
 vi.hoisted(() => {
@@ -53,7 +53,7 @@ vi.mock("@intentic/ui", async () => {
 vi.mock("../composables/workspace/useHistory", () => ({ invalidateWorkspace: vi.fn() }));
 vi.mock("../composables/chat/useChatPopout", () => ({ useChatPopout: () => ({ overlayTarget: undefined }) }));
 /* Built fresh per mount rather than once for the file: `state` is a plain object, so a computed over it caches
- * its first reading forever — which silently gave every test the first one's chat. */
+ * its first reading forever, which silently gave every test the first one's chat. */
 vi.mock("../composables/chat/useChat", async () => {
     const { computed, shallowRef } = await import("vue");
     return {
@@ -71,7 +71,7 @@ vi.mock("../composables/chat/useChat", async () => {
         openAgentConversation: (agent: { id: string }) => opened.ids.push(agent.id),
     };
 });
-// The forks taken from this conversation are read off the fleet, not off the open tabs — that is what makes the
+// The forks taken from this conversation are read off the fleet, not off the open tabs: that is what makes the
 // mark survive a closed tab, and what lets it count a colleague's fork.
 vi.mock("../composables/agents/useAgents", async () => {
     const { computed } = await import("vue");
@@ -139,7 +139,7 @@ describe(`the fork cut`, () => {
     });
 
     // The two rows that promise old files are the two that need a state to go back to. "Fork chat only" promises
-    // the files as they ARE, which is always available — that is the whole reason it is a separate row.
+    // the files as they ARE, which is always available: that is the whole reason it is a separate row.
     it(`withholds the rows that promise old files where there is no state to go back to`, async () => {
         state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, unanchored(2)];
         const element = mount(2);
@@ -163,7 +163,7 @@ describe(`the fork cut`, () => {
     });
 
     /* THE WHOLE CONVERSATION rides the LAST answer's mark, whose cut lands past the final message. That line has
-     * no boundary of its own — there is no turn below it, and so no state filed under it either — which leaves
+     * no boundary of its own: there is no turn below it, and so no state filed under it either, which leaves
      * exactly one honest offer, the one that promises nothing about old files, and no dead rows beside it. It
      * used to be a cut line of its own drawn past the final message, which is to say a full-width row sitting on
      * top of the composer. */
@@ -178,7 +178,7 @@ describe(`the fork cut`, () => {
 
     /* THE EDIT ROW leads the menu, and it is the only row here that answers for the MESSAGE the cut sits above
      * rather than for the boundary. It arms the composer and fires nothing, so unlike the rewind beneath it
-     * there is no second press to guard — the send is the confirmation (see Conversation.editing). */
+     * there is no second press to guard: the send is the confirmation (see Conversation.editing). */
     it(`leads with editing the prompt the cut sits above, and arms rather than fires`, async () => {
         const element = mount(2);
         await openMenu(element);
@@ -194,7 +194,7 @@ describe(`the fork cut`, () => {
         expect(forkAt).not.toHaveBeenCalled();
     });
 
-    // The same two refusals the file rows carry, for the same two reasons — an edit that could not put the files
+    // The same two refusals the file rows carry, for the same two reasons: an edit that could not put the files
     // back would start the replacement turn on the very work it was meant to discard.
     it(`refuses the edit where the files cannot come back, and while a turn holds them`, async () => {
         state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, unanchored(2)];
@@ -212,7 +212,7 @@ describe(`the fork cut`, () => {
         expect(row(`Edit`)?.[`hint`]).toBe(`Old files have to wait for the turn to finish`);
     });
 
-    /* A cut can land above the agent's words — a turn the reducer opened without a prompt of its own. "Edit"
+    /* A cut can land above the agent's words: a turn the reducer opened without a prompt of its own. "Edit"
      * over those means something else entirely (that is what the composer's agent voice is for), so the row is
      * absent rather than disabled: a greyed row would advertise a thing this menu does not do. */
     it(`offers no edit where the cut sits above the agent's own words`, async () => {
@@ -255,7 +255,7 @@ describe(`the fork cut`, () => {
         row(`Rewind`)?.command?.({ originalEvent: new Event(`click`), item: {} });
         await nextTick();
         expect(rewindTo).not.toHaveBeenCalled();
-        expect(row(`Click again`)?.label).toBe(`Click again — drops 2 messages`);
+        expect(row(`Click again`)?.label).toBe(`Click again, drops 2 messages`);
 
         row(`Click again`)?.command?.({ originalEvent: new Event(`click`), item: {} });
         await nextTick();
@@ -279,7 +279,7 @@ describe(`the fork cut`, () => {
 
     /* A TURN IN FLIGHT OWNS THE FILES, NOT THE TRANSCRIPT ABOVE IT. Copying the turns above the cut into a new
      * chat takes nothing away from the run still writing below, and a turn that has been going twenty minutes
-     * is exactly when a second line of attack is worth opening — so the chat fork stands. The two rows that
+     * is exactly when a second line of attack is worth opening, so the chat fork stands. The two rows that
      * would put files back where they were wait, and say why rather than going quietly grey. */
     it(`forks the chat while a turn is running, and holds back the rows that move files`, async () => {
         state.streaming = true;
@@ -305,7 +305,7 @@ describe(`the fork cut`, () => {
         expect(row(`Fork`)?.disabled).toBe(false);
     });
 
-    /* A chat working in the SHARED workspace has one fork to give — its files are everyone else's too, so
+    /* A chat working in the SHARED workspace has one fork to give: its files are everyone else's too, so
      * "as they were here" is not a thing it can offer without rolling the tree back under other chats. Two
      * rows then, not a third that could never be pressed, and the one fork still says which files it lands on.
      * Going back is untouched: that moves this chat's own files, which is what it has always meant. */
@@ -325,10 +325,10 @@ describe(`the fork cut`, () => {
 });
 
 /* THE OTHER END OF THE RELATIONSHIP. A fork's own transcript says where it came from; this is what the SOURCE
- * shows at the point it was cut — because the reason to fork is to compare, and a path you cannot reach from
+ * shows at the point it was cut, because the reason to fork is to compare, and a path you cannot reach from
  * where it left is one you will not compare. */
 describe(`a cut that has been forked`, () => {
-    // In the MENU, by name — out in the margin they were a row of chips, which is the width this control gave
+    // In the MENU, by name: out in the margin they were a row of chips, which is the width this control gave
     // back. The menu costs a click and keeps every branch findable from the point it left.
     it(`names the forks taken from exactly this point, and opens them`, async () => {
         state.fleet = [
@@ -339,7 +339,7 @@ describe(`a cut that has been forked`, () => {
         const element = mount(2);
         await openMenu(element);
 
-        // Only this cut's fork — the one taken four messages down belongs to a different point, and an
+        // Only this cut's fork: the one taken four messages down belongs to a different point, and an
         // unrelated conversation's fork belongs to a different chat.
         const labels = shown.model.map((item) => String(item.label ?? ``));
         expect(labels).toContain(`Without the cache`);
@@ -369,7 +369,7 @@ describe(`a cut that has been forked`, () => {
         expect(className).not.toContain(`text-link`);
     });
 
-    /* AND IT DOES NOT APPEAR JUST BECAUSE SOMETHING IS RUNNING. The chip this replaced did exactly that — it
+    /* AND IT DOES NOT APPEAR JUST BECAUSE SOMETHING IS RUNNING. The chip this replaced did exactly that: it
      * was visible only while a turn was in flight, which was the one state in which it refused to be pressed,
      * so the only version of the control most people ever saw was a greyed-out one that did nothing. */
     it(`does not light up merely because a turn is running`, async () => {

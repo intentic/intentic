@@ -1,10 +1,10 @@
-<!-- THE MODEL PILL — provider mark · model name · chevron, in the composer's ghost dress. Both composers (the
+<!-- THE MODEL PILL: provider mark · model name · chevron, in the composer's ghost dress. Both composers (the
      chat's and the suggested-session box's) open the same ChatModelPicker off it, and both had written the
      button out by hand.
 
      IT EXPOSES ITS ELEMENT, and that is the whole reason this is a component with an `el` rather than a slot:
      the button IS the anchor. AnchoredOverlay derives from the anchor the document it teleports into, the
-     viewport it measures the free room against, and the one click that must never dismiss the panel — so a
+     viewport it measures the free room against, and the one click that must never dismiss the panel, so a
      popped-out composer works unchanged only if the overlay is handed THIS element rather than a remembered one.
 
      NO HOVER LABEL, deliberately: the old one said the provider's name, which the logo beside it is already
@@ -23,9 +23,9 @@ const {
     labelClass = ``,
 } = defineProps<{
     conversation: Conversation;
-    /** Whether the picker this pill opens is showing — drives aria-expanded. */
+    /** Whether the picker this pill opens is showing: drives aria-expanded. */
     expanded?: boolean;
-    /** Greyed and inert — the chat composer's controls go quiet under a workflow badge. */
+    /** Greyed and inert: the chat composer's controls go quiet under a workflow badge. */
     disabled?: boolean;
     /** Extra classes on the model name, for a composer that drops it in a narrow container. */
     labelClass?: string;
@@ -36,7 +36,7 @@ const {
 const { provider, model } = conversation;
 const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
 
-// The button itself — see the note above on why the anchor has to be this element and not a stand-in.
+// The button itself: see the note above on why the anchor has to be this element and not a stand-in.
 const el = ref<HTMLButtonElement>();
 defineExpose({ el, label: modelLabelText });
 </script>

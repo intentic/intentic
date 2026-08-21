@@ -166,7 +166,7 @@ export const icCandidates = (platform: NodeJS.Platform, home: string | undefined
 export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undefined): string[] => {
     if (swap === "rebuild") {
         if (hash === undefined || hash === "") {
-            throw new Error(`"hash" is required to rebuild — it is the digest of the overlay the owner approved.`);
+            throw new Error(`"hash" is required to rebuild: it is the digest of the overlay the owner approved.`);
         }
         return ["sandbox", "rebuild", slug, hash];
     }

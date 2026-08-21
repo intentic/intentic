@@ -4,18 +4,18 @@ import { computed, nextTick, ref, watch } from "vue";
 import type { RunEvent } from "../desktop";
 import type { ProgressView } from "../setupPlan";
 
-/* WHAT AN INSTALL LOOKS LIKE WHILE IT RUNS — the plan, where in it we are, and how much is left.
+/* WHAT AN INSTALL LOOKS LIKE WHILE IT RUNS: the plan, where in it we are, and how much is left.
  *
  * This replaced a single line and a disclosure: the last thing the script said, and the log behind it. That
  * is enough to READ a run and nothing like enough to WAIT through one, because the two questions somebody
- * sitting in front of a four-minute image pull actually has — is it stuck, and how long — were both
+ * sitting in front of a four-minute image pull actually has (is it stuck, and how long) were both
  * unanswerable from it. An install is the one screen in this app where the user has nothing to do but
  * decide whether to keep waiting, and every affordance a real installer has exists to make that decision
  * for them.
  *
  * So: the whole plan is drawn before anything starts (setupPlan.ts), the current step names itself and
  * carries the script's own words underneath, and the bar is weighted by how long each step takes rather than
- * how many there are — a step counter alone would sit at "6 of 9" through the longest part of the install
+ * how many there are: a step counter alone would sit at "6 of 9" through the longest part of the install
  * and then finish three steps in four seconds.
  *
  * The log is still here, still behind a disclosure, and still opens ITSELF on failure: a run that stopped has
@@ -42,7 +42,7 @@ const failed = computed(() => exit.value?.kind === `exit` && !exit.value.ok);
  *
  * The source excerpt and the caret are for someone debugging the script; CategoryInfo and
  * FullyQualifiedErrorId name the .NET exception type, which is `WriteErrorException` for every error the
- * script raises on purpose and so says nothing about this one. Left in, they are the LAST lines — so a
+ * script raises on purpose and so says nothing about this one. Left in, they are the LAST lines, so a
  * "show me the end of stderr" rule shows the four that cannot help and hides the one that can, which is
  * exactly what a user meets on a failed setup. */
 const isPowerShellDecoration = (text: string): boolean => /^\s*\+ /.test(text) || /^At .+:\d+ char:\d+$/.test(text);
@@ -56,7 +56,7 @@ const failure = computed(() =>
         .join(`\n`),
 );
 
-// `immediate`, so a card that MOUNTS on a run that already failed opens the log too — closing the overlay
+// `immediate`, so a card that MOUNTS on a run that already failed opens the log too: closing the overlay
 // and coming back is the ordinary way to arrive at one, and it is exactly the reader who needs the detail.
 watch(
     failed,
@@ -82,7 +82,7 @@ watch(
 <template>
     <div class="flex flex-col gap-3">
         <!-- THE BAR, AND THE TWO NUMBERS EITHER SIDE OF IT. The percentage answers "is it moving", the
-             estimate answers "should I wait" — the two questions the old single line could not. -->
+             estimate answers "should I wait": the two questions the old single line could not. -->
         <div class="flex flex-col gap-1.5">
             <div class="flex items-baseline gap-2 text-2xs">
                 <span class="flex-1 font-medium text-content">{{ failed ? `Stopped` : (view.position ?? `Starting…`) }}</span>
@@ -98,7 +98,7 @@ watch(
         </div>
 
         <!-- THE PLAN, DRAWN IN FULL FROM THE FIRST FRAME. Steps that will not happen on this machine were
-             never in it, so nothing here is ever crossed out or skipped — what you see is what will run. -->
+             never in it, so nothing here is ever crossed out or skipped: what you see is what will run. -->
         <ol class="flex flex-col gap-1">
             <li v-for="step in view.steps" :key="step.phase" class="flex items-start gap-2 text-2xs">
                 <span class="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">
@@ -112,7 +112,7 @@ watch(
                         {{ step.label }}
                     </span>
                     <!-- The script's own sentence, under the step it belongs to. This is where the things
-                         only the script knows land — which image, how big, and "accept Docker's first-run
+                         only the script knows land, which image, how big, and "accept Docker's first-run
                          dialog if it shows", which is an instruction and not decoration. -->
                     <span v-if="step.detail" class="block truncate text-subtle">{{ step.detail }}</span>
                 </span>
@@ -124,7 +124,7 @@ watch(
         <div class="flex items-center gap-2 text-2xs">
             <!-- True, and the reason the × on this card is not a trap: the script is a process on this
                  machine, not something this window is holding up. -->
-            <span v-if="running" class="flex-1 text-subtle">You can close this — the install keeps going.</span>
+            <span v-if="running" class="flex-1 text-subtle">You can close this: the install keeps going.</span>
             <span v-else class="flex-1" />
             <button type="button" class="shrink-0 text-link hover:underline" @click="open = !open">
                 {{ open ? `Hide detail` : `Show detail` }}

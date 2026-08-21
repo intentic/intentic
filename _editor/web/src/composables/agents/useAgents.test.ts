@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // canArchive is pure, but it lives beside the fleet store, so importing it pulls useChat -> the app shell. Cut
 // the edges that need a browser at module-eval, exactly as useChat.test.ts does: the router (createWebHistory wants
 // window, and its @intentic/ui barrel drags in .vue files the node test env can't transform), plus the three
-// modules that reach environment.ts's window.env read — analytics (direct), useSandbox (via useApi), and
+// modules that reach environment.ts's window.env read: analytics (direct), useSandbox (via useApi), and
 // sandboxClient (via useGoogleIdentity). The projection under test touches none of them.
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../analytics", () => ({ track: vi.fn() }));
@@ -12,7 +12,7 @@ vi.mock("../sandbox/useSandbox", async () => {
     return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) };
 });
 // The scoping rule the key registry builds on, pinned to a fixed id so the assertions below can spell the whole
-// key out (activeSandbox is a leaf module — it needs no browser, only a predictable answer).
+// key out (activeSandbox is a leaf module: it needs no browser, only a predictable answer).
 vi.mock("../sandbox/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
 
@@ -25,7 +25,7 @@ import { queryClient } from "../queryPersistence";
 import { canArchive, FINISHED_WINDOW, type FleetAgent, resetAgents, resetArchive, setAgents, useAgents, windowFinished } from "./useAgents";
 
 /* The Finished lane's cap, and the one card it is never allowed to drop. The board draws a ring on whatever the
- * docked chat is pointing at, so a lane that culls that card leaves the ring nowhere at all — which reads as
+ * docked chat is pointing at, so a lane that culls that card leaves the ring nowhere at all, which reads as
  * "this chat is not an agent", not as "that card is further down". */
 describe("windowFinished", () => {
     const lane = (count: number): FleetAgent[] =>
@@ -56,7 +56,7 @@ describe("windowFinished", () => {
         expect(hidden).toBe(3);
     });
 
-    it("keeps the selected card whatever its age — pinned at the tail, and counted OUT of the row that hides the rest", () => {
+    it("keeps the selected card whatever its age: pinned at the tail, and counted OUT of the row that hides the rest", () => {
         const { shown, hidden } = windowFinished(lane(10), `a8`, byId);
 
         expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a8`]);
@@ -64,11 +64,11 @@ describe("windowFinished", () => {
         expect(hidden).toBe(2);
     });
 
-    it("leaves the lane alone when the selection is already inside the window — no card is ever shown twice", () => {
+    it("leaves the lane alone when the selection is already inside the window: no card is ever shown twice", () => {
         expect(windowFinished(lane(10), `a2`, byId)).toEqual(windowFinished(lane(10), undefined, byId));
     });
 
-    it("leaves it alone for a selection this lane does not hold — an active agent, an archived one, a plain chat", () => {
+    it("leaves it alone for a selection this lane does not hold: an active agent, an archived one, a plain chat", () => {
         expect(windowFinished(lane(10), `nowhere`, byId)).toEqual(windowFinished(lane(10), undefined, byId));
     });
 
@@ -79,9 +79,9 @@ describe("windowFinished", () => {
         expect(hidden).toBe(0);
     });
 
-    // The id the chat list windows by lives one level down, on the conversation the entry wraps — the case the
+    // The id the chat list windows by lives one level down, on the conversation the entry wraps: the case the
     // extractor exists for, and the one a `T extends { id }` constraint would have forced a duplicate field for.
-    it("windows entries whose id is not their own field — the chat list's wrapped conversations", () => {
+    it("windows entries whose id is not their own field: the chat list's wrapped conversations", () => {
         const chats = lane(10).map((agent) => ({ conversation: { conversationId: agent.id } }));
         const { shown, hidden } = windowFinished(chats, `a8`, (entry) => entry.conversation.conversationId);
 
@@ -97,7 +97,7 @@ describe("windowFinished", () => {
 describe("canArchive", () => {
     const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
 
-    it("takes the dead ends — a failed turn and an unlandable conflict are exactly what wants taking off the board", () => {
+    it("takes the dead ends: a failed turn and an unlandable conflict are exactly what wants taking off the board", () => {
         expect(canArchive({ status: `error`, attention: none })).toBe(true);
         expect(canArchive({ status: `conflict`, attention: { ...none, conflict: true } })).toBe(true);
         expect(canArchive({ status: `idle`, attention: { ...none, conflict: true } })).toBe(true);
@@ -108,7 +108,7 @@ describe("canArchive", () => {
         expect(canArchive({ status: `idle`, attention: none })).toBe(true);
     });
 
-    it("refuses an agent waiting to be told something — archiving would bury the question, not answer it", () => {
+    it("refuses an agent waiting to be told something: archiving would bury the question, not answer it", () => {
         expect(canArchive({ status: `awaiting`, attention: none })).toBe(false);
         expect(canArchive({ status: `running`, attention: { ...none, plan: true } })).toBe(false);
         expect(canArchive({ status: `running`, attention: { ...none, question: true } })).toBe(false);
@@ -118,11 +118,11 @@ describe("canArchive", () => {
     it("refuses a live turn (the worktree is its working state) and a draft (no registry entry to archive)", () => {
         expect(canArchive({ status: `running`, attention: none })).toBe(false);
         expect(canArchive({ status: `draft`, attention: none })).toBe(false);
-        // A REFUSED send is the other half of that same reason — it is in the Attention lane, where archiving
+        // A REFUSED send is the other half of that same reason: it is in the Attention lane, where archiving
         // is otherwise the move, but the daemon turned its request away and so has no entry to file. The
         // affordance the card offers instead is Close (AgentCard.closable).
         expect(canArchive({ status: `failed`, attention: none })).toBe(false);
-        // A stopped turn is still a live turn until its generator unwinds — the daemon holds the worktree for
+        // A stopped turn is still a live turn until its generator unwinds: the daemon holds the worktree for
         // the whole of it, and that window is exactly when a user reaches for the next control.
         expect(canArchive({ status: `stopping`, attention: none })).toBe(false);
     });
@@ -170,7 +170,7 @@ describe("roster titles", () => {
     });
 
     it("leaves a tab that named itself alone while its entry carries no title", async () => {
-        // A draft's first turn has not begun, so the roster knows the conversation without knowing its name —
+        // A draft's first turn has not begun, so the roster knows the conversation without knowing its name:
         // adopting that absence would blank a tab the browser had already titled from the prompt.
         const conversation = new Conversation(`a1`);
         conversation.title.value = `The login page throws on submit`;
@@ -184,11 +184,11 @@ describe("roster titles", () => {
 });
 
 /* The review panel's diff query is pull-only while the roster is push-fed, so a status transition is the one
- * signal that a land performed elsewhere — the auto-land at turn completion, another device's button — changed
+ * signal that a land performed elsewhere (the auto-land at turn completion, another device's button) changed
  * what that query holds. Without it the header said "Landed" over a review still counting every file as
  * pending, with Land now armed. */
 describe("diff invalidation", () => {
-    // seenAt outruns updatedAt so nothing here reads as unread — the markSeen watcher must stay out of a
+    // seenAt outruns updatedAt so nothing here reads as unread: the markSeen watcher must stay out of a
     // suite that is about cache invalidation, not read markers.
     const summary = (id: string, status: AgentSummary["status"]): AgentSummary => ({
         id,
@@ -204,7 +204,7 @@ describe("diff invalidation", () => {
         resetAgents();
     });
 
-    it("invalidates an agent's diff on a status transition — the auto-land flip this browser never performed", () => {
+    it("invalidates an agent's diff on a status transition: the auto-land flip this browser never performed", () => {
         setAgents([summary(`a1`, `running`)], 1);
         const invalidate = vi.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
 
@@ -214,7 +214,7 @@ describe("diff invalidation", () => {
         invalidate.mockRestore();
     });
 
-    it("stays quiet across frames that only tick activity — a running turn must not hammer the diff", () => {
+    it("stays quiet across frames that only tick activity: a running turn must not hammer the diff", () => {
         setAgents([summary(`a1`, `running`)], 1);
         const invalidate = vi.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
 
@@ -224,7 +224,7 @@ describe("diff invalidation", () => {
         invalidate.mockRestore();
     });
 
-    it("treats an unseen id as a transition — a reconnect's first snapshot may carry a land that happened offline", () => {
+    it("treats an unseen id as a transition: a reconnect's first snapshot may carry a land that happened offline", () => {
         const invalidate = vi.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
 
         setAgents([summary(`a1`, `landed`)], 0);
@@ -234,11 +234,11 @@ describe("diff invalidation", () => {
     });
 });
 
-/* The DRAFT card — the fleet's one client-only state, there so "New agent" has a visible result on the board
+/* The DRAFT card: the fleet's one client-only state, there so "New agent" has a visible result on the board
  * before the first turn registers anything. It used to be derived from "this open tab has no entry on the live
  * roster", which is also true of every agent the user ARCHIVES (the roster carries live agents only) and of
- * every agent at all while the events stream is down. So an archived agent with a tab still open — read from the
- * archive view, or caught by the daemon's retention sweep — came straight back as a brand-new card in the ACTIVE
+ * every agent at all while the events stream is down. So an archived agent with a tab still open: read from the
+ * archive view, or caught by the daemon's retention sweep: came straight back as a brand-new card in the ACTIVE
  * lane. The rule is now a one-way latch on the conversation: a draft is one the fleet has NEVER registered. */
 describe("draft cards", () => {
     const registered = (id: string): AgentSummary => ({
@@ -250,7 +250,7 @@ describe("draft cards", () => {
         attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
     });
 
-    // The lane the phantom card landed in, by id — the board's own list, not a count, so a case can say which
+    // The lane the phantom card landed in, by id: the board's own list, not a count, so a case can say which
     // agent is on it and not merely how many.
     const activeIds = (): string[] => useAgents().lanes.value.active.map((entry) => entry.id);
 
@@ -267,8 +267,8 @@ describe("draft cards", () => {
             .mockResolvedValue({ ok: false } as never);
         resetAgents();
         useAgents().archived.value = [];
-        // One open tab per case, installed by the case itself. The list is never emptied — useChat guarantees
-        // an active conversation at all times — so this registered placeholder keeps that invariant without
+        // One open tab per case, installed by the case itself. The list is never emptied: useChat guarantees
+        // an active conversation at all times, so this registered placeholder keeps that invariant without
         // posing as another draft under test.
         const other = new Conversation();
         other.isolated.value = false;
@@ -291,13 +291,13 @@ describe("draft cards", () => {
     });
 
     /* AN UNREGISTERED CONVERSATION CARRYING AN ERROR IS NOT A DRAFT. The only way one gets here is that its send
-     * was REFUSED — the daemon turns a request away and never makes an entry, which is precisely why the fleet
+     * was REFUSED: the daemon turns a request away and never makes an entry, which is precisely why the fleet
      * has never heard of it. Reading that as a draft put a card nobody can act on into the Active lane, sorted
      * ABOVE the agents genuinely working (drafts lead that lane), where it survived every reload for the life of
      * the sandbox: the report this came from had ten of them.
      *
      * Attention is where it belongs and `Didn't start` is what the chip says, because the card IS a thing that
-     * needs the user — and what they do about it is close it, which is the affordance that standing unlocks. */
+     * needs the user, and what they do about it is close it, which is the affordance that standing unlocks. */
     it("cards a conversation whose send was refused as failed, in Attention rather than among the working", () => {
         const conversation = new Conversation(`refused`);
         conversation.error.value = `invalid attachment path: nope.png`;
@@ -309,7 +309,7 @@ describe("draft cards", () => {
         ]);
     });
 
-    // The error is about the LAST send, not about the conversation — a turn that goes through clears it, and the
+    // The error is about the LAST send, not about the conversation: a turn that goes through clears it, and the
     // card has to follow rather than wear a refusal the user has already sent past.
     it("cards it as a draft again once a turn is under way", () => {
         const conversation = new Conversation(`refused`);
@@ -323,7 +323,7 @@ describe("draft cards", () => {
     /* A SENT TURN THE DAEMON HAS NOT FILED YET is `starting`, and the card says what this browser knows about it.
      *
      * It used to report the wire's own `running` and carry the four identity fields alone, so the board drew a
-     * title under a spinner and nothing else — no model, no elapsed — for as long as the filing took. */
+     * title under a spinner and nothing else (no model, no elapsed) for as long as the filing took. */
     it("cards a sent turn the fleet has not registered as starting, with the settings and elapsed it knows", () => {
         const conversation = new Conversation(`sent`);
         conversation.model.value = `claude-opus-5`;
@@ -336,12 +336,12 @@ describe("draft cards", () => {
         ).toEqual([{ id: `sent`, status: `starting`, model: `claude-opus-5`, startedAt: 4_000 }]);
     });
 
-    /* CLICKING ONE MUST NOT TAKE IT OFF THE BOARD — the reported bug, in one case.
+    /* CLICKING ONE MUST NOT TAKE IT OFF THE BOARD: the reported bug, in one case.
      *
      * `open` latches the tab as registered for a card the fleet DOES know, which is right for every registry card
      * and was being applied to this one too, because `running` was indistinguishable from the daemon's own
      * running. The drafts half then skipped the conversation for being registered and the registry had no entry
-     * to render instead, so the agent vanished from every lane on the very click meant to open it — and only a
+     * to render instead, so the agent vanished from every lane on the very click meant to open it, and only a
      * reload brought it back. */
     it("keeps a starting card on the board when it is opened, and leaves its placement alone", () => {
         const conversation = new Conversation(`sent`);
@@ -356,7 +356,7 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([`sent`]);
     });
 
-    it("stops carding a conversation once the roster registers it — one card, from the registry", () => {
+    it("stops carding a conversation once the roster registers it: one card, from the registry", () => {
         const conversation = new Conversation(`a1`);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
@@ -383,7 +383,7 @@ describe("draft cards", () => {
     });
 
     // The same hole, reached from the other side: an archived agent keeps its branch, its diff and its
-    // transcript, so reading one from the archive is a real destination — and it OPENS the tab, which must not
+    // transcript, so reading one from the archive is a real destination, and it OPENS the tab, which must not
     // put the card the user just filed away straight back on the board.
     it("leaves it off the board when its tab is opened from the archive", () => {
         const { archived, open } = useAgents();
@@ -407,8 +407,8 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([]);
     });
 
-    /* A CONVERSATION REOPENED FROM HISTORY IS NOT A DRAFT. It has no registry entry — the agent that ran it is
-     * long gone, or it was a plain chat — so it lands in this same client-only half, and calling that a draft
+    /* A CONVERSATION REOPENED FROM HISTORY IS NOT A DRAFT. It has no registry entry: the agent that ran it is
+     * long gone, or it was a plain chat, so it lands in this same client-only half, and calling that a draft
      * put a three-week-old conversation at the HEAD of the Active lane wearing "Draft": the board announcing
      * the user's own history as work about to begin. Nothing is running and nothing is owed, which is
      * `finished`. */
@@ -427,7 +427,7 @@ describe("draft cards", () => {
      *
      * Reading an agent out of the archive opens its chat by design, and typing there is the ordinary next move.
      * The board had no card for it, so clearing the search that found it left the half-written message with
-     * nowhere to be seen from — the report this came from. It is lifted for exactly as long as the words are
+     * nowhere to be seen from: the report this came from. It is lifted for exactly as long as the words are
      * there, says "archived" on its face (archivedAt survives the lift), and nothing is written daemon-side. */
     it("lifts an archived session back onto the board while its chat holds an unsent message", () => {
         const { archived, open } = useAgents();
@@ -443,7 +443,7 @@ describe("draft cards", () => {
         ]);
     });
 
-    // ...and it files itself straight back when they go. Whitespace is not a message — send() refuses it too, so
+    // ...and it files itself straight back when they go. Whitespace is not a message: send() refuses it too, so
     // a stray space must not be what keeps a card on the board for the rest of the day.
     it("puts it back in the archive the moment the message is cleared", () => {
         const { archived, open } = useAgents();
@@ -460,7 +460,7 @@ describe("draft cards", () => {
 });
 
 /* THE FOLD, AND WHAT IT MAY NOT SWALLOW. The Finished lane windows to FINISHED_WINDOW cards while it is being
- * browsed, ordered by recency — so an old session is behind the fold by definition, which is fine right up
+ * browsed, ordered by recency, so an old session is behind the fold by definition, which is fine right up
  * until the user starts writing in one. Those words live in this window and nowhere else, so the ordering puts
  * them in front of the fold and the only thing that can push one behind it is MORE unsent messages than the
  * window has room for: at that point they are hiding each other rather than being hidden by unrelated work. */
@@ -484,7 +484,7 @@ describe("the finished fold", () => {
     });
 
     // The reported case, at the store level: the session the user searched up is the oldest thing in the lane,
-    // so the fold has it — until they start writing, at which point it leads the lane instead.
+    // so the fold has it, until they start writing, at which point it leads the lane instead.
     it("holds the oldest finished card in front of the fold when its chat has a message waiting", () => {
         const oldest = `a${FINISHED_WINDOW + 1}`;
         const conversation = new Conversation(oldest);
@@ -504,7 +504,7 @@ describe("the finished fold", () => {
 
     // Ordering, not pinning: the cards holding words lead the lane (newest of them first, the lane's own rule),
     // and the window then falls where it falls. Past a window's worth of them the fold is back, which is the
-    // honest outcome — the lane is a browsing list, not a promise to draw everything at once.
+    // honest outcome: the lane is a browsing list, not a promise to draw everything at once.
     it("orders every unsent card ahead of the sent ones", () => {
         const held = [`a6`, `a7`, `a8`].map((id) => {
             const conversation = new Conversation(id);
@@ -527,7 +527,7 @@ describe("the finished fold", () => {
     });
 });
 
-/* CARDS THAT WOULD NOT SIT STILL — the reported bug, and the argument for the tiebreaker every lane order now
+/* CARDS THAT WOULD NOT SIT STILL: the reported bug, and the argument for the tiebreaker every lane order now
  * ends on.
  *
  * A tie in a sort is not a draw, it is a question passed down: the order falls to the array underneath, and
@@ -535,7 +535,7 @@ describe("the finished fold", () => {
  * at a time and out of step with the rest, so every activity frame dealt the tied cards a fresh order and the
  * column reshuffled itself under the user's eyes.
  *
- * The ties are ordinary. Agents resumed TOGETHER — one credential renewal bringing a batch of turns back —
+ * The ties are ordinary. Agents resumed TOGETHER: one credential renewal bringing a batch of turns back:
  * begin in the same millisecond, so they carry an identical `startedAt` for as long as they run. */
 describe("lane order holds still", () => {
     const running = (id: string, startedAt: number, updatedAt: number): AgentSummary => ({
@@ -568,7 +568,7 @@ describe("lane order holds still", () => {
         const settled = activeIds();
 
         expect(settled).toHaveLength(4);
-        // Each in turn becomes the most recently active — the frames that used to re-deal the lane.
+        // Each in turn becomes the most recently active: the frames that used to re-deal the lane.
         for (const [at, live] of batch.entries()) {
             setAgents(
                 batch.map((id) => running(id, 5_000, id === live ? 6_000 + at : 5_000)),
@@ -580,7 +580,7 @@ describe("lane order holds still", () => {
     });
 
     // Attention orders on `updatedAt` alone, so a batch that also stalls together (two agents asking at once)
-    // ties outright — the same churn, one lane over.
+    // ties outright: the same churn, one lane over.
     it("holds the attention lane still when two cards share an updatedAt", () => {
         const asking = (id: string): AgentSummary => ({
             ...running(id, 5_000, 7_000),
@@ -590,7 +590,7 @@ describe("lane order holds still", () => {
         setAgents([asking(`b`), asking(`a`)], 1);
         const settled = useAgents().lanes.value.attention.map((entry) => entry.id);
 
-        // The daemon's own roster order is not a promise — the same agents arrive the other way round on the
+        // The daemon's own roster order is not a promise: the same agents arrive the other way round on the
         // next frame, and the lane may not move because of it.
         setAgents([asking(`a`), asking(`b`)], 2);
 
@@ -611,14 +611,14 @@ describe("archive", () => {
     });
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
     const post = vi.mocked(sandboxJson);
-    // The tabs whose conversation is one of THIS suite's agents — the strip also carries the main-tree chat the
+    // The tabs whose conversation is one of THIS suite's agents: the strip also carries the main-tree chat the
     // reset installs, which no archive is about.
     const openTabs = (): string[] =>
         useChat()
             .conversations.value.map((conversation) => conversation.conversationId)
             .filter((id) => [`a`, `b`].includes(id));
 
-    // The store is a module singleton (one board per app), so each case resets what it looks at — resetAgents
+    // The store is a module singleton (one board per app), so each case resets what it looks at: resetAgents
     // drops the roster, the undo set and both reports, since all of them were promises about one daemon. The
     // tab strip is reset too, since archiving now writes to it: one MAIN-TREE chat, which is not fleet work and
     // cards nothing, so a case that wants an agent's tab open installs it itself.
@@ -644,13 +644,13 @@ describe("archive", () => {
 
         expect(post).toHaveBeenCalledWith(`/agents/archive`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ ids: [`a`] }) }));
         expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
-        // The archive half is filled from the same response — no second round-trip, so the detail page's
+        // The archive half is filled from the same response: no second round-trip, so the detail page's
         // cross-half lookup resolves an agent archived under the user's cursor.
         expect(archived.value.map((entry) => entry.id)).toEqual([`a`]);
         // The whole point of the rework: one card is the routine case, and the routine case interrupts nobody.
         expect(receipt.value).toBeUndefined();
         expect(notice.value).toBeUndefined();
-        // Quiet is not the same as unrecoverable — the undo is held, and the counter is told to pulse.
+        // Quiet is not the same as unrecoverable: the undo is held, and the counter is told to pulse.
         expect(undoable.value).toEqual([`a`]);
         expect(archivedFlash.value).toBe(flashes + 1);
     });
@@ -658,7 +658,7 @@ describe("archive", () => {
     /* THE PRESS PAINTS; THE REQUEST FOLLOWS IT.
      *
      * Behind one press sit a commit of whatever the worktree held, a checkout teardown and a ref park, per repo
-     * — so the card used to hold still for as long as the git took, which on a board carrying a fleet's worth
+     *, so the card used to hold still for as long as the git took, which on a board carrying a fleet's worth
      * of finished sessions reads as a button that did nothing. The card leaves on the press instead, and the
      * daemon's answer only ever corrects it: what it declined comes back, and a failure brings back the lot. */
     describe("before the daemon has answered", () => {
@@ -699,8 +699,8 @@ describe("archive", () => {
             expect(notice.value).toContain(`the agent's turn is running`);
         });
 
-        // The removal is a guess about what the daemon will take. An agent it declines — a turn that started
-        // under the press, a worktree that would not retire — is a card that must come back, while the ones
+        // The removal is a guess about what the daemon will take. An agent it declines: a turn that started
+        // under the press, a worktree that would not retire: is a card that must come back, while the ones
         // beside it stay gone.
         it("hands back exactly what the daemon declined", async () => {
             const { archive, lanes, archived, undoable } = useAgents();
@@ -726,8 +726,8 @@ describe("archive", () => {
             expect(receipt.value?.message).toContain(`Nothing to archive`);
         });
 
-        /* The rollback withdraws only its OWN unanswered intent. Two presses can be open on one card — the card
-         * menu of a card still animating out, a double press — and if the one that FAILS is the one that
+        /* The rollback withdraws only its OWN unanswered intent. Two presses can be open on one card: the card
+         * menu of a card still animating out, a double press, and if the one that FAILS is the one that
          * answers last, dropping the hold the successful one left would put an archived card back on the board
          * for good. So the failure hands back only what nobody has since archived. */
         it("leaves a card another press did archive off the board when it rolls back", async () => {
@@ -775,7 +775,7 @@ describe("archive", () => {
         expect(undoable.value).toEqual([]);
     });
 
-    // Mod+Z reaches the last archive whether or not a receipt was ever raised — which, for the single-card
+    // Mod+Z reaches the last archive whether or not a receipt was ever raised, which, for the single-card
     // case, it never is. Without this the quiet archive would be the unrecoverable one.
     it("undoes a silent single archive from the keyboard", async () => {
         const { archive, undoArchive, undoable, lanes } = useAgents();
@@ -815,7 +815,7 @@ describe("archive", () => {
         expect(undoable.value).toEqual([`b`]);
     });
 
-    // One agent is a card and a tab, so the archive moves both — driven off `moved`, so a bulk sweep closes
+    // One agent is a card and a tab, so the archive moves both: driven off `moved`, so a bulk sweep closes
     // exactly the chats whose cards left and no others.
     it("closes the chat tabs of the cards that moved, and only those", async () => {
         const { archive } = useAgents();
@@ -851,7 +851,7 @@ describe("archive", () => {
         expect(receipt.value?.undo).toBeUndefined();
     });
 
-    // A failure is the one thing here that must be read, so it lands on the strip that has no timer — never
+    // A failure is the one thing here that must be read, so it lands on the strip that has no timer: never
     // on the receipt, which retires itself whether or not anyone looked.
     it("reports a failure on the persistent strip, without dropping any cards off the board", async () => {
         const { archive, notice, receipt, lanes } = useAgents();
@@ -865,7 +865,7 @@ describe("archive", () => {
         expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`a`]);
     });
 
-    // Clicking card after card is the normal way this gets used, so overlapping calls are the normal case —
+    // Clicking card after card is the normal way this gets used, so overlapping calls are the normal case:
     // not an edge one. Each of these pins something that broke when the two requests shared one piece of state.
     describe("overlapping archives", () => {
         // Resolves when the test says so, so two archives can be held open at once.
@@ -953,7 +953,7 @@ describe("archive", () => {
 
         // The roster arrives as full snapshots from three racing sources (the /events stream, refresh(), and
         // this browser's own writes), so "which one is newest" cannot be "which one landed last". These pin the
-        // ordering rules that replaced last-frame-wins — each was a way an archived card came back.
+        // ordering rules that replaced last-frame-wins: each was a way an archived card came back.
         it("ignores a roster snapshot older than the one already applied", () => {
             const { lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 5);
@@ -981,7 +981,7 @@ describe("archive", () => {
             post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 9 } as never);
             await archive([`a`]);
 
-            // The roster that reflects the archive retires the local intent — and the daemon is authoritative
+            // The roster that reflects the archive retires the local intent, and the daemon is authoritative
             // again, so an agent it has since restored elsewhere reappears instead of being held off forever.
             setAgents([agent(`a`), agent(`b`)], 9);
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
@@ -996,7 +996,7 @@ describe("archive", () => {
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
         });
 
-        // The way back no longer hangs off the message offering it — which is what lets the message expire on
+        // The way back no longer hangs off the message offering it, which is what lets the message expire on
         // a timer, and lets the single-card archive have no message at all.
         it("keeps the undo after the receipt that announced it is gone", async () => {
             const { archive, receipt, dismissReceipt, undoable } = useAgents();
@@ -1012,10 +1012,10 @@ describe("archive", () => {
     });
 });
 
-/* The archive list is the fleet's pull-only half — no stream carries it — so its one invalidation signal is an
+/* The archive list is the fleet's pull-only half: no stream carries it, so its one invalidation signal is an
  * id leaving the roster by another hand than this browser's (the daemon's retention sweep, another device's
  * archive or discard). Without it the Finished header's count, and the archive door it gates, froze at
- * whatever the last visit read — which is how the door came to look like it disappears. */
+ * whatever the last visit read, which is how the door came to look like it disappears. */
 describe("the archive list", () => {
     const agent = (id: string): AgentSummary => ({
         id,
@@ -1039,7 +1039,7 @@ describe("the archive list", () => {
         useChat().conversations.value = [other];
     });
 
-    it("re-reads itself when an id leaves the roster by another hand — the daemon's sweep, another device", async () => {
+    it("re-reads itself when an id leaves the roster by another hand: the daemon's sweep, another device", async () => {
         const { archived } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
         post.mockResolvedValueOnce({ agents: [archivedAgent(`b`)] } as never);
@@ -1051,20 +1051,20 @@ describe("the archive list", () => {
         expect(archivedReads()).toBe(1);
     });
 
-    it("stays quiet when the departure is this browser's own archive — both halves are already written", async () => {
+    it("stays quiet when the departure is this browser's own archive: both halves are already written", async () => {
         const { archive } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
         post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
         await archive([`a`]);
 
-        // The daemon's own account of the archive, and a later unrelated frame — neither is news to the list.
+        // The daemon's own account of the archive, and a later unrelated frame: neither is news to the list.
         setAgents([agent(`b`)], 2);
         setAgents([agent(`b`)], 3);
 
         expect(archivedReads()).toBe(0);
     });
 
-    it("stays quiet across a reconnect's first snapshot — a reset board has no ids to depart", () => {
+    it("stays quiet across a reconnect's first snapshot: a reset board has no ids to depart", () => {
         setAgents([agent(`a`)], 42);
         resetAgents();
 
@@ -1073,7 +1073,7 @@ describe("the archive list", () => {
         expect(archivedReads()).toBe(0);
     });
 
-    it("is cleared by resetArchive alone — a stream failure must not blank the archive door", async () => {
+    it("is cleared by resetArchive alone: a stream failure must not blank the archive door", async () => {
         const { archived } = useAgents();
         archived.value = [Object.assign(archivedAgent(`a`), { open: false, unread: false, unsent: false })];
 
@@ -1090,7 +1090,7 @@ describe("the archive list", () => {
 /* THE SWEEP'S OTHER HALF. One agent is a card and a tab, and the two only ever moved together when the press
  * happened in this browser: archiving from the board closed the chat with the card, while the daemon's own
  * retention sweep took the card and left the tab. So the board stayed seven deep while the chat list's Finished
- * lane grew for the life of the sandbox — the thing the user reports as "my popped-out chat never cleans up".
+ * lane grew for the life of the sandbox: the thing the user reports as "my popped-out chat never cleans up".
  * Same departure signal as the archive list above, applied to the strip. */
 describe("tabs the daemon retired", () => {
     const agent = (id: string): AgentSummary => ({
@@ -1102,7 +1102,7 @@ describe("tabs the daemon retired", () => {
         attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
     });
     const openTabs = (): string[] => useChat().conversations.value.map((conversation) => conversation.conversationId);
-    // A tab the roster has latched as registered — an untouched draft would be swept by the tab list's own
+    // A tab the roster has latched as registered: an untouched draft would be swept by the tab list's own
     // rules, and would prove nothing about this one.
     const openAgentTab = (id: string): Conversation => {
         const conversation = new Conversation(id);
@@ -1144,7 +1144,7 @@ describe("tabs the daemon retired", () => {
         expect(openTabs()).toContain(`a`);
     });
 
-    // Everything else a chat holds survives a close — the transcript is in History, the turn detaches, the
+    // Everything else a chat holds survives a close: the transcript is in History, the turn detaches, the
     // branch is on the daemon. A half-typed message does not.
     it("spares one holding unsent input", () => {
         const drafted = openAgentTab(`a`);
@@ -1158,7 +1158,7 @@ describe("tabs the daemon retired", () => {
     });
 
     // The departure signal is "left by another hand". A reconnect resets the board, so its first snapshot has
-    // nothing to compare against — and must not read as the whole fleet being swept.
+    // nothing to compare against, and must not read as the whole fleet being swept.
     it("keeps every tab across a reconnect's first snapshot", () => {
         openAgentTab(`a`);
         setAgents([agent(`a`)], 7);

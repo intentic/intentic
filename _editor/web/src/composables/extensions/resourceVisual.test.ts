@@ -18,7 +18,7 @@ describe(`resourceIcon`, () => {
 describe(`resourceLogoUrl`, () => {
     it(`builds a simple-icons CDN url, using the real slug where it differs from the kind`, () => {
         expect(resourceLogoUrl(`cloudflare`)).toBe(`https://cdn.simpleicons.org/cloudflare`);
-        // Slug ≠ kind — exactly the part TypeScript can't guard, so pin it.
+        // Slug ≠ kind: exactly the part TypeScript can't guard, so pin it.
         expect(resourceLogoUrl(`postgres`)).toBe(`https://cdn.simpleicons.org/postgresql`);
         expect(resourceLogoUrl(`paperless`)).toBe(`https://cdn.simpleicons.org/paperlessngx`);
         // The `/color` suffix keeps GitHub's near-black mark visible on the dark card.

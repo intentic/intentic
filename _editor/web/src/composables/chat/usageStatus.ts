@@ -360,7 +360,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
  * the unit of the fleet's capacity is a COUNT of accounts by band.
  *
  * Counts, never a mean utilization. Averaging 31 separate pools produces a number that describes no account and
- * hides the only one that matters — 30 idle accounts and one spent one is not "3% used", it is "one account you
+ * hides the only one that matters: 30 idle accounts and one spent one is not "3% used", it is "one account you
  * can't use". Each band is a decision: run on it, avoid a long turn on it, don't route to it, or don't know. */
 
 // Ordered worst-first: the same order the segments are drawn and the counts are read in, so the bar, the legend
@@ -570,7 +570,7 @@ export const refusalNote = (
     const answer = refusalAnswer(refusal, readings);
     const opening = `${REFUSAL_CONDITION[refusal.kind]} ${formatAge(refusal.at, now)}`;
     return {
-        line: answer === undefined ? `${opening} — ${refusal.message}` : `${opening} — ${answer}.`,
+        line: answer === undefined ? `${opening}, ${refusal.message}` : `${opening}, ${answer}.`,
         detail: refusal.message,
         current: answer === undefined,
     };

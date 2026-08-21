@@ -34,19 +34,19 @@ import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "../composables/agents/reviewGroupPass";
 import { basename } from "@intentic/ui/path";
 
-/* One agent's work, as a REVIEW: the file list on the left, that file's diff on the right, in this view — the
+/* One agent's work, as a REVIEW: the file list on the left, that file's diff on the right, in this view, the
  * shape every code review has (GitHub, VSCode's SCM, `git add -p`), because the job is scanning a body of
  * changes fast enough to decide whether to land them.
  *
  * Three things this is built around, each replacing something the old panel got wrong:
  *   - THE DIFF IS HERE. Clicking a file used to push a workspace tab and NAVIGATE AWAY to /workspace, which
  *     abandoned the review to look at one file. The diff now renders next to the list (Monaco, the same engine
- *     the editor uses), so the next file is one keystroke away. Opening it in the workspace is still offered —
+ *     the editor uses), so the next file is one keystroke away. Opening it in the workspace is still offered:
  *     as a deliberate secondary action, for when a file needs the full editor.
  *   - EACH COLUMN CARRIES ITS OWN BAR, and neither spans both. The list's header counts and narrows the FILES;
  *     the diff's (DiffToolbar, the same one the workspace tab renders) names and configures the FILE you are
  *     reading. What used to sit above both was a single full-width strip holding eleven targets and three
- *     unrelated jobs — what's in this changeset, narrow the list, end the session — so it stated the file count
+ *     unrelated jobs: what's in this changeset, narrow the list, end the session, so it stated the file count
  *     four times over and put Discard eight pixels from Land. The session half of it now lives in the page
  *     header above (AgentDetail); the two bars here are exactly as wide as the thing they describe.
  *   - LANDED WORK IS STILL WORK. The list is the agent's CUMULATIVE output (see useAgentChanges), not the
@@ -54,13 +54,13 @@ import { basename } from "@intentic/ui/path";
  *     an empty panel for everything the agent had just written. Rows carry `landed`; the toolbar counts what is
  *     left, and the SegmentedControl filters down to it.
  *   - A REVIEW HAS PROGRESS. Files can be ticked off as you look at them (viewed, GitHub-style), the toolbar
- *     shows the count, and `v` ticks the current file and advances — so a 30-file scan has a place to stop and
+ *     shows the count, and `v` ticks the current file and advances, so a 30-file scan has a place to stop and
  *     resume rather than being a wall of paths. Whole HEADINGS tick too (ReviewGroupCheck, `⇧V`): the mark
  *     tracks the reader's attention rather than gating anything, and attention is allocated by package. Every
- *     heading also COLLAPSES — repo AND package — so the packages a review isn't about (a lockfile bump, a
+ *     heading also COLLAPSES: repo AND package, so the packages a review isn't about (a lockfile bump, a
  *     generated client, forty test fixtures) fold away instead of pushing the ones it is about off-screen.
  *   - A CONFLICT IS A PROPERTY OF FILES. When a land refuses, the report above says how many refused and why;
- *     the LIST says which. Every blocked row carries its cause (REASON_COPY — the report's own vocabulary and
+ *     the LIST says which. Every blocked row carries its cause (REASON_COPY: the report's own vocabulary and
  *     the report's own glyph), each repo heading carries its count so a collapsed group cannot hide one, and
  *     the filter narrows to exactly them. Without this the two halves of a conflict lived apart: a paragraph
  *     naming three paths, above thirty rows that all looked alike, and the user matching strings by eye.
@@ -68,21 +68,21 @@ import { basename } from "@intentic/ui/path";
  * Keyboard, while focus isn't in a text field or inside Monaco: ↑/↓ or j/k move, v marks viewed and advances,
  * ⇧V marks the current heading's rows and advances past them.
  * The conflict ladder's two gates are not the same gate, because its two offers are not the same kind of act.
- * Asking the agent to resolve STARTS A TURN, and a conversation already holding one refuses the second — so it
+ * Asking the agent to resolve STARTS A TURN, and a conversation already holding one refuses the second, so it
  * waits for any live turn, parked or not. The merge is a land: it only reads the agent's checkout, so it waits
  * only while the agent is actually writing (see agents.routes.ts landable). */
 
 const { agentId, changes } = defineProps<{
     agentId: string;
-    // The review's state, created and owned by AgentDetail — see the note there. This panel reads it and fires
+    // The review's state, created and owned by AgentDetail: see the note there. This panel reads it and fires
     // the conflict ladder's own actions through it; Land, archive, discard and hold fire from the page header.
     changes: ReturnType<typeof useAgentChanges>;
-    // Whether THIS browser is streaming the agent's turn — what the "have the agent resolve it" offer waits on.
+    // Whether THIS browser is streaming the agent's turn: what the "have the agent resolve it" offer waits on.
     streaming: boolean;
     // The narrow half: the agent is mid-write, so a land would catch it half-done. What the merge offer waits on.
     writing: boolean;
 }>();
-// "Watch it work" — the conflict block's link to the turn it just started. On desktop the conversation is
+// "Watch it work": the conflict block's link to the turn it just started. On desktop the conversation is
 // already on screen in the docked chat, so this is a mobile affair: only there is the chat a mode this view
 // has to be switched INTO, and only the parent owns that switch.
 const emit = defineEmits<{ chat: [] }>();
@@ -94,14 +94,14 @@ const { openDiff } = useWorkspaceTabs();
 
 // --- the list ------------------------------------------------------------------------------------------
 /* THE NARROWING CONTROL. Every option is offered exactly while it would tell the user something they cannot
- * already see, and each is dropped for its own reason — which is why this is a list built per state rather
+ * already see, and each is dropped for its own reason, which is why this is a list built per state rather
  * than one `splittable` flag over the whole control. That flag was "is the unlanded set a proper subset", and
  * it hid the SegmentedControl ENTIRELY whenever it wasn't: a refused land is atomic, so it leaves every row unlanded,
  * so the one state where narrowing matters most was the one state with no control to do it.
  *
- *   Blocked     — what refused. First, because when it exists it is the only reason the user is on this panel.
- *   Code/Tests  — the product change vs the proof, offered only when the review holds both.
- *   Not landed  — the remainder Land now would apply, offered only while it is a PROPER subset: with nothing
+ *   Blocked    : what refused. First, because when it exists it is the only reason the user is on this panel.
+ *   Code/Tests : the product change vs the proof, offered only when the review holds both.
+ *   Not landed , the remainder Land now would apply, offered only while it is a PROPER subset: with nothing
  *                 landed it filters nothing, and with everything landed it would empty the panel. */
 type ReviewFilter = `all` | `blocked` | `code` | `tests` | `pending`;
 const filter = ref<ReviewFilter>(`all`);
@@ -128,11 +128,11 @@ watch(filterOptions, (options) => {
 
 /* WHAT IS FOLDED AWAY, at both scopes the list has headings for: a repo, and a package inside it. Two sets
  * rather than one, because a package is only ever addressed together with its repo (the same package name can
- * appear under two of them) — but one gesture, so a heading is a heading wherever you click it.
+ * appear under two of them), but one gesture, so a heading is a heading wherever you click it.
  *
  * Per-package collapse is what makes a big landing readable at all: 187 files across four packages is one
  * package you are reviewing and three that are noise TO YOU, and without this the only way to get the noise
- * off the screen was to fold its whole repo — which in a monorepo is everything. Deliberately not persisted:
+ * off the screen was to fold its whole repo, which in a monorepo is everything. Deliberately not persisted:
  * which packages are noise is a property of the change being read, not of the user, and a fold restored from
  * last week's review is a file hidden for a reason nobody remembers. */
 const collapsed = ref<ReadonlySet<string>>(new Set());
@@ -157,7 +157,7 @@ const filtered = computed<readonly AgentReviewFile[]>(() => {
     if (filter.value === `pending`) {
         return changes.files.value.filter((file) => !file.change.landed);
     }
-    // The change vs the proof — the contract's isTestPath, the same classifier the header chips total.
+    // The change vs the proof: the contract's isTestPath, the same classifier the header chips total.
     if (filter.value === `code` || filter.value === `tests`) {
         return changes.files.value.filter((file) => isTestPath(file.change.path) === (filter.value === `tests`));
     }
@@ -165,25 +165,25 @@ const filtered = computed<readonly AgentReviewFile[]>(() => {
 });
 
 /* HOW BIG EACH CHANGE IS IN THE READING ON SCREEN. The diffs here open on code alone unless the reader asks for
- * the comments back, so the counts beside them do too — see useCodeStats for where they come from and why they
+ * the comments back, so the counts beside them do too: see useCodeStats for where they come from and why they
  * arrive rather than being computed here. Scoped by agent, since the store is shared with every other review
  * surface in the app and two agents can be holding the same path.
  *
  * Three answers, not two: this file's stripped counts, git's own (for a file with nothing to strip), or that the
- * reading is still being worked out — which the badge prints as such instead of standing git's number in for it.
+ * reading is still being worked out, which the badge prints as such instead of standing git's number in for it.
  * The background reader has normally settled every row of this review before the page opens; a row that arrives
  * ahead of it says "counting" for a moment rather than showing a number that would then change. */
 const { countOf } = useCodeStats();
 const codeOf = (file: AgentReviewFile): CodeCount => countOf(agentStatKey(agentId, file.repo, file.change.path));
 
-/* What a heading says about the rows under it — at BOTH scopes, because both fold. A collapsed heading is the
+/* What a heading says about the rows under it: at BOTH scopes, because both fold. A collapsed heading is the
  * only thing left of its rows, so it has to carry what the rows would have said: how big the change is, and
- * how much of it refused. The blocker count especially — the whole point of the row marks is that the list
+ * how much of it refused. The blocker count especially: the whole point of the row marks is that the list
  * says where the trouble is without being scrolled or expanded, which a fold would otherwise undo. */
 interface GroupStats {
     readonly additions: number;
     readonly deletions: number;
-    /* The same span with the comments out of it — the sum of what its rows are showing, and PENDING until every one
+    /* The same span with the comments out of it: the sum of what its rows are showing, and PENDING until every one
      * of them is known (sumCounts). A heading that added up the rows it happened to have and printed the result was
      * the worst number on the panel: part git, part code, agreeing with neither, and re-totalling every time the
      * reader clicked one of its rows. */
@@ -198,7 +198,7 @@ const statsOf = (files: readonly AgentReviewFile[]): GroupStats => ({
     code: codeSumOf(files),
     blocked: files.filter((file) => file.blocked !== undefined).length,
 });
-// The whole review, for the list header — every file, not the filtered ones, exactly as its git totals are.
+// The whole review, for the list header: every file, not the filtered ones, exactly as its git totals are.
 const reviewCode = computed(() => codeSumOf(changes.files.value));
 
 interface RepoGroup extends GroupStats {
@@ -228,13 +228,13 @@ const groups = computed<readonly RepoGroup[]>(() => {
 /* The same reading the workspace's Changes panel offers, from the same preference (useChangeGrouping) and
  * through the same rule (changeModules' moduleView): a repo's rows grouped under the package each path lives
  * in, with the row itself shrunk to the file. One setting and one rule for both review surfaces, because "how
- * do I read a change list" is not a thing anyone wants to answer twice — and because these two lists
+ * do I read a change list" is not a thing anyone wants to answer twice, and because these two lists
  * disagreeing about how a changed file is named is exactly the kind of seam that makes two panels feel like two
  * products.
  *
  * The MODULES come from the agent's own diff (useAgentChanges' modulesOf), not from the workspace-wide read the
  * Changes panel uses: an agent works in a worktree, so a package it has just created is not in /work to be
- * named yet — see the note there. */
+ * named yet: see the note there. */
 const { groupByModule } = useChangeGrouping();
 
 // A package's rows plus the numbers its heading carries, summed here rather than in the template so a fold is
@@ -260,8 +260,8 @@ const repoViews = computed<ReadonlyMap<string, RepoView>>(() => {
 });
 const viewOf = (repo: string): RepoView => repoViews.value.get(repo) ?? EMPTY_MODULE_VIEW;
 
-// What the keyboard walks: the rows actually on screen, in render order. A collapsed repo — or a collapsed
-// package inside an open one — contributes nothing, since j/k stepping onto a row you cannot see is the fold
+// What the keyboard walks: the rows actually on screen, in render order. A collapsed repo, or a collapsed
+// package inside an open one: contributes nothing, since j/k stepping onto a row you cannot see is the fold
 // silently undone. Read through the buckets, since grouping reorders a repo's rows.
 const visibleRows = computed<readonly AgentReviewFile[]>(() =>
     groups.value.flatMap((group) =>
@@ -291,13 +291,13 @@ const select = (file: AgentReviewFile): void => {
 };
 
 /* The conflict report's paths, landed on the rows they name. The report explains the CAUSES; the list holds
- * the files — clicking a path is the one gesture that joins them, and without it a user reading "3 files
+ * the files: clicking a path is the one gesture that joins them, and without it a user reading "3 files
  * couldn't be applied" over thirty rows is left to find them by matching strings with their eyes.
  *
  * The guards are the difference between a click that works and a click that visibly does nothing: the row may
- * be hidden by the filter the user is standing in (widened to `blocked`, which by definition holds it — never
+ * be hidden by the filter the user is standing in (widened to `blocked`, which by definition holds it: never
  * to `all`, which would throw away a narrowing they chose), and either its repo or its package may be folded
- * away — both are opened, since opening one still leaves the row unrendered. The scroll waits a tick because
+ * away: both are opened, since opening one still leaves the row unrendered. The scroll waits a tick because
  * after any of those the row's element does not exist yet. */
 const jumpTo = async (blocker: Blocker): Promise<void> => {
     const file = changes.files.value.find((row) => row.repo === blocker.repo && row.change.path === blocker.path);
@@ -322,7 +322,7 @@ const jumpTo = async (blocker: Blocker): Promise<void> => {
     rowEls.get(file.key)?.scrollIntoView({ block: `nearest` });
 };
 
-// Desktop opens on the first file — an empty diff pane next to a full list is a dead half-screen, and the
+// Desktop opens on the first file: an empty diff pane next to a full list is a dead half-screen, and the
 // first thing a reviewer does is click that row anyway. Mobile does NOT: there the diff is a full-screen
 // takeover, so it waits to be asked for. A refresh that keeps the selected path keeps the selection.
 watch(
@@ -363,7 +363,7 @@ const viewAndAdvance = (): void => {
     }
 };
 
-/* THE SAME TICK AT A HEADING'S SCOPE — the rules are reviewGroupPass, which states why each one is what it is;
+/* THE SAME TICK AT A HEADING'S SCOPE: the rules are reviewGroupPass, which states why each one is what it is;
  * what the panel supplies is the SCOPE. Every call below passes the rows the heading is currently drawing:
  * filtered, so standing in Code cannot tick a package's tests off, and grouped, so with module grouping on the
  * unit is the package the user means by "this one's fine" rather than the whole repo. */
@@ -375,7 +375,7 @@ const toggleGroupViewed = (rows: readonly AgentReviewFile[]): void =>
         groupPassOn(rows, changes.viewed.value),
     );
 
-// The innermost group the selection sits in — the module bucket when the list is grouped by module, the repo's
+// The innermost group the selection sits in: the module bucket when the list is grouped by module, the repo's
 // single bucket when it isn't. "This whole package is fine" is a judgement about the smaller of the two.
 const selectedGroup = computed<readonly AgentReviewFile[]>(() => {
     const file = selected.value;
@@ -385,7 +385,7 @@ const selectedGroup = computed<readonly AgentReviewFile[]>(() => {
     return viewOf(file.repo).buckets.find((bucket) => bucket.rows.some((row) => row.key === file.key))?.rows ?? [];
 });
 
-/* ⇧V — the keyboard peer of the heading's tick: accept the rest of this group and land on the next one, so a
+/* ⇧V, the keyboard peer of the heading's tick: accept the rest of this group and land on the next one, so a
  * pass over packages is one key per package the way a pass over files is one key per file. Without it the
  * bulk tick is a mouse-only gesture in a panel whose whole scan (j/k/v) is built for the keyboard. */
 const viewGroupAndAdvance = (): void => {
@@ -409,7 +409,7 @@ const onKey = (event: KeyboardEvent): void => {
     if (event.metaKey || event.ctrlKey || event.altKey) {
         return;
     }
-    // Typing beats navigating — the docked chat composer shares this screen, and Monaco's own editing surface
+    // Typing beats navigating: the docked chat composer shares this screen, and Monaco's own editing surface
     // is a (hidden) textarea, so this same guard leaves ↑/↓ and F7 to the diff whenever it has focus.
     const target = event.target;
     if (target instanceof HTMLElement && (target.isContentEditable || [`INPUT`, `TEXTAREA`, `SELECT`].includes(target.tagName))) {
@@ -440,7 +440,7 @@ onBeforeUnmount(() => window.removeEventListener(`keydown`, onKey));
 
 // --- the diff ------------------------------------------------------------------------------------------
 /* One query per selected row, on the SHARED terms (useAgentChanges' AGENT_FILE_DIFF_OPTIONS) rather than a set
- * of its own — so this observer and the background loader that warmed the row are the same cache entry, and a
+ * of its own, so this observer and the background loader that warmed the row are the same cache entry, and a
  * row already in hand paints without re-reading it. The key is filed under the agent's diff, so the invalidation
  * that refreshes the file list (invalidateAgentAction, after a land or discard) drops the per-file diffs with
  * it. That key is also what makes arrowing through the list safe: it outruns the network, and a key change
@@ -453,10 +453,10 @@ const { query: diffQuery, error: diffError } = useSandboxQuery({
 });
 const diff = computed(() => diffQuery.data.value);
 const diffLoading = diffQuery.isFetching;
-// Identity of what the viewer is showing. Monaco is uncontrolled (it owns its models), so a new file — or the
-// same file re-read after the agent moved it — has to remount the editor rather than re-render it. vue-query's
+// Identity of what the viewer is showing. Monaco is uncontrolled (it owns its models), so a new file, or the
+// same file re-read after the agent moved it: has to remount the editor rather than re-render it. vue-query's
 // structural sharing keeps `diff` the SAME object across a refetch that changed nothing, so the object is the
-// content's identity — numbered here only because :key wants a string.
+// content's identity: numbered here only because :key wants a string.
 const diffIds = new WeakMap<FileDiffResponse, number>();
 let diffSeq = 0;
 const diffKey = computed(() => {
@@ -473,14 +473,14 @@ const diffKey = computed(() => {
 
 /* --- reading ahead ------------------------------------------------------------------------------------
  * NOT DONE HERE ANY MORE, and that is the point. This panel used to walk its own file list reading the diffs
- * behind it, which meant the read-ahead existed exactly while the panel was mounted — arrive at a review and
+ * behind it, which meant the read-ahead existed exactly while the panel was mounted: arrive at a review and
  * the first click still paid a round trip, because the walk had only just started. The app's background loader
  * (composables/prefetch) now keeps this agent's rows warm from wherever the user happens to be standing, and it
  * reads through the very query above, so a click either finds the answer sitting there or joins the read
  * already in flight.
  *
  * The COUNTS came along with it. A row's code-only +/− is a by-product of having both sides of the file, so it
- * is taken where the file is read (useAgentChanges' readAgentFileDiff) rather than by whoever asked for it —
+ * is taken where the file is read (useAgentChanges' readAgentFileDiff) rather than by whoever asked for it:
  * which is why the second watch that used to catch rows past the walk's limit is gone too: there is no limit
  * here to be past, and no path that reads a diff without counting it. */
 
@@ -510,7 +510,7 @@ const openInWorkspace = (file: AgentReviewFile): void => {
             ...body,
             ...diffRawUrls({ source: `agent`, agent: agentId, repo: file.repo }, file.change.path, file.change.status),
         },
-        // The button says "open this over there" — a tab that vanished on the next look would be the opposite.
+        // The button says "open this over there": a tab that vanished on the next look would be the opposite.
         `keep`,
     );
     void router.push({ name: `workspace` });
@@ -522,12 +522,12 @@ const openInWorkspace = (file: AgentReviewFile): void => {
 const ICON_BUTTON = ui.iconButton(`disabled:opacity-40`);
 const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
 
-// What a refused land left behind. The report itself — the causes, and the ladder of actions ordered by who
-// can take them — is AgentConflictReport; this panel only owns where its buttons lead.
+// What a refused land left behind. The report itself: the causes, and the ladder of actions ordered by who
+// can take them: is AgentConflictReport; this panel only owns where its buttons lead.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
 
 // Where the user's own half of a conflict is dealt with: the workspace sidebar's Changes panel, which is
-// where these paths get committed or stashed. Same deep-link the badges use — setSidebarPanel un-collapses.
+// where these paths get committed or stashed. Same deep-link the badges use: setSidebarPanel un-collapses.
 const openChanges = (): void => {
     shell.setSidebarPanel(`changes`);
     void router.push({ name: `workspace` });
@@ -536,7 +536,7 @@ const openChanges = (): void => {
 // --- the list's width ----------------------------------------------------------------------------------
 // The file list is a column of PATHS, and how much of one you need is the reviewer's call, not a constant:
 // a flat repo reads fine at the default, a deep monorepo truncates every row at it. Same gesture and same
-// persistence as the workspace explorer's edge — drag to size, double-click to reset, remembered after.
+// persistence as the workspace explorer's edge: drag to size, double-click to reset, remembered after.
 // Pointer capture rather than window listeners, so a drag that outruns the 6px strip still tracks.
 const listEl = ref<HTMLElement>();
 const resizing = ref(false);
@@ -585,7 +585,7 @@ const endResize = (event: PointerEvent): void => {
                 Landed with {{ resolvingPaths.length }} file{{ resolvingPaths.length === 1 ? "" : "s" }} to finish
             </span>
             <p class="text-2xs text-muted">
-                Everything else applied. These carry conflict markers in your workspace — resolve them there, as you would any merge.
+                Everything else applied. These carry conflict markers in your workspace: resolve them there, as you would any merge.
             </p>
             <p class="break-all font-mono text-2xs text-muted">{{ resolvingPaths.join(", ") }}</p>
         </div>
@@ -612,13 +612,13 @@ const endResize = (event: PointerEvent): void => {
         <div v-else-if="changes.count.value === 0" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
             <Icon name="file-edit" class="text-2xl text-subtle" />
             <p class="max-w-xs text-2xs text-muted">
-                This agent hasn't changed any files. Ask it for something in the chat — its work shows up here, file by file, to review before it
+                This agent hasn't changed any files. Ask it for something in the chat: its work shows up here, file by file, to review before it
                 lands.
             </p>
         </div>
 
         <!-- List | diff. On a phone the two are the same real estate: the list IS the view until a file is
-             picked, and the diff takes the screen with a back arrow — no route change either way. -->
+             picked, and the diff takes the screen with a back arrow: no route change either way. -->
         <div v-else class="flex min-h-0 flex-1" :class="resizing ? 'select-none' : ''">
             <aside
                 v-if="!mobile || selected === undefined"
@@ -627,14 +627,14 @@ const endResize = (event: PointerEvent): void => {
                 :class="mobile ? 'flex-1' : 'shrink-0 border-r border-line'"
                 :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
             >
-                <!-- The list's own header — everything on it is about the FILES: how many, which of them, how
+                <!-- The list's own header, everything on it is about the FILES: how many, which of them, how
                      far the pass got. Exactly as tall as the diff's toolbar beside it (h-8), so the two column
                      headers read as one unbroken line across the panel, the same invariant .view-header keeps
                      for the shell's columns.
 
                      The count is stated ONCE. It used to appear four times over: "8 files", the "All 8" filter
                      option, "0/8 reviewed", and each repo heading's badge. The filter is the copy that earns
-                     its pixels — it prints the total AND is the control that acts on it — so the bare count
+                     its pixels: it prints the total AND is the control that acts on it, so the bare count
                      only renders when there is no filter to state it. -->
                 <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
                     <SegmentedControl v-if="filterOptions.length > 1" v-model="filter" :options="filterOptions" size="xs" />
@@ -692,12 +692,12 @@ const endResize = (event: PointerEvent): void => {
 
                         <template v-if="!collapsed.has(group.repo)">
                             <template v-for="bucket in viewOf(group.repo).buckets" :key="`${group.repo}/${bucket.key}`">
-                                <!-- The module its run of rows belongs to, said once — and the scope of the two
+                                <!-- The module its run of rows belongs to, said once, and the scope of the two
                                  things a reviewer does per package. Land is atomic and open is a single file,
                                  but VIEWED is the reader's own attention ("I read three of these, the rest of
                                  the package is fine"), and so is FOLDING: the chevron is how a package this
                                  review isn't about stops taking up the screen. Same three-part heading as the
-                                 repo's above — fold on the left, sweep on the right, totals between — because
+                                 repo's above: fold on the left, sweep on the right, totals between, because
                                  they are the same two jobs at a smaller scope. -->
                                 <div v-if="viewOf(group.repo).named" class="group/head flex items-center border-b border-line/40 bg-canvas/60 pr-1">
                                     <button
@@ -710,11 +710,11 @@ const endResize = (event: PointerEvent): void => {
                                             :name="moduleCollapsed(group.repo, bucket.key) ? 'chevron-right' : 'chevron-down'"
                                         />
                                         <!-- One way to say a module, shared with the workspace's own Changes
-                                         list — see ModuleLabel. -->
+                                         list: see ModuleLabel. -->
                                         <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
                                         <span class="shrink-0 text-2xs text-subtle">{{ groupLabel(bucket.rows) }}</span>
                                         <!-- A folded package must not be able to hide a refusal, exactly as a
-                                         folded repo can't — same badge, same glyph, one scope down. -->
+                                         folded repo can't: same badge, same glyph, one scope down. -->
                                         <span
                                             v-if="bucket.blocked > 0"
                                             class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1.5 py-px text-2xs font-medium text-warning"
@@ -762,11 +762,11 @@ const endResize = (event: PointerEvent): void => {
                                                 :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
                                             />
                                             <!-- How a changed file is named, shared with the workspace's Changes
-                                     list so a file reads the same on both — see ChangeRowName. -->
+                                     list so a file reads the same on both: see ChangeRowName. -->
                                             <ChangeRowName :path="file.change.path" :label="file.label" :named="viewOf(group.repo).named" />
                                             <!-- WHY THIS ROW REFUSED, on the row. A blocked file is unlanded by
                                      definition, so the plain dot would only be repeating what the mark
-                                     already says in a word — the mark REPLACES it rather than crowding in
+                                     already says in a word: the mark REPLACES it rather than crowding in
                                      beside it. One word and the cause's own glyph, because this sits between
                                      a truncating path and a diffstat; the sentence is the tooltip. -->
                                             <span
@@ -792,7 +792,7 @@ const endResize = (event: PointerEvent): void => {
                                                     : 'opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100'
                                             "
                                             @click="toggleViewed(file)"
-                                            v-tooltip.right="isViewed(file) ? 'Reviewed — click to unmark' : 'Mark as reviewed'"
+                                            v-tooltip.right="isViewed(file) ? 'Reviewed, click to unmark' : 'Mark as reviewed'"
                                             :aria-label="`Mark ${file.label} as reviewed`"
                                         >
                                             <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />
@@ -823,8 +823,8 @@ const endResize = (event: PointerEvent): void => {
             <section v-if="!mobile || selected !== undefined" class="flex min-h-0 min-w-0 flex-1 flex-col">
                 <template v-if="selected !== undefined">
                     <!-- The same bar the workspace tab renders, so Split|Unified and Comments are in the same
-                         place with the same words wherever a diff is read. What it can't know — this file's
-                         place in a REVIEW — comes in through its slots: the conflict mark beside the name, and
+                         place with the same words wherever a diff is read. What it can't know: this file's
+                         place in a REVIEW, comes in through its slots: the conflict mark beside the name, and
                          the reviewer's own controls after the reading ones. -->
                     <DiffToolbar
                         :path="selected.label"
@@ -871,7 +871,7 @@ const endResize = (event: PointerEvent): void => {
                                 @click="toggleViewed(selected)"
                                 v-tooltip.bottom="
                                     isViewed(selected)
-                                        ? 'Reviewed — click to unmark (v)'
+                                        ? 'Reviewed: click to unmark (v)'
                                         : 'Mark reviewed and go to the next file (v) · ⇧V for the rest of this group'
                                 "
                                 :aria-label="`Mark ${selected.label} as reviewed`"
@@ -929,7 +929,7 @@ const endResize = (event: PointerEvent): void => {
 </template>
 
 <style scoped>
-/* Drag-to-resize seam on the file list's right edge (pointer-capture, no global listeners — mirrors the
+/* Drag-to-resize seam on the file list's right edge (pointer-capture, no global listeners: mirrors the
    workspace explorer's .ws-resize). Above the sticky repo headers so a drag started over one still grabs it. */
 .review-resize {
     position: relative;

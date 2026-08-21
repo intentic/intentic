@@ -14,14 +14,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 
 // The realistic Tier-1 run: boot a Docker-in-Docker "host", then drive the REAL CLI (pnpm intentic
-// init/resolve/apply) exactly as an operator would — scaffold, author a deploy.config.ts pointed at the
+// init/resolve/apply) exactly as an operator would: scaffold, author a deploy.config.ts pointed at the
 // DinD host's mapped SSH port, fill desired-state/.env, resolve, apply. Phase 1 stands up the platform
 // (Forgejo + runner + Komodo) and exposes git.<zone>/deploy.<zone> through a real Cloudflare tunnel. Then we
 // push a tiny Dockerfile to the app repo and, in phase 2, author an environment so apply WIRES CI/CD (a
-// Forgejo Actions workflow + a Komodo registry deployment) — intentic does not build or deploy. The workflow
+// Forgejo Actions workflow + a Komodo registry deployment): intentic does not build or deploy. The workflow
 // then builds + pushes the image and Komodo rolls it out live at app.<zone>. Gated behind INTENTIC_E2E because
 // it needs a privileged Docker daemon + live Cloudflare credentials (with DNS-edit + tunnel-edit scopes) on a
-// zone you own — so `pnpm test` never reaches it, and in CI only the nightly does, and only when it holds a
+// zone you own, so `pnpm test` never reaches it, and in CI only the nightly does, and only when it holds a
 // token to reach Cloudflare with.
 //
 // The host SSH key is generated per-run and written into the .env the CLI loads; the Forgejo/Komodo admin
@@ -38,8 +38,8 @@ const tier = e2eTier("intentic CLI end-to-end (manual, real Cloudflare + DinD)",
 
 const exec = promisify(execFile);
 
-// The Cloudflare zone this suite deploys under. The config no longer authors it — the CLI discovers it from
-// the app domains + token — but the harness still needs it to build the expected public hostnames and to
+// The Cloudflare zone this suite deploys under. The config no longer authors it: the CLI discovers it from
+// the app domains + token, but the harness still needs it to build the expected public hostnames and to
 // purge DNS on teardown. Read from env so the suite can target any zone you own (the account is discovered
 // from the token); use a token scoped to this zone so the platform-only phase (no app domains) can resolve it.
 const ZONE = process.env["CLOUDFLARE_ZONE"] ?? "atlas-protocol.com";
@@ -51,7 +51,7 @@ const GIT_DOMAIN = `git.${ZONE}`;
 const KOMODO_DOMAIN = `deploy.${ZONE}`;
 // The workspace sandbox exposes a single-label wildcard preview route to its own dev server. The cf-route owns
 // a proxied `*.<zone>` CNAME (purged on teardown); `probe` is a concrete host under it the test curls (a
-// non-`preview-` host, so the proxy answers 404 — enough to prove DNS + tunnel + proxy are wired).
+// non-`preview-` host, so the proxy answers 404: enough to prove DNS + tunnel + proxy are wired).
 const WILDCARD_PREVIEW = `*.${ZONE}`;
 const PREVIEW_PROBE = `probe.${ZONE}`;
 
@@ -127,7 +127,7 @@ const pollUrl = async (url: string, timeoutMs: number, bodyIncludes?: string): P
                 return last;
             }
         } catch {
-            // DNS not propagated / connection reset — keep polling.
+            // DNS not propagated / connection reset: keep polling.
         }
         if (Date.now() >= deadline) {
             throw new Error(`${url} never returned a live-origin response; last=${JSON.stringify(last)}`);
@@ -159,11 +159,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 300_000);
 
     afterAll(async () => {
-        // Stop the host FIRST so cloudflared dies — Cloudflare refuses to delete a tunnel with active
+        // Stop the host FIRST so cloudflared dies: Cloudflare refuses to delete a tunnel with active
         // connections, so the connector must be gone before we purge the tunnel below.
         await host?.stop().catch(() => {});
 
-        // Purge the live Cloudflare resources this run created — the engine has no destroy path. The account id
+        // Purge the live Cloudflare resources this run created: the engine has no destroy path. The account id
         // comes back from resolving the zone (the same discovery the CLI does), so it is not configured here.
         const zone = await cloudflareApi.getZone({ apiToken: tier.secrets.CLOUDFLARE_API_TOKEN, zone: ZONE }).catch(() => undefined);
         if (zone !== undefined) {
@@ -219,7 +219,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         }
     };
 
-    it("scaffolds, exposes Forgejo + Komodo, then builds and deploys a real app — all through the CLI", async () => {
+    it("scaffolds, exposes Forgejo + Komodo, then builds and deploys a real app: all through the CLI", async () => {
         const address = host.getHost();
         const port = host.getMappedPort(22);
 
@@ -235,11 +235,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
         // 3. Resolve + apply: brings up Forgejo + its Actions runner + Komodo + the workspace sandbox + the
         // tunnel/routes, and wires the app's CI/CD. The workspace provider PULLS the published sandbox image
-        // (ghcr.io/intentic/sandbox) from GHCR — it must be published under that name + public.
+        // (ghcr.io/intentic/sandbox) from GHCR: it must be published under that name + public.
         await intentic("deploy", "resolve", "--config", configPath, "--out", artifactPath);
         await intentic("deploy", "apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8");
 
-        // The admin password intentic generated (in desired-state/.secrets.json) — what bootstrapped Forgejo.
+        // The admin password intentic generated (in desired-state/.secrets.json): what bootstrapped Forgejo.
         const forgejoPassword = (await readGeneratedSecrets(join(tmp, "desired-state")))["FORGEJO_ADMIN_PASSWORD"] ?? "";
 
         // The platform containers actually came up on the host.
@@ -260,7 +260,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
         // The wildcard preview route resolves end-to-end: DNS (`*.<zone>`) -> the host tunnel ingress -> the
         // sandbox's preview proxy (port 5173, bound to the host's internal ip). A non-`preview-` host gets a
-        // 404 from the proxy — that still proves the route is wired through.
+        // 404 from the proxy: that still proves the route is wired through.
         const preview = await pollUrl(`https://${PREVIEW_PROBE}`, 240_000);
         expect([200, 301, 302, 303, 401, 403, 404]).toContain(preview.status);
 

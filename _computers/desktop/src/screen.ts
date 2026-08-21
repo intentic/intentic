@@ -86,7 +86,7 @@ export const capture = async (): Promise<Buffer> => {
             .filter((install) => install !== "");
         throw new DesktopError(
             installs.length === 0 ? "Could not capture the screen." : "No screenshot tool on this computer.",
-            installs.length === 0 ? undefined : installs.join(" — or — "),
+            installs.length === 0 ? undefined : installs.join(", or — "),
         );
     } finally {
         await rm(out, { force: true }).catch(() => undefined);

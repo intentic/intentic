@@ -1,27 +1,27 @@
-<!-- THE PEOPLE THIS SANDBOX CAN BE, as a list you talk to — the chat list's other cut (chatGrouping.ts holds
+<!-- THE PEOPLE THIS SANDBOX CAN BE, as a list you talk to: the chat list's other cut (chatGrouping.ts holds
      the switch). Where the lanes answer "what needs me next", this answers "who am I talking to", and a row
      here is a PERSONA rather than a session: Work, the Inbox Manager, whoever the workspace has cards for.
 
      WHY IT IS NOT SESSIONS GROUPED UNDER PERSONA HEADINGS, which is what this was first built as. A chat's
      persona is a composer pick that defaults to none, so on a real workspace every session sits in one "Anyone"
-     pile and the grouping is a heading change and nothing else — 56 chats under one heading was the actual
+     pile and the grouping is a heading change and nothing else: 56 chats under one heading was the actual
      result. Grouping can only ever reflect a habit the product never asked anyone to form. A LIST OF PERSONAS
      needs no such habit: the cards exist because someone made them, and the rail is useful from the first one.
 
      PRESSING A ROW PUTS YOU IN A CHAT AS THAT PERSONA. If this window already holds one acting as them, it is
-     the one that comes up — the most recent, because that is the conversation you were having. Otherwise a
+     the one that comes up: the most recent, because that is the conversation you were having. Otherwise a
      fresh chat opens already pinned to them, through the app's one "new agent" action so the caret lands in
      the composer exactly as it does everywhere else. So the rail reads as a correspondent list even though
      nothing behind it is stored per person: it is the persona card plus the chats that name it.
 
      IT IS A LIST OF PEOPLE AND NOTHING ELSE. There is no "Anyone" row: the composer's picker has one because
      there it means "send this turn through every account rather than one person's", but as a row HERE it meant
-     every chat nobody had pinned — which on a real workspace is nearly all of them. It sat at the bottom
+     every chat nobody had pinned, which on a real workspace is nearly all of them. It sat at the bottom
      holding eleven conversations and wearing their attention bar, outweighing the personas the list exists to
      show. Unpinned chats already have a home, and it is the Agents cut.
 
      IT OPENS ON WHOEVER YOU ARE ALREADY TALKING TO. If the chat you walk in from is pinned to a persona, that
-     row is ringed and its group is already open on that chat — the list answers "where am I" before you press
+     row is ringed and its group is already open on that chat: the list answers "where am I" before you press
      anything, which is the one thing a switcher must never make you work out for yourself. Walking in from an
      UNPINNED chat rings nobody, because there is nobody to ring. After that the ring is this list's own
      (`picked`), and walking back out leaves the Agents cut on the conversation it was already reading.
@@ -43,7 +43,7 @@ import { useChat } from "../composables/chat/useChat";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 import RailCard from "../components/RailCard.vue";
 
-// The host focuses the chat, exactly as it does for the lanes' rows — this list emits verbs and never writes
+// The host focuses the chat, exactly as it does for the lanes' rows: this list emits verbs and never writes
 // the store itself.
 const emit = defineEmits<{ select: [id: string] }>();
 
@@ -52,7 +52,7 @@ const { activeId, conversations } = useChat();
 const { agentById } = useAgents();
 
 /* WHAT THIS WINDOW IS HOLDING FOR EACH PERSONA. The pick lives on the conversation (Conversation.actsAs) and
- * nowhere else — the sandbox files it against each turn, never against the session — so the chats a row can
+ * nowhere else: the sandbox files it against each turn, never against the session, so the chats a row can
  * speak for are this window's own tabs. That is a real limit and the row is careful never to imply otherwise:
  * it reports what it can see ("2 chats", when they last moved) and claims nothing about the rest. */
 const chatsOf = (id: string) =>
@@ -61,17 +61,17 @@ const chatsOf = (id: string) =>
         .map((conversation) => ({ conversation, agent: agentById(conversation.conversationId) }))
         .toSorted((a, b) => (b.agent?.updatedAt ?? 0) - (a.agent?.updatedAt ?? 0));
 
-/* THE CHAT THIS RAIL IS RINGING — the one it put on screen itself, or the one you arrived holding.
+/* THE CHAT THIS RAIL IS RINGING: the one it put on screen itself, or the one you arrived holding.
  *
  * SEEDED ONCE, AT THE MOMENT THE COLUMN BECOMES THIS LIST (the host mounts the rail on the switch, so setup IS
  * the switch), from the window's focused chat and only when that chat NAMES A PERSONA. Without the seed, going
- * to the Agents cut and back left you looking at the very conversation you were in with nobody ringed for it —
+ * to the Agents cut and back left you looking at the very conversation you were in with nobody ringed for it:
  * the list disowning a chat that is, by its own rule, one of this persona's. A pinned chat is a fact about
  * the chat, not a claim about what you pressed here, so the list can state it on arrival without inventing
  * anything.
  *
- * AND ONLY ON ARRIVAL, never as a live mirror of the focus. Whatever moves the chat while this column is up —
- * a pane, a keyboard cycle, a turn landing somewhere else — must not drag the ring around a list you are
+ * AND ONLY ON ARRIVAL, never as a live mirror of the focus. Whatever moves the chat while this column is up:
+ * a pane, a keyboard cycle, a turn landing somewhere else: must not drag the ring around a list you are
  * reading: one is a list of work and the other a list of people, and they are not one selection drawn twice.
  * A plain ref, so it starts from the arrival state every time the switch remounts the rail. */
 const arrivedIn = conversations.value.find(
@@ -84,7 +84,7 @@ interface PersonaRow {
     readonly key: string;
     readonly id: string;
     readonly label: string;
-    /* The accounts under the name — a mark cannot tell `reddit-work` from `reddit-personal`, and those being
+    /* The accounts under the name: a mark cannot tell `reddit-work` from `reddit-personal`, and those being
      * different accounts is the entire reason a persona exists.
      *
      * EMPTY WHEN THERE ARE NONE, rather than a line saying so. A persona holding no accounts is a perfectly
@@ -103,7 +103,7 @@ interface PersonaRow {
  *
  * THERE IS NO "ANYONE" ROW. It was here because the composer's picker has one, where it means something
  * precise: "send this turn through every account rather than one person's". As a row in a list of PEOPLE it
- * meant something else entirely — every chat that had never been pinned, which on a real workspace is almost
+ * meant something else entirely: every chat that had never been pinned, which on a real workspace is almost
  * all of them. So it sat at the bottom holding eleven conversations, wearing their attention bar, outweighing
  * the personas the list exists to show, and answering a question nobody asked it. Unpinned chats already have
  * a home: the Agents cut, which is the whole list of them. */
@@ -121,7 +121,7 @@ const rows = computed<PersonaRow[]>(() =>
             // The bar down the row's edge, on the same channel a session card uses: one of this persona's chats
             // is waiting on you, which is the only thing here worth interrupting a scan for.
             needsYou: mine.some((entry) => entry.agent !== undefined && blocked(entry.agent)),
-            // Ringed only for a chat opened FROM HERE — see `picked`.
+            // Ringed only for a chat opened FROM HERE: see `picked`.
             open: mine.some((entry) => entry.conversation.conversationId === picked.value),
         };
     }),
@@ -129,7 +129,7 @@ const rows = computed<PersonaRow[]>(() =>
 
 const empty = computed(() => personas.value.length === 0);
 
-/* THE PRESS. The most recent chat already acting as them, or a new one pinned to them — see the note at the
+/* THE PRESS. The most recent chat already acting as them, or a new one pinned to them: see the note at the
  * top for why those are the same act from the reader's side ("put me in a chat with this persona"). */
 const open = (row: PersonaRow): void => {
     const first = chatsOf(row.id)[0];
@@ -139,7 +139,7 @@ const open = (row: PersonaRow): void => {
     }
 };
 
-// Switching to one of a persona's other chats, and starting a fresh one, both land here — the ring follows
+// Switching to one of a persona's other chats, and starting a fresh one, both land here: the ring follows
 // what this rail put on screen either way.
 const show = (conversationId: string): void => {
     picked.value = conversationId;
@@ -152,13 +152,13 @@ const startAs = (row: PersonaRow): void => {
 /* --- The persona's other chats ---------------------------------------------------------------------------
  * A ROW USED TO STATE A NUMBER IT WOULD NOT OPEN. "6 chats" named six conversations and the only press on the
  * card went to the newest of them, so the other five were reachable only by leaving this cut for the Agents
- * one — which is to say, by giving up the persona you were looking at. A count that cannot be opened is worse
+ * one, which is to say, by giving up the persona you were looking at. A count that cannot be opened is worse
  * than no count.
  *
  * AND THERE WAS NO WAY TO START A SECOND. The card's press means "the latest, or a new one if there are none",
  * so the moment a persona had one chat the rail could never make another: you had to press New agent and then
  * name the persona by hand in the composer, which is the errand this whole list exists to remove. Both of
- * those are one disclosure — the chats appear, and the way to make the next one appears under them.
+ * those are one disclosure: the chats appear, and the way to make the next one appears under them.
  *
  * IT OPENS FROM THE COUNT, not from the card. The card's press is the fast path ("talk to them") and it stays
  * one press; the disclosure is its own smaller target beside it. Offered from ONE chat rather than two: with
@@ -180,7 +180,7 @@ const toggleExpanded = (row: PersonaRow): void => {
 /* The persona you have OPENED FROM HERE expands itself, so the rail shows where the press landed rather than
  * making you find it. Keyed to this rail's own pick, not to the window's active chat: once the list is up, a
  * chat focused from somewhere else must not fling a group open under the reader. Fires only when that pick
- * changes — a reader who then collapses it has said something, and it must not spring back open. */
+ * changes: a reader who then collapses it has said something, and it must not spring back open. */
 watch(
     () => rows.value.find((row) => row.open)?.key,
     (key) => {
@@ -190,7 +190,7 @@ watch(
     },
 );
 
-/* INSIDE A GROUP: what needs you, then what is running, then what finished, newest first within each — the
+/* INSIDE A GROUP: what needs you, then what is running, then what finished, newest first within each, the
  * order every other list of sessions in this app uses. Grouping by person must not cost the routing. */
 const LANE_RANK: Record<FleetLane, number> = { attention: 0, active: 1, finished: 2 };
 const sessionsOf = (row: PersonaRow) =>
@@ -200,7 +200,7 @@ const sessionsOf = (row: PersonaRow) =>
             (b.agent?.updatedAt ?? 0) - (a.agent?.updatedAt ?? 0),
     );
 
-// The status glyph, in the shape RailCard binds onto an Icon — the agent's own machine where there is one
+// The status glyph, in the shape RailCard binds onto an Icon: the agent's own machine where there is one
 // (landed, conflict…), and what the conversation is doing where there isn't.
 const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undefined }): { name: IconName; spin?: boolean; class: string } => {
     if (entry.agent !== undefined) {
@@ -227,31 +227,31 @@ const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undef
             <template v-for="row in rows" :key="row.key">
                 <RailCard :title="row.label" :selected="row.open" :attention="row.needsYou" :aria-label="`Chat as ${row.label}`" @click="open(row)">
                     <!-- THE FACE, at the card's own height rather than at a glyph's. This list is scanned for a
-                     PERSON, and a name is what you read second — so the mark leads, big enough to be found
+                     PERSON, and a name is what you read second, so the mark leads, big enough to be found
                      without reading, and the row's text sits beside it. Generated from the persona's id, so
                      it is the same face here, in the composer's picker and on the personas page. -->
                     <template #aside>
                         <!-- NO SIZE HERE, which is deliberate: the face's own default is this list size, and
                              the personas page asks for it the same way, so the two cannot drift apart the way a
                              hand-written 56 here and a 32 there did. It is a fixed number rather than a share of
-                             the card because it is what SETS the row's height — a face this size is taller than
+                             the card because it is what SETS the row's height: a face this size is taller than
                              the two lines of text beside it, so the card is as tall as its mark and every row in
                              the column matches. Sizing it from the card instead (`h-full`) reads as the tidier
                              idea and resolves its percentage against a box that is itself waiting on the mark to
                              know how tall it is.
-                             The row satisfies the face's persona shape on its own — it carries the id and the
-                             resolved label — so nothing here re-states what a persona's face is made of. -->
+                             The row satisfies the face's persona shape on its own: it carries the id and the
+                             resolved label, so nothing here re-states what a persona's face is made of. -->
                         <PersonaFace :persona="row" />
                     </template>
                     <!-- The clock, where the rail's session rows keep theirs. Only once this persona has a chat to
                      have a clock about. It rides the TITLE's line, so gaining one never changes the row's
-                     height — see the meta line below for the other half of that. -->
+                     height: see the meta line below for the other half of that. -->
                     <template #trailing>
                         <span v-if="row.lastAt !== undefined && row.lastAt > 0" class="shrink-0 text-2xs text-subtle">{{
                             relativeTime(row.lastAt)
                         }}</span>
                     </template>
-                    <!-- ONE LINE, ALWAYS, AND NEVER WRAPPING — a stability rule rather than a layout preference.
+                    <!-- ONE LINE, ALWAYS, AND NEVER WRAPPING: a stability rule rather than a layout preference.
                      Pressing a row opens a chat as that persona, which is the moment the row gains a count and
                      a clock; when those arrived as separate children of a wrapping line they pushed onto a
                      second row, the card grew by a line, and the list jumped under the cursor that had just
@@ -261,9 +261,9 @@ const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undef
                         <span class="flex min-h-4 min-w-0 flex-1 items-center gap-2 overflow-hidden">
                             <StatusBadge v-if="row.bounds !== undefined" variant="neutral" size="xs">{{ row.bounds }}</StatusBadge>
                             <!-- The accounts, when there are any. A persona with none says nothing here rather than
-                             apologising for itself — see `detail`. -->
+                             apologising for itself: see `detail`. -->
                             <span v-if="row.detail !== ``" class="min-w-0 truncate text-subtle">{{ row.detail }}</span>
-                            <!-- What this window is holding for them, stated as what it is: the chats open HERE —
+                            <!-- What this window is holding for them, stated as what it is: the chats open HERE:
                              and the door to them. Absent at zero, where "0 chats" would only be saying that a
                              fresh persona is fresh, and where the card's own press already starts one.
                              `role="button"` rather than a nested <button>, which the card's own button element
@@ -284,7 +284,7 @@ const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undef
                 </RailCard>
 
                 <!-- THE PERSONA'S OWN CHATS, indented under them. The board's card at rail width, exactly as the
-                 Agents cut draws it — these are the same conversations, so nothing here is a new thing to
+                 Agents cut draws it: these are the same conversations, so nothing here is a new thing to
                  learn. Only the facts a one-line row can carry: which one it is, what it is doing, and when. -->
                 <!-- The INDENT is on the group, never on the cards: a card is `w-full`, so a margin on each one
                      adds to a width that was already the column's and pushes the whole run off the rail's right
@@ -308,7 +308,7 @@ const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undef
                         </template>
                     </RailCard>
                     <!-- THE SEVENTH CHAT. Without this the rail can open a persona's existing conversations and
-                     still not make another one — the gap the disclosure exists to close as much as switching
+                     still not make another one: the gap the disclosure exists to close as much as switching
                      is. It sits under them because that is the order the question arrives in: none of these,
                      then a new one. -->
                     <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="startAs(row)">
@@ -318,7 +318,7 @@ const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undef
                 </div>
             </template>
 
-            <!-- The way to the page that owns these cards, at the bottom where a list's "manage" always is —
+            <!-- The way to the page that owns these cards, at the bottom where a list's "manage" always is:
                  the picker in the composer puts it in the same place. -->
             <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
                 <Icon name="cog" class="text-2xs" />

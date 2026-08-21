@@ -103,7 +103,7 @@ export const daemonDrifted = computed(() => driftedRoutes.value.length > 0);
  * way, which spends minutes on what dev-reload.sh does in seconds. */
 const daemonOlderRemedy = (): string =>
     import.meta.env.DEV
-        ? `This sandbox is running older code than this app — reload it with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
+        ? `This sandbox is running older code than this app: reload it with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
         : `Update the sandbox to a newer image to use this feature.`;
 
 /* The same question when NOBODY KNOWS WHICH SIDE IS OLD, see driftedRoutes: a fingerprint that disagrees says
@@ -112,7 +112,7 @@ const daemonOlderRemedy = (): string =>
  * how a warning earns its reputation for lying. So this offers both, cheapest first. */
 const eitherSideOlderRemedy = (): string =>
     import.meta.env.DEV
-        ? `One of the two is running older code — reload this page, or the sandbox with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
+        ? `One of the two is running older code: reload this page, or the sandbox with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
         : `Reload this page, or update the sandbox to a newer image.`;
 
 /* The reason a request to `path` failed, when the cause is that this daemon predates the route. Undefined when

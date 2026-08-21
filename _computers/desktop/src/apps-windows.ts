@@ -123,7 +123,7 @@ export const windowsApps = {
         );
         if (settled.trim() !== `focused`) {
             throw new DesktopError(
-                `Windows would not give window ${id} the keyboard — it is gone, or something is holding the foreground (a UAC prompt, a full-screen app, or a locked session).`,
+                `Windows would not give window ${id} the keyboard: it is gone, or something is holding the foreground (a UAC prompt, a full-screen app, or a locked session).`,
             );
         }
     },

@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { parseChord, windowsChord, wtypeArgs, xdotoolChord } from "./keys.js";
 import { DesktopError } from "./types.js";
 
-/* The one part of this package that can be tested without a screen — and the part most likely to be wrong,
+/* The one part of this package that can be tested without a screen, and the part most likely to be wrong,
  * because it is three translations of the same vocabulary and nothing but a test compares them. */
 
 test("modifiers are recognised by every name a person would reach for", () => {
@@ -18,7 +18,7 @@ test("named keys are canonicalised, single characters keep their case", () => {
     expect(parseChord("ESC").key).toBe("Escape");
     expect(parseChord("pageup").key).toBe("Page_Up");
     expect(parseChord("backspace").key).toBe("BackSpace");
-    // Shift is a modifier, so the letter is not upper-cased on the way through — "shift+a" and "A" differ.
+    // Shift is a modifier, so the letter is not upper-cased on the way through: "shift+a" and "A" differ.
     expect(parseChord("shift+a").key).toBe("a");
 });
 
@@ -57,7 +57,7 @@ test("windows resolves to virtual-key codes, including the key SendKeys cannot p
     expect(windowsChord("F5").key).toBe(0x74);
     expect(windowsChord("f12").key).toBe(0x7b);
     expect(windowsChord("5").key).toBe(0x35);
-    // super+e opens Explorer — the chord that motivated not using SendKeys for keys at all.
+    // super+e opens Explorer: the chord that motivated not using SendKeys for keys at all.
     expect(windowsChord("super+e")).toEqual({ modifiers: [0x5b], key: 0x45 });
 });
 

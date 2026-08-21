@@ -843,7 +843,7 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
             // reading the user can't distinguish from a broken button. And every card it took on spec goes back,
             // because "nothing moved" is exactly the case the optimistic removal guessed wrong about.
             restore();
-            receipt.value = { message: `Nothing to archive — every finished agent is already off the board.` };
+            receipt.value = { message: `Nothing to archive, every finished agent is already off the board.` };
             return;
         }
         // A DELTA, not the roster the daemon happens to hold now: two archives in flight would otherwise race,
@@ -942,7 +942,7 @@ const purgeArchived = async (): Promise<void> => {
         // are gone. Same rule as archiving, which closes them for the far gentler reason.
         useChat().closeTabs(gone);
         notice.value =
-            removed.length < aimedAt ? `Deleted ${removed.length} of ${aimedAt} archived agents — the rest are still in use and stayed.` : undefined;
+            removed.length < aimedAt ? `Deleted ${removed.length} of ${aimedAt} archived agents, the rest are still in use and stayed.` : undefined;
         receipt.value = { message: `${removed.length} archived agent${removed.length === 1 ? `` : `s`} deleted` };
     } catch (error) {
         notice.value = errorMessage(error, `Couldn't delete the archive.`);
@@ -991,7 +991,7 @@ const rename = async (id: string, title: string): Promise<void> => {
         return;
     }
     const revertTitle = previous.title;
-    previous.title = trimmed; // registry is a deep ref — the in-place write repaints the fleet
+    previous.title = trimmed; // registry is a deep ref: the in-place write repaints the fleet
     try {
         const summary = await post();
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));

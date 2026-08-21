@@ -9,7 +9,7 @@
      THE ACTIONS SLOT IS THE CARD'S TOP-RIGHT CORNER, at every width, and it is sized for one thing: an
      icon-sized affordance (an InfoHint's (i)). That is what makes it safe to share the title's line on a
      phone. It used to wrap to a second row there, because the slot once held a "Check now" BUTTON and
-     sharing the line turned "Waiting for your sandbox to report in…" into a three-line column beside it —
+     sharing the line turned "Waiting for your sandbox to report in…" into a three-line column beside it:
      a title that has to be read vertically reads as a broken layout. A 16px icon costs the title one word;
      a second row cost it a corner, and a hint alone on a row of its own reads as a stray control rather
      than as something belonging to the heading beside it. Put anything wider than an icon in the body. -->
@@ -27,12 +27,12 @@ const { step, icon, title, done = false } = defineProps<{ step?: number; icon?: 
                     class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-2xs font-medium"
                     :class="done ? `border-success/40 bg-success/10 text-success` : `border-line bg-canvas text-muted`"
                 >
-                    <Icon name="check" v-if="done" :aria-label="`${title} — done`" />
+                    <Icon name="check" v-if="done" :aria-label="`${title}: done`" />
                     <template v-else-if="step !== undefined">{{ step }}</template>
                     <Icon v-else-if="icon" :name="icon" />
                 </span>
                 <!-- Medium, not semibold. A card of steps is a stack of headings, and set in bold they read as
-                     one solid block rather than as a spine — the badge beside each one already says "this is a
+                     one solid block rather than as a spine: the badge beside each one already says "this is a
                      step", so the weight only has to lift the title off the body under it. -->
                 <h2 class="min-w-0 font-medium leading-tight">{{ title }}</h2>
             </div>

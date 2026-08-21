@@ -9,7 +9,7 @@ import { pictureRect } from "../composables/browser/viewportCoords";
  * at the option they wanted lands on whatever the page has underneath. The daemon reads the options out of the
  * page (readSelect) and this draws them where the control is, so picking one is an ordinary click again.
  *
- * It is a REAL menu in the operator's own browser, not a picture of one — so it is sharp at any zoom, scrolls a
+ * It is a REAL menu in the operator's own browser, not a picture of one, so it is sharp at any zoom, scrolls a
  * twelve-year list of birth years properly, and answers the arrow keys. Nothing is injected into the page to
  * achieve that, which matters: the agent's next snapshot must not find an overlay we left in its DOM. */
 
@@ -19,7 +19,7 @@ const props = defineProps<{
         selected: number;
         rect: { x: number; y: number; width: number; height: number };
     };
-    // The <img> the frame paints into — the menu is placed against the picture, not against the pane.
+    // The <img> the frame paints into: the menu is placed against the picture, not against the pane.
     frame: HTMLElement | undefined;
     viewWidth: number;
     viewHeight: number;
@@ -37,7 +37,7 @@ const box = computed(() =>
         : pictureRect(props.frame, props.viewWidth, props.viewHeight, props.menu.rect),
 );
 
-/* Below the control, or above it when there is no room — the rule every native menu follows, and the one that
+/* Below the control, or above it when there is no room: the rule every native menu follows, and the one that
  * keeps a year list from opening off the bottom of a pane. Measured against the picture's own box. */
 const placement = computed(() => {
     const paneHeight = props.frame?.getBoundingClientRect().height ?? 0;
@@ -63,7 +63,7 @@ const move = (delta: number): void => {
 };
 
 const onKeydown = (event: KeyboardEvent): void => {
-    // Every key belongs to the menu while it is open — none of them may fall through to the page behind it.
+    // Every key belongs to the menu while it is open: none of them may fall through to the page behind it.
     event.preventDefault();
     event.stopPropagation();
     if (event.key === "Escape" || event.key === "Tab") {
@@ -81,7 +81,7 @@ const onKeydown = (event: KeyboardEvent): void => {
     }
 };
 
-// Open focused and scrolled to the current choice — a birth year is a long way down a list that opens at the top.
+// Open focused and scrolled to the current choice: a birth year is a long way down a list that opens at the top.
 watch(
     () => props.menu,
     async () => {

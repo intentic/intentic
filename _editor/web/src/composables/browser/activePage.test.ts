@@ -20,7 +20,7 @@ test("a picked tab holds, even as the agent moves on", () => {
 });
 
 test("a picked tab that closes falls back to the agent's, rather than highlighting nothing", () => {
-    // p1 is gone from the daemon's list — the pick is stale, and the pane is already following the agent again
+    // p1 is gone from the daemon's list: the pick is stale, and the pane is already following the agent again
     // (the socket's `gone` frame drops the pin at the same moment).
     expect(activePageOf([page(`p2`, true), page(`p3`)], `p1`)?.id).toBe(`p2`);
 });

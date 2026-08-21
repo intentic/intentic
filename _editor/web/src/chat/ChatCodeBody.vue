@@ -3,10 +3,10 @@ import { useHighlighter } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 
 /* A Read tool card's body: the file's contents syntax-highlighted by the shared Shiki highlighter (the same
- * grammars/themes the /workspace editor uses) with a line-number gutter — so code in chat reads like the code
+ * grammars/themes the /workspace editor uses) with a line-number gutter, so code in chat reads like the code
  * viewer, not a flat dump. The SDK's own line-number prefixes were stripped upstream (numberedFileBody in
  * toolPresentation); `firstLine` restores them here as a real gutter (Read honors an offset, so the first line
- * isn't always 1). Falls back to plain — but still numbered — monospace while the grammar loads and permanently
+ * isn't always 1). Falls back to plain, but still numbered: monospace while the grammar loads and permanently
  * for a file whose extension we ship no grammar for, so the contents are always readable. */
 
 const { code, lang, firstLine } = defineProps<{ code: string; lang?: string; firstLine: number }>();
@@ -24,7 +24,7 @@ const gutter = computed(() =>
         .join(`\n`),
 );
 
-// v-html trusts Shiki's own output — it HTML-escapes the code text, so the only markup is its <span> color
+// v-html trusts Shiki's own output: it HTML-escapes the code text, so the only markup is its <span> color
 // tokens (see the design system's <Code>). A seq guard drops a stale highlight if the props change first.
 let seq = 0;
 watch(

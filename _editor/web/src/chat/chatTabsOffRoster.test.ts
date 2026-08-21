@@ -3,7 +3,7 @@
 // A CHAT THE ROSTER CANNOT RESOLVE IS STILL A CHAT. The fleet carries LIVE agents only: the daemon's retention
 // sweep files finished ones away, the archive half is pull-only, and a conversation opened from History can
 // outlive its registry entry altogether. The card used to read every fact it drew off the FleetAgent behind one
-// `v-if`, so all of those cases collapsed to a bare title over a grey dot — a rail that had been full of models,
+// `v-if`, so all of those cases collapsed to a bare title over a grey dot: a rail that had been full of models,
 // costs and counts an hour earlier went blank as the sweep ran underneath it.
 //
 // What is asserted here is the FALLBACK, in the shape the user sees it: mount the list over a registered
@@ -11,7 +11,7 @@
 // facts are checked as text rather than as pixels.
 import { beforeEach, expect, it, vi } from "vitest";
 
-// The daemon, stubbed at the one seam the list reaches it through — so the archive probe below can be asserted
+// The daemon, stubbed at the one seam the list reaches it through, so the archive probe below can be asserted
 // as the call it is, rather than inferred from a card that did or didn't fill in.
 vi.mock("../composables/sandbox/sandboxClient", () => ({
     sandboxJson: vi.fn(async () => ({ agents: [] })),
@@ -27,7 +27,7 @@ import { queryClient } from "../composables/queryPersistence";
 import { router } from "../router";
 import ChatTabList from "./ChatTabList.vue";
 
-// The import-time globals a mounted chat component needs — the same set chatTabsReveal.test.ts installs.
+// The import-time globals a mounted chat component needs: the same set chatTabsReveal.test.ts installs.
 vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
 });
@@ -59,7 +59,7 @@ beforeEach(async () => {
 it(`draws the model and the spend from the conversation when the fleet cannot resolve it`, async () => {
     const chat = useChat();
     const conversation = chat.active.value;
-    // Registered — so the join treats it as a real agent that is merely off the roster, not as a draft (which
+    // Registered, so the join treats it as a real agent that is merely off the roster, not as a draft (which
     // is the one case that legitimately has nothing to say).
     conversation.registered.value = true;
     conversation.title.value = `Detached intentic chat · fix`;
@@ -85,7 +85,7 @@ it(`asks the daemon for the archive when an open chat is off the roster`, async 
     expect(vi.mocked(sandboxJson).mock.calls.some(([path]) => path === `/agents/archived`)).toBe(true);
 });
 
-it(`spends nothing it has not seen — a restored chat prints no zero`, async () => {
+it(`spends nothing it has not seen: a restored chat prints no zero`, async () => {
     const chat = useChat();
     const conversation = chat.active.value;
     conversation.registered.value = true;

@@ -1,15 +1,15 @@
-<!-- Design-system single-select — the replacement for native <select> / PrimeVue Select everywhere a choice
+<!-- Design-system single-select: the replacement for native <select> / PrimeVue Select everywhere a choice
      deserves more than OS chrome: token-styled rows with icon · label · quiet description (or a wrapping hint
      sentence, for options that have to be taught rather than named) · check, group headers, wrap-around
      keyboard navigation, and a filter box that appears by itself once the list is long.
      The closed trigger is a real button (bordered `input` variant for forms/settings rows, borderless `ghost`
-     for toolbars); the open panel is <ResponsiveOverlay> — anchored on desktop, a thumb-reachable sheet on a
+     for toolbars); the open panel is <ResponsiveOverlay>: anchored on desktop, a thumb-reachable sheet on a
      phone. The #icon scoped slot lets a site draw brand marks (provider logos) the icon set can't.
 
      THAT OVERLAY WAS EXTRACTED FROM HERE AND THIS COMPONENT KEPT THE COPY, which is the whole reason the note
      is worth writing down. <Picker> had always done the desktop/mobile swap internally, so when five other
      menus were found hand-writing the same pair they were given <ResponsiveOverlay> and this one was left
-     alone — it already worked, after all. What it worked WITH was PrimeVue's Popover, and PrimeVue's Popover
+     alone: it already worked, after all. What it worked WITH was PrimeVue's Popover, and PrimeVue's Popover
      measures the room around a trigger against the module-scope `window`. In a popped-out chat or terminal
      panel that is the wrong window: the panel opens off the bottom edge with its top over the pill that owns
      it, and an overlay covering its own trigger cannot be dismissed by clicking that trigger. The app's own
@@ -68,7 +68,7 @@ const passAttrs = computed(() => {
 });
 /* `touch-target` on the trigger, and it is the GHOST variant that needs it: the `input` variant already
  * clears 44px from its own padding (a form row), while the ghost one is a bare word with a caret riding a
- * toolbar — 22px tall, which is what a page's own repository switcher measured at on a phone. The overlay
+ * toolbar: 22px tall, which is what a page's own repository switcher measured at on a phone. The overlay
  * grows the hit area on a coarse pointer and leaves the toolbar's height alone, so nothing this trigger
  * shares a row with moves. Applied to both because twMerge would drop a duplicate anyway and the input
  * variant is already big enough for the rule to be a no-op there. */
@@ -89,15 +89,15 @@ const open = ref(false);
 // rather than watched: the trigger cannot resize while a modal panel is over it.
 const panelMinWidth = ref(0);
 
-/* THE CAP HAS TO CLEAR THE FLOOR, and for a long time it did not — which was a clipping bug rather than a
+/* THE CAP HAS TO CLEAR THE FLOOR, and for a long time it did not, which was a clipping bug rather than a
  * sizing preference. The floor above lived on this sizing div; the cap (a flat `max-w-96`) lived on the panel
- * WRAPPER, one element up, inside a surface whose whole job is to clip. So a full-width form field — the
- * automations "Runs as" row is ~40rem — asked for a 40rem list inside a 24rem box, and everything at the right
+ * WRAPPER, one element up, inside a surface whose whole job is to clip. So a full-width form field: the
+ * automations "Runs as" row is ~40rem: asked for a 40rem list inside a 24rem box, and everything at the right
  * end of every row was simply cut off: the quiet annotation, and the tick marking the current choice. The panel
  * also came out visibly narrower than the control that opened it, which is the tell.
  * One element owns both numbers now, so they cannot contradict: comfortable by default, as wide as its own
  * trigger when that is wider, and never past the edge of the window. */
-const PANEL_WIDTH_CAP = 384; // 24rem — the comfortable reading measure for a list of names
+const PANEL_WIDTH_CAP = 384; // 24rem: the comfortable reading measure for a list of names
 const panelMaxWidth = computed(() => Math.max(PANEL_WIDTH_CAP, panelMinWidth.value));
 
 const toggle = (): void => {
@@ -148,7 +148,7 @@ const applyPick = (option: PickerOption<T>): void => {
                      thing on screen once the panel shuts and "who is this set to" is the whole question it
                      answers. Sized to the room the trigger ALREADY has, which is the constraint that settled the
                      number: this field sits in a two-column form beside plain inputs and other pickers, and 24
-                     grew it two pixels taller than all of them — a persona field visibly out of line with its
+                     grew it two pixels taller than all of them: a persona field visibly out of line with its
                      neighbours, to make one avatar bigger. 20 changes no height at all, and a toolbar's
                      borderless pill only has room for 16. Both are under the 28 a panel row gets, which is the
                      right way round: a list of people is where you recognise a face, and a closed field is where
@@ -159,7 +159,7 @@ const applyPick = (option: PickerOption<T>): void => {
         </template>
         <!-- The label reveals itself only when this span actually clips it. A native `title` on the BUTTON said
              the same words the button was already showing, in the browser's own box, a second behind the rest of
-             the app's hints — and stayed silent in the one case worth a hover, a name too long for the trigger. -->
+             the app's hints, and stayed silent in the one case worth a hover, a name too long for the trigger. -->
         <span
             class="min-w-0 flex-1 truncate text-left"
             :class="[selected === undefined ? `text-subtle` : ``, selected?.mono === true ? `font-mono` : ``]"

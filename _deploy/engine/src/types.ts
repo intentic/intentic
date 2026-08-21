@@ -77,6 +77,6 @@ export interface EngineConfig {
     readonly providers: Providers;
     readonly env?: Readonly<Record<string, string | undefined>>; // default: process.env
     readonly probe?: ReadinessProbe; // default: httpProbe
-    readonly log?: (message: string) => void; // default: console.log — providers' free-form messages
-    readonly onEvent?: (event: EngineEvent) => void; // default: no-op — structured lifecycle events
+    readonly log?: (message: string) => void; // default: console.log, providers' free-form messages
+    readonly onEvent?: (event: EngineEvent) => void; // default: no-op, structured lifecycle events
 }

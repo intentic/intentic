@@ -61,21 +61,21 @@ export const REASON_COPY: Record<LandConflictReason, { icon: IconName; mark: str
         mark: `moved`,
         title: `your workspace moved on since the agent branched`,
         fix: `The agent can rebase onto it and merge these itself.`,
-        row: `Your workspace moved on since the agent branched — the agent can rebase onto it and merge this itself.`,
+        row: `Your workspace moved on since the agent branched, the agent can rebase onto it and merge this itself.`,
     },
     workspace: {
         icon: `user`,
         mark: `yours`,
         title: `you have uncommitted edits to these`,
-        fix: `Only you can clear this — git cannot merge through unstaged work, and the agent's checkout cannot see it.`,
-        row: `You have uncommitted edits to this file — only you can clear it, by committing or stashing them.`,
+        fix: `Only you can clear this, git cannot merge through unstaged work, and the agent's checkout cannot see it.`,
+        row: `You have uncommitted edits to this file, only you can clear it, by committing or stashing them.`,
     },
     binary: {
         icon: `image`,
         mark: `binary`,
         title: `binary files, which have no automatic merge`,
         fix: `The agent can re-create them against the current file, or pick a side.`,
-        row: `A binary file has no automatic merge — the agent can re-create it against the current file, or pick a side.`,
+        row: `A binary file has no automatic merge, the agent can re-create it against the current file, or pick a side.`,
     },
 };
 
@@ -103,7 +103,7 @@ const listing = (blockers: readonly Blocker[], reasons: boolean): string => {
     }
     return [...byRepo]
         .map(([repo, group]) =>
-            [repo, ...group.map((blocker) => `  - ${blocker.path}${reasons ? ` — ${REASON_BRIEF[blocker.reason]}` : ``}`)].join(`\n`),
+            [repo, ...group.map((blocker) => `  - ${blocker.path}${reasons ? `, ${REASON_BRIEF[blocker.reason]}` : ``}`)].join(`\n`),
         )
         .join(`\n`);
 };
@@ -122,7 +122,7 @@ const listing = (blockers: readonly Blocker[], reasons: boolean): string => {
  *     command errors and it improvises from there.
  *   · THE MAIN LINE BY NAME, from the report (LandConflictSchema.mainBranch), the daemon read it off the
  *     user's checkout, which is the only place it is visible. Telling the agent to read it off the FIRST line
- *     of `git worktree list` instead was correct and expensive: that listing is one line per live agent — 65
+ *     of `git worktree list` instead was correct and expensive: that listing is one line per live agent, 65
  *     of them here, and a transcript audit found all seven conflicted sessions opening with it and the
  *     orientation calls around it. The instruction survives as the fallback for a detached HEAD, which is the
  *     one case with no name to give. Still ONLY the branch name: an isolated turn has its worktree mounted
@@ -153,19 +153,19 @@ export const resolvePrompt = (conflicts: readonly LandConflict[] | undefined): s
     const main = sharedMainBranch(conflicts);
     return errandPrompt(ERRANDS.landConflict, [
         [
-            `1. \`git add -A && git commit\` — a rebase refuses to start on a dirty tree.`,
+            `1. \`git add -A && git commit\`: a rebase refuses to start on a dirty tree.`,
             main === undefined
-                ? `2. \`git rebase <branch>\`, where \`<branch>\` is the one in brackets on the FIRST line of \`git worktree list\` — the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge <branch>\` instead.`
-                : `2. \`git rebase ${main}\` — that is the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge ${main}\` instead.`,
-            `3. Resolve each conflict keeping the intent of BOTH sides — your change and whatever moved underneath it. Do not take one side wholesale.`,
+                ? `2. \`git rebase <branch>\`, where \`<branch>\` is the one in brackets on the FIRST line of \`git worktree list\`, the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge <branch>\` instead.`
+                : `2. \`git rebase ${main}\`, that is the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge ${main}\` instead.`,
+            `3. Resolve each conflict keeping the intent of BOTH sides: your change and whatever moved underneath it. Do not take one side wholesale.`,
             `4. Check the result still builds and tests, where this project makes that cheap.`,
         ].join(`\n`),
         `What blocked the land:\n${listing(mine, true)}`,
         ...(theirs.length === 0
             ? []
             : [
-                  `Leave these alone — the user has uncommitted edits on them, which only they can clear; rebasing will not unblock them:\n${listing(theirs, false)}`,
+                  `Leave these alone: the user has uncommitted edits on them, which only they can clear; rebasing will not unblock them:\n${listing(theirs, false)}`,
               ]),
-        `Stay inside your own worktree: never edit, stage or commit in the user's checkout. The app re-lands automatically when your turn ends — stop once the rebase is clean.`,
+        `Stay inside your own worktree: never edit, stage or commit in the user's checkout. The app re-lands automatically when your turn ends, stop once the rebase is clean.`,
     ]);
 };

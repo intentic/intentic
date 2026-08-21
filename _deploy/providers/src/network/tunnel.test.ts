@@ -149,7 +149,7 @@ test("apply reuses an existing tunnel rather than creating a new one", async () 
 test("apply on an ingress-only change puts the config without restarting the running connector", async () => {
     let putIngress: readonly IngressRule[] | undefined;
     const ssh = fakeSsh("intentic-tunnel-tunnel-abc");
-    // getTunnelToken/getTunnelStatus stay NOT_USED: a running, image-current connector must be left alone —
+    // getTunnelToken/getTunnelStatus stay NOT_USED: a running, image-current connector must be left alone:
     // the ingress PUT reaches it as a live config push, so a restart (and its 1033 outage window) is a bug.
     const provider = createTunnelProvider(
         api({

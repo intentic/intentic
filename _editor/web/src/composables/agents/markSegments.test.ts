@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { markSegments } from "./markSegments";
 
-// The term is marked without v-html — this text is a chat's own words, which are not trusted markup.
+// The term is marked without v-html: this text is a chat's own words, which are not trusted markup.
 describe(`markSegments`, () => {
     it(`marks every occurrence, not just the first`, () => {
         expect(markSegments(`land and land again`, `land`)).toEqual([

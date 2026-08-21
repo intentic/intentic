@@ -1,16 +1,16 @@
 <!-- A ```mermaid fence, drawn.
-     Mermaid is the notation people already write diagrams in — a repository's READMEs and design notes are
-     full of it long before this app opens them — so a file preview that printed the arrow syntax instead of
+     Mermaid is the notation people already write diagrams in: a repository's READMEs and design notes are
+     full of it long before this app opens them, so a file preview that printed the arrow syntax instead of
      the picture would be the one tool on the machine that cannot read them.
 
      THE PARSER IS THE VALIDATOR, and it arrives late. Mermaid is a megabyte of diagram grammars: it loads on
      the first document that actually holds a diagram, and never on the many that do not. That is also why the
      "is this valid?" question is answered here rather than in markdown/figures.ts, which decides every other
-     figure kind synchronously — nothing but mermaid can judge mermaid. A body it refuses renders as an
+     figure kind synchronously: nothing but mermaid can judge mermaid. A body it refuses renders as an
      ordinary code block, which keeps the engine's contract exactly where it always was: a broken figure costs
      itself, never the page.
 
-     Untrusted input, and treated as such — see mermaidRender.ts, which owns everything singular about mermaid
+     Untrusted input, and treated as such: see mermaidRender.ts, which owns everything singular about mermaid
      (its configuration, its ids, the order renders run in), because a page holds many diagrams and one
      mermaid. This file owns what is per-diagram: which of the three states it is in, and the theme it was
      drawn for. -->
@@ -29,7 +29,7 @@ const host = ref<HTMLElement>();
 const drawn = ref<string>();
 const refused = ref(false);
 
-// The source, dressed exactly like any other fenced block — same chrome, same copy button, which the prose
+// The source, dressed exactly like any other fenced block: same chrome, same copy button, which the prose
 // surface's delegated handler reaches because this markup is inside it.
 const source = computed(() => codeBlockHtml({ code, lang: MERMAID_LANG }, 0, true));
 
@@ -62,12 +62,12 @@ const draw = (): void => {
 
 /* A DIAGRAM SHRUNK TO FIT IS NOT ALWAYS A DIAGRAM ANYONE CAN READ. Mermaid caps its svg at the container's
  * width, which is right up until the diagram is twice as wide as the column it is being read in: the flowchart
- * that prompted this feature is 1163px of boxes, and in a 627px preview it drew at 54% — labels at seven
+ * that prompted this feature is 1163px of boxes, and in a 627px preview it drew at 54%: labels at seven
  * pixels, a picture of a diagram rather than one.
  *
  * So the shrink gets a floor and, past it, the figure scrolls sideways instead. It is the same trade DagGraph
  * makes with `readableZoom`, for the same reason and with the same conclusion: a fit no one can read is not a
- * fit. The floor is loose enough that a diagram only somewhat too wide still fits whole — scrolling to see a
+ * fit. The floor is loose enough that a diagram only somewhat too wide still fits whole: scrolling to see a
  * picture that WOULD have been legible is the other way to get this wrong. */
 const MIN_SCALE = 0.8;
 

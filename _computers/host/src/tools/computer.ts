@@ -95,7 +95,7 @@ export const act = async (screen: Desktop, input: ComputerInput, scopes: HostSco
     }
     if (input.action === "key") {
         if (input.text === undefined || input.text === "") {
-            throw new DesktopError(`"text" is required to press a key — for example "Return", "ctrl+c", "alt+Tab".`);
+            throw new DesktopError(`"text" is required to press a key: for example "Return", "ctrl+c", "alt+Tab".`);
         }
         await screen.key(input.text);
         return;

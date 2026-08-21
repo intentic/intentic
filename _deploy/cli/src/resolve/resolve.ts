@@ -37,7 +37,7 @@ export const discoverZone = async (intent: IntentSet, dir: string): Promise<stri
     }
     const apiToken = process.env[token.key];
     if (apiToken === undefined || apiToken === "") {
-        throw new Error(`set ${token.key} (your Cloudflare API token) before resolve — it is needed to discover your zone and account`);
+        throw new Error(`set ${token.key} (your Cloudflare API token) before resolve: it is needed to discover your zone and account`);
     }
     const zones = await cloudflareApi.listZones({ apiToken });
     return selectZone(

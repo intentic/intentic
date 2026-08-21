@@ -37,13 +37,13 @@ const marked = (): boolean => {
     try {
         return sessionStorage.getItem(HEALED_MARKER) !== null;
     } catch {
-        return true; // No storage means nothing persisted to heal — never wipe-reload.
+        return true; // No storage means nothing persisted to heal: never wipe-reload.
     }
 };
 
 const heal = (error: unknown): void => {
     healing = true;
-    console.error(`[self-heal] startup crashed — wiping this origin's stored state and reloading once:`, error);
+    console.error(`[self-heal] startup crashed, wiping this origin's stored state and reloading once:`, error);
     try {
         localStorage.clear();
         sessionStorage.clear();
@@ -64,7 +64,7 @@ export const reportStartupError = (error: unknown): void => {
     }
     if (marked()) {
         // The clean slate did not fix it, a real bug, so let it surface instead of looping the wipe.
-        console.error(`[self-heal] crashed again after a wipe — not storage, leaving the error to surface.`);
+        console.error(`[self-heal] crashed again after a wipe, not storage, leaving the error to surface.`);
         return;
     }
     heal(error);

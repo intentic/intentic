@@ -1,6 +1,6 @@
 <!-- EVERY NOTICE A VIEW HAS, IN ONE PLACE, IN THE RIGHT ORDER (ranking and de-duplication: notice.ts).
-     A view hands this everything currently wrong — `undefined`s included, so call sites stay a plain list
-     rather than a filter — and renders nothing at all when nothing is. Safe to leave mounted at the top of a
+     A view hands this everything currently wrong: `undefined`s included, so call sites stay a plain list
+     rather than a filter, and renders nothing at all when nothing is. Safe to leave mounted at the top of a
      view, which is the point: the alternative is a `v-if` box per failure scattered down the template, where
      two problems at once produce two boxes with no relationship and the user reads them in markup order. -->
 <script setup lang="ts">

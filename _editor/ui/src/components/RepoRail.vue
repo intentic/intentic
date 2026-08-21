@@ -1,8 +1,8 @@
-<!-- WHICH REPOSITORY — the narrowing column two workspace-wide boards had each built, and the reason their
+<!-- WHICH REPOSITORY: the narrowing column two workspace-wide boards had each built, and the reason their
      bodies can stay a list.
 
      IT NARROWS, IT DOES NOT SELECT. "All repositories" is where these pages open and where they return to,
-     because the first question a cross-repo board answers is "is anything wrong anywhere" — a menu you have to
+     because the first question a cross-repo board answers is "is anything wrong anywhere": a menu you have to
      walk repository by repository to answer that is not a monitoring surface, it is a filing cabinet. That is
      why the pinned row belongs to no group and cannot be grouped or filtered out of reach: a row you cannot get
      back to is a filter you cannot clear.
@@ -15,7 +15,7 @@
      ONE NUMBER PER ROW, and any second fact is its COLOUR rather than a second number: two numbers in a 16rem
      column read as "1 5" with nothing saying which is which, and the reader who needs the distinction is
      scanning, not hovering. The tooltip is where the whole state is spelled out. What the number COUNTS is the
-     caller's — branches failing, chores due — and so is the colour rule; this owns the shape they are said in.
+     caller's: branches failing, chores due, and so is the colour rule; this owns the shape they are said in.
 
      Bounded by how many repositories a workspace holds, never by how much they are owed. That is the whole
      answer to what these pages grow into. -->
@@ -42,7 +42,7 @@ const { groups, all, memory } = defineProps<{
 // undefined = every repository. Kept undefined rather than a sentinel so the URL simply omits the parameter.
 const selected = defineModel<string | undefined>();
 
-/* Which repository you were last reading about, kept across visits — a rail is where these pages are steered
+/* Which repository you were last reading about, kept across visits: a rail is where these pages are steered
  * from, and re-picking the same row on arrival was the cost of a URL that starts empty every time. "All" is
  * remembered as readily as one of them: somebody who deliberately widened the scope should find it wide. */
 useRailMemory(memory, selected, () => groups.flatMap((group) => group.rows.map((row) => row.value)));

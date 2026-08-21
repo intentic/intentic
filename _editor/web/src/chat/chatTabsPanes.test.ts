@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 //
-// THE RAIL'S GESTURES ON THE PANE SET — the popped-out window's left edge is a multi-selecting list (Ctrl adds
+// THE RAIL'S GESTURES ON THE PANE SET: the popped-out window's left edge is a multi-selecting list (Ctrl adds
 // a column, Shift takes a run of rows), and this is what its PLAIN click means: that row, alone.
 //
 // Driven through the mounted list rather than against the store, because the store verb is not the part that
-// was wrong — `chat panes` in useChat.test.ts already pins it. What this file holds is the WIRING: which of
+// was wrong, `chat panes` in useChat.test.ts already pins it. What this file holds is the WIRING: which of
 // the click's branches the reset lives in. Put in the wrong one it either fires on a modified click (making
 // Ctrl+click a swap and the split unreachable) or fires while DOCKED, where the split is stored but not drawn
 // and collapsing one nobody can see quietly loses the arrangement the pop-out returns to.
@@ -13,7 +13,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetAgents } from "../composables/agents/useAgents";
 import { draftConversation, resetChat, reveal, useChat } from "../composables/chat/useChat";
-// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
 // suites open extra tabs with.
 const newChat = () => {
     const conversation = draftConversation();
@@ -107,8 +107,8 @@ it(`collapses the split to the row clicked without a modifier`, async () => {
     expect(useChat().conversations.value.map((c) => c.conversationId)).toEqual(ids);
 });
 
-/* BOTH COLUMNS, ONE MARK. The rail used to rank a split — the focused chat's card at full strength, the rest a
- * step fainter — which asked the reader to read a hierarchy into two chats they had put up to read together.
+/* BOTH COLUMNS, ONE MARK. The rail used to rank a split: the focused chat's card at full strength, the rest a
+ * step fainter, which asked the reader to read a hierarchy into two chats they had put up to read together.
  * Every chat with a column wears the same card now, and the row for a chat with no column still wears none. */
 it(`marks every chat on screen the same, whichever one holds the keyboard`, async () => {
     const ids = openThree();
@@ -134,7 +134,7 @@ it(`still gives a row a column of its own when Ctrl says so`, async () => {
 });
 
 // Docked, the panel draws the focused chat alone whatever the pane set says, and the pane gestures are not
-// offered at all — so a click here is only a focus move, and the split the reader left in the window is theirs
+// offered at all, so a click here is only a focus move, and the split the reader left in the window is theirs
 // to come back to.
 it(`leaves a stored split alone when the panel is docked`, async () => {
     const ids = openThree();

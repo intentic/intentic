@@ -6,7 +6,7 @@ import type { TodoItem } from "@intentic/sandbox-contract";
  *
  * Every block in a transcript is a snapshot, not a live view: the agent writes a fresh one each time the list
  * moves, so a long turn leaves a trail of them and a finished session leaves the whole trail behind. Which is
- * why `live` exists — a spinner is a claim about right now, and the row that was underway when a snapshot was
+ * why `live` exists: a spinner is a claim about right now, and the row that was underway when a snapshot was
  * taken stays that way forever. Scrolled back to, an animated row reads as an agent still working on a session
  * that ended hours ago; frozen, it keeps its highlight as a static dot and reads as the record it is. */
 
@@ -27,7 +27,7 @@ const todoIcon = (todo: TodoItem): { name: IconName; spin?: boolean; class: stri
 };
 
 // `activeForm` is the row's present-tense phrasing ("Serializing…"), which only tells the truth while the row
-// is actually active — a settled snapshot reads back in the same imperative form as the rows around it.
+// is actually active: a settled snapshot reads back in the same imperative form as the rows around it.
 const todoText = (todo: TodoItem): string => (props.live && todo.status === `in_progress` && todo.activeForm ? todo.activeForm : todo.content);
 </script>
 

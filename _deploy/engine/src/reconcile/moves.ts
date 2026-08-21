@@ -26,7 +26,7 @@ export const applyMoves = async (graph: DesiredStateGraph, config: EngineConfig)
             throw new Error(`moved: "from" and "to" are the same id "${move.from}"`);
         }
         if (graph.resources[move.from] !== undefined) {
-            throw new Error(`moved: source "${move.from}" still exists in the desired state — a rename must remove the old id`);
+            throw new Error(`moved: source "${move.from}" still exists in the desired state, a rename must remove the old id`);
         }
         const node = graph.resources[move.to];
         if (node === undefined) {
@@ -37,7 +37,7 @@ export const applyMoves = async (graph: DesiredStateGraph, config: EngineConfig)
         const type = node.type as ResourceType;
         const provider = requireProvider(config.providers, type, move.to);
         if (provider.restamp === undefined) {
-            log(`moved: ${type} cannot rename in place — "${move.from}" → "${move.to}" will be recreated (its data is NOT preserved)`);
+            log(`moved: ${type} cannot rename in place, "${move.from}" → "${move.to}" will be recreated (its data is NOT preserved)`);
             continue;
         }
         const ctx = makeContext(move.to, store, env, log);

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // jsdom because the whole subject here is the LEFT-HAND LIST. A land conflict used to be a paragraph above the
-// review naming a few paths, over a list of rows that all looked alike — so "which of these thirty files is the
+// review naming a few paths, over a list of rows that all looked alike, so "which of these thirty files is the
 // problem, and whose problem is it?" was a question the user answered by matching strings with their eyes. The
 // fix is entirely in what renders: a mark per blocked row, a count per repo heading, a filter that narrows to
 // them. None of that can be pinned by a unit test on the composable, only by looking at the rows.
@@ -18,14 +18,14 @@ import { router } from "../router";
 
 // The panel's import chain pulls in app-wide singletons that read browser globals at import time
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). matches:false keeps
-// the device DESKTOP — the form factor where the list and the diff are on screen together.
+// the device DESKTOP: the form factor where the list and the diff are on screen together.
 vi.hoisted(() => {
     // jsdom implements no scrolling at all, and selecting a row keeps it on screen.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
 });
 
 // The only stand-ins: the two viewers, which the panel mounts for whichever file is selected. Monaco is a real
-// editor with real workers and nothing about it is under test here — the list is.
+// editor with real workers and nothing about it is under test here: the list is.
 vi.mock("../pages/workspace/viewers/DiffView.vue", () => ({ default: { render: () => null } }));
 vi.mock("../pages/workspace/viewers/BinaryDiffView.vue", () => ({ default: { render: () => null } }));
 
@@ -36,7 +36,7 @@ const { showComments, toggleShowComments } = (await import("../composables/useLa
 
 const AGENT = `a1`;
 /* A refused land as the daemon reports it: nothing landed (a check land is atomic), two of the five files
- * blocked, for two different causes, in two different repos. The third repo group holds none — the case that
+ * blocked, for two different causes, in two different repos. The third repo group holds none: the case that
  * proves a heading's count is per repo and not the report's total. */
 const changes: AgentChangesResponse = {
     repos: [
@@ -70,9 +70,9 @@ const changes: AgentChangesResponse = {
     ],
 };
 
-/* The root repo's package layout AS THE AGENT'S OWN TREE HAS IT — shipped with the diff, not looked up from the
+/* The root repo's package layout AS THE AGENT'S OWN TREE HAS IT: shipped with the diff, not looked up from the
  * workspace-wide read, because an agent works in a worktree and /work cannot see a package that so far exists
- * only there. One package over the two auth files, and the two loose files nothing claims — which are also,
+ * only there. One package over the two auth files, and the two loose files nothing claims, which are also,
  * deliberately, the two blocked ones: folding the bucket that holds a refusal is the case where a fold must not
  * be able to hide anything. */
 const MODULES: readonly WorkspaceModule[] = [{ dir: `src/auth`, name: `@shop/auth` }];
@@ -81,11 +81,11 @@ let app: App | undefined;
 
 /* Seeded into the query cache rather than served over a stubbed fetch: the diff query is gated on the daemon
  * being reachable (useSandboxQuery), which no test drives, and the cache is where the real panel reads it from
- * anyway — this is the state a browser is in when it opens the review on a conflict it learned about from the
+ * anyway: this is the state a browser is in when it opens the review on a conflict it learned about from the
  * board. */
 const mount = async (modules: readonly WorkspaceModule[] = []): Promise<HTMLElement> => {
     // Empty by default: with no packages to group by, every path lands in one unnamed bucket and the list draws
-    // repo headings only — which is what the tests that aren't about packages want.
+    // repo headings only, which is what the tests that aren't about packages want.
     const repos: AgentChangesResponse[`repos`] = [];
     for (const repo of changes.repos) {
         repos.push(repo.repo === `root` ? { ...repo, modules: [...modules] } : repo);
@@ -94,7 +94,7 @@ const mount = async (modules: readonly WorkspaceModule[] = []): Promise<HTMLElem
     const el = document.createElement(`div`);
     document.body.append(el);
     // The review's state is created by AgentDetail in the real page and handed down, so one instance serves
-    // both the header's actions and this panel's — the host here stands in for exactly that.
+    // both the header's actions and this panel's: the host here stands in for exactly that.
     app = createApp({
         setup() {
             const review = useAgentChanges(ref(AGENT));
@@ -137,7 +137,7 @@ afterEach(() => {
 const rows = (el: HTMLElement): HTMLElement[] => [...el.querySelectorAll<HTMLElement>(`[class*="group/file"]`)];
 const rowFor = (el: HTMLElement, path: string): HTMLElement =>
     rows(el).find((row) => row.textContent?.includes(path.slice(path.lastIndexOf(`/`) + 1)))!;
-// The rows on screen, top to bottom, by the file each one names — the reading the list gives a user.
+// The rows on screen, top to bottom, by the file each one names: the reading the list gives a user.
 const NAMES = /session\.test\.ts|session\.ts|config\.ts|logo\.png|README\.md/;
 const rowNames = (el: HTMLElement): string[] => rows(el).map((row) => row.textContent?.match(NAMES)?.[0] ?? ``);
 // A PACKAGE heading's own control (the fold), told apart from its repo's by the module glyph it carries and
@@ -154,7 +154,7 @@ const filters = (el: HTMLElement): string[] =>
 
 it(`marks each blocked row with its own cause, and leaves the rest of the review alone`, async () => {
     const el = await mount();
-    // The user's own uncommitted edits, and a file git cannot merge at all — two causes, two marks, and the
+    // The user's own uncommitted edits, and a file git cannot merge at all: two causes, two marks, and the
     // words are the module's, so the row cannot come to say something the report above it doesn't.
     expect(rowFor(el, `src/config.ts`).textContent).toContain(REASON_COPY.workspace.mark);
     expect(rowFor(el, `src/config.ts`).querySelector(`[data-icon="${REASON_COPY.workspace.icon}"]`)).not.toBeNull();
@@ -178,7 +178,7 @@ it(`counts the blockers on the repo heading, so a collapsed group cannot hide on
 });
 
 /* THE REGRESSION THIS FILTER CARRIES. The control used to be hidden whole whenever the unlanded set was not a
- * proper subset of the review — and a refused land leaves EVERY row unlanded, so the one state where narrowing
+ * proper subset of the review, and a refused land leaves EVERY row unlanded, so the one state where narrowing
  * a thirty-file list matters most was the one state with no control to do it. */
 it(`offers Blocked first and keeps the control alive when a refusal left nothing landed`, async () => {
     const el = await mount();
@@ -193,7 +193,7 @@ it(`narrows to exactly the blocked files`, async () => {
 });
 
 /* THE PACKAGE /work HAS NEVER HEARD OF. An agent writes in a worktree, so a package it has just created has
- * its manifest only there — and that is exactly when grouping matters most, because every file of a new package
+ * its manifest only there, and that is exactly when grouping matters most, because every file of a new package
  * is a change. This list used to group by the workspace-wide read, which walks /work, so all of them fell into
  * the unnamed "loose in this repo" bucket and were drawn as bare paths under no package at all. It groups by
  * the layout its own diff shipped with; the workspace read below is seeded to disagree, and is not consulted. */
@@ -208,7 +208,7 @@ it(`groups by the packages of the agent's own tree, not the workspace's`, async 
 });
 
 /* FOLDING A PACKAGE. A landing that spans four packages is one the reviewer cares about and three that are
- * noise to them, and before this the only fold on offer was the whole repo — which in a monorepo is the entire
+ * noise to them, and before this the only fold on offer was the whole repo, which in a monorepo is the entire
  * review. These three pin the parts that are easy to get wrong: what disappears, what must not, and that the
  * keyboard can't walk back into what you just folded. */
 it(`folds one package's rows away and leaves the rest of the review standing`, async () => {
@@ -217,7 +217,7 @@ it(`folds one package's rows away and leaves the rest of the review standing`, a
     packageHeading(el, `@shop/auth`).click();
     await nextTick();
     expect(rowNames(el)).toEqual([`config.ts`, `logo.png`, `README.md`]);
-    // The same control both ways — a fold with no way back is a file hidden for good.
+    // The same control both ways: a fold with no way back is a file hidden for good.
     packageHeading(el, `@shop/auth`).click();
     await nextTick();
     expect(rowNames(el)).toEqual([`session.ts`, `session.test.ts`, `config.ts`, `logo.png`, `README.md`]);
@@ -225,7 +225,7 @@ it(`folds one package's rows away and leaves the rest of the review standing`, a
 
 it(`keeps a folded package saying how big it is and how much of it refused`, async () => {
     const el = await mount(MODULES);
-    // The bucket of files no package claims — here, both blocked ones.
+    // The bucket of files no package claims: here, both blocked ones.
     const loose = packageHeading(el, `root`);
     loose.click();
     await nextTick();
@@ -233,7 +233,7 @@ it(`keeps a folded package saying how big it is and how much of it refused`, asy
     expect(packageHeading(el, `root`).querySelector(`[data-icon="exclamation-triangle"]`)).not.toBeNull();
     expect(packageHeading(el, `root`).textContent).toContain(`2`);
     /* WHAT A HEADING SAYS BEFORE ITS ROWS HAVE BEEN READ. Nothing here has read a diff, so how much of these
-     * packages is code rather than comment is not known yet — so the heading holds git's total, at half weight,
+     * packages is code rather than comment is not known yet, so the heading holds git's total, at half weight,
      * with the hover saying that the code-only reading is still being worked out (ReviewStat). A folded package
      * whose size was a pending mark was a fold that hid the one fact it exists to keep. */
     expect(packageHeading(el, `@shop/auth`).textContent).toContain(`+20`);
@@ -253,7 +253,7 @@ it(`steps past a folded package instead of landing inside it`, async () => {
     const el = await mount(MODULES);
     packageHeading(el, `@shop/auth`).click();
     await nextTick();
-    // Folding is "give me back the space", not "close the file I'm reading" — the diff stays on session.ts.
+    // Folding is "give me back the space", not "close the file I'm reading": the diff stays on session.ts.
     expect(el.querySelector(`section > div`)?.textContent).toContain(`session.ts`);
     window.dispatchEvent(new KeyboardEvent(`keydown`, { key: `j` }));
     await nextTick();

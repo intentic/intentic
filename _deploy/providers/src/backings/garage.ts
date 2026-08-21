@@ -67,7 +67,7 @@ const garageToml = (parsed: GarageInputs): string =>
         "",
     ].join("\n");
 
-// Write compose + garage.toml (always) and the rpc secret (once — 32 bytes / 64 hex via openssl, host-side).
+// Write compose + garage.toml (always) and the rpc secret (once: 32 bytes / 64 hex via openssl, host-side).
 const ensureFiles = async (session: SshSession, id: string, hash: string, parsed: GarageInputs): Promise<void> => {
     const dir = stateDir(KIND, id);
     await session.exec(`mkdir -p ${dir}`);

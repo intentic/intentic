@@ -23,7 +23,7 @@ export { DesktopError, type Desktop, type MouseButton, type Point, type ScreenFr
 // macOS and the rest: capture would work, but input would not, and a Desktop that silently cannot click is worse
 // than one that says so.
 const unsupported = async (): Promise<never> => {
-    throw new DesktopError(`Controlling the screen is not supported on ${process.platform} yet — only Windows and Linux.`);
+    throw new DesktopError(`Controlling the screen is not supported on ${process.platform} yet: only Windows and Linux.`);
 };
 
 export const desktop = (): Desktop => {

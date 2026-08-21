@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // jsdom because what this component IS is what it renders: a turn's whole run of tool calls reduced to one
-// mark, and the same rows the shown mode draws once that mark is opened. Both halves are render decisions —
+// mark, and the same rows the shown mode draws once that mark is opened. Both halves are render decisions:
 // neither throws when it goes wrong, it just draws the wrong thing.
 import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
@@ -37,7 +37,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-/* Closing a run is a <Transition>, so the calls leave with the reveal rather than on the tick that shut it —
+/* Closing a run is a <Transition>, so the calls leave with the reveal rather than on the tick that shut it:
  * they are gone once it has run, which is what "closed" means to a reader. jsdom reports no transition
  * duration, so Vue finishes the leave on the next frames rather than after any real 160ms. */
 const settle = async (): Promise<void> => {

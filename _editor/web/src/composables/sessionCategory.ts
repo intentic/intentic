@@ -41,19 +41,19 @@ export interface SessionCategory {
 }
 
 const CATEGORIES: Readonly<Record<string, Omit<SessionCategory, "type">>> = {
-    chore: { hue: 210, icon: `search` }, // investigation & upkeep — audit, analyze, check, review
+    chore: { hue: 210, icon: `search` }, // investigation & upkeep, audit, analyze, check, review
     // ⇄ for reshaping what exists, redesign, rewrite, split, unify. Not the cycle-arrows: those rhyme with
     // the running status's arc, and a card can wear both at once.
     refactor: { hue: 280, icon: `arrows-h` },
-    feat: { hue: 130, icon: `plus` }, // new work — add, design, implement, wire
-    fix: { hue: 350, icon: `wrench` }, // repair — fix, debug, restore
+    feat: { hue: 130, icon: `plus` }, // new work, add, design, implement, wire
+    fix: { hue: 350, icon: `wrench` }, // repair, fix, debug, restore
     revert: { hue: 350, icon: `undo` }, // undoing is repair
-    perf: { hue: 20, icon: `bolt` }, // speed — optimize, benchmark, cache
-    test: { hue: 40, icon: `list-check` }, // verification — test, cover, verify
-    build: { hue: 40, icon: `cog` }, // tooling kin of test — only ever from an explicit `build:` prefix
+    perf: { hue: 20, icon: `bolt` }, // speed, optimize, benchmark, cache
+    test: { hue: 40, icon: `list-check` }, // verification, test, cover, verify
+    build: { hue: 40, icon: `cog` }, // tooling kin of test, only ever from an explicit `build:` prefix
     ci: { hue: 40, icon: `cog` },
-    docs: { hue: 160, icon: `book` }, // reference — document, describe, explain
-    style: { hue: 320, icon: `palette` }, // cosmetics — polish, format, restyle
+    docs: { hue: 160, icon: `book` }, // reference, document, describe, explain
+    style: { hue: 320, icon: `palette` }, // cosmetics, polish, format, restyle
 };
 
 /* A title already written as a Conventional Commits subject, the user's own `fix: …` prompt, or a session a

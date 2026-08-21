@@ -4,7 +4,7 @@
 
 Everything this project publishes is built by GitHub Actions from a tagged commit in this repository, and each
 artifact carries a signed statement saying so. The signature goes to a public transparency log, so the check
-below runs on your machine, against public infrastructure, without involving us — which is the point. If it
+below runs on your machine, against public infrastructure, without involving us: which is the point. If it
 passes, the bytes you have are the bytes this repository's source produced. If it fails, do not run them.
 
 You need the [GitHub CLI](https://cli.github.com). Nothing else, and no account.
@@ -21,7 +21,7 @@ npm audit signatures
 ```
 
 Each answers with the workflow, the commit and the repository that produced the artifact. What it cannot tell
-you is whether that source is trustworthy — that part is the reading, and it is why the source is public.
+you is whether that source is trustworthy: that part is the reading, and it is why the source is public.
 
 The [OpenSSF Scorecard report](https://scorecard.dev/viewer/?uri=github.com/intentic/intentic) is the other
 half: eighteen automated checks over this repository's security posture, scored and published continuously,
@@ -51,13 +51,13 @@ The parts where a bug is most likely to matter to someone other than the operato
 | `_platform/api` · `_editor/web` | the hosted platform: identity and the browser workspace |
 | `_extensions/*` | anything that reaches a third-party system with the operator's credentials |
 
-Particularly interesting: **anything that crosses the sandbox boundary the wrong way** — a path that lets a
+Particularly interesting: **anything that crosses the sandbox boundary the wrong way**, a path that lets a
 remote visitor reach the workspace API, a preview or public-files route that serves a file outside its root, a
 redaction gap that puts a credential into a transcript or a log, or an agent-facing tool that escapes its
-worktree. Also **an ingestion path that reaches the agent unmarked**: content the operator did not write — a
-listener or Front Desk message, a fetched page, a foreign MCP server's result — that arrives outside the
+worktree. Also **an ingestion path that reaches the agent unmarked**: content the operator did not write, a
+listener or Front Desk message, a fetched page, a foreign MCP server's result: that arrives outside the
 `<untrusted-content>` envelope, or a way for such content to forge or escape one. On the platform side: anything that would let it reach a user's code or credentials, which
-[ARCHITECTURE.md](ARCHITECTURE.md) argues it structurally cannot — except for **hosted** sandboxes, where the
+[ARCHITECTURE.md](ARCHITECTURE.md) argues it structurally cannot: except for **hosted** sandboxes, where the
 platform runs the machine on its own provider account by design; there the interesting findings are the ones
 that cross between hosted tenants (each machine is its own microVM on its own private network), or that let
 anyone other than the platform's own configuration reach the provider credential.
@@ -70,17 +70,17 @@ anyone other than the platform's own configuration reach the provider credential
   What is **not** covered by that sentence, and is in scope: the agent reads content the operator did not
   write, and a workspace with a public Front Desk or a listener reads it from strangers. Trusting the agent is
   not trusting everything it has read. The envelope, the marker neutralization and the credential-read floor
-  that follows outside content into a turn are there for exactly that gap — bugs in them are in scope under
+  that follows outside content into a turn are there for exactly that gap: bugs in them are in scope under
   the ingestion-path clause above. Prompt injection on its own is not a vulnerability here (no in-process
   screen of model-influenced text can be); a way past one of those mechanisms is.
 - Vulnerabilities in third-party dependencies with no exploitable path through this code. Report those
   upstream; Renovate carries the bump here.
 - The development certificate at `_tools/localhost-https`. It is minted per machine at install time, name-
   constrained to `localhost` and the loopback addresses, and its private half never leaves the machine that
-  generated it. (Until August 2026 that CA was committed here, unconstrained and valid to 2035 — if you ever
+  generated it. (Until August 2026 that CA was committed here, unconstrained and valid to 2035: if you ever
   added it to a trust store, remove it.)
 
 ## Supported versions
 
-Fixes land on `main` and ship in the next release. There are no maintained back-release branches — the npm
+Fixes land on `main` and ship in the next release. There are no maintained back-release branches: the npm
 packages, the container images, and the desktop installers all move forward together at one version.

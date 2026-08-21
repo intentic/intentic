@@ -23,21 +23,21 @@ import PresenceAvatars from "../presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
 import PastChatList from "./PastChatList.vue";
 
-/* THE CHAT PANEL'S OWN BAR — one line that says which conversation you are in, and drops the list of every
+/* THE CHAT PANEL'S OWN BAR: one line that says which conversation you are in, and drops the list of every
  * other one on click. Docked it is a header across the top of the chat column; popped out it stands up the
  * window's left edge as a rail, with that same list permanently open in it.
  *
  * IT USED TO BE A TAB STRIP, and the strip was the wrong shape for this column. Tabs wrapped to a second row
  * and then scrolled, so a fleet of a dozen showed two or three truncated titles ("Migrate the users tab…",
- * "Migrate the users tab…" — derived titles share their prefixes), the rows reflowed on every open and close
+ * "Migrate the users tab…": derived titles share their prefixes), the rows reflowed on every open and close
  * so no tab kept its place, and the whole thing cost up to 96px of the narrowest column in the app to be a
  * strictly worse version of the switcher /agents already is. What the strip really earned was the other two
  * jobs: saying which chat the transcript below belongs to, and being the one place outside /agents that knows
- * you have other sessions running at all. Both fit on one 2.25rem line — the same line mobile has always used
- * — with the counts as marks (`spinner 2`, `! 1`) rather than as three shrunken titles.
+ * you have other sessions running at all. Both fit on one 2.25rem line: the same line mobile has always used
+ *: with the counts as marks (`spinner 2`, `! 1`) rather than as three shrunken titles.
  *
  * So the switcher wears: status glyph · origin · title · viewers · running / attention counts · chevron. The
- * list it opens is ChatTabList, the fleet board's three lanes in miniature — the same component the rail
+ * list it opens is ChatTabList, the fleet board's three lanes in miniature: the same component the rail
  * shows, so the docked sheet and the pop-out rail cannot drift apart.
  *
  * The strip reads the conversation list from the useChat singleton and emits select / close / open rather
@@ -60,15 +60,15 @@ const router = useRouter();
 // teaches the chord that makes the trip unnecessary. Never shown where the panel already floats, so it never
 // has to say the way back.
 const popoutHint = computed(() => withShortcut(`Move chat into new window`, `chat.togglePopout`));
-// Its sibling on the docked header — moving the chat's home to the RAIL (a tile, full-window when opened).
+// Its sibling on the docked header: moving the chat's home to the RAIL (a tile, full-window when opened).
 // The ways back live on the tile itself (its right-click menu, ShellDesktop) and on this bar's own menu, so
 // the rail form carries no window-management chrome of its own.
-const railHint = computed(() => withShortcut(`Dock chat to rail — full window, behind a rail tile`, `chat.toggleHome`));
+const railHint = computed(() => withShortcut(`Dock chat to rail: full window, behind a rail tile`, `chat.toggleHome`));
 
 /* On a WIDE surface (the pop-out window, or the /chat area filling the main one) the bar stands up the LEFT
  * EDGE as a resizable rail with the chat list always open in it (ChatPanel says why that side).
  * A wide surface has the width to keep the list open beside the transcript, and a top bar there would spend
- * the one axis the chat is short of (height) on a row that has width to burn — while a rail has room to be a
+ * the one axis the chat is short of (height) on a row that has width to burn, while a rail has room to be a
  * slice of the fleet board. Docked, the chat column is ~22rem: a permanent rail there would halve the
  * transcript, so the list lives in a sheet the header drops and takes back. */
 const vertical = computed(() => chatWide.value);
@@ -76,7 +76,7 @@ const vertical = computed(() => chatWide.value);
 /* --- The counts the header carries -------------------------------------------------------------
  * The one thing the strip did that /agents cannot: from inside the workspace, a terminal or settings, say
  * that other sessions are alive. Two numbers, over the chats open in THIS window (the set this bar switches
- * between) — how many are working, and how many have stopped to ask you something. Each is absent at zero, so
+ * between): how many are working, and how many have stopped to ask you something. Each is absent at zero, so
  * a quiet fleet leaves a quiet header and the marks mean something when they do appear. */
 const runningCount = computed(
     () =>
@@ -90,19 +90,19 @@ const attentionCount = computed(
 );
 
 /* --- The sheet ---------------------------------------------------------------------------------
- * Docked, the list drops out of the header as a panel pinned to the chat column's own width — the shape the
+ * Docked, the list drops out of the header as a panel pinned to the chat column's own width: the shape the
  * composer's pickers already use (see ComposerPopover), and for the same reason: this is not a menu hanging
  * off a small trigger with room to flip around, it is a sheet the width of the column it belongs to. It also
  * keeps the row menus working, which an <AnchoredOverlay> would not: that closes on any pointerdown outside
- * its own box, and a right-click menu is teleported outside by construction — so choosing "Rename" would
+ * its own box, and a right-click menu is teleported outside by construction, so choosing "Rename" would
  * dismiss the sheet a beat before the row it renames could show its input.
  *
  * Dismissal is therefore ours: Escape, a second press on the header, picking a chat, or a pointerdown outside
- * the header — except inside an open context menu, which is the one "outside" that is still this sheet. */
+ * the header: except inside an open context menu, which is the one "outside" that is still this sheet. */
 const listOpen = ref(false);
 // The sheet is a child of the bar, so one ref answers both "is this click ours" and "which document are we in".
 const bar = ref<HTMLElement | null>(null);
-// The rail's list, for the one thing the host has to reach into it for — see the rename command below.
+// The rail's list, for the one thing the host has to reach into it for: see the rename command below.
 const rail = ref<InstanceType<typeof ChatTabList> | null>(null);
 
 const onDocumentPointerDown = (event: Event): void => {
@@ -140,7 +140,7 @@ watch(listOpen, (open) => {
 onBeforeUnmount(disarmSheet);
 
 // Picking from the sheet is the end of the errand: switch, and give the column back to the transcript. The
-// rail is not a sheet and stays put — out there the list IS the surface.
+// rail is not a sheet and stays put: out there the list IS the surface.
 const pick = (id: string): void => {
     listOpen.value = false;
     emit(`select`, id);
@@ -175,8 +175,8 @@ watch(
 );
 
 // --- Rail width ---------------------------------------------------------------------------------
-// The rail resizes off its RIGHT edge (pointer capture, double-click resets) — it stands at the left of every
-// wide surface — and persists locally, because it exists only in those forms. The bounds themselves are
+// The rail resizes off its RIGHT edge (pointer capture, double-click resets): it stands at the left of every
+// wide surface, and persists locally, because it exists only in those forms. The bounds themselves are
 // chatRail.ts's: the panel needs them too, to know what the panes get.
 const readRailWidth = (): number => {
     try {
@@ -201,7 +201,7 @@ const startRailResize = (event: PointerEvent): void => {
     railResizing.value = true;
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
 };
-// The width is the distance from the rail's own left edge to the pointer — measured off the ELEMENT, not off
+// The width is the distance from the rail's own left edge to the pointer: measured off the ELEMENT, not off
 // the window. In a pop-out the two are the same thing (the rail is flush with that window's left edge), but in
 // the /chat area the shell's icon rail stands to its left, and a width read as the pointer's x would be that
 // column's width too wide on every drag.
@@ -222,7 +222,7 @@ const endRailResize = (event: PointerEvent): void => {
     }
 };
 
-/* The history panel and WHICH button it is hanging off — the docked header's glyph or the rail's "Past chats"
+/* The history panel and WHICH button it is hanging off: the docked header's glyph or the rail's "Past chats"
  * button, whichever was pressed. The anchor is also what decides the window it opens in (AnchoredOverlay derives
  * document, viewport and dismissal from it), and those two buttons live in different ones: the rail's is in the
  * pop-out window, the header's in the app. */
@@ -242,10 +242,10 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
 
 /* --- Right-click menu on the bar's chrome ----------------------------------------------------------
  * A right-click anywhere on this bar that isn't a text field opens the sweeps that name no particular chat
- * (Close Finished, Close All, the pop-out toggle) rather than popping the chat out on the spot — an
+ * (Close Finished, Close All, the pop-out toggle) rather than popping the chat out on the spot: an
  * accidental right-click near the header shouldn't tear the panel into its own window. A CARD's menu is the
  * list's own and acts on the card under the pointer; this one is the chrome's, and the keyboard commands
- * below act on the ACTIVE chat — the split the workspace's file tabs make. */
+ * below act on the ACTIVE chat: the split the workspace's file tabs make. */
 const barMenu = ref<{ show: (event: Event) => void } | undefined>();
 const barMenuItems = computed<MenuItem[]>(() => [
     {
@@ -257,7 +257,7 @@ const barMenuItems = computed<MenuItem[]>(() => [
     { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
     // The chat's other two homes, in the header buttons' order (move within this window, then leave it). The
-    // dock row is the shell command's move (toggleChatHome — from a pop-out window it docks AND navigates,
+    // dock row is the shell command's move (toggleChatHome: from a pop-out window it docks AND navigates,
     // which is exactly what those words ask for there).
     {
         label: chatOnRail.value ? `Dock chat back to the side` : `Dock chat to rail`,
@@ -281,13 +281,13 @@ const onBarContextMenu = (event: MouseEvent): void => {
 };
 
 /* --- Commands ------------------------------------------------------------------------------------
- * Registered while THIS bar is mounted — the desktop bar and the mobile one are exclusive, so the ids can't
+ * Registered while THIS bar is mounted: the desktop bar and the mobile one are exclusive, so the ids can't
  * double-register.
  *
  * Every chord here is the SHELL-WIDE tab family (tabSurface.ts): the same Ctrl+Shift+{X , . Backspace} the
  * workspace's file tabs carry and the same Alt+PageUp/PageDown cycling, claimed only while the focus is inside
  * the chat panel. Two surfaces are on screen at once, so one chord per verb resolved by focus beats two chords
- * per verb memorized — it's what F2/rename has always done here. Each is rebindable in Settings →
+ * per verb memorized: it's what F2/rename has always done here. Each is rebindable in Settings →
  * Keybindings, per surface: remapping Close Chat leaves Close Tab where it was.
  *
  * They all act on the ACTIVE chat, which is the one this header names. Cycling emits `select` rather than
@@ -306,7 +306,7 @@ const cycleTab = (delta: number): void => {
     }
 };
 // The chord's half of Open Beside: the first chat AFTER the focused one that isn't already in a column, else
-// the first anywhere that isn't — so repeated presses fill the window rather than re-opening the same chat.
+// the first anywhere that isn't, so repeated presses fill the window rather than re-opening the same chat.
 // Tab order, like cycleTab, since both answer "the next chat" and must not mean two different things.
 const splitBeside = (): void => {
     if (!chatWide.value) {
@@ -330,7 +330,7 @@ onMounted(() => {
             when: `tabSurface == 'chat'`,
             handler: (): void => {
                 if (edit.editing) {
-                    return; // already renaming — a second F2 would wipe the draft
+                    return; // already renaming: a second F2 would wipe the draft
                 }
                 // Renamed where the user can see it happen: the header line docked, and the active card itself
                 // out in the rail, which has no header to put an input in.
@@ -377,7 +377,7 @@ onMounted(() => {
         },
         {
             // Unbound by default: the shell-wide tab family (Ctrl+Shift+{X , . Backspace}) is the set the
-            // workspace's file tabs share, and "finished" is a fact only an agent chat has — there is no file-tab
+            // workspace's file tabs share, and "finished" is a fact only an agent chat has: there is no file-tab
             // verb to pair a chord with. It reaches the palette and Settings → Keybindings like any other command,
             // and the menu row shows a chord the moment one is bound.
             command: `chat.closeFinishedTabs`,
@@ -404,7 +404,7 @@ onMounted(() => {
         {
             /* VSCode's split-editor chord doing the chat's version of it: give the next chat a column of its
              * own beside this one. NOT a second view of the same conversation, which is what VSCode splits to
-             * — a chat carries a composer, and two of them writing into one transcript is a worse answer than
+             *: a chat carries a composer, and two of them writing into one transcript is a worse answer than
              * the question deserves. Wide surfaces only, where the width for a second column exists (ChatPanel). */
             command: `chat.splitView`,
             title: `Open Next Chat Beside`,
@@ -414,7 +414,7 @@ onMounted(() => {
         },
         {
             // Unbound, like Close Finished: the verb is one press away on the row's own menu, and every chord
-            // worth spending here is already spent. Takes the focused chat's column back — the chat stays open.
+            // worth spending here is already spent. Takes the focused chat's column back: the chat stays open.
             command: `chat.closePane`,
             title: `Close Pane`,
             when: `tabSurface == 'chat'`,
@@ -430,7 +430,7 @@ onMounted(() => {
             when: `tabSurface == 'chat'`,
             handler: (): void => {
                 if (vertical.value) {
-                    return; // the rail is already the list — there is nothing to open
+                    return; // the rail is already the list: there is nothing to open
                 }
                 listOpen.value = !listOpen.value;
             },
@@ -459,7 +459,7 @@ const openHistory = (event: Event): void => {
 <template>
     <!-- Docked: one line across the top of the chat column, with the list on a sheet beneath it. Undocked: a
          resizable rail down the window's left edge with the list always open, over a foot that carries the
-         same ✚ / history pair the header wears beside it — there as two bare glyphs, here as a labelled
+         same ✚ / history pair the header wears beside it: there as two bare glyphs, here as a labelled
          "Past chats" row and a filled "New agent". -->
     <component
         :is="vertical ? 'aside' : 'header'"
@@ -486,7 +486,7 @@ const openHistory = (event: Event): void => {
              above it would say a third time what the ringed card and the transcript already say.
              Renaming REPLACES it rather than nesting a field inside it: an input in a button is neither valid
              markup nor a usable caret. Enter commits, Esc cancels, blur commits, an empty or unchanged name
-             silently cancels — the WorkspaceTree convention, via createInlineRename. -->
+             silently cancels: the WorkspaceTree convention, via createInlineRename. -->
         <template v-if="!vertical">
             <input
                 v-if="edit.editing && renaming"
@@ -509,7 +509,7 @@ const openHistory = (event: Event): void => {
                 :class="{ 'chat-tab-on': listOpen }"
                 :aria-expanded="listOpen"
                 aria-haspopup="dialog"
-                :aria-label="`Switch chat — ${conversations.length} open`"
+                :aria-label="`Switch chat: ${conversations.length} open`"
                 @click="listOpen = !listOpen"
                 @dblclick.prevent.stop="beginRename()"
             >
@@ -566,16 +566,16 @@ const openHistory = (event: Event): void => {
             @open="emit('open', $event)"
         />
 
-        <!-- Docked: the ✚ / history / dock-to-rail / pop-out run beside the switcher — a header row has width
+        <!-- Docked: the ✚ / history / dock-to-rail / pop-out run beside the switcher, a header row has width
              to spare and no room for labels.
              THE LAST TWO GLYPHS ARE THE POINT OF THIS BAR HAVING A TOOLBAR AT ALL: the chat's other two homes.
              The expand moves the chat's home to the RAIL (a tile, full-window when opened, no column beside
              other views); the pop-out moves it into its own window, a several-times-an-hour act for anyone
              running it beside an editor or on a second screen that used to live only behind a right-click on
-             chrome the tabs kept eating. They sit last in that order — move within this window, then leave it —
+             chrome the tabs kept eating. They sit last in that order: move within this window, then leave it:
              hard against the window edge where window controls live, and each tooltip teaches its command's
              chord so the pointer trip is one a hand only has to make until it remembers. Both are absent from
-             the rail form (which is already one of the places they lead — out there the ways back are the
+             the rail form (which is already one of the places they lead: out there the ways back are the
              Chat tile's own right-click menu, the window's ×, F9, or this bar's menu rows). -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent()" v-tooltip.bottom="'New agent'" aria-label="New agent">
@@ -591,7 +591,7 @@ const openHistory = (event: Event): void => {
                 v-tooltip.bottom="railHint"
                 :aria-label="railHint"
             >
-                <!-- A panel docked at the left edge — the rail — not `expand`, whose fullscreen glyph promised
+                <!-- A panel docked at the left edge: the rail, not `expand`, whose fullscreen glyph promised
                      a maximise this press doesn't do. -->
                 <Icon name="layout-left" class="text-sm" />
             </button>
@@ -606,29 +606,29 @@ const openHistory = (event: Event): void => {
             </button>
         </div>
 
-        <!-- FOOT OF THE RAIL: the two ways out of the list — one more session, or an older one — as ONE
+        <!-- FOOT OF THE RAIL: the two ways out of the list (one more session, or an older one) as ONE
              centred row under it. Both controls are LABELLED, which is what the two 28px glyphs this
              replaced never were, and both are sized to their labels: stacked full-width rows made a footer
              slab, and at the rail's width the primary was exactly a card, wearing a tinted border in the
              same colour as the ring on the active card above it. Two competing rectangles, both chrome, in
-             a window whose job is to be read. Rank is carried by the fill alone now — the primary keeps the
+             a window whose job is to be read. Rank is carried by the fill alone now: the primary keeps the
              fleet board's fill, glyph and wording (one "New agent" across the product), the archive is the
              quiet ghost beside it.
              CENTRED rather than pushed into the bottom-left corner. The corner is the better Fitts target
              and that is what this row was first built as, but a pair of small controls held against the
              left of a rail that can be dragged to 480px reads as two things left over at the end of a list
-             — the width they are not using is the loudest thing about them. A band across the foot is what
+            : the width they are not using is the loudest thing about them. A band across the foot is what
              the eye expects under a column, and the filled button is a big enough target either way.
              The label says "Past chats", not "Past chats…": the ellipsis is the convention for "this opens
              a chooser", but beside a button that has none it reads as a truncated label rather than as a
              promise, which is exactly how it was read.
-             No divider — that went with the border down the rail's right edge, since with no edge to end
+             No divider: that went with the border down the rail's right edge, since with no edge to end
              against a hairline over a half-empty column is a line to nowhere. Gaps hold this row off
              instead, and the one BELOW it is the point: the rail's own padding alone left a control sitting
              on the window's bottom edge. Both are ~1rem, so the row sits in a band of its own rather than
              at the end of the window.
              Note the division of labour with the filter at the top of the list: typing SEARCHES past the
-             open chats already (the "Not open" group), so History is for BROWSING — newest first. -->
+             open chats already (the "Not open" group), so History is for BROWSING: newest first. -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
             <Button size="small" @click="startAgent()"> <Icon name="plus" />New agent </Button>
             <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
@@ -642,7 +642,7 @@ const openHistory = (event: Event): void => {
              ON CANVAS, not on the panel's card colour: the list draws its lanes as slabs mixed FROM canvas
              (`.lane`), so a host that paints anything else leaves them floating a shade off their own
              surroundings. The rail out in the pop-out window is a canvas body; this paints one. The strong
-             edge and the shadow are what make it a sheet floating over the transcript — the fill was never
+             edge and the shadow are what make it a sheet floating over the transcript: the fill was never
              carrying that. -->
         <div
             v-if="listOpen && !vertical"
@@ -652,7 +652,7 @@ const openHistory = (event: Event): void => {
         </div>
 
         <!-- Anchored to whichever button was pressed, and capped by AnchoredOverlay to the room that button's
-             own window has — the rail's trigger sits at the foot of the pop-out window, where the room above is
+             own window has: the rail's trigger sits at the foot of the pop-out window, where the room above is
              whatever the user has dragged it to. The session list gives way; the search box holds its size. -->
         <AnchoredOverlay v-model="historyOpen" :anchor="historyAnchor" side="bottom">
             <div class="flex min-h-0 w-72 flex-col">
@@ -685,7 +685,7 @@ const openHistory = (event: Event): void => {
 </template>
 
 <style scoped>
-/* Drag-to-resize handle on the rail's RIGHT edge — the seam against the panes it stands beside (pointer-capture,
+/* Drag-to-resize handle on the rail's RIGHT edge: the seam against the panes it stands beside (pointer-capture,
  * mirrors the panel's .resize-handle). */
 .rail-resize {
     position: absolute;

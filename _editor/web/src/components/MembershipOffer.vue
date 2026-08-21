@@ -6,14 +6,14 @@ import { formatCredits as n, installsFor } from "../composables/membership/credi
 import { useMembership } from "../composables/membership/useMembership";
 import { environment } from "../environments/environment";
 
-/* THE OFFER — the one thing this product ever asks anybody for money for, and now the one COMPONENT that
+/* THE OFFER: the one thing this product ever asks anybody for money for, and now the one COMPONENT that
  * asks. It used to live inside the membership settings tab, which was fine while that tab was the only
  * buying surface. It stopped being the only one the moment a coding agent outside a sandbox could need a
  * membership: those people never reach settings (the workspace shell would bounce them to setup, which is
  * the exact wrong thing to show somebody who came to pay), so they get /join instead.
  *
  * Two surfaces, one pitch. A second copy of the price, the split and the four reassurances is how the two
- * start disagreeing about what a membership is — and this is the page where being wrong costs trust rather
+ * start disagreeing about what a membership is, and this is the page where being wrong costs trust rather
  * than a rerender.
  *
  * EVERY NUMBER IS THE PLATFORM'S. The price, the share and the daily allowance arrive on the membership
@@ -23,7 +23,7 @@ import { environment } from "../environments/environment";
 const props = defineProps<{
     // Which lane the checkout should return to. The two buying surfaces are not the same journey home.
     returnTo: `settings` | `join`;
-    // The action's own name — "Join" or "Rejoin". The button is the last thing read before a decision.
+    // The action's own name: "Join" or "Rejoin". The button is the last thing read before a decision.
     joinLabel: string;
     working?: boolean;
     // Whether to offer the in-product "see what's premium first" escape. Meaningless outside the shell.
@@ -41,7 +41,7 @@ const platformPercent = computed(() => 100 - sharePercent.value);
 // What a day's allowance buys, in the one unit every reader of this page already understands.
 const installsPerDay = computed(() => installsFor(dailyCredits.value, donationCredits.value));
 
-// The public ledger, served by the platform for anyone — a prospective member is exactly who should read it.
+// The public ledger, served by the platform for anyone: a prospective member is exactly who should read it.
 const transparencyUrl = `${environment.api.url}/pool/transparency`;
 
 /* The reassurances, as data. All four answer questions a reader asks silently at the button, and they are
@@ -64,7 +64,7 @@ const assurances = computed(() => [
 
 <template>
     <!-- The hero. Accent-tinted rather than another plain card: this is the one thing a first-time reader
-         must land on. The price is its own box, on the side the eye finishes on — laid out down the card
+         must land on. The price is its own box, on the side the eye finishes on: laid out down the card
          instead, the money read as a footnote to the sentence above it. -->
     <Card class="border-primary-fill/25 bg-primary-fill/[0.07]">
         <div class="flex flex-col gap-5 @2xl:flex-row @2xl:items-center @2xl:gap-8">
@@ -111,7 +111,7 @@ const assurances = computed(() => [
             <span class="flex size-7 items-center justify-center rounded-md bg-primary-fill/12 text-link"><Icon name="bolt" /></span>
             <p class="mt-1.5 text-lg font-semibold leading-tight text-content">{{ n(dailyCredits) }} service credits a day</p>
             <p class="text-xs text-muted">
-                For the runs that cost real money — paid data, real compute. Your agent quotes the price before each one and waits for your yes.
+                For the runs that cost real money: paid data, real compute. Your agent quotes the price before each one and waits for your yes.
             </p>
         </Card>
 
@@ -153,7 +153,7 @@ const assurances = computed(() => [
                 See what's premium first
             </RouterLink>
             <p class="w-full text-xs text-muted">
-                Credits you never spend pay nobody — the membership is what you'd like to give, not a bill for what you took.
+                Credits you never spend pay nobody: the membership is what you'd like to give, not a bill for what you took.
             </p>
         </div>
     </Card>

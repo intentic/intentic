@@ -1,15 +1,15 @@
-<!-- A ```dag fence, drawn — one branch of MarkdownFigure's switch, living in a file of its own because it is the
+<!-- A ```dag fence, drawn: one branch of MarkdownFigure's switch, living in a file of its own because it is the
      one figure kind heavy enough to be worth loading only when a document actually holds one.
 
      Under it is a graph canvas: Vue Flow plus dagre, and a stylesheet import that no bundler will drop. Reached
-     statically from the prose surface, that lands in every bundle that can render prose — measured on the page a
+     statically from the prose surface, that lands in every bundle that can render prose: measured on the page a
      shared conversation is published as, which a stranger downloads to read someone's transcript, it was a fifth
      of a megabyte for a canvas almost no conversation contains. So MarkdownFigure imports this file lazily, on
      mermaid's rule (mermaidRender.ts) and Shiki's (code.ts): the first document that holds one pays, the many
      that do not never see it.
 
      The author supplies meaning; this file and dagre supply the picture. Nothing here reads a coordinate, a
-     colour or a size from the document — that is the whole reason figures are data instead of HTML. -->
+     colour or a size from the document: that is the whole reason figures are data instead of HTML. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import type { DagFigure } from "../markdown/figures.js";
@@ -30,7 +30,7 @@ const nodes = computed<DagNode<NodeData>[]>(() =>
         id: node.id,
         data: { label: node.label, note: node.note, swatch: seriesColor(node.accent) },
         // The id is the stable name the rest of the document (and the author) refers to the box by, and it is
-        // often the package path the label paraphrases — worth having on hover.
+        // often the package path the label paraphrases: worth having on hover.
         tooltip: node.id,
     })),
 );
@@ -39,7 +39,7 @@ const edges = computed<DagEdge[]>(() => figure.edges.map((edge) => ({ from: edge
 
 /* A prose column cannot host a pannable canvas of unknown height, so the figure gets a fixed one and DagGraph
  * fits its content into it. Scaled to the node count rather than fixed: a three-box diagram in a 24rem frame is
- * mostly empty space, and a twenty-box diagram in one is unreadable. Bounded at both ends — past the ceiling the
+ * mostly empty space, and a twenty-box diagram in one is unreadable. Bounded at both ends: past the ceiling the
  * graph is pannable, which is what the canvas is for.
  *
  * It is computed from the FIGURE, not measured from the canvas, which is also what makes the lazy load invisible:

@@ -4,7 +4,7 @@ import { refIndex, renderPage, SNAPSHOT_SCRIPT, toPageState } from "./snapshot.j
 
 /* The parts of browser control that can be tested without a browser: how a page is rendered for the agent, how
  * references are read back, and which binaries would be looked for. The CDP calls themselves end in a real
- * Chrome painting a real page — those need a machine, not a test. */
+ * Chrome painting a real page: those need a machine, not a test. */
 
 test("a page renders as its identity and then things to act on", () => {
     const rendered = renderPage({
@@ -19,7 +19,7 @@ test("a page renders as its identity and then things to act on", () => {
     expect(rendered).toContain("Page: Inbox (3)");
     expect(rendered).toContain("https://mail.example.com/inbox");
     expect(rendered).toContain(`[e0] link "Compose"`);
-    // What a field HOLDS matters as much as what it is called — it is how the agent knows a form is already
+    // What a field HOLDS matters as much as what it is called: it is how the agent knows a form is already
     // filled, or filled with the wrong thing.
     expect(rendered).toContain(`[e1] textbox "Search mail" = "invoice"`);
 });

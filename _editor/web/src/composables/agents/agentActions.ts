@@ -181,7 +181,7 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
             why:
                 yours > 0
                     ? `A rebase can't reach this: ${yours === 1 ? `the blocked file is` : `all ${yours} blocked files are`} held by your own uncommitted edits. Commit or stash them, then land again.`
-                    : `Nothing left for the agent to rebase — open it to see what the land reported.`,
+                    : `Nothing left for the agent to rebase, open it to see what the land reported.`,
         };
     }
     // Dispatched, not awaited, `enqueue` runs the queue, and drainQueue awaits `send`, which does not settle

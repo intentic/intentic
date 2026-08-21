@@ -4,7 +4,7 @@ import { type ComponentPublicInstance, computed, ref } from "vue";
 import Icon from "./Icon.vue";
 import type { IconName } from "../icons/iconSets.js";
 
-/* THE BUTTON THAT STARTS AN AGENT FOR YOU — Fix with agent on a red pipeline, Ask the agent to fix on a broken
+/* THE BUTTON THAT STARTS AN AGENT FOR YOU: Fix with agent on a red pipeline, Ask the agent to fix on a broken
  * container, Run a chore, Run all 21 stories. One component, because they are one act, and until it existed the
  * app answered the same question three different ways: a one-click button whose tooltip merely NAMED the model
  * it was about to spend (pipelines, deployments, maintenance, documentation), a separate chip beside the button
@@ -13,7 +13,7 @@ import type { IconName } from "../icons/iconSets.js";
  * is the failure that just beat the standing one, and the answer was a trip to a settings page.
  *
  * A SPLIT BUTTON, so the common case keeps costing one click. The primary half does exactly what it did before
- * — starts the run on Sandbox ▸ Agent ▸ Models' standing list — and the caret is a second, quieter affordance
+ *: starts the run on Sandbox ▸ Agent ▸ Models' standing list, and the caret is a second, quieter affordance
  * for the run that wants something else. That asymmetry is the design: pressing Fix should not become a
  * two-step decision because deviating is occasionally useful.
  *
@@ -22,13 +22,13 @@ import type { IconName } from "../icons/iconSets.js";
  * copies of one fact nobody is reading. Once the user picks something else the label appears inline, because a
  * deviation that is invisible is a deviation you forget you made and then pay for.
  *
- * THE CARET HANDS BACK ITS OWN ELEMENT rather than raising the picker itself. The picker is not a widget — it
- * is a live read of every connected provider's catalog and which credentials the sandbox holds — so it stays
+ * THE CARET HANDS BACK ITS OWN ELEMENT rather than raising the picker itself. The picker is not a widget: it
+ * is a live read of every connected provider's catalog and which credentials the sandbox holds, so it stays
  * the host's (useAgentRunPick's `ModelPicking` is the seam). Anchoring to the element matters in a popped-out
  * panel, where an overlay measured against the opener's window opens off the bottom edge.
  *
  * A HAIRLINE GAP, not a shared border. The two halves carry the same fill, so one pixel of page showing between
- * them reads as the divider — and it keeps reading as one on every severity and in both themes, which a border
+ * them reads as the divider, and it keeps reading as one on every severity and in both themes, which a border
  * colour picked against one of them does not. On the borderless `text` variant there is no fill, the gap
  * disappears, and two quiet controls beside each other is exactly right. */
 
@@ -68,13 +68,13 @@ const caret = ref<ComponentPublicInstance>();
 
 /* WHAT THE CARET PROMISES, in the one place a caret can say anything. Three states and they are genuinely
  * different: a run on the sandbox's standing order, a run the user has just re-pointed, and a sandbox that has
- * pinned nothing — where the honest answer is the composer's own model rather than a name this button invents. */
+ * pinned nothing, where the honest answer is the composer's own model rather than a name this button invents. */
 const caretHint = computed(() =>
     modelLabel === undefined
         ? `Opens on whatever your chat composer is set to. Click to run this one on a specific model.`
         : overridden
           ? `This run only: ${modelLabel}. Click to change it, or pick the sandbox default to go back.`
-          : `Opens an isolated agent on ${modelLabel} — the sandbox default. Click to run this one on something else.`,
+          : `Opens an isolated agent on ${modelLabel}, the sandbox default. Click to run this one on something else.`,
 );
 
 const openPicker = (): void => {
@@ -105,7 +105,7 @@ const openPicker = (): void => {
         </Button>
         <!-- Disabled with the primary half and never on its own: a caret that stayed live while the run it
              configures could not be started would let someone choose a model for a click that does nothing.
-             It does NOT take the loading spinner, though — one spinner per action is the whole point of it. -->
+             It does NOT take the loading spinner, though: one spinner per action is the whole point of it. -->
         <Button
             ref="caret"
             :size="size"

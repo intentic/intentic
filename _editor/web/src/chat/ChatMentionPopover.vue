@@ -6,7 +6,7 @@ import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
 import { basename, parentDir } from "@intentic/ui/path";
 
 /* The composer's @-mention picker: an inline panel above the textarea listing workspace files matching the
- * active token (client-ranked over the cached tree — the QuickOpen data path, useFuzzyFiles). The parent owns
+ * active token (client-ranked over the cached tree: the QuickOpen data path, useFuzzyFiles). The parent owns
  * the keyboard flow (the textarea keeps focus) and calls the exposed move/pickActive from its keydown handler. */
 
 const props = defineProps<{ query: string }>();

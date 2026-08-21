@@ -103,14 +103,14 @@ export const SNAPSHOT_SCRIPT = `(function () {
 export const renderPage = (page: PageState, truncated = false): string => {
     const header = [`Page: ${page.title === "" ? "(untitled)" : page.title}`, page.url];
     if (page.elements.length === 0) {
-        return [...header, "", "Nothing on this page can be clicked or typed into — try reading its text instead."].join("\n");
+        return [...header, "", "Nothing on this page can be clicked or typed into: try reading its text instead."].join("\n");
     }
     const rows = page.elements.map((element) => {
         const said = element.name === "" ? "" : ` "${element.name}"`;
         const holds = element.value === undefined || element.value === "" ? "" : ` = "${element.value}"`;
         return `[${element.ref}] ${element.role}${said}${holds}`;
     });
-    const note = truncated ? [`(only the first ${MAX_ELEMENTS} are listed — scroll or narrow the page to see more)`] : [];
+    const note = truncated ? [`(only the first ${MAX_ELEMENTS} are listed, scroll or narrow the page to see more)`] : [];
     return [...header, "", ...rows, ...note].join("\n");
 };
 

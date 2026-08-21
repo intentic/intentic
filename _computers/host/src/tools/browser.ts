@@ -24,7 +24,7 @@ export const openPage = async (web: Browser, url: string, scopes: HostScopes): P
     // Opening may start a browser process, which is what the shell switch governs.
     assertScope(scopes, "shell");
     if (url === "") {
-        throw new BrowserError(`"url" is required — the page to open.`);
+        throw new BrowserError(`"url" is required: the page to open.`);
     }
     // A bare host is what people type; a browser needs the scheme, and refusing over a missing "https://" would
     // be pedantry rather than safety.
@@ -40,7 +40,7 @@ export const snapshotPage = async (web: Browser, scopes: HostScopes): Promise<st
 export const readPage = async (web: Browser, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "screen");
     const text = await web.text();
-    return text.trim() === "" ? "That page has no readable text — it may still be loading, or it may be a canvas or a PDF." : text;
+    return text.trim() === "" ? "That page has no readable text, it may still be loading, or it may be a canvas or a PDF." : text;
 };
 
 /* Every action answers with a FRESH SNAPSHOT, for the same reason `computer` answers with a screenshot: the page
@@ -49,7 +49,7 @@ export const readPage = async (web: Browser, scopes: HostScopes): Promise<string
 export const clickElement = async (web: Browser, ref: string, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (ref === "") {
-        throw new BrowserError(`"ref" is required — take a snapshot and use one of the [e…] references from it.`);
+        throw new BrowserError(`"ref" is required: take a snapshot and use one of the [e…] references from it.`);
     }
     await web.click(ref);
     await settle();
@@ -59,7 +59,7 @@ export const clickElement = async (web: Browser, ref: string, scopes: HostScopes
 export const fillElement = async (web: Browser, ref: string, text: string, submit: boolean, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (ref === "") {
-        throw new BrowserError(`"ref" is required — take a snapshot and use one of the [e…] references from it.`);
+        throw new BrowserError(`"ref" is required: take a snapshot and use one of the [e…] references from it.`);
     }
     await web.fill(ref, text, submit);
     await settle();
@@ -82,14 +82,14 @@ export const listTabs = async (web: Browser, scopes: HostScopes): Promise<string
     }
     return [
         `${tabs.length} tab${tabs.length === 1 ? "" : "s"} (* = the one these tools are acting on). Pass an id to switch.`,
-        ...tabs.map((tab) => `${tab.active ? "* " : "  "}[${tab.id}] ${tab.title} — ${tab.url}`),
+        ...tabs.map((tab) => `${tab.active ? "* " : "  "}[${tab.id}] ${tab.title}, ${tab.url}`),
     ].join("\n");
 };
 
 export const selectTab = async (web: Browser, id: string, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (id === "") {
-        throw new BrowserError(`"id" is required — list the tabs and pass one of the ids in brackets.`);
+        throw new BrowserError(`"id" is required: list the tabs and pass one of the ids in brackets.`);
     }
     return renderPage(await web.selectTab(id));
 };

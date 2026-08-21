@@ -19,18 +19,18 @@ your laptop                                    your sandbox
 
 ## Why it is shaped like this
 
-**The machine dials out.** A laptop sits behind NAT, a corporate proxy and a closed lid — nothing can dial it.
+**The machine dials out.** A laptop sits behind NAT, a corporate proxy and a closed lid: nothing can dial it.
 So it holds one ordinary outbound WebSocket and everything multiplexes over that: no open ports, no router
 configuration, no VPN.
 
 **The machine is the server, though it placed the call.** After one plain-JSON `hello` carrying the enrollment
 token, the socket becomes oRPC: this package serves `hostContract`
 (`_sandbox/sandbox-contract/src/contracts/host.contract.ts`) and the daemon holds the client. oRPC's websocket
-adapter attaches to either peer, so who dialled and who serves are independent — and request/response
+adapter attaches to either peer, so who dialled and who serves are independent: and request/response
 correlation, argument validation and error shape all belong to the link rather than to hand-rolled framing.
 
-**The tools live here, not in the sandbox.** `hostContract` has exactly one deliberately untyped procedure —
-`mcp` — carrying MCP JSON-RPC verbatim in both directions. That hole is the point: if the contract described
+**The tools live here, not in the sandbox.** `hostContract` has exactly one deliberately untyped procedure:
+`mcp`, carrying MCP JSON-RPC verbatim in both directions. That hole is the point: if the contract described
 each tool, the daemon would have to know every schema and translate, and this computer could no longer learn a
 tool without a matching daemon release. What the machine can do is decided by `src/mcp.ts`, here.
 
@@ -43,42 +43,42 @@ the machine answers.
 
 | Tool | Notes |
 | --- | --- |
-| `describe` | OS, shell, home, allowed folders. The agent's first call — it is the difference between writing for this machine and guessing. |
+| `describe` | OS, shell, home, allowed folders. The agent's first call: it is the difference between writing for this machine and guessing. |
 | `run_command` | PowerShell on Windows, the login shell elsewhere. Every command has a deadline; stdin is closed so nothing can hang waiting for input. |
 | `read_file` / `list_dir` | Bounded by the allowed folders. |
-| `write_file` / `trash_file` | Also need the write switch, which is **off** unless the user turned it on. There is no delete tool — `trash_file` moves the file somewhere recoverable. |
+| `write_file` / `trash_file` | Also need the write switch, which is **off** unless the user turned it on. There is no delete tool: `trash_file` moves the file somewhere recoverable. |
 | `screenshot` | Windows via .NET; Linux via grim/spectacle/import/scrot, picked by session type. |
-| `list_sandboxes` / `manage_sandbox` | The Intentic sandboxes running on this machine: list them, start/stop/restart one (tunnel sidecar included). Managing takes its own switch, **off** by default — narrower than `run_command`, so the machine's fleet can be delegated to a sandbox without handing it a shell. Listing is subsumed by either switch. |
-| `swap_sandbox` / `sandbox_logs` | Update one onto a newer image, roll it back, rebuild its approved overlay, prepare its next update — and read its container log. The swap runs `ic`, takes minutes, and keeps /work and /history; it rides the same `sandboxes` switch, and logs ride the same rule as listing. `prepare` is the one that changes nothing: it downloads and builds the next image without touching the container, so the sandbox keeps serving and the update that follows is a restart of seconds. |
+| `list_sandboxes` / `manage_sandbox` | The Intentic sandboxes running on this machine: list them, start/stop/restart one (tunnel sidecar included). Managing takes its own switch, **off** by default, narrower than `run_command`, so the machine's fleet can be delegated to a sandbox without handing it a shell. Listing is subsumed by either switch. |
+| `swap_sandbox` / `sandbox_logs` | Update one onto a newer image, roll it back, rebuild its approved overlay, prepare its next update, and read its container log. The swap runs `ic`, takes minutes, and keeps /work and /history; it rides the same `sandboxes` switch, and logs ride the same rule as listing. `prepare` is the one that changes nothing: it downloads and builds the next image without touching the container, so the sandbox keeps serving and the update that follows is a restart of seconds. |
 | `remove_sandbox` | Delete one, with its files and its history. Its **own** switch, off by default: everything under `sandboxes` is undone by doing it again, and this is undone by nothing. |
 
 ## The sandbox flows are not reimplemented here
 
 `swap_sandbox` and `remove_sandbox` spawn the [`ic`](../../_sandbox/ic) CLI that the setup one-liner already put
-on this machine — the same binary the pasted command, the desktop app's buttons and a hand-typed `ic` run. This
+on this machine: the same binary the pasted command, the desktop app's buttons and a hand-typed `ic` run. This
 package is the fourth caller of one implementation, not a second copy of it, which is the argument the desktop
 app makes for spawning the scripts instead of porting them into Rust.
 
 `ic` is looked for where the installers put it (`~/.intentic/ic/bin`, then `/usr/local/bin`) before PATH, and
-the path is built for the TARGET platform rather than by `node:path` — this agent's Windows spelling is asserted
+the path is built for the TARGET platform rather than by `node:path`: this agent's Windows spelling is asserted
 from a Linux runner, so a function that answers in the running host's dialect could not be checked.
 
 ## Watching a flow, rather than being told about it afterwards
 
 An update pulls an image and recreates a container: minutes in which an MCP tool result can say nothing at all.
-So `hostContract` carries one **typed, streaming** procedure beside the opaque `mcp` one — `runSandboxFlow` —
+So `hostContract` carries one **typed, streaming** procedure beside the opaque `mcp` one: `runSandboxFlow`:
 which the browser's Computers view reads live. Both doors call the same functions in `src/tools/sandboxes.ts`,
 so what a person watches and what the agent is told can never describe one run differently.
 
 The log tail rides that same procedure (`op: "logs"`), which is one of the two ops there that change nothing.
 It is not a route of its own for the reason the other eight share one: it is a button in the same row, on a
 container that may be too broken to answer any other way, and the stream's shape is already "many lines, then
-an outcome" — which is what a log tail is. Same reading as the `sandbox_logs` tool, same gate.
+an outcome": which is what a log tail is. Same reading as the `sandbox_logs` tool, same gate.
 
 `op: "prepare"` is the other, and it is the reason the update card can now quote a real number. Downloading
 the image and rebuilding the environment recipe are the minutes; the restart at the end is the seconds, and
-the sandbox is up and serving through everything before it. Doing the first part on its own — from a button,
-while the fleet is busy, with nothing interrupted — is what leaves the update itself a restart of about half
+the sandbox is up and serving through everything before it. Doing the first part on its own: from a button,
+while the fleet is busy, with nothing interrupted: is what leaves the update itself a restart of about half
 a minute instead of an unbounded wait.
 
 Typed, unlike `mcp`, because the reader is different: a model gains nothing from a line as it arrives and
@@ -89,7 +89,7 @@ needs exactly the opposite.
 
 Most machines never run that one-liner by hand any more: `ic sandbox connect` installs this agent as part of
 setting a sandbox up, redeeming a pairing the platform minted with the setup code. A computer connected that way
-arrives with **`sandboxes` on and every other switch off** — no shell, no files, no screen — because installing a
+arrives with **`sandboxes` on and every other switch off** (no shell, no files, no screen) because installing a
 sandbox is consent to running a sandbox, not to handing the agent inside it a laptop. Widening it is a click on
 the card. See `_sandbox/sandbox/src/hosts/host-seed.ts`.
 
@@ -100,14 +100,14 @@ intentic-host run --foreground                                # the connection l
 intentic-host uninstall                                       # disconnect and forget the credential
 ```
 
-State lives in `~/.intentic/host`: `config.json` (0600 — sandbox URL, machine id, enrollment token, cached
-scopes), `audit.jsonl` (every call, kept even across an uninstall — it is the user's record, not the agent's),
+State lives in `~/.intentic/host`: `config.json` (0600, sandbox URL, machine id, enrollment token, cached
+scopes), `audit.jsonl` (every call, kept even across an uninstall: it is the user's record, not the agent's),
 `host.log`, and `trash/`.
 
 ## Gotchas worth knowing before editing
 
 - **Every spawn in this package passes `windowsHide`.** The connection loop runs `detached` (without it, Windows
-  tears it down with the command that started it), which leaves it with no console — and Windows gives a console
+  tears it down with the command that started it), which leaves it with no console: and Windows gives a console
   child of a console-less process one of its own, window included. The flag is per-spawn for that reason: it
   applies whether or not the parent has a console.
 - **The enrollment token rides the hello FRAME, never the URL.** A durable credential in a query string ends up
@@ -119,14 +119,14 @@ scopes), `audit.jsonl` (every call, kept even across an uninstall — it is the 
 - **The install and lifecycle plumbing is not in this package.** The `~/.intentic/host` home and its 0600 floor,
   self-relaunch, login autostart and the detached connection loop all come from
   [`@intentic/local-agent`](../../_computers/local-agent), shared with `@intentic/sync` and `@intentic/acp-bridge`.
-  `src/autostart.ts` here is only this agent's spec — and it declares no macOS `launchAgent`, because the
+  `src/autostart.ts` here is only this agent's spec: and it declares no macOS `launchAgent`, because the
   connection loop has never been run on a Mac. Opting in is three lines once someone has.
 
 ## Key files
 
-- [src/app.ts](src/app.ts) — the machine agent's own server and its lifecycle.
-- [src/policy.ts](src/policy.ts) — what the sandbox is permitted to do on this machine; the security surface.
-- [src/tools](src/tools) — the capabilities exposed: commands, files, screen.
-- [src/connection.ts](src/connection.ts) — staying attached to the sandbox.
-- [src/audit.ts](src/audit.ts) — what was done on this machine, recorded.
-- [src/autostart.ts](src/autostart.ts) — installing as a background agent, per platform.
+- [src/app.ts](src/app.ts): the machine agent's own server and its lifecycle.
+- [src/policy.ts](src/policy.ts): what the sandbox is permitted to do on this machine; the security surface.
+- [src/tools](src/tools), the capabilities exposed: commands, files, screen.
+- [src/connection.ts](src/connection.ts): staying attached to the sandbox.
+- [src/audit.ts](src/audit.ts): what was done on this machine, recorded.
+- [src/autostart.ts](src/autostart.ts): installing as a background agent, per platform.

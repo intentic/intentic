@@ -42,7 +42,7 @@ describe(`singleFlight`, () => {
         const second = load(`claude`);
         expect(calls).toEqual([`claude`]);
         await settle();
-        // The second caller is not merely deduped — it gets the answer, so it can't be left waiting forever.
+        // The second caller is not merely deduped: it gets the answer, so it can't be left waiting forever.
         expect(await first).toBe(`claude:done`);
         expect(await second).toBe(`claude:done`);
     });
@@ -88,7 +88,7 @@ describe(`serial`, () => {
         void write(`settings:a`);
         void write(`settings:b`);
         void write(`settings:c`);
-        // Only the first has started — the point of the policy.
+        // Only the first has started: the point of the policy.
         expect(calls).toEqual([`settings:a`]);
         await settle();
         expect(calls).toEqual([`settings:a`, `settings:b`]);
@@ -137,7 +137,7 @@ describe(`latest`, () => {
     });
 
     it(`settles a superseded caller with the newer run's result`, async () => {
-        // The alternative — leaving the dropped caller's promise hanging — silently wedges any `await` on it.
+        // The alternative (leaving the dropped caller's promise hanging) silently wedges any `await` on it.
         const { run, settle } = controllable();
         const search = withConcurrency(run, { mode: `latest`, key: byKey });
         void search(`q:fo`);

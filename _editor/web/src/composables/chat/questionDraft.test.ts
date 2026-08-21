@@ -36,7 +36,7 @@ it("sweeps drafts older than a week, and keeps the rest", async () => {
     const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
     localStorage.setItem(stale, JSON.stringify({ selections: { 0: [`A`] }, otherTexts: {}, savedAt: eightDaysAgo }));
     localStorage.setItem(fresh, JSON.stringify({ selections: { 0: [`B`] }, otherTexts: {}, savedAt: Date.now() }));
-    // The sweep runs once, at module load — so re-run the module under a fresh registry rather than exporting a
+    // The sweep runs once, at module load, so re-run the module under a fresh registry rather than exporting a
     // hook that exists only for this test.
     vi.resetModules();
     await import(`./questionDraft`);
@@ -46,7 +46,7 @@ it("sweeps drafts older than a week, and keeps the rest", async () => {
 });
 
 // The case the redesign exists for: a draft written when a listed pick and a typed answer could be held at
-// once must not reopen the card in that state. The pick stands, the row that contradicted it does not — and
+// once must not reopen the card in that state. The pick stands, the row that contradicted it does not, and
 // the words survive, because unpicking the Other row was never meant to cost them.
 it("drops a stored pick the live card would refuse, and keeps what was typed", () => {
     writeQuestionDraft(`req-a`, { selections: { 0: [`Postgres`, OTHER_LABEL] }, otherTexts: { 0: `Neither, use Redis` } });

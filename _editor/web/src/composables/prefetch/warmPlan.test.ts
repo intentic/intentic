@@ -12,7 +12,7 @@ describe(`the wish list`, () => {
         expect(warmPlan().map((task) => task.key)).toEqual([`n`, `e`, `w`, `r`]);
     });
 
-    it(`keeps each source's own order within a band — a list is warmed the way it is drawn`, () => {
+    it(`keeps each source's own order within a band: a list is warmed the way it is drawn`, () => {
         registerWarmSource(() => [wish(`first`, `near`), wish(`second`, `near`), wish(`third`, `near`)]);
         expect(warmPlan().map((task) => task.key)).toEqual([`first`, `second`, `third`]);
     });
@@ -27,7 +27,7 @@ describe(`the wish list`, () => {
         expect(plan[0]?.band).toBe(`now`);
     });
 
-    it(`carries on when one surface throws — its wishes are missing, not everyone else's`, () => {
+    it(`carries on when one surface throws: its wishes are missing, not everyone else's`, () => {
         registerWarmSource(() => {
             throw new Error(`this screen is mid-teardown`);
         });

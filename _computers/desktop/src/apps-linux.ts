@@ -29,7 +29,7 @@ export const linuxApps = {
                 return parseSwayTree(await run("swaymsg", ["-t", "get_tree"]));
             }
             throw new DesktopError(
-                "This Wayland session does not let a program list other windows — the compositor refuses it by design, and only sway/Hyprland offer an IPC that answers. Use a screenshot to see what is open, or log in to an X11 session for full window control.",
+                "This Wayland session does not let a program list other windows: the compositor refuses it by design, and only sway/Hyprland offer an IPC that answers. Use a screenshot to see what is open, or log in to an X11 session for full window control.",
             );
         }
         // The active window first, so `focused` can be filled in: wmctrl does not report it.

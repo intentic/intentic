@@ -89,7 +89,7 @@ export const planCommand = buildCommand<PlanFlags>({
                     out.text(`orphan\t${orphan.type}\t${orphan.id}`);
                 }
             } else {
-                out.text("targeted plan — orphan scan skipped");
+                out.text("targeted plan: orphan scan skipped");
             }
             out.result({ steps: outcome.steps, orphans });
         };
@@ -101,7 +101,7 @@ export const planCommand = buildCommand<PlanFlags>({
                 work(),
                 new Promise<never>((_, reject) => {
                     deadline = setTimeout(
-                        () => reject(new Error(`plan exceeded ${PLAN_DEADLINE_MS / 60_000}m — last activity: ${lastActivity}`)),
+                        () => reject(new Error(`plan exceeded ${PLAN_DEADLINE_MS / 60_000}m, last activity: ${lastActivity}`)),
                         PLAN_DEADLINE_MS,
                     );
                     deadline.unref();

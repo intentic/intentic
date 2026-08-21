@@ -151,7 +151,7 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
     }
     const what = `${deps.missing} new ${deps.missing === 1 ? `dependency` : `dependencies`}`;
     return deps.deferred
-        ? ` ${what} are queued — installation starts after this turn and any other active agents finish, appears in Work terminals, then its checks and outcome land in Activity.`
+        ? ` ${what} are queued: installation starts after this turn and any other active agents finish, appears in Work terminals, then its checks and outcome land in Activity.`
         : ` Installing ${what} it added; the project's checks run when that finishes, and the outcome lands in Activity.`;
 };
 
@@ -200,11 +200,11 @@ const prependTurnNotice = (state: TurnState, text: string, extra?: Pick<ChatMess
 const syncLine = (sync: { commits: number; blocked: readonly string[] }): string => {
     const moved =
         sync.commits > 0
-            ? `Your workspace moved on while this agent waited — its branch was rebased onto your latest ${sync.commits} commit${sync.commits === 1 ? `` : `s`}.`
+            ? `Your workspace moved on while this agent waited, its branch was rebased onto your latest ${sync.commits} commit${sync.commits === 1 ? `` : `s`}.`
             : undefined;
     const blocked =
         sync.blocked.length > 0
-            ? `Couldn't rebase onto your workspace in ${sync.blocked.join(`, `)} — the turn is running from the older base, so its land may need a resolve.`
+            ? `Couldn't rebase onto your workspace in ${sync.blocked.join(`, `)}: the turn is running from the older base, so its land may need a resolve.`
             : undefined;
     return [moved, blocked].filter((line) => line !== undefined).join(` `);
 };
@@ -701,13 +701,13 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             // its reconcile too (dependencyLine), the one consequence of this turn the Changes panel cannot
             // show, because it happened outside the diff.
             if (event.held === true) {
-                return step(appendNotice(state, `Finished — the work is on this agent's branch, ready to land from its review.`));
+                return step(appendNotice(state, `Finished: the work is on this agent's branch, ready to land from its review.`));
             }
             return step(
                 appendNotice(
                     state,
                     event.landed
-                        ? `Changes landed in your workspace — review them in the Changes panel.${dependencyLine(event.deps)}`
+                        ? `Changes landed in your workspace: review them in the Changes panel.${dependencyLine(event.deps)}`
                         : // Named, not explained: the cause is per-FILE (your edits, a moved main line, a binary),
                           // and the review is where each one is spelled out with the action that fits it. A
                           // notice that guesses one cause for all of them sends the user looking for an

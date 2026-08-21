@@ -166,7 +166,7 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                         : (await session.exec(`test -e ${directive.probe.path}`)).code === 0;
                 if (!probe) {
                     unsupported.push(directive.token);
-                    ctx.log(`workspace "${ctx.id}": host cannot provide ${directive.token} — starting without ${directive.name}`);
+                    ctx.log(`workspace "${ctx.id}": host cannot provide ${directive.token}, starting without ${directive.name}`);
                 }
             }
             const digest = toolsDigest(parsed.tools);

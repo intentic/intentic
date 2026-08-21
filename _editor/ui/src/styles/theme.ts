@@ -64,7 +64,7 @@ const custom = {
                  *
                  * The size lives here so `size="small"` IS the compact button and a call site has nothing
                  * left to override. `--text-2xs`'s own line-height comes with it (pinned in primeng.css, as
-                 * Aura has no per-size token for it) — 11px text on a 16px line box, 4px above and below,
+                 * Aura has no per-size token for it): 11px text on a 16px line box, 4px above and below,
                  * lands a 26px control, which is what the board draws today. */
                 sm: {
                     fontSize: `var(--text-2xs)`,

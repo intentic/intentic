@@ -8,7 +8,7 @@ describe(`useLoadingReveal`, () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());
 
-    // In a scope, as it is in a component — the composable registers its timer cleanup there.
+    // In a scope, as it is in a component: the composable registers its timer cleanup there.
     const reveal = (loading: Ref<boolean>, subject: Ref<string>): Ref<boolean> =>
         effectScope().run(() => useLoadingReveal(loading, subject)) as Ref<boolean>;
 
@@ -32,7 +32,7 @@ describe(`useLoadingReveal`, () => {
         vi.advanceTimersByTime(200);
         expect(revealed.value).toBe(true);
 
-        // Answered one tick after it appeared — the hold keeps it on screen rather than strobing it off.
+        // Answered one tick after it appeared: the hold keeps it on screen rather than strobing it off.
         vi.advanceTimersByTime(50);
         loading.value = false;
         await nextTick();
@@ -43,7 +43,7 @@ describe(`useLoadingReveal`, () => {
         expect(revealed.value).toBe(false);
     });
 
-    it(`drops the hold the moment the subject changes — the outline belonged to the other conversation`, async () => {
+    it(`drops the hold the moment the subject changes: the outline belonged to the other conversation`, async () => {
         const loading = ref(true);
         const subject = ref(`chat-1`);
         const revealed = reveal(loading, subject);

@@ -36,7 +36,7 @@ test("a need with no option throws", () => {
     expect(() => resolveState(intent, "example.com", empty)).toThrow('no option satisfies "infra-control"');
 });
 
-test("an ambiguous capability throws — the state resolver makes no choice", () => {
+test("an ambiguous capability throws: the state resolver makes no choice", () => {
     const ambiguous: Catalog = {
         optionsFor: (capability) =>
             capability === "infra-control"

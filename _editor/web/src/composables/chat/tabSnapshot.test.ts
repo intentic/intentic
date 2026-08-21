@@ -1,7 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
 import { beforeEach, describe, expect, it } from "vitest";
 
-/* The reader's contract: whatever is on disk, what comes back is a strip that can actually be rendered — every
+/* The reader's contract: whatever is on disk, what comes back is a strip that can actually be rendered, every
  * tab named once, a focus that names one of them, and nothing dropped that was still readable. The strip keys
  * its v-for on the conversationId, so a duplicate would be two tabs sharing a key: Vue then patches the wrong
  * node, which reads as the wrong name on a tab, a click that surfaces someone else's chat, and a × that
@@ -83,7 +83,7 @@ describe(`reading a tab snapshot`, () => {
         expect(readTabSnapshot(`sb1`)?.active).toBe(`a`);
     });
 
-    it(`degrades an unparseable or empty blob to no snapshot — a fresh tab, not a broken strip`, () => {
+    it(`degrades an unparseable or empty blob to no snapshot: a fresh tab, not a broken strip`, () => {
         session.set(KEY, `not json`);
         expect(readTabSnapshot(`sb1`)).toBeUndefined();
 
@@ -127,7 +127,7 @@ describe(`reading a tab snapshot`, () => {
 
     /* The fork linkage is the one field whose loss is invisible until the first send: a rebuilt fork keeps its
      * draft and bubbles either way, but without `forkOf` that send opens an ordinary empty conversation
-     * daemon-side and the "continued" chat answers from nothing. Read back whole or not at all — a partial one
+     * daemon-side and the "continued" chat answers from nothing. Read back whole or not at all: a partial one
      * would have the daemon copy the wrong prefix of the wrong source, which is worse than the fresh start. */
     it(`restores a fork's linkage whole, and drops one that reads back partial`, () => {
         session.set(

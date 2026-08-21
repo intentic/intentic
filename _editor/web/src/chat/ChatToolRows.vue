@@ -5,7 +5,7 @@ import ChatToolCard from "./ChatToolCard.vue";
 import ChatToolGroup from "./ChatToolGroup.vue";
 import { type ToolEntry, groupConsecutiveTools } from "./toolGrouping";
 
-/* A run of tool calls as rows — the count-grouping (toolGrouping.ts) and the card-or-group choice, in one
+/* A run of tool calls as rows: the count-grouping (toolGrouping.ts) and the card-or-group choice, in one
  * place. Extracted so the transcript's two readings render calls through the SAME component: the mode that
  * shows them inline, and a hidden run somebody has just opened. What "shown" looks like is then one definition
  * rather than two that drift. */

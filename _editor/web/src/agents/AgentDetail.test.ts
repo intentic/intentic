@@ -5,18 +5,18 @@
 //
 // The first: the status words and Chat | Changes both sat in that row, so a longer status ("Idle" → "Running")
 // left the title a four-pixel box. The words were made to stand down below the header's @md width, keeping
-// their accessible name — that is the `hidden @md:inline` pair below.
+// their accessible name: that is the `hidden @md:inline` pair below.
 //
 // The second, measured at 390px: even with the words gone the row held a back arrow, the title, a rename
 // pencil, the session chip, the status glyph, the ~120px switch and the actions menu, and the title got 55px
-// for a string needing 250 — "Add Stripe checkout to the pricing page" rendered "Add St…". The switch moved to
+// for a string needing 250: "Add Stripe checkout to the pricing page" rendered "Add St…". The switch moved to
 // a full-width row of its own beneath the header, so THE SWITCH BEING OUTSIDE `.view-header` is now the
-// contract, and it is asserted as such rather than merely "present somewhere in the component" — which is
+// contract, and it is asserted as such rather than merely "present somewhere in the component", which is
 // what the old assertion said, and which stayed true throughout the failure it was meant to prevent.
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
-// The header's way back to the board is a link now, so this mock has to carry a <RouterLink> — the real one
+// The header's way back to the board is a link now, so this mock has to carry a <RouterLink>: the real one
 // resolves its href out of a router this bare mount never installs.
 vi.mock(import("vue-router"), async (importOriginal) => ({
     ...(await importOriginal()),
@@ -147,7 +147,7 @@ it(`keeps a mobile running agent's title slot: the view switch is not in the hea
     const status = header.querySelector<HTMLElement>(`[aria-label="Running"]`)!;
     const words = [...status.querySelectorAll(`span`)].find((node) => node.textContent === `Running`)!;
 
-    // The switch is rendered, and it is rendered OUTSIDE the header — the header has no width to spare for it.
+    // The switch is rendered, and it is rendered OUTSIDE the header: the header has no width to spare for it.
     expect(el.querySelector(`[data-mode-switch]`)).not.toBeNull();
     expect(header.querySelector(`[data-mode-switch]`)).toBeNull();
     expect(title.textContent).toBe(`Readable mobile title`);

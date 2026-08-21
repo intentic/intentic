@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The badge's job is to always state a number and to be honest about which reading it is, so what is asserted
-// here is WHICH reading it prints in each state — not its markup, beyond the one class that marks a count as
+// here is WHICH reading it prints in each state, not its markup, beyond the one class that marks a count as
 // still provisional. Mounted with plain Vue, as markdownFigures.test does, rather than adding @vue/test-utils.
 import { describe, expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
@@ -70,7 +70,7 @@ describe(`<ReviewStat>`, () => {
 
         // +0 −0 is how the badge says "a rename", and it reads as though the file were untouched.
         expect(host.textContent).toContain(`comments`);
-        expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toBe(`Only comments changed — +26 −4 of them`);
+        expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toBe(`Only comments changed, +26 −4 of them`);
     });
 
     it(`shows git's own for a file it could not strip, with nothing extra claimed on hover`, async () => {
@@ -83,8 +83,8 @@ describe(`<ReviewStat>`, () => {
     });
 
     /* THE CASE THIS COMPONENT WAS GETTING WRONG. A row whose file had not been read printed nothing but a pending
-     * mark, and on the workspace Changes panel — where the reading is a background read that arrives in its own
-     * time — that was every row of the list at once: a review with no numbers on it. It prints git's, marked as
+     * mark, and on the workspace Changes panel, where the reading is a background read that arrives in its own
+     * time, that was every row of the list at once: a review with no numbers on it. It prints git's, marked as
      * standing in for a reading still being worked out. */
     it(`stands git's numbers in, at half weight, while the reading is still being worked out`, async () => {
         await withComments(false);
@@ -94,11 +94,11 @@ describe(`<ReviewStat>`, () => {
         expect(host.textContent).not.toContain(`…`);
         expect(host.querySelector(`.opacity-50`)).not.toBeNull();
         expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toBe(
-            `+54 counting comments — still working out how much of it is code`,
+            `+54 counting comments, still working out how much of it is code`,
         );
     });
 
-    it(`has nothing to wait for when the comments are shown — git's counts are the reading, at full weight`, async () => {
+    it(`has nothing to wait for when the comments are shown: git's counts are the reading, at full weight`, async () => {
         await withComments(true);
         const host = render({ counting: true, additions: 54, deletions: 0 });
 

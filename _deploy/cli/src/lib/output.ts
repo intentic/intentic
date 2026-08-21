@@ -108,7 +108,7 @@ const eventText = (event: EngineEvent): string | undefined => {
             return `applying "${event.id}" (type "${event.type}")`;
         }
         const reason = event.reason === undefined ? "" : ` (${event.reason})`;
-        return `applied "${event.id}" (type "${event.type}") — ${event.action ?? "done"}${reason}`;
+        return `applied "${event.id}" (type "${event.type}"): ${event.action ?? "done"}${reason}`;
     }
     if (event.kind === "readiness") {
         return event.state === "waiting" ? `waiting for "${event.id}" at ${event.url}` : `"${event.id}" ready`;
@@ -116,7 +116,7 @@ const eventText = (event: EngineEvent): string | undefined => {
     if (event.kind === "prune") {
         return event.state === "deleted"
             ? `prune: deleted "${event.id}" (type "${event.type}")`
-            : `prune: "${event.id}" (type "${event.type}") removed from desired state but its provider has no delete — left in place`;
+            : `prune: "${event.id}" (type "${event.type}") removed from desired state but its provider has no delete, left in place`;
     }
     if (event.kind === "orphan") {
         return `orphan: "${event.id}" (type "${event.type}") exists but is not in the desired graph`;
