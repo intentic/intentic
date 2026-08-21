@@ -708,6 +708,10 @@ useKeybindings();
 .icon-rail {
     gap: var(--icon-rail-gap);
     padding-block: var(--icon-rail-padding);
+    /* A faint accent wash so switching colours shifts the rail, not only buttons and links. An inset shadow
+     * layers on top of any background-image a skin may set (sanctum's stone), so it does not fight specificity
+     * the way a background-image rule from a scoped style would. */
+    box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--color-brand-950) 8%, transparent);
 }
 
 /* NOTHING IN THE RAIL MAY BE SQUASHED. A column flex item defaults to flex-shrink: 1, and .icon-rail-tile sets
