@@ -1,9 +1,9 @@
-import { access, mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, rmdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { AgentSpan, GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { changedFiles, headSha, parseNameStatusZ } from "../git/changes.js";
+import { changedFiles, headSha, parseNameStatusZ, parseNumstatZ } from "../git/changes.js";
 import { commitWorktreeRemainder } from "../git/root-repo.js";
 import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { branchSha, mainBranchOf } from "./agent-refs.js";
@@ -77,6 +77,27 @@ const applies = async (main: string, patch: string, direction: "forward" | "reve
     } catch {
         return false;
     }
+};
+
+/* THE PATCH GOES STRAIGHT FROM GIT TO A FILE, and never through this process.
+ *
+ * Every land below already wrote its diff to a temp file and handed git the PATH, so carrying the bytes through
+ * the daemon on the way bought nothing, and it cost the whole feature a ceiling. The git runner buffers a
+ * command's stdout and rejects past MAX_GIT_OUTPUT, 16 MiB (@intentic/scaffold exec.ts); an ordinary change
+ * clears that without trying. Twenty-three product screenshots retaken in one turn came to a 51 MiB binary
+ * patch: the turn had finished its work, the hand-over died on `stdout maxBuffer length exceeded`, the session
+ * was marked failed, and the message named neither the size that broke it nor the step it broke in. Raising the
+ * ceiling would only move it, and a 50 MiB string in a daemon already running at ~420 MB of heap is a hazard of
+ * its own. A file has no ceiling to raise.
+ *
+ * `--output` is git's own answer, and it needs an ABSOLUTE path: the runner passes `-C <repo>`, so a relative
+ * one would land inside the repository being diffed. Returns the patch's SIZE, because a size is all any caller
+ * ever wanted the string for, `patch === ""` becomes `bytes === 0`. git creates the file either way, so an
+ * empty delta is a zero-byte file rather than a missing one; the `catch` covers only a diff that never ran.
+ */
+const writePatch = async (main: string, patchPath: string, range: readonly string[], git: GitRunner): Promise<number> => {
+    await git(main, ["diff", `--output=${patchPath}`, "--binary", "-M", ...range]);
+    return (await stat(patchPath).catch(() => undefined))?.size ?? 0;
 };
 
 /* ONE CHANGE of a delta, carrying the COMPLETE set of paths its own diff spans.
@@ -159,6 +180,20 @@ export const pruneEmptiedDirs = async (main: string, removed: readonly string[])
 const classifyDelta = async (main: string, from: string, tip: string, patchDir: string, repo: string, git: GitRunner): Promise<DeltaReport> => {
     const rows = parseNameStatusZ((await git(main, ["diff", "--name-status", "-z", "-M", from, tip])).stdout);
     const changes = rows.map(deltaChangeOf);
+    /* WHICH OF THESE ARE BINARY, asked of git's own numstat rather than read off the patch.
+     *
+     * The reason used to come from a `"GIT binary patch"` substring test on the per-change patch, which meant
+     * holding that patch as a string, which is the one thing writePatch exists to stop: a single 3 MB image is a
+     * ~4 MB probe and nothing bounds how big one file can be. numstat answers the same question in one bounded
+     * read for the whole delta, and answers it from git's own classification rather than from the spelling of a
+     * header. A binary file is listed with BOTH counts omitted (parseNumstatZ omits rather than zeroes them,
+     * `-\t-`); a text file always carries both. Keyed on the destination path, which is how numstat keys a
+     * rename, and which is the path a conflict is reported at. */
+    const stats = parseNumstatZ((await git(main, ["diff", "--numstat", "-z", "-M", from, tip])).stdout);
+    const isBinary = (path: string): boolean => {
+        const counts = stats.get(path);
+        return counts !== undefined && counts.additions === undefined && counts.deletions === undefined;
+    };
     // A path the user STAGED conflicts with the incoming patch exactly as much as one they left unstaged, so
     // "yours is the copy at risk" has to consider the union, rename `from` legs included.
     const mainState = await changedFiles(main, git);
@@ -172,13 +207,11 @@ const classifyDelta = async (main: string, from: string, tip: string, patchDir: 
     const blocked: { path: string; reason: LandConflictReason }[] = [];
     const clean: DeltaChange[] = [];
     for (const [index, change] of changes.entries()) {
-        const single = (await git(main, ["diff", "--binary", "-M", from, tip, "--", ...change.paths])).stdout;
-        if (single === "") {
+        const probePath = join(patchDir, `${repo.replaceAll("/", "_")}.probe.${index}.patch`);
+        if ((await writePatch(main, probePath, [from, tip, "--", ...change.paths], git)) === 0) {
             clean.push(change);
             continue;
         }
-        const probePath = join(patchDir, `${repo.replaceAll("/", "_")}.probe.${index}.patch`);
-        await writeFile(probePath, single);
         if (await applies(main, probePath, "forward", git)) {
             clean.push(change);
             continue;
@@ -189,7 +222,7 @@ const classifyDelta = async (main: string, from: string, tip: string, patchDir: 
             continue;
         }
         // Binary first: it outranks the other two, because no three-way merge of it exists to offer.
-        const reason: LandConflictReason = single.includes("GIT binary patch")
+        const reason: LandConflictReason = isBinary(change.path)
             ? "binary"
             : change.paths.some((path) => mainDirty.has(path))
               ? "workspace"
@@ -228,12 +261,10 @@ const applyChanges = async (
     if (changes.length === 0) {
         return;
     }
-    const patch = (await git(main, ["diff", "--binary", "-M", from, tip, "--", ...changes.flatMap((change) => change.paths)])).stdout;
-    if (patch === "") {
+    const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.remainder.patch`);
+    if ((await writePatch(main, patchPath, [from, tip, "--", ...changes.flatMap((change) => change.paths)], git)) === 0) {
         return;
     }
-    const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.remainder.patch`);
-    await writeFile(patchPath, patch);
     const removes = changes.flatMap((change) => change.removes);
     await git(main, ["apply", patchPath]);
     await Promise.all(
@@ -284,12 +315,10 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
                 if (tip === from) {
                     return;
                 }
-                const patch = (await git(main, ["diff", "--binary", "-M", from, tip])).stdout;
-                if (patch === "") {
+                const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
+                if ((await writePatch(main, patchPath, [from, tip], git)) === 0) {
                     return;
                 }
-                const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
-                await writeFile(patchPath, patch);
                 // Applies whole, or is already in whole: nothing refuses today, whatever refused back then.
                 if ((await applies(main, patchPath, "forward", git)) || (await applies(main, patchPath, "reverse", git))) {
                     return;
@@ -418,8 +447,8 @@ export const landAgent = async (
                 // main file still holding the previously-landed (`from`) content matches the patch context and
                 // applies cleanly, while a user edit on the same lines mismatches and applies NOTHING. A
                 // path-set overlap test can't make that distinction (it would flag every re-touched file).
-                const patch = (await git(main, ["diff", "--binary", "-M", from, tip])).stdout;
-                if (patch === "") {
+                const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
+                if ((await writePatch(main, patchPath, [from, tip], git)) === 0) {
                     // A net-zero delta, the agent reverted everything it did since the last land. There is
                     // nothing to apply (`git apply` rejects an empty patch), but the tip must still advance,
                     // or every future land re-reports this range as a phantom conflict nothing can resolve.
@@ -427,8 +456,6 @@ export const landAgent = async (
                     next = { repo, base, landedTip: tip };
                     return;
                 }
-                const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
-                await writeFile(patchPath, patch);
                 /* `measure`: auto-land is off, so an outstanding delta STAYS on the branch, everything above
                  * this line already ran (the provenance commit, the diffstat, the tip===from and net-zero
                  * bookkeeping), and everything below is exactly what "don't touch the main tree" forbids. The

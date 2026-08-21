@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -747,6 +748,52 @@ test("the subset land (part of the delta already in main) also prunes what its r
     const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: `c2` }));
     expect(result.landed).toBe(true);
     expect(existsSync(join(work, "src"))).toBe(false);
+});
+
+/* THE SIZE CEILING THAT KILLED FINISHED WORK.
+ *
+ * The patch used to come back through the git runner's stdout, which rejects past 16 MiB, so a change bigger
+ * than that failed the hand-over with `stdout maxBuffer length exceeded` AFTER the turn had done its work: the
+ * session was marked failed, the delta stayed on the branch, and the message named neither the size nor the
+ * step. It took twenty-three retaken product screenshots (a 51 MiB binary patch) to hit in the wild, so the
+ * guard has to be a genuinely oversized patch rather than a mocked runner.
+ *
+ * Incompressible bytes on purpose: `--binary` deflates before base85, so a compressible blob of the same length
+ * produces a patch of almost nothing and the test would pass without ever crossing the ceiling. The assertion on
+ * the patch's own size is what keeps this test honest if that ever changes.
+ */
+test("a delta whose patch is larger than the runner's 16 MiB stdout ceiling still lands", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "big.bin"), randomBytes(18 * 1024 * 1024));
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos));
+
+    expect(result.landed).toBe(true);
+    expect(result.conflicts).toBeUndefined();
+    expect((await stat(join(work, "big.bin"))).size).toBe(18 * 1024 * 1024);
+    // The patch this land had to carry, measured the way the ceiling measured it. Piped to `wc` so the test's
+    // own exec is not the thing that blows up on it.
+    const tip = await sh(conversation.cwd, "rev-parse", "HEAD");
+    const bytes = await exec("bash", ["-c", `git -C ${work} diff --binary -M HEAD ${tip} | wc -c`]);
+    expect(Number(bytes.stdout.trim())).toBeGreaterThan(16 * 1024 * 1024);
+});
+
+// `binary` outranks the other two reasons because no three-way merge of it exists to offer, and it is now read
+// off git's numstat (both counts omitted) rather than off a "GIT binary patch" substring in a patch this no
+// longer holds as a string.
+test("a binary file both sides changed conflicts as `binary`, not `workspace`", async () => {
+    const { work, worktrees } = await setup();
+    await writeFile(join(work, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02]));
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "logo");
+    const conversation2 = await worktrees.ensure("c2", []);
+    await writeFile(join(conversation2.cwd, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xaa, 0xbb]));
+    await writeFile(join(work, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xcc, 0xdd]));
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation2.repos, { id: `c2` }));
+
+    expect(result.landed).toBe(false);
+    expect(result.conflicts?.[0]?.paths).toEqual([{ path: "logo.png", reason: "binary" }]);
 });
 
 // The prune itself, off the git path: climbs exactly as far as the removal emptied, and no further.
