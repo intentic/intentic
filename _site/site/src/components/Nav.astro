@@ -403,13 +403,16 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
      * whether or not it is showing, so nothing on the row moves — a menu that shifts its labels under the
      * pointer is a menu you misclick.
      *
-     * The rule is incised left to right. A carved line is cut from one end, so it is drawn from one end:
-     * `scaleX` off its left edge, gold at the start and running out to nothing before the right margin,
-     * so it reads as a chisel stroke rather than as a border switching on.
-     *
      * And the ground is RAKING LIGHT, not a fill. A flat translucent block is a highlight; a warm wash
      * that is strongest at the left and gone by two thirds across is light falling on stone from the side,
-     * which is the one light this entire page is lit by. */
+     * which is the one light this entire page is lit by.
+     *
+     * THERE WAS A THIRD THING AND IT IS GONE: a gold rule incised along the row's foot, drawn on from the
+     * left as the pointer arrived. Two rows deep in a list it stopped reading as a chisel stroke and started
+     * reading as a BORDER switching on — an underline under one item in a column of items, which is the
+     * closest thing this panel had to a line it did not mean. The panel already draws a great many gold
+     * lines (its own double rule, the action's divider); one more, appearing and disappearing under the
+     * pointer, was the one that made the menu feel busy. Two effects, not three. */
     .menu-item {
         position: relative;
         display: block;
@@ -430,19 +433,6 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         transform: rotate(45deg) scale(0);
         transition: transform 0.26s cubic-bezier(0.34, 1.5, 0.64, 1);
     }
-    /* The incised rule. */
-    .menu-item::after {
-        content: "";
-        position: absolute;
-        right: 0.6rem;
-        bottom: 0.1rem;
-        left: 0.5rem;
-        height: 1px;
-        background: linear-gradient(90deg, var(--color-gold), rgba(201, 160, 92, 0.25) 62%, transparent 100%);
-        transform: scaleX(0);
-        transform-origin: left;
-        transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-    }
     .menu-item:hover,
     .menu-item.current {
         background: linear-gradient(90deg, rgba(224, 123, 39, 0.13) 0%, rgba(224, 123, 39, 0.05) 34%, transparent 72%);
@@ -450,10 +440,6 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
     .menu-item:hover::before,
     .menu-item.current::before {
         transform: rotate(45deg) scale(1);
-    }
-    .menu-item:hover::after,
-    .menu-item.current::after {
-        transform: scaleX(1);
     }
     .menu-item-label {
         display: block;
@@ -603,10 +589,9 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         .menu-panel {
             transition: none;
         }
-        /* The mark and the rule still ARRIVE — they are what says which row the pointer is on — they just
-           stop being stamped and cut, and appear at their finished size. */
-        .menu-item::before,
-        .menu-item::after {
+        /* The mark still ARRIVES — it is what says which row the pointer is on — it just stops being
+           stamped, and appears at its finished size. */
+        .menu-item::before {
             transition: none;
         }
         .bar[data-cta-managed] .bar-cta {

@@ -72,7 +72,7 @@ const themeOptions = [
     {
         label: `Sanctum`,
         value: `sanctum` as const,
-        title: `The look of intentic.dev: ash stone, a gold rule round every panel, dark timber, and the site's own type.`,
+        title: `The look of intentic.dev: ash stone, a gold rule round every panel, woven cloth, and the site's own type.`,
     },
 ];
 // The row's lead glyph names the look rather than the light level, which is what the row now chooses.

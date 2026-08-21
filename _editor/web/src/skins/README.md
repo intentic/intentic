@@ -8,11 +8,11 @@ There are two, and they are deliberately opposite materials:
 
 - **HUD** (`hud.css`) — a heads-up display. Deep cool glass over a survey grid, hairlines that glow, corner
   brackets instead of soft rounding, angular geometry, and an angular technical face on headings.
-- **Sanctum** (`sanctum.css`) — **the site's design system, worn by the app**. Same metals, same ink, same square
-  edges, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground, one gold
-  rule round everything, cream ink, and the site's two faces. Two surfaces are dark timber — the navigation
-  plank and the one loud button — and nothing else is. A distant temple stands on the floor of the window where
-  the app has put nothing in front of it.
+- **Sanctum** (`sanctum.css`) — **the site's design system, worn by the app**. Same metals, same ink, same
+  materials, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground with a
+  tooth in it, one gold rule round everything, cream ink, and the site's two faces. The rail and every overlay
+  are faced in the site's woven cloth; the one loud button is a panel of dark timber; nothing else is either. A
+  distant temple stands on the floor of the window where the app has put nothing in front of it.
 
 **They part company on the accent, and that is the interesting difference.** The HUD is *lit* by the colour the
 user picked: every glow, edge and focus ring is mixed from `--color-primary-*`, so Lagoon gives it cyan and Ember
@@ -24,12 +24,18 @@ paint its hairlines has a thousand of them to paint.
 
 ## The rule both of them keep
 
-**Every surface a word sits on is flat and opaque.** Texture and gradient live on the *wall*, never on a plate;
-overlays that cover live text are solid, never translucent. A wash down the top of a card puts the first line of
-a paragraph on a different ground from the last — nothing is unreadable and everything is slightly worse, which
-is the expensive kind of wrong because it never announces itself.
+**Every surface a word sits on is flat in the low frequencies, and opaque.** Overlays that cover live text are
+solid, never translucent, and no plate ever carries a *gradient*. A wash down the top of a card puts the first
+line of a paragraph on a different ground from the last — nothing is unreadable and everything is slightly worse,
+which is the expensive kind of wrong because it never announces itself.
 
-Sanctum has paid for that rule and three others, and the notes are kept at the top of the file:
+A *texture* is not that. A fine, high-frequency speckle has no low-frequency component at all: every square inch
+of it averages the same value, so the contrast at the top of a paragraph and at the bottom are the same number.
+Sanctum read the rule as "no background-image on a plate" for one cut, and shipped a skin built out of materials
+in which every surface anyone actually looked at was a flat rectangle. The plates carry a tooth now, measured at
+under a hundredth of a contrast ratio point.
+
+Sanctum has paid for that rule and five others, and the notes are kept at the top of the file:
 
 - **Ornament on an edge becomes noise at UI size.** A carved arcade that reads as stone at 40px reads as a torn,
   dithered edge at 14px — and every panel in an app is a 14px edge. Character has to come from the material, the
@@ -46,6 +52,19 @@ Sanctum has paid for that rule and three others, and the notes are kept at the t
   cartouche with a cream label — the site's `.btn` — and the timber `ui-button-loud` is the only lit control
   left. The severities (`danger`, `warn`, `success`) keep their own tones, and have to be excluded **by name**:
   the app sets each one's tone in `@layer primeng`, and a skin's `components` layer beats that layer outright.
+- **A site's squareness does not survive being repeated.** Sanctum copied the site's hard corner outright and it
+  was wrong for the same reason it is right over there: a landing page draws about fifteen frames and they are
+  large, a workspace draws hundreds and most of them are a 28px row or a 20px chip. At that size a right angle
+  stops reading as *carved* and starts reading as a corner that catches the eye every time it passes, and the
+  fatigue is cumulative in a way ninety seconds on a page never shows. The radius ramp is the design system's
+  own, eased by about a fifth — a rubbed arris, not a pill.
+- **A skin cannot only repaint what it owns.** The role tokens came down and the app's own tinted marks did not,
+  so the calmest chrome in the product was still carrying a lane of forty saturated category chips down the
+  middle of it. Whatever a skin leaves at full chroma becomes, by default, the loudest thing in the room. Two
+  things needed naming here — the session card's `.category-tile` and `--color-danger-800` — and both were found
+  by *counting* what the chrome actually uses, not by guessing. Note the tile's selector begins with `html`:
+  the app's own dark rule is exactly as specific and is declared later in the same layer, so the type selector
+  is the cheapest legal way to outrank it.
 
 ## How it works
 
@@ -59,7 +78,7 @@ Each stylesheet overrides three tiers and then names a handful of components:
 | --------------------- | ------------------------------------------------------------------------------------------- |
 | `--color-surface-*`   | Every Tailwind `surface-*` utility **and** every PrimeVue component (theme.ts bridges them)  |
 | `--role-*`            | `bg-card`, `border-line`, `text-muted` and their thousand call sites                         |
-| `--radius-*`          | Every `rounded-*` utility — this is what makes a rounded app angular                         |
+| `--radius-*`          | Every `rounded-*` utility — this is what makes a rounded app angular, or a hard one gentle   |
 
 Only after those does a skin name individual selectors, and only ever to change **paint**: colour, border,
 shadow, background, outline. Never a width, a padding or a position — a skin that moves things is a skin that
