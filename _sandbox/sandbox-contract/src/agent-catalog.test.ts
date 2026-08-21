@@ -49,6 +49,15 @@ describe("every provider/harness pair declares what it can do", () => {
         }
         expect(["namespace", "cwd"]).toContain(capabilities.isolation);
         expect(["replace", "append", "none"]).toContain(capabilities.instructions);
+        expect(["hooks", "approval", "refuse-only", "none"]).toContain(capabilities.rulebook);
+        expect(["masked", "none"]).toContain(capabilities.secrets);
+        /* Masking is a PostToolUse hook and nothing else can edit what a model reads, so a record claiming
+         * masked without hooks would be claiming a seam that does not exist (see the axis doc). The one
+         * direction that IS legal is hooks without masking, which is why this is an implication and not
+         * equality. */
+        if (capabilities.secrets === "masked") {
+            expect(capabilities.rulebook).toBe("hooks");
+        }
         // The permission modes offered must include the mode a clamp falls back to: a floor that isn't in the
         // list would leave the composer showing a posture the runtime can't hold.
         expect(modesFor(capabilities)).toContain(clampMode("default", capabilities));
@@ -176,14 +185,50 @@ test("every axis a record can lack has words for it", () => {
         terminals: false,
         recovery: false,
         instructions: "none",
+        rulebook: "none",
+        secrets: "none",
     };
 
-    // Eleven DISCLOSABLE axes, eleven sentences: an axis added to the interface without one would silently
-    // never be disclosed. fastMode is the deliberate twelfth: a record alone can't tell the truth about it (a
+    // Thirteen DISCLOSABLE axes, thirteen sentences: an axis added to the interface without one would silently
+    // never be disclosed. fastMode is the deliberate exception: a record alone can't tell the truth about it (a
     // translator-routed turn reads true here and still can't go fast), so it is answered by fastAllowed
     // instead. Anything else added to the interface has to move this number.
-    expect(limitationsOf(nothing)).toHaveLength(11);
+    expect(limitationsOf(nothing)).toHaveLength(13);
     expect(limitationsOf(nothing).join(" ")).not.toContain("fast");
+});
+
+/* The two safety axes, checked the same way the instruction axis is below and for the same reason: `rulebook`
+ * has a middle value, and disclosing the floor's words for it would tell a Codex user their rules are ignored
+ * when they are in fact being applied to everything Codex asks about. */
+test("the safety axes disclose the middle answer differently from the floor", () => {
+    const claude = limitationsOf(capabilitiesOf("claude", "native")).join(" ");
+    const codex = limitationsOf(capabilitiesOf("codex", "native")).join(" ");
+    const pi = limitationsOf(capabilitiesOf("pi", "native")).join(" ");
+
+    // The ceiling says nothing about either axis.
+    expect(claude).not.toContain("command rules");
+    expect(claude).not.toContain("stored secrets");
+
+    // The middle: rules DO apply, to what the vendor raises. Never the floor's flat "aren't applied".
+    expect(codex).toContain("only to calls this agent asks about");
+    expect(codex).not.toContain("aren't applied");
+
+    // The floor: no seam at all, said plainly.
+    expect(pi).toContain("your command rules aren't applied");
+
+    /* The third answer, which exists because OpenCode's watchdog aborts a turn that pauses. Its sentence must
+     * say the rules DO bite (unlike Pi's) and that a hold cannot ask (unlike Codex's). */
+    const grok = limitationsOf(capabilitiesOf("grok", "native")).join(" ");
+    expect(grok).toContain("a rule set to hold refuses instead");
+    expect(grok).not.toContain("aren't applied");
+    expect(grok).not.toContain("only to calls this agent asks about");
+    // Gemini rides the same loop, so it must read the same way.
+    expect(limitationsOf(capabilitiesOf("gemini", "native")).join(" ")).toBe(grok);
+
+    // Masking is binary and structural, so every non-Claude runtime says the same thing.
+    for (const provider of ["codex", "grok", "gemini", "pi", "some-installed-agent"] as const) {
+        expect(limitationsOf(capabilitiesOf(provider, "native")).join(" ")).toContain("stored secrets reach the model unmasked");
+    }
 });
 
 /* The instruction axis has THREE values and only two of them are worth a sentence, which is the one shape the

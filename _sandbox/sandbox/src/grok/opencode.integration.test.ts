@@ -2,8 +2,9 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import { createTurnGate } from "../guard/turn-gate.js";
 import { humanizeModelId, SEED_XAI_MODELS } from "./grok-models.js";
-import { createOpenCodeService } from "./opencode.js";
+import { createOpenCodeService, registerSessionGate, releaseSessionGate } from "./opencode.js";
 
 // Capture the server-spawn options instead of booting a real `opencode serve` (client() is otherwise untested).
 // The client is a double too: an event stream the test feeds, and a record of every permission answered on it.
@@ -68,6 +69,11 @@ const SEED_CATALOG = { models: SEED_XAI_MODELS.map((id) => ({ id, label: humaniz
 
 afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+    // The three doubles are module-level (vi.hoisted), so a test that fed the stream or answered a permission
+    // would otherwise be read by the next one's assertions.
+    streamEvents.length = 0;
+    permissionReplies.length = 0;
+    serverSpawns.length = 0;
 });
 
 test("connected('xai') reflects a persisted OAuth token in auth.json, not OpenCode's cached snapshot", async () => {
@@ -173,17 +179,29 @@ test("client() spawns the server with store:false for every known xai model (see
  * calls it a timeout. `external_directory` is the one that found it: an isolated conversation runs in a
  * worktree while its attachments stay on /work, so reading the image the user attached is a read outside the
  * session's own directory. */
-test("client() spawns the server with EVERY permission allowed, not merely the ones anyone thought of", async () => {
+test("client() spawns the server with EVERY permission answered, not merely the ones anyone thought of", async () => {
     const xdg = await scratch();
     await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch }).client();
-    const spawn = serverSpawns.at(-1) as { config: { permission: Record<string, string> } };
-    expect(spawn.config.permission).toEqual({
-        edit: "allow",
-        bash: "allow",
-        webfetch: "allow",
-        doom_loop: "allow",
-        external_directory: "allow",
-    });
+    const spawn = serverSpawns.at(-1) as { config: { permission: Record<string, unknown> } };
+    const permission = spawn.config.permission;
+
+    // Every key present and answered. A key left out defaults to `ask`, which is the stall this test exists for.
+    expect(Object.keys(permission).toSorted()).toEqual(["bash", "doom_loop", "edit", "external_directory", "webfetch"]);
+    for (const key of ["edit", "webfetch", "doom_loop", "external_directory"]) {
+        expect(permission[key], key).toBe("allow");
+    }
+
+    /* `bash` is the one map, and its DEFAULT is still allow, which is what keeps this test's property true: the
+     * owner's command rulebook needs to see a command before it runs (guard/command-gate.ts), and OpenCode's
+     * permission channel is the only seam that offers one. So interesting shapes are pre-filtered to `ask` and
+     * answered by the real classifier, while everything else keeps the standing yes and never round-trips. */
+    const bash = permission["bash"] as Record<string, string>;
+    expect(bash["*"]).toBe("allow");
+    expect(bash["*git push*"]).toBe("ask");
+    expect(bash["*rm *"]).toBe("ask");
+    // Nothing in the map may be anything but allow-or-ask: a `deny` here would refuse without ever consulting
+    // the rulebook, which is the one verdict this layer must never reach on its own.
+    expect([...new Set(Object.values(bash))].toSorted()).toEqual(["allow", "ask"]);
 });
 
 /* ...and the same answer given live, for a permission kind this build has never heard of. A future OpenCode's
@@ -196,6 +214,67 @@ test("a permission ask on a watched directory is answered with a standing yes", 
     // The watcher reads its stream detached from the boot that started it, so let its first read land.
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(permissionReplies).toEqual([{ id: "ses_1", permissionID: "per_1", directory: "/work", response: "always" }]);
+});
+
+/* THE OWNER'S RULEBOOK, ANSWERED OVER THIS CHANNEL. A registered session's permissions are judged by the same
+ * decide fn every other runtime uses; an unregistered one keeps the standing yes above. This is the whole of
+ * what `rulebook: "refuse-only"` claims for Grok and Gemini. */
+test("a registered session's permission is judged by the rulebook, and a refused command is rejected", async () => {
+    const xdg = await scratch();
+    const { gate, release } = createTurnGate({
+        commandRules: { "git.destructive": "deny" },
+        // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so a hold refuses.
+        rulebook: "refuse-only",
+        signal: new AbortController().signal,
+    });
+    registerSessionGate("ses_gated", gate);
+    streamEvents.push({
+        type: "permission.updated",
+        properties: { id: "per_2", sessionID: "ses_gated", type: "bash", metadata: { command: "git push --force origin main" }, title: "bash" },
+    });
+    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: "/work" }).client();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(permissionReplies).toEqual([{ id: "ses_gated", permissionID: "per_2", directory: "/work", response: "reject" }]);
+    releaseSessionGate("ses_gated");
+    release();
+});
+
+/* An allowed-but-classified command replies `once`, never `always`: `always` would tell OpenCode to stop asking
+ * about that pattern for the rest of the session, and the next command matching it could be one the rulebook
+ * WOULD refuse. */
+test("a command the rulebook allows is approved for this call only", async () => {
+    const xdg = await scratch();
+    const { gate, release } = createTurnGate({
+        commandRules: { "git.destructive": "deny" },
+        // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so a hold refuses.
+        rulebook: "refuse-only",
+        signal: new AbortController().signal,
+    });
+    registerSessionGate("ses_ok", gate);
+    streamEvents.push({
+        type: "permission.updated",
+        properties: { id: "per_3", sessionID: "ses_ok", type: "bash", metadata: { command: "git push origin feature" }, title: "bash" },
+    });
+    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: "/work" }).client();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(permissionReplies).toEqual([{ id: "ses_ok", permissionID: "per_3", directory: "/work", response: "once" }]);
+    releaseSessionGate("ses_ok");
+    release();
+});
+
+// A session whose turn has settled, or a delegation nobody registered, is where it always was: the standing yes.
+test("an unregistered session keeps the standing yes", async () => {
+    const xdg = await scratch();
+    streamEvents.push({
+        type: "permission.updated",
+        properties: { id: "per_4", sessionID: "ses_unknown", type: "bash", metadata: { command: "git push --force origin main" }, title: "bash" },
+    });
+    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: "/work" }).client();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(permissionReplies).toEqual([{ id: "ses_unknown", permissionID: "per_4", directory: "/work", response: "always" }]);
 });
 
 test("recordModels is a no-op for an empty or media-only list (keeps the seed floor)", async () => {

@@ -483,6 +483,11 @@ const honoured = (
         systemPromptMode: prompt.mode,
         ...(placement.systemPrompt !== undefined ? { systemPrompt: placement.systemPrompt } : {}),
         ...(placement.systemAppend !== undefined ? { systemAppend: placement.systemAppend } : {}),
+        /* HOW THIS RUNTIME CAN ENFORCE THE OWNER'S COMMAND RULEBOOK, from the pair's own record rather than
+         * hardcoded in each adapter, which is what makes the axis ENFORCED rather than merely described: the
+         * vendor runtimes derive their gate's shape from this value (guard/turn-gate.ts), so a row that lies
+         * about itself changes how a turn behaves instead of only what the composer says about it. */
+        rulebook: capabilities.rulebook,
         // Set HERE because this is the one point every runtime passes through, and because it is the only place
         // that can still tell the workspace root from the turn's cwd, below this, a persona's start folder and
         // an isolated worktree have already overwritten it.

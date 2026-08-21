@@ -6,6 +6,8 @@ import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } f
 import { toolCategoryOf, workspacePath } from "../agent/tool-calls.js";
 import { openBrowserSession } from "../browser/browser-sessions.js";
 import { ROUTED_BROWSER_SERVER } from "../browser/browser-tools.js";
+import { type CommandGate, vendorSubject } from "../guard/command-gate.js";
+import { createTurnGate } from "../guard/turn-gate.js";
 import {
     type CodexEvent,
     type CodexItem,
@@ -231,14 +233,16 @@ const steeringRelay = (queue: AsyncIterable<string>): (() => SteeringChannel) =>
     };
 };
 
-const threadOptions = (request: AgentRequest, sandboxMode: CodexSandboxMode): CodexThreadOptions => {
+const threadOptions = (request: AgentRequest, sandboxMode: CodexSandboxMode, gated: boolean): CodexThreadOptions => {
     const effort = request.effort !== undefined ? reasoningEffort(request.effort) : undefined;
     return {
         workingDirectory: request.cwd,
         sandboxMode,
-        // This client does not implement app-server's approval requests; the container is the isolation boundary
-        // (same posture as the Claude path's bypassPermissions).
-        approvalPolicy: "never",
+        /* The container is the isolation boundary, so the standing posture is that Codex asks nothing, exactly
+         * as it always did. `gated` flips it when the owner's command rulebook has something it could refuse
+         * (or the turn is carrying somebody else's words): then Codex raises an approval per command and the
+         * gate answers from the same decide fn a Claude turn uses. */
+        approvalPolicy: gated ? "untrusted" : "never",
         ...(request.model !== undefined ? { model: request.model } : {}),
         ...(effort !== undefined ? { modelReasoningEffort: effort } : {}),
     };
@@ -338,6 +342,10 @@ interface CodexStreamContext {
     readonly conversationId?: string;
     readonly holdMessages?: boolean;
     readonly browser?: CodexBrowserContext;
+    /* The owner's command rulebook for this turn (guard/turn-gate.ts). One gate for the whole turn, so an
+     * "always" answered during the plan phase is not asked again while executing. Absent only where a caller
+     * builds a context by hand (a bench run), and then Codex was never asked to raise approvals either. */
+    readonly gate?: CommandGate;
 }
 
 /* A CODEX QUESTION, ON THE CARD THE `ask` TOOL RAISES, the same registry, the same frames, the same dismissal
@@ -363,6 +371,29 @@ async function* codexQuestionCard(
     const { reply, resolved } = await wait(context.signal);
     yield resolved;
     request.respond(codexAnswers(request.questions, reply));
+}
+
+/* ONE COMMAND CODEX ASKED ABOUT, PUT THROUGH THE OWNER'S RULEBOOK, and the reason `commandRules` now means
+ * something on this runtime instead of silently nothing.
+ *
+ * Shaped exactly like codexQuestionCard above, because it is the same trick and it is the only one available:
+ * app-server is BLOCKED on this request, so parking here parks the turn, in order, with nothing of the turn's
+ * able to arrive while a person reads the card. The gate's own frames (the card, then its resolution) are
+ * `yield*`ed straight into this stream.
+ *
+ * A REFUSAL DECLINES rather than cancels. Codex offers both, and the difference matters: `cancel` interrupts the
+ * whole turn, which is not what a refused command means. The agent should hear no and pick something else,
+ * exactly as it does when the Claude path's hook denies one call. */
+async function* codexCommandApproval(
+    request: Extract<CodexEvent, { type: "command_approval.requested" }>,
+    context: CodexStreamContext,
+): AsyncGenerator<AgentEvent> {
+    if (context.gate === undefined) {
+        request.respond(true);
+        return;
+    }
+    const outcome = yield* context.gate.consult(request.command, vendorSubject("Bash"));
+    request.respond(outcome.allow);
 }
 
 // Normalize one Codex turn's provider event stream onto AgentEvents, RETURNING what the turn captured, the
@@ -512,6 +543,8 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
             yield { kind: "commands", items: event.skills.map((skill) => ({ name: skill.name, description: skill.description })) };
         } else if (event.type === "user_input.requested") {
             yield* codexQuestionCard(event, context);
+        } else if (event.type === "command_approval.requested") {
+            yield* codexCommandApproval(event, context);
         } else if (event.type === "turn.completed") {
             if (event.usage !== undefined) {
                 yield {
@@ -575,7 +608,7 @@ async function* runCodexPlanTurn(
                     ...(sessionId !== undefined ? { sessionId } : {}),
                     ...turnBase,
                     ...(steering !== undefined ? { steering: steering.steering } : {}),
-                    options: threadOptions(request, sandboxMode),
+                    options: threadOptions(request, sandboxMode, context.gate?.enforcing === true),
                     signal: request.signal,
                 }),
                 {
@@ -652,10 +685,18 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         // The run's one consumer of the daemon's steering queue (see steeringRelay). Absent when the turn was
         // started with no queue, a bench or benchmark run rather than a chat.
         const channel = request.steering === undefined ? undefined : steeringRelay(request.steering);
+        /* THE TURN'S SAFETY WIRING (guard/turn-gate.ts): the owner's command rulebook, reached through the
+         * approval requests app-server raises, and this conversation's outside-content bit, published so the
+         * wallet's payment gate can read it from outside this generator.
+         *
+         * Minted once for the whole run, so an "always" answered during the plan phase still holds while
+         * executing, and so both phases ask Codex for the same approval posture. */
+        const { gate, release } = createTurnGate(request);
         const context: Omit<CodexStreamContext, "holdMessages" | "browser"> = {
             cwd: request.cwd,
             imageArtifacts,
             signal: request.signal,
+            gate,
             ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
         };
         // If app-server reports a specific error and then its process also dies, keep the actionable frame and
@@ -672,7 +713,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                           ...(request.sessionId !== undefined ? { sessionId: request.sessionId } : {}),
                           ...turnBase,
                           ...(steering !== undefined ? { steering: steering.steering } : {}),
-                          options: threadOptions(request, "danger-full-access"),
+                          options: threadOptions(request, "danger-full-access", gate.enforcing),
                           signal: request.signal,
                       }),
                       {
@@ -712,6 +753,9 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
             // The app-server this channel fed is gone; a message still riding the queue has nowhere to land, and
             // leaving the channel open would park its pump on a promise nothing resolves.
             steering?.close();
+            // This turn's outside-content bit dies with the turn (guard/turn-taint.ts): the next one starts clean
+            // unless it too takes something in.
+            release();
         }
         yield { kind: "done" };
     };

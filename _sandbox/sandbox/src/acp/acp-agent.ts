@@ -8,6 +8,8 @@ import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
 import { sessionUpdateEvent } from "./acp-events.js";
+import type { CommandGate } from "../guard/command-gate.js";
+import { createTurnGate } from "../guard/turn-gate.js";
 import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
 
 /* The ACP provider adapter: the same seam as runAgent/createCodexAgent/createGrokAgent. AgentRequest in,
@@ -97,6 +99,10 @@ async function* runAcpTurn(
     phase: PermissionPhase,
     captureText: boolean,
     timeouts: AcpTimeouts,
+    // This turn's rulebook gate, and the sink its permission cards go through. One gate for the whole turn (see
+    // runAcpAgent), so the sink is repointed at whichever phase is currently streaming rather than rebuilt.
+    gate: CommandGate,
+    sink: { push: (event: AgentEvent) => void },
 ): AsyncGenerator<AgentEvent, TurnOutcome> {
     let sid = sessionId;
     if (sid !== undefined && !connection.sessions.has(sid)) {
@@ -140,6 +146,12 @@ async function* runAcpTurn(
     const queue: AgentEvent[] = [];
     let text = "";
     let wake: () => void = noopWake;
+    // Point the turn-level gate's card sink at THIS phase's queue. The gate outlives a phase (an "always"
+    // answered while planning must hold while executing), the queue does not.
+    sink.push = (event) => {
+        queue.push(event);
+        wake();
+    };
     const onUpdate = (notification: SessionNotification): void => {
         const update = notification.update;
         if (captureText && update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
@@ -160,7 +172,7 @@ async function* runAcpTurn(
     let terminalSurfaced = false;
     const unbind = connection.bindTurn(sid, {
         onUpdate,
-        permission: (permissionRequest) => decidePermission(permissionRequest, phase, request.signal.aborted),
+        permission: (permissionRequest) => decidePermission(permissionRequest, phase, request.signal.aborted, gate, (event) => sink.push(event)),
         ...(tmuxSession !== undefined
             ? {
                   terminal: {
@@ -271,16 +283,46 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: AcpTimeout
         const { blocks, unread } = nativeImages ? await imageBlocks(images) : { blocks: [], unread: [...images] };
         const prompt = withFileNote(request.prompt, [...others, ...unread]);
 
+        /* THE TURN'S SAFETY WIRING, minted once for every phase this turn runs (guard/turn-gate.ts): the
+         * owner's command rulebook, reached through the one seam ACP publishes, and this conversation's
+         * outside-content bit, published so the wallet's payment gate can read it from outside the generator.
+         *
+         * The sink starts as a no-op and each phase repoints it at its own queue, because a card has to reach
+         * the client through whichever stream is live, while the GATE has to outlive the phase so an "always"
+         * answered during planning is not asked again while executing. */
+        const sink = { push: (_event: AgentEvent) => {} };
+        const { gate, release } = createTurnGate(request);
+
         try {
             if (request.permissionMode === "plan") {
                 // Plan flow is text-only prompts; attachment paths ride the note (images too, the planning
                 // phase reads, it doesn't look at screenshots natively; keeping phases uniform beats cleverness).
                 const planPhase: PlanPhase = async function* (phasePrompt, sessionId) {
-                    const outcome = yield* runAcpTurn(connection, request, [{ type: "text", text: phasePrompt }], sessionId, "plan", true, timeouts);
+                    const outcome = yield* runAcpTurn(
+                        connection,
+                        request,
+                        [{ type: "text", text: phasePrompt }],
+                        sessionId,
+                        "plan",
+                        true,
+                        timeouts,
+                        gate,
+                        sink,
+                    );
                     return { sessionId: outcome.sessionId, planText: outcome.text, errored: outcome.errored };
                 };
                 const executePhase: ExecutePhase = async function* (sessionId) {
-                    yield* runAcpTurn(connection, request, [{ type: "text", text: EXECUTE_PROMPT }], sessionId, "execute", false, timeouts);
+                    yield* runAcpTurn(
+                        connection,
+                        request,
+                        [{ type: "text", text: EXECUTE_PROMPT }],
+                        sessionId,
+                        "execute",
+                        false,
+                        timeouts,
+                        gate,
+                        sink,
+                    );
                 };
                 yield* runPlanEmulation(
                     request.signal,
@@ -290,11 +332,23 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: AcpTimeout
                     executePhase,
                 );
             } else {
-                yield* runAcpTurn(connection, request, [{ type: "text", text: prompt }, ...blocks], request.sessionId, "execute", false, timeouts);
+                yield* runAcpTurn(
+                    connection,
+                    request,
+                    [{ type: "text", text: prompt }, ...blocks],
+                    request.sessionId,
+                    "execute",
+                    false,
+                    timeouts,
+                    gate,
+                    sink,
+                );
             }
         } catch (error) {
             // A throwing turn (session/new failure, connection torn down mid-turn) surfaces, never swallows.
             yield { kind: "error", message: errorText(error, connection.stderrTail()) };
+        } finally {
+            release();
         }
         yield { kind: "done" };
     };

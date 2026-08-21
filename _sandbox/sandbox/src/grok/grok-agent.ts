@@ -5,8 +5,10 @@ import { withFileNote } from "../agent/attachment-note.js";
 import { mentionsSpentAllowance } from "../agent/failure-sentences.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
+import type { CommandGate } from "../guard/command-gate.js";
+import { createTurnGate } from "../guard/turn-gate.js";
 import { isChatModel, parseModelSuggestions } from "./grok-models.js";
-import { openCodeBackendLabel, type OpenCodeService } from "./opencode.js";
+import { openCodeBackendLabel, type OpenCodeService, registerSessionGate, releaseSessionGate } from "./opencode.js";
 
 /* The xAI Grok provider adapter: same seam as agent.ts's runAgent. AgentRequest in, AgentEvent frames out,
  * backed by OpenCode (`@opencode-ai/sdk`) pointed at xAI Grok. OpenCode is itself the agentic runtime
@@ -37,6 +39,14 @@ export interface GrokTurn {
     readonly provider?: string;
     // The built-in OpenCode agent: "plan" is read-only (proposes), "build" executes.
     readonly agent: "plan" | "build";
+    /* This turn's command-rulebook gate, registered against the OpenCode session id the moment it exists so the
+     * daemon-wide permission watcher can find it (opencode.ts sessionGates). Absent ⇒ nothing is registered and
+     * every permission gets the standing yes, exactly as before.
+     *
+     * Registration happens in the RUNNER rather than in the adapter because the session id is born here: a new
+     * session's id comes back from `session.create`, and a permission can arrive before the `session.created`
+     * event the adapter reads. */
+    readonly gate?: CommandGate;
     /* THIS SANDBOX'S STANDING INSTRUCTIONS, as much of them as OpenCode will take, the whole of what makes
      * this runtime `instructions: "append"` rather than one that drops the setting silently.
      *
@@ -129,6 +139,9 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
             }
         }
         turn.signal.addEventListener("abort", () => void c.session.abort({ path: { id: sessionId } }).catch(() => {}), { once: true });
+        if (turn.gate !== undefined) {
+            registerSessionGate(sessionId, turn.gate);
+        }
         // Fire the turn's prompt on the resolved session for a given model id (empty ⇒ let OpenCode choose). Reused
         // by the self-heal below to re-prompt with a corrected model after a "model not found" rejection.
         const sendPrompt = (modelId: string | undefined): ReturnType<typeof c.session.promptAsync> =>
@@ -250,6 +263,9 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
             }
         } finally {
             await iterator.return?.().catch(() => {});
+            // The gate dies with the phase that registered it: a permission arriving later belongs to a session
+            // nothing is judging any more, and gets the standing yes (opencode.ts answerPermission).
+            releaseSessionGate(sessionId);
         }
     };
 
@@ -481,7 +497,7 @@ async function* streamTurn(
 // No `question` frames. OpenCode's permission channel maps to per-tool approvals, not multiple-choice
 // clarifying questions; a dedicated ask-tool is the upgrade path. Declared as `questions: false` in this
 // runtime's capability row, which is what the composer says out loud.
-async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provider: string): AsyncGenerator<AgentEvent> {
+async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provider: string, gate: CommandGate): AsyncGenerator<AgentEvent> {
     // Both phases of the emulation carry the same standing instructions: they are two messages of ONE turn, and
     // a plan proposed under the owner's prompt that is then executed without it would be a different agent
     // doing the work than the one that agreed to it.
@@ -495,6 +511,7 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provi
                 ...(request.model !== undefined ? { model: request.model } : {}),
                 provider,
                 agent: "plan",
+                gate,
                 ...(system !== undefined ? { system } : {}),
                 signal: request.signal,
             }),
@@ -513,6 +530,7 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provi
                 ...(request.model !== undefined ? { model: request.model } : {}),
                 provider,
                 agent: "build",
+                gate,
                 ...(system !== undefined ? { system } : {}),
                 signal: request.signal,
             }),
@@ -529,9 +547,19 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provi
 export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
     async function* runGrokAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
         const prompt = withFileNote(request.prompt, request.attachments ?? []);
+        /* THE TURN'S SAFETY WIRING (guard/turn-gate.ts): the owner's command rulebook, answered over OpenCode's
+         * permission channel, and this conversation's outside-content bit, published so the wallet's payment gate
+         * can read it from outside this generator.
+         *
+         * `canPark: false` is the one thing that makes this runtime's rulebook weaker than the Claude path's, and
+         * it is this runtime's watchdog rather than its protocol: a turn is aborted after two minutes with no
+         * event for its session, and a permission paused on a person is exactly that silence. So a hold is
+         * delivered as a refusal naming the rule, `deny` works in full, and the capability record says
+         * `rulebook: "refuse-only"` so the composer tells the owner before they rely on it. */
+        const { gate, release } = createTurnGate(request);
         const turn =
             request.permissionMode === "plan"
-                ? runGrokPlanTurn({ ...request, prompt }, runner, provider)
+                ? runGrokPlanTurn({ ...request, prompt }, runner, provider, gate)
                 : streamTurn(
                       runner({
                           prompt,
@@ -540,6 +568,7 @@ export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
                           ...(request.model !== undefined ? { model: request.model } : {}),
                           provider,
                           agent: "build",
+                          gate,
                           ...(request.systemAppend !== undefined ? { system: request.systemAppend } : {}),
                           signal: request.signal,
                       }),
@@ -561,6 +590,9 @@ export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
                 // the bad pinned model rather than showing the raw error.
                 yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };
             }
+        } finally {
+            // This turn's outside-content bit dies with the turn (guard/turn-taint.ts).
+            release();
         }
         yield { kind: "done" };
     };

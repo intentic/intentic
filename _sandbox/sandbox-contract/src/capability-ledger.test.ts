@@ -57,6 +57,11 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     // turn-plan.ts (honoured) plans the JS backend only where "js" is declared, so a runtime without it is
     // handed no `jsExecution` and mounts no Code tool: the same drop-what-you-can't-honour rule as `effort`.
     execution: "enforced",
+    /* turn-plan.ts (honoured) carries this onto every request and guard/turn-gate.ts DERIVES the gate's shape
+     * from it: "none" gets no consult and a permanently-set taint bit, "refuse-only" cannot park so a hold
+     * refuses, the other two park on a card. So a row that lies about itself changes how its turns behave.
+     * It also decides whether Codex is asked to raise approvals at all (codex-agent.ts threadOptions). */
+    rulebook: "enforced",
 
     /* DESCRIPTIVE: true of the runtime, and nothing consults them. Each describes behaviour that is emergent
      * rather than gated: an agent that never emits `question` frames simply never asks, one that publishes no
@@ -68,6 +73,14 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     commands: "descriptive",
     terminals: "descriptive",
     recovery: "descriptive",
+    /* DESCRIPTIVE, and the one entry here whose gap cannot be closed by wiring. Masking a stored credential in
+     * what the model READS needs a seam that edits a tool result before the model sees it, and only the Claude
+     * Code loop has one (a PostToolUse hook). Every other runtime runs its tools inside the VENDOR'S loop: the
+     * model has read the result before the daemon sees any frame about it. So nothing consults this field, and
+     * nothing can: it exists so limitationsOf can say out loud what is true, instead of letting an owner who
+     * stored a credential assume it is hidden everywhere. Moving it to ENFORCED would take a runtime that
+     * publishes a result-rewriting seam, not a change here. */
+    secrets: "descriptive",
 };
 
 // The full ceiling: every ability real, so `limitationsOf` has nothing to say about it. Read from the catalog
@@ -92,10 +105,16 @@ describe("a descriptive claim reaches the user", () => {
         expect(limitationsOf(CEILING)).toEqual([]);
     });
 
-    it.each(fieldsWhere("descriptive"))("%s puts its own sentence in the picker when the runtime lacks it", (field) => {
-        expect(typeof CEILING[field], `${field} is descriptive but not a boolean — teach the flip below how to diminish it`).toBe("boolean");
+    /* What "lacking this axis" MEANS for a field that is not a boolean. A boolean diminishes to false; anything
+     * else has to name its own floor here, because only the axis knows which of its values is the weak one.
+     * Adding a non-boolean descriptive field without an entry fails below rather than silently testing nothing. */
+    const DIMINISHED: Partial<Record<keyof AgentCapabilities, unknown>> = { secrets: "none" };
 
-        const lacking: AgentCapabilities = { ...CEILING, [field]: false };
+    it.each(fieldsWhere("descriptive"))("%s puts its own sentence in the picker when the runtime lacks it", (field) => {
+        const floor = typeof CEILING[field] === "boolean" ? false : DIMINISHED[field];
+        expect(floor, `${field} is descriptive and not a boolean: add its weakest value to DIMINISHED above`).toBeDefined();
+
+        const lacking: AgentCapabilities = { ...CEILING, [field]: floor };
 
         expect(limitationsOf(lacking)).toHaveLength(1);
     });

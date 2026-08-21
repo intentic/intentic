@@ -5,6 +5,7 @@ import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { withTimeout } from "../acp/acp-connection.js";
+import { createTurnGate } from "../guard/turn-gate.js";
 import { createPiEventMapper } from "./pi-events.js";
 import type { PiEvent, PiProcess, PiSpawn } from "./pi-rpc.js";
 
@@ -338,6 +339,16 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_T
             }
         }
 
+        /* PI IS THE ONE RUNTIME WITH NO CONSULT SEAM, so this publishes the turn's outside-content bit and
+         * nothing else: there is no gate to build. Pi runs bash in-process and its RPC raises no approval
+         * request, which is what `rulebook: "none"` declares in the capability record and what limitationsOf
+         * tells the person about to send a message here.
+         *
+         * `blind` is why the bit is published at all. A turn nothing can gate has no later moment where "has
+         * this read a stranger's words" could be acted on, so it is treated as carrying outside content for its
+         * whole life: the wallet's payment gate then asks in chat rather than spending inside a standing
+         * delegation that assumed a gate existed (guard/turn-gate.ts). It costs Pi nothing it had. */
+        const { release } = createTurnGate(request);
         try {
             yield* serve();
         } catch (error) {
@@ -345,6 +356,7 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_T
             yield { kind: "error", message: errorText(error instanceof Error ? error.message : "Pi agent failed", proc.stderrTail()) };
         } finally {
             proc.kill();
+            release();
         }
         yield { kind: "done" };
     };

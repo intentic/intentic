@@ -286,6 +286,49 @@ export interface AgentCapabilities {
      * only the Claude Code loop's: Codex's own base describes Codex's own tools, so swapping it for a prompt
      * written about another harness is the owner's deliberate act (their custom text), never ours. */
     readonly instructions: "replace" | "append" | "none";
+    /* WHETHER THE OWNER'S COMMAND RULEBOOK REACHES THIS RUNTIME (SandboxSettings.commandRules, decided by
+     * guard/actions.ts commandRun, delivered by guard/command-gate.ts).
+     *
+     * It exists because the rulebook was silently a Claude Code rulebook. The gate is a PreToolUse hook, which
+     * is an Agent SDK seam, so an owner who set `files.destructive: hold` was asked on a Claude turn and never
+     * on a Codex, Grok, Gemini, Pi or ACP one, with nothing on screen saying so. Same failure mode as the
+     * `instructions` axis above, and the same fix: name it once, let every surface read it.
+     *
+     *   "hooks"      , the runtime's own pre-execution hook carries the verdict and a HOLD can park the call.
+     *                  The Claude Code loop, whose PreToolUse hook fires even under bypassPermissions.
+     *   "approval"   , the vendor publishes a per-call approval channel the daemon answers from the same
+     *                  rulebook, and a hold parks on a card because the vendor is blocked on the answer
+     *                  (Codex's `item/commandExecution/requestApproval`, ACP's `session/request_permission`).
+     *                  Weaker than "hooks" in one stated way: the vendor decides WHICH calls it asks about, so a
+     *                  class it never raises is a class the rulebook cannot see. What it does raise is judged by
+     *                  the same decide fn.
+     *   "refuse-only", the same channel, but the vendor puts a CLOCK on the wait, so a hold cannot park and
+     *                  arrives as a refusal instead. OpenCode's turn has an inactivity watchdog that reads a
+     *                  paused approval as a stalled turn; a card there would break the turn rather than gate it.
+     *                  `deny` rules work fully; `hold` rules stop the command and say they could not ask.
+     *   "none"       , the runtime publishes no seam before it runs a command, so no rule can apply. Pi runs its
+     *                  bash in-process with no approval channel at all.
+     *
+     * The taint floor rides this axis too: a runtime with no consult has no place to apply it, which is why
+     * `conversationTainted` must read a "none" runtime as tainted rather than as clean (guard/turn-taint.ts). */
+    readonly rulebook: "hooks" | "approval" | "refuse-only" | "none";
+    /* WHETHER A STORED CREDENTIAL IS MASKED IN WHAT THIS RUNTIME'S MODEL READS (secrets/secret-registry.ts and
+     * the two seams around it).
+     *
+     * "masked" is the full round trip: every stored value is replaced by its `{{secret:name}}` reference on the
+     * way into the model's context, and the same reference resolves back to the value at the two exits that
+     * spend it (a shell command, a script). The Claude Code loop, via PostToolUse and PreToolUse.
+     *
+     * "none" is a STRUCTURAL limit, not an unfinished wire, and it is the reason this axis is honest rather
+     * than aspirational. On every other runtime the tool runs inside the VENDOR'S own loop: the model has read
+     * the result before the daemon sees any frame about it, so there is no seam left to rewrite. A PostToolUse
+     * hook is the only thing that can edit what a model reads, and only the Claude Code loop has one. Nothing
+     * about wiring more transports changes that, which is why the answer here is a disclosure and the real fix
+     * is to stop putting credentials where a vendor's tool can read them at all.
+     *
+     * Read by limitationsOf, and by agent/system-prompt.ts, which must not teach the reference language to a
+     * runtime that has no exit for it. */
+    readonly secrets: "masked" | "none";
 }
 
 // The Claude Code Agent SDK loop, the ceiling every other runtime is measured against, and the only one that
@@ -307,6 +350,10 @@ const CLAUDE_CODE: AgentCapabilities = {
     terminals: true,
     recovery: true,
     instructions: "replace",
+    // The only runtime with a pre-execution hook of its own, which is why it is the only one where a HOLD can
+    // park the call and wait for a card rather than having to refuse it.
+    rulebook: "hooks",
+    secrets: "masked",
 };
 
 /* Codex app-server: item-level events, process-backed MCP servers, and the four interactive seams its protocol
@@ -336,6 +383,13 @@ const CODEX: AgentCapabilities = {
      * message ahead of its skills and team blocks. Verified against codex-cli 0.147 by reading what actually
      * reached the wire, the keys are undocumented, and a strings dump proves only that they parse. */
     instructions: "replace",
+    /* App-server publishes `item/commandExecution/requestApproval`, whose params carry the command text, and
+     * takes `accept`/`decline` back (codex-cli 0.147's own generated JSON Schema, read with
+     * `codex app-server generate-json-schema`). The daemon only asks Codex to raise those requests when the
+     * owner has written command rules, so an unconfigured workspace keeps `approvalPolicy: "never"` and pays
+     * nothing (codex/codex-agent.ts threadOptions). */
+    rulebook: "approval",
+    secrets: "none",
 };
 
 // OpenCode (the Grok runtime): its own agentic loop, its own tools, allow-all permissions. It takes a model id,
@@ -357,6 +411,16 @@ const OPENCODE: AgentCapabilities = {
     // replacing that, so a custom prompt lands here as extra instructions, and the settings page says so
     // rather than letting "replaces everything" quietly mean something else on two providers.
     instructions: "append",
+    /* OpenCode asks over its own permission channel (`permission.updated`, replied on
+     * `/session/{id}/permissions/{permissionID}`, vocabulary once/always/reject), and the daemon judges what it
+     * raises with the same decide fn every other runtime uses.
+     *
+     * REFUSE-ONLY because of its watchdog, not because of its protocol. A Grok/Gemini turn is aborted after two
+     * minutes without an event for its session (grok/grok-agent.ts GROK_INACTIVITY_MS), and a permission paused
+     * on a person is exactly that silence, so a parked card would turn "ask me" into a broken turn. A `deny`
+     * rule is enforced in full; a `hold` stops the command and tells the agent it could not be asked about. */
+    rulebook: "refuse-only",
+    secrets: "none",
 };
 
 /* The same OpenCode loop, serving Gemini instead of xAI, identical abilities, which is the point of giving it
@@ -396,6 +460,12 @@ const ACP: AgentCapabilities = {
     // ACP's `session/new` and `session/prompt` carry no system field: the agent owns its own instructions the
     // same way it owns its model and its permission posture. The persona note takes the user message instead.
     instructions: "none",
+    /* `session/request_permission` is in the protocol floor, so every conforming agent has the channel and the
+     * daemon answers it from the rulebook (acp/acp-permissions.ts). The caveat the "approval" value already
+     * carries is at its widest here: WHICH calls an agent asks about is entirely the agent's choice, and one
+     * that never asks is one no rule can reach. */
+    rulebook: "approval",
+    secrets: "none",
 };
 
 /* THE PI CAPABILITY ID IS RESERVED, the same way the five native ids are: an `agent`-kind capability installed
@@ -426,6 +496,12 @@ const PI: AgentCapabilities = {
     // Pi's RPC opens a session with a prompt and steers it; nothing in that protocol sets standing
     // instructions, so like ACP it hears the persona note through the user message.
     instructions: "none",
+    /* THE ONE RUNTIME WITH NO SEAM AT ALL. Pi runs bash in-process and its RPC publishes no approval request,
+     * so there is nothing to consult before a command runs and no rule the owner writes can apply here. Said
+     * out loud rather than left to be discovered: limitationsOf renders it, and the taint floor treats a "none"
+     * runtime as permanently tainted, because a bit nobody can act on is worse than no bit. */
+    rulebook: "none",
+    secrets: "none",
 };
 
 // The pair → its record. An `endpoint/<id>` provider is a model API the user configured, driven BY the Claude
@@ -501,6 +577,18 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
      * mechanism, because that is the thing they wrote and the thing that will or will not be in force. */
     ...(capabilities.instructions === "append" ? ["your system prompt is added to theirs, not replacing it"] : []),
     ...(capabilities.instructions === "none" ? ["your system prompt isn't applied"] : []),
+    /* THE TWO SAFETY AXES, phrased as what the OWNER loses rather than as which seam is missing, because both
+     * describe something they configured on a settings page and would otherwise assume was in force everywhere.
+     *
+     * "hooks" and "masked" are the ceiling and disclose nothing. The "approval" middle answer discloses the one
+     * thing that genuinely differs from a hook: the vendor picks which calls it asks about, so a rule can only
+     * reach what it chose to raise. */
+    ...(capabilities.rulebook === "approval" ? ["your command rules apply only to calls this agent asks about"] : []),
+    ...(capabilities.rulebook === "refuse-only"
+        ? ["your command rules can stop a command here but not pause to ask: a rule set to hold refuses instead"]
+        : []),
+    ...(capabilities.rulebook === "none" ? ["your command rules aren't applied"] : []),
+    ...(capabilities.secrets === "none" ? ["stored secrets reach the model unmasked, and `{{secret:name}}` isn't substituted"] : []),
 ];
 
 // Claude's compile-time model floor, shared by the daemon's catalog (claude-models.ts, its last rung, reached

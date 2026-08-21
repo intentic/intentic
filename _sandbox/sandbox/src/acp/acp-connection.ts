@@ -42,7 +42,9 @@ export const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T
 
 export interface TurnHooks {
     readonly onUpdate: (notification: SessionNotification) => void;
-    readonly permission: (request: RequestPermissionRequest) => RequestPermissionResponse;
+    /* Answering can PARK: the owner's command rulebook may hold this call for approval, and the agent is meant
+     * to wait, which is what a JSON-RPC request is for (`ClientRequestHandler` returns `MaybePromise`). */
+    readonly permission: (request: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
     // The turn's terminal context: which tmux session its terminal/create commands run in (the conversation's
     // agent-<id> session, the panel UX Claude's Bash gets), the cwd fallback, and the first-create signal
     // (the adapter emits its {kind:"terminal", session} frame there). Absent ⇒ terminal requests are refused.

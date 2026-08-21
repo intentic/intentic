@@ -15,6 +15,7 @@ import {
 import { spawn } from "node:child_process";
 import {
     type AdmissionRule,
+    type AgentCapabilities,
     type AgentEvent,
     type AgentReply,
     type AskQuestion,
@@ -218,6 +219,12 @@ export interface AgentRequest {
      * read. A turn with no rules and no outside content still reaches every decide and is allowed by all of
      * them, which costs one classify per Bash call. */
     readonly commandRules?: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
+    /* What the serving runtime can DO about that rulebook, from the pair's capability record
+     * (capabilitiesOf().rulebook). The vendor adapters read it to shape their gate: "none" gets no consult and a
+     * permanently-set taint bit, "refuse-only" cannot park on a card so holds refuse, "approval" and "hooks"
+     * park. Absent ⇒ "hooks", the Claude Code loop, which is the only caller that builds its gate by hand
+     * because it is the only one that can also MARK taint mid-turn. */
+    readonly rulebook?: AgentCapabilities["rulebook"];
     /* Whether this turn was woken BY outside content, a listener message, a webchat visitor, carrying the
      * source's name. The mid-turn half (a fetched page, a foreign MCP result) marks itself through the wrap
      * seam; this is the half only the caller knows (guard/turn-taint.ts). */

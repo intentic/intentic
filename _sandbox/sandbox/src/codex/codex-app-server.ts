@@ -20,7 +20,14 @@ export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhig
 export interface CodexThreadOptions {
     readonly workingDirectory: string;
     readonly sandboxMode: CodexSandboxMode;
-    readonly approvalPolicy: "never";
+    /* `never` is the standing posture, and what every turn ran under before the command rulebook reached this
+     * runtime: Codex asks nothing and the container is the isolation boundary.
+     *
+     * `untrusted` is asked for ONLY when the owner's rules could refuse something (codex-agent.ts
+     * threadOptions), because it is the value that makes Codex raise
+     * `item/commandExecution/requestApproval` for commands rather than only on sandbox escalation, which
+     * `dangerFullAccess` never needs. It costs one in-process round-trip per command Codex asks about. */
+    readonly approvalPolicy: "never" | "untrusted";
     readonly model?: string;
     readonly modelReasoningEffort?: CodexReasoningEffort;
 }
@@ -137,6 +144,16 @@ export type CodexEvent =
           readonly type: "user_input.requested";
           readonly questions: readonly CodexQuestion[];
           readonly respond: (answers: Readonly<Record<string, readonly string[]>>) => void;
+      }
+    /* One command Codex is about to run and wants an answer on, from
+     * `item/commandExecution/requestApproval`. `command` is the text the classifier reads; `reason` is Codex's
+     * own words for why it asked, carried so a card can show them. `respond` takes the verdict, and the turn is
+     * blocked on it, which is what lets a hold park here the same way it parks a Bash hook. */
+    | {
+          readonly type: "command_approval.requested";
+          readonly command: string;
+          readonly reason?: string;
+          readonly respond: (allow: boolean) => void;
       }
     | { readonly type: "turn.completed"; readonly usage?: CodexUsage }
     | { readonly type: "turn.failed"; readonly error: { readonly message: string } }
@@ -322,9 +339,28 @@ export interface CodexAppServerConnection {
     readonly close: () => void;
 }
 
-// The server-initiated requests Intentic answers. Approvals are deliberately absent: `approvalPolicy: "never"`
-// means Codex never asks, and the container is the isolation boundary either way.
-const HANDLED_REQUESTS = new Set(["item/tool/requestUserInput"]);
+/* The server-initiated requests Intentic answers. Anything else is refused on arrival with a JSON-RPC
+ * "method not found", which is why this set and the loop below have to agree: a request Codex sends and nothing
+ * answers is a wedged turn.
+ *
+ * The three approval requests are here because the owner's command rulebook needs a seam before a command runs,
+ * and this is the only one Codex publishes (`item/commandExecution/requestApproval`, whose params carry the
+ * command text). They arrive only when the turn asked for them: `approvalPolicy` is still `"never"` unless the
+ * owner wrote rules, so an unconfigured workspace sees exactly what it always did (codex-agent.ts threadOptions).
+ *
+ * The other two ride along because turning approvals on turns on ALL of them: a file change or a permission
+ * profile Codex asks about is accepted, which is the posture those calls already had under `never`. Only the
+ * command class is judged. Shapes read off codex-cli 0.147's own generated schema
+ * (`codex app-server generate-json-schema`), not guessed. */
+const COMMAND_APPROVAL_REQUEST = "item/commandExecution/requestApproval";
+const FILE_CHANGE_APPROVAL_REQUEST = "item/fileChange/requestApproval";
+const PERMISSIONS_APPROVAL_REQUEST = "item/permissions/requestApproval";
+const HANDLED_REQUESTS = new Set([
+    "item/tool/requestUserInput",
+    COMMAND_APPROVAL_REQUEST,
+    FILE_CHANGE_APPROVAL_REQUEST,
+    PERMISSIONS_APPROVAL_REQUEST,
+]);
 
 export type CodexAppServerConnector = (turn: CodexTurn) => Promise<CodexAppServerConnection>;
 
@@ -630,6 +666,30 @@ const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly s
 
 // The questions on one `item/tool/requestUserInput` request. Undefined when it belongs to another turn on this
 // thread, nothing in this run can answer that, and its caller says so on the wire instead of asking a person.
+/* The one command on an `item/commandExecution/requestApproval`, or undefined when this request is not this
+ * run's to answer (another turn's) or carries no command text to judge.
+ *
+ * `command` is optional in the schema, so a request without one is undefined here and the caller accepts it:
+ * the alternative is refusing work over a field Codex chose not to send, and the gate is friction for
+ * well-behaved commands rather than a boundary (guard/command-classes.ts). Deliberately TOLERANT of everything
+ * else in the payload: this runs on the turn path and a shape surprise must not throw the stream. */
+const commandApprovalFrom = (raw: unknown, turnIds: ReadonlySet<string>): { readonly command: string; readonly reason?: string } | undefined => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+        return undefined;
+    }
+    const params = raw as JsonObject;
+    const turnId = params["turnId"];
+    if (typeof turnId !== "string" || !turnIds.has(turnId)) {
+        return undefined;
+    }
+    const command = params["command"];
+    if (typeof command !== "string" || command.trim() === "") {
+        return undefined;
+    }
+    const reason = params["reason"];
+    return { command, ...(typeof reason === "string" && reason.trim() !== "" ? { reason } : {}) };
+};
+
 const questionsFrom = (raw: unknown, turnIds: ReadonlySet<string>): readonly CodexQuestion[] | undefined => {
     const params = object(raw, "item/tool/requestUserInput params");
     if (!turnIds.has(string(params, "turnId", "item/tool/requestUserInput params"))) {
@@ -756,8 +816,39 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
             let usage: CodexUsage | undefined;
             for await (const notification of connection.messages) {
                 if (notification.kind === "request") {
-                    // Only the question request reaches here (HANDLED_REQUESTS); everything else was refused on
-                    // arrival. A question for another turn is answered empty rather than shown to a person.
+                    /* THE APPROVALS FIRST. `accept`/`decline` are the schema's own decision words; declining
+                     * lets the turn carry on (`cancel` would interrupt it, which is not what a refused command
+                     * means, the agent should hear no and choose something else).
+                     *
+                     * A request naming a turn this run is not watching is accepted rather than shown to anyone:
+                     * the same rule the question card follows, for the same reason (a superseded turn can still
+                     * be completing while the steered one runs). */
+                    if (notification.method === COMMAND_APPROVAL_REQUEST) {
+                        const approval = commandApprovalFrom(notification.params, turnIds);
+                        if (approval === undefined) {
+                            notification.respond({ decision: "accept" });
+                            continue;
+                        }
+                        yield {
+                            type: "command_approval.requested",
+                            command: approval.command,
+                            ...(approval.reason !== undefined ? { reason: approval.reason } : {}),
+                            respond: (allow) => notification.respond({ decision: allow ? "accept" : "decline" }),
+                        };
+                        continue;
+                    }
+                    if (notification.method === FILE_CHANGE_APPROVAL_REQUEST) {
+                        notification.respond({ decision: "accept" });
+                        continue;
+                    }
+                    if (notification.method === PERMISSIONS_APPROVAL_REQUEST) {
+                        // The profile Codex asked for, granted as asked: the container is the isolation boundary,
+                        // so narrowing it here would refuse work without protecting anything.
+                        const params = object(notification.params, `${PERMISSIONS_APPROVAL_REQUEST} params`);
+                        notification.respond({ permissions: (params["permissions"] ?? {}) as JsonValue });
+                        continue;
+                    }
+                    // The question request. A question for another turn is answered empty rather than shown.
                     const questions = questionsFrom(notification.params, turnIds);
                     if (questions === undefined) {
                         notification.respond({ answers: {} });

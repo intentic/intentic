@@ -7,8 +7,10 @@ import {
     createOpencodeServer,
     type Event as OpenCodeEvent,
     type OpencodeClient,
+    type Permission as OpenCodePermission,
 } from "@opencode-ai/sdk";
 import { noteDelegationSignal } from "../agent/subagents.js";
+import { type CommandGate, consultWith, vendorSubject } from "../guard/command-gate.js";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
 /* The shared OpenCode runtime: one warm `opencode serve` per container plus its client. Both the adapters that
@@ -180,12 +182,86 @@ const foldSessionEvent = (event: OpenCodeEvent): void => {
  * a key OpenCode adds later is a compile error here rather than another silent stall. `doom_loop` (OpenCode's
  * are-you-stuck guard) is allowed for the same reason the others are, a turn the model can't get out of is
  * bounded by the adapter's own turn cap, while a turn nobody can answer is bounded by nothing. */
+/* THE SHAPES WORTH ASKING ABOUT, and the reason `bash` is a pattern map rather than a flat "allow".
+ *
+ * The owner's command rulebook (guard/command-gate.ts) has to see a command BEFORE it runs, and OpenCode's
+ * permission channel is the only seam this runtime publishes. But asking about EVERY command would put a
+ * round-trip on `ls`, and the server is warm and daemon-wide, so the cost would land on every Grok and Gemini
+ * turn in the container, configured workspace or not.
+ *
+ * So OpenCode does a coarse pre-filter and the real classifier does the deciding. These globs are a deliberate
+ * OVER-approximation of guard/command-classes.ts: they must not miss anything that classifier would catch, and
+ * they are free to match things it will wave straight through (an unclassified `git push` to a feature branch
+ * costs one in-process round-trip and nothing else). They are NOT a second rulebook, and no verdict is ever
+ * read off them: every ask they produce is answered by the one decide fn.
+ *
+ * Everything unmatched keeps the standing allow, which is the posture this block has always had: the container
+ * is the isolation boundary, and see the note below for why every kind must be answered rather than most. */
+const ASK_ABOUT: Readonly<Record<string, "ask">> = {
+    "*git push*": "ask",
+    "*git reset*": "ask",
+    "*git clean*": "ask",
+    "*git branch*": "ask",
+    "*git filter-branch*": "ask",
+    "*rm *": "ask",
+    "*.env*": "ask",
+    "*.ssh/*": "ask",
+    "*id_rsa*": "ask",
+    "*id_ed25519*": "ask",
+    "*.npmrc*": "ask",
+    "*credentials*": "ask",
+    "*publish*": "ask",
+    "*release create*": "ask",
+    "*docker push*": "ask",
+    "*twine upload*": "ask",
+    "*curl *": "ask",
+    "*wget *": "ask",
+};
+
 const ALLOW_EVERY_PERMISSION: Required<NonNullable<OpenCodeConfig["permission"]>> = {
     edit: "allow",
-    bash: "allow",
+    // The one kind with a pattern map: allow by default, ask about the shapes the rulebook might care about.
+    bash: { "*": "allow", ...ASK_ABOUT },
     webfetch: "allow",
     doom_loop: "allow",
     external_directory: "allow",
+};
+
+/* THE LIVE TURNS' GATES, BY OPENCODE SESSION, because the thing that answers a permission is a DETACHED,
+ * daemon-wide watcher (watchSessionEvents below) and the thing that holds the owner's rules is one turn.
+ *
+ * A session id is the only key both halves share: the runner knows it the moment the session exists and
+ * registers there (grok-agent.ts), the watcher reads it off `permission.updated`. An ask for a session with no
+ * entry, a delegation, a sibling conversation, an arrival after its turn settled, gets the standing yes, which
+ * is where it already was before any of this. */
+const sessionGates = new Map<string, CommandGate>();
+
+export const registerSessionGate = (sessionId: string, gate: CommandGate): void => {
+    sessionGates.set(sessionId, gate);
+};
+
+export const releaseSessionGate = (sessionId: string): void => {
+    sessionGates.delete(sessionId);
+};
+
+/* WHAT THIS PERMISSION IS ABOUT TO RUN, as text the classifier can read. OpenCode's `Permission` carries no
+ * declared command field, so the shape is read tolerantly: `metadata` is where a bash permission puts its own
+ * details, `pattern` is what matched, and `title` is the human line. Same reasoning as ACP's programOf, and the
+ * same consequence for a miss, the coarse patterns above already decided this call was worth a look, so failing
+ * to find text means allow rather than refuse. */
+const permissionProgram = (permission: OpenCodePermission): string | undefined => {
+    const metadata = permission.metadata as Record<string, unknown> | undefined;
+    for (const key of ["command", "cmd", "script", "input"]) {
+        const value = metadata?.[key];
+        if (typeof value === "string" && value.trim() !== "") {
+            return value;
+        }
+    }
+    const pattern = Array.isArray(permission.pattern) ? permission.pattern.join(" ") : permission.pattern;
+    if (typeof pattern === "string" && pattern.trim() !== "") {
+        return pattern;
+    }
+    return permission.title.trim() === "" ? undefined : permission.title;
 };
 
 /* ...AND THE SAME ANSWER GIVEN LIVE, for the asks the block above cannot cover.
@@ -197,12 +273,47 @@ const ALLOW_EVERY_PERMISSION: Required<NonNullable<OpenCodeConfig["permission"]>
  *
  * "always" rather than "once": the pattern is allowed for the rest of the session, so a tool that reads twenty
  * files under one directory asks about the first and none of the rest. */
-const allowPermission = async (client: OpencodeClient, permission: { id: string; sessionID: string }, directory: string): Promise<void> => {
+const replyPermission = async (
+    client: OpencodeClient,
+    permission: { id: string; sessionID: string },
+    directory: string,
+    response: "once" | "always" | "reject",
+): Promise<void> => {
     await client.postSessionIdPermissionsPermissionId({
         path: { id: permission.sessionID, permissionID: permission.id },
         query: { directory },
-        body: { response: "always" },
+        body: { response },
     });
+};
+
+/* ONE PERMISSION, ANSWERED: the owner's rulebook when this session has one, the standing yes otherwise.
+ *
+ * REFUSE-ONLY, and the reason is this runtime's own watchdog rather than its protocol. A Grok/Gemini turn is
+ * aborted after two minutes with no event for its session (grok-agent.ts GROK_INACTIVITY_MS), and a permission
+ * paused on a person is exactly that silence: a card parked here would turn "hold this for my approval" into a
+ * broken turn two minutes later, which is worse than either answer. So the gate is built with `canPark: false`
+ * (grok-agent.ts) and a hold comes back as a refusal naming the rule. `deny` rules are enforced in full. The
+ * capability record says `rulebook: "refuse-only"` and limitationsOf puts it in front of the user.
+ *
+ * `once` rather than `always` on an allowed-but-classified command, deliberately: `always` would tell OpenCode
+ * to stop asking about that pattern for the session, and the next command matching it could be one the rulebook
+ * WOULD refuse. The standing yes below keeps `always`, which is what makes an unknown kind cost one round-trip
+ * rather than one per call. */
+const answerPermission = async (client: OpencodeClient, permission: OpenCodePermission, directory: string): Promise<void> => {
+    const gate = sessionGates.get(permission.sessionID);
+    if (gate === undefined || !gate.enforcing) {
+        await replyPermission(client, permission, directory, "always");
+        return;
+    }
+    const program = permissionProgram(permission);
+    if (program === undefined) {
+        await replyPermission(client, permission, directory, "always");
+        return;
+    }
+    // The frames a refusal would have produced go nowhere: with canPark false the gate never raises a card, so
+    // consultWith has nothing to push. Kept as a sink rather than a throw for the day that changes.
+    const outcome = await consultWith(gate, program, vendorSubject(permission.type), () => {});
+    await replyPermission(client, permission, directory, outcome.allow ? "once" : "reject");
 };
 
 // How many times the event stream may die in a row before the watcher gives up. The service never restarts a
@@ -243,10 +354,13 @@ const watchSessionEvents = (client: OpencodeClient, directory: string): void => 
                     failures = 0;
                     foldSessionEvent(event as OpenCodeEvent);
                     if (event.type === "permission.updated") {
-                        // Detached: the reply is a round-trip of its own, and awaiting it here would stop reading
-                        // the very stream the answer's effects arrive on. A failed one leaves the ask standing,
-                        // which is where it already was.
-                        void allowPermission(client, event.properties, directory).catch(() => {});
+                        /* Detached: the reply is a round-trip of its own, and awaiting it here would stop reading
+                         * the very stream the answer's effects arrive on. A failed one leaves the ask standing,
+                         * which is where it already was.
+                         *
+                         * Detached is also what makes the rulebook consult safe here. It classifies and may
+                         * refuse, and none of that can delay the stream this loop is draining. */
+                        void answerPermission(client, event.properties, directory).catch(() => {});
                     }
                 }
             } catch {
