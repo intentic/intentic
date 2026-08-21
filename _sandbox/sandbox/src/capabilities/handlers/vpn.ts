@@ -3,6 +3,7 @@ import { removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skill
 import { vpnDrivers } from "../../vpn/vpn-drivers.js";
 import { connectVpn, disconnectVpn, vpnLink } from "../../vpn/vpn-links.js";
 import type { CapabilityHandler } from "../capability.js";
+import { TUN_PRIVILEGES_FRAGMENT } from "./net-privileges.js";
 
 // The `vpn` capability: STORE a connection (credentials + whether it dials itself on boot). Everything about
 // dialling lives in the vpn/ subsystem behind a per-protocol driver, and the live surface is the /vpn routes,
@@ -13,12 +14,14 @@ import type { CapabilityHandler } from "../capability.js";
 // environment-overlay fragment + runtime directives, applied by an owner-run rebuild; until then a link reads
 // "unavailable". The daemon runs as root, so no sudo is involved.
 
-// ONE fragment for every provider rather than one per protocol. Two reasons, both important: adding a second
-// kind of VPN later must not cost a second container rebuild, and the runtime directives must appear exactly
-// once in the composed overlay, recreate.sh appends each directive token it reads without deduplicating, and a
-// doubled --device would fail the run. Composition dedupes fragments by exact content, so N vpn capabilities
-// still contribute this one block.
-const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocols, plus the container privileges they share.
+// ONE fragment for every provider rather than one per protocol, so adding a second kind of VPN later does not
+// cost a second container rebuild. Composition dedupes fragments by exact content, so N vpn capabilities still
+// contribute this one block.
+//
+// The container PRIVILEGES are deliberately not in here: they live in net-privileges.ts and are returned
+// alongside this, because the `exit` kind needs the same ones and a second copy of those directive lines would
+// hand `docker run` the same --device twice. See CapabilityHandler.fragment.
+const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocols.
 # WireGuard: wg-quick and the resolvconf its DNS= handling shells out to.
 # FortiGate SSL-VPN: openconnect with its vpnc routing script. openconnect routes over tun rather than spawning
 #   pppd, so it needs no /dev/ppp, which is why it, not openfortivpn, is the client here.
@@ -28,9 +31,7 @@ const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocol
 #   it an XAuth tunnel negotiates phase 1 and then fails with no mention of the missing plugin.
 RUN apt-get update && apt-get install -y --no-install-recommends \\
         wireguard-tools openresolv openconnect vpnc-scripts strongswan libcharon-extra-plugins libcharon-extauth-plugins \\
-    && rm -rf /var/lib/apt/lists/*
-# intentic:runtime --device=/dev/net/tun
-# intentic:runtime --cap-add=NET_ADMIN`;
+    && rm -rf /var/lib/apt/lists/*`;
 
 // The agent drives VPNs through the `vpn` CLI, never the underlying clients: the CLI calls the daemon, so a
 // tunnel the agent dials shows up in the operator's UI (and vice versa) instead of the two drifting apart.
@@ -146,7 +147,8 @@ export const vpnHandler: CapabilityHandler = {
                     }),
         };
     },
-    fragment: () => VPN_FRAGMENT,
+    // Two blocks: this kind's clients, and the tun privilege shared with `exit` as one identical string.
+    fragment: () => [VPN_FRAGMENT, TUN_PRIVILEGES_FRAGMENT],
     // A tunnel's conf files are written per name by its driver, and the re-apply writes them under the new one,
     // so this only has to take the old tunnel down and erase what it left. A tunnel that was up comes back up
     // where the config says it should (autoConnect), under the name it now has.

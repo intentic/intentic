@@ -76,6 +76,9 @@ describe("contributionCard", () => {
             "devops",
             "docker",
             "endpoint",
+            // Static like endpoint: an exit's providers are core drivers, not something an extension supplies,
+            // and the country pickers are filled from the measured tables in the contract.
+            "exit",
             "extension",
             // Static like endpoint, and for the same reason: an identity has no site, so there is nothing an
             // extension could vary: the email IS the card.
@@ -124,8 +127,22 @@ describe("contributionCard", () => {
             skill: "skills/website/SKILL.md",
         };
         const card = contributionCard(generic);
-        // …plus `identity`, whose browser the account lives in is core the way the credentials are.
-        expect(card.fields.map((field) => field.key)).toEqual(["platform", "homeUrl", "loginUrl", "purpose", "username", "password", "identity"]);
+        // …plus `identity`, whose browser the account lives in, and `exit`, which country that browser appears
+        // to be in. Both core the way the credentials are: facts about this sandbox's manifest, not about any
+        // site, so no site card may forget them or mean something else by them.
+        expect(card.fields.map((field) => field.key)).toEqual([
+            "platform",
+            "homeUrl",
+            "loginUrl",
+            "purpose",
+            "username",
+            "password",
+            "identity",
+            "exit",
+        ]);
+        // Offered only to an account that owns its own profile: one belonging to an identity browses from that
+        // identity's exit, because it browses in that identity's Chromium profile.
+        expect(card.fields.find((field) => field.key === "exit")?.when).toBe("!identity");
         expect(card.fields[0]).toEqual({ key: "platform", label: "", value: "website" });
         // The credentials are optional and the password is a secret: a card that stored it in the clear, or
         // demanded it from someone who signs in by hand, would be wrong in two different ways.
@@ -148,7 +165,7 @@ describe("contributionCard", () => {
             skill: "skills/customsite/SKILL.md",
         };
         const keys = contributionCard(declaring).fields.map((field) => field.key);
-        expect(keys).toEqual(["platform", "username", "password", "identity"]);
+        expect(keys).toEqual(["platform", "username", "password", "identity", "exit"]);
         expect(contributionCard(declaring).fields.find((field) => field.key === "username")?.label).toBe("Login handle");
     });
 

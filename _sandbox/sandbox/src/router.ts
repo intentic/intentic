@@ -33,6 +33,7 @@ import { createShareRoutes } from "./share/share.routes.js";
 import { createSkillsRoutes } from "./settings/skills.routes.js";
 import { createSystemRoutes } from "./system/system.routes.js";
 import { createUsageRoutes } from "./usage/usage.routes.js";
+import { createExitRoutes } from "./exit/exit.routes.js";
 import { createVpnRoutes } from "./vpn/vpn.routes.js";
 import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
 
@@ -75,4 +76,5 @@ export const createRouter = (services: Services) => ({
     system: createSystemRoutes(services),
     usage: createUsageRoutes(services),
     vpn: createVpnRoutes(services),
+    exit: createExitRoutes(services),
 });

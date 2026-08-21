@@ -418,6 +418,13 @@ COPY --chmod=755 _sandbox/sandbox/bin/retrieve-output.mjs /usr/local/bin/retriev
 # The clients themselves are NOT baked — they ride the vpn capability's environment fragment, like WireGuard
 # always has, so a sandbox with no VPN carries neither the tooling nor the privileges.
 COPY --chmod=755 _sandbox/sandbox/bin/vpn /usr/local/bin/vpn
+# The geo-exit command the agent's geo skill teaches. Same shape as vpn: it calls the daemon's /exit routes,
+# never tor or openvpn directly, so an exit the agent moves and one the owner moves are the same operation.
+# The clients are NOT baked either — tor rides the exit capability's fragment (and only tor's, which is why a
+# tor-only exit costs no container privileges at all).
+# NAMED `geo` BECAUSE `exit` IS A SHELL BUILTIN: a binary called exit is unreachable from any command line
+# (`exit list` exits the shell instead of running it). The capability and the routes keep the word.
+COPY --chmod=755 _sandbox/sandbox/bin/geo /usr/local/bin/geo
 # The one-time-code command connector skills teach for services whose write path asks for a 2FA code (npm
 # publish --otp). Same shape as vpn: it calls the daemon's code mint and owns no totp logic, so the stored seed
 # never reaches a shell — only codes that die within their period do.

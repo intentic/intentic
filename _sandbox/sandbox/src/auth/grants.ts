@@ -56,6 +56,11 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
 const agentReach = (method: string, path: string): boolean =>
     path === "/vpn" ||
     path.startsWith("/vpn/") ||
+    // The geo-exit surface the `exit` CLI drives: list, catalog, start/move/rotate/check/stop over the pools
+    // the owner configured. Same bargain as /vpn, the agent may operate what is already there and can never
+    // read the credentials behind it (a pasted WireGuard conf is vaulted like any other capability secret).
+    path === "/exit" ||
+    path.startsWith("/exit/") ||
     (method === "GET" && /^\/capabilities\/[^/]+\/otp$/.test(path)) ||
     // The capability setup gate the `capabilities` CLI drives: discovery (card ids and names, whether each is
     // connected, never a config or a secret), and the ask, which parks on an owner-decided card in chat
@@ -121,9 +126,7 @@ const panelReach = (_method: string, path: string): boolean => !CONNECTION_READ.
 const SYNC_TRANSPORT = "/system/sync/ssh";
 
 const syncReach = (method: string, path: string): boolean =>
-    (method === "GET" && path === "/ports") ||
-    (method === "GET" && path === SYNC_TRANSPORT) ||
-    (method === "POST" && path === "/system/sync/report");
+    (method === "GET" && path === "/ports") || (method === "GET" && path === SYNC_TRANSPORT) || (method === "POST" && path === "/system/sync/report");
 
 export interface GrantSources {
     readonly panelToken: string;

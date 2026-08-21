@@ -65,12 +65,19 @@ export interface CapabilityCtx {
 // A capability kind's behaviour. `apply` is idempotent and streams progress (mcp/integration emit one frame;
 // devops/service stream real work). `status` is a fast, non-blocking probe. A kind with no `remove` can't be
 // torn down (devops). `requires` lists kinds that must already be active (checked at the route before apply).
-// `fragment` is a code-versioned Dockerfile fragment (RUN/ENV + optional "# intentic:runtime <flag>" directive
-// lines) this ENTRY bakes into the composed environment overlay, resolved per entry (the config decides),
-// deduped by exact content at compose time. Fragments must be self-contained: install and purge their own
-// build deps, never rely on another fragment's layers. A handler whose payload is a feature pack resolves it
-// through environment/packs.ts (async, the pack file and the base image's stamp are both reads), which
-// returns nothing when the running base already bakes the pack.
+/* `fragment` is a code-versioned Dockerfile fragment (RUN/ENV + optional "# intentic:runtime <flag>" directive
+ * lines) this ENTRY bakes into the composed environment overlay, resolved per entry (the config decides),
+ * deduped by exact content at compose time. Fragments must be self-contained: install and purge their own
+ * build deps, never rely on another fragment's layers. A handler whose payload is a feature pack resolves it
+ * through environment/packs.ts (async, the pack file and the base image's stamp are both reads), which
+ * returns nothing when the running base already bakes the pack.
+ *
+ * SEVERAL fragments may be returned, and the reason is the dedupe rule above rather than tidiness. Two kinds
+ * that need the SAME container privilege (vpn and exit both want /dev/net/tun + NET_ADMIN) must emit that
+ * directive as a byte-identical block, or the set keeps both copies and the recreate hands `docker run` the
+ * same --device twice. Returning [tools, privileges] lets the privileged half be literally one shared string
+ * (handlers/net-privileges.ts) while each kind installs its own packages, and lets a kind ask for the
+ * privilege only in the configurations that actually need it. */
 /* WHAT RENAMING A CONNECTION OF THIS KIND TAKES.
  *
  * A capability's id is not a label, it is the agent's HANDLE for the thing: the name of its skill file, the
@@ -96,7 +103,7 @@ export interface CapabilityRename {
 
 export interface CapabilityHandler {
     readonly requires?: readonly CapabilityKind[];
-    readonly fragment?: (config: unknown) => string | undefined | Promise<string | undefined>;
+    readonly fragment?: (config: unknown) => string | readonly string[] | undefined | Promise<string | readonly string[] | undefined>;
     readonly apply: (ctx: CapabilityCtx, id: string, config: unknown) => AsyncGenerator<IntenticLine>;
     readonly status: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<CapabilityStatus>;
     readonly remove?: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<void>;

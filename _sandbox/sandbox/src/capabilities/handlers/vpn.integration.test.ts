@@ -116,14 +116,23 @@ test("a fortinet connection's password never reaches disk", async () => {
     expect(await readWorkspaceFile(skillPath(root))).toContain("name: vpn");
 });
 
-test("fragment carries every client and both runtime directives, once", async () => {
-    const fragment = (await vpnHandler.fragment!(office.config))!;
-    expect(fragment).toContain("wireguard-tools");
-    expect(fragment).toContain("openconnect");
-    expect(fragment).toContain("strongswan");
-    // The privileges are the whole reason this fragment is code-authored rather than extension-supplied.
-    expect(fragment.split("# intentic:runtime --device=/dev/net/tun").length - 1).toBe(1);
-    expect(fragment.split("# intentic:runtime --cap-add=NET_ADMIN").length - 1).toBe(1);
+test("fragment carries every client and both runtime directives, once, in two separate blocks", async () => {
+    const returned = (await vpnHandler.fragment!(office.config))!;
+    /* TWO blocks, not one, and the split is load-bearing rather than cosmetic. Fragments are deduped by exact
+     * content at compose time, and the `exit` kind needs the SAME tun privilege: keeping the directives in
+     * their own byte-identical block (handlers/net-privileges.ts) is what stops a sandbox with both kinds
+     * composing an overlay that hands `docker run` the same --device twice. */
+    const blocks = typeof returned === "string" ? [returned] : [...returned];
+    expect(blocks).toHaveLength(2);
+    const [tools, privileges] = blocks as [string, string];
+    expect(tools).toContain("wireguard-tools");
+    expect(tools).toContain("openconnect");
+    expect(tools).toContain("strongswan");
+    // The clients block asks for nothing privileged; the privileges block installs nothing.
+    expect(tools).not.toContain("intentic:runtime");
+    expect(privileges).not.toContain("apt-get");
+    expect(privileges.split("# intentic:runtime --device=/dev/net/tun").length - 1).toBe(1);
+    expect(privileges.split("# intentic:runtime --cap-add=NET_ADMIN").length - 1).toBe(1);
 });
 
 test("remove drops the conf but keeps the shared skill while another vpn remains", async () => {

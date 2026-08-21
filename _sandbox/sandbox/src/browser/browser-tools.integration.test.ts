@@ -25,6 +25,43 @@ test("browser MCP configs live in a private directory, each one written exclusiv
     expect(statSync(path).mode & 0o777).toBe(0o600);
 });
 
+/* THE TWO HALVES OF A BOUND PROFILE, in the one file that carries both. @playwright/mcp has no flag for
+ * either, so the proxy and the clock travel together in this config or not at all — and they must travel
+ * TOGETHER: an address in Berlin under a New York clock is a sharper signal than never having moved, because
+ * no real visitor looks like that. The pairing is enforced upstream (the fingerprint is derived with the
+ * exit's country as its place), and this is where the result becomes a file. */
+test("an exit-bound config carries the proxy and the matching clock", async () => {
+    const server = `bound-${process.hrtime.bigint()}`;
+    const berlin = { locale: "de-DE", timezoneId: "Europe/Berlin", languages: ["de-DE", "de", "en"] };
+    const device = await browserFingerprint(tempRoot(), "reddit", berlin);
+    const path = await writeBrowserConfig(server, 41_239, device, {
+        exitId: "berlin",
+        proxy: "socks5://127.0.0.1:19042",
+        country: "DE",
+        place: berlin,
+    });
+    const config = JSON.parse(readFileSync(path, "utf8")) as {
+        browser: { launchOptions: { proxy?: { server: string } }; contextOptions: { locale: string; timezoneId: string } };
+    };
+    expect(config.browser.launchOptions.proxy?.server).toBe("socks5://127.0.0.1:19042");
+    expect(config.browser.contextOptions.timezoneId).toBe("Europe/Berlin");
+    expect(config.browser.contextOptions.locale).toBe("de-DE");
+});
+
+// An unbound profile gets no proxy at all: nothing is routed through an exit unless something asked for it,
+// and a `proxy` key present-but-empty would be a different thing entirely.
+test("an unbound config carries no proxy, and still carries the sandbox's clock", async () => {
+    const server = `unbound-${process.hrtime.bigint()}`;
+    const device = await anyDevice();
+    const path = await writeBrowserConfig(server, 41_240, device);
+    const config = JSON.parse(readFileSync(path, "utf8")) as {
+        browser: { launchOptions: Record<string, unknown>; contextOptions: { locale: string; timezoneId: string } };
+    };
+    expect(config.browser.launchOptions["proxy"]).toBeUndefined();
+    expect(config.browser.contextOptions.locale).toBe(device.locale);
+    expect(config.browser.contextOptions.timezoneId).toBe(device.timezoneId);
+});
+
 /* THE REGRESSION: a recycled port must not end the turn.
  *
  * Ports are reissued once the port memory has rolled past them: a dozen turns, in a sandbox with twenty

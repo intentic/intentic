@@ -13,6 +13,7 @@ import {
     type Screencast,
     type ScreencastClientMessage,
 } from "./screencast.js";
+import { resolveProfileExit } from "./browser-exit.js";
 import { browserFingerprint } from "./fingerprint.js";
 import { acquireProfileLock, markConnected, passkeyPath, profileOwner, releaseProfileLock, sessionDir } from "./session-store.js";
 import { stealthInit } from "./stealth.js";
@@ -138,6 +139,21 @@ export const createBrowserProfileRoute = (services: Services) =>
                 }
                 account = requested;
                 owner = profile;
+                /* A profile BOUND TO A GEO EXIT is resolved before Chromium starts, and a refusal closes the
+                 * window rather than opening one. Opening anyway would sign this account in from the sandbox's
+                 * own address, which for an account whose whole purpose is to appear to be somewhere else is
+                 * the one outcome worth failing loudly over, a login is exactly when a site records where you
+                 * are. Starts the exit if it was down; see browser-exit.ts. */
+                const bound = await resolveProfileExit(await services.capabilities.list(), profile).catch((error: unknown) => ({
+                    refusal: `its exit could not be resolved (${error instanceof Error ? error.message : String(error)})`,
+                }));
+                if (bound !== undefined && "refusal" in bound) {
+                    ws.send(JSON.stringify({ type: "error", message: bound.refusal }));
+                    await cleanup();
+                    ws.close(1011, "exit unavailable");
+                    return;
+                }
+                const boundExit = bound?.exit;
                 let playwright: typeof import("playwright");
                 try {
                     playwright = await import("playwright");
@@ -156,14 +172,20 @@ export const createBrowserProfileRoute = (services: Services) =>
                      * site watches the owner sign in here and then meets the agent later on what has to be the
                      * same machine: a device that changes underneath a live cookie is precisely what
                      * session-binding checks are built to catch, and the answer is a logout or a captcha. */
-                    const fingerprint = await browserFingerprint(services.workspace.root, profile);
+                    const fingerprint = await browserFingerprint(services.workspace.root, profile, boundExit?.place);
                     context = await playwright.chromium.launchPersistentContext(sessionDir(services.workspace.root, profile), {
                         headless: false,
                         env: { ...process.env, DISPLAY: display },
                         viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT },
-                        // Look like a normal desktop browser (headed full Chromium already has a real UA / window.chrome).
+                        /* Look like a normal desktop browser (headed full Chromium already has a real UA /
+                         * window.chrome). The clock and the language come from the fingerprint, which was
+                         * derived with this profile's exit as its place, so a bound profile claims the country
+                         * its traffic actually leaves by and an unbound one claims the sandbox's. */
                         locale: fingerprint.locale,
                         timezoneId: fingerprint.timezoneId,
+                        // Where that traffic goes. Set together with the pair above, never one without the
+                        // other: an address in Berlin under a New York clock is worse than not having moved.
+                        ...(boundExit === undefined ? {} : { proxy: { server: boundExit.proxy } }),
                         // --no-sandbox: Chromium runs as root and the container IS the isolation boundary. --disable-dev-shm-usage:
                         // a container's tiny /dev/shm crashes Chromium. The blink flag drops navigator.webdriver.
                         args: ["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage"],

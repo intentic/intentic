@@ -6,6 +6,7 @@ import { cliHandler } from "./handlers/cli.js";
 import { devopsHandler } from "./handlers/devops.js";
 import { dockerHandler } from "./handlers/docker.js";
 import { endpointHandler } from "./handlers/endpoint.js";
+import { exitHandler } from "./handlers/exit.js";
 import { extensionHandler } from "./handlers/extension.js";
 import { hostHandler } from "./handlers/host.js";
 import { identityHandler } from "./handlers/identity.js";
@@ -30,6 +31,7 @@ export const registry: Record<CapabilityKind, CapabilityHandler> = {
     extension: extensionHandler,
     ssh: sshHandler,
     vpn: vpnHandler,
+    exit: exitHandler,
     docker: dockerHandler,
     browser: browserHandler,
     identity: identityHandler,

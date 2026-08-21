@@ -26,6 +26,7 @@ import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers
 import { writeAgentToken } from "./auth/agent-token.js";
 import { startClaudeRefresh } from "./claude/claude-credentials.js";
 import { createCiPoller } from "./ci/poller.js";
+import { restoreExits } from "./exit/exit-links.js";
 import { reconnectVpns } from "./vpn/vpn-links.js";
 import { writeCodexConfig } from "./codex/codex-config.js";
 import { AGENT_SIGNALS_DIR, watchDelegationSignals } from "./agent/delegation-signals.js";
@@ -234,7 +235,10 @@ const main = async (): Promise<void> => {
     /* The last invariant companion, wired here rather than in composition because its subject is the answer just
      * computed: everything downstream trusts this role forever, and the claim it rests on is a file a second
      * daemon's boot overwrites (platform/invariant.ts). */
-    services.invariants.register(containerOwner, containerChecks({ role, roots: { workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot } }));
+    services.invariants.register(
+        containerOwner,
+        containerChecks({ role, roots: { workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot } }),
+    );
     const resourceMetrics = startResourceMetrics({
         historyRoot: config.historyRoot,
         logger,
@@ -320,10 +324,7 @@ const main = async (): Promise<void> => {
         void seedSetupHost(services, { token: config.hostPairToken, platform: config.hostPlatform, label: config.hostLabel })
             .then(({ armed, id }) => {
                 if (armed) {
-                    logger.info(
-                        { host: id },
-                        "setup computer armed: it may manage this machine's sandboxes; widen or revoke on its capability card",
-                    );
+                    logger.info({ host: id }, "setup computer armed: it may manage this machine's sandboxes; widen or revoke on its capability card");
                 }
             })
             .catch((error: unknown) =>
@@ -848,6 +849,12 @@ const main = async (): Promise<void> => {
     const bootCtx = capabilityCtx(services);
     if (role.container) {
         void reconnectVpns(services.capabilities, services.logger);
+        /* Geo exits, restored the same way and with one extra job the VPNs do not have. An auto-start exit is
+         * down and wants starting, the familiar half. But a tunnel-based exit's CLIENT survives the daemon
+         * while the SOCKS proxy that published it does not, because that listener lived in this process: so
+         * there can be a live tunnel with nothing serving it, and restoreExits re-publishes the proxy without
+         * disturbing the tunnel. Best-effort like the VPNs, a dead relay must not take the boot path with it. */
+        void restoreExits(services.capabilities, services.logger);
     }
     // Connector hooks' side effects die with the container the same way: the git keypair is on /history
     // (linked above), but the credential helper, the https line, the ssh-config Include and npm's ~/.npmrc

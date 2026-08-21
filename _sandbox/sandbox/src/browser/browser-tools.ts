@@ -10,6 +10,7 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { Capability } from "@intentic/sandbox-contract";
 import { workloadStamp } from "../platform/leftovers.js";
 import { browserOutputDir } from "./browser-artifacts.js";
+import { type ProfileExit, resolveProfileExit } from "./browser-exit.js";
 import { ensureXvfb } from "./display.js";
 import { browserFingerprint, type BrowserFingerprint } from "./fingerprint.js";
 import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "./session-store.js";
@@ -173,7 +174,12 @@ const freePort = async (): Promise<number> => {
  * executable the child would trust), and the EEXIST propagates out of turn planning, which happens BEFORE the
  * model is asked anything: the whole turn dies with a raw filesystem error and no browser was even involved.
  * The name never had to be derivable, so it isn't. Owner and port stay in it for reading a directory by eye. */
-export const writeBrowserConfig = async (server: string, port: number, fingerprint: BrowserFingerprint): Promise<string> => {
+export const writeBrowserConfig = async (
+    server: string,
+    port: number,
+    fingerprint: BrowserFingerprint,
+    exit?: ProfileExit | undefined,
+): Promise<string> => {
     await mkdir(configDir, { recursive: true, mode: 0o700 });
     const path = join(configDir, `${server}-${port}-${randomBytes(4).toString("hex")}.json`);
     /* `contextOptions` is the same seam as `launchOptions` and carries the half of the device that is the
@@ -181,10 +187,18 @@ export const writeBrowserConfig = async (server: string, port: number, fingerpri
      * because `Accept-Language` and the timezone are read below JavaScript, and a header that disagrees with
      * `navigator.languages` is the kind of contradiction detectors look for first. The owner's own login window
      * passes the identical pair to launchPersistentContext (browser-profile.ts) — they share a profile, so a
-     * site must meet the same machine whichever of the two is driving. */
+     * site must meet the same machine whichever of the two is driving.
+     *
+     * `launchOptions.proxy` is the other half of the same file, and the reason a geo exit needs no flag of its
+     * own: @playwright/mcp has none for either. The clock above already agrees with it, because the
+     * fingerprint this was built from was derived with the exit's country as its place (fingerprint.ts) — an
+     * address in Berlin under a New York clock is worse than not having moved at all. */
     const config = {
         browser: {
-            launchOptions: { args: [`--remote-debugging-port=${port}`] },
+            launchOptions: {
+                args: [`--remote-debugging-port=${port}`],
+                ...(exit === undefined ? {} : { proxy: { server: exit.proxy } }),
+            },
             contextOptions: { locale: fingerprint.locale, timezoneId: fingerprint.timezoneId },
         },
     };
@@ -442,19 +456,42 @@ export const browserServersOf = async (
     }
     const backends: Record<string, { command: string; args: readonly string[]; env: Record<string, string> }> = {};
     for (const owner of owners) {
+        /* A profile BOUND TO A GEO EXIT is resolved before anything is spawned, and an exit that cannot be
+         * brought up DROPS THE OWNER from this turn rather than degrading. That is the whole point of the
+         * binding: an account set to browse from Berlin must never quietly browse from this sandbox's own
+         * address instead, and a backend spawned without the proxy would do exactly that. The router's
+         * refusal for a missing account is what the agent then reads. */
+        const bound = await resolveProfileExit(capabilities, owner).catch((error: unknown) => ({
+            refusal: `${owner}: its exit could not be resolved (${error instanceof Error ? error.message : String(error)})`,
+        }));
+        if (bound !== undefined && "refusal" in bound) {
+            delete accounts[owner];
+            for (const [id, mapped] of Object.entries(accounts)) {
+                if (mapped === owner) {
+                    delete accounts[id];
+                }
+            }
+            continue;
+        }
+        const exit = bound?.exit;
         const port = await freePort();
         ports[owner] = port;
         passkeys[owner] = passkeyPath(root, owner);
-        // One device per owner, derived (fingerprint.ts) rather than shared: the GPU string is the signal that
-        // survives an IP change, so handing every profile the same one would link an owner's accounts for free.
-        const fingerprint = await browserFingerprint(root, owner);
+        /* One device per owner, derived (fingerprint.ts) rather than shared: the GPU string is the signal that
+         * survives an IP change, so handing every profile the same one would link an owner's accounts for free.
+         *
+         * The exit's country goes in as the device's PLACE, which is the same rule fingerprint.ts already
+         * follows rather than an exception to it: the clock and the language belong to the address traffic
+         * leaves by, and a bound profile's address is the exit's, not the sandbox's. Unbound, `place` is
+         * undefined and the sandbox's own clock answers, as it does for everyone else. */
+        const fingerprint = await browserFingerprint(root, owner, exit?.place);
         const spec = browserServerSpec(
             runtime.cli,
             runtime.executablePath,
             sessionDir(root, owner),
             await ensureStealthScript(root, owner, fingerprint),
             display,
-            await writeBrowserConfig(owner, port, fingerprint),
+            await writeBrowserConfig(owner, port, fingerprint, exit),
         );
         if (spec.type !== "stdio") {
             return { ...NO_BROWSER_TOOLS, servers, ports };

@@ -1,7 +1,16 @@
 // Platform UI/product catalogs: the add-form descriptors + card data the web renders. NOT wire contract,
 // moved out of @intentic-app/api-contract so the contract holds only schemas. Daemon enums are imported.
 import { type CapabilityContribution, type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
-import type { CapabilityKind, ServiceKind } from "@intentic/sandbox-contract";
+import { type CapabilityKind, type ExitPoint, type ServiceKind, TOR_EXIT_COUNTRIES, VPNGATE_EXIT_COUNTRIES } from "@intentic/sandbox-contract";
+
+/* One country in the geo-exit card's picker. The capacity share rides in the LABEL rather than being dropped,
+ * because a bare country list is misleading here: a third of Tor's countries are one overloaded relay, and
+ * picking one of those looks like a broken exit rather than a thin one. Seeing "30% of capacity" next to the
+ * Netherlands and "0.2%" next to the United Kingdom is what makes the menu honest. */
+const countryOption = (point: ExitPoint): { value: string; label: string } => ({
+    value: point.country,
+    label: `${point.countryName}${point.share === undefined ? "" : ` — ${point.share >= 0.01 ? Math.round(point.share * 100) : "<1"}% of capacity`}`,
+});
 
 // Catalog the web uses to render the add forms. Only the user-provided, non-secret fields appear here.
 // Backends are never added through a bare form: servers register themselves via the connect-host command
@@ -486,6 +495,97 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         },
     },
     {
+        id: "exit",
+        name: "Geo exit",
+        kind: "exit",
+        category: "servers",
+        icon: "globe",
+        description: "Browse and fetch as if from another country.",
+        fields: [
+            /* The discriminator, ordered by what it costs the reader. Tor first because it is the one that
+             * needs no account, no credentials and no container privilege at all; the paste-your-own arm last
+             * because it is the only one that asks for anything. */
+            {
+                key: "provider",
+                label: "Provider",
+                default: "tor",
+                hint: "Tor is free, needs no account and reaches the most countries. VPN Gate is free too but is mostly Japan and Korea. Paste your own for a provider you already have (Proton VPN's free tier, Mullvad).",
+                options: [
+                    { value: "tor", label: "Tor (free, ~28 countries)" },
+                    { value: "vpngate", label: "VPN Gate (free, Japan/Korea)" },
+                    { value: "wireguard", label: "Paste WireGuard configs" },
+                ],
+            },
+            /* THE COUNTRY IS A PICKER, NOT A TEXT BOX, and per provider, because that is the whole "known
+             * addresses are filled in for you" half of this card. The lists are the measured capacity tables
+             * from the contract, sorted best-supplied first, so the top of each menu is the part that works
+             * and nobody types a code that turns out to have one overloaded relay behind it. Servers are
+             * never asked for at all: the driver picks one out of the provider's live catalog. */
+            {
+                key: "country",
+                label: "Come out in",
+                optional: true,
+                default: "",
+                hint: "Leave on Anywhere unless a task needs a specific country: it is faster and, on Tor, kinder to a volunteer network. You can switch country any time afterwards without re-adding this.",
+                when: "provider == 'tor'",
+                options: [{ value: "", label: "Anywhere (fastest)" }, ...TOR_EXIT_COUNTRIES.map(countryOption)],
+            },
+            {
+                key: "country",
+                label: "Come out in",
+                optional: true,
+                default: "",
+                hint: "VPN Gate's pool is overwhelmingly Japanese and Korean. For anywhere else, add a Tor exit instead.",
+                when: "provider == 'vpngate'",
+                options: [{ value: "", label: "Anywhere (fastest)" }, ...VPNGATE_EXIT_COUNTRIES.map(countryOption)],
+            },
+            {
+                key: "config",
+                label: "WireGuard configs",
+                secret: true,
+                multiline: true,
+                placeholder:
+                    "[Interface]\nPrivateKey = …\nAddress = 10.2.0.2/32\n\n[Peer]\n# DE-FREE#1\nPublicKey = …\nEndpoint = …:51820\n\n[Interface]\n… paste the next country's file straight after …",
+                hint: "Paste one file per country, back to back. The country is read from each file automatically; add a `# country: DE` line to any it cannot place.",
+                when: "provider == 'wireguard'",
+            },
+            {
+                key: "country",
+                label: "Start in",
+                optional: true,
+                placeholder: "DE",
+                hint: "Two-letter code, matching one of the files pasted above. Leave empty to use the first one.",
+                when: "provider == 'wireguard'",
+            },
+            /* Off by default, the opposite of the VPN card's auto-connect, and deliberately. A VPN is dialled
+             * because something behind it is unreachable otherwise; an exit costs volunteer bandwidth and buys
+             * nothing until a task actually wants another country. A browser account bound to this exit starts
+             * it on demand anyway, so "on" is for an exit something long-running depends on. */
+            {
+                key: "autoStart",
+                label: "Start automatically",
+                default: "off",
+                hint: "Off means it comes up when something asks for it. On means it is held up from the moment the sandbox starts.",
+                options: [
+                    { value: "off", label: "Off" },
+                    { value: "on", label: "On" },
+                ],
+            },
+        ],
+        hint: "Nothing goes through an exit unless you point it there: this never changes the sandbox's own connection. Bind a browser account to it on that account's card, or use `geo proxy <name>` with curl.",
+        guide: {
+            steps: [
+                "Tor: nothing to fill in. Pick a country and add it, that is the whole setup.",
+                "VPN Gate: nothing to fill in either. Its server list is fetched for you and a server is picked per country.",
+                "Proton VPN (free): sign in at `account.protonvpn.com` → `Downloads` → `WireGuard configuration`, generate one config per free country, and paste the files here one after another.",
+                "Mullvad: `mullvad.net/account` → `WireGuard configuration`, pick the countries you want, paste the files here.",
+                "Any other provider: any standard `.conf` works. Several files in this one box is the point, they become one pool you switch between.",
+                "After adding, switch country from the `Status` card or with `geo use <name> DE` (the command is `geo`, since `exit` is a shell builtin). Every switch is verified against the real address and fails if it lands in the wrong country.",
+                "These are datacenter addresses: sites that check will see a proxy. Nothing free looks like an ordinary home connection.",
+            ],
+        },
+    },
+    {
         id: "custom",
         name: "Custom MCP server",
         kind: "mcp",
@@ -655,6 +755,17 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 default: "off",
                 hint: "Lets the agent create new platform accounts through this identity when a task needs one. Automated signup is against many platforms' terms, leave off unless that is a call you have made.",
             },
+            /* WHERE THIS IDENTITY LIVES. Set here rather than on each account because an identity IS one
+             * browser: every account born from it shares the profile, so they share the country too. One
+             * signed-in session appearing from two places at once is a much louder signal than any address,
+             * and this card is the only place that can be decided coherently. */
+            {
+                key: "exit",
+                label: "Browse through",
+                optional: true,
+                placeholder: "the geo exit's name",
+                hint: "A connected Geo exit. Every account under this identity then browses from that country, with its clock and language set to match. Leave empty to browse from this sandbox's own connection.",
+            },
         ],
         hint: "The agent signs into (and opens) platform accounts through this identity's browser, you do one login, it does the rest, and calls you in for anything only a person can clear.",
         guide: {
@@ -728,6 +839,22 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
         label: "Belongs to identity",
         optional: true,
         hint: "The identity whose browser this account lives in. It shares its email session, so 'Continue with' its provider is one click.",
+    },
+    /* WHERE THIS ACCOUNT BROWSES FROM, core for the same reason again: which country a session appears to come
+     * from is a fact about the sandbox's manifest, not about any site, so a site card cannot be allowed to
+     * forget it or to mean something different by it.
+     *
+     * Only shown for an account that owns its OWN profile. An account belonging to an identity browses from
+     * that identity's exit, because it browses in that identity's Chromium profile: the cookies are shared, so
+     * the country has to be. One signed-in session appearing from two countries is a much louder signal than a
+     * datacenter address, and the `when` here is what stops the form offering that mistake. */
+    {
+        key: "exit",
+        label: "Browse through",
+        optional: true,
+        when: "!identity",
+        placeholder: "the geo exit's name",
+        hint: "A connected Geo exit. Every page this account opens then comes out of that country, with the browser's clock and language set to match. Leave empty to browse from this sandbox's own connection.",
     },
 ];
 const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };

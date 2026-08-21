@@ -234,6 +234,8 @@ survive reconnects. Its subsystems:
   one unified model with a per-kind handler ([capabilities/](_sandbox/sandbox/src/capabilities/)): see
   [Capabilities](#capabilities).
 - **VPN** (putting the sandbox on a private network ([vpn/](_sandbox/sandbox/src/vpn/))) see [VPN](#vpn).
+- **Geo exits** (making chosen traffic LEAVE from another country, without touching the sandbox's own
+  connection ([exit/](_sandbox/sandbox/src/exit/))) see [Geo exits](#geo-exits).
 - **Members**: shared access for invited collaborators, enforced by the daemon
   ([auth.ts](_sandbox/sandbox/src/auth/auth.ts)).
 - **Workspace file service**: search, tree, watch, diff, and chunked multi-GB uploads
@@ -636,7 +638,7 @@ buses every extension is allowed to contribute to.
 Everything a user adds to a sandbox is a **capability**: one `{ id, kind, config }` entry in a single
 discriminated union (`CapabilitySchema` in [schemas.ts](_sandbox/sandbox-contract/src/schemas.ts)) over the
 kinds: `devops`, `monorepo`, `mcp`, `service`, `integration`, `cli`, `plugin`, `extension`, `ssh`, `vpn`,
-`docker`, `browser`, `host`, `agent`, `endpoint`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
+`exit`, `docker`, `browser`, `host`, `agent`, `endpoint`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
 environments vs secrets": those are overlapping *ingredients*, not disjoint categories (a connector is a
 skill + a secret + env injection + maybe an image fragment; an extension is a repo + skills + processes +
 views + a fragment), so the model unifies the noun and differentiates behaviour per kind: the same bet
@@ -673,7 +675,7 @@ machinery is uniform:
 **The catalog is extensible; the handlers are core.** This is the line the whole `/capabilities` grid is
 drawn on, and it is the honest version of the VSCode bet for this system. VSCode's core owns the privileged
 primitives and extensions *compose* them; here the handlers **are** the privileged primitives: `docker`
-bakes `--privileged`, `vpn` bakes `NET_ADMIN`, `host` pushes the enforcement boundary onto somebody's
+bakes `--privileged`, `vpn` and `exit` bake `NET_ADMIN`, `host` pushes the enforcement boundary onto somebody's
 personal laptop, `extension` installs extensions. A manifest that could contribute one of those is a
 manifest that grants itself privilege, so **no handler is contributable, ever**. What an extension supplies
 instead is a **card**: the data that varies between two cards served by the *same* handler.
@@ -728,11 +730,11 @@ on connected instances, and as grid badges for the consequential ones (image / r
 
 | Effect | Mechanics |
 | --- | --- |
-| `skill` | Writes `.agents/skills/<name>/SKILL.md`: the vendor-neutral loaded folder every runtime reads (Claude Code through per-skill symlinks under `.claude/skills/`, loader-less runtimes through a managed AGENTS.md index), per-instance for `cli`/`browser` (the instance id is the skill name), shared for `ssh`/`vpn`. |
+| `skill` | Writes `.agents/skills/<name>/SKILL.md`: the vendor-neutral loaded folder every runtime reads (Claude Code through per-skill symlinks under `.claude/skills/`, loader-less runtimes through a managed AGENTS.md index), per-instance for `cli`/`browser` (the instance id is the skill name), shared for `ssh`/`vpn`/`exit` (whose skill is `geo`, after its command). |
 | `secret` | `agent-env`: injected into the agent's environment each turn, never written to disk (`cli`). `disk`: a `0600` file, or a field in the off-workspace secret vault the manifest points at with a marker (ssh key/password, WireGuard conf, git token). |
 | `clone` | Git checkout into `.intentic/records/plugins/<id>` or `.intentic/local/extensions/<id>` (staged → pinned detached checkout → swap; tokens ride `GIT_CONFIG_*`, never the URL). |
 | `image` | A Dockerfile fragment composed into the environment overlay: needs a one-time owner-run rebuild. |
-| `runtime` | Privileged directives riding a core fragment, the ONLY source of container privileges (the base run is unprivileged): `vpn` → `NET_ADMIN` + `/dev/net/tun`, `docker` → `--privileged`. |
+| `runtime` | Privileged directives riding a core fragment, the ONLY source of container privileges (the base run is unprivileged): `vpn` → `NET_ADMIN` + `/dev/net/tun`, `docker` → `--privileged`. A handler may return SEVERAL fragments, and the tun grant is one shared string ([net-privileges.ts](_sandbox/sandbox/src/capabilities/handlers/net-privileges.ts)) contributed byte-identically by `vpn` and `exit`: fragments dedupe by exact content, so two near-identical privileged blocks would survive the set and hand `docker run` the same `--device` twice. It also lets a kind ask only in the configurations that need it, a tor-only `exit` contributes no directive at all. |
 | `process` | Long-lived tmux-managed background processes (an extension's declared `processes`), restored on boot. |
 | `mcp` | The manifest entry itself becomes an `mcp__<id>__` server the agent connects to next turn. |
 | `scaffold` | Repos created in the workspace: `devops` → the intent + desired-state repos; `monorepo` → an empty pnpm+turbo repo named after the instance. |
@@ -740,7 +742,7 @@ on connected instances, and as grid badges for the consequential ones (image / r
 | `trusted-code` | Extension code runs inside the app with the owner's session: owner-only, full-sha-pinned install; the trust decision of the system. |
 | `profile` | A persisted logged-in Chromium profile under `.intentic/local/browser/<id>`, keyed by the CAPABILITY, so one site can be connected several times over (a work Reddit and a personal one) and each account signs in, and is disconnected, on its own. Established through the guided-login WebSocket (`/system/browser-login`), the credential is a browser session, not a token. Beside it, `<id>.passkeys.json` holds any WebAuthn credential enrolled in that browser: a CDP virtual authenticator is armed on every page of a logged-in browser, so the sandbox owns a software security key for that account and answers its 2FA ceremonies itself ([passkeys.ts](_sandbox/sandbox/src/browser/passkeys.ts)). Both die with the connection. |
 
-**Environment fragments have two trust tiers.** Core handler fragments (`vpn`/`browser`) are
+**Environment fragments have two trust tiers.** Core handler fragments (`vpn`/`exit`/`browser`) are
 code-authored and may carry privileged `# intentic:runtime` directives; extension/connector checkout
 fragments are restricted to RUN/ENV instructions: the whole "what can an extension bake into the image"
 security surface is `invalidExtensionFragment`
@@ -776,8 +778,9 @@ Per-kind mechanics ([handlers/](_sandbox/sandbox/src/capabilities/handlers/)):
 | `extension` | Owner-only, sha-pinned clone into `.intentic/local/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
 | `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` (the /history-backed dir above) + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |
 | `vpn` | Stores ONE connection, discriminated by `provider`, `wireguard` (pasted `.conf`, `wg-quick`), `fortinet` (FortiGate SSL-VPN via `openconnect --protocol=fortinet`), `ipsec` (IKEv1/IKEv2 PSK + XAuth via strongSwan), plus the shared vpn skill. Connecting is NOT part of the config: see [VPN](#vpn) below. |
+| `exit` | Stores ONE POOL to come out of, discriminated by `provider`, `tor` (free, no account, ~28 usable countries, and no container privilege at all), `vpngate` (free, no account, the University of Tsukuba's volunteer relays, mostly Japan/Korea), `wireguard` (one or more pasted `.conf` files, so Proton VPN's free tier or Mullvad become a pool), plus the shared `geo` skill. Starting, switching country and rotating are NOT part of the config: see [Geo exits](#geo-exits) below. |
 | `docker` | The engine is baked into the base image, dormant; the fragment is a lone `--privileged` runtime directive (a cache-hit rebuild, not an install). Once privileged, runs `dockerd` in a persistent tmux session, restored on boot: so `pnpm db:up` works like a local dev machine. Not removable. |
-| `browser` | ONE ACCOUNT on a site, not one site: per-instance platform skill (rendered from the contributed pack), and profile/login/passkey/tool-prefix all keyed by the instance id, so `reddit-work` and `reddit-personal` are two real accounts the agent drives separately in the same turn. Connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives, headed on Xvfb with the stealth patch. That patch presents ONE STABLE DEVICE PER PROFILE OWNER — GPU, core count, memory, clock — derived from a per-sandbox secret seed (`browser/fingerprint.ts`), so an owner's profiles are not linkable to each other by their hardware and no two sandboxes share a signature. Stable rather than randomised on purpose: these profiles hold live logins, and a device that shifts underneath a cookie is what session-binding checks exist to catch. The site cards (Reddit, X, YouTube, npmjs.com) are PRESETS over one generic card: `website` ("Browser session") asks for the page to open, an optional separate sign-in page and a one-line purpose, so any site is connectable without shipping an extension, and a preset is that card with the addresses pinned and a cheatsheet attached. This capability buys *identity*, not the browser itself: Chromium is baked into the base image and every turn already gets a credential-free `mcp__web__browser_*` server (`--isolated`, no profile on disk, headed on the same Xvfb and carrying the same stealth patch, falling back to headless only where the pack has never been installed), because reading a page is ordinary coding work and a WAF turns the headless shell away whether or not anyone is signed in. |
+| `browser` | ONE ACCOUNT on a site, not one site: per-instance platform skill (rendered from the contributed pack), and profile/login/passkey/tool-prefix all keyed by the instance id, so `reddit-work` and `reddit-personal` are two real accounts the agent drives separately in the same turn. Connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives, headed on Xvfb with the stealth patch. That patch presents ONE STABLE DEVICE PER PROFILE OWNER — GPU, core count, memory, clock — derived from a per-sandbox secret seed (`browser/fingerprint.ts`), so an owner's profiles are not linkable to each other by their hardware and no two sandboxes share a signature. The clock is the one part drawn per SANDBOX rather than per owner, because it has to agree with the address traffic leaves by and every profile shares one — unless it doesn't: a profile bound to a geo exit takes that exit's country instead, which is the same rule rather than an exception to it (see [Geo exits](#geo-exits)). Stable rather than randomised on purpose: these profiles hold live logins, and a device that shifts underneath a cookie is what session-binding checks exist to catch. The site cards (Reddit, X, YouTube, npmjs.com) are PRESETS over one generic card: `website` ("Browser session") asks for the page to open, an optional separate sign-in page and a one-line purpose, so any site is connectable without shipping an extension, and a preset is that card with the addresses pinned and a cheatsheet attached. This capability buys *identity*, not the browser itself: Chromium is baked into the base image and every turn already gets a credential-free `mcp__web__browser_*` server (`--isolated`, no profile on disk, headed on the same Xvfb and carrying the same stealth patch, falling back to headless only where the pack has never been installed), because reading a page is ordinary coding work and a WAF turns the headless shell away whether or not anyone is signed in. |
 | `host` | A computer of the user's OWN, one capability per machine. Writes the contributed OS skill pack, then pushes the scope switches to the machine if it is up: an edit is a decision about what may happen on somebody's computer *now*, so it travels immediately rather than at the next reconnect. The machine connects itself out-of-band (the card's one-liner enrolls over `/system/hosts/enroll` and dials back); enforcement is on the machine, never here. |
 | `agent` | An ACP agent as a chat provider. `apply`/`status` are a spawn + initialize probe, so a command that doesn't actually speak ACP is caught (with its stderr) before the first chat turn depends on it; the warm turn-serving connection lives in the acp pool. |
 | `endpoint` | A model API the user pointed us at. `apply` and `status` are the SAME probe and neither is fatal: adding an endpoint whose server isn't up yet is the ordinary case, so the entry is stored either way and the card carries the truth ("3 models" vs "no models", the usual way an Ollama install disappoints its owner). |
@@ -825,9 +828,10 @@ it is implemented:
 | `ipsec` | strongSwan | IKEv1/IKEv2 with a PSK and optional XAuth, FortiClient's `<ipsecvpn>` connections, aggressive mode included. Each connection is its own pair of files under `/etc/ipsec.d/intentic`, which `/etc/ipsec.conf` and `/etc/ipsec.secrets` `include`, so one tunnel is written and torn down without regenerating the others. `routedNetworks` is the traffic selector this client offers (strongSwan's `rightsubnet`), and it is a **config field rather than a fixed `0.0.0.0/0`** because a gateway does not have to narrow what it is offered: a FortiGate accepts the catch-all and then drops what it has no route for, which takes the sandbox's own outbound connections (the agent's included) down with it. It still defaults to `0.0.0.0/0`, since narrowing it for everyone would cut existing tunnels off from networks they reach today. |
 
 All three ride **one** environment fragment rather than one per protocol: adding a second kind of VPN later must
-not cost a second container rebuild, and the runtime directives must appear exactly once in the composed
-overlay (rebuild.sh appends each directive token it reads without deduplicating, so a doubled `--device` would
-fail the run).
+not cost a second container rebuild. The runtime directives are a SECOND fragment, shared verbatim with the
+`exit` kind ([net-privileges.ts](_sandbox/sandbox/src/capabilities/handlers/net-privileges.ts)), because they
+must appear exactly once in the composed overlay: fragments dedupe by exact content, and rebuild.sh appends
+each directive token it reads without deduplicating, so a doubled `--device` would fail the run.
 
 **The agent drives the same routes the browser does.** `/usr/local/bin/vpn`
 ([bin/vpn](_sandbox/sandbox/bin/vpn)) is a thin client over `/vpn`, taught by the shared `vpn` skill, so a tunnel
@@ -840,6 +844,81 @@ A user holding an exported FortiClient configuration imports it rather than re-k
 ([forticlient-config.ts](_sandbox/sandbox/src/vpn/forticlient-config.ts)). Credentials in that file are wrapped in
 FortiClient's machine-bound `EncX` encryption and are **not** recoverable, so every encrypted value is dropped
 and reported as a field the user must supply: importing an unusable value would be worse than asking.
+
+### Geo exits
+
+A **geo exit** is somewhere chosen traffic can *leave* from, so a page fetches as if read in Berlin or Osaka.
+It is its own capability kind rather than a fourth `vpn` provider, and the distinction is what makes it safe:
+
+| | `vpn` | `exit` |
+| --- | --- | --- |
+| Purpose | reach a private network | appear somewhere else |
+| Shape | one stored gateway | a pool with a catalog |
+| Runtime verbs | connect / disconnect | start, use `<country>`, rotate, stop |
+| Routing | pushes routes into the main table | routes **nothing** into the main table |
+| Success test | "the tunnel is up" | "my egress address is now in DE" |
+
+**It never touches the default route, and everything else follows from that.** An exit is a full tunnel by
+construction, so a default route in table `main` would swallow the daemon's own uplink, the model endpoint and
+the tunnel that makes this sandbox reachable, and the symptom is the agent going silent mid-turn with no
+mention of a VPN (`IpsecVpnConfigSchema.routedNetworks` documents the same trap on the `vpn` kind, where it is
+at least the user's explicit choice; here it would be the happy path). So each exit puts its default route in
+a **private routing table** and installs exactly one `ip rule` into it: traffic whose *source* is the tunnel's
+own address ([exit-routing.ts](_sandbox/sandbox/src/exit/exit-routing.ts)). Nothing acquires that source
+address by accident: a socket has to ask for it with `localAddress`, which the exit's own SOCKS proxy does
+([exit-socks.ts](_sandbox/sandbox/src/exit/exit-socks.ts)) and nothing else in the container does. A live exit
+is therefore completely inert until something opts in, which is also what keeps a volunteer relay from ever
+carrying the agent's own working traffic. Source-address matching rather than uid ranges or firewall marks
+because it needs only `CAP_NET_ADMIN`, which the `vpn` fragment already grants; a netns would want
+`CAP_SYS_ADMIN` and put the capability in a higher privilege bracket for nothing.
+
+**A switch is only true once it has been observed.** The drivers know how to bring a tunnel up; the links
+layer ([exit-links.ts](_sandbox/sandbox/src/exit/exit-links.ts)) insists it came up *where it was asked to*, by
+fetching an `ExitObservation` — the egress address and its country — **through the exit's own proxy** before
+reporting success. A start or a `use` that cannot prove its country takes the exit back **down** rather than
+leaving something running that a browser would happily use while believing it was elsewhere. Hostnames resolve
+through the exit too ([exit-dns.ts](_sandbox/sandbox/src/exit/exit-dns.ts), DNS over TCP from the tunnel's
+source address, because Node's resolver cannot be told one): a lookup over the plain uplink does not leak the
+address, it leaks the *location*, and geo-aware CDNs and search engines route on the resolver's.
+
+Three providers, one driver each, total over the provider union
+([exit-drivers.ts](_sandbox/sandbox/src/exit/exit-drivers.ts)):
+
+| Provider | Free | Countries | Client | Notes |
+| --- | --- | --- | --- | --- |
+| `tor` | yes, no account | ~52, **28 usable** | `tor` | The free default, and the only one that needs **no container privilege at all**: tor publishes its own SOCKS port, so there is no tun device, no routing table and no `ip rule` in this driver. Country is a torrc line and a new address is a control-port `NEWNYM`, both applied to a running process in under a second. `StrictNodes 1` always accompanies `ExitNodes`, or tor treats the country as a preference and leaves from elsewhere when it is congested, which is the one outcome this feature must never produce silently. |
+| `vpngate` | yes, no account | 10, **87% JP/KR** | `openvpn` | The University of Tsukuba's volunteer pool. Its public CSV *is* the catalog, so a user picks a country and never sees a hostname. Worth having beside tor precisely because it covers the half of the map tor covers worst. `route-nopull` is the load-bearing directive: without it OpenVPN installs the server's pushed default route into table `main`. |
+| `wireguard` | bring your own | as many as pasted | `wg-quick` | One or more `.conf` files pasted together become one pool, which is what turns Proton VPN's free tier or a Mullvad account into a country switcher. Country is auto-labelled from what providers already write (`# NL-FREE#1`, `de-ber-wg-001.…`), narrowly, because a mislabel is worse than no label. `DNS =` is **stripped** (wg-quick applies it by rewriting `/etc/resolv.conf` for the whole container) and `Table = off` injected. |
+
+**The exit belongs to the browser PROFILE, not to the account.** `profileOwner`
+([session-store.ts](_sandbox/sandbox/src/browser/session-store.ts)) already decides what an account's browser
+*is*: an identity-born account shares its identity's Chromium profile, cookies and passkeys included. Where
+that browser appears to be is such a fact, so an account inside an identity takes the identity's exit and its
+own field is ignored ([browser-exit.ts](_sandbox/sandbox/src/browser/browser-exit.ts)). Letting an account
+override its identity would let one signed-in Google session appear from two countries at once, and sites do
+not flag "datacenter address" anywhere near as hard as they flag a session that teleports. A bound profile also
+gets the **timezone, locale and `navigator.languages`** of the country it comes out of: a German address under
+a New York clock is a sharper signal than never having moved. Those three are not set here, they are handed to
+[fingerprint.ts](_sandbox/sandbox/src/browser/fingerprint.ts) as that profile's `place`, because that module
+already owns the rule that the clock follows the EGRESS and a bound profile is simply one whose egress is not
+the sandbox's; everything else about its device (GPU, cores, memory) still comes from the seed, so it is the
+same machine sitting somewhere else. The country codes become a zone and a language through ICU rather than a
+table ([exit-countries.ts](_sandbox/sandbox/src/exit/exit-countries.ts)). An exit that cannot be brought up
+**refuses the browser** rather than opening it from the sandbox's own address.
+
+**The agent drives the same routes the operator does.** `/usr/local/bin/geo`
+([bin/geo](_sandbox/sandbox/bin/geo)) is a thin client over `/exit`, taught by the shared `geo` skill, on the
+same per-boot token as `vpn`. It is called `geo` rather than `exit` because **`exit` is a shell builtin**: a
+binary of that name is unreachable from any command line (`exit list` closes the shell instead of running it),
+which is a failure that would only have surfaced the first time an agent tried. The capability, the routes and
+the manifest entry keep the word, where nothing shadows it. The skill states the three things an agent
+otherwise gets wrong: nothing is
+proxied unless pointed at the proxy, a large share of the web blocks tor exits (that is the destination's
+choice, not a broken exit), and these are datacenter addresses that a site which checks will see.
+
+Two runtime invariants ([exit/invariant.ts](_sandbox/sandbox/src/exit/invariant.ts)), both for promises that
+are established once and then never re-checked on the normal path: no exit interface ever appears in table
+`main`, and an exit that reads `up` still comes out where it was verified.
 
 ### Dependency islands: iq & lsp
 

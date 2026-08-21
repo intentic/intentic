@@ -41,11 +41,21 @@ test("two owners in one sandbox are two machines", async () => {
 
 /* The other half of that: the values must not be a signature for THIS PRODUCT. Every install used to report the
  * same GPU on the same clock, which identifies the sandbox rather than disguising it. Two sandboxes mint two
- * seeds, so the same owner name in each is a different machine. */
+ * seeds, so the same owner name in each is a different machine.
+ *
+ * COMPARED ACROSS SEVERAL OWNERS AT ONCE, not one, and the difference is the whole reliability of this test.
+ * One owner draws from 8 GPUs × 5 machines, so two sandboxes agree on that one owner about 3% of the time by
+ * chance — measured, not estimated — which is a failure every thirtieth run for a property that is not broken.
+ * Six owners have to agree on ALL SIX before this fails, which happens if and only if the seeds did not differ:
+ * the thing actually being asserted. */
 test("the same owner in two sandboxes is not the same machine", async () => {
-    const [here, there] = await Promise.all([browserFingerprint(tempRoot(), "reddit"), browserFingerprint(tempRoot(), "reddit")]);
-    // A single draw could collide by chance; the pair of independent draws makes that vanishingly unlikely.
-    expect(`${here.webglRenderer}|${String(here.hardwareConcurrency)}`).not.toBe(`${there.webglRenderer}|${String(there.hardwareConcurrency)}`);
+    const owners = ["reddit", "alice", "bob", "carol", "dave", "erin"];
+    const machines = async (root: string): Promise<string> =>
+        (await Promise.all(owners.map((owner) => browserFingerprint(root, owner))))
+            .map((device) => `${device.webglRenderer}|${String(device.hardwareConcurrency)}`)
+            .join("/");
+    const [here, there] = await Promise.all([machines(tempRoot()), machines(tempRoot())]);
+    expect(here).not.toBe(there);
 });
 
 /* WHY THE CLOCK IS NOT PER OWNER. Every profile in a sandbox leaves by the same IP. Three accounts on one
@@ -56,6 +66,33 @@ test("every profile in one sandbox agrees on the clock and the language", async 
     const [one, two] = await Promise.all([browserFingerprint(root, "alice"), browserFingerprint(root, "bob")]);
     expect(two.timezoneId).toBe(one.timezoneId);
     expect(two.locale).toBe(one.locale);
+});
+
+/* THE EXCEPTION THAT KEEPS THE RULE. The clock agrees across a sandbox because every profile leaves by the
+ * same address — and a profile bound to a geo exit does not. Handed that exit's country as its `place`, it
+ * claims that country's clock and language while every unbound profile beside it still claims the sandbox's.
+ *
+ * What must NOT move is the rest of the device: the GPU, the cores and the memory are still drawn from the
+ * seed, so a site that met this profile before it was bound meets the same machine afterwards, in a new place.
+ * A device that changes underneath a live cookie is exactly what session-binding checks are built to catch. */
+test("a profile behind a geo exit takes that country's clock, and keeps its own machine", async () => {
+    const root = tempRoot();
+    const berlin = { locale: "de-DE", timezoneId: "Europe/Berlin", languages: ["de-DE", "de", "en"] };
+    const [home, abroad, neighbour] = await Promise.all([
+        browserFingerprint(root, "alice"),
+        browserFingerprint(root, "alice", berlin),
+        browserFingerprint(root, "bob"),
+    ]);
+    expect(abroad.locale).toBe("de-DE");
+    expect(abroad.timezoneId).toBe("Europe/Berlin");
+    expect(abroad.languages).toEqual(["de-DE", "de", "en"]);
+    // Same owner, same hardware: only the place moved.
+    expect(abroad.webglRenderer).toBe(home.webglRenderer);
+    expect(abroad.hardwareConcurrency).toBe(home.hardwareConcurrency);
+    expect(abroad.deviceMemory).toBe(home.deviceMemory);
+    // And the unbound profile beside it is untouched: binding one exit does not move the sandbox's clock.
+    expect(neighbour.timezoneId).toBe(home.timezoneId);
+    expect(neighbour.locale).toBe(home.locale);
 });
 
 // The pair has to be one a real place could produce: an en-GB browser on a Sydney clock is a tell of its own.

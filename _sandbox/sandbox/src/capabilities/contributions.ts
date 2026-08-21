@@ -189,7 +189,9 @@ export const validateContributionConfig = (spec: CapabilityContribution, config:
     // argument: a fact about this sandbox's account, not about the site, and every pinned-URL card declares no
     // fields at all, so a per-card declaration would mean no site card could ever carry them.
     if (spec.kind === "browser") {
-        declared.add("username").add("password").add("identity").add("purpose").add("openedAt");
+        // `exit` joins them for the same reason as `identity`: which country an account's browser appears to be
+        // in is a fact about this sandbox's manifest, not about any site.
+        declared.add("username").add("password").add("identity").add("purpose").add("openedAt").add("exit");
     }
     const unknown = Object.keys(config).filter((key) => !declared.has(key));
     if (unknown.length > 0) {

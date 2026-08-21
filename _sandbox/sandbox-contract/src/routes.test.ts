@@ -135,12 +135,18 @@ describe(`routeShapes`, () => {
 describe(`the real sandbox contract`, () => {
     it(`fingerprints all but the streaming routes`, () => {
         const unshaped = SANDBOX_ROUTE_NAMES.filter((name) => !(name in SANDBOX_ROUTE_SHAPES));
-        // oRPC wraps an event iterator's output in an opaque type with no schema under it, so these seven
+        // oRPC wraps an event iterator's output in an opaque type with no schema under it, so these ten
         // cannot be fingerprinted and are assumed compatible. Named rather than counted: a NEW entry here is
         // a route that quietly lost its shape check, which is worth failing a test over.
         expect(unshaped.toSorted()).toEqual([
             `agent.attach`,
             `capabilities.add`,
+            // The three geo-exit moves, streaming for the same reason vpn.connect does: bringing an exit up
+            // pulls a catalog, dials, and then verifies the address it landed on, which is tens of seconds on
+            // the free providers and can fail with something the user has to read at each step.
+            `exit.rotate`,
+            `exit.start`,
+            `exit.use`,
             `intentic.applyEvents`,
             `intentic.run`,
             `system.events`,
@@ -151,7 +157,7 @@ describe(`the real sandbox contract`, () => {
 
     it(`fingerprints every other route exactly once`, () => {
         expect(Object.keys(SANDBOX_ROUTE_SHAPES).every((name) => SANDBOX_ROUTE_NAMES.includes(name))).toBe(true);
-        expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length - 7);
+        expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length - 10);
     });
 
     it(`derives a route table with no duplicate names`, () => {

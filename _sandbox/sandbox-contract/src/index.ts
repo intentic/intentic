@@ -10,6 +10,7 @@ import { ciContract } from "./contracts/ci.contract.js";
 import { claudeContract } from "./contracts/claude.contract.js";
 import { draftsContract } from "./contracts/drafts.contract.js";
 import { endpointsContract } from "./contracts/endpoints.contract.js";
+import { exitContract } from "./contracts/exit.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
 import { personasContract } from "./contracts/personas.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
@@ -47,6 +48,7 @@ export { ciContract } from "./contracts/ci.contract.js";
 export { claudeContract } from "./contracts/claude.contract.js";
 export { draftsContract } from "./contracts/drafts.contract.js";
 export { endpointsContract, type TrialHealth, TrialStatusSchema, type TrialStatusResponse } from "./contracts/endpoints.contract.js";
+export { exitContract } from "./contracts/exit.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
 export { personasContract } from "./contracts/personas.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
@@ -155,6 +157,7 @@ export const sandboxContract = {
     translator: translatorContract,
     usage: usageContract,
     vpn: vpnContract,
+    exit: exitContract,
     workflows: workflowsContract,
 };
 

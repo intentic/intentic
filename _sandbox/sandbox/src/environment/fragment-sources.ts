@@ -49,9 +49,14 @@ export const invalidExtensionFragment = (content: string): string | undefined =>
 // compose-time defense for a checkout that changed underneath).
 export const capabilityFragments = async (services: Services, capability: Capability): Promise<string[]> => {
     const fragments: string[] = [];
-    const core = (await registry[capability.kind].fragment?.(capability.config))?.trim();
-    if (core !== undefined && core !== "") {
-        fragments.push(core);
+    // One handler may contribute several blocks: see CapabilityHandler.fragment for why the privileged half is
+    // kept as its own byte-identical block rather than folded into the tools it accompanies.
+    const core = await registry[capability.kind].fragment?.(capability.config);
+    for (const block of core === undefined ? [] : typeof core === "string" ? [core] : core) {
+        const trimmed = block.trim();
+        if (trimmed !== "") {
+            fragments.push(trimmed);
+        }
     }
     if (capability.kind === "extension") {
         const dir = extensionRootOf(extensionDir(services.workspace.root, capability.id), capability.config.path);

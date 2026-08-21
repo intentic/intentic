@@ -1274,6 +1274,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agents,
         manifest: capabilityManifest,
         connectors: secretFieldConnectors,
+        // The DECORATED store for the exit checks: they read `kind` and a country code, never a credential, so
+        // the rehydrating read is the right one and the raw store would only hide vault markers from them.
+        capabilities: services.capabilities,
     });
     return services;
 };

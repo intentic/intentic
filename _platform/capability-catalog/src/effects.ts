@@ -163,6 +163,23 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         { kind: "skill", name: "ssh" },
     ],
     vpn: () => [{ kind: "secret", exposure: "disk" }, { kind: "skill", name: "vpn" }, { kind: "image" }, { kind: "runtime", level: "net-admin" }],
+    /* A geo exit, and the row that changes with the PROVIDER rather than being fixed for the kind, which is
+     * the honest way to disclose it. A tor exit installs a package and asks for nothing else: no credential
+     * (there is no account), and NO container privilege, because tor publishes its own SOCKS port and needs
+     * neither a tun device nor NET_ADMIN. Charging every tor user a privilege row they never use would be
+     * exactly the quiet over-ask this panel exists to prevent. The tunnel-building providers do need it, and
+     * only the paste-your-own arm stores a credential (the .conf files hold private keys). */
+    exit: (input) => {
+        const provider = input.config["provider"] ?? "tor";
+        const effects: CapabilityEffect[] = [{ kind: "skill", name: "geo" }, { kind: "image" }];
+        if (provider !== "tor") {
+            effects.push({ kind: "runtime", level: "net-admin" });
+        }
+        if (provider === "wireguard") {
+            effects.push({ kind: "secret", exposure: "disk" });
+        }
+        return effects;
+    },
     // The engine is baked into the base image, the "image" effect here is the overlay rebuild that applies the
     // fragment's --privileged directive, not new tooling. The gpu option adds real tooling (the container
     // toolkit) and the claim on the host's GPUs; it is the one part of this card the user chose.

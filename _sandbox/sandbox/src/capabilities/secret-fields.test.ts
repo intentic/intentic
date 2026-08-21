@@ -89,6 +89,19 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
             },
         },
     ],
+    /* All three exit arms, each with `country` populated, which is the field this guard is actually about
+     * here: it is the only non-secret one on the tor and vpngate arms, so if it were ever dropped from the
+     * echo the vault would replace it with VAULTED, CountryCodeSchema would refuse that on the next read, and
+     * the whole exit would vanish from the manifest rather than one label going missing. */
+    exit: [
+        { id: "tor-exit", kind: "exit", config: { provider: "tor", country: "DE", autoStart: "on" } },
+        { id: "vpngate-exit", kind: "exit", config: { provider: "vpngate", country: "JP", autoStart: "off" } },
+        {
+            id: "byo-exit",
+            kind: "exit",
+            config: { provider: "wireguard", config: "[Interface]\nPrivateKey=x", country: "NL", autoStart: "off" },
+        },
+    ],
     docker: [
         {
             id: "docker",
