@@ -2,14 +2,15 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Eleven invariants live here, and all of them exist because the checks that catch drift used to run
- * in exactly one place (CI, on main, after the merge. (5 through 11) the release-heading contract, the
+ * --only`. Twelve invariants live here, and all of them exist because the checks that catch drift used to run
+ * in exactly one place (CI, on main, after the merge. (5 through 12) the release-heading contract, the
  * undeclared-shrink gate on the wire contract, the armed-hooks check, the reusable-workflow permission
- * ceiling, the runner npm will attest a publish from, the tag pushes GitHub never delivers, and the packages a
- * lockfile keeps after nothing depends on them: are documented at their own blocks below.)
+ * ceiling, the runner npm will attest a publish from, the tag pushes GitHub never delivers, the packages a
+ * lockfile keeps after nothing depends on them, and the Vue templates no type checker reads: are documented at
+ * their own blocks below.)
  *
- * All but invariant 2 need no node_modules and no network, which is what lets `--checks-only` run them from a
- * `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
+ * All but invariants 2 and 12 need no node_modules and no network, which is what lets `--checks-only` run them
+ * from a `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
  * Measured over 40 main pipelines, 10 of the 22 red ones died on invariant 1 or 3: each after 0.6-2.0 min of
  * runner time, in four jobs at once, for a fact that is readable from the checkout in under a second.
  *
@@ -88,6 +89,7 @@ import { basename, dirname, join } from "node:path";
  * One `..` to a sibling package, and still one copy of the walk. */
 import { repoRoot } from "../constants/src/node.mjs";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 
 const root = repoRoot(import.meta.url);
 // Discovered, not listed: every `_`-prefixed root directory is a package group (pnpm-workspace.yaml globs the same set).
@@ -96,6 +98,7 @@ const WORKSPACES = readdirSync(root, { withFileTypes: true })
     .map((entry) => entry.name);
 const SKIP_DIRS = new Set(["node_modules", "dist", ".cache", ".turbo", "out-tsc", "generated", ".git"]);
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
+const VUE_FILE = /\.vue$/;
 
 /* The workspace file's negations are part of the same discovery: a directory it excludes (the store shells:
  * installed standalone on the machine that actually builds them, a Mac with Xcode or Bubblewrap's JDK) is not
@@ -129,13 +132,14 @@ const packages = WORKSPACES.flatMap((workspace) =>
     }),
 );
 
-const walk = (dir) =>
+// One walk, two file kinds: the test files invariant 1 reads, and the templates invariant 12 compiles.
+const walk = (dir, wanted = TEST_FILE) =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
         if (SKIP_DIRS.has(entry.name)) {
             return [];
         }
         const path = join(dir, entry.name);
-        return entry.isDirectory() ? walk(path) : TEST_FILE.test(entry.name) ? [path] : [];
+        return entry.isDirectory() ? walk(path, wanted) : wanted.test(entry.name) ? [path] : [];
     });
 
 // tsconfigs here carry comments and trailing commas; this only needs `exclude`, so read it without a parser.
@@ -1021,6 +1025,67 @@ console.log(`lockfile reachability: all ${edges.size} packages in the lockfile a
 if (process.argv.includes("--checks-only")) {
     process.exit(0);
 }
+
+/* 12. TEMPLATES: every .vue template in the repository parses and compiles.
+ *
+ * NOTHING ELSE READS THEM. `vue-tsc --noEmit` over a component whose template cannot be parsed at all exits 0
+ * with no output: it type-checks the script and gives up on the rest in silence. oxlint does not read a
+ * template either, and an extension is consumed as SOURCE by the web app, so its own `build` never compiles
+ * one. That leaves exactly one reader in the whole pipeline: the app bundle.
+ *
+ * Which is where it surfaced. A sweep that straightened the typographic quotes through
+ * `_extensions/knowledge` rewrote one title binding as `:title="`No note for "${x}" yet`"`, where the inner
+ * `"` is what HTML reads as the end of the attribute — leaving the compiler an unterminated template literal
+ * and the rest of the tag as attribute names. Every typecheck passed it, in all three verify groups, and all
+ * three then died on `@intentic-app/web#build` 5,145 modules in. One character, three red groups, and the
+ * cheapest reader of that line was the last thing to look at it.
+ *
+ * THE REAL COMPILER, not a scanner for quotes in attributes: the guard is only worth having if it fails on
+ * exactly what the bundler fails on, and the way an approximation goes wrong is by staying green on the next
+ * shape nobody thought of. It costs ~0.8s for ~400 templates, which is why it can sit here in front of the
+ * type check rather than at the end of a build.
+ *
+ * It is BELOW the `--checks-only` line for that same reason: the compiler comes from node_modules. Resolved
+ * through the first workspace package that declares `vue` rather than a root devDependency — every package
+ * with a template already depends on it, discovery beats another entry to keep in step, and the root's
+ * manifest carries tooling, not the app's runtime. */
+// From the root rather than per package: `_tools/extension-example/seed` is the tree `intentic extension
+// create` copies onto someone else's machine, it belongs to no workspace package, and a template that cannot
+// compile is no better there.
+const templates = walk(root, VUE_FILE);
+const vueHost = packages.find(({ pkg }) => pkg.dependencies?.vue !== undefined || pkg.devDependencies?.vue !== undefined);
+const uncompilable = [];
+if (templates.length > 0 && vueHost === undefined) {
+    // Unreachable while any package renders one: a template is compiled by the `vue` its package depends on.
+    uncompilable.push(`${templates.length} templates, and no package declares vue: nothing here can compile them`);
+}
+if (templates.length > 0 && vueHost !== undefined) {
+    const { parse: parseSfc, compileTemplate } = createRequire(join(vueHost.dir, "package.json"))("vue/compiler-sfc");
+    for (const file of templates) {
+        const relative = file.slice(root.length + 1);
+        // A CompilerError carries `loc`; a plain SyntaxError out of a script block does not, and both arrive here.
+        const reported = (error, offset) =>
+            `${relative}${error.loc === undefined ? "" : `:${error.loc.start.line + offset}:${error.loc.start.column}`}: ${error.message}`;
+        const { descriptor, errors } = parseSfc(readFileSync(file, "utf8"), { filename: file });
+        uncompilable.push(...errors.map((error) => reported(error, 0)));
+        if (errors.length > 0 || descriptor.template === null) {
+            continue;
+        }
+        // A template error is located within the block, so the block's own first line is what turns it into a
+        // line of the file — the same offset @vitejs/plugin-vue applies when the bundler reports one.
+        const offset = descriptor.template.loc.start.line - 1;
+        const compiled = compileTemplate({ source: descriptor.template.content, filename: file, id: relative });
+        uncompilable.push(...compiled.errors.map((error) => (typeof error === "string" ? `${relative}: ${error}` : reported(error, offset))));
+    }
+}
+if (uncompilable.length > 0) {
+    console.error(
+        `A .vue template does not compile, so the web build cannot bundle it (no type check reads templates, ` +
+            `which is why this says so here):\n${uncompilable.map((line) => `  - ${line}`).join("\n")}`,
+    );
+    process.exit(1);
+}
+console.log(`vue templates: all ${templates.length} parse and compile, so the bundler has nothing left to discover`);
 
 /* A package needs building exactly when its `exports` hand a dependent a MODULE out of `dist/`: that `.js` is
  * what a dependent's compiler reads (through the `.d.ts` beside it), so a stale or absent dist there is a
