@@ -204,7 +204,7 @@ const onProseClick = (event: MouseEvent): void => {
                     <button v-if="link.path" type="button" class="text-link hover:underline" @click="emit(`open`, link.path)">
                         {{ link.title }}
                     </button>
-                    <span v-else class="text-subtle underline decoration-dotted underline-offset-2" :title="`No note for "${link.title}" yet`">
+                    <span v-else class="text-subtle underline decoration-dotted underline-offset-2" :title="`No note for &quot;${link.title}&quot; yet`">
                         {{ link.title }}
                     </span>
                 </span>
