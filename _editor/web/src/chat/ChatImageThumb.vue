@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { useChatPopout } from "../composables/chat/useChatPopout";
 
 /* A compact image-attachment thumbnail that reveals a large floating preview on hover: shared by the
  * composer's staged chips and the sent user bubble so both read the same. The preview teleports to the overlay
@@ -8,11 +7,9 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
  * overflow-auto clipping. Sideways it hangs off the whole chat panel's nearer edge (the left, for the right-docked
  * chat, so the transcript stays visible) rather than off the thumb's, which keeps placement independent of where in
  * a row the thumb happens to sit; vertically it is flush with the thumb's own nearer edge. Then it grows as large
- * as that quadrant allows. See show() for the popped-out fallback. */
+ * as that quadrant allows. See show() for the floating fallback. */
 
 withDefaults(defineProps<{ src: string; alt: string; size?: string }>(), { size: `h-9 w-9` });
-
-const { overlayTarget } = useChatPopout();
 
 // The preview's fixed-position corner (one horizontal + one vertical offset) plus how far it may grow from there,
 // recomputed from the thumb's rect each time it opens; undefined while hidden.
@@ -32,7 +29,7 @@ const gutters = (rect: DOMRect, viewportWidth: number): [left: number, right: nu
 
 const show = (event: MouseEvent): void => {
     const el = event.currentTarget as HTMLElement;
-    // The thumb may live in the pop-out window, whose viewport (and fixed-position origin) is its own: measure and
+    // The thumb may live in the floating window, whose viewport (and fixed-position origin) is its own: measure and
     // clamp against that window, not the main realm's globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();
@@ -78,7 +75,7 @@ const hide = (): void => {
         @mouseenter="show"
         @mouseleave="hide"
     />
-    <Teleport :to="overlayTarget">
+    <Teleport to="body">
         <img
             v-if="box"
             :src="src"

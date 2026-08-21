@@ -3,7 +3,7 @@ import type { EndpointKind } from "./endpoint";
 /* HOW MANY LONG-LIVED STREAMS ONE TAB MAY HOLD AT ONCE, the guard against the app starving its own requests.
  *
  * A browser allows SIX concurrent HTTP/1.1 connections per origin. This app holds long-lived ones: `/events` for
- * the life of the tab, plus an `/agent/attach` for every conversation with a live turn (and a popped-out window
+ * the life of the tab, plus an `/agent/attach` for every conversation with a live turn (and a floating window
  * shares the same origin). Five running agents therefore took every slot, and the next ordinary read, a file
  * tree, a git status, the reconnect itself, had nowhere to go and simply queued in the browser until some
  * stream ended. The daemon's log stays silent and healthy throughout, because those requests never reach it;

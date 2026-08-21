@@ -16,9 +16,9 @@ import { createApp, defineComponent, h, ref } from "vue";
  * element (`el.style.left = …`) while the same element carried a `:style` binding for the off-screen parking
  * that hides it until it is measured. The frame that binding went from the parked object to nothing, Vue
  * patched it as `removeAttribute("style")` and took the coordinates with it, so the panel painted UNSTYLED,
- * in the window's top-left corner, which is precisely the flash the parking exists to prevent. A pop-out
- * window showed it worst, because what recovered the box was the ResizeObserver's first delivery and an
- * observer watching an element in ANOTHER window rides the opener's rendering loop.
+ * in the window's top-left corner, which is precisely the flash the parking exists to prevent. What recovered
+ * the box was the ResizeObserver's first delivery, so the flash lasted as long as the window went without a
+ * rendering step, which is why it read as intermittent.
  *
  * Hence the assertion below is on the box's own `style` attribute rather than on any coordinate the component
  * computed: the report was never "placed wrong", it was "placed, then unplaced". */

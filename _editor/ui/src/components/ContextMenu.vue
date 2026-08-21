@@ -44,9 +44,9 @@ const {
     model: MenuItem[];
     /** rem: the menu's floor, so a short verb list doesn't render as a sliver. */
     minWidth?: number;
-    /* Which document the menu opens in. The chat and terminal panels teleport into a real `window.open`
-       document while popped out (usePopout), and a menu left behind in the opener is a menu the user cannot
-       see. Undefined ⇒ PrimeVue's default. */
+    /* Which document the menu opens in, for a caller that draws into one of its own (an iframe): a menu left
+       behind in the wrong document is a menu the user cannot see. Undefined ⇒ PrimeVue's default, which is
+       right for everything in the app's own window, floating panels included, since each is its own window. */
     appendTo?: HTMLElement | string;
 }>();
 

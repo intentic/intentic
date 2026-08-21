@@ -45,7 +45,7 @@ export const openRunSessions = (sessions: readonly RunSession[]): boolean => {
     return true;
 };
 
-/* Show a run: `live`, always, whatever state it is in, as a SUMMONS, so every window's panel (the popped-out
+/* Show a run: `live`, always, whatever state it is in, as a SUMMONS, so every window's panel (the floating
  * chat included) starts following it; each follows from its own ledger reads (openRunSessions above).
  *
  * IT OPENS NO WINDOW, and that is the correction. It used to pop the panel out first, on the argument that a

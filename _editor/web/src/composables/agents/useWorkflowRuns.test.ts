@@ -12,7 +12,7 @@ vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxReques
 vi.mock("../sandbox/useSandboxQuery", () => ({ useSandboxQuery: vi.fn() }));
 
 /* The grouping rule, on its own. These are the pure half of the run row: the half three surfaces share (the
- * board's lanes, the board's archive, the popped-out rail) and the half that was getting the answer wrong,
+ * board's lanes, the board's archive, the rail in a floating window) and the half that was getting the answer wrong,
  * so it is tested here rather than through any one of them.
  */
 

@@ -1,5 +1,5 @@
 <!-- ONE SESSION, AS A CARD IN A RAIL: the fleet board's AgentCard in a column one card wide, and the one
-     component every rail in this app draws its rows with: the popped-out chat's open chats and its search
+     component every rail in this app draws its rows with: the floating chat's open chats and its search
      hits (ChatTabList), the workflow runs above them, and the agents this sandbox's agents started
      (pages/Subagents.vue).
 
@@ -60,7 +60,7 @@ const props = defineProps<{
     live?: { icon: IconName; text: string; since?: number };
     now?: number;
     /* THE LIVE READOUT SHARES THE FACTS LINE INSTEAD OF TAKING ONE OF ITS OWN, for a list that has to stay
-     * thin: the popped-out chat's rail, where the card's own line of facts is short (the model, and little
+     * thin: the floating chat's rail, where the card's own line of facts is short (the model, and little
      * else) and a second row for "Bash · 12s" bought a third of a card's height per running chat. It TRAILS
      * that line, in the corner a settled card puts its age in, so the clock sits in one place whether or not
      * the turn has ended. Everywhere with room for it (the Subagents list) the readout keeps its own row. */

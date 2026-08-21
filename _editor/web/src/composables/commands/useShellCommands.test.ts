@@ -4,7 +4,7 @@ import { createApp, h } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 // The import-time globals this graph reads at module scope: environment.ts's window.env and ui's useDevice
 // media queries, are in place before this file loads: vitest.setup.ts installs them for the whole package.
-import { useChatPopout } from "../chat/useChatPopout";
+import { receiveFloatingNote } from "../floating";
 import { boundCommand, commands, commandShortcut } from "./useCommands";
 import { useShellCommands } from "./useShellCommands";
 
@@ -32,17 +32,19 @@ const mountShell = (): { unmount: () => void } => {
 
 it(`binds the chat pop-out to F9 and names it for the direction the press will take`, () => {
     const app = mountShell();
-    const entry = commands.value.find((candidate) => candidate.command === `chat.togglePopout`);
+    const entry = commands.value.find((candidate) => candidate.command === `chat.toggleFloating`);
 
     expect(entry).toBeDefined();
     expect(entry!.title).toBe(`Move Chat into New Window`);
     // The same words the strip's menu row and the button's tooltip use, and the chord all three now teach.
-    expect(commandShortcut(`chat.togglePopout`)).toBe(`F9`);
+    expect(commandShortcut(`chat.toggleFloating`)).toBe(`F9`);
 
-    useChatPopout().poppedOut.value = true;
+    // Another window announcing that it holds the chat, which is the only thing that makes it float as far as
+    // this window is concerned (composables/floating.ts).
+    receiveFloatingNote({ kind: `here`, panel: `chat`, id: `other-window`, since: 1 });
     expect(entry!.title).toBe(`Dock Chat Back`);
 
-    useChatPopout().poppedOut.value = false;
+    receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `other-window` });
     app.unmount();
 });
 
@@ -67,7 +69,7 @@ it(`leaves F9 to whatever is running in a terminal`, () => {
         return event;
     };
     expect(boundCommand(from(inTerminal), false)).toBeUndefined();
-    expect(boundCommand(from(inChat), false)?.command).toBe(`chat.togglePopout`);
+    expect(boundCommand(from(inChat), false)?.command).toBe(`chat.toggleFloating`);
 
     app.unmount();
 });

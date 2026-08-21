@@ -6,9 +6,10 @@ import { readWindowState, writeWindowState } from "./windowStore";
 
 export type ChatPosition = "left" | "right";
 // Which HOME the chat lives in: the side column beside every view, or behind a rail tile as the full-screen
-// /chat area. A third home, its own pop-out window, is session state, not a preference, and stays with
-// usePopout. One value the user chooses, so the two in-app homes are exclusive: docked to the rail, the side
-// column never appears and the rail carries a Chat tile; docked to the side, the reverse.
+// /chat area. A window of its own is not a third value here: that is a live fact about which window is drawing
+// the panel, not a preference (composables/floating.ts). One value the user chooses, so the two in-app homes
+// are exclusive: docked to the rail, the side column never appears and the rail carries a Chat tile; docked to
+// the side, the reverse.
 export type ChatHome = "side" | "rail";
 // What the ONE workspace sidebar shows: the file explorer, the agent-changes review, or the snapshot timeline
 // (VSCode's Source-Control-in-the-sidebar pattern, no second nav column stealing width from the diff view).

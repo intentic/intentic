@@ -4,7 +4,7 @@ import { TranscriptClock } from "./transcriptClock";
 
 /* WHO THE TYPEWRITER IS FOR: the pane the reader is in, and nobody else.
  *
- * A popped-out chat window shows as many chats side by side as the user picks (ChatPanel's panes), and each
+ * A floating chat window shows as many chats side by side as the user picks (ChatPanel's panes), and each
  * one that is streaming owns a clock. Left to themselves they would all type at once: N things moving in the
  * periphery of someone trying to read one of them, each paying the reveal's per-paint cost (a reducer pass to
  * append a few characters). So a transcript nobody is watching settles its text in the frame it arrives.

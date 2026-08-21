@@ -33,7 +33,6 @@
             "@intentic/ui/time": ["../../_editor/ui/src/lib/timeWindow.ts"],
             "@intentic-app/web/main": ["../../_editor/web/src/main.ts"],
             "@intentic-app/web/builtins": ["../../_editor/web/src/extension-host/builtins.ts"],
-            "@intentic-app/web/popout-keeper": ["../../_editor/web/src/popout/keeper.ts"],
             "@intentic-app/web/chat-tabs": ["../../_editor/web/src/composables/chat/tabSnapshot.ts"]
         }
     },

@@ -2,19 +2,18 @@
 
      It is ours for the same reason the tooltip directive is (lib/tooltip.ts): PrimeVue's Popover works
      against the module-scope `document` and `window`. It appends to a target you have to remember to pass, it
-     measures the room around the trigger with the OPENER's viewport, it arms its dismiss listener on the
-     OPENER's document, and it re-aligns on the OPENER's resize. A popped-out chat panel (usePopout) renders in
-     another window with its JS left in this realm, so every one of those was the wrong window at once, and the
-     failure they add up to is the one that kept coming back: the picker opened off the pop-out's bottom edge
-     with its top over the pill that owns it, and an overlay covering its own trigger cannot be closed by
-     clicking that trigger: the click lands INSIDE the overlay, which is the click PrimeVue's dismiss logic
-     ignores by design.
+     measures the room around the trigger with that viewport, it arms its dismiss listener on that document, and
+     it re-aligns on that window's resize. Point it at a surface the app drew somewhere else and every one of
+     those is the wrong window at once, and the failure they add up to is the one that kept coming back: the
+     picker opened off the bottom edge with its top over the pill that owns it, and an overlay covering its own
+     trigger cannot be closed by clicking that trigger, since the click lands INSIDE the overlay, which is the
+     click PrimeVue's dismiss logic ignores by design. Floating panels used to guarantee that (they were painted
+     from another window); the app still draws into iframes.
 
      Everything here derives from the anchor element instead: `anchor.ownerDocument` is where the box is
      teleported and where dismissal listens, `ownerDocument.defaultView` is what its room is measured against.
-     No `append-to` to thread through, nothing to remember at the call site, and correct in either window by
-     construction rather than by a listener-mirroring trick that only covers what happens to bind to
-     `document`.
+     No `append-to` to thread through, nothing to remember at the call site, and right in whatever surface the
+     anchor belongs to by construction.
 
      DISMISSAL IS STATELESS: a `pointerdown` outside the box and outside the anchor closes it. PrimeVue instead
      kept a `selfClick` flag set by its content's mousedown and cleared by the document's click: a two-event

@@ -28,7 +28,6 @@ import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 import { useRole } from "../composables/sandbox/useRole";
 import { useChatAttachments } from "../composables/chat/useChatAttachments";
-import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useComposerVoice } from "../composables/chat/useComposerVoice";
 import { useEditorContextChip } from "../composables/chat/useEditorContextChip";
 import { useRunThrough } from "../composables/chat/useRunThrough";
@@ -56,7 +55,7 @@ import ComposerModelPill from "./ComposerModelPill.vue";
 
 /* ONE CHAT ON SCREEN: the transcript, the composer that writes into it, and the pickers and banners that
  * belong to that one conversation. The panel around it (ChatPanel) owns the frame: the chat list, the pop-out,
- * the resize handle, the shell-wide commands. Several of these stand side by side in a popped-out window.
+ * the resize handle, the shell-wide commands. Several of these stand side by side in a floating window.
  *
  * IT TAKES ITS CONVERSATION RATHER THAN READING THE FOCUSED ONE, which is the whole reason it is a component:
  * every value on screen here: what the composer sends, which model the pill names, whose plan the card
@@ -73,7 +72,7 @@ import ComposerModelPill from "./ComposerModelPill.vue";
  * without a chat on screen.
  *
  * The column is a @container: composer/status label density keys off the width the messages get (288px docked
- * while the viewport is desktop-wide, or this pane's share of the pop-out window), while touch-target sizing
+ * while the viewport is desktop-wide, or this pane's share of the floating window), while touch-target sizing
  * keys off the max-md: device class. Two intentional axes, don't unify them. */
 
 const props = defineProps<{
@@ -170,7 +169,6 @@ provide(
         navigate: (route) => void router.push(route),
     }),
 );
-const { poppedOut } = useChatPopout();
 const { activeSandboxId, reachable, connection } = useSandbox();
 // The daemon refused this Google account outright: a different sentence than "not connected yet", because
 // waiting will not fix it.
@@ -216,11 +214,9 @@ const runThroughPill = ref<HTMLElement>();
 const personaPill = ref<HTMLElement>();
 
 // Auto-follow: the transcript stays at its newest content unless the user has scrolled up to read. The rule
-// and every geometry change it has to survive live in the composable; the pane only says when a NEW
-// transcript is on screen (the conversationId watch below), when the user has just sent something (submit),
-// and, because the composable watches these boxes with an observer owned by the window they are in, when
-// they move to another one, which for this pane is the pop-out and back.
-const { pin, follow } = useStickToBottom(scroller, content, poppedOut);
+// and every geometry change it has to survive live in the composable; the pane only says when a NEW transcript
+// is on screen (the conversationId watch below) and when the user has just sent something (submit).
+const { pin, follow } = useStickToBottom(scroller, content);
 
 const activeError = computed(() => props.conversation.error.value);
 /* This conversation's transcript round-trip, still in flight with nothing painted yet: the empty state
@@ -385,7 +381,7 @@ const modeIcon = computed(() => modeMeta(mode.value).icon);
  * guarantees nothing about the box being laid out and styled yet. When it isn't, the element reports a height
  * smaller than one line of its own text, and the old code wrote that number into `style.height` and never
  * looked again. The result was a composer permanently the height of its own padding, with the placeholder
- * sliced through the middle: worst in a popped-out window, where the panel is measured in the window it left
+ * sliced through the middle: worst in a floating window, where the panel is measured in the window it left
  * and dressed in the one it arrived in, so nothing this pane does ever re-measures it.
  *
  * The floor is computed rather than assumed: line-height plus the vertical padding is what this box is when it
@@ -1049,11 +1045,9 @@ watch(composerFocus, () => {
 // One idle-time realization pass after a transcript lands wholesale, so the native scrollbar stops lying about
 // how tall the column is (useTranscriptWarmup).
 const { realizing } = useTranscriptWarmup({
-    scroller,
     conversationId: computed(() => props.conversation.conversationId),
     messageCount: computed(() => messages.value.length),
     streaming,
-    poppedOut,
 });
 
 /* A different transcript is on screen: start it at its newest message, the way a chat is opened everywhere.
@@ -1260,7 +1254,7 @@ watch(
                      The box is a touch WIDER than the column of text it sits under (50rem against .chat-turns'
                      48rem, and a half-inset against its full one below either cap): a composer flush with the
                      prose reads as one more block of the transcript, and the reading measure is a rule for text,
-                     not one the app's controls have to line up on. Capped at all for the popped-out window,
+                     not one the app's controls have to line up on. Capped at all for the floating window,
                      where a full-width composer is a 150-character line with its Send button half a screen from
                      the text. -->
                 <div class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2 px-2 py-3">

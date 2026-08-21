@@ -1,8 +1,8 @@
-// The summons channel's contract: a chat summoned ANYWHERE is on screen EVERYWHERE. The app runs as a full
-// copy per browser window and a popped-out chat is drawn by whichever window opened it, so the guarantee under
-// test is the receiving half (a window that never saw the click applies the identical reveal) plus the two
-// rules the wire form carries: queued messages never ride it (another window would send them again), and a
-// summons for another sandbox's chats is ignored whole.
+// The summons channel's contract: a chat summoned ANYWHERE is on screen EVERYWHERE. The app runs as a full copy
+// per browser window, the chat's own floating window included, so the guarantee under test is the receiving half
+// (a window that never saw the click applies the identical reveal) plus the two rules the wire form carries:
+// queued messages never ride it (another window would send them again), and a summons for another sandbox's
+// chats is ignored whole.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));

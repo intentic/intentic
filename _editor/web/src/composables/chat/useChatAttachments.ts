@@ -5,6 +5,7 @@ import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
 import type { PendingAttachment } from "./conversation";
 import type { ChatAttachment } from "./transcript";
+import { uuid } from "../uuid";
 
 /* FILES STAGED FOR THE NEXT TURN, the chips over the composer, and the three ways they get there: the paperclip
  * (a file dialog the pane opens), a paste, and a drop.
@@ -38,9 +39,9 @@ export const useChatAttachments = (composer: {
         // array ref's proxy, so the raw object wouldn't trigger updates. The entry lands on the tab active at
         // attach time and this closure keeps pointing at it, so a mid-upload tab switch updates the right chip.
         const entry = reactive<PendingAttachment>({
-            id: crypto.randomUUID(),
+            id: uuid(),
             name: file.name,
-            path: `.intentic/records/artifacts/attachments/${crypto.randomUUID()}/${file.name}`,
+            path: `.intentic/records/artifacts/attachments/${uuid()}/${file.name}`,
             controller,
             status: `uploading`,
             progress: 0,

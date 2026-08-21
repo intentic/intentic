@@ -43,14 +43,16 @@ import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
 import { providerReady, providerReadyOn } from "./access";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "./transcript";
 import { readAccountPreference, writeAccountPreference } from "./accountPreference";
-import { readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
+import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
 import { withConcurrency } from "../concurrency";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
+import { showsPanel } from "../floating";
 import { useSandbox } from "../sandbox/useSandbox";
+import { uuid } from "../uuid";
 
 // One past conversation in the sandbox's SDK session store, for the history menu.
 export interface ChatSession {
@@ -71,8 +73,8 @@ export interface ChatSession {
  * A singleton PER WINDOW: every browser window runs a full copy of the app with its own tab set (windowStore
  * has why), and only daemon-backed state converges between them on its own. What does cross windows is the
  * SUMMONS, a surface outside the panel showing a chat goes through summon.ts, which applies the same reveal
- * in every window, so the popped-out chat (drawn by whichever window opened it) follows a click made in any
- * of them. */
+ * in every window, so a click made in any of them is followed by all of them, the chat's own floating window
+ * included. */
 
 const { activeSandboxId, reachable } = useSandbox();
 
@@ -157,7 +159,7 @@ const setConversations = (next: readonly Conversation[], focus: string, reason: 
 
 /* WHICH CHATS ARE ON SCREEN AT ONCE, the panes, in the order they were opened.
  *
- * One id is the ordinary case (the docked column has room for nothing else); several is the popped-out window
+ * One id is the ordinary case (the docked column has room for nothing else); several is the floating window
  * showing a fleet side by side. The focused pane is `activeId`, always a member, so every surface outside this
  * panel goes on reading `active` and means "the chat the user is looking at".
  *
@@ -217,13 +219,13 @@ const restoreTab = (tab: StoredTab): Conversation => {
     conversation.modePick.value = startingMode(conversation.isolated.value);
     conversation.draft.value = tab.draft;
     conversation.attachments.value = tab.attachments.map((file) => ({
-        id: crypto.randomUUID(),
+        id: uuid(),
         name: file.name,
         path: file.path,
         status: `done` as const,
         progress: 1,
     }));
-    conversation.queued.value = tab.queued.map((message) => ({ id: crypto.randomUUID(), text: message.text, attachments: message.attachments }));
+    conversation.queued.value = tab.queued.map((message) => ({ id: uuid(), text: message.text, attachments: message.attachments }));
     conversation.title.value = tab.title ?? null;
     // Restore the harness before the model, the native/claude-code model lists diverge for codex/grok.
     if (tab.harness !== undefined) {
@@ -310,8 +312,20 @@ const restoreTabs = (): void => {
 
 restoreTabs();
 
-// Persist the tab snapshot on any change: the stringified getter touches every persisted field, so tab
-// open/close/switch, keystrokes, uploads finishing, and session commits all write through automatically.
+/* WHICH WINDOW REMEMBERS THE STRIP, and it is exactly the window that is DRAWING it. There is one chat surface
+ * at a time (composables/floating.ts): while the chat is in a window of its own, this window shows no chat, so
+ * it has no view state for one, and the strip it remembers from before the move is not a memory but a stale
+ * copy. Keeping it is what made a docked chat come back wearing tabs the reader had closed out there.
+ *
+ * So the rule is two sides of one fact:
+ *   · SHOWING it, write on every change, which also re-seeds the next window (windowStore's two stores).
+ *   · NOT showing it, forget, and read the seed back the moment the panel returns. A brand-new floating window
+ *     and a window taking the panel back therefore travel the same path, the one a fresh window always took.
+ * Nothing is exchanged between the two windows and nothing has to be handed over: the seed is the handoff. */
+const showsChat = showsPanel(`chat`);
+
+// The stringified getter touches every persisted field, so tab open/close/switch, keystrokes, uploads finishing
+// and session commits all write through automatically.
 // ponytail: writes per keystroke; the blob is tiny, throttle if profiling shows jank.
 watch(
     () =>
@@ -321,11 +335,19 @@ watch(
             tabs: conversations.value.map(snapshotTab),
         }),
     (json) => {
-        if (scopedSandboxId !== undefined) {
+        if (scopedSandboxId !== undefined && showsChat.value) {
             writeTabSnapshot(scopedSandboxId, json);
         }
     },
 );
+
+watch(showsChat, (shows) => {
+    if (shows) {
+        restoreTabs();
+        return;
+    }
+    forgetTabSnapshot(scopedSandboxId);
+});
 
 // Persist the account pick per provider, the seed a NEW conversation (and a fresh window) starts from. A watch
 // rather than a write inside selectAccount, because the pick also moves on its own: a connect makes the new
@@ -366,7 +388,7 @@ const sessions = ref<ChatSession[]>([]);
 /* ONE CONVERSATION, AS A PANEL BINDS IT, the facade every chat surface renders through, over whichever
  * conversation it was built for rather than over the focused one.
  *
- * It exists as a FACTORY because the chat panel shows several conversations at once (the pop-out's panes): a
+ * It exists as a FACTORY because the chat panel shows several conversations at once (the floating window's panes): a
  * transcript, its composer, its pickers and its tool cards all have to answer for the chat they are IN, and a
  * module-level facade over `active` can only ever answer for the focused one. The singleton below builds its
  * own from `active`, so the store's exported surface, and every consumer outside the panel, is unchanged;
@@ -1222,8 +1244,8 @@ export const resetChat = (): void => {
  * surfaces outside the panel, the fleet board, New agent, a suggestion box, an extension, never touch the
  * tab list directly: they describe what the chat should show and hand it to the summons channel (summon.ts),
  * which runs this same function in this window and broadcasts it to the app's other windows. That is the whole
- * cure for "I clicked New agent and the popped-out chat kept showing an old conversation": the popped-out
- * window is drawn by whichever window opened it, so a summons that only mutated the clicking window's own
+ * cure for "I clicked New agent and the floating chat kept showing an old conversation": a floating chat is a
+ * window of its own running its own copy of the app, so a summons that only mutated the clicking window's own
  * store was invisible out there. The panel's OWN controls (its rail, its tabs, its panes) keep calling the
  * plain store verbs, a gesture inside the panel acts on the panel it was made in.
  *
@@ -1440,7 +1462,7 @@ export const composingConversation = (): Conversation => {
 };
 
 // "Put the caret in the composer", as a signal rather than a call: the conversation list is store state, but
-// the caret belongs to whichever chat surface is mounted (the docked panel, the mobile detail, a popped-out
+// the caret belongs to whichever chat surface is mounted (the docked panel, the mobile detail, a floating
 // window), and only that component holds the textarea. A counter, not a flag, two "New agent" presses in a
 // row must each land, and a re-focus of the same conversation is still a distinct request.
 const composerFocus = ref(0);
@@ -1828,7 +1850,7 @@ export const hydrateOnce = (conversation: Conversation): void => {
 // session, else load its transcript into a new tab (reveal's session entry). Panel-internal, so it reveals in
 // THIS window only, the surfaces outside the panel go through the summons channel (summon.ts) instead.
 const openConversation = (id: string): void => {
-    const conversationId = crypto.randomUUID();
+    const conversationId = uuid();
     reveal({
         verb: `focus`,
         entries: [{ conversationId, sessionRef: id, title: sessions.value.find((session) => session.id === id)?.title }],

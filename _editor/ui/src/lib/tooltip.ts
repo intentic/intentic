@@ -2,14 +2,14 @@ import type { Directive, DirectiveBinding } from "vue";
 
 /* `v-tooltip.top="'Archive'"`, the app's own hover label, replacing PrimeVue's directive.
  *
- * It is ours because PrimeVue's operates on the MODULE-SCOPE `document`: it appends to `document.body`,
- * looks its element up with `document.getElementById`, and aligns against the main window's viewport and
- * scroll. Half this app's tooltips live in the chat and terminal panels, which teleport into a REAL
- * `window.open` document while their JS stays in this realm (see usePopout), so hovering anything in a
- * popped-out panel drew the label in the ORIGINAL window, at the pop-out's coordinates, over whatever
- * happened to be there. Owning the directive fixes that for every call site at once: the box is created in
- * `el.ownerDocument` and measured against `el.ownerDocument.defaultView`, so it is correct in either window
- * by construction rather than by remembering to pass a target.
+ * It is ours because PrimeVue's operates on the MODULE-SCOPE `document`: it appends to `document.body`, looks
+ * its element up with `document.getElementById`, and aligns against that document's viewport and scroll. Hover
+ * anything the app drew into another document and the label lands in the wrong one, at the other's coordinates,
+ * over whatever happened to be there, which is what a tooltip in a floating panel did back when such a panel
+ * was painted from another window. Owning the directive fixes it for every call site at once: the box is created
+ * in `el.ownerDocument` and measured against `el.ownerDocument.defaultView`, so it is right in whatever surface
+ * the element belongs to (an iframe's document included) by construction rather than by remembering to pass a
+ * target.
  *
  * Positioning is `fixed` against that window, which is also why there is no scroll math: a scroll moves the
  * anchor out from under the box, so the box is dismissed instead of chased (the pointer has left it anyway).

@@ -16,7 +16,7 @@ import type { ChatAttachment } from "../composables/chat/transcript";
  * out, else <body>) to escape its trigger's overflow clipping, and places itself with the room in THAT window.
  *
  * It opens BESIDE its anchor, never over/under it. Every surface that raises this card is a narrow column of
- * stacked rows: the chat tab rail down a pop-out window's left edge, the Changes panel's origin chips above
+ * stacked rows: the chat tab rail down a floating window's left edge, the Changes panel's origin chips above
  * its file list, so a card above or below the anchor lands on the very rows the user is reading past. Beside
  * it, the card spills into the wide area next door (the transcript, the editor) and the column stays legible.
  *
@@ -91,7 +91,7 @@ const says = (message: HoverCardMessage): boolean => (message.text ?? ``).trim()
 const show = (event: MouseEvent, content: HoverCardContent): void => {
     if ((content.title ?? ``).trim() === `` && !(content.messages ?? []).some(says)) return; // nothing to reveal
     const el = event.currentTarget as HTMLElement;
-    // The anchor may live in the pop-out window, whose viewport (and fixed-position origin) is its own: measure
+    // The anchor may live in the floating window, whose viewport (and fixed-position origin) is its own: measure
     // and clamp against that window, not the main realm's globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();

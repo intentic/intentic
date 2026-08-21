@@ -1,14 +1,14 @@
 /* Which window's clipboard a copy goes through.
  *
- * A POPPED-OUT panel (see usePopout) is DOM teleported into a real second window while the JS keeps running in
- * the opener's realm. So the module-global `navigator` out there belongs to the ORIGINAL document, the one the
- * user is not looking at and not focused on. Chrome's async clipboard is gated on the calling
- * document's focus, so `navigator.clipboard.writeText` from a pop-out rejects with NotAllowedError ("Document
- * is not focused"); every call site swallows that rejection, which is why pressing Copy in a popped-out chat
- * did precisely nothing, no clipboard write, no "Copied", no error on screen.
+ * Chrome's async clipboard is gated on the CALLING document's focus: `navigator.clipboard.writeText` from a
+ * document that is not focused rejects with NotAllowedError ("Document is not focused"), and every call site
+ * swallows that rejection, so the press does precisely nothing, no clipboard write, no "Copied", no error on
+ * screen. That is exactly what a copy inside a floating panel used to do, when the panel's DOM was in one window
+ * and its JS in another; the panels are their own windows now, and the app still draws into iframes (the
+ * preview, the extension host).
  *
- * The element the gesture happened on knows better than the module does: its ownerDocument IS the focused
- * window's document. Reaching the clipboard through it makes the same code work docked and popped out, and it
- * falls back to this realm's own clipboard when there is no element to ask (or a detached one). */
+ * So the element the gesture happened on is asked rather than the module: its ownerDocument IS the focused
+ * document, whatever surface it belongs to, and there is a fallback to this realm's clipboard when there is no
+ * element to ask (or a detached one). */
 export const clipboardOf = (element: Element | null | undefined): Clipboard =>
     element?.ownerDocument.defaultView?.navigator.clipboard ?? navigator.clipboard;

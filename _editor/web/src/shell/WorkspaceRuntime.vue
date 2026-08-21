@@ -3,6 +3,7 @@ import { useDevice } from "@intentic/ui";
 import { onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useChat } from "../composables/chat/useChat";
+import { floatingWindowPanel } from "../composables/floating";
 import { onScreen } from "../composables/onScreen";
 import { startBackgroundLoader, stopBackgroundLoader } from "../composables/prefetch/useBackgroundLoader";
 import { startDraftingReceipts } from "../composables/workspace/draftingReceipts";
@@ -19,7 +20,7 @@ import ReceiptBar from "./ReceiptBar.vue";
  *
  * It sits here because the shell is not the app. /setup (where "Add sandbox" goes), an invite link and the
  * desktop sign-in handoff are all routes outside it, and stopping the daemon stream on the way to one is what
- * made a popped-out chat go dead the moment the user clicked "Add sandbox": the panel itself now survives that
+ * made a floating chat go dead the moment the user clicked "Add sandbox": the panel itself now survives that
  * navigation (PoppablePanels), so the stream behind it has to survive it too: a floating window rendering a
  * disconnected chat would only be a slower way to lose the conversation.
  *
@@ -48,7 +49,7 @@ watch(
     { immediate: true },
 );
 // Idle is "nobody is looking", asked of every window this tab renders into rather than of the tab itself
-// (composables/onScreen.ts): a user typing in a popped-out chat while the tab sits behind another one was
+// (composables/onScreen.ts): a user typing in a floating chat while the tab sits behind another one was
 // reported away to everyone else, in the window where they were most obviously present.
 watch(onScreen, (looking) => reportIdle(!looking), { immediate: true });
 
@@ -71,9 +72,11 @@ startDraftingReceipts();
 </script>
 
 <template>
-    <!-- The mobile shell docks neither panel: its chat is the agent route and its terminal a tab of its own:
-         so there is nothing out there to own, and nothing that could be popped into a window. -->
-    <PoppablePanels v-if="!mobile" />
+    <!-- The mobile shell docks neither panel: its chat is the agent route and its terminal a tab of its own,
+         so there is nothing here for a panel to sit in. A FLOATING window is the exception at any width: the
+         panel is that window's whole content, and dragging one narrow must leave a chat in it rather than an
+         empty rectangle (composables/floating.ts). -->
+    <PoppablePanels v-if="!mobile || floatingWindowPanel !== undefined" />
     <!-- A push that needs an answer, asked wherever the user has got to. It belongs to the session for the same
          reason the stream does: the check that raises it takes minutes, the user was told to go and do something
          else, and every route in the app is somewhere they might reasonably be when it lands. -->

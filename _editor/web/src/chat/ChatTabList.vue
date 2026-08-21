@@ -30,8 +30,8 @@ import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import ChatShareDialog from "./ChatShareDialog.vue";
 import { useChat } from "../composables/chat/useChat";
-import { useChatPopout } from "../composables/chat/useChatPopout";
-import { chatWide, toggleChatPopout } from "../composables/chat/chatSurface";
+import { useChatFloating } from "../composables/chat/chatFloating";
+import { chatWide, toggleChatFloating } from "../composables/chat/chatSurface";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
 import {
@@ -77,7 +77,7 @@ const emit = defineEmits<{
 const { conversations, activeId, tabReveal, panes, openBeside, closePane, collapsePanes, setPanes } = useChat();
 const { agentById, fleet, loadArchived, rename } = useAgents();
 
-const { poppedOut, overlayTarget } = useChatPopout();
+const { floats } = useChatFloating();
 const router = useRouter();
 /* WHICH LIST THIS IS RIGHT NOW: the open chats in their lanes, or the personas you can talk to
  * (ChatPersonaRail). Two answers to "what goes in the left column", not two views of one set, so the switch
@@ -132,7 +132,7 @@ const lastActive = (entry: OpenChat): number => entry.agent?.updatedAt ?? 0;
  * own box for browsing; this one is for finding.
  *
  * Its state is per-INSTANCE, which means per-window and per-opening: a query typed on the board must not
- * narrow a pop-out the user isn't looking at.
+ * narrow a floating window the user isn't looking at.
  */
 const {
     query: filterQuery,
@@ -250,10 +250,10 @@ const LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
  * hook: is therefore applied once at mount and never again, and the lane's visibility freezes in whatever
  * shape it had then.
  *
- * That is invisible docked, where this list is a sheet that mounts on every open. The popped-out rail is
+ * That is invisible docked, where this list is a sheet that mounts on every open. The floating rail is
  * mounted once and lives for hours, and it is where the bug landed: the lanes froze as they were when the
  * window opened, so a chat opened from the fleet board arrived in a section that was still `display:none` and
- * the rail sat there looking empty while the panel beside it had the conversation open: the "the popped-out
+ * the rail sat there looking empty while the panel beside it had the conversation open: the "the floating
  * chat stopped reacting to what I select" report. For the same reason a lane section must not grow a
  * directive, a `ref` or a dynamic prop: it would be stale out there in exactly the same way. */
 // A lane holding only a workflow run is not empty. Without the second half, a run in a lane with no chats in
@@ -264,7 +264,7 @@ const occupiedLanes = computed(() => LANES.filter((lane) => lanes.value[lane.key
  * THE BOARD'S CAP, ON THE BOARD'S OWN LANE: windowFinished, the same function /agents runs (see the note on
  * it). Attention and Active are self-emptying: a card leaves them the moment its turn settles. Finished is the
  * terminal shelf, so without a cap it is the one lane that only ever grows, and this list is the surface where
- * that hurts most: the docked sheet is dismissed between uses, but the popped-out rail is mounted once and
+ * that hurts most: the docked sheet is dismissed between uses, but the rail in a floating window is mounted once and
  * read for hours, so its Finished lane was a column of a hundred landed agents by the end of a working day
  * while the board beside it stayed seven deep.
  *
@@ -544,7 +544,7 @@ const showing = (id: string): boolean => panes.value.includes(id);
 // Whether there is a column to GIVE BACK: the last pane is the panel itself, so "Close Pane" and the Ctrl+click
 // that toggles one off are offered only past the first.
 const split = computed(() => panes.value.length > 1);
-// Panes exist on WIDE surfaces only (the pop-out window, the full-window /chat area): the docked column is
+// Panes exist on WIDE surfaces only (the floating window, the full-window /chat area): the docked column is
 // ~22rem, and a second chat in it would be two unusable slivers (ChatPanel holds that rule). So the gestures
 // and the rows that teach them are offered where they do something, rather than sitting in the docked sheet
 // quietly doing nothing.
@@ -585,7 +585,7 @@ const onRowClick = (event: MouseEvent, id: string): void => {
     emit(`select`, id);
     // The reset half of the same gesture set: a click carrying no modifier means "just this row", here as in
     // any list that also multi-selects. Only where panes are offered: docked, the split is stored but not
-    // drawn, and collapsing one the reader cannot see would quietly lose the arrangement the pop-out returns
+    // drawn, and collapsing one the reader cannot see would quietly lose the arrangement the floating window returns
     // to. The select above has already moved the focus, so this keeps the row that was clicked.
     collapsePanes();
 };
@@ -661,11 +661,9 @@ const tabMenuItems = computed<MenuItem[]>(() => {
         { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
         { separator: true },
         {
-            label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
-            shortcut: commandShortcut(`chat.togglePopout`),
-            // The routed toggle, not the bare one: docking back while the rail is home walks to the tile's
-            // area instead of parking the chat out of sight (chatSurface.ts).
-            command: (): void => toggleChatPopout(router),
+            label: floats.value ? `Dock chat back` : `Move chat into new window`,
+            shortcut: commandShortcut(`chat.toggleFloating`),
+            command: (): void => toggleChatFloating(),
         },
     ];
 });
@@ -978,9 +976,9 @@ const closeTab = (event: Event, id: string): void => {
 
         <!-- Both of these teleport out (the hover card to the overlay target, the menu to `append-to`), so
              they sit inside the root only to keep this component single-rooted: a fragment root would drop
-             the sizing classes its two hosts hand it. Into the pop-out window while the chat floats there. -->
-        <HoverCard ref="hoverCard" :to="overlayTarget" />
-        <ContextMenu ref="tabMenu" :model="tabMenuItems" :append-to="overlayTarget" :min-width="13" />
+             the sizing classes its two hosts hand it. Into the floating window while the chat floats there. -->
+        <HoverCard ref="hoverCard" />
+        <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
         <ChatShareDialog
             v-if="shareTarget"
             visible

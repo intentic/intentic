@@ -139,11 +139,13 @@ Component rules sit in `@layer components`, one layer below Tailwind's utilities
 `bg-warning/10` on a card still wins, exactly as they do without the skin. The one deliberate exception in each
 file is the section-label rule, which is unlayered because the treatment it restates is spelled out by utilities.
 
-The attribute has to travel to any document this app draws into, not just the one it booted in. A popped-out
-panel lives in a second window whose DOM is teleported from this realm, and `usePopout.ts` mirrors a fixed list
-of root attributes onto it: `data-skin` was missing from that list for as long as skins existed, so a
-popped-out chat rendered in the app's default look with every stylesheet present and every rule inert. Anything
-a skin reads off `<html>` belongs on that list.
+The attribute lives on the `<html>` of every window the app runs in, and each window sets its own: a floating
+panel is a real window booting its own copy of the app ([`composables/floating.ts`](../composables/floating.ts)),
+so it reads the stored skin at load exactly as the first window does. This used to be a hazard worth a paragraph:
+a floating panel's DOM was teleported in from another window, whose realm mirrored a fixed list of root
+attributes onto it, and `data-skin` was missing from that list for as long as skins existed, so a floating chat
+rendered in the app's default look with every stylesheet present and every rule inert. There is no list to keep
+in step now.
 
 Both skins imply a dark scheme (PrimeVue keys its own dark preset off `data-mode`), so `useSkin` flips the scheme
 when a skin goes on. Each skin's display webfont is fetched only while that skin is active, and switching between

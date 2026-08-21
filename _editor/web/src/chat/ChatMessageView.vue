@@ -19,7 +19,6 @@ import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { invalidateWorkspace } from "../composables/workspace/useHistory";
 import { usePaneView } from "../composables/chat/useChat";
-import { useChatPopout } from "../composables/chat/useChatPopout";
 import { landsByDefault } from "../composables/sandbox/rules";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../composables/terminal/useWorkTerminals";
@@ -537,24 +536,14 @@ const startEdit = (): void => {
 const bubble = ref<HTMLElement>();
 const overflowing = ref(false);
 const expanded = ref(false);
-// Which window this row's observers belong to changes with the panel's: see the two watches below.
-const { poppedOut } = useChatPopout();
-
-/* Built by the window the bubble is IN, and rebuilt when the panel moves to another one: an observer is
- * per-window machinery: it delivers in the rendering steps of the document that CREATED it, whatever document
- * the element it watches has since been adopted into. Popped out, one made here reports on the OPENER's frames,
- * and the opener is the window behind the chat window, which a browser stops rendering entirely. Same reasoning
- * as useStickToBottom's observer and terminalSession.observeHost; `poppedOut` is in the dependencies because
- * adoption rewrites `ownerDocument` in place, with nothing reactive about it to watch. */
 watch(
-    [bubble, poppedOut],
-    ([element], _previous, onCleanup) => {
+    bubble,
+    (element, _previous, onCleanup) => {
         if (element === undefined) {
             overflowing.value = false;
             return;
         }
-        const view = element.ownerDocument.defaultView ?? window;
-        const observer = new view.ResizeObserver(() => {
+        const observer = new ResizeObserver(() => {
             // Open, the clamp is off and the box always fits: there is nothing to measure, and measuring
             // would clear the flag that keeps the collapse control on screen. The next collapse re-measures.
             if (!expanded.value) {
@@ -652,10 +641,9 @@ const { showToolCalls } = useToolCalls();
 const row = ref<HTMLElement>();
 const pinned = ref(false);
 
-// Per-window and rebuilt on the move, for the reason the clamp's observer above states.
 watch(
-    [row, poppedOut],
-    ([element], _previous, onCleanup) => {
+    row,
+    (element, _previous, onCleanup) => {
         pinned.value = false;
         if (element === undefined || props.message.role !== `user` || defers.value) {
             return;
@@ -687,12 +675,11 @@ watch(
                 scroller.removeEventListener(`scroll`, sync);
             }
         };
-        const view = element.ownerDocument.defaultView ?? window;
         // Default threshold: the gate asks only whether the row is in the scrollport, and an isIntersecting
         // flip is the one transition an observer always reports. Scrolled away, the flag is nobody's business
         // and the listener comes off; arriving, this is also what re-measures the row. The freshest entry, since
         // a callback takes a queue and the last of it is the frame that just happened.
-        const observer = new view.IntersectionObserver(
+        const observer = new IntersectionObserver(
             (entries) => {
                 listen(entries.at(-1)?.isIntersecting === true);
                 sync();
@@ -733,7 +720,7 @@ const onBubbleScroll = (): void => {
 // only: a body click that FOLDED the box would fire under a reader who is still inside it, and the chip is
 // on screen throughout. Guarded on a live selection so dragging text out of a prompt doesn't unfold it.
 const onBubbleClick = (): void => {
-    // The selection asked of the bubble's OWN window: popped out, the drag being guarded against lives there,
+    // The selection asked of the bubble's OWN window: out in a floating one, the drag being guarded against lives there,
     // and this realm's selection is a different (always-collapsed) one.
     const selection = bubble.value?.ownerDocument.defaultView?.getSelection() ?? window.getSelection();
     if (expanded.value || !overflowing.value || selection?.isCollapsed === false) {
@@ -866,7 +853,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                      against 49 stacked one step narrower); at the docked default the same arrangement sets
                      the prompt to about twenty characters a line, so it stays stacked and the saving is
                      simply not available there. The query is on the transcript column (ChatPanel's
-                     @container), so it answers to a dragged panel edge and to the pop-out window alike. -->
+                     @container), so it answers to a dragged panel edge and to the floating window alike. -->
                 <ChatAttachmentStrip v-if="attachmentsAside" :attachments="attachmentThumbs" class="mr-1 hidden shrink-0 self-start @lg:flex" />
                 <!-- Frame and scroller are two elements, and `relative` belongs on the FRAME: past the cap the
                      text below scrolls, and the clamp fade and the open/close chip are positioned against this
@@ -1100,7 +1087,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
                 <div class="flex flex-col gap-4 px-3.5 py-3">
                     <div v-for="(question, index) in message.question.questions" :key="index" class="flex flex-col gap-2">
-                        <span v-if="message.question.questions.length > 1" class="chat-question-title text-xs font-medium text-content">{{ question.question }}</span>
+                        <span v-if="message.question.questions.length > 1" class="chat-question-title text-xs font-medium text-content">{{
+                            question.question
+                        }}</span>
 
                         <div v-if="message.question.status === 'pending'" class="flex flex-col gap-1.5">
                             <!-- The one line that says out loud what the square marks below say by shape, and it
@@ -1234,9 +1223,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     </div>
 
                     <div v-if="message.question.status === 'pending'" class="flex items-center gap-2 pt-1">
-                        <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit" @click="submitAnswers"
-                            >Submit</ChatDecisionButton
-                        >
+                        <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit" @click="submitAnswers">Submit</ChatDecisionButton>
                         <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
                              does not say, so the tooltip does, before the click rather than after it. -->
                         <ChatDecisionButton tone="secondary" v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)"

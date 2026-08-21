@@ -12,6 +12,7 @@ import { resetDaemonBoot } from "./useDaemonBoot";
 import { resetDaemonRoutes } from "./useDaemonRoutes";
 import { useEndpoint } from "./useEndpoint";
 import { signalConnection, useSandbox } from "./useSandbox";
+import { uuid } from "../uuid";
 
 /* The DRIVER: hold one long-lived `/events` stream open to the active sandbox daemon, and reconnect when it
  * breaks. Everything it used to ALSO do now lives next door, the transition rules in connection.ts (pure,
@@ -110,7 +111,7 @@ const stream = async (sandboxId: string): Promise<void> => {
     armWatchdog();
     // Per-CONNECTION presence id, never reused across attempts: the daemon keys this tab's roster entry by it,
     // so a lingering old connection's teardown can only ever remove its own entry, never this one's.
-    const clientId = crypto.randomUUID();
+    const clientId = uuid();
     const frames = await sandboxRpc.system.events({ clientId }, { signal: controller.signal });
     signalConnection({ kind: `opened` });
     armWatchdog();

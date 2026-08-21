@@ -48,11 +48,10 @@ const { conversations } = useChat();
 const SOURCES = [terminalsWarmSource, changesWarmSource, agentsWarmSource, railWarmSource, extensionsWarmSource];
 
 const gates: LoaderGates = {
-    /* NOBODY LOOKING, OR NOTHING TO LOOK AT. `onScreen` is asked of every window this tab renders into rather
-     * than of the tab itself, a popped-out chat is a window the user is reading while `document` here says
-     * hidden (see onScreen.ts). `reachable` is the daemon liveness probe's verdict: with the stream down every
-     * read would fail anyway, and a loader walking its plan into a dead tunnel is the failure streak this
-     * avoids paying for. */
+    /* NOBODY LOOKING, OR NOTHING TO LOOK AT. `onScreen` is this window's own visibility (onScreen.ts); every
+     * window of the app, a floating panel's included, runs its own copy of this and answers for itself.
+     * `reachable` is the daemon liveness probe's verdict: with the stream down every read would fail anyway,
+     * and a loader walking its plan into a dead tunnel is the failure streak this avoids paying for. */
     paused: () => !onScreen.value || !toValue(reachable),
     /* STAND ASIDE FOR THE USER, AND FOR THE AGENTS.
      *

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The open-chat list is a SCROLL BOX: a lane-grouped column of cards, in a sheet the docked header drops or in
-// the pop-out rail, and almost nothing that focuses a chat is inside it: a card on /agents, a history row, a
+// the floating rail, and almost nothing that focuses a chat is inside it: a card on /agents, a history row, a
 // chord, a brand-new agent appended to the end. Each of those lands on the store's setActive, and unless the
 // list follows, the card it is highlighting can sit scrolled out of sight while the panel swaps its transcript
 // underneath. The docked case is worse still: the sheet mounts on open, so the card it must show is one that

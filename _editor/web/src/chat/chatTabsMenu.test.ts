@@ -215,7 +215,7 @@ it(`offers the card-less rows from the bar's own menu instead of popping out on 
 
     // The gesture used to toggle the pop-out on the spot, which tore the panel into its own window on a
     // right-click that only just missed a tab. It opens the menu now, carrying the rows that need no tab
-    // under the pointer; the panel's other two homes (the /chat area, the pop-out window) are two of them.
+    // under the pointer; the panel's other two homes (the /chat area, the floating window) are two of them.
     await openBarMenu();
     expect(labels()).toEqual([`Close Finished`, `Close All`, `Dock chat to rail`, `Move chat into new window`]);
     expect(open).not.toHaveBeenCalled();
@@ -235,7 +235,7 @@ it(`offers the card-less rows from the bar's own menu instead of popping out on 
  * behind a right-click on strip chrome that the tabs themselves eat (they `grow` into every pixel of slack), so
  * the target shrank as sessions were opened: hardest to hit exactly when a floating chat is most wanted. The
  * label doubles as the tooltip and carries the chord once one is bound, which is not the case here: this file
- * mounts the strip alone, and `chat.togglePopout` belongs to the shell's registration. */
+ * mounts the strip alone, and `chat.toggleFloating` belongs to the shell's registration. */
 it(`moves the chat into its own window from the strip's own button`, async () => {
     openTabs(2);
     await nextTick();

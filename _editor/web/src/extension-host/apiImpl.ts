@@ -34,6 +34,7 @@ import { registerViewer } from "../core-views/viewerRegistry";
 import { router } from "../router";
 import { registerFileBindings } from "./fileBindings";
 import { recordSandboxCall } from "./sandboxUsage";
+import { uuid } from "../composables/uuid";
 
 /* The host's fulfillment of IntenticApi, one instance per activated extension. Every registration is gated on
  * the APPROVED manifest's declarations (views/commands/settings/processes), the manifest the owner saw at
@@ -419,7 +420,7 @@ export const createExtensionApi = (
                     if (agent !== undefined) {
                         agents.open(agent);
                     } else {
-                        const conversationId = crypto.randomUUID();
+                        const conversationId = uuid();
                         summonChat({
                             kind: `reveal`,
                             verb: `show`,

@@ -10,12 +10,12 @@ import { placeAnchored } from "@intentic/ui";
  * pinned here, where the surfaces that broke without it live.
  *
  * WHAT THESE PIN IS A BUG THAT CAME BACK TWICE. PrimeVue's Popover measures the room around a trigger with the
- * module-scope `window`, which for a popped-out chat panel is the OPENER's window while the overlay lands in
- * the pop-out's. When the two differ, and they always do; one is a column, the other a window the user
- * dragged: it decided "no room above, flip below" against the wrong numbers and put the picker off the bottom
- * edge with its top over the very pill that opens it. An overlay covering its own trigger cannot be closed by
- * clicking that trigger, and that is what "sometimes I can't close the model picker" was. Hence: the view is an
- * argument, and these tests are about what the answer does with it. */
+ * module-scope `window`, which is not always the window the overlay lands in: the app draws into iframes (the
+ * preview, the extension host), and a floating chat panel used to be painted from another window entirely.
+ * Whenever the two differ it decides "no room above, flip below" against the wrong numbers and puts the picker
+ * off the bottom edge with its top over the very pill that opens it. An overlay covering its own trigger cannot
+ * be closed by clicking that trigger, and that is what "sometimes I can't close the model picker" was. Hence:
+ * the view is an argument, and these tests are about what the answer does with it. */
 
 // The composer's pill: near the bottom edge of whatever window it is in, panel opening upward.
 const pill = { top: 727, left: 10, width: 140, height: 36 };
@@ -24,13 +24,13 @@ const base = { anchor: pill, box: picker, side: `top`, cross: `start`, gap: 8, e
 
 describe(`placeAnchored`, () => {
     it(`measures the room in the view it was GIVEN, not in some other window`, () => {
-        // The pop-out window the pill is actually in: 800 tall, so the whole picker fits above it.
+        // The floating window the pill is actually in: 800 tall, so the whole picker fits above it.
         const inPopout = placeAnchored({ ...base, view: { width: 1280, height: 800 } });
         expect(inPopout.side).toBe(`top`);
         expect(inPopout.top).toBe(727 - 8 - 430);
         expect(inPopout.maxHeight).toBe(727 - 8 - 8);
 
-        // The same pill, riding the bottom of a window 380 tall: a chat column, or a pop-out the user made
+        // The same pill, riding the bottom of a window 380 tall: a chat column, or a window the user dragged
         // short. The panel is CAPPED to the room above rather than flipped below, where 21px is all there is.
         const short = placeAnchored({ ...base, anchor: { ...pill, top: 307 }, view: { width: 1280, height: 380 } });
         expect(short.side).toBe(`top`);

@@ -7,6 +7,7 @@ import { useChat } from "../chat/useChat";
 import { sandboxRequest, sandboxUpload } from "../sandbox/sandboxClient";
 import { revealConversation } from "./agentActions";
 import { composeSession } from "./sessionSuggestion";
+import { uuid } from "../uuid";
 
 /* SYNTHESIZE THE OPEN PANES, the conversations on screen side by side become the SOURCES of a fresh agent
  * chat whose job is to reconcile them into one result. The board's "Synthesize N" button lands here.
@@ -190,7 +191,7 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
             const label = String.fromCharCode(65 + index);
             const title = source.title.value ?? `Untitled agent`;
             const name = `source-${label}-${slugOf(title)}.md`;
-            const path = `.intentic/records/artifacts/attachments/${crypto.randomUUID()}/${name}`;
+            const path = `.intentic/records/artifacts/attachments/${uuid()}/${name}`;
             refs.push({ label, title, path });
             return { name, path, markdown: renderTranscript(label, title, transcripts[index] ?? []) };
         });
@@ -212,7 +213,7 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
         conversation.modePick.value = `default`;
         // Already uploaded, so the chips arrive `done`, the same shape a restored draft's attachments carry.
         conversation.attachments.value = attachments.map((attachment) => ({
-            id: crypto.randomUUID(),
+            id: uuid(),
             name: attachment.name,
             path: attachment.path,
             status: `done`,

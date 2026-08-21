@@ -2,8 +2,8 @@
  * (ChatTabs draws it and owns the drag; this is only the arithmetic).
  *
  * The numbers live here because two files need them and a copy in each is a drift waiting to happen: the bar
- * that resizes the rail, and the panel that asks its pop-out window to widen for a new pane, which can only
- * work out what the panes will get if it knows what the rail takes first (ChatPanel's `fit`).
+ * that resizes the rail, and the panel that asks its own floating window to widen for a new pane, which can
+ * only work out what the panes will get if it knows what the rail takes first (ChatPanel's `fit`).
  *
  * In APP PIXELS, like every other width the app persists (see useLayout's note): the rail holds chat cards, so
  * the width that fits their titles moves with the reader's text size.

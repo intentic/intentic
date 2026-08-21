@@ -26,17 +26,15 @@ const fromRoot = (path: string): string => join(repoRoot(import.meta.url), path)
 const here = (path: string): string => join(packageRoot(import.meta.url), path);
 
 /* Serve `index.html` for every DOCUMENT request, which is the same thing the site's worker is told for
- * production: the demo is a history-mode SPA, so `/demo/agents` and `/demo/workspace/api/src/stripe.ts` are its
- * routes, not its files. Keyed on `Accept: text/html` rather than on the path's shape, because a workspace route
- * legitimately ends in `.ts`, a navigation says what it wants, and module/asset requests never ask for html.
+ * production: the demo is a history-mode SPA, so `/demo/agents`, `/demo/workspace/api/src/stripe.ts` and
+ * `/demo/floating/chat` are its routes, not its files. Keyed on `Accept: text/html` rather than on the path's
+ * shape, because a workspace route legitimately ends in `.ts`, a navigation says what it wants, and module or
+ * asset requests never ask for html.
  *
- * The pop-out page is the one document that is NOT this app's entry, and it has to be excepted by name: a
- * popped-out panel is teleported into a window loaded on `popout.html`, whose only job is to run the keeper that
- * reports back to this tab. Swept into the fallback it boots a second copy of the demo instead, nothing answers
- * the handshake, and the panel never leaves its column. Exempted by exact path rather than by an `.html` suffix,
- * because a workspace route can legitimately open a file called index.html, the same reason the rule keys on
- * Accept in the first place. (Production needs no equivalent: the worker serves a real asset when one exists,
- * and `popout.html` is one.) */
+ * No exceptions any more. A floating panel used to live on a page of its own, teleported into from the tab that
+ * opened it, and that page had to be excepted by name or the fallback booted a second copy of the demo into it.
+ * A floating panel is an ordinary route of the app now (_editor/web/src/composables/floating.ts), so it wants
+ * exactly this fallback. */
 const spaFallback = (): Plugin => ({
     name: `demo-spa-fallback`,
     configureServer: (server) => {
@@ -44,10 +42,8 @@ const spaFallback = (): Plugin => ({
         // the rewrite has to carry the base too, or Vite reads `/index.html` as outside the base and bounces it
         // back to `/demo/`, forever.
         const entry = `${server.config.base}index.html`;
-        const popout = `${server.config.base}popout.html`;
         server.middlewares.use((request, _response, next) => {
-            const path = request.url?.split(`?`)[0];
-            if (request.method === `GET` && request.headers.accept?.includes(`text/html`) === true && path !== popout) {
+            if (request.method === `GET` && request.headers.accept?.includes(`text/html`) === true) {
                 request.url = entry;
             }
             next();
@@ -69,8 +65,6 @@ export default defineConfig({
             // from the app rather than re-listed here on purpose: a demo whose list is one extension short shows
             // that extension as image/app drift, in the app's own alarmed wording.
             "@intentic-app/web/builtins": fromRoot(`_editor/web/src/extension-host/builtins.ts`),
-            // The pop-out window's own script, and the only code a floating panel runs in its own realm.
-            "@intentic-app/web/popout-keeper": fromRoot(`_editor/web/src/popout/keeper.ts`),
             // How the app persists a window's open chat tabs. The recording seeds four of them (fixture/
             // openChats.ts), and takes the shape from the app so a change to the strip's stored form is a
             // build error here rather than four rows that quietly stop appearing.
@@ -92,9 +86,7 @@ export default defineConfig({
         outDir: fromRoot(`_site/site/public/demo`),
         emptyOutDir: true,
         target: `es2024`,
-        // Two documents, the same pair the app builds: the demo, and the page a popped-out panel is teleported
-        // into. Naming inputs at all is what makes the second one ship. Vite's default is index.html alone, and
-        // a pop-out whose page 404s is a window that can never report in.
-        rolldownOptions: { input: { index: here(`index.html`), popout: here(`popout.html`) } },
+        // One document, the same as the app's: a floating panel is a route rather than a page of its own.
+        rolldownOptions: { input: { index: here(`index.html`) } },
     },
 });

@@ -55,7 +55,7 @@ export const resetWorkspaceScopedState = (): void => {
     // Content-keyed, so never wrong, just unbounded. A switch is where it is worth letting go.
     resetCodeStats();
     // The preview shows ONE sandbox's app; the parked panel goes with the box, and the new box's own last
-    // target comes back (a popped-out window survives, see resetPreviewSurface).
+    // target comes back (a floating window survives, see resetPreviewSurface).
     resetPreviewSurface();
 };
 

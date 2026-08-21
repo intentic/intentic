@@ -15,7 +15,7 @@ import { ref } from "vue";
  *
  * PERSISTED AND MODULE-WIDE, unlike the list's filter (which is per-instance on purpose, so a query typed in
  * one window cannot narrow another). Grouping is not a search: it is how this reader reads the list, so it
- * holds across the docked sheet, the popped-out rail, and reloads, the same treatment the diff layout and the
+ * holds across the docked sheet, the rail in a floating window, and reloads, the same treatment the diff layout and the
  * workspace sidebar's panel get. */
 
 export type ChatGrouping = "lane" | "persona";

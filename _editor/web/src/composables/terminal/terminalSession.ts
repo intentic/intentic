@@ -53,12 +53,15 @@ export type TerminalSession = {
     // The GPU renderer, held only while the session is on screen (attachRenderer).
     webgl?: WebglAddon;
     // Tears down the fit triggers (ResizeObserver + window resize listener) for the WINDOW the host last lived
-    // in, rebuilt when a mount moves the host into another document (the pop-out window), since both are
-    // per-window machinery that stops tracking an element adopted elsewhere.
+    // in, rebuilt whenever a mount lands it somewhere new, since both are per-window machinery that stops
+    // tracking an element adopted into another document.
     unobserve?: () => void;
-    // The document of the LAST mount, mountTerminalSession's move signal. host.ownerDocument can't be it: the
-    // pop-out Teleport adopts the mounted host (with the whole panel) into the pop-out document BEFORE the remount
-    // watcher runs, so by then host and container already agree and the move would go undetected.
+    /* The document of the LAST mount, mountTerminalSession's move signal, and the first mount's "this is new".
+     * It stays a document rather than a boolean because the app does still render into more than one (the
+     * preview's iframe, the extension host's), and because getting this wrong is expensive: a host whose
+     * observers belong to a document it has left refits nothing. The panel itself no longer crosses documents,
+     * a floating terminal is its own window running its own copy of the app (composables/floating.ts), where
+     * this session is opened fresh and tmux redraws on attach. */
     mountedDocument: Document;
     // The session-over handoff: the daemon's `exit` frame, or a dispose. Never called twice. Mutable because a
     // cached session outlives the tabs instance that created it, each instance rebinds it on cache hit, so an
@@ -273,8 +276,8 @@ const SCROLLBAR_PX = 14;
 
 // Fit the grid to the host's box, measured in the HOST'S OWN realm (clientWidth/Height). Not @xterm/addon-fit:
 // its proposeDimensions measures through the GLOBAL window's getComputedStyle, which is cross-realm for a host
-// living in the pop-out document, where it can silently misresolve, no-oping every fit and leaving the
-// PTY at the docked grid while the window floats at another size entirely.
+// living in any other document (an iframe's), where it can silently misresolve, no-oping every fit and leaving
+// the PTY at a grid the panel no longer has.
 const fitSession = (s: TerminalSession): void => {
     const cell = coreOf(s.term)._renderService.dimensions.css.cell;
     if (cell.width === 0 || cell.height === 0) {
@@ -299,12 +302,11 @@ const scheduleResizeFrame = (s: TerminalSession): void => {
 };
 
 // (Re)build the session's fit triggers against the window its host currently lives in. A ResizeObserver, and
-// the rAF that coalesces its fits (the panel's drag handle fires it per pointermove), is per-window machinery:
-// after the host is adopted into the pop-out document, the ORIGINAL window's observer no longer tracks it,
-// so every document move rebuilds both from the host's own view. The window resize listener doubles the
-// observer on purpose: a pop-out window's OS-level resize (the user maximizing it, or
-// dragging its frame) must refit even where the observer's delivery proves unreliable; a duplicate trigger
-// collapses in the rAF and a same-size fit is a no-op.
+// the rAF that coalesces its fits (the panel's drag handle fires it per pointermove), is per-window machinery
+// that stops tracking an element adopted into another document, so both are rebuilt from the host's own view on
+// every move. The window resize listener doubles the observer on purpose: an OS-level window resize (the reader
+// maximizing a floating terminal, or dragging its frame) must refit even where the observer's delivery proves
+// unreliable; a duplicate trigger collapses in the rAF and a same-size fit is a no-op.
 const observeHost = (s: TerminalSession): void => {
     s.unobserve?.();
     const view = s.host.ownerDocument.defaultView ?? window;
@@ -336,7 +338,7 @@ const FONT_PX = 13;
 // Pre-measurement cell estimate (fontSize 13 JetBrains Mono ≈ 7.8×17 css px) for the SPAWN grid only, the
 // first real fit corrects it by at most a row or two. Without it the PTY spawns at xterm's 80x24 default and
 // the immediate shrink to the panel's real grid banks the difference as BLANK lines in tmux's pane history;
-// every later grow (the pop-out) then resurrects them as junk rows above the prompt. Scaled with the font it
+// every later grow (a maximized window) then resurrects them as junk rows above the prompt. Scaled with the font it
 // is an estimate OF, or the guess is wrong by the text size on every spawn.
 const EST_CELL_W = 7.8;
 const EST_CELL_H = 17;
@@ -371,7 +373,7 @@ export const retypeTerminalSession = (s: TerminalSession): void => {
 };
 
 // The two clipboard verbs, both routed through the TERMINAL's own window (clipboardOf) for the same reason the
-// OSC 52 handler is: popped out, this realm's document is the unfocused one behind, and Chrome refuses a
+// OSC 52 handler is: in an iframe or a second surface, this realm's document may be the unfocused one, and Chrome refuses a
 // clipboard call from it. A denied read (no permission, or a browser that only exposes the clipboard through a
 // real paste event) leaves the terminal untouched. Ctrl+V, which arrives as that event, always works.
 export const copySelection = (s: TerminalSession): void => {
@@ -518,7 +520,7 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     // tmux runs with `set-clipboard on`, so a copy in copy-mode (`y`, …) arrives here as OSC 52
     // with a base64 payload, land it in the browser clipboard, which xterm otherwise ignores. `?` asks to
     // READ the clipboard; that stays unanswered. Guarded: the payload is arbitrary program output.
-    // Both writes below go through the TERMINAL's own window (clipboardOf): popped out, this realm's document
+    // Both writes below go through the TERMINAL's own window (clipboardOf): elsewhere, this realm's document
     // is the unfocused one behind, and Chrome refuses a clipboard write from it.
     term.parser.registerOscHandler(52, (data) => {
         const payload = data.slice(data.indexOf(`;`) + 1);
@@ -608,10 +610,10 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
     fitSession(s);
     if (moved) {
         observeHost(s);
-        // A document move (pop-out/dock) leaves xterm's grid and tmux's screen laid out for the OLD window,
-        // and the fit above may have measured mid-layout (the pop-out's cloned styles/fonts still settling): snap
-        // the viewport back to the live screen, jiggle the PTY one row so tmux issues a full clear+redraw even
-        // when the fitted size happens to match, and refit on the new window's next frame once layout is real.
+        // A move leaves xterm's grid and tmux's screen laid out for wherever the host was, and the fit above may
+        // have measured mid-layout: snap the viewport back to the live screen, jiggle the PTY one row so tmux
+        // issues a full clear+redraw even when the fitted size happens to match, and refit on the next frame
+        // once layout is real.
         s.term.scrollToBottom();
         send(s, { type: `resize`, cols: s.term.cols, rows: Math.max(1, s.term.rows - 1) });
         s.host.ownerDocument.defaultView?.requestAnimationFrame(() => {
@@ -629,12 +631,12 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
     }
 };
 
-// Unmount a session's host WITHOUT losing it to a dying document. A host merely .remove()d while the panel
-// floats stays ADOPTED by the pop-out document; when that window closes, the whole rendered realm dies with it,
-// the WebGL context is lost inside a dead document and the fallback DOM renderer rebuilds against it, leaving
-// the terminal a blank white pane. Adopting the detached host home (and re-open()ing to re-point xterm's
-// window binding) keeps every hidden session anchored to the main realm. mountedDocument is deliberately NOT
-// updated: the next mount must still read as a move so it rebuilds the observer and forces the tmux redraw.
+// Unmount a session's host WITHOUT losing it to a document that may go away. A host merely .remove()d stays
+// ADOPTED by whatever document last held it, and if that document dies the WebGL context is lost inside it and
+// the fallback DOM renderer rebuilds against it, leaving the terminal a blank white pane. Adopting the detached
+// host into THIS document (and re-open()ing to re-point xterm's window binding) keeps every hidden session
+// anchored where its realm is. mountedDocument is deliberately NOT updated: the next mount must still read as a
+// move so it rebuilds the observer and forces the tmux redraw.
 export const parkTerminalSession = (s: TerminalSession): void => {
     // The GPU context goes back to the browser the moment a session leaves the screen (see attachRenderer),
     // which also means the context above never survives to be carried into another document at all: the next

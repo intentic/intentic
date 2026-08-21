@@ -17,18 +17,16 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { nextTick } from "vue";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
-import { unwatchOnScreen, watchOnScreen } from "../onScreen";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { resetAgents, setAgents } from "./useAgents";
 
-/* READING A CHAT IN A POP-OUT IS READING IT. A turn that lands while you are watching its conversation is not
- * news, so the card must not badge under your cursor, and the only thing that used to count as watching was
- * the app's TAB being visible. A popped-out chat is drawn by that tab's realm from a window of its own (see
- * composables/usePopout.ts), so a chat opened out there while the tab sat behind another one kept its "Updated"
- * badge until the user clicked back to the tab, where it then cleared on its own. */
+/* READING A CHAT IS READING IT. A turn that lands while you are watching its conversation is not news, so the
+ * card must not badge under your cursor, and what counts as watching is this window being on screen with that
+ * chat focused. Each window answers that for itself, the floating chat's window included, since it runs its own
+ * copy of the app (composables/floating.ts). */
 
-// jsdom answers `visible` for the page's own document and `prerender` for a detached one, and neither can be
-// set, so both windows are dressed by hand, the way the browser would report them.
+// jsdom answers `visible` for the page's own document and it cannot be set, so it is dressed by hand, the way
+// the browser would report it.
 const show = (doc: Document, visible: boolean): void => {
     Object.defineProperty(doc, `visibilityState`, { value: visible ? `visible` : `hidden`, configurable: true });
     doc.dispatchEvent(new Event(`visibilitychange`));
@@ -57,22 +55,18 @@ beforeEach(() => {
 
 afterEach(() => show(document, true));
 
-describe(`the unread badge across the app's windows`, () => {
-    it(`clears for a chat read in a pop-out while the app's tab is behind another one`, async () => {
-        const popout = document.implementation.createHTMLDocument(`popout`);
-        show(popout, true);
-        watchOnScreen(popout);
-        show(document, false);
+describe(`the unread badge`, () => {
+    it(`clears for the focused chat while this window is on screen`, async () => {
+        show(document, true);
         useChat().conversations.value = [new Conversation(`a1`)];
 
         setAgents([worked(`a1`)], 1);
         await nextTick();
 
         expect(sandboxJson).toHaveBeenCalledWith(...seen(`a1`));
-        unwatchOnScreen(popout);
     });
 
-    it(`stands while every window the app renders into is away`, async () => {
+    it(`stands while this window is away`, async () => {
         show(document, false);
         useChat().conversations.value = [new Conversation(`a2`)];
 

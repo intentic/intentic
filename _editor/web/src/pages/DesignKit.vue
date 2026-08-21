@@ -514,8 +514,7 @@ const pickedTier = ref(`collaborator`);
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Overlays</h2>
                 <p class="text-xs text-muted">
-                    Every one of these measures its room against the window its anchor is in, which is what makes them right inside a popped-out
-                    panel.
+                    Every one of these measures its room against the window its anchor is in, which is what makes them right inside a floating panel.
                 </p>
                 <div class="flex flex-wrap items-center gap-3">
                     <SegmentedControl v-model="modalSize" :options="MODAL_SIZES.map((value) => ({ label: value, value }))" size="sm" />

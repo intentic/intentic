@@ -28,7 +28,7 @@ const input = ref<HTMLTextAreaElement | null>(null);
 // The pill IS the anchor, which is why the component hands its element back: the overlay derives the document
 // it teleports into, the viewport it measures the room against, and the click that never dismisses it, all from
 // that element, so this box works unchanged wherever it is mounted (the app-wide dialog, the push dialog, a
-// popped-out window).
+// floating window).
 const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 // ONE flag for both hosts. It was two: one for the sheet, one for the panel, which is the shape a
 // hand-written pair grows into and the reason the swap is a component now.

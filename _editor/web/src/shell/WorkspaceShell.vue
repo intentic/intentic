@@ -13,7 +13,7 @@ import { prefetchViewsAtIdle } from "../router/prefetch";
  *
  * What used to live here and no longer does: the sandbox's liveness stream, presence, and the chat/terminal
  * panels themselves. Those belong to the SESSION rather than to this route, and holding them here is what let
- * a step outside the shell (/setup, an invite link) close a popped-out chat window and drop its connection.
+ * a step outside the shell (/setup, an invite link) close a floating chat window and drop its connection.
  * They are mounted above the router now (shell/WorkspaceRuntime.vue); this route supplies the places the
  * panels dock into (shell/dockSlots.ts) and nothing more. */
 

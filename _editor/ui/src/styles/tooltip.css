@@ -1,6 +1,6 @@
 /* The hover label raised by `v-tooltip` (composables/tooltip.ts). Plain CSS rather than a PrimeVue preset
- * because the directive is ours: the box is built by hand in whichever document the anchor lives in, and a
- * pop-out window gets these rules through the stylesheet clone usePopout does.
+ * because the directive is ours: the box is built by hand in whichever document the anchor lives in, and every
+ * window of the app loads these rules with the app itself.
  *
  * The box is a strip, not a slab. Width is content-driven up to --ui-tooltip-max-width, which is set wide on
  * purpose: at a narrow cap a sentence of prose wraps into a tall column that covers the very control it

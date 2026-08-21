@@ -1,6 +1,6 @@
 /* The panel raised by AnchoredOverlay. Plain CSS rather than a PrimeVue preset because the component is ours —
- * the box is built in whichever document its anchor lives in, and a pop-out window gets these rules through the
- * stylesheet clone usePopout does (the same deal as tooltip.css).
+ * the box is built in whichever document its anchor lives in, and every window of the app loads these rules
+ * with the app itself (the same deal as tooltip.css).
  *
  * TWO ELEMENTS, one panel: the outer box is the positioned frame the arrow hangs off (so it must not clip), and
  * the surface inside is what paints, rounds and CLIPS the content. Height is capped on the frame — the room its

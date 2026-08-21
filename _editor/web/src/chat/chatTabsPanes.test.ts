@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// THE RAIL'S GESTURES ON THE PANE SET: the popped-out window's left edge is a multi-selecting list (Ctrl adds
+// THE RAIL'S GESTURES ON THE PANE SET: the floating window's left edge is a multi-selecting list (Ctrl adds
 // a column, Shift takes a run of rows), and this is what its PLAIN click means: that row, alone.
 //
 // Driven through the mounted list rather than against the store, because the store verb is not the part that
@@ -21,8 +21,8 @@ const newChat = () => {
     return conversation;
 };
 
-import { useChatPopout } from "../composables/chat/useChatPopout";
 import { queryClient } from "../composables/queryPersistence";
+import { chatFullDock } from "../shell/dockSlots";
 import { router } from "../router";
 import ChatTabList from "./ChatTabList.vue";
 
@@ -79,14 +79,16 @@ beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
     resetChat();
     resetAgents();
-    useChatPopout().poppedOut.value = true; // panes are offered in the window only
+    // A published full-window slot IS the wide surface (chatSurface.chatWide), and panes are offered
+    // there only: standing in the /chat area, or in the chat's own window, which publish the same slot.
+    chatFullDock.value = document.createElement(`div`);
     await nextTick();
 });
 
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    useChatPopout().poppedOut.value = false;
+    chatFullDock.value = null;
     document.body.replaceChildren();
 });
 
@@ -139,7 +141,7 @@ it(`still gives a row a column of its own when Ctrl says so`, async () => {
 it(`leaves a stored split alone when the panel is docked`, async () => {
     const ids = openThree();
     useChat().openBeside(ids[1]!);
-    useChatPopout().poppedOut.value = false;
+    chatFullDock.value = null;
     const el = await mountList();
 
     row(el, ids[2]!).click();

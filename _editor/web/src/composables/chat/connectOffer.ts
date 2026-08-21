@@ -13,7 +13,7 @@ import { ref } from "vue";
  * different routes into different grid areas, with the shell between them. The board raises it while its offer
  * is on screen and drops it on unmount, so nothing has to remember to clear it.
  *
- * This says only that the board is showing it HERE, in this window's own layout. A popped-out chat is a
- * separate window with no board beside it, and mobile shows the two on separate screens, both keep their own
- * gate, and both ask that question themselves (ChatPane) rather than making this flag answer for them. */
+ * This says only that the board is showing it HERE, in this window's own layout. A floating chat is a separate
+ * window with no board beside it, and mobile shows the two on separate screens, both keep their own gate, and
+ * both ask that question themselves (ChatPane) rather than making this flag answer for them. */
 export const offerOnBoard = ref(false);

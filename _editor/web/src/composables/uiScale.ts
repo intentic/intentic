@@ -9,7 +9,7 @@ import { useTextSize } from "@intentic/ui/text-size";
  * So those widths are held in APP PIXELS, pixels at the base text size, the ones every measured constant in
  * useLayout was written in. A column then keeps the same number of characters across text sizes, which is what
  * a reader who widened a column until the paths fit actually asked for. Screen pixels appear at exactly two
- * edges: the pointer, and anything handed to the platform (a pop-out window's size). Convert there, nowhere
+ * edges: the pointer, and anything handed to the platform (a floating window's size). Convert there, nowhere
  * else, a conversion in the middle is how a value ends up scaled twice.
  */
 

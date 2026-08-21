@@ -26,7 +26,7 @@ const TURNS = [
 ];
 // Twice through, so the stack is taller than any panel it can be drawn in and the outline always reaches the top
 // edge instead of leaving a band of empty transcript above itself. The turns that don't fit are clipped, never
-// seen, and cost nothing; the repeat only becomes visible in a full-screen pop-out, where a repeating placeholder
+// seen, and cost nothing; the repeat only becomes visible in a full-screen window, where a repeating placeholder
 // is what a placeholder looks like anyway.
 const OUTLINE = [...TURNS, ...TURNS];
 

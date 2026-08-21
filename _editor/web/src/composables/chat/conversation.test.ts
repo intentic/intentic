@@ -4,7 +4,6 @@ import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Conversation } from "./conversation";
 import { providerAccounts } from "./providerAccounts";
-import { transcriptView } from "./transcriptClock";
 import { turnDefaults } from "./turnDefaults";
 import { resolvePrompt } from "../agents/conflictResolution";
 import { type ChatMessage, CONTINUATIONS, continuationFor, dayMarksOf, foldsIntoTurn, forkCutsOf, isAcknowledgment, turnsOf } from "./transcript";
@@ -41,8 +40,6 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
-    // The window the panel announces it is displayed in: a module singleton like the rest below.
-    transcriptView.value = undefined;
     // turnDefaults is a module singleton; reset the per-provider memory so tests stay order-independent.
     // Grok's default is loaded live (empty until then); a fresh test env has no loaded catalog.
     turnDefaults.models.value = { claude: `opus`, codex: ``, grok: `` };
@@ -2821,53 +2818,18 @@ describe(`Conversation`, () => {
     });
 });
 
-/* THE CLOCK'S WINDOW. A popped-out chat is DOM teleported into a second real window while this module keeps
- * running in the opener's realm (composables/usePopout.ts), and rendering steps belong to a window: the opener,
- * sitting behind the chat window the user is working in, is given none. A clock armed there stops: the frames
- * pile up in the inbox and the panel out there shows a live-looking transcript that never moves, which is what
- * "the popped-out chat stopped reacting" is. So the panel announces which window its rows are in, and the two
- * tests below pin both halves: the frames are asked of THAT window, and a frame that never comes cannot park
- * the transcript for good. */
+/* THE CLOCK'S FALLBACK. The transcript is revealed on this window's frames, and a browser gives none to a
+ * window that is minimized or fully occluded, so an armed clock waiting on a frame that never comes would be a
+ * conversation that has gone deaf for the rest of the session. Which is what "the chat stopped reacting" was,
+ * for a longer reason that no longer exists: a floating panel used to be drawn by the app's tab, so the clock
+ * ran on the frames of the window BEHIND the one being read. The panel renders itself now
+ * (composables/floating.ts); the fallback below is what remains, and it is worth pinning. */
 describe(`the transcript's clock`, () => {
-    // A window that hands out frames on request: what the pop-out is, and what this realm is not while it sits
-    // behind it.
-    const viewWithFrames = (): { view: Window; deliver: () => void } => {
-        const owed: FrameRequestCallback[] = [];
-        return {
-            view: { requestAnimationFrame: (callback: FrameRequestCallback) => owed.push(callback) } as unknown as Window,
-            deliver: () => owed.splice(0, owed.length).forEach((callback) => callback(0)),
-        };
-    };
-
-    it(`asks the window the panel is displayed in for its frames, not the realm it runs in`, async () => {
-        const conversation = new Conversation(`c-popped`);
-        const opener: FrameRequestCallback[] = [];
-        vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback) => opener.push(callback));
-        const { view, deliver } = viewWithFrames();
-        transcriptView.value = view;
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `hi` }], { stayOpen: true }));
-
-        const turn = conversation.send(`go`, settings);
-        // Delivered per poll rather than once: the head opens the stream a beat before the delta rides in, so
-        // the frame the transcript is waiting on is not always the first one owed.
-        await vi.waitFor(() => {
-            deliver();
-            expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `hi` });
-        });
-
-        // The opener was never asked. Being asked is the whole bug: it answers when it is in front and goes
-        // silent when it is behind, which is exactly backwards for a panel that lives in the other window.
-        expect(opener).toHaveLength(0);
-
-        conversation.stop();
-        await turn;
-    });
-
-    it(`applies frames on its own timer when the window it asked never delivers one`, async () => {
+    it(`applies frames on its own timer when the window never delivers one`, async () => {
         const conversation = new Conversation(`c-parked`);
-        // Frames requested and never delivered: the chat window minimized, or, the one that used to be
-        // permanent: a pop-out closed while still owing the frame the armed clock was waiting on.
-        transcriptView.value = viewWithFrames().view;
+        // Frames requested and never delivered: a minimized window, which the clock's own fallback timer is the
+        // whole reason for, since an armed clock waiting on a frame that never comes is a deaf conversation.
+        vi.stubGlobal(`requestAnimationFrame`, () => 0);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `hi` }], { stayOpen: true }));
 
         const turn = conversation.send(`go`, settings);

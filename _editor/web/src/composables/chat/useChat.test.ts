@@ -955,7 +955,7 @@ describe(`opening a fleet agent`, () => {
  * NOT outlive is the entry itself: a tab still claiming an agent the daemon has discarded is invisible on
  * /agents (no registry entry to render, and the draft half of the fleet skips registered conversations) while
  * sitting in the strip as an empty, untitled "New agent" that the focus-leave sweep is barred from taking:
- * the ghost card behind "there's a New agent in the popped-out rail that doesn't exist on the board". */
+ * the ghost card behind "there's a New agent in the rail in a floating window that doesn't exist on the board". */
 describe(`a tab whose agent the fleet no longer has`, () => {
     beforeEach(() => {
         storage.clear();
@@ -1037,7 +1037,7 @@ describe(`effort/thinking pairing`, () => {
 });
 
 /* THE PANES, which of the open chats are on screen at once, and in which columns. One is the ordinary case;
- * several is the popped-out window showing a fleet side by side (ChatPanel renders one ChatPane per id).
+ * several is the floating window showing a fleet side by side (ChatPanel renders one ChatPane per id).
  *
  * The rule every case below turns on: SWITCHING is not OPENING. Everything that moves the focus, a rail
  * click, a card on the board, a deep link, a history row, a close reseating the focus: lands on setActive and

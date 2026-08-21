@@ -1,7 +1,7 @@
 /* WHERE THE BROWSER'S TIME GOES, the daemon's platform/perf.ts, on this side of the wire.
  *
  * The daemon can only ever account for the half of a slow interaction that it served. When the user says the
- * /agents board stutters or a popped-out chat lags, the daemon's log is often completely clean, because
+ * /agents board stutters or a floating chat lags, the daemon's log is often completely clean, because
  * nothing was wrong with it: the time went into a query the browser fired six times, a stream frame that
  * rebuilt a thousand-message transcript, or a persist that structured-cloned the whole query cache. None of
  * that was measured anywhere, and "the UI feels slow" has no next step without it.

@@ -58,3 +58,20 @@ export const writeWindowState = (key: string, json: string): void => {
     writeTo(() => sessionStorage, key, json);
     writeTo(() => localStorage, key, json);
 };
+
+/* GIVE UP THIS WINDOW'S OPINION, keeping the seed. The window stops claiming to know what it was showing, so
+ * its next read falls through to whatever the last writer left, which is exactly what a HANDOFF needs.
+ *
+ * One caller: the chat, when the panel moves into a window of its own (composables/floating.ts). There is one
+ * chat surface at a time, so while another window is drawing it this window genuinely has no view state for it,
+ * and a remembered strip from before the move is not a memory but a stale copy, the thing that used to come
+ * back on dock wearing the tabs the reader had closed ten minutes ago out there. Forgetting is what makes the
+ * two-store split do the handoff for free: the floating window writes the seed on every change, and the window
+ * that takes the panel back reads it exactly as a brand-new window would. */
+export const forgetWindowState = (key: string): void => {
+    try {
+        sessionStorage.removeItem(key);
+    } catch {
+        // Unavailable; there was nothing remembered here to begin with.
+    }
+};

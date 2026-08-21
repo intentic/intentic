@@ -9,11 +9,10 @@
 
      WHERE IT GOES IS `placeAnchored`'S ANSWER, not this file's. It used to carry its own copy of the flip-above
      and the horizontal clamp, written against the module-scope `window` and teleported to the module-scope
-     `document.body`, which is the bug anchorPlacement.ts opens by describing: a hint inside a popped-out chat
-     or terminal panel measured its room against the OPENER's viewport and landed in the pop-out's. It is the
-     third implementation of that geometry the app had (AnchoredOverlay and the tooltip directive were the
-     others), and the only one nobody had noticed was wrong, because a hint that opens slightly off is a hint
-     you assume you mis-hovered.
+     `document.body`, which is the bug anchorPlacement.ts opens by describing: a hint measured its room against
+     one window's viewport and landed in another's. It is the third implementation of that geometry the app had
+     (AnchoredOverlay and the tooltip directive were the others), and the only one nobody had noticed was wrong,
+     because a hint that opens slightly off is a hint you assume you mis-hovered.
 
      It does NOT use <AnchoredOverlay>, which owns the same geometry, and that is deliberate: that component is
      a dialog: it dismisses on outside pointerdown, takes Escape, and hands the keyboard back on close. This is
@@ -118,7 +117,7 @@ onBeforeUnmount(hide);
             <Icon name="info-circle" role="img" :aria-label="label" />
             <span v-if="text" class="text-xs font-medium">{{ text }}</span>
         </span>
-        <!-- Into the TRIGGER's document, which is the pop-out's when the hint is in a popped-out panel. -->
+        <!-- Into the TRIGGER's document, which is not this module's when the app has drawn the hint elsewhere. -->
         <Teleport v-if="trigger !== undefined" :to="trigger.ownerDocument.body">
             <span
                 v-if="open"

@@ -16,7 +16,7 @@ import { fetchScrollback } from "../composables/terminal/terminalScrollback";
 import { copySelection, pasteIntoTerminal } from "../composables/terminal/terminalSession";
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource, terminalSessionOf } from "../composables/terminal/useTerminal";
 import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type TerminalRequest } from "../composables/terminal/useTerminalPanel";
-import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
+import { useTerminalFloating } from "../composables/terminal/terminalFloating";
 import { postTurnControl } from "../composables/chat/turnStream";
 
 /* THE terminal panel: mounted once in the shell, below every view. Each tab is a tmux-backed session in the
@@ -40,7 +40,7 @@ import { postTurnControl } from "../composables/chat/turnStream";
  * its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves: they live
  * in the toolbar's processes popover, and their × only hides the read-only log view. `initial` is an object so
  * re-requesting the same session still refocuses. Height persists per storageKey; `resizable: false` pins the
- * panel to its container (the mobile route, and the pop-out window). */
+ * panel to its container (the mobile route, and the floating window). */
 
 const {
     source,
@@ -80,20 +80,9 @@ const placeholders = computed(() =>
 // Restart kills the active session and opens a fresh web-* shell in its slot: meaningless for a dev-server
 // tab, which gets refresh instead.
 const activeShell = computed(() => order.value.find((tab) => tab.name === activeName.value)?.kind === `shell`);
-const popout = useTerminalPopout();
-// The bar turns into a left rail while the panel floats in its own window (see the component comment).
-const vertical = computed(() => popout.poppedOut.value);
-// Teleporting the panel to/from the pop-out window moves the container wholesale without any Vue re-mount:
-// remount the active group after the flush so every cell refits (and the PTYs resync) at the new window's size.
-watch(
-    popout.poppedOut,
-    () => {
-        if (activeName.value !== undefined) {
-            switchTab(activeName.value);
-        }
-    },
-    { flush: `post` },
-);
+const floating = useTerminalFloating();
+// The bar turns into a left rail while the panel has a window of its own (see the component comment).
+const vertical = computed(() => floating.here.value);
 
 // Sessions FINISH through paths no client action fires: an agent's last Bash command exits, a dev server dies.
 // The strip lists imperatively (around spawns, kills, restarts and surfaces), so a tab would keep reading as
@@ -164,7 +153,7 @@ const stripIndex = computed(() => {
 });
 // What the pop-out button says and is named, both directions: the same wording as the strip menu's row and the
 // palette's, with the chord when one is bound (withShortcut, shared with the chat strip's own button).
-const popoutHint = computed(() => withShortcut(popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`, `terminal.togglePopout`));
+const floatHint = computed(() => withShortcut(floating.floats.value ? `Dock panel back` : `Move panel into new window`, `terminal.toggleFloating`));
 // The panel's dismissal, which is NOT a kill: the sessions are tmux facts on the sandbox and outlive every view
 // of them. It used to say "Close terminal" under a ×, the same glyph the pills carry for the one action that
 // DOES end a session, so the toolbar read as "kill everything". It now says what it does and leaves × to the
@@ -172,7 +161,7 @@ const popoutHint = computed(() => withShortcut(popout.poppedOut.value ? `Dock pa
 // is nothing to drop into and the press retires the window, which is the one place a × still tells the truth.
 const closeHint = computed(() =>
     withShortcut(
-        popout.poppedOut.value ? `Close the window, the terminals keep running` : `Hide the panel, the terminals keep running`,
+        floating.here.value ? `Close the window, the terminals keep running` : `Hide the panel, the terminals keep running`,
         `terminal.toggle`,
     ),
 );
@@ -406,9 +395,9 @@ const stripItems = computed<MenuItem[]>(() => {
             command: () => (showWorkTerminals.value = !showWorkTerminals.value),
         },
         {
-            label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`,
-            shortcut: commandShortcut(`terminal.togglePopout`),
-            command: popout.toggle,
+            label: floating.floats.value ? `Dock panel back` : `Move panel into new window`,
+            shortcut: commandShortcut(`terminal.toggleFloating`),
+            command: floating.toggle,
         },
     );
     return items;
@@ -508,7 +497,7 @@ const closeScrollback = (): void => {
     scrollbackFailed.value = false;
 };
 
-// Through the dialog's own element, so a popped-out panel writes from the window the user is actually in.
+// Through the dialog's own element, so a floating panel writes from the window the user is actually in.
 const copyScrollback = (): void => {
     const text = scrollback.value?.text;
     if (text !== undefined) {
@@ -1021,7 +1010,7 @@ const endResize = (event: PointerEvent): void => {
             @dblclick="setHeight(DEFAULT_HEIGHT)"
             title="Drag to resize · double-click to reset"
         ></div>
-        <!-- The bar: across the top when docked, down the left edge in the pop-out window (`vertical`). Same
+        <!-- The bar: across the top when docked, down the left edge in the floating window (`vertical`). Same
              pills, same toolbar, same right-click menu: only the axis differs. -->
         <div
             class="flex shrink-0 gap-1 border-line bg-card"
@@ -1176,11 +1165,11 @@ const endResize = (event: PointerEvent): void => {
                      burial the chat's pop-out had, on a toolbar that has room to say it out loud. Beside the
                      close × because both answer "where does this panel live", and it flips with the state so
                      the one control is the whole round trip. -->
-                <button type="button" :class="ui.iconButton()" @click="popout.toggle()" v-tooltip.top="popoutHint" :aria-label="popoutHint">
-                    <Icon :name="popout.poppedOut.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
+                <button type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatHint" :aria-label="floatHint">
+                    <Icon :name="floating.floats.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
                 </button>
                 <button type="button" :class="ui.iconButton()" @click="emit(`close`)" v-tooltip.top="closeHint" :aria-label="closeHint">
-                    <Icon :name="popout.poppedOut.value ? 'times' : 'chevron-down'" class="text-xs" />
+                    <Icon :name="floating.here.value ? 'times' : 'chevron-down'" class="text-xs" />
                 </button>
             </div>
         </div>
@@ -1295,12 +1284,12 @@ const endResize = (event: PointerEvent): void => {
         </div>
 
         <!-- Right-click pill menu: split/join/unsplit/kill + the per-terminal cosmetic overrides. Rendered
-             into the pop-out window while the panel floats there. -->
-        <ContextMenu ref="menu" :model="menuItems" :append-to="popout.overlayTarget.value" :min-width="14" />
+             into the floating window while the panel floats there. -->
+        <ContextMenu ref="menu" :model="menuItems" :min-width="14" />
 
         <!-- Right-click INSIDE a terminal: the clipboard verbs and the scrollback, in the place tmux used to
              draw its own pane menu. -->
-        <ContextMenu ref="gridMenu" :model="gridItems" :append-to="popout.overlayTarget.value" :min-width="12" />
+        <ContextMenu ref="gridMenu" :model="gridItems" :min-width="12" />
 
         <!-- The pane's history as selectable text. The live grid can only ever offer the screenful in front of
              you: a tmux client runs on the alternate screen, so its scrollback never reaches the browser, and
@@ -1309,7 +1298,6 @@ const endResize = (event: PointerEvent): void => {
             :open="scrollbackName !== undefined"
             size="xl"
             :scroll="false"
-            :append-to="popout.overlayTarget.value"
             :header="scrollbackName === undefined ? '' : `Scrollback, ${segmentLabel(scrollbackName)}`"
             @update:open="closeScrollback"
         >
@@ -1343,7 +1331,6 @@ const endResize = (event: PointerEvent): void => {
             confirm-label="Kill anyway"
             confirm-icon="trash"
             :items="pendingKillItems"
-            :append-to="popout.overlayTarget.value"
             @cancel="pendingKill = undefined"
             @confirm="confirmKill"
         >
@@ -1357,13 +1344,7 @@ const endResize = (event: PointerEvent): void => {
 
         <!-- One dialog for the two pickers, color and icon: both apply on click, with a leading "default"
              swatch that clears the override. (Rename is inline in the strip, not here.) -->
-        <Modal
-            :open="customize !== undefined"
-            size="sm"
-            :append-to="popout.overlayTarget.value"
-            :header="customizeHeader"
-            @update:open="customize = undefined"
-        >
+        <Modal :open="customize !== undefined" size="sm" :header="customizeHeader" @update:open="customize = undefined">
             <template v-if="customize">
                 <div v-if="customize.mode === 'color'" class="flex flex-wrap items-center gap-2">
                     <button

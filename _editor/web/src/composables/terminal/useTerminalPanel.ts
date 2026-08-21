@@ -4,6 +4,7 @@ import { useLayout } from "../useLayout";
 import { useSandbox } from "../sandbox/useSandbox";
 import { clearPendingTerminals, listTerminals, refreshTerminals, removeTerminal } from "./terminalsQuery";
 import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
+import { uuid } from "../uuid";
 
 /* The ONE global terminal panel's controls + session source. Terminals are sandbox-global facts (tmux sessions
  * on one machine), so the panel lives in the shell, below every view, and any surface opens/focuses it with
@@ -37,7 +38,7 @@ import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
 
 export const globalTerminalSource: TerminalTabsSource = {
     list: listTerminals,
-    create: () => `web-${crypto.randomUUID().slice(0, 8)}`,
+    create: () => `web-${uuid().slice(0, 8)}`,
     // Drop it from the shared list up front so the rail's badge falls with the tab, then let the daemon's own
     // account of the kill land, which is what puts the session BACK if the DELETE turns out to have failed.
     // That reconcile is the whole point, so it runs in a `finally`: a tunnel that drops mid-kill is exactly the
@@ -111,7 +112,7 @@ watch(useSandbox().activeSandboxId, (_id, previous) => {
 });
 
 /* A request is SPENT once the panel has taken it. It used to stand forever, so the next panel to mount,
- * hours later, by Ctrl+`, a popout, a mobile route change, replayed it and went hunting for whatever
+ * hours later, by Ctrl+`, a float, a mobile route change, replayed it and went hunting for whatever
  * yesterday's push had been running. That is where "Opening job-checks…" came from when nobody was pushing.
  * Called by the panel as it consumes the request, which is the only reader there is. */
 export const clearTerminalRequest = (): void => {

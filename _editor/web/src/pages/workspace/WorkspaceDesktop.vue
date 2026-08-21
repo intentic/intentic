@@ -414,7 +414,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
         { separator: true },
         ...stripItems.value, // Close All: the one row the empty-space menu shows on its own
         // Only file/diff tabs have a filesystem path to copy (directory and generated panels don't).
-        // Reached through this view's root so a popped-out panel writes to the focused window (see clipboardOf);
+        // Reached through this view's root so a floating panel writes to the focused window (see clipboardOf);
         // the clipboard may still be unavailable (insecure context): swallow, matching CopyButton.
         ...(menuTab.kind === `file` || menuTab.kind === `diff`
             ? [

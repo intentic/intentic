@@ -57,10 +57,10 @@ export default defineConfig({
         emptyOutDir: true,
         target: "es2024",
         rolldownOptions: {
-            // Two HTML entries: the app, and the page a popped-out panel is teleported into (see
-            // src/composables/usePopout.ts), its own document so a pop-out window carries a real URL and icon
-            // instead of about:blank.
-            input: { index: here("./index.html"), popout: here("./popout.html") },
+            // One HTML entry. A floating panel used to have a second: a near-empty page the panel's DOM was
+            // teleported into from the window that opened it. It is a route of the app now (/floating/<panel>,
+            // see src/composables/floating.ts), so there is nothing separate to build.
+            input: { index: here("./index.html") },
         },
     },
 });

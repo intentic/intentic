@@ -19,12 +19,12 @@ import { agentSeed, canArchive, FINISHED_WINDOW, type FleetAgent, useAgents, win
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
+import { chatWide } from "../composables/chat/chatSurface";
 import { offerOnBoard } from "../composables/chat/connectOffer";
 import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { summonChat } from "../composables/chat/summon";
 import { agentTabOf, useChat } from "../composables/chat/useChat";
-import { useChatPopout } from "../composables/chat/useChatPopout";
 import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import MatchLine from "../components/MatchLine.vue";
@@ -33,6 +33,7 @@ import { BUILD_IDEAS, buildPrompt } from "./buildIdeas";
 import AgentCard from "./AgentCard.vue";
 import HeldWakeCard from "./HeldWakeCard.vue";
 import WorkflowRunCard from "./WorkflowRunCard.vue";
+import { uuid } from "../composables/uuid";
 /* The fleet as a kanban: Attention | Active | Finished, attention leftmost because the board's whole job is
  * routing the user to agents that need them. Lanes are pure projections of the registry status machine
  * (laneOf), so "finished" is automatic: the auto-land flow flips a cleanly-completed turn to landed/idle
@@ -110,7 +111,6 @@ const {
 // the card takes that conversation's view (provider, harness, the press that re-points it) as one object.
 const chat = useChat();
 const { active, panes, closeTabs, connected, accountsLoaded } = chat;
-const { popOut: popOutChat, poppedOut } = useChatPopout();
 // A refusal lands on the board's notice strip: the preparation refuses whole (a running source, a transcript
 // that couldn't be captured), and a press that does nothing visible reads as a button that broke.
 const synthesize = async (): Promise<void> => {
@@ -279,10 +279,12 @@ const flashId = ref<string | undefined>(undefined);
  *
  * The predicate is the PANEL'S OWN (showingRunGraph), not a second reading of the mode, because the mode alone
  * stopped being the answer: a run being FOLLOWED draws its diagram too, for as long as it has nothing live to
- * put in the panes. Only popped out: docked, the panel shows the focused chat whatever the run is doing. */
+ * put in the panes. Only on a WIDE chat surface, its own window or the /chat area: in the docked column the
+ * panel shows the focused chat whatever the run is doing. `chatWide` reads the same in every window, so the
+ * board is right about a diagram that is up on another screen (chatSurface.ts). */
 const runGraphUp = computed(
     () =>
-        poppedOut.value &&
+        chatWide.value &&
         showingRunGraph(
             workflowRuns.value.find((run) => run.runId === chatRun.value?.runId),
             chatRun.value,
@@ -365,9 +367,9 @@ const beyondLabel = computed(() => {
     return parts.join(` · `);
 });
 // A never-carded conversation opens as an ordinary tab: the board is a surface outside the panel, so the
-// open is a summons (every window, the popped-out chat included) with the tab's identity minted here.
+// open is a summons (every window, the floating chat included) with the tab's identity minted here.
 const openSession = (id: string): void => {
-    const conversationId = crypto.randomUUID();
+    const conversationId = uuid();
     summonChat({
         kind: `reveal`,
         verb: `show`,
@@ -611,7 +613,7 @@ onMounted(() => {
         // select, so a chord pressed with a stale query in the box starts a new one by typing (VS Code's find
         // flow). Deliberately UNBOUND: Mod+F belongs to the browser's own find, and this registry is global to
         // every window the app owns, so a binding claimed while the board is mounted swallowed Mod+F in the
-        // popped-out chat too, where the board is not even on screen and the focus went to a hidden field.
+        // floating chat too, where the board is not even on screen and the focus went to a hidden field.
         // Bindable in Settings → Keybindings by anyone who wants it, like every other command here.
         registerCommand({
             owner: `builtin`,
@@ -682,7 +684,7 @@ const clearable = computed(() => lanes.value.finished.length);
  *
  * IT ASKS FOR A TASK, IT IS NOT A PLACE TO TYPE ONE. There was a composer in the middle of this screen: its
  * own box, its own send, and it was wrong twice over. There is exactly one composer in this product and it is
- * the chat: docked on the right, or popped out into its own window. A second one an inch from the first, in a
+ * the chat: docked on the right, or floating in its own window. A second one an inch from the first, in a
  * column that is otherwise a board, teaches a shape the app does not have. And on the screen it was built for
  * it could not even send: a brand-new sandbox has no AI account connected yet, so the first thing the first
  * user ever met was a box that swallows a sentence and a button that goes nowhere.
@@ -762,7 +764,7 @@ const trialOnly = computed(() => !started.value && !archiveOpen.value && connect
 watch(offering, (on) => (offerOnBoard.value = on), { immediate: true });
 onUnmounted(() => (offerOnBoard.value = false));
 // Card click FOCUSES, it does not navigate: on desktop it only points the chat surface, this window's docked
-// panel and, through the summons channel, every other window's, the popped-out chat included: at this agent
+// panel and, through the summons channel, every other window's, the floating chat included: at this agent
 // and highlights the card. Cheap and reversible, so the user can click down a lane to skim. The view-change to
 // the review detail is a deliberate, separate act (reviewAgent, below). Mobile has no dock, so a tap there IS
 // the way into the conversation: it navigates.
@@ -779,7 +781,7 @@ onUnmounted(() => (offerOnBoard.value = false));
  * selection you cannot replace by pointing somewhere else is not one: the split outlived every later click
  * and had to be dismantled a × at a time.
  *
- * Every gesture here is a SUMMONS (summon.ts): the panel it composes may be another window's popped-out chat,
+ * Every gesture here is a SUMMONS (summon.ts): the panel it composes may be another window's floating chat,
  * so the reveal is broadcast and each window applies the identical verb to its own panel. */
 const paneOrder = computed<FleetAgent[]>(() => LANES.flatMap((lane) => cardsFor(lane.key)));
 const paneAnchor = ref<string>();
@@ -823,7 +825,7 @@ const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
     // The click itself, before anything downstream can move it: the head of the focus trace (focusTrace.ts).
     traceFocus(`board-click`, { id: agent.id, status: agent.status });
     // A modified click asks for a column rather than the focus, and says so itself. Desktop only: panes live
-    // in the pop-out window, and a phone navigates to the conversation instead of pointing anything at it.
+    // in the floating window, and a phone navigates to the conversation instead of pointing anything at it.
     if (event !== undefined && !mobile.value && paneGesture(agent, event)) {
         return;
     }
@@ -945,7 +947,7 @@ const openRunGraph = (run: WorkflowRun): void => {
  *
  * IT DOES NOT NAVIGATE, and that is the correction: sending the main view to the workflows extension answered
  * a question nobody asked. What a person wants from a run in flight is the transcripts: several at once,
- * which is precisely what the popped-out panel is for, and a page showing a picture of them is a detour on
+ * which is precisely what the floating panel is for, and a page showing a picture of them is a detour on
  * the way there. The picture is still one press away, as the panel's own back arrow (chatRun's two modes).
  */
 const openRun = (run: WorkflowRun): void => void openRunInChat(run);

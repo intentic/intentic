@@ -69,7 +69,7 @@ const anyOpenable = computed(() => [...columns.value.values()].some((column) => 
             <span v-else>No step in this run ran, so there is nothing to open.</span>
         </p>
         <div class="min-h-0 flex-1">
-            <!-- `magnify` off: this is a popped-out window, and a five-node run stretched to fill one reads
+            <!-- `magnify` off: this is a floating window, and a five-node run stretched to fill one reads
                  as a diagram of five billboards. Small graphs sit at their natural size and the reader zooms
                  in by hand if they want to. -->
             <DagGraph

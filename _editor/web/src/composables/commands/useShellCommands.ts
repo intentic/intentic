@@ -2,12 +2,12 @@ import type { Disposable } from "@intentic/extension-api";
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { type CommandRegistration, registerCommand } from "./useCommands";
-import { chatOnRail, toggleChatHome, toggleChatPopout } from "../chat/chatSurface";
-import { useChatPopout } from "../chat/useChatPopout";
+import { chatOnRail, toggleChatFloating, toggleChatHome } from "../chat/chatSurface";
+import { useChatFloating } from "../chat/chatFloating";
 import { openPreview } from "../preview/previewSurface";
-import { togglePreviewPopout, usePreviewPopout } from "../preview/usePreviewPopout";
+import { togglePreviewFloating, usePreviewFloating } from "../preview/previewFloating";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
-import { useTerminalPopout } from "../terminal/useTerminalPopout";
+import { useTerminalFloating } from "../terminal/terminalFloating";
 import { useQuickOpen } from "../useQuickOpen";
 import { useRole } from "../sandbox/useRole";
 
@@ -22,9 +22,9 @@ export function useShellCommands(): void {
     const router = useRouter();
     const terminal = useTerminalPanel();
     const { canShip } = useRole();
-    const chat = useChatPopout();
-    const terminalPopout = useTerminalPopout();
-    const previewPopout = usePreviewPopout();
+    const chat = useChatFloating();
+    const terminalFloat = useTerminalFloating();
+    const previewFloat = usePreviewFloating();
     const { isOpen, mode } = useQuickOpen();
 
     let disposables: readonly Disposable[] = [];
@@ -100,16 +100,14 @@ export function useShellCommands(): void {
              * hesitates on, and gated off the terminal, where F9 belongs to whatever TUI is running in it
              * (mc's menu, an editor's key) rather than to the shell. */
             {
-                command: `chat.togglePopout`,
+                command: `chat.toggleFloating`,
                 get title(): string {
-                    return chat.poppedOut.value ? `Dock Chat Back` : `Move Chat into New Window`;
+                    return chat.floats.value ? `Dock Chat Back` : `Move Chat into New Window`;
                 },
                 icon: `external-link`,
                 keybinding: `F9`,
                 when: `tabSurface != 'terminal'`,
-                // toggleChatPopout, not the bare window toggle: docking back must land the chat in its home,
-                // which with the rail as home means walking to /chat, the reasoning is on the function.
-                handler: () => toggleChatPopout(router),
+                handler: () => toggleChatFloating(),
             },
             /* THE POP-OUT'S IN-WINDOW SIBLING: which of the two IN-APP homes the chat lives in, the side
              * column beside every view, or the rail (a Chat tile whose area the chat fills, and no column
@@ -128,27 +126,27 @@ export function useShellCommands(): void {
                 handler: () => toggleChatHome(router),
             },
             {
-                command: `terminal.togglePopout`,
+                command: `terminal.toggleFloating`,
                 get title(): string {
-                    return terminalPopout.poppedOut.value ? `Dock Terminal Back` : `Move Terminal into New Window`;
+                    return terminalFloat.floats.value ? `Dock Terminal Back` : `Move Terminal into New Window`;
                 },
                 icon: `external-link`,
                 handler: (): void => {
                     // Popping out a closed panel would float an empty window, open it first (docking keeps it open).
                     terminal.setOpen(true);
-                    terminalPopout.toggle();
+                    terminalFloat.toggle();
                 },
             },
             // The live app preview's two doors, on the chat's terms: a jump to its area, and the window toggle
             // whose title says which direction the press will take.
             { command: `view.preview`, title: `Go to Preview`, icon: `eye`, handler: () => openPreview(router) },
             {
-                command: `preview.togglePopout`,
+                command: `preview.toggleFloating`,
                 get title(): string {
-                    return previewPopout.poppedOut.value ? `Dock Preview Back` : `Move Preview into New Window`;
+                    return previewFloat.floats.value ? `Dock Preview Back` : `Move Preview into New Window`;
                 },
                 icon: `external-link`,
-                handler: () => togglePreviewPopout(router),
+                handler: () => togglePreviewFloating(),
             },
         ];
         // Object.assign rather than `{ owner, ...entry }`: a spread READS every property, which would freeze the

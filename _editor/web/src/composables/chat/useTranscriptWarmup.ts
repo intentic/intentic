@@ -19,30 +19,20 @@ import { nextTick, type Ref, ref, watch } from "vue";
 const IDLE_FALLBACK_MS = 200;
 
 export const useTranscriptWarmup = (transcript: {
-    /** The scrolling box, and the only handle on the window the rows are actually painted in. */
-    readonly scroller: Ref<HTMLElement | undefined>;
     /** A new transcript on screen, a tab switch, a history open. */
     readonly conversationId: Ref<string>;
     /** Rows in the list, watched for the bulk arrivals rather than for a streamed frame. */
     readonly messageCount: Ref<number>;
     readonly streaming: Ref<boolean>;
-    /** Changes when the rows move to another window, where every remembered size is a measurement of somewhere else. */
-    readonly poppedOut: Ref<unknown>;
 }): { readonly realizing: Ref<boolean> } => {
     const realizing = ref(false);
     let queued = false;
 
-    /* The window this pane's rows are painted in, the pop-out's whenever the panel has one. Asked afresh at
-     * each step, since a pop-out or a dock can land between two steps of the same pass: asking the opener
-     * (where this code runs) is asking a window that is typically behind the chat window and getting no
-     * rendering steps at all, the pass never ran, and the latch below never lifted.
-     *
-     * Undefined only when there is no window to be had at all, the pane's scroller is gone AND so is the
-     * global. That is a torn-down document, which happens between a deferred callback being queued and it
-     * running (a unit test's environment closing under an idle task; a pop-out closed mid-pass).
+    /* This window, unless there is no window at all: a torn-down document, which happens between a deferred
+     * callback being queued and it running (a unit test's environment closing under an idle task).
      * `globalThis.window` rather than a bare `window`, because the bare identifier THROWS where the property
      * merely reads undefined. */
-    const painter = (): (Window & typeof globalThis) | undefined => transcript.scroller.value?.ownerDocument.defaultView ?? globalThis.window;
+    const painter = (): (Window & typeof globalThis) | undefined => globalThis.window;
 
     const whenIdle = (task: () => void): void => {
         const view = painter();
@@ -99,19 +89,5 @@ export const useTranscriptWarmup = (transcript: {
             warm();
         }
     });
-    // A pop-out or a dock is a new window at a new width, so every row's remembered size is a measurement of
-    // somewhere else, and a pass left in flight is owed frames by the window just left, which will never
-    // deliver them. Clearing the latch is what stops that one missed hand-off from disabling warming for the
-    // session.
-    watch(
-        transcript.poppedOut,
-        () => {
-            queued = false;
-            realizing.value = false;
-            warm();
-        },
-        { flush: `post` },
-    );
-
     return { realizing };
 };

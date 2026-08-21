@@ -51,7 +51,6 @@ vi.mock("@intentic/ui", async () => {
     };
 });
 vi.mock("../composables/workspace/useHistory", () => ({ invalidateWorkspace: vi.fn() }));
-vi.mock("../composables/chat/useChatPopout", () => ({ useChatPopout: () => ({ overlayTarget: undefined }) }));
 /* Built fresh per mount rather than once for the file: `state` is a plain object, so a computed over it caches
  * its first reading forever, which silently gave every test the first one's chat. */
 vi.mock("../composables/chat/useChat", async () => {

@@ -1,8 +1,6 @@
-import { onMounted, onUnmounted, watch } from "vue";
+import { onMounted, onUnmounted } from "vue";
 import { boundCommand, executeCommand } from "./useCommands";
 import { isApplePlatform } from "./keybindings";
-import { useChatPopout } from "../chat/useChatPopout";
-import { useTerminalPopout } from "../terminal/useTerminalPopout";
 
 /* The shell's global keybinding dispatcher: ONE window keydown listener that turns a keystroke into a command
  * invocation. Registered commands are the single source of truth, a command's own `keybinding` is its shortcut,
@@ -10,7 +8,13 @@ import { useTerminalPopout } from "../terminal/useTerminalPopout";
  * The first command whose chord matches (and whose `when` gate, if any, is open) wins; its default browser action
  * is suppressed and it runs by id. Because builtins and extension-contributed commands share the registry, an
  * extension gets working shortcuts for free the day it declares one. Installed on mount / removed on unmount by
- * the desktop shell, mirroring the listener it replaces, so a mobile↔desktop crossover leaves no orphaned handler. */
+ * whichever surface owns this window, the desktop shell, or a floating panel's own page, which has no shell but
+ * still wants F9 to dock the panel it is holding.
+ *
+ * ONE listener, on this window, and that is now the whole story. It used to mirror itself onto every pop-out
+ * window's document, because a floating panel's keystrokes dispatch in ITS window and the panel was drawn from
+ * this realm. A floating panel runs its own copy of the app now (composables/floating.ts), so its keystrokes
+ * reach its own dispatcher and there is nothing to mirror. */
 export function useKeybindings(): void {
     const isMac = isApplePlatform();
 
@@ -30,29 +34,5 @@ export function useKeybindings(): void {
 
     onMounted(() => window.addEventListener(`keydown`, onKey));
 
-    /* A popped-out panel's keystrokes dispatch in ITS window, never this one, mirror the listener onto each
-     * pop-out window while it exists, so shortcuts keep working inside the floating chat/terminal. That document
-     * dies with its window, so only a still-open body needs explicit removal on unmount.
-     *
-     * Immediate, because a floating window now outlives this dispatcher: the panels are mounted above the router
-     * (shell/dockSlots.ts) and only the SHELL comes and goes, so on a step out to /setup and back there is a
-     * window already open that no `body` change will ever announce again. */
-    const popouts = [useChatPopout(), useTerminalPopout()];
-    for (const popout of popouts) {
-        watch(
-            popout.body,
-            (body, previous) => {
-                previous?.ownerDocument.defaultView?.removeEventListener(`keydown`, onKey);
-                body?.ownerDocument.defaultView?.addEventListener(`keydown`, onKey);
-            },
-            { immediate: true },
-        );
-    }
-
-    onUnmounted(() => {
-        window.removeEventListener(`keydown`, onKey);
-        for (const popout of popouts) {
-            popout.body.value?.ownerDocument.defaultView?.removeEventListener(`keydown`, onKey);
-        }
-    });
+    onUnmounted(() => window.removeEventListener(`keydown`, onKey));
 }

@@ -260,7 +260,7 @@ const confirmDelete = (): void => {
 };
 const copyPath = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
-    // Reached through this view's root so a popped-out panel writes to the focused window (see clipboardOf).
+    // Reached through this view's root so a floating panel writes to the focused window (see clipboardOf).
     // Clipboard may still be unavailable (insecure context): swallow, matching CopyButton.
     void clipboardOf(rootEl.value)
         .writeText(target.path)

@@ -481,11 +481,11 @@ const unread = computed(() => fleet.value.filter((agent) => agent.unread).length
 const attention = computed(() => fleet.value.filter((agent) => blocked(agent) || agent.unread).length + heldWakes.value.length);
 
 // A turn that finishes while you are WATCHING its conversation is not news, the reply is already on your
-// screen, so the card must not flip to "New" under your cursor (and the rail must not badge it). Gated on a
-// window of the app being ON SCREEN, which is not the same as this tab being visible: the chat may be floating
-// in a pop-out window of its own while the tab it is rendered from sits behind another one (onScreen.ts). An
-// agent that finishes with every one of those windows hidden, a background tab, a locked phone, is exactly
-// what the badge exists for, even though its conversation is still technically the active one.
+// screen, so the card must not flip to "New" under your cursor (and the rail must not badge it). Gated on THIS
+// window being on screen with that chat focused (onScreen.ts); a floating chat runs its own copy of the app and
+// answers the same question for itself. An agent that finishes with the window hidden, a background tab, a
+// locked phone, is exactly what the badge exists for, even though its conversation is still technically the
+// active one.
 watch(
     () => {
         if (!onScreen.value) {
@@ -660,10 +660,9 @@ const refresh = async (): Promise<void> => {
  * looking at it again is the one signal that the delay is now being WATCHED, so it is answered with a read
  * rather than waited out.
  *
- * Asked of every window the app renders into rather than of this tab (onScreen.ts), a board read in a
- * pop-out is being looked at whatever the tab behind it is doing. Gated on the daemon being reachable: with
- * the stream down this would fail anyway, and the reconnect brings its own roster with it. One request per
- * return, not per second; a refresh that fails leaves the roster exactly where it stood.
+ * Asked of this window (onScreen.ts), which every window of the app does for itself. Gated on the daemon being
+ * reachable: with the stream down this would fail anyway, and the reconnect brings its own roster with it. One
+ * request per return, not per second; a refresh that fails leaves the roster exactly where it stood.
  *
  * Module scope, like the unread watch above: this is a fact about the SESSION, not about whether the board
  * happens to be the open route, the rail's badge is drawn from the same roster on every page in the app. */
@@ -1090,9 +1089,9 @@ export const agentSeed = (
     ...(agent.fast !== undefined ? { fast: agent.fast } : {}),
 });
 
-// Opening a card is a SUMMONS, not a store call: the chat panel showing the result may be another window's
-// (the popped-out chat is drawn by whichever window opened it), so the reveal is broadcast and every window,
-// this one included, applies the same thing (summon.ts).
+// Opening a card is a SUMMONS, not a store call: the chat panel showing the result may be another window's (the
+// chat can be floating in a window of its own), so the reveal is broadcast and every window, this one included,
+// applies the same thing (summon.ts).
 const open = (agent: Parameters<typeof agentSeed>[0]): void => {
     const seed = agentSeed(agent);
     summonChat({ kind: `reveal`, verb: `show`, entries: [agentTabOf(seed)], focus: seed.id, caret: false });

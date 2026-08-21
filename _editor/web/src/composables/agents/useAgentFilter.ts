@@ -7,12 +7,12 @@ import { useSandbox } from "../sandbox/useSandbox";
 import { type FleetAgent, useAgents } from "./useAgents";
 import { AGENTS, SESSIONS } from "../queryKeys";
 
-/* Filter the fleet by what was SAID in it, the board's header field and the popped-out rail's.
+/* Filter the fleet by what was SAID in it: the board's header field, and the chat rail's.
  *
  * A FACTORY, not a singleton. The query is how ONE surface is being looked at right now, exactly like the
- * board's showAllFinished / archiveOpen, and the rail lives in a different WINDOW: a filter typed on the board
- * silently narrowing a pop-out the user isn't looking at would be a spooky action at a distance. Each caller
- * owns its own.
+ * board's showAllFinished / archiveOpen, and the rail is routinely in a different WINDOW: a filter typed on the
+ * board silently narrowing a floating chat the user isn't looking at would be a spooky action at a distance.
+ * Each caller owns its own.
  *
  * MATCHING RUNS IN TWO TIERS, because the two things the user needs from a filter are in tension:
  *

@@ -1090,7 +1090,7 @@ describe("the archive list", () => {
 /* THE SWEEP'S OTHER HALF. One agent is a card and a tab, and the two only ever moved together when the press
  * happened in this browser: archiving from the board closed the chat with the card, while the daemon's own
  * retention sweep took the card and left the tab. So the board stayed seven deep while the chat list's Finished
- * lane grew for the life of the sandbox: the thing the user reports as "my popped-out chat never cleans up".
+ * lane grew for the life of the sandbox: the thing the user reports as "my floating chat never cleans up".
  * Same departure signal as the archive list above, applied to the strip. */
 describe("tabs the daemon retired", () => {
     const agent = (id: string): AgentSummary => ({

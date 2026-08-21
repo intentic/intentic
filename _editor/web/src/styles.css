@@ -168,7 +168,7 @@
     }
 
     /* A SESSION CARD — the one surface the fleet board (AgentCard), the workflow row (WorkflowRunCard) and
-     * every rail row (RailCard: the popped-out chat's open chats, the Subagents list) are all drawn on. It
+     * every rail row (RailCard: the floating chat's open chats, the Subagents list) are all drawn on. It
      * lives here rather than in any one of them because those lists are read minutes apart by the same eye:
      * a board card and a rail row are ONE card in two frames, and every time the skin was written twice the
      * two drifted — different fills, different selection metal, a left edge that stood down on one and stacked

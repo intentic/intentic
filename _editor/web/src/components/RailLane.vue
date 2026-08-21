@@ -1,5 +1,5 @@
 <!-- ONE LANE OF A RAIL: the fleet board's kanban column at one card's width, and the frame every list of
-     sessions in this app is drawn in: the popped-out chat's open chats (ChatTabList), the agents this
+     sessions in this app is drawn in: the floating chat's open chats (ChatTabList), the agents this
      sandbox's agents started (pages/Subagents.vue).
 
      It is a SLAB rather than a heading over loose cards (see .lane in styles.css): a rounded surface the

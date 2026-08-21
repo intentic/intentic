@@ -9,14 +9,15 @@ import { useSandbox } from "../sandbox/useSandbox";
  *
  * The app runs as a full copy per browser window, and the copies share nothing but the daemon: agents,
  * transcripts and rosters converge everywhere, while the chat panel's own state, which tabs are open, which is
- * focused, is deliberately per window. A popped-out chat is drawn by whichever window opened it, so a board
- * click that only mutated the clicking window's store was invisible out there: "I pressed New agent and the
- * popped-out chat kept showing an old conversation" was this, and nothing else.
+ * focused, is deliberately per window. The chat's own floating window is one of those copies
+ * (composables/floating.ts), so a board click that only mutated the clicking window's store was invisible out
+ * there: "I pressed New agent and the floating chat kept showing an old conversation" was this, and nothing
+ * else.
  *
  * So a summons is not a store call, it is a BROADCAST: the same reveal (useChat.reveal) is applied in this
  * window and posted to every other window of this origin, each of which applies it to its own panel, docked,
- * popped out, or parked. One channel, one apply, no ownership question: there is no "attached" window to
- * find and no fallback when it is missing, because every window is told and every window obeys.
+ * floating, or parked. One channel, one apply, no ownership question: there is no "attached" window to find
+ * and no fallback when it is missing, because every window is told and every window obeys.
  *
  * WHAT RIDES THE CHANNEL is the portable description of a tab (StoredTab), never the live object: a window
  * that has never heard of the chat rebuilds it exactly as a reload would and hydrates it from the daemon. Two

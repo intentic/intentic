@@ -12,7 +12,7 @@ import { createSegmenter, resampleTo16k, wavOf16k } from "./voiceAudio";
 
 // The capture worklet, inlined as a blob module: 128-sample process() blocks are batched to ~2048 before
 // crossing the thread boundary (‾46ms at 44.1kHz: 20 messages/s instead of 375). A string rather than an
-// asset file so the popout window and the dev server load it identically, with no Vite plumbing.
+// asset file so a floating window and the dev server load it identically, with no Vite plumbing.
 const CAPTURE_WORKLET = `
 class IntenticVoiceCapture extends AudioWorkletProcessor {
     constructor() {

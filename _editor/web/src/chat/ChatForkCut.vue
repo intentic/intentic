@@ -6,7 +6,6 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { invalidateWorkspace } from "../composables/workspace/useHistory";
 import { openAgentConversation, useChat, usePaneView } from "../composables/chat/useChat";
 import { useAgents } from "../composables/agents/useAgents";
-import { useChatPopout } from "../composables/chat/useChatPopout";
 
 /* THE CUT: one gesture for every way of going back to a point in a conversation.
  *
@@ -60,7 +59,6 @@ const props = defineProps<{
 }>();
 
 const { conversation, messages, forkAt, beginEdit, editing, streaming: conversationStreaming } = usePaneView();
-const { overlayTarget } = useChatPopout();
 const { mobile } = useDevice();
 const queryClient = useQueryClient();
 const { fleet, agentById } = useAgents();
@@ -325,6 +323,6 @@ const open = (event: Event): void => {
         >
             <Icon :name="rewinding ? `spinner` : `fork`" :spin="rewinding" class="text-2xs" />
         </button>
-        <ContextMenu ref="menu" :model="items" :append-to="overlayTarget" :min-width="17" />
+        <ContextMenu ref="menu" :model="items" :min-width="17" />
     </div>
 </template>

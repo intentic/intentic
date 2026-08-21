@@ -76,7 +76,7 @@
    fault rather than as one layer passing under another. A
    hairline at the row's bottom edge draws the boundary the way a sticky header's divider does: the surface
    ends here, and what is cut below is passing under it. It replaced a drop shadow, which read as a halo
-   hanging off the prompt rather than an edge of the band — worst in the popped-out window, where the band
+   hanging off the prompt rather than an edge of the band — worst in the floating window, where the band
    runs wide of the bubble and the dark-mode alpha the shadow needed to register smeared the first line of
    every reply.
    A pseudo-element rather than border-bottom because a border is a pixel of height appearing at the pin
@@ -255,7 +255,7 @@
     --prose-measure: none;
 }
 /* Reading width for the transcript. A docked panel is narrower than this and never sees it; a panel dragged
-   wide, popped out, or on a big screen would otherwise run prose to 150+ characters a line, where the eye
+   wide, floating, or on a big screen would otherwise run prose to 150+ characters a line, where the eye
    loses its place returning to the left edge. Capping the COLUMN rather than the paragraphs keeps one edge
    for everything in a turn — tool cards, bubbles, prose, code blocks, decision cards — so the ragged right
    reads as a margin instead of as a block that failed to fill its box.
@@ -304,7 +304,7 @@
    reading measure is 48rem on both sides of it, so past that point the extra inset costs the text nothing at
    all and there is no reason to withhold it. Under it the gutter thins back to the plain inset and the mark
    tucks in beside the words, which is the right trade in a panel narrow enough to have no margin to give.
-   @container, so it answers to a dragged panel edge and a pop-out window rather than to the screen — and note
+   @container, so it answers to a dragged panel edge and a floating window rather than to the screen — and note
    the root here is 17.6px, so this breakpoint lands near 930px rather than the 848 the number reads as. */
 .chat-turns {
     --chat-gutter: 1rem;

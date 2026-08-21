@@ -16,12 +16,14 @@ import { RouterLink, useRouter } from "vue-router";
 import { frameSandbox, pickTarget, type PreviewTarget } from "../composables/preview/previewModel";
 import { usePreviewTargets } from "../composables/preview/usePreviewTargets";
 import { previewAddress, previewOpened, previewSelectedId, selectPreviewTarget, setPreviewAddress } from "../composables/preview/previewSurface";
-import { togglePreviewPopout, usePreviewPopout } from "../composables/preview/usePreviewPopout";
+import { togglePreviewFloating, usePreviewFloating } from "../composables/preview/previewFloating";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 
 /* THE ONE PREVIEW PANEL: the live, clickable app, full-bleed under one slim strip of chrome. Mounted once per
- * page (shell/PoppablePanels) and teleported between the /preview area, its own pop-out window and the parking
- * stage, so the iframe, and the previewed app's own state inside it: survives every move.
+ * window (shell/PoppablePanels) and teleported between the /preview area, a floating window's whole canvas and
+ * the parking stage, so the iframe, and the previewed app's own state inside it, survives every move in a
+ * window. Moving it to a window of its OWN is a fresh instance, which is the one place the app under preview
+ * reloads (composables/floating.ts states that trade).
  *
  * DESIGNED FOR ONE SCREEN WITH NO ROOM TO SPARE. The app under preview gets everything below a single h-10
  * bar; nothing floats over it (hover-revealed chrome steals the exact pixels the previewed app's own header
@@ -39,7 +41,7 @@ const router = useRouter();
 const { targets, settled, start, stop } = usePreviewTargets(previewOpened);
 const target = computed(() => pickTarget(targets.value, previewSelectedId.value));
 
-const { poppedOut } = usePreviewPopout();
+const { floats } = usePreviewFloating();
 const terminal = useTerminalPanel();
 
 // --- The switcher -------------------------------------------------------------------------------
@@ -339,11 +341,11 @@ const fit = ref<`full` | `phone`>(`full`);
             <button
                 type="button"
                 class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                :aria-label="poppedOut ? `Dock the preview back` : `Move the preview into its own window`"
-                v-tooltip.bottom="poppedOut ? 'Dock back' : 'Move into new window'"
-                @click="togglePreviewPopout(router)"
+                :aria-label="floats ? `Dock the preview back` : `Move the preview into its own window`"
+                v-tooltip.bottom="floats ? 'Dock back' : 'Move into new window'"
+                @click="togglePreviewFloating()"
             >
-                <Icon :name="poppedOut ? 'sign-in' : 'external-link'" />
+                <Icon :name="floats ? 'sign-in' : 'external-link'" />
             </button>
         </div>
 

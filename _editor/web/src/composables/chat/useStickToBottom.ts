@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, type Ref, watch } from "vue";
+import { onMounted, onUnmounted, type Ref } from "vue";
 
 /* "Follow the newest content unless the user has scrolled up to read", the transcript's half of the fact that
  * a chat is read from its bottom edge.
@@ -21,16 +21,14 @@ import { onMounted, onUnmounted, type Ref, watch } from "vue";
  * because appending to a transcript doesn't move scrollTop at all.
  *
  * The geometry half of that is a ResizeObserver, and a ResizeObserver belongs to a WINDOW: it delivers its
- * callbacks in the rendering steps of the document that CREATED it, whatever document the elements it watches
- * happen to live in. The chat panel is teleported into a real pop-out window (usePopout) with its JS left
- * behind in the opener, so an observer made here, in the opener, reports the popped-out transcript's growth
- * only while the OPENER window is itself painting. A browser stops giving rendering opportunities to a window
- * that is minimized, occluded or in a background tab, which is the normal state of the app window while the
- * user works in the chat window in front of it: the follow simply stopped, and a message sent from the pop-out
- * landed below the fold with nothing to bring it up, the one thing the pin exists to prevent. So the observer
- * is built by the window the transcript is IN, and rebuilt when the panel moves between them, which puts it on
- * the rendering loop of the window the user is looking at (terminalSession.observeHost does this for the same
- * reason). Scroll listeners need none of it: an event fires on the element wherever it lives. */
+ * callbacks in the rendering steps of the document that CREATED it. That used to be a real problem here, and it
+ * is worth knowing why it no longer is: a floating chat used to be DOM teleported into a second window with its
+ * JS left behind in the opener, so this observer ran on the OPENER's frames, and a browser gives none to a
+ * window that is minimized, occluded or backgrounded, which is the normal state of the app window while the
+ * user works in the chat window in front of it. The follow simply stopped, and a message sent from out there
+ * landed below the fold with nothing to bring it up. A floating panel is rendered by its own window now
+ * (composables/floating.ts), so the transcript, this observer and the frames they run on are always the same
+ * window's, and there is nothing left to re-home. */
 
 // How close to the bottom still counts as parked there, about a line of prose, so the follow survives a
 // stray wheel notch or a sub-pixel rounding of the scroll offset.
@@ -39,10 +37,6 @@ const THRESHOLD = 80;
 export const useStickToBottom = (
     scroller: Ref<HTMLElement | undefined>,
     content: Ref<HTMLElement | undefined>,
-    // Any value that CHANGES when these elements are teleported to another document, the panel's popped-out
-    // flag. Not the document itself: adoption rewrites `ownerDocument` in place, with nothing reactive about it
-    // to watch, so the move is announced by whoever performs it.
-    host: Ref<unknown>,
 ): { pin: () => void; follow: () => void } => {
     // Closure state rather than refs: nothing renders either of these, and every read happens inside a DOM
     // callback where a reactive read would only cost a dependency nobody collects.
@@ -103,9 +97,7 @@ export const useStickToBottom = (
      * mobile keyboard opening, which lands on the scroller's CONTENT box (its client box minus the padding the
      * composer reserves) and leaves its border box untouched. Neither implies the other, so both are observed.
      *
-     * Re-runnable, and the pop-out is why (see above). A fresh observer delivers a first observation of every
-     * target it takes on, so a followed transcript re-pins into the window it has just been moved to, where
-     * the room it is read in is a window's worth rather than a column's. */
+     * Neither implies the other, so both are observed. */
     const observe = (): void => {
         observer?.disconnect();
         observer = undefined;
@@ -114,8 +106,7 @@ export const useStickToBottom = (
         if (element === undefined || wrapper === undefined) {
             return;
         }
-        const view = element.ownerDocument.defaultView ?? window;
-        observer = new view.ResizeObserver(follow);
+        observer = new ResizeObserver(follow);
         observer.observe(wrapper);
         observer.observe(element, { box: `content-box` });
     };
@@ -130,10 +121,6 @@ export const useStickToBottom = (
         element.addEventListener(`scroll`, onScroll, { passive: true });
         observe();
     });
-
-    // Post-flush: the teleport moves the panel's DOM in the same flush that flips this, so the rebuild reads
-    // the document the elements have landed in rather than the one they are leaving.
-    watch(host, observe, { flush: `post` });
 
     onUnmounted(() => {
         observer?.disconnect();

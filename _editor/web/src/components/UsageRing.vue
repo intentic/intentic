@@ -17,13 +17,14 @@ import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDeta
  * rather than by parsing.
  *
  * IT OPENS BESIDE THE RING: on the flank the row asks for (see `flank`), and only falls back to above/below
- * when neither flank can hold it (a narrow pop-out). Every surface that draws this ring is a COLUMN of rows:
- * accounts stacked in the picker, connection rows down the Agent tab, so the one placement that never covers
- * what the reader is comparing against is sideways, into the wide area next door.
+ * when neither flank can hold it (a narrow floating window). Every surface that draws this ring is a COLUMN of
+ * rows: accounts stacked in the picker, connection rows down the Agent tab, so the one placement that never
+ * covers what the reader is comparing against is sideways, into the wide area next door.
  *
- * IN THE ANCHOR'S OWN WINDOW, like every other overlay here: the chat panel can be popped out into a real
- * `window.open` document while its JS stays in this realm, so the box is teleported into
- * `anchor.ownerDocument.body` and measured against that window (placeAnchored). It borrows AnchoredOverlay's
+ * IN THE ANCHOR'S OWN WINDOW, like every other overlay here: the box is teleported into
+ * `anchor.ownerDocument.body` and measured against that window (placeAnchored), so a ring the app drew into a
+ * document of its own (the preview, the extension host) places against the room it actually has. It borrows
+ * AnchoredOverlay's
  * skin: the same surface, shadow and arrow the pickers use, so the app has one overlay language rather than
  * a bespoke box per feature.
  *
@@ -81,7 +82,7 @@ const reposition = (): void => {
     const rect = host.getBoundingClientRect();
     const size = el.getBoundingClientRect();
     // Sideways whenever EITHER flank can hold the card; placeAnchored takes the asked-for one and flips only
-    // when that helps. Above/below is the last resort a narrow pop-out forces, not the default a tooltip makes
+    // when that helps. Above/below is the last resort a narrow floating window forces, not the default a tooltip makes
     // of it: over and under is where the rows the reader is comparing are.
     const beside = Math.max(rect.left, view.innerWidth - rect.right) >= size.width + GAP + EDGE;
     placement.value = placeAnchored({
@@ -96,9 +97,9 @@ const reposition = (): void => {
 };
 
 // A scroll or a resize moves the ring out from under a fixed box, and the pointer has left it anyway, so the
-// card is dismissed rather than chased. Armed on the ANCHOR's document and window, which in a pop-out are not
-// this realm's; remembered as the pair they were armed on, so the same pair is disarmed even if the panel has
-// docked back in the meantime.
+// card is dismissed rather than chased. Armed on the ANCHOR's document and window rather than on this module's,
+// and remembered as the pair they were armed on, so the same pair is disarmed even if the anchor has moved
+// documents in the meantime.
 let armed: { readonly doc: Document; readonly view: Window } | undefined;
 
 const hide = (): void => {

@@ -35,7 +35,6 @@ blocked and unpinned rows remain non-admitted.
 | File | What it is |
 | --- | --- |
 | `index.html` | the entry; sets `window.env` inline (sentinel origins) and loads `src/main.ts` |
-| `popout.html` | the window a popped-out panel is teleported into; loads `src/popout.ts`, which is the app's keeper and nothing else |
 | `src/transport.ts` | what the demo claims from `fetch`/`WebSocket`/`XMLHttpRequest`, and the socket shim |
 | `src/platform.ts` | the platform as a fetch handler: the session and the sandbox row the gates need |
 | `src/daemon.ts` | the daemon as a fetch handler: the route table and the `/events` stream |
@@ -95,11 +94,11 @@ belong to an extension the next mode switches off. The choice lives in `sessionS
 visit still meets the curated opening frame) and `?mode=minimal` on the address seeds it once, then is stripped
 from the URL so it cannot outrank the switcher.
 
-Two things this package owns that the app resolves against its BASE rather than the origin root, because here
-that root belongs to the marketing site: the pop-out window's page (`popout.html`, which the dev server's SPA
-fallback excepts by name and the build emits as a second entry) and the address the recording opens on:
-`src/main.ts` rewrites a bare `/demo/` to `/demo/agents` before the app boots, so a visitor who presses play
-lands on the fleet board rather than on an empty workspace.
+One thing this package owns that the app resolves against its BASE rather than the origin root, because here
+that root belongs to the marketing site: the address the recording opens on. `src/main.ts` rewrites a bare
+`/demo/` to `/demo/agents` before the app boots, so a visitor who presses play lands on the fleet board rather
+than on an empty workspace. (A floating panel's window resolves the same way and needs nothing of its own: it is
+an ordinary route, `/demo/floating/chat`, served by the SPA fallback like every other.)
 
 Design notes, the route/event coverage table and what is deliberately absent:
 [`docs/marketing/interactive-demo.md`](../../docs/marketing/interactive-demo.md).

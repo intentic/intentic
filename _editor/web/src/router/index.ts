@@ -144,6 +144,20 @@ const routes: RouteRecordRaw[] = [
         component: asyncView(() => import(`../pages/Setup.vue`)),
     },
     {
+        /* A FLOATING PANEL'S OWN WINDOW: the chat, the terminal or the preview filling a real window of the app,
+         * with no shell around it (composables/floating.ts holds the arrangement, pages/FloatingArea.vue the
+         * page). Outside the shell rather than inside it, because there is no rail, no outlet and nothing to
+         * navigate: the window is the panel.
+         *
+         * Guarded exactly like the shell, since it needs the same two things the panels do: a session and a
+         * connected sandbox. The path enumerates its three panels, so an unknown one falls through to the
+         * catch-all instead of opening a window with nothing in it. */
+        path: `/floating/:panel(chat|terminal|preview)`,
+        name: `floating`,
+        beforeEnter: [requireAuth, requireSetup],
+        component: () => import(`../pages/FloatingArea.vue`),
+    },
+    {
         // Persistent workspace shell (rail + shared chat + area outlet). Guarded: signed in AND sandbox
         // connected; otherwise requireSetup redirects to /setup (so all shell navigation is blocked until setup
         // completes).

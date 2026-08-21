@@ -22,28 +22,20 @@ import type { TurnContext } from "./turnStream";
  * What a frame MEANS is the reducer's (turnReducer.ts) and what to DO about it is the Conversation's; this owns
  * only the state, the timing, and the ordering between them. */
 
-/* WHICH WINDOW'S FRAMES THE TRANSCRIPT RUNS ON, announced by the panel (ChatPanel, on mount and on every
- * pop-out move), because the window a transcript is DISPLAYED in is not always the window this module lives in.
- *
- * A popped-out chat is DOM teleported into a second real window while its JS keeps running in the opener's
- * realm (composables/usePopout.ts). Rendering steps belong to a window: a browser gives none, no animation
- * frames, no observer deliveries, to one that is hidden, minimized or fully occluded, and that is the normal
- * state of the app window while the user works in the chat window in front of it. So a clock armed on the
- * OPENER simply stops: frames pile up in the inbox, the typewriter holds its text, and the panel out there
- * looks alive (its keeper is still being answered, see usePopout's liveness contract, which proves the realm
- * can run code, not that it can paint) while nothing on it moves. Every "the popped-out chat stopped
- * reacting" report is this. useStickToBottom and terminalSession.observeHost re-home their observers for the
- * same reason; this is the transcript's half of it.
- *
- * Undefined until the panel mounts, and in tests, where this module's own realm is the only answer there is. */
-export const transcriptView = shallowRef<Window | undefined>(undefined);
+/* THE TRANSCRIPT RUNS ON ITS OWN WINDOW'S FRAMES, which is worth a note only because it used to be the hardest
+ * thing in this file to get right. A floating chat was DOM teleported into a second window while its JS kept
+ * running in the opener's realm, and rendering steps belong to a window: a browser gives none, no animation
+ * frames, no observer deliveries, to one that is hidden, minimized or fully occluded, which is the normal state
+ * of the app window while the user works in the chat window in front of it. So the clock stopped: frames piled
+ * up in the inbox, the typewriter held its text, and the panel out there looked alive while nothing on it moved.
+ * Every "the floating chat stopped reacting" report was this. A floating panel is rendered by its own window
+ * now (composables/floating.ts), so the transcript, this clock and the frames it runs on are the same window's
+ * by construction, and there is no view to announce or re-home. */
 
 // How long a tick waits on a frame that may never come. The clock's rate is the frame's, this only bounds the
-// lag when NO window is painting the transcript: both windows minimized, or a pop-out closed while a frame it
-// owed was still pending, which would otherwise leave the clock armed forever and the conversation deaf for
-// the rest of the session. Deliberately on this realm's timer, the one that outlives every pop-out window; a
-// browser throttles it to about a second while the page is hidden, which is the right rate for a transcript
-// nobody is looking at.
+// lag when nothing is painting: a minimized window, which would otherwise leave the clock armed forever and the
+// conversation deaf for the rest of the session. A browser throttles this timer to about a second while the page
+// is hidden, which is the right rate for a transcript nobody is looking at.
 const CLOCK_FALLBACK_MS = 120;
 
 // An assistant bubble a turn opened for an answer that never arrived. A turn the daemon refused before running
@@ -95,7 +87,7 @@ export class TranscriptClock {
      * focus and false for every other one.
      *
      * The typewriter is an animation, and an animation is worth paying for only where the eye is. With several
-     * chats side by side in a popped-out window, N transcripts typing at once is N things moving in the reader's
+     * chats side by side in a floating window, N transcripts typing at once is N things moving in the reader's
      * periphery while they try to read one, the single fastest way to make a split unbearable. So an unwatched
      * transcript SETTLES each batch whole instead of revealing it a slice per paint: the same text, the same
      * order, arriving as it lands rather than at reading speed.
@@ -129,19 +121,16 @@ export class TranscriptClock {
         this.schedule();
     }
 
-    // Run a tick on the next paint of the window the transcript is IN (transcriptView, a popped-out panel's is
-    // not this realm's), unless one is already owed. The clock only runs while there is something for it to do
-    //, buffered frames, or text still being revealed, so an idle conversation holds no timer.
+    // Run a tick on this window's next paint, unless one is already owed. The clock only runs while there is
+    // something for it to do, buffered frames, or text still being revealed, so an idle conversation holds no
+    // timer.
     private schedule(): void {
         if (this.clockArmed) {
             return;
         }
         this.clockArmed = true;
         this.clockFallback = setTimeout(() => this.tick(), CLOCK_FALLBACK_MS);
-        // A closed window paints nothing ever again, and the panel hears about one a flush after it goes, so
-        // the frames of the window that is still here are the better bet for the beat in between.
-        const view = transcriptView.value;
-        (view === undefined || view.closed ? globalThis : view).requestAnimationFrame(() => this.tick());
+        globalThis.requestAnimationFrame(() => this.tick());
     }
 
     /* Fold every buffered frame into `from`, returning the state they produce and the effects they raised in

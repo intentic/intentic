@@ -10,8 +10,8 @@
 // compile-time constant compiles to a STABLE fragment whose <section>s carry no patch flag, so Vue patched
 // their children through the block tree and never the sections themselves: `v-show` ran once at mount and
 // `display` froze there. A chat opened from the board arrived in a lane still set to `display:none`, and the
-// popped-out rail sat looking empty while the panel beside it had the conversation open ("I keep clicking cards
-// in /agents and the popped-out window doesn't react"). Every assertion here is about what is ON SCREEN rather
+// floating rail sat looking empty while the panel beside it had the conversation open ("I keep clicking cards
+// in /agents and the floating window doesn't react"). Every assertion here is about what is ON SCREEN rather
 // than what is rendered, because that was the whole gap: the section was in the DOM the entire time, with the
 // right cards in it, invisible.
 import type { AgentSummary } from "@intentic/sandbox-contract";
@@ -33,7 +33,7 @@ vi.hoisted(() => {
 
 let app: App | undefined;
 
-// Mounted ONCE per test and never again: the pop-out window's own lifetime, and the condition every assertion
+// Mounted ONCE per test and never again: the floating window's own lifetime, and the condition every assertion
 // below is made under.
 const mountList = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
@@ -159,7 +159,7 @@ it(`drops a lane the last chat left, so no empty header is left standing`, async
 /* THE FINISHED LANE IS THE ONLY ONE THAT GROWS. Attention and Active empty themselves: a card leaves them the
  * moment its turn settles, so on the surface that is mounted for hours, an uncapped Finished lane is a column
  * of every agent the day produced. The board has always capped its own (windowFinished); this list drew the
- * same lane with no cap at all, which is the "my popped-out Finished lane keeps growing" report. */
+ * same lane with no cap at all, which is the "my Finished lane keeps growing" report. */
 const seedFinished = (count: number): void =>
     setAgents(
         Array.from({ length: count }, (_, at) => ({

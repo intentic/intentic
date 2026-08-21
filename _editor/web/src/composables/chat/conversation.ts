@@ -44,6 +44,7 @@ import { type SessionRef, type TurnSettings, resumes, turnRequestBody } from "./
 import { type AttachHead, followRun, postTurnControl, type TurnContext } from "./turnStream";
 import { usageStatusByAccount } from "./usageStatus";
 import { mentionPaths } from "./useMentions";
+import { uuid } from "../uuid";
 
 // A file staged in a conversation's composer, uploaded to the workspace the moment it's attached (send is
 // then instant). Each lands in its own uuid dir so duplicate names never collide and the agent sees the real
@@ -797,7 +798,7 @@ export class Conversation {
          * they are re-staged as finished chips rather than re-uploaded. `previewUrl` rides along where the
          * bubble still has one; a tab restored from the record has none, and the chip falls back to its name. */
         this.attachments.value = (message.attachments ?? []).map((attachment): PendingAttachment => ({
-            id: crypto.randomUUID(),
+            id: uuid(),
             name: attachment.name,
             path: attachment.path,
             previewUrl: attachment.previewUrl,
@@ -1249,7 +1250,7 @@ export class Conversation {
         if ((trimmed.length > 0 || attachments.length > 0) && !repeatsNudge({ text: trimmed, attachments }, this.queued.value.at(-1))) {
             this.queued.value = [
                 ...this.queued.value,
-                { id: crypto.randomUUID(), text: trimmed, attachments, ...(editorContext !== undefined ? { editorContext } : {}) },
+                { id: uuid(), text: trimmed, attachments, ...(editorContext !== undefined ? { editorContext } : {}) },
             ];
         }
         return this.drainQueue();
@@ -1275,7 +1276,7 @@ export class Conversation {
         if (repeatsNudge(held, this.queued.value[0])) {
             return;
         }
-        this.queued.value = [{ id: crypto.randomUUID(), ...held }, ...this.queued.value];
+        this.queued.value = [{ id: uuid(), ...held }, ...this.queued.value];
     }
 
     // Release a hold placed by a failure the user has now fixed (reconnecting a revoked account) and let

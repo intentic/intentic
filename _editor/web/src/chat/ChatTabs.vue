@@ -12,10 +12,10 @@ import { useAgents } from "../composables/agents/useAgents";
 import OriginMark from "../components/OriginMark.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
 import { clampRailWidth, DEFAULT_RAIL_WIDTH, RAIL_WIDTH_KEY } from "../composables/chat/chatRail";
-import { chatOnRail, chatWide, toggleChatHome, toggleChatPopout } from "../composables/chat/chatSurface";
+import { chatOnRail, chatWide, toggleChatFloating, toggleChatHome } from "../composables/chat/chatSurface";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
-import { useChatPopout } from "../composables/chat/useChatPopout";
+import { useChatFloating } from "../composables/chat/chatFloating";
 import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../composables/commands/useCommands";
 import { toAppPx, uiLength } from "../composables/uiScale";
 import { viewersOfSession } from "../composables/usePresence";
@@ -24,7 +24,7 @@ import ChatTabList from "./ChatTabList.vue";
 import PastChatList from "./PastChatList.vue";
 
 /* THE CHAT PANEL'S OWN BAR: one line that says which conversation you are in, and drops the list of every
- * other one on click. Docked it is a header across the top of the chat column; popped out it stands up the
+ * other one on click. Docked it is a header across the top of the chat column; floating it stands up the
  * window's left edge as a rail, with that same list permanently open in it.
  *
  * IT USED TO BE A TAB STRIP, and the strip was the wrong shape for this column. Tabs wrapped to a second row
@@ -38,7 +38,7 @@ import PastChatList from "./PastChatList.vue";
  *
  * So the switcher wears: status glyph · origin · title · viewers · running / attention counts · chevron. The
  * list it opens is ChatTabList, the fleet board's three lanes in miniature: the same component the rail
- * shows, so the docked sheet and the pop-out rail cannot drift apart.
+ * shows, so the docked sheet and the floating rail cannot drift apart.
  *
  * The strip reads the conversation list from the useChat singleton and emits select / close / open rather
  * than writing it: this bar is a view of the tabs, and the panel it lives in is what hands each verb to the
@@ -54,18 +54,18 @@ const emit = defineEmits<{
 
 const { conversations, active, activeId, panes, openBeside, closePane, sessions, loadSessions } = useChat();
 const { agentById, rename } = useAgents();
-const { poppedOut, overlayTarget } = useChatPopout();
+const { floats } = useChatFloating();
 const router = useRouter();
 // The toolbar button's tooltip AND its accessible name, one string: the control the pointer finds is what
 // teaches the chord that makes the trip unnecessary. Never shown where the panel already floats, so it never
 // has to say the way back.
-const popoutHint = computed(() => withShortcut(`Move chat into new window`, `chat.togglePopout`));
+const floatHint = computed(() => withShortcut(`Move chat into new window`, `chat.toggleFloating`));
 // Its sibling on the docked header: moving the chat's home to the RAIL (a tile, full-window when opened).
 // The ways back live on the tile itself (its right-click menu, ShellDesktop) and on this bar's own menu, so
 // the rail form carries no window-management chrome of its own.
 const railHint = computed(() => withShortcut(`Dock chat to rail: full window, behind a rail tile`, `chat.toggleHome`));
 
-/* On a WIDE surface (the pop-out window, or the /chat area filling the main one) the bar stands up the LEFT
+/* On a WIDE surface (the floating window, or the /chat area filling the main one) the bar stands up the LEFT
  * EDGE as a resizable rail with the chat list always open in it (ChatPanel says why that side).
  * A wide surface has the width to keep the list open beside the transcript, and a top bar there would spend
  * the one axis the chat is short of (height) on a row that has width to burn, while a rail has room to be a
@@ -120,7 +120,7 @@ const onDocumentKeydown = (event: KeyboardEvent): void => {
         listOpen.value = false;
     }
 };
-// Armed on the bar's OWN document, so a docked panel and a popped-out one can never listen in the wrong window.
+// Armed on the bar's OWN document, so a docked panel and a floating one can never listen in the wrong window.
 let armedDocument: Document | undefined;
 const disarmSheet = (): void => {
     armedDocument?.removeEventListener(`pointerdown`, onDocumentPointerDown, true);
@@ -202,7 +202,7 @@ const startRailResize = (event: PointerEvent): void => {
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
 };
 // The width is the distance from the rail's own left edge to the pointer: measured off the ELEMENT, not off
-// the window. In a pop-out the two are the same thing (the rail is flush with that window's left edge), but in
+// the window. In a floating window the two are the same thing (the rail is flush with that window's left edge), but in
 // the /chat area the shell's icon rail stands to its left, and a width read as the pointer's x would be that
 // column's width too wide on every drag.
 const onRailResize = (event: PointerEvent): void => {
@@ -257,7 +257,7 @@ const barMenuItems = computed<MenuItem[]>(() => [
     { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
     // The chat's other two homes, in the header buttons' order (move within this window, then leave it). The
-    // dock row is the shell command's move (toggleChatHome: from a pop-out window it docks AND navigates,
+    // dock row is the shell command's move (toggleChatHome: from a floating window it docks AND navigates,
     // which is exactly what those words ask for there).
     {
         label: chatOnRail.value ? `Dock chat back to the side` : `Dock chat to rail`,
@@ -265,11 +265,9 @@ const barMenuItems = computed<MenuItem[]>(() => [
         command: (): void => toggleChatHome(router),
     },
     {
-        label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
-        shortcut: commandShortcut(`chat.togglePopout`),
-        // The routed toggle, not the bare one: docking back while the rail is home walks to the tile's area
-        // instead of parking the chat out of sight (chatSurface.ts).
-        command: (): void => toggleChatPopout(router),
+        label: floats.value ? `Dock chat back` : `Move chat into new window`,
+        shortcut: commandShortcut(`chat.toggleFloating`),
+        command: (): void => toggleChatFloating(),
     },
 ]);
 const onBarContextMenu = (event: MouseEvent): void => {
@@ -598,9 +596,9 @@ const openHistory = (event: Event): void => {
             <button
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
-                @click="toggleChatPopout(router)"
-                v-tooltip.bottom="popoutHint"
-                :aria-label="popoutHint"
+                @click="toggleChatFloating()"
+                v-tooltip.bottom="floatHint"
+                :aria-label="floatHint"
             >
                 <Icon name="external-link" class="text-sm" />
             </button>
@@ -641,7 +639,7 @@ const openHistory = (event: Event): void => {
              completely covered by the list of things it is one of.
              ON CANVAS, not on the panel's card colour: the list draws its lanes as slabs mixed FROM canvas
              (`.lane`), so a host that paints anything else leaves them floating a shade off their own
-             surroundings. The rail out in the pop-out window is a canvas body; this paints one. The strong
+             surroundings. The rail out in the floating window is a canvas body; this paints one. The strong
              edge and the shadow are what make it a sheet floating over the transcript: the fill was never
              carrying that. -->
         <div
@@ -652,7 +650,7 @@ const openHistory = (event: Event): void => {
         </div>
 
         <!-- Anchored to whichever button was pressed, and capped by AnchoredOverlay to the room that button's
-             own window has: the rail's trigger sits at the foot of the pop-out window, where the room above is
+             own window has: the rail's trigger sits at the foot of the floating window, where the room above is
              whatever the user has dragged it to. The session list gives way; the search box holds its size. -->
         <AnchoredOverlay v-model="historyOpen" :anchor="historyAnchor" side="bottom">
             <div class="flex min-h-0 w-72 flex-col">
@@ -679,8 +677,8 @@ const openHistory = (event: Event): void => {
         </AnchoredOverlay>
 
         <!-- Right-click menu for the bar's own chrome (the cards have their own, inside the list), rendered
-             into the pop-out window while the chat floats there. -->
-        <ContextMenu ref="barMenu" :model="barMenuItems" :append-to="overlayTarget" :min-width="13" />
+             into the floating window while the chat floats there. -->
+        <ContextMenu ref="barMenu" :model="barMenuItems" :min-width="13" />
     </component>
 </template>
 

@@ -33,7 +33,7 @@ import { fileLinkDecorator } from "../composables/renderMarkdown";
  * like its parent's.
  *
  * THE LIST IS THE CHAT RAIL'S, NOT A SECOND LIST OF SESSIONS. Its rows are RailCard on RailLane: the same card
- * and the same lane slab the popped-out chat lists its conversations with, and the fleet board's card one column
+ * and the same lane slab the floating chat lists its conversations with, and the fleet board's card one column
  * wide. This used to be its own thing: a flat column of bordered rows, its own status glyphs, its own facts in
  * its own order, no identity tile and no card surface, so the agents an AGENT started looked like a different
  * kind of object from the agents the user started, two screens apart in the same app. Everything a row needs
@@ -349,7 +349,7 @@ watch(
 </script>
 
 <template>
-    <!-- ON THE CARD SURFACE, which is the popped-out chat's ground (ChatPanel) and not this route's default
+    <!-- ON THE CARD SURFACE, which is the floating chat's ground (ChatPanel) and not this route's default
          canvas, because the list down the left is that window's list, drawn by the same RailLane and RailCard,
          and a lane means opposite things on the two grounds. `.lane` is mixed FROM canvas, so on canvas it is a
          slab that RISES out of the page and its cards rise again off that; on the card ground it is a trough
@@ -386,7 +386,7 @@ watch(
         <template v-else>
             <!-- WHICH AGENT. The chat rail's own column: lane slabs of session cards, so the agents an agent
                  started are read exactly the way the agents you started are, two clicks away. -->
-            <!-- No divider down its right edge, for the reason the pop-out rail has none: the lane slabs are
+            <!-- No divider down its right edge, for the reason the floating rail has none: the lane slabs are
                  the structure, and a hairline against a column of them is a second edge saying what the first
                  already said. -->
             <!-- THE GUTTER IS ON THE FRAME, NOT ON THE SCROLLER: the shape the docked rail uses (ChatTabs

@@ -428,11 +428,12 @@ describe(`code block copy`, () => {
         expect(written).toEqual([]);
     });
 
-    /* THE POP-OUT. A popped-out panel's DOM is teleported into a second real window while this realm keeps
-     * running the JS, so the module-global `navigator` belongs to a document the user is NOT focused on, and
-     * Chrome refuses a clipboard write from an unfocused document, silently, which is exactly what "the Copy
-     * button does nothing out here" was. The write must therefore go through the button's OWN window. An
-     * iframe stands in for the pop-out: a second same-origin realm with its own document and navigator. */
+    /* ANOTHER REALM. Chrome refuses a clipboard write from a document that is not focused, silently, so a Copy
+     * button whose write goes through the module-global `navigator` does nothing at all whenever that global
+     * belongs to a different document than the button does. This app draws into realms of its own (the preview,
+     * the extension host), and a floating panel used to be one too, back when its DOM was teleported into a
+     * second window with the JS left behind. Hence: the write goes through the BUTTON's own window. An iframe
+     * stands in for that realm, being the one thing jsdom gives with a document and navigator of its own. */
     it(`writes through the window the button lives in, not this realm's`, async () => {
         const frame = document.createElement(`iframe`);
         document.body.appendChild(frame);
@@ -443,14 +444,14 @@ describe(`code block copy`, () => {
             value: { writeText: (text: string): Promise<void> => (outThere.push(text), Promise.resolve()) },
         });
         const container = other.document.createElement(`div`);
-        container.innerHTML = renderMarkdown("```ts\nexport const poppedOut = 7;\n```");
+        container.innerHTML = renderMarkdown("```ts\nexport const elsewhere = 7;\n```");
         container.addEventListener(`pointerdown`, copyCodeFromEvent);
         other.document.body.replaceChildren(container);
 
         (container.querySelector(`.md-code-copy`) as HTMLElement).dispatchEvent(new other.MouseEvent(`pointerdown`, { bubbles: true }));
         await Promise.resolve();
 
-        expect(outThere).toEqual([`export const poppedOut = 7;`]);
+        expect(outThere).toEqual([`export const elsewhere = 7;`]);
         expect(written).toEqual([]);
     });
 

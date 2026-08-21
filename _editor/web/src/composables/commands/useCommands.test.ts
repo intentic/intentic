@@ -41,11 +41,11 @@ describe(`command registry`, () => {
     });
 
     it(`disposing removes the command so its id is free again`, () => {
-        const disposable = registerCommand(entry(`chat.togglePopout`, () => undefined));
+        const disposable = registerCommand(entry(`chat.toggleFloating`, () => undefined));
         disposable.dispose();
         expect(commands.value).toHaveLength(0);
         // Re-registering the same id must now succeed: this is what lets the shell remount without colliding.
-        expect(() => registerCommand(entry(`chat.togglePopout`, () => undefined))).not.toThrow();
+        expect(() => registerCommand(entry(`chat.toggleFloating`, () => undefined))).not.toThrow();
     });
 
     it(`throws when executing an unknown command`, async () => {

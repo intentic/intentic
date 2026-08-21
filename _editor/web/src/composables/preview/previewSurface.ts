@@ -6,9 +6,9 @@ import { ADDRESS_TARGET_ID } from "./previewModel";
 
 /* THE ONE PREVIEW PANEL'S OWN STATE, which target it shows and whether it exists at all, as a module-level
  * singleton like useChat/useLayout, because the panel is mounted above the router (shell/PoppablePanels) and
- * has no route to keep state in: the same panel serves the /preview area and its pop-out window.
+ * has no route to keep state in: the same panel serves the /preview area and a window of its own.
  *
- * `opened` IS THE PANEL'S EXISTENCE. Nothing mounts until the user first looks (the /preview area, a pop-out,
+ * `opened` IS THE PANEL'S EXISTENCE. Nothing mounts until the user first looks (the /preview area, a window,
  * a tree row's eye), an iframe quietly loading a dev server nobody asked to see would be requests into the
  * user's app from a surface they never opened. Once opened it STAYS mounted, parked offscreen behind the rail
  * tile while other areas are up (PoppablePanels' stage): moving back and forth between the code and the app is
@@ -34,8 +34,8 @@ const restore = (): void => {
 restore();
 
 // Re-scope to the incoming sandbox (called from sandboxScope): its own last target comes back, and the parked
-// panel goes away rather than keeping the outgoing sandbox's app loaded, a popped-out preview re-marks itself
-// opened immediately (PoppablePanels watches the window), so a floating window survives the switch.
+// panel goes away rather than keeping the outgoing sandbox's app loaded. A floating preview window marks itself
+// opened on arrival (pages/FloatingArea.vue), so it survives the switch on its own.
 export const resetPreviewSurface = (): void => {
     opened.value = false;
     restore();
@@ -79,5 +79,5 @@ export const openPreview = (router: Router, targetId?: string): void => {
     void router.push(`/preview`);
 };
 
-/* The pop-out toggle lives in usePreviewPopout.ts rather than here: this module is imported by sandboxScope
- * (whose tests run without a DOM), and the pop-out machinery installs its window hook at module scope. */
+/* The window toggle lives in previewFloating.ts rather than here: this module is imported by sandboxScope,
+ * whose tests run without a DOM, and the floating surface reaches for the window at module scope. */

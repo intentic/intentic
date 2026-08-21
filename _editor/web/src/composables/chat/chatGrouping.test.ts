@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // jsdom for the one thing this module does beyond holding a string: it remembers. The cut is how this reader
-// reads the chat list, so it has to survive the docked sheet being dismissed, the pop-out being closed, and a
+// reads the chat list, so it has to survive the docked sheet being dismissed, the floating window being closed, and a
 // reload: a preference that silently resets is one people stop using.
 import { beforeEach, expect, it, vi } from "vitest";
 

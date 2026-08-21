@@ -16,7 +16,6 @@
             "entry": [
                 "src/main.ts",
                 "index.html",
-                "popout.html",
                 "vite.config.ts",
                 "src/**/*.test.ts",
                 "scripts/*.mjs",
@@ -26,7 +25,7 @@
             "ignore": ["public/**"]
         },
         "_site/demo": {
-            "entry": ["src/main.ts", "src/popout.ts", "index.html", "popout.html", "vite.config.ts"]
+            "entry": ["src/main.ts", "index.html", "vite.config.ts"]
         },
         "_editor/desktop-app": {
             "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]

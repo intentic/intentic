@@ -1,46 +1,37 @@
 <script setup lang="ts">
-import { computed, onUnmounted, watch, watchEffect } from "vue";
-import { useChatPopout } from "../composables/chat/useChatPopout";
+import { computed, onUnmounted, watch } from "vue";
+import { useRouter } from "vue-router";
+import { useChatFloating } from "../composables/chat/chatFloating";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
-import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
-import { chatFullscreen, chatOnRail } from "../composables/chat/chatSurface";
-import { markPreviewOpened, previewOpened } from "../composables/preview/previewSurface";
-import { usePreviewPopout } from "../composables/preview/usePreviewPopout";
+import { useTerminalFloating } from "../composables/terminal/terminalFloating";
+import { chatOnRail, chatWide } from "../composables/chat/chatSurface";
+import { previewOpened } from "../composables/preview/previewSurface";
+import { usePreviewFloating } from "../composables/preview/previewFloating";
 import ChatPanel from "../chat/ChatPanel.vue";
 import PreviewPanel from "../preview/PreviewPanel.vue";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { chatDock, chatFullDock, previewDock, terminalDock } from "./dockSlots";
 
 /* THE THREE POPPABLE PANELS (the chat, the sandbox-global terminal and the app preview) each mounted exactly
- * once per page, here above the router rather than inside the workspace shell (dockSlots.ts has the why). One
- * instance whose live DOM is teleported to wherever the panel currently belongs: its pop-out window, the
- * shell's docked slot, or the parking stage below. A move is a move, never a rebuild, so a streaming turn, an
- * open picker and an attached xterm ride through navigation the way they already ride through popping out.
+ * once per window, here above the router rather than inside the workspace shell (dockSlots.ts has the why). One
+ * instance whose live DOM is teleported to wherever the panel currently belongs in THIS window: the shell's
+ * docked slot, a full-window area, the floating window's one big slot, or the parking stage below. A move is a
+ * move, never a rebuild, so a streaming turn, an open picker and an attached xterm ride through navigation.
  *
- * WHAT THIS COMPONENT'S OWN LIFETIME MEANS. It owns the panels, so it is the one thing whose going away really
- * does orphan a floating window, and it now goes away only when the workspace itself does: a lost session
- * bounced to /login, the last sandbox deselected, the viewport crossing into the mobile shell (which has no
- * docked panel to come home to). Signing out is not on that list because it reloads the page outright: that
- * window is handled by its keeper, which closes a window no live page will answer for.
+ * WHICH WINDOW DRAWS WHICH PANEL is one reading, `shows` (composables/floating.ts): this window is the panel's
+ * floating window, or nobody else is floating it. That is the whole of the arrangement — there is no ownership
+ * to resolve, no adoption, no liveness handshake, and no branch anywhere on "popped out or not". A window that
+ * loses the panel unmounts it; a window that gains it mounts it and the daemon hands the state straight back
+ * (the chat re-attaches its run by cursor, tmux redraws, the preview reloads).
  *
- * So this is where each floating window learns whether it is still a view of the app: the holds below say "a
- * panel is being rendered into you right now", for exactly as long as it is (composables/usePopout.ts has the
- * contract, and why a window told anything less honest than this ends up frozen on its last frame). Saying it
- * as a HOLD rather than as a dock() on unmount is what lets a remount cross without casualties: the previous
- * shape decided the window's fate at the first frame of a teardown, and a teardown that turned out to be the
- * first half of a remount had already closed the user's floating chat, or latched a refusal that kept the panel
- * from ever floating again on that page. Nothing here decides anything now: it reports, and the window acts. */
+ * This component's own lifetime no longer decides anything about any window. It renders what it shows; a
+ * floating window answers for itself. */
 
-const { restoring: chatRestoring, body: chatPopoutBody, holdWhile: holdChat } = useChatPopout();
-const {
-    poppedOut: terminalPoppedOut,
-    restoring: terminalRestoring,
-    body: terminalPopoutBody,
-    dock: dockTerminal,
-    holdWhile: holdTerminal,
-} = useTerminalPopout();
+const chat = useChatFloating();
+const terminalFloat = useTerminalFloating();
 const terminal = useTerminalPanel();
-const { poppedOut: previewPoppedOut, restoring: previewRestoring, body: previewPopoutBody, holdWhile: holdPreview } = usePreviewPopout();
+const preview = usePreviewFloating();
+const router = useRouter();
 
 /* THE PARKING STAGE, where a docked panel waits out a route that has no shell to dock into. Offscreen rather
  * than `display: none`, because a panel with no box is a panel whose every measurement is zero: the terminal's
@@ -53,68 +44,59 @@ park.style.cssText = `position:fixed;left:-20000px;top:0;width:900px;height:700p
 document.body.append(park);
 onUnmounted(() => park.remove());
 
-// The chat's three homes, in rank: its own window, the /chat area filling the main one, the docked column.
-// The pop-out outranks the full-window slot so a URL restored to /chat can never steal a floating window the
-// reload path is busy re-adopting: recalling it is the area's own explicit button (ChatArea.vue). And while
-// the RAIL is the chat's home, the column is never a fallback: away from /chat the panel waits on the parking
-// stage behind the rail's Chat tile, which is the whole meaning of that choice (chatSurface.ts).
-const chatTarget = computed(() => chatPopoutBody.value ?? chatFullDock.value ?? (chatOnRail.value ? park : (chatDock.value ?? park)));
-const terminalTarget = computed(() => terminalPopoutBody.value ?? terminalDock.value ?? park);
-// The preview's two homes plus the stage: its window, the /preview area's slot, else parked, where a live
+// The chat's homes in this window, in rank: a full-window slot (the /chat area, or a floating window's whole
+// canvas — both publish the same slot), else the docked column. And while the RAIL is the chat's home, the
+// column is never a fallback: away from /chat the panel waits on the parking stage behind the rail's Chat tile,
+// which is the whole meaning of that choice (chatSurface.ts).
+const chatTarget = computed(() => chatFullDock.value ?? (chatOnRail.value ? park : (chatDock.value ?? park)));
+const terminalTarget = computed(() => terminalDock.value ?? park);
+// The preview has no side-column slot: it fills its area, fills its window, or waits parked, where a live
 // iframe keeps the previewed app's own state (its route, a half-filled form) across every trip to the code.
-const previewTarget = computed(() => previewPopoutBody.value ?? previewDock.value ?? park);
+const previewTarget = computed(() => previewDock.value ?? park);
 
-/* A PREVIEW WINDOW IS ITS OWN DOOR. The panel exists only once someone opened it (previewSurface.opened:
- * an iframe nobody asked to see would be requests into their app), and a window is proof someone did: one
- * re-adopted after a reload, or restored, marks the panel open so it mounts straight out there: otherwise a
- * fresh page would answer the returning window `waiting` forever. */
-watchEffect(() => {
-    if (previewPoppedOut.value || previewRestoring.value) {
-        markPreviewOpened();
+/* A PANEL COMING BACK LANDS SOMEWHERE THE READER CAN SEE, in every window, whatever door the dock came
+ * through: the floating window's own ×, another window's button, F9, the palette. This is the one rule that
+ * used to be spread across the toggles, which is exactly how the window's × came to be the door that skipped
+ * it: press it with the rail as the chat's home and the panel docked to the parking stage behind a tile, and
+ * "I closed the window and my chat didn't come back" is that, nothing else.
+ *
+ * Only for the two panels whose home is a ROUTE. The terminal docks into the shell below the workspace, so it
+ * is already on screen wherever the reader stands. */
+watch(chat.floats, (floats) => {
+    if (!floats && chatOnRail.value && router.currentRoute.value.name !== `chat`) {
+        void router.push(`/chat`);
     }
 });
-
-// Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window. A decision
-// by the reader, so it is a dock and not merely a released hold: the window goes now rather than after a grace.
-watch(terminal.open, (open) => {
-    if (!open) {
-        dockTerminal();
+watch(preview.floats, (floats) => {
+    if (!floats && previewOpened.value && router.currentRoute.value.name !== `preview`) {
+        void router.push(`/preview`);
     }
 });
-
-// What each window is told about itself, in the same terms as the `v-if` below, because that condition IS
-// whether the panel exists to be drawn. Held until this component's scope ends, which is the only honest
-// account of "the app stopped rendering into you" available anywhere in the page.
-holdChat(() => !chatRestoring.value);
-holdTerminal(() => terminal.open.value && !terminalRestoring.value);
-holdPreview(() => previewOpened.value && !previewRestoring.value);
 </script>
 
 <template>
     <!-- The grid area and the column's border ride on the PANEL rather than the slot: the slot generates no box
-         (display: contents), so the panel itself is the shell grid's item. Held back entirely while a pop-out
-         window from before a page reload is still coming back, so the panel mounts once, out there, instead of
-         building itself in the collapsed column first. -->
-    <!-- The left border is the seam against the workspace it docks beside (kept in the pop-out window too,
-         where it has always drawn). Filling the /chat area it would double the rail's own right border, so it
-         is the one place the seam comes off. -->
+         (display: contents), so the panel itself is the shell grid's item. -->
+    <!-- The left border is the seam against the workspace it docks beside, so it belongs to the DOCKED column
+         alone: filling a whole window or the /chat area it would double the rail's own right border. `chatWide`
+         is exactly that distinction (chatSurface.ts). -->
     <Teleport :to="chatTarget">
-        <ChatPanel v-if="!chatRestoring" :class="{ 'border-l border-line': !chatFullscreen }" style="grid-area: chat" />
+        <ChatPanel v-if="chat.shows.value" :class="{ 'border-l border-line': !chatWide }" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <TerminalPanel
-            v-if="terminal.open.value && !terminalRestoring"
+            v-if="terminal.open.value && terminalFloat.shows.value"
             :source="globalTerminalSource"
             storage-key="sandbox"
             :initial="terminal.requested.value"
             :surfaced="terminal.surfaced.value"
-            :resizable="!terminalPoppedOut"
+            :resizable="!terminalFloat.floats.value"
             @close="terminal.setOpen(false)"
         />
     </Teleport>
-    <!-- The preview mounts only once someone has opened it (see the watch above), and then stays: parked, the
+    <!-- The preview mounts only once someone has opened it (previewSurface.opened), and then stays: parked, the
          iframe keeps the previewed app alive between looks. -->
     <Teleport :to="previewTarget">
-        <PreviewPanel v-if="previewOpened && !previewRestoring" />
+        <PreviewPanel v-if="previewOpened && preview.shows.value" />
     </Teleport>
 </template>

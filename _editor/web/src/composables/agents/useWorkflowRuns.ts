@@ -58,7 +58,7 @@ export const runsNeedingYou = (fleet: readonly FleetAgent[]): Set<string> =>
     new Set(fleet.flatMap((agent) => (blocked(agent) && agent.workflow !== undefined ? [agent.workflow.runId] : [])));
 
 /* A STEP IS NEVER A CARD OF ITS OWN, the one rule behind the grouping, asked by every surface that lists
- * conversations: the fleet board's lanes, the board's archive, and the popped-out rail.
+ * conversations: the fleet board's lanes, the board's archive, and the rail in a floating window.
  *
  * It is answered from the LEDGER, not from which runs a surface happens to be drawing, and that is the whole
  * correction. Gating on "is the run's row on screen right now" meant every reason a row was not, a filter

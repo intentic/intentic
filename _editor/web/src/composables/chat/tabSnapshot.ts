@@ -1,6 +1,6 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import type { Conversation } from "./conversation";
-import { readWindowState, writeWindowState } from "../windowStore";
+import { forgetWindowState, readWindowState, writeWindowState } from "../windowStore";
 
 /* Where a sandbox's open chat tabs live between page loads: session/provider identity, title, and the composer
  * draft (text + done-upload metadata), as one JSON blob per sandbox, this window's own, seeded by the last
@@ -225,4 +225,13 @@ export const readTabSnapshot = (sandboxId: string | undefined): TabSnapshot | un
 // makes "any field of any tab changed" a single cheap comparison, so re-serializing here would only repeat it.
 export const writeTabSnapshot = (sandboxId: string, json: string): void => {
     writeWindowState(snapshotKey(sandboxId), json);
+};
+
+// …and stop claiming to know this sandbox's strip, for as long as the chat is drawn by another window. The next
+// read falls through to the seed, which is that window's, so taking the panel back picks its tabs up where they
+// were left rather than where this window last saw them (windowStore.forgetWindowState has the whole argument).
+export const forgetTabSnapshot = (sandboxId: string | undefined): void => {
+    if (sandboxId !== undefined) {
+        forgetWindowState(snapshotKey(sandboxId));
+    }
 };

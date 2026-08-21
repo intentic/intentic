@@ -12,8 +12,9 @@
  * the rule sayable in one line ("closes act on the workspace unless you're typing in the chat or a terminal")
  * with no last-focused state to guess at.
  *
- * Panels teleported into a pop-out window resolve the same way: adoption moves the nodes but leaves their
- * main-realm prototypes, so both `instanceof Element` and `closest` still find the roots there. */
+ * A panel floating in a window of its own needs nothing special here: it runs its own copy of the app
+ * (composables/floating.ts), so its keystrokes dispatch against its own document and resolve against the same
+ * roots. */
 
 export type TabSurface = `chat` | `terminal` | `workspace`;
 

@@ -16,8 +16,8 @@ import { useTerminalActivity } from "../composables/terminal/useTerminalActivity
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
-import { chatOnRail, lastAreaPath, toggleChatHome, toggleChatPopout } from "../composables/chat/chatSurface";
-import { useChatPopout } from "../composables/chat/useChatPopout";
+import { chatOnRail, lastAreaPath, toggleChatFloating, toggleChatHome } from "../composables/chat/chatSurface";
+import { useChatFloating } from "../composables/chat/chatFloating";
 import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useKeybindings } from "../composables/commands/useKeybindings";
 import { useLayout } from "../composables/useLayout";
@@ -90,9 +90,10 @@ const pushFlow = usePushFlow();
 const { attention: agentAttention } = useAgents();
 const layout = useLayout();
 const { iconRailSize } = useIconRailSize();
-// Only what the LAYOUT needs: a popped-out (or returning) chat is a collapsed column. The panel itself is
-// mounted above the router now: this shell just lends it the column (see the slot in the template).
-const { poppedOut, restoring: chatRestoring } = useChatPopout();
+// Only what the LAYOUT needs: a chat in a window of its own is a collapsed column, in EVERY other window,
+// because there is one chat surface and it is out there. The panel itself is mounted above the router: this
+// shell just lends it the column (see the slot in the template).
+const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
 
@@ -161,13 +162,11 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
  * user is standing on /chat, so retiring its tile in that same frame would leave the rail with nothing lit
  * while the view it belongs to is still on screen: the shell disowning where you are, as the reward for a
  * press that was only about a window. So the seat is kept for as long as that view is, and goes with it: the
- * next tile pressed is both the view change and the tile's exit. (`restoring` counts as away: a window from
- * before a reload is on its way back, and the panel is not in this window either.)
+ * next tile pressed is both the view change and the tile's exit.
  *
- * The way back never depended on the tile anyway: F9, the floating window's own menu row, or its ×, each of
- * which lands the chat in its home and (toggleChatPopout) walks to the area where the seat lights up again. */
-const chatAway = computed(() => poppedOut.value || chatRestoring.value);
-const chatTileSeated = computed(() => chatOnRail.value && (!chatAway.value || route.name === `chat`));
+ * The way back never depended on the tile anyway: F9, the floating window's own menu row, or its ×, and a
+ * docked chat lands in the area where the seat lights up again (shell/PoppablePanels.vue's one watch). */
+const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || route.name === `chat`));
 
 /* Preview closes the Work band: start a turn (Chat), read what it did (Agents/Workspace), LOOK at the running
  * app. Evidence-driven like every extension tile: it appears once the workspace has anything a live iframe can
@@ -426,9 +425,9 @@ const chatTileMenuItems = computed<MenuItem[]>(() => [
         command: (): void => toggleChatHome(router),
     },
     {
-        label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
-        shortcut: commandShortcut(`chat.togglePopout`),
-        command: (): void => toggleChatPopout(router),
+        label: chatFloats.value ? `Dock chat back` : `Move chat into new window`,
+        shortcut: commandShortcut(`chat.toggleFloating`),
+        command: (): void => toggleChatFloating(),
     },
 ]);
 const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
@@ -457,7 +456,7 @@ const rail = (value: string): string => `calc(${value} / var(--ui-scale))`;
 const gridStyle = computed(() => {
     const compact = iconRailSize.value === `compact`;
     return {
-        "--chat-width": poppedOut.value || chatRestoring.value || chatOnRail.value ? `0px` : uiLength(layout.chatWidth.value),
+        "--chat-width": chatFloats.value || chatOnRail.value ? `0px` : uiLength(layout.chatWidth.value),
         "--icon-rail-width": rail(`${ICON_RAIL_WIDTH_REM[iconRailSize.value]}rem`),
         "--icon-rail-tile-size": rail(compact ? `2.5rem` : `2.75rem`),
         "--icon-rail-account-size": rail(compact ? `2rem` : `2.25rem`),
@@ -665,7 +664,7 @@ useKeybindings();
         </nav>
 
         <!-- The chat's place in the grid: a slot, not the panel. The panel is mounted above the router and
-             teleported in here (shell/dockSlots.ts), so the same live DOM serves the column, the pop-out window
+             teleported in here (shell/dockSlots.ts), so the same live DOM serves the column, the floating window
              and a route this shell doesn't cover; `display: contents` means this element is not in the layout
              at all and the panel itself is still the grid item. -->
         <div ref="chatDock" class="contents"></div>

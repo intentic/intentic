@@ -46,11 +46,10 @@ source under a path prefix is what surfaced them:
 - `styles.css` now names its own source in an `@source`. Tailwind's auto-detection is rooted at the *build's*
   root, which was the app's directory only because the app was the only thing building it; the demo's first run
   came up as real markup with three-quarters of a design system.
-- `usePopout.ts` resolves the pop-out window's page against `import.meta.env.BASE_URL` instead of the origin
-  root. `/popout.html` under a prefix is the *marketing site's* 404 page, and nothing in it can answer the
-  keeper's handshake: so the window opened and then sat there while the panel stayed docked, which is exactly
-  the failure the liveness contract is written to prevent, arriving through the address rather than the realm.
-  The demo owns its own `popout.html` (same keeper, its own document, since the page is addressed by URL).
+- `floating.ts` resolves a floating panel's window against `import.meta.env.BASE_URL` instead of the origin
+  root. Under a prefix, a root-absolute `/floating/chat` is the *marketing site's* 404 page, so the window opened
+  onto a dead end and the panel never left its column. It is an ordinary route of the app (`/demo/floating/chat`),
+  so the demo needs nothing of its own for it beyond the SPA fallback every other route already gets.
 
 Both fixture handlers are plain `Request → Response` functions with contract types on every payload
 (`satisfies AgentsList`, `: SavingsReport`, …), so a shape that drifts from the wire is a build error. They are

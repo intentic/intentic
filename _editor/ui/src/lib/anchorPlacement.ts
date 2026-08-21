@@ -1,15 +1,14 @@
 /* WHERE AN ANCHORED BOX GOES, measured against the window the ANCHOR is in, never against a module-scope one.
  *
  * Pure geometry, no DOM: the caller reads the anchor's rect and its window's size and applies what comes back.
- * That signature is the whole point. Half this app's overlays live in the chat and terminal panels, which are
- * teleported into a REAL `window.open` document while their JS stays in this realm (see usePopout), so a
- * library that positions with the module-scope `window.innerHeight` (PrimeVue's overlays do, and so did
- * PrimeVue's tooltip before this app grew its own) decides "does it fit above the trigger?" against the
- * OPENER's viewport while the box lands in the pop-out's. The two windows are different sizes by definition,
- * one is a panel column, the other a window the user dragged, and the answer was wrong in the way that costs
- * most: a picker placed off the bottom edge of a short pop-out window, its top edge over the very pill that
- * opens it. An overlay covering its own trigger cannot be closed by clicking that trigger, which is what
- * "sometimes I can't close the model picker" was.
+ * That signature is the whole point. A library that positions with the module-scope `window.innerHeight`
+ * (PrimeVue's overlays do, and so did PrimeVue's tooltip before this app grew its own) decides "does it fit
+ * above the trigger?" against a viewport the box may not land in, and gets it wrong in the way that costs most:
+ * a picker placed off the bottom edge, its top over the very pill that opens it, and an overlay covering its own
+ * trigger cannot be closed by clicking that trigger. The app's floating panels used to make that certain, since
+ * they were rendered into another window entirely; they are their own windows now, but the app still draws into
+ * iframes (the preview, the extension host), so deriving the viewport from the ANCHOR remains the only reading
+ * that cannot be wrong.
  *
  * So the view is an argument. Every reader of it (AnchoredOverlay, the tooltip directive) passes the one it
  * measured from `el.ownerDocument.defaultView`, and being right in either window stops being a thing anyone

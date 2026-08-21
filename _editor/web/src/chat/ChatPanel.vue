@@ -4,12 +4,11 @@ import { computed, nextTick, ref, watch } from "vue";
 import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../composables/chat/chatRun";
 import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
-import { transcriptView } from "../composables/chat/transcriptClock";
 import { openRunSessions } from "../composables/chat/openRun";
 import { DEFAULT_RAIL_WIDTH } from "../composables/chat/chatRail";
 import { chatOnRail, chatWide } from "../composables/chat/chatSurface";
 import { useChat } from "../composables/chat/useChat";
-import { useChatPopout } from "../composables/chat/useChatPopout";
+import { useChatFloating } from "../composables/chat/chatFloating";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { MIN_PANE_PX, useLayout } from "../composables/useLayout";
 import { toAppPx, uiLength } from "../composables/uiScale";
@@ -20,12 +19,12 @@ import ChatTabsMobile from "./ChatTabsMobile.vue";
 
 /* The shared assistant: the FRAME around one or more chats. What is on screen (the transcript, its composer,
  * its pickers) is a ChatPane per conversation; this owns everything that belongs to the panel rather than to
- * any one chat: the switcher bar, the pop-out, the left-edge resize handle, and telling the transcript clock
- * which window it is painting in.
+ * any one chat: the switcher bar, the button that moves the panel into a window of its own, and the left-edge
+ * resize handle.
  *
  * All state lives in the useChat singleton, so a transcript persists as the user moves between workspace
  * areas. On mobile the bar becomes a taller touch header over a bottom sheet and the resize handle disappears.
- * On a WIDE surface (the pop-out window, or the /chat area filling the main one (chatSurface.ts)) the panel
+ * On a WIDE surface (a window of its own, or the /chat area filling the main one (chatSurface.ts)) the panel
  * turns on its side: the strip becomes a rail down the left edge, and the panes stand side by side in the room
  * that leaves. */
 
@@ -37,20 +36,18 @@ import ChatTabsMobile from "./ChatTabsMobile.vue";
  * on the same form factor: it switched between open chats and started a new agent, and on a phone the fleet
  * board (the Agents tab) is that switcher and carries that button.
  *
- * A prop rather than a `mobile` check inside this component, because "am I on a phone" is not the question:
- * the docked and popped-out panels are the ones that need their own strip, and they are the ones that keep it.
+ * A prop rather than a `mobile` check inside this component, because "am I on a phone" is not the question: the
+ * docked and floating panels are the ones that need their own strip, and they are the ones that keep it.
  * Defaults on, so nothing but the caller that asked is affected. */
 const { tabs = true } = defineProps<{ tabs?: boolean }>();
 
 const { active, activeId, conversations, panes, setActive, closePane, closeTabs, openConversation, tabReveal } = useChat();
 const layout = useLayout();
-const { poppedOut, fit } = useChatPopout();
+const { here: floating, fit } = useChatFloating();
 const { mobile } = useDevice();
 
-// The panel's own element, and the one question anything here asks of it: which window it is currently in.
-// The panes are teleported with it, so this answers for all of them.
+// The panel's own element (the left-edge resize handle measures against it).
 const root = ref<HTMLElement>();
-const panelWindow = (): Window & typeof globalThis => root.value?.ownerDocument.defaultView ?? window;
 
 // True while the user is dragging the left-edge handle to resize the panel.
 const resizing = ref(false);
@@ -134,8 +131,8 @@ const shownRun = computed(() => (chatWide.value && !mobile.value ? trackedRun.va
 /* THE BAR IS DRAWN WHEREVER THE RUN IS DRIVING, which is not the same question and used to be answered as if
  * it were. Following a run moves the panes on its own, and docked, where the diagram cannot be shown: the
  * bar went with the diagram: the reader got a panel that reseated itself every few seconds, with nothing on
- * screen naming the cause and no × to press, because the one control that ends it lived in a bar only the
- * pop-out ever saw. A thing that moves the panes by itself has to say so wherever it does it. */
+ * screen naming the cause and no × to press, because the one control that ends it lived in a bar only the wide
+ * forms ever drew. A thing that moves the panes by itself has to say so wherever it does it. */
 const barRun = computed(() => trackedRun.value);
 /* WHEN THE DIAGRAM IS WHAT IS ON SCREEN, and `live` is the mode that answers this two different ways over its
  * own lifetime. Asked for outright (`graph`) it is the diagram, full stop. Following the run, it is the diagram
@@ -152,8 +149,8 @@ const showingGraph = computed(() => showingRunGraph(shownRun.value, chatRun.valu
  * It runs on every focus GESTURE, not merely on the id moving: `tabReveal` is the counter setActive bumps for
  * exactly the ask an id watch cannot see (the card of the chat you are already in, clicked again), and that
  * click is as much "show me this chat" as any other. And it runs on `trackedRun`, whatever the panel's form:
- * gated on the popped-out `shownRun` it was dead while docked, which left `chatRun` (and the board ring it
- * draws) latched to a run the user had long since clicked away from.
+ * gated on `shownRun`, which only the wide forms have, it was dead while docked, which left `chatRun` (and the
+ * board ring it draws) latched to a run the user had long since clicked away from.
  *
  * It also runs when the ledger has NO reading for the run, which is the second half of the same lesson: a
  * missing run is handed to runOnFocus rather than being a reason to skip it, and comes back as a release. See
@@ -175,7 +172,7 @@ watch([activeId, tabReveal], () => {
 
 /* ROOM FOR THE BAND THAT JUST OPENED. A run's first move is usually two sessions at once, and a panel that
  * held the width it had would answer that by showing one of them, so the column asks for the width its own
- * floor says those panes need, exactly as the popped-out window asks itself to widen (`fit`). Clamped by the
+ * floor says those panes need, exactly as a floating window asks itself to widen (`fit`). Clamped by the
  * layout to a sliver short of the viewport, and left there for the reader to drag back: a width the app chose
  * is still a width, and the seam is where it is undone.
  *
@@ -200,9 +197,9 @@ const makeRoomFor = (count: number): void => {
  * panes. Between them the reader never presses anything, which is the point: "show me my workflow" was the
  * whole of the instruction.
  *
- * IT RUNS DOCKED AS WELL AS POPPED OUT, and on the stored PANE SET rather than on what this window has room
- * to draw. Gated on the popped-out reading, a run started from a docked panel opened nothing at all, which is
- * what the automatic pop-out was really for. A run's sessions are sessions: they open as tabs in a narrow
+ * IT RUNS DOCKED AS WELL AS FLOATING, and on the stored PANE SET rather than on what this window has room to
+ * draw. Gated on the panel having a window of its own, a run started from a docked panel opened nothing at all,
+ * which is what the automatic pop-out was really for. A run's sessions are sessions: they open as tabs in a narrow
  * panel and stand side by side in a wide one, exactly as two chats the reader opened by hand do.
  *
  * Guarded on the MODE rather than on the run, because `graph` and `pinned` are exactly the states in which the
@@ -244,7 +241,7 @@ const openRunColumn = (sessions: readonly RunSession[]): void => {
 };
 
 // A pane the window has no room for is a pane the user cannot see, so adding one asks the window to widen
-// (usePopout.fit only ever grows it, and only as far as the screen allows). Docked, there is no window of ours
+// (floating.fit only ever grows it, and only as far as the screen allows). Docked, there is no window of ours
 // to resize: the panel is a column in the app's own.
 watch(
     () => shown.value.length,
@@ -255,21 +252,14 @@ watch(
     },
 );
 
-/* The transcript's CLOCK is told which window its frames belong to (transcriptClock's transcriptView): the
- * window these rows are in is the pop-out's whenever the panel has one. Post-flush, so the Teleport has
- * already moved them and `ownerDocument` answers about where they landed rather than where they left; the
- * root is in the dependencies because a mount is the other way this becomes true. */
-watch([root, poppedOut], () => (transcriptView.value = panelWindow()), { flush: `post`, immediate: true });
-
-/* THE OTHER END OF THE FOCUS TRACE (focusTrace.ts): what this panel actually put on screen, and in WHICH
- * window it put it. The store's own line says which chat it resolved to; this one says which chat the user is
- * looking at, out of which document, so a report of "the popped-out chat is showing a different session than
- * the board" is answerable without guessing at which of the two moved. Post-flush, so the id and the window
- * are read after the Teleport has settled them, and title-free: the id is what both ends have in common. */
+/* THE OTHER END OF THE FOCUS TRACE (focusTrace.ts): what this panel actually put on screen, and in which kind
+ * of window it put it. The store's own line says which chat it resolved to; this one says which chat the user
+ * is looking at, so a report of "the floating chat is showing a different session than the board" is answerable
+ * without guessing at which of the two moved. Post-flush, so the id is read after the render has settled. */
 watch(
-    [() => active.value.conversationId, poppedOut, root],
-    ([id, floating]) => {
-        traceFocus(`render`, { id, window: floating ? `popout` : `docked`, document: panelWindow().document.title });
+    [() => active.value.conversationId, floating],
+    ([id, inOwnWindow]) => {
+        traceFocus(`render`, { id, window: inOwnWindow ? `floating` : `docked` });
     },
     { flush: `post`, immediate: true },
 );
@@ -375,7 +365,7 @@ const endResize = (event: PointerEvent): void => {
                  half of) until the floor, past which the row scrolls sideways rather than crushing them. -->
             <div v-else ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto" :style="{ '--min-pane': minPaneLength }">
                 <!-- A pane may be closed from its own corner only in a SPLIT: with one column the × would be
-                     a control that closes the panel it lives in, which is the pop-out's job and the strip's.
+                     a control that closes the panel it lives in, which is the floating window's job and the strip's.
                      The panel answers the press, the way it answers `focus`, which chats are on screen is
                      the frame's state, not any one pane's. -->
                 <ChatPane

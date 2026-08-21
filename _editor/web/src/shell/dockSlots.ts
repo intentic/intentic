@@ -3,16 +3,17 @@ import { shallowRef } from "vue";
 /* WHERE THE SHELL LENDS THE FLOATING PANELS A PLACE TO SIT.
  *
  * The chat and the sandbox-global terminal are mounted ABOVE the router (shell/PoppablePanels.vue), not inside
- * the workspace shell, because a popped-out panel is a PAGE-level surface: its DOM lives in another window and
- * its lifetime is this page's, not the current route's. They used to be children of ShellDesktop, and that made
- * every route outside the shell: /setup, which is where "Add sandbox" goes, an invite link, the desktop
- * sign-in handoff, tear the chrome down and close the floating window with it, mid-conversation.
+ * the workspace shell, because a panel is a PAGE-level surface: its lifetime is this window's, not the current
+ * route's. They used to be children of ShellDesktop, and that made every route outside the shell: /setup, which
+ * is where "Add sandbox" goes, an invite link, the desktop sign-in handoff, tear the chrome down and take a
+ * mid-conversation panel with it.
  *
  * So the shell no longer OWNS the panels; it publishes a place for them. An empty element in the chat grid
  * column, another below the workspace where the terminal docks, and the panel is teleported into whichever slot
- * is published, or into its pop-out window when it has one, or the parking stage when there is neither. It is
- * never unmounted, so a trip to /setup costs nothing: not the streaming turn, not the attached xterm, not even
- * a scroll position.
+ * is published, or into the parking stage when there is none. It is never unmounted, so a trip to /setup costs
+ * nothing: not the streaming turn, not the attached xterm, not even a scroll position. A floating window
+ * publishes the very same slots from its own copy of the app (pages/FloatingArea.vue), which is why "the panel
+ * is out in its own window" needs no case of its own here.
  *
  * Both slots are `display: contents` elements, they generate no box at all, so the panel itself stays the grid
  * item its own classes were written against and this indirection changes no layout.

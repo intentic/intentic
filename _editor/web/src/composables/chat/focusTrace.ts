@@ -1,5 +1,5 @@
 /* WHY THE FOCUSED CHAT MOVED, the trace behind the one report that keeps coming back and has never been
- * reproduced here: the popped-out chat showing a different session than the board's ring, after a click on the
+ * reproduced here: the floating chat showing a different session than the board's ring, after a click on the
  * board that both of them were supposed to hear.
  *
  * Everything that can move the focus goes through ONE writer (setConversations in useChat), so one line there,
@@ -17,10 +17,11 @@
  * this had to guess at.
  *
  * Always on, and cheap by construction: these are user-scale events (a click, a close, a reconnect), not
- * per-frame ones, so a busy hour is a few hundred lines. It prints to the console of the realm that OWNS the
- * chat, which is the opener even when the panel is floating in its own window, so one console holds both
- * halves of the story. `window.intenticFocusTrace()` dumps the ring as one block for pasting, for the usual
- * case where nobody had DevTools open when it happened. */
+ * per-frame ones, so a busy hour is a few hundred lines. Each window keeps and prints its OWN ring, because
+ * each runs its own copy of the app (composables/floating.ts), and the report worth tracing is precisely a
+ * disagreement BETWEEN two of them: the `render` line names which window it came from (`floating` or `docked`),
+ * so the two rings read as one story once both are pasted. `window.intenticFocusTrace()` dumps a ring as one
+ * block, for the usual case where nobody had DevTools open when it happened. */
 
 // Long enough to cover the minutes before someone notices and opens the console, short enough to paste.
 const KEPT = 300;
