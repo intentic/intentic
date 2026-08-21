@@ -74,7 +74,7 @@ export const creatorLinks: AboutLink[] = [
 
 export const creatorRole = "Full-stack engineer, DevOps, and 15+ years of shipping production systems.";
 
-export const creatorBio = "I wanted a real workspace for my agents, on my own hardware. Now it runs on yours too.";
+export const creatorBio = "Developer's job has changed and VSCode wasn't catching up fast enough.";
 
 /* The hero, which the landing band deliberately does NOT have.
  *
