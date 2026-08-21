@@ -52,7 +52,9 @@ pub struct Args {
 /// back with consent (`-y`, or `INSTALL_DOCKER=1`).
 #[cfg_attr(not(windows), allow(dead_code))]
 pub const EXIT_NEEDS_CONSENT: i32 = 3;
-/// Windows has to restart before the setup can go further. Everything that could be done has been.
+/// Windows has to end this session — a restart, or a sign-out — before the setup can go further. Everything
+/// that could be done has been. One code for both because they are one idea as far as any caller is
+/// concerned: nothing is wrong, nothing more can happen in THIS session, and the setup resumes in the next.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub const EXIT_NEEDS_RESTART: i32 = 4;
 
@@ -194,9 +196,17 @@ pub fn run(args: Args) -> Result<()> {
     // Things nobody here can do anything about — firmware, a host machine's settings, a PC this build does
     // not run on, a full disk. Reported and stopped on, without asking to change anything: consent for work
     // that cannot happen is a question with no honest answer.
+    //
+    // A restart and a sign-out are NOT in that set. Both are things this flow knows how to park on and come
+    // back from, and both have their own screen below; listing them here would report a machine that is one
+    // session away from ready as one that cannot run a sandbox.
     let stuck: Vec<plan::Requirement> = unmet
         .iter()
-        .filter(|requirement| !requirement.action.ours() && requirement.action != Action::Restart)
+        .filter(|requirement| {
+            !requirement.action.ours()
+                && requirement.action != Action::Restart
+                && requirement.action != Action::SignOut
+        })
         .cloned()
         .collect();
     if !stuck.is_empty() {
@@ -216,6 +226,18 @@ pub fn run(args: Args) -> Result<()> {
     // A restart Windows was already waiting for, with nothing else to do first.
     if unmet.iter().all(|r| r.action == Action::Restart) {
         return restart(&unmet, args.yes);
+    }
+    /* Or a sign-in that predates a group this account is already in — the same shape, one session smaller,
+     * and blocking for the same reason a pending restart is. Everything below `docker-users` on the list
+     * needs to REACH Docker's pipe, and this token cannot, so there is no version of carrying on: starting
+     * the engine and waiting five minutes for a connection that will be refused is not progress.
+     *
+     * Found anywhere on the list rather than only alone on it, and asked BEFORE consent: consent covers work,
+     * and there is no work here to authorise. Everything unmet has already been announced above, so the app
+     * still draws the whole list — this only decides what happens next, which is nothing until Windows issues
+     * a new token. */
+    if let Some(stale) = unmet.iter().find(|r| r.action == Action::SignOut) {
+        return sign_out(std::slice::from_ref(stale), &facts.user);
     }
 
     consent(&unmet, args.yes)?;
@@ -251,6 +273,14 @@ pub fn run(args: Args) -> Result<()> {
         previous = ids;
 
         for requirement in &todo {
+            // Uncovered by an earlier fix in this very pass: installing Docker Desktop adds the account to
+            // docker-users itself, so the requirement that was a UAC prompt when the list was drawn is a
+            // sign-out by the time we reach it. Parked properly rather than reported as a wall.
+            if requirement.action == Action::SignOut {
+                announce(requirement);
+                announce_state(requirement.id, "done", Some("waiting for the next sign-in"));
+                return sign_out(std::slice::from_ref(requirement), &facts.user);
+            }
             if !requirement.action.ours() {
                 // Reached only when a fix uncovered something new that is not ours (a full disk, say). Report
                 // it the same way the first round would have.
@@ -275,18 +305,23 @@ pub fn run(args: Args) -> Result<()> {
                     announce_state(requirement.id, "done", Some("waiting for the restart"));
                     return restart(&pending, args.yes);
                 }
+                /* The fix worked and changed nothing yet, which is the whole point of `Done::AfterSignOut`.
+                 * This is a designed stop, not a failure, and it leaves through the same screen as the one
+                 * above rather than through `bail!` — an account that was just granted a permission is not
+                 * an error to print in red. */
                 Outcome::SignOut => {
                     let mut pending = requirement.clone();
                     pending.action = Action::SignOut;
+                    pending.problem = format!(
+                        "{} was added to the docker-users group, and Windows only picks that up on the next sign-in.",
+                        if facts.user.is_empty() { "this account" } else { &facts.user }
+                    );
                     pending.remedy =
-                        "sign out of Windows and back in, then run the same command again."
+                        "sign out of Windows and back in - the setup picks up from there."
                             .to_string();
                     announce(&pending);
                     announce_state(requirement.id, "done", Some("waiting for the next sign-in"));
-                    bail!(
-                        "{} was added to the docker-users group, but Windows only picks that up on the next sign-in.\n       Sign out and back in, then run the same command again.",
-                        if facts.user.is_empty() { "this account" } else { &facts.user }
-                    );
+                    return sign_out(std::slice::from_ref(&pending), &facts.user);
                 }
             }
         }
@@ -423,6 +458,40 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     stop(
         EXIT_NEEDS_RESTART,
         "this PC has to restart before Docker can run - restart it, then run the command above.",
+    )
+}
+
+/* THE SAME PARKING, ONE SESSION SMALLER — and the outcome that used to leave through `bail!`.
+ *
+ * Windows issues a login token once, at sign-in, and never revises it. So an account can BE in `docker-users`
+ * and still be refused by Docker's pipe, and nothing running in this session can change that: not another
+ * `net localgroup`, not administrator, not re-running the setup. Only the next sign-in.
+ *
+ * That made it the one row on the checklist whose only control was "Check again", which could never work —
+ * and, until this, the one designed stop reported as `error:` in red, on a machine where every single thing
+ * had gone right. The desktop app has had the button for it for a while (Requirements.vue); what it needed
+ * was for the installer to stop calling this a failure. */
+#[cfg(windows)]
+fn sign_out(unmet: &[plan::Requirement], user: &str) -> Result<()> {
+    let again = rerun_command();
+    let who = if user.is_empty() {
+        "this account"
+    } else {
+        user
+    };
+    crate::ui::suspend();
+    println!();
+    println!("{}", explain(unmet));
+    println!("{who} is in the group already. Windows hands it out with a new login");
+    println!("token, and it only issues one at sign-in - so nothing else can happen first.");
+    println!();
+    println!("After you sign back in, run this again:");
+    println!();
+    println!("  {again}");
+    println!();
+    stop(
+        EXIT_NEEDS_RESTART,
+        "sign out of Windows and back in, then run the command above.",
     )
 }
 

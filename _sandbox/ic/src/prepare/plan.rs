@@ -85,6 +85,11 @@ pub struct Facts {
     /// This login token carries the `docker-users` group. A token, not the group's roster: adding somebody
     /// to a group does nothing until they sign in again, and that is the fact worth acting on.
     pub in_docker_users: bool,
+    /// The group's ROSTER carries this account, whatever the token above says. The two disagree for exactly
+    /// as long as it takes to sign out and back in — and Docker Desktop's installer adds whoever ran it, so
+    /// on a machine that has just installed Docker they always disagree. Told apart because the remedies are
+    /// nothing alike: one is a UAC prompt, the other is a sign-out that the first cannot substitute for.
+    pub in_docker_users_group: bool,
     /// Free space on the system drive, whole GiB. None when the drive would not answer.
     pub free_gib: Option<u64>,
     /// `USERNAME` — the short form, for prose.
@@ -445,16 +450,37 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         ));
     }
 
-    // Non-administrators need this group to reach the engine, and Docker's installer only adds the user who
-    // ran it. A token without it produces "access is denied" on the pipe, which reads like a broken install.
+    /* Non-administrators need this group to reach the engine, and Docker's installer only adds the user who
+     * ran it. A token without it produces "access is denied" on the pipe, which reads like a broken install.
+     *
+     * TWO STATES, NOT ONE. "not in the group" is fixable with administrator; "in the group, but this login
+     * token predates that" is not fixable by anything at all except a new sign-in. Collapsing them sends a
+     * machine that is one sign-out from ready to a UAC prompt, where the add cannot do anything — which is
+     * how a reported install stopped dead: Docker Desktop's installer had already added the account moments
+     * earlier, in the same pass. */
     if !facts.in_docker_users && !facts.elevated {
-        found.push(req(
-            "docker-users",
-            "Permission to use Docker",
-            &format!("{} is not in this PC's docker-users group, so Docker will refuse the connection.", if facts.user.is_empty() { "this account" } else { &facts.user }),
-            "add this account to docker-users (Windows will ask for administrator), then sign out and back in.",
-            Action::FixElevated,
-        ));
+        let who = if facts.user.is_empty() {
+            "this account"
+        } else {
+            &facts.user
+        };
+        found.push(if facts.in_docker_users_group {
+            req(
+                "docker-users",
+                "Permission to use Docker",
+                &format!("{who} is in this PC's docker-users group, but this sign-in was issued before that and does not carry it."),
+                "sign out of Windows and back in - the group needs a new login token, and nothing else issues one.",
+                Action::SignOut,
+            )
+        } else {
+            req(
+                "docker-users",
+                "Permission to use Docker",
+                &format!("{who} is not in this PC's docker-users group, so Docker will refuse the connection."),
+                "add this account to docker-users (Windows will ask for administrator), then sign out and back in.",
+                Action::FixElevated,
+            )
+        });
     }
 
     if !facts.docker_daemon {
@@ -691,6 +717,7 @@ mod tests {
                 .to_string(),
             docker_desktop_version: "4.34.0".to_string(),
             in_docker_users: true,
+            in_docker_users_group: true,
             free_gib: Some(200),
             user: "radarsu".to_string(),
             user_qualified: "omen\\radarsu".to_string(),
@@ -718,6 +745,7 @@ mod tests {
             docker_desktop_path: String::new(),
             docker_desktop_version: String::new(),
             in_docker_users: false,
+            in_docker_users_group: false,
             docker_cli: false,
             docker_daemon: false,
             docker_server_os: None,
@@ -1093,6 +1121,7 @@ mod tests {
     fn the_docker_group_matters_only_for_a_non_administrator() {
         let plain = Facts {
             in_docker_users: false,
+            in_docker_users_group: false,
             elevated: false,
             ..healthy()
         };
@@ -1105,6 +1134,7 @@ mod tests {
 
         let admin = Facts {
             in_docker_users: false,
+            in_docker_users_group: false,
             elevated: true,
             ..healthy()
         };
@@ -1112,6 +1142,81 @@ mod tests {
             !ids(&admin).contains(&"docker-users"),
             "an administrator reaches the engine regardless of the group"
         );
+    }
+
+    /* THE REPORTED FAILURE, AS A DIAGNOSIS. A machine that has just installed Docker Desktop is in
+     * `docker-users` — Docker's own installer put it there — and carrying a login token issued before that.
+     * Reading only the token asks for administrator to perform an add that has already happened, which is a
+     * UAC prompt that cannot change anything, followed by `net`'s "already a member" reported as a failure.
+     *
+     * The two states have to be told apart, because a sign-out is not something administrator substitutes
+     * for and administrator is not something a sign-out substitutes for. */
+    #[test]
+    fn an_account_already_in_the_group_is_asked_to_sign_out_rather_than_for_administrator() {
+        let facts = Facts {
+            in_docker_users: false,
+            in_docker_users_group: true,
+            elevated: false,
+            ..healthy()
+        };
+        let group = requirements(&facts)
+            .into_iter()
+            .find(|r| r.id == "docker-users")
+            .expect("a stale token is still a requirement");
+        assert_eq!(
+            group.action,
+            Action::SignOut,
+            "there is nothing left to add, so there is nothing to ask administrator for"
+        );
+        assert!(
+            group.problem.contains("is in this PC's docker-users group"),
+            "it must not accuse the machine of a missing membership it has: {}",
+            group.problem
+        );
+        assert!(
+            group.remedy.contains("sign out"),
+            "the one thing that works: {}",
+            group.remedy
+        );
+        assert!(
+            !group.remedy.contains("administrator"),
+            "asking for a prompt that cannot help is how this stopped at 8%: {}",
+            group.remedy
+        );
+    }
+
+    /// …and the same row keeps its old shape when the account really is missing from the group.
+    #[test]
+    fn an_account_missing_from_the_group_still_gets_the_administrator_route() {
+        let facts = Facts {
+            in_docker_users: false,
+            in_docker_users_group: false,
+            elevated: false,
+            ..healthy()
+        };
+        let group = requirements(&facts)
+            .into_iter()
+            .find(|r| r.id == "docker-users")
+            .expect("reported");
+        assert_eq!(group.action, Action::FixElevated);
+        assert!(group.action.ours(), "this half is still ours to do");
+    }
+
+    /// A token that already carries the group is the end of it — the roster is not asked, and no row is drawn
+    /// either way.
+    #[test]
+    fn a_token_that_carries_the_group_needs_nothing_whatever_the_roster_says() {
+        for roster in [true, false] {
+            let facts = Facts {
+                in_docker_users: true,
+                in_docker_users_group: roster,
+                ..healthy()
+            };
+            assert!(
+                !ids(&facts).contains(&"docker-users"),
+                "the token is what Docker's pipe reads, and it has the group"
+            );
+        }
     }
 
     #[test]
@@ -1170,6 +1275,7 @@ mod tests {
             docker_desktop_path: String::new(),
             docker_desktop_version: String::new(),
             in_docker_users: false,
+            in_docker_users_group: false,
             docker_cli: false,
             docker_daemon: false,
             docker_server_os: None,

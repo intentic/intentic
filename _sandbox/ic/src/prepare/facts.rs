@@ -90,6 +90,22 @@ try {
   $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 } catch { }
 
+# TWO DIFFERENT QUESTIONS ABOUT ONE GROUP, and the whole reason this block exists.
+#
+# `$groups` above is the LOGIN TOKEN, which is issued once at sign-in and never revised. The roster below is
+# the group as it stands right now. They disagree for exactly as long as it takes somebody to sign out and
+# back in - and Docker Desktop's own installer adds whoever ran it, so on a machine that has just installed
+# Docker they disagree every time. Asking for administrator to add an account that is already there is a UAC
+# prompt that cannot change anything; asking the user to sign out is the fix that works.
+#
+# Reading a local group needs no administrator, which is what makes this safe to ask before consent.
+$me = ([string](whoami.exe)).Trim()
+$short = $me
+if ($me.Contains('\')) { $short = $me.Split('\')[-1] }
+$roster = @()
+foreach ($line in (net.exe localgroup docker-users 2>&1)) { $roster += ([string]$line).Trim() }
+$inGroup = (($roster -contains $me) -or ($roster -contains $short))
+
 $free = $null
 if ($disk -and $disk.FreeSpace) { $free = [int64]([math]::Floor($disk.FreeSpace / 1GB)) }
 
@@ -114,9 +130,10 @@ if ($disk -and $disk.FreeSpace) { $free = [int64]([math]::Floor($disk.FreeSpace 
   dockerDesktopPath = $dd
   dockerDesktopVersion = $ddVer
   inDockerUsers = ($groups -match 'docker-users')
+  inDockerUsersGroup = [bool]$inGroup
   freeGib = $free
   user = [string]$env:USERNAME
-  userQualified = ([string](whoami.exe)).Trim()
+  userQualified = $me
 } | ConvertTo-Json -Compress
 "#;
 
@@ -169,7 +186,7 @@ mod tests {
      * trimmed to one line, because the failure this guards against is silent: a key renamed on either side
      * leaves serde filling every field with its default, and a machine that is completely fine then reports
      * no Docker, no WSL and no virtualization. */
-    const REAL: &str = r#"{"build":22631,"displayVersion":"23H2","productName":"Windows 11 Pro","editionId":"Professional","arch":9,"hypervisorPresent":true,"virtualizationFirmware":false,"slat":true,"vmHint":"asus system product name","serviceVmcompute":true,"serviceWsl":true,"wslStatusOk":true,"wslStatus":"Default Version: 2","wslVersion":"WSL version: 2.2.4.0","rebootPending":false,"elevated":false,"winget":true,"dockerDesktopPath":"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe","dockerDesktopVersion":"4.34.0","inDockerUsers":true,"freeGib":412,"user":"radarsu","userQualified":"omen\\radarsu"}"#;
+    const REAL: &str = r#"{"build":22631,"displayVersion":"23H2","productName":"Windows 11 Pro","editionId":"Professional","arch":9,"hypervisorPresent":true,"virtualizationFirmware":false,"slat":true,"vmHint":"asus system product name","serviceVmcompute":true,"serviceWsl":true,"wslStatusOk":true,"wslStatus":"Default Version: 2","wslVersion":"WSL version: 2.2.4.0","rebootPending":false,"elevated":false,"winget":true,"dockerDesktopPath":"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe","dockerDesktopVersion":"4.34.0","inDockerUsers":true,"inDockerUsersGroup":true,"freeGib":412,"user":"radarsu","userQualified":"omen\\radarsu"}"#;
 
     #[test]
     fn every_field_the_probe_prints_lands_somewhere() {
@@ -192,6 +209,10 @@ mod tests {
         assert!(facts.docker_desktop_path.ends_with("Docker Desktop.exe"));
         assert_eq!(facts.docker_desktop_version, "4.34.0");
         assert!(facts.in_docker_users);
+        assert!(
+            facts.in_docker_users_group,
+            "the roster is a second, separate fact and has to arrive as one"
+        );
         assert_eq!(facts.free_gib, Some(412));
         assert_eq!(facts.user, "radarsu");
         assert_eq!(
@@ -209,7 +230,7 @@ mod tests {
      *
      * Note `productName` too: "Windows 10 Pro" on a Windows 11 machine. That registry value was never updated
      * for 11, which is why nothing here decides anything from it and the build number is the version of record. */
-    const OMEN: &str = r#"{"winget":true,"productName":"Windows 10 Pro","freeGib":402,"inDockerUsers":true,"wslVersion":"WSL version: 2.7.11.0\r\nKernel version: 6.18.33.2-2\r\n","arch":9,"dockerDesktopVersion":"4.82.0","build":26200,"user":"radar","displayVersion":"25H2","rebootPending":false,"dockerDesktopPath":"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe","virtualizationFirmware":false,"userQualified":"radarsu-omen17\\radar","editionId":"Professional","wslStatus":"Default Distribution: archlinux\r\nDefault Version: 2\r\n","wslStatusOk":true,"hypervisorPresent":true,"slat":false,"serviceVmcompute":true,"vmHint":"hp omen by hp laptop 17-ck0xxx","serviceWsl":true,"elevated":false}"#;
+    const OMEN: &str = r#"{"winget":true,"productName":"Windows 10 Pro","freeGib":402,"inDockerUsers":true,"inDockerUsersGroup":true,"wslVersion":"WSL version: 2.7.11.0\r\nKernel version: 6.18.33.2-2\r\n","arch":9,"dockerDesktopVersion":"4.82.0","build":26200,"user":"radar","displayVersion":"25H2","rebootPending":false,"dockerDesktopPath":"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe","virtualizationFirmware":false,"userQualified":"radarsu-omen17\\radar","editionId":"Professional","wslStatus":"Default Distribution: archlinux\r\nDefault Version: 2\r\n","wslStatusOk":true,"hypervisorPresent":true,"slat":false,"serviceVmcompute":true,"vmHint":"hp omen by hp laptop 17-ck0xxx","serviceWsl":true,"elevated":false}"#;
 
     /// The regression that matters most: a working PC must never be told its hardware is unsupported.
     #[test]
@@ -273,6 +294,32 @@ mod tests {
         let facts = parse(json).expect("parses");
         assert_eq!(facts.wsl_version, "WSL");
         assert_eq!(facts.wsl_status, "x");
+    }
+
+    /* THE MACHINE THAT REPORTED THIS. Docker Desktop had just been installed — its own installer adds
+     * whoever ran it to `docker-users` — so the ROSTER says yes and the login token, issued at sign-in
+     * before any of that, says no. The probe has to carry both, because they are the difference between
+     * "ask for administrator" and "sign out", and only one of those can possibly work here. */
+    #[test]
+    fn the_group_roster_and_the_login_token_are_reported_separately() {
+        let json = r#"{"inDockerUsers":false,"inDockerUsersGroup":true,"user":"radar"}"#;
+        let facts = parse(json).expect("parses");
+        assert!(!facts.in_docker_users, "the token predates the membership");
+        assert!(facts.in_docker_users_group, "the group itself has them");
+    }
+
+    /// Reading a local group takes no administrator, which is what makes it safe to ask in a probe that runs
+    /// before consent. This pins that the probe READS `docker-users` and never writes to it.
+    #[test]
+    fn the_group_is_read_and_never_added_to() {
+        assert!(
+            PROBE.contains("net.exe localgroup docker-users"),
+            "the roster has to actually be asked for"
+        );
+        assert!(
+            !PROBE.contains("/add"),
+            "the probe runs before consent - it must never change a group"
+        );
     }
 
     #[test]

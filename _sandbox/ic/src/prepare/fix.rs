@@ -284,10 +284,48 @@ pub fn put_docker_on_path(facts: &Facts) -> Fixed {
     }
 }
 
-/// The `docker-users` group, for a user who is not an administrator. The name is passed IN rather than read
-/// inside the elevated script on purpose: that script may be running as somebody else entirely — whoever the
-/// UAC prompt was answered as — and adding the wrong account to the group is a fix that changes nothing and
-/// says it worked.
+/* THE `docker-users` GROUP, AND WHY `net.exe`'S ANSWER IS NOT WORTH READING.
+ *
+ * `net localgroup` reports every one of these as exit code 2:
+ *
+ *     System error 1379 — the specified local group already exists.
+ *     System error 1378 — the specified account name is already a member of the group.
+ *     System error 1387 — no such account.
+ *
+ * The first two mean THIS IS ALREADY DONE and the third means it cannot be. Believing the exit code puts all
+ * three on the same screen, and a real install ended there: Docker Desktop's own installer adds whoever ran
+ * it to `docker-users`, so by the time this ran — seconds after that installer finished, in the same pass —
+ * the account was already a member, `net` said 2, and a setup that had just done everything right stopped at
+ * 8% claiming it could not grant a permission the machine had already granted.
+ *
+ * So the verdict is "the add worked, OR the account is in the group either way" — which is the fact this fix
+ * is actually about, and is true whichever order things happened in. It is the same question
+ * [`super::facts`] asks before deciding whether to come here at all. Failing means BOTH: the add was refused
+ * and the roster does not have them, which is unambiguous and worth printing.
+ *
+ * The account name is passed IN rather than read inside the elevated script, because that script may be
+ * running as somebody else entirely — whoever the UAC prompt was answered as — and adding the wrong account
+ * to the group is a fix that changes nothing and says it worked. */
+const ADD_TO_DOCKER_USERS: &str = "\
+$name = '%NAME%'\n\
+$short = $name\n\
+if ($name.Contains('\\')) { $short = $name.Split('\\')[-1] }\n\
+# The group is created by Docker's installer; make sure it exists so this works in either order.\n\
+net.exe localgroup docker-users /add *>> $Log\n\
+net.exe localgroup docker-users $name /add *>> $Log\n\
+$added = $LASTEXITCODE\n\
+# A clean add is a yes. A 2 is not a no - it is the code for 'already a member' as well - so it is not read\n\
+# as one, and the roster below settles it instead. See this constant's header.\n\
+if ($added -eq 0) { exit 0 }\n\
+$out = (net.exe localgroup docker-users 2>&1)\n\
+Add-Content -Path $Log -Value ($out | Out-String)\n\
+$roster = @()\n\
+foreach ($line in $out) { $roster += ([string]$line).Trim() }\n\
+# A local member is listed bare, a domain or Entra one as DOMAIN\\user, and `whoami` spells it the second way.\n\
+if ($roster -contains $name) { exit 0 }\n\
+if ($roster -contains $short) { exit 0 }\n\
+exit 1\n";
+
 #[cfg(windows)]
 pub fn add_to_docker_users(facts: &Facts) -> Fixed {
     let who = if facts.user_qualified.is_empty() {
@@ -300,13 +338,7 @@ pub fn add_to_docker_users(facts: &Facts) -> Fixed {
             "could not work out which account to add to docker-users.".to_string(),
         ));
     }
-    let who = who.replace('\'', "''");
-    let script = format!(
-        "# The group is created by Docker's installer; make sure it exists so this works in either order.\n\
-         net.exe localgroup docker-users /add *>> $Log\n\
-         net.exe localgroup docker-users '{who}' /add *>> $Log\n\
-         exit $LASTEXITCODE\n"
-    );
+    let script = ADD_TO_DOCKER_USERS.replace("%NAME%", &who.replace('\'', "''"));
     from_exit(
         &shell::run_elevated(&script),
         "adding this account to docker-users",
@@ -439,6 +471,9 @@ pub fn restart_windows() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The struct is only USED here on Windows (see this file's header), but the substitution it feeds is
+    // pure, so the test that guards it runs on every runner.
+    use crate::prepare::plan::Facts;
 
     /* The bodies above are Windows-only and are covered by the Windows smoke tiers. What is worth asserting
      * on every runner is the constants they are built from: a download URL and a flag set are the two things
@@ -455,6 +490,61 @@ mod tests {
             !INSTALLER_URL.contains(' '),
             "the space in the filename must stay percent-encoded"
         );
+    }
+
+    /* THE REPORTED FAILURE, PINNED AT ITS CAUSE. `net localgroup` answers exit 2 for "the group already
+     * exists", exit 2 for "already a member", and exit 2 for a genuine refusal. A real install stopped at 8%
+     * with "adding this account to docker-users failed (exit 2)" seconds after Docker Desktop's own installer
+     * had added that very account — the fix had succeeded before it ran, and it called that a failure.
+     *
+     * So the script must decide from the ROSTER and never from the exit code, and this is the assertion that
+     * keeps a future edit from quietly putting `exit $LASTEXITCODE` back on the end. */
+    #[test]
+    fn the_group_fix_reads_the_roster_rather_than_believing_net_exes_exit_code() {
+        assert!(
+            !ADD_TO_DOCKER_USERS.contains("exit $LASTEXITCODE"),
+            "handing net's code straight back is the bug: 'already a member' and a real refusal share it"
+        );
+        assert!(
+            ADD_TO_DOCKER_USERS.contains("if ($added -eq 0) { exit 0 }"),
+            "a clean add is still allowed to be the whole answer - the roster only ever ADDS outcomes"
+        );
+        assert!(
+            ADD_TO_DOCKER_USERS.contains("$roster -contains $name")
+                && ADD_TO_DOCKER_USERS.contains("$roster -contains $short"),
+            "a local member is listed bare and a domain one as DOMAIN\\user - both have to count"
+        );
+        assert!(
+            ADD_TO_DOCKER_USERS.contains("net.exe localgroup docker-users $name /add"),
+            "it still has to try the add"
+        );
+        assert!(
+            ADD_TO_DOCKER_USERS.is_ascii(),
+            "same rule as every other script in this repo"
+        );
+    }
+
+    /// The account is substituted in, not read inside the elevated script — that script may be running as
+    /// whoever answered the UAC prompt, which is how you add the wrong person and report success.
+    #[test]
+    fn the_account_is_the_one_that_asked_and_its_quotes_cannot_escape_the_script() {
+        let facts = Facts {
+            user: "radar".to_string(),
+            user_qualified: "rog\\radar".to_string(),
+            ..Facts::default()
+        };
+        let who = if facts.user_qualified.is_empty() {
+            facts.user.clone()
+        } else {
+            facts.user_qualified.clone()
+        };
+        let script = ADD_TO_DOCKER_USERS.replace("%NAME%", &who.replace('\'', "''"));
+        assert!(script.contains("$name = 'rog\\radar'"));
+        assert!(!script.contains("%NAME%"), "the placeholder must be spent");
+        // A name with a quote in it is doubled, which is PowerShell's own escape inside a single-quoted
+        // string - so it stays DATA rather than closing the literal and becoming script.
+        let nasty = ADD_TO_DOCKER_USERS.replace("%NAME%", &"a'; exit 0 #".replace('\'', "''"));
+        assert!(nasty.contains("$name = 'a''; exit 0 #'"));
     }
 
     #[test]
