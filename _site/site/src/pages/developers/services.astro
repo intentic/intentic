@@ -1,5 +1,5 @@
 ---
-import { apiBook } from "@intentic-dev/site-content/api";
+import { developersBook } from "@intentic-dev/site-content/developers";
 import { admission, creatorSharePct, maxRefundPct } from "@intentic-dev/site-content/pool";
 import { discordUrl, githubUrl } from "@intentic-dev/site-content/site";
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
@@ -74,7 +74,7 @@ const runSteps = [
 ---
 
 <DocsLayout
-    book={apiBook}
+    book={developersBook}
     pageId="services"
     heading="Offer a paid service"
     lead="A service is not an extension: no manifest, bundle or repo pointer. It is one HTTPS endpoint that receives metered, signed calls from the platform. The technical bar is verifying a webhook, and admission is mechanical: pass the checks and you are listed, with nobody in the loop."

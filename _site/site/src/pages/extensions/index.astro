@@ -1,6 +1,6 @@
 ---
 import { REGISTRY_TOPIC } from "@intentic/registry";
-import { apiHref, extensionLifecycle } from "@intentic-dev/site-content/api";
+import { developersHref, extensionLifecycle } from "@intentic-dev/site-content/developers";
 import { creatorSharePct, pool } from "@intentic-dev/site-content/pool";
 import { APP_URL } from "@intentic-dev/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -130,8 +130,8 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                     Extensions can add pages, panels, file viewers, connections and automations. Even built-in features use the same extension system.
                 </p>
                 <div class="mt-7 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={apiHref("build")}>Build one</a>
-                    <a class="btn btn-secondary" href={apiHref("publish")}>Get listed</a>
+                    <a class="btn btn-primary" href={developersHref("build")}>Build one</a>
+                    <a class="btn btn-secondary" href={developersHref("publish")}>Get listed</a>
                 </div>
             </div>
         </section>
@@ -145,7 +145,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                             Be the first to publish one. Add the <code class="text-content">{REGISTRY_TOPIC}</code> topic to your repository, and
                             the registry bot will open a listing pull request for you.
                         </p>
-                        <a class="btn btn-primary mt-6" href={apiHref("build")}>
+                        <a class="btn btn-primary mt-6" href={developersHref("build")}>
                             Build an extension
                         </a>
                     </section>
@@ -339,8 +339,8 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                 </div>
 
                 <div class="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                    <a class="text-link hover:underline" href={apiHref("publish")}>Listing &amp; ranking</a>
-                    <a class="text-link hover:underline" href={apiHref("maintain")}>Maintain &amp; grow</a>
+                    <a class="text-link hover:underline" href={developersHref("publish")}>Listing &amp; ranking</a>
+                    <a class="text-link hover:underline" href={developersHref("maintain")}>Maintain &amp; grow</a>
                     <a class="text-link hover:underline" href="/earn/">The pool &amp; the ledger</a>
                 </div>
             </section>
@@ -373,7 +373,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                     take.
                 </p>
                 <div class="mt-6 flex flex-wrap justify-center gap-3">
-                    <a class="btn btn-primary" href={apiHref("build")}>Build an extension</a>
+                    <a class="btn btn-primary" href={developersHref("build")}>Build an extension</a>
                     <a class="btn btn-secondary" href={APP_URL}>Open the app</a>
                 </div>
             </div>

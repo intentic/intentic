@@ -44,6 +44,23 @@ export const TrialStatusSchema = z.object({
 export type TrialStatusResponse = z.infer<typeof TrialStatusSchema>;
 
 export const endpointsContract = {
-    models: oc.route({ method: "GET", path: "/endpoints/{id}/models" }).input(CapabilityIdParamSchema).output(ModelsSchema),
-    trial: oc.route({ method: "GET", path: "/endpoints/trial/status" }).output(TrialStatusSchema),
+    models: oc
+        .route({
+            method: "GET",
+            path: "/endpoints/{id}/models",
+            summary: "Models a connected server offers",
+            description:
+                "Asks one configured model server what it serves. There is no built-in list and no fallback: what a server offers is knowable only by asking it, so an empty answer is the honest report that we could not.",
+        })
+        .input(CapabilityIdParamSchema)
+        .output(ModelsSchema),
+    trial: oc
+        .route({
+            method: "GET",
+            path: "/endpoints/trial/status",
+            summary: "What is left of the free trial",
+            description:
+                "The allowance, what has been used, when it resets, and which model actually answered the last message. Not being available is the ordinary answer rather than a failure: most sandboxes run against a platform that offers no trial at all.",
+        })
+        .output(TrialStatusSchema),
 };

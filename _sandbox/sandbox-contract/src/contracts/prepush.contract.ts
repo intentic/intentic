@@ -11,7 +11,30 @@ import { OkSchema, PrepushRunSchema } from "../schemas.js";
 // tmux window, so watching it is the terminal's job. `cancel` kills that window; the run settles as `cancelled`
 // and the push it was gating does not go.
 export const prepushContract = {
-    state: oc.route({ method: "GET", path: "/prepush/state" }).output(PrepushRunSchema),
-    run: oc.route({ method: "POST", path: "/prepush/run" }).output(OkSchema),
-    cancel: oc.route({ method: "POST", path: "/prepush/cancel" }).output(OkSchema),
+    state: oc
+        .route({
+            method: "GET",
+            path: "/prepush/state",
+            summary: "How the pre-push check is going",
+            description:
+                "The verdict, or the progress so far. Nothing is addressed by id here, because there is one working tree and so exactly one check.",
+        })
+        .output(PrepushRunSchema),
+    run: oc
+        .route({
+            method: "POST",
+            path: "/prepush/run",
+            summary: "Run the checks before pushing",
+            description:
+                "Starts the suite the workspace runs before anything leaves the machine, and answers immediately. A suite takes minutes, and a request held open that long dies at the first proxy. It runs in a real terminal, so watch it there and poll for the verdict.",
+        })
+        .output(OkSchema),
+    cancel: oc
+        .route({
+            method: "POST",
+            path: "/prepush/cancel",
+            summary: "Stop the pre-push check",
+            description: "Kills the run. It settles as cancelled and the push it was gating does not go.",
+        })
+        .output(OkSchema),
 };

@@ -1,0 +1,623 @@
+---
+/* THE PLAYGROUND'S BRAIN AND ITS LOOK, rendered once per group page.
+ *
+ * WHAT ANSWERS THE CALLS. Nothing leaves the page. Each operation's answer was composed at build time from its
+ * own output schema (lib/api-examples.ts) and travels here as finished JSON; pressing Send validates what the
+ * reader typed and then shows it. Three reasons that is the right trade rather than a compromise:
+ *
+ *   A sandbox is not a public API. There is no shared server to point a demo at — the whole product is that
+ *   the daemon runs on hardware you own — so a live playground would need a reader to have a sandbox, sign in
+ *   to it, and open its door to this origin before they could press one button.
+ *
+ *   All 255 calls work, not the safe ones. A live playground would have to hide `discard`, `purge`, `push`
+ *   and every other route that changes something, which is most of the interesting half.
+ *
+ *   The answers are stable. A reader comparing two routes sees the same values twice, and a screenshot of
+ *   this page is still true next month.
+ *
+ * WHAT IS REAL: the address, the method, the fields, which of them are required, the shapes on both sides, and
+ * the curl and TypeScript printed beside every operation. The standing note at the top of the page says which
+ * half is which, in the reader's own words, once.
+ *
+ * VALIDATION IS THE PART THAT HAS TO BE HONEST. A missing required field or a body that is not JSON produces
+ * the daemon's real refusal — a 400 with a `message`, which is the shape every failure on this API takes — so
+ * the playground teaches the failure as well as the success. What it deliberately does not do is re-implement
+ * the contract's own validation: it checks presence and well-formedness, not types, because a half-accurate
+ * imitation of a validator is worse than an honest partial one.
+ *
+ * VANILLA, no framework. The site has no UI runtime and this is the only interactive thing on it; adding one
+ * for a single widget would put a framework in the bundle of every page that imports a component from here.
+ */
+
+interface Props {
+    /** The group's operations, already reduced to what the browser needs. */
+    payload: string;
+}
+
+const { payload } = Astro.props;
+---
+
+{/* Inline on purpose: it is data, not code. Astro would otherwise try to process it as a module. */}
+<script is:inline type="application/json" id="api-playground-data" set:html={payload} />
+
+<script>
+    interface PlayParam {
+        name: string;
+        in: "path" | "query";
+        required: boolean;
+        example: string;
+        options?: string[];
+    }
+    interface PlayOperation {
+        id: string;
+        method: string;
+        path: string;
+        streams: boolean;
+        sandbox: string;
+        params: PlayParam[];
+        body?: string;
+        answer: string;
+    }
+
+    const source = document.getElementById("api-playground-data");
+    const operations: PlayOperation[] = source ? (JSON.parse(source.textContent ?? "[]") as PlayOperation[]) : [];
+    const byId = new Map(operations.map((operation) => [operation.id, operation]));
+
+    /* A deep link has to land on an OPEN row, or it lands on a heading with nothing under it and reads as a
+       broken anchor. Runs on load and on every hash change, and scrolls afterwards because opening a row
+       below the target moves it. */
+    const openFromHash = () => {
+        const id = decodeURIComponent(location.hash.slice(1));
+        if (id === "") return;
+        const target = document.querySelector<HTMLDetailsElement>(`details[data-api-op="${CSS.escape(id)}"]`);
+        if (!target) return;
+        target.open = true;
+        target.scrollIntoView({ block: "start" });
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+
+    /** The address as it stands, with the reader's own path segments and query values in it. */
+    const addressOf = (operation: PlayOperation, values: Map<string, string>): string => {
+        const path = operation.path.replace(/\{([^}]+)\}/gu, (_match, name: string) => encodeURIComponent(values.get(name) ?? `{${name}}`));
+        const query = operation.params
+            .filter((parameter) => parameter.in === "query" && (values.get(parameter.name) ?? "") !== "")
+            .map((parameter) => `${parameter.name}=${encodeURIComponent(values.get(parameter.name) ?? "")}`);
+        return `${operation.sandbox}${path}${query.length === 0 ? "" : `?${query.join("&")}`}`;
+    };
+
+    /* The stream form of an answer. A stream sends frames, not a value, so showing one object would teach the
+       wrong shape: the example is wrapped in the wire's own `data:` framing and repeated, because what a
+       reader needs to see is that more than one arrives and how they are separated. */
+    const asFrames = (answer: string): string => {
+        const compact = (() => {
+            try {
+                return JSON.stringify(JSON.parse(answer));
+            } catch {
+                return answer;
+            }
+        })();
+        return `data: ${compact}\n\ndata: ${compact}\n\n…`;
+    };
+
+    const setup = (panel: HTMLElement) => {
+        const id = panel.dataset.play;
+        const operation = id === undefined ? undefined : byId.get(id);
+        if (operation === undefined) return;
+
+        const fields = panel.querySelector<HTMLElement>("[data-play-fields]");
+        const send = panel.querySelector<HTMLButtonElement>("[data-play-send]");
+        const reset = panel.querySelector<HTMLButtonElement>("[data-play-reset]");
+        const address = panel.querySelector<HTMLElement>("[data-play-url]");
+        const out = panel.querySelector<HTMLElement>("[data-play-out]");
+        if (!fields || !send || !reset || !address || !out) return;
+
+        const inputs = new Map<string, HTMLInputElement | HTMLSelectElement>();
+        let bodyBox: HTMLTextAreaElement | undefined;
+
+        const values = (): Map<string, string> => new Map([...inputs].map(([name, input]) => [name, input.value]));
+
+        const paint = () => {
+            address.textContent = `${operation.method} ${addressOf(operation, values())}`;
+        };
+
+        for (const parameter of operation.params) {
+            const row = document.createElement("label");
+            row.className = "api-field";
+
+            const name = document.createElement("span");
+            name.className = "api-field-name";
+            name.textContent = parameter.name;
+            if (parameter.required) {
+                const mark = document.createElement("span");
+                mark.className = "api-field-req";
+                mark.textContent = "required";
+                name.append(mark);
+            }
+            const where = document.createElement("span");
+            where.className = "api-field-where";
+            where.textContent = parameter.in === "path" ? "address" : "query";
+            name.append(where);
+            row.append(name);
+
+            /* A picker when the value is a fixed set, a box otherwise. Typing `mian` into a field that only
+               accepts four branches is a mistake the page can simply not offer. */
+            if (parameter.options && parameter.options.length > 0) {
+                const select = document.createElement("select");
+                select.className = "api-input";
+                if (!parameter.required) select.append(new Option("(omit)", ""));
+                for (const option of parameter.options) select.append(new Option(option, option));
+                select.value = parameter.example;
+                select.addEventListener("change", paint);
+                inputs.set(parameter.name, select);
+                row.append(select);
+            } else {
+                const input = document.createElement("input");
+                input.className = "api-input";
+                input.type = "text";
+                input.value = parameter.example;
+                input.spellcheck = false;
+                input.addEventListener("input", paint);
+                inputs.set(parameter.name, input);
+                row.append(input);
+            }
+            fields.append(row);
+        }
+
+        if (operation.body !== undefined) {
+            const row = document.createElement("label");
+            row.className = "api-field api-field-body";
+            const name = document.createElement("span");
+            name.className = "api-field-name";
+            name.textContent = "body";
+            const where = document.createElement("span");
+            where.className = "api-field-where";
+            where.textContent = "JSON";
+            name.append(where);
+            row.append(name);
+
+            const box = document.createElement("textarea");
+            box.className = "api-input api-body";
+            box.value = operation.body;
+            box.spellcheck = false;
+            box.rows = Math.min(14, operation.body.split("\n").length + 1);
+            bodyBox = box;
+            row.append(box);
+            fields.append(row);
+        }
+
+        paint();
+
+        const show = (status: number, label: string, kind: "ok" | "bad", text: string, lang: string) => {
+            out.hidden = false;
+            out.innerHTML = "";
+
+            const head = document.createElement("div");
+            head.className = `api-status api-status-${kind}`;
+            head.textContent = `${status} ${label}`;
+            const type = document.createElement("span");
+            type.className = "api-status-type";
+            type.textContent = lang;
+            head.append(type);
+            out.append(head);
+
+            const pre = document.createElement("pre");
+            pre.className = "api-out-body";
+            pre.textContent = text;
+            out.append(pre);
+        };
+
+        send.addEventListener("click", () => {
+            const missing = operation.params.filter((parameter) => parameter.required && (inputs.get(parameter.name)?.value ?? "") === "");
+            if (missing.length > 0) {
+                /* The daemon's own refusal, in the daemon's own shape. Its validator names the fields it
+                   could not accept, so this does too: a reader who leaves `repo` blank should see the answer
+                   they would really get, not a browser alert. */
+                show(400, "Bad Request", "bad", JSON.stringify({ message: `Input validation failed`, issues: missing.map((parameter) => ({ path: [parameter.name], message: "Required" })) }, null, 2), "application/json");
+                return;
+            }
+
+            if (bodyBox !== undefined) {
+                try {
+                    JSON.parse(bodyBox.value);
+                } catch (error) {
+                    show(400, "Bad Request", "bad", JSON.stringify({ message: `The request body is not valid JSON: ${(error as Error).message}` }, null, 2), "application/json");
+                    return;
+                }
+            }
+
+            if (operation.streams) {
+                show(200, "OK", "ok", asFrames(operation.answer), "text/event-stream");
+                return;
+            }
+            show(200, "OK", "ok", operation.answer, "application/json");
+        });
+
+        reset.addEventListener("click", () => {
+            for (const parameter of operation.params) {
+                const input = inputs.get(parameter.name);
+                if (input) input.value = parameter.example;
+            }
+            if (bodyBox !== undefined && operation.body !== undefined) bodyBox.value = operation.body;
+            out.hidden = true;
+            paint();
+        });
+    };
+
+    /* Built on OPEN rather than on load. A group page has up to 43 of these and almost nobody opens more than
+       one, so building every panel up front is a few thousand DOM nodes made for nothing. `once` keeps a row
+       that is opened and closed twice from building twice. */
+    for (const panel of document.querySelectorAll<HTMLElement>("[data-play]")) {
+        const row = panel.closest("details");
+        if (row?.open !== false) {
+            setup(panel);
+            continue;
+        }
+        row.addEventListener("toggle", () => setup(panel), { once: true });
+    }
+</script>
+
+<style is:global>
+    /* THE REFERENCE'S OWN FURNITURE. Global rather than scoped because the playground builds its fields in
+       the browser, and Astro's scoping is stamped onto markup at build time: a scoped rule would style the
+       panel and miss everything inside it. The `api-` prefix is what keeps that honest. */
+
+    .api-op {
+        border: 1px solid var(--color-line);
+        background: var(--color-card);
+        margin-block: 0.75rem;
+    }
+    .api-op[open] {
+        border-color: var(--color-line-strong);
+    }
+    .api-op-summary {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.6rem;
+        padding: 0.7rem 1rem;
+        cursor: pointer;
+        list-style: none;
+        scroll-margin-top: 5rem;
+    }
+    .api-op-summary::-webkit-details-marker {
+        display: none;
+    }
+    .api-op-summary:hover .api-op-title {
+        color: var(--color-content);
+    }
+    .api-method {
+        flex: none;
+        min-width: 4.2rem;
+        padding: 0.15rem 0.45rem;
+        border: 1px solid;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-align: center;
+    }
+    .api-path {
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        color: var(--color-content);
+        word-break: break-all;
+    }
+    .api-op-title {
+        flex: 1 1 14rem;
+        font-size: 0.875rem;
+        color: var(--color-muted);
+        transition: color 0.15s ease;
+    }
+    .api-badge {
+        flex: none;
+        padding: 0.05rem 0.4rem;
+        border: 1px solid var(--color-line-strong);
+        font-size: 0.65rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-gold);
+    }
+    .api-op-body {
+        padding: 0 1rem 1.25rem;
+        border-top: 1px solid var(--color-line);
+    }
+    .api-lede {
+        margin: 1rem 0 0;
+        max-width: 62ch;
+        font-size: 0.9375rem;
+        line-height: 1.65;
+        color: var(--color-muted);
+    }
+    .api-h3 {
+        margin: 1.5rem 0 0.5rem;
+        font-family: var(--font-mark);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--color-gold);
+    }
+    /* Two columns once there is room for both tables to stay legible; stacked below that, because a schema
+       table squeezed to 20rem wraps every type onto its own line. */
+    .api-split {
+        display: grid;
+        gap: 0 2.5rem;
+    }
+    @media (min-width: 60rem) {
+        .api-split {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+    .api-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8125rem;
+    }
+    .api-table th {
+        padding: 0.3rem 0.5rem 0.3rem 0;
+        border-bottom: 1px solid var(--color-line);
+        font-family: var(--font-mark);
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        text-align: left;
+        color: var(--color-subtle);
+    }
+    .api-table td {
+        padding: 0.35rem 0.5rem 0.35rem 0;
+        border-bottom: 1px solid var(--color-line);
+        vertical-align: top;
+        color: var(--color-muted);
+    }
+    /* Nesting, and the rule that draws it has to sit at the same weight as the padding above or it loses. A
+       hairline down the left of an indented run is what makes four levels legible: the indent alone reads as
+       a ragged left edge once the names differ in length. */
+    .api-table td[data-depth="1"],
+    .api-table td[data-depth="2"],
+    .api-table td[data-depth="3"] {
+        border-left: 1px solid var(--color-line);
+    }
+    .api-table td[data-depth="1"] {
+        padding-left: 0.75rem;
+    }
+    .api-table td[data-depth="2"] {
+        padding-left: 1.5rem;
+    }
+    .api-table td[data-depth="3"] {
+        padding-left: 2.25rem;
+    }
+    .api-table code {
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        color: var(--color-content);
+    }
+    .api-req {
+        margin-left: 0.4rem;
+        font-size: 0.65rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-primary-500);
+    }
+    .api-note {
+        display: block;
+        margin-top: 0.15rem;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: var(--color-subtle);
+    }
+    .api-type,
+    .api-where {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--color-subtle);
+    }
+    .api-empty {
+        margin: 0;
+        font-size: 0.8125rem;
+        color: var(--color-subtle);
+    }
+
+    /* ── the playground ─────────────────────────────────────────────────────────── */
+    .api-play {
+        margin-top: 1.5rem;
+        border: 1px solid var(--color-line-strong);
+        background: rgba(8, 6, 4, 0.5);
+    }
+    .api-play-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.55rem 0.9rem;
+        border-bottom: 1px solid var(--color-line);
+    }
+    .api-play-note {
+        font-size: 0.7rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+    }
+    .api-play-fields {
+        display: grid;
+        gap: 0.75rem;
+        padding: 0.9rem;
+    }
+    .api-field {
+        display: grid;
+        gap: 0.3rem;
+    }
+    .api-field-name {
+        display: flex;
+        align-items: baseline;
+        gap: 0.45rem;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--color-content);
+    }
+    .api-field-req {
+        font-family: var(--font-mark);
+        font-size: 0.65rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-primary-500);
+    }
+    .api-field-where {
+        margin-left: auto;
+        font-family: var(--font-mark);
+        font-size: 0.65rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+    }
+    .api-input {
+        width: 100%;
+        padding: 0.4rem 0.55rem;
+        border: 1px solid var(--color-line);
+        background: var(--color-canvas);
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        color: var(--color-content);
+    }
+    .api-input:focus-visible {
+        outline: none;
+        border-color: var(--color-primary-600);
+    }
+    .api-body {
+        resize: vertical;
+        line-height: 1.55;
+    }
+    .api-play-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0 0.9rem 0.9rem;
+    }
+    /* The two corners cut off the leading edge, which is the button shape the rest of the site uses. */
+    .api-send {
+        padding: 0.4rem 1.1rem;
+        border: 1px solid var(--color-primary-600);
+        background: linear-gradient(180deg, rgba(224, 123, 39, 0.22), rgba(224, 123, 39, 0.08));
+        font-family: var(--font-mark);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--color-primary-200);
+        cursor: pointer;
+        clip-path: polygon(0.5rem 0, 100% 0, 100% calc(100% - 0.5rem), calc(100% - 0.5rem) 100%, 0 100%, 0 0.5rem);
+        transition:
+            background 0.15s ease,
+            color 0.15s ease;
+    }
+    .api-send:hover {
+        background: linear-gradient(180deg, rgba(224, 123, 39, 0.34), rgba(224, 123, 39, 0.14));
+        color: var(--color-primary-100, #fdf0e0);
+    }
+    .api-reset {
+        padding: 0.4rem 0.8rem;
+        border: 1px solid var(--color-line);
+        background: none;
+        font-family: var(--font-mark);
+        font-size: 0.8125rem;
+        color: var(--color-muted);
+        cursor: pointer;
+    }
+    .api-reset:hover {
+        border-color: var(--color-line-strong);
+        color: var(--color-content);
+    }
+    .api-play-url {
+        flex: 1 1 20rem;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        line-height: 1.5;
+        color: var(--color-subtle);
+        word-break: break-all;
+    }
+    .api-play-out {
+        border-top: 1px solid var(--color-line);
+    }
+    .api-status {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.45rem 0.9rem;
+        border-bottom: 1px solid var(--color-line);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .api-status-ok {
+        color: var(--color-success);
+    }
+    .api-status-bad {
+        color: var(--color-danger);
+    }
+    .api-status-type {
+        margin-left: auto;
+        font-weight: 400;
+        color: var(--color-subtle);
+    }
+    .api-out-body {
+        margin: 0;
+        max-height: 26rem;
+        padding: 0.75rem 0.9rem;
+        overflow: auto;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        line-height: 1.6;
+        color: var(--color-content);
+        white-space: pre;
+    }
+
+    /* ── the copyable pair ──────────────────────────────────────────────────────── */
+    .api-snippets {
+        display: grid;
+        gap: 1.25rem;
+        margin-top: 1.5rem;
+    }
+    @media (min-width: 60rem) {
+        .api-snippets {
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+    }
+    .api-snippets .code-window {
+        margin: 0;
+    }
+
+    /* The group index above the operations: one row per route, so a reader can see all 43 at once and jump. */
+    .api-index {
+        display: grid;
+        gap: 0;
+        margin: 1.5rem 0 2.5rem;
+        border: 1px solid var(--color-line);
+    }
+    .api-index a {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.6rem;
+        padding: 0.45rem 0.8rem;
+        border-bottom: 1px solid var(--color-line);
+        text-decoration: none;
+        transition: background 0.15s ease;
+    }
+    .api-index a:last-child {
+        border-bottom: 0;
+    }
+    .api-index a:hover {
+        background: var(--color-overlay);
+    }
+    .api-index .api-op-title {
+        flex: 1 1 12rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .api-op-title,
+        .api-send,
+        .api-index a {
+            transition: none;
+        }
+    }
+</style>

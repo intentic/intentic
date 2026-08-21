@@ -31,8 +31,8 @@ const SCRIPTS: Record<string, string> = {
 };
 
 /* Paths that moved, kept alive as 301s. The site's menu labels and its URLs used to disagree: "Features" over
- * /product/, "Run" over /product/orchestrate/, "Developers" over /api/. The labels were the accurate half, so
- * the paths moved to match them.
+ * /product/, "Run" over /product/orchestrate/. The labels were the accurate half, so the paths moved to match
+ * them.
  *
  * These are the ONE compatibility layer this repo keeps, and the reason is that a URL is the only thing here
  * somebody else has already written down: in a bookmark, a blog post, an answer on a forum, a search index.
@@ -40,11 +40,22 @@ const SCRIPTS: Record<string, string> = {
  * search engine to move the ranking rather than split it, which is the difference between a rename and a
  * quiet traffic loss.
  *
+ * /api IS NO LONGER FORWARDED, and it is the one entry that has been withdrawn rather than kept. It used to
+ * send /api/* to /developers/*, from when the authoring book lived there. /api/ is now a real book of its own:
+ * the daemon's whole HTTP surface, generated from the contract. A forward would have to shadow it, so the two
+ * cannot both exist, and of the two the live reference is worth more than the redirect.
+ *
+ * The old deep links that break are /api/, /api/manifest, /api/host, /api/build, /api/publish, /api/verify,
+ * /api/maintain and /api/services. Six of the eight now 404; the other two, /api/host and a bare /api/, land on
+ * pages about something else, which is the sharper edge of this. It is accepted deliberately: those paths were
+ * themselves a forward that had already been in place since the rename, so anything still using them has had a
+ * redirect the whole time and never followed it.
+ *
  * The verb map is spelled out rather than derived from productPages: it is the OLD vocabulary, which by
  * definition no longer appears in the content. Automate kept its name and so needs no entry.
  *
- * The /api and /product prefixes are handled as prefixes, so every page under them, including any added
- * later, and any deep link with a #fragment, follows without a new line here. */
+ * /product is handled as a prefix, so every page under it, including any added later, and any deep link with a
+ * #fragment, follows without a new line here. */
 const MOVED_VERBS: Record<string, string> = {
     orchestrate: "run",
     empower: "connect",
@@ -52,11 +63,19 @@ const MOVED_VERBS: Record<string, string> = {
     delegate: "host",
 };
 
+/* Pages that moved to a different book, matched exactly rather than by prefix. One entry so far: the prose
+ * page that stood in for a route reference until there was a generated one. Its readers were arriving with a
+ * specific question, so the pages that used to link to it now link into /api/ at the page that answers each,
+ * and this catches the addresses somebody else wrote down. */
+const MOVED_PAGES: Record<string, string> = {
+    "/developers/http": "/api/",
+};
+
 function movedPath(pathname: string): string | undefined {
+    const exact = MOVED_PAGES[pathname.replace(/\/$/u, "")];
+    if (exact !== undefined) return exact;
     let moved: string | undefined;
-    if (pathname === "/api" || pathname.startsWith("/api/")) {
-        moved = `/developers${pathname.slice("/api".length)}`;
-    } else if (pathname === "/product" || pathname.startsWith("/product/")) {
+    if (pathname === "/product" || pathname.startsWith("/product/")) {
         const [verb = "", ...tail] = pathname.slice("/product".length).replace(/^\//u, "").split("/");
         moved = ["/features", MOVED_VERBS[verb] ?? verb, ...tail].join("/");
     }

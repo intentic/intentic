@@ -15,10 +15,45 @@ import { OkSchema, SkillBodySchema, SkillDraftSchema, SkillIdSchema, SkillRemove
  * `read` is a GET with the id in the query rather than in the path: an id can name an owner
  * (`extension:intentic.knowledge:knowledge`), and a path template cannot carry those segments. */
 export const skillsContract = {
-    list: oc.route({ method: "GET", path: "/skills" }).output(SkillsListSchema),
-    read: oc.route({ method: "GET", path: "/skills/read" }).input(SkillIdSchema).output(SkillBodySchema),
+    list: oc
+        .route({
+            method: "GET",
+            path: "/skills",
+            summary: "What the agent knows how to do",
+            description:
+                "Every skill available here and whether it is switched on, joined from all four places they come from: the owner's own, the settings, plugins a connection installed, and folders inside extensions.",
+        })
+        .output(SkillsListSchema),
+    read: oc
+        .route({
+            method: "GET",
+            path: "/skills/read",
+            summary: "Read one skill",
+            description:
+                "The full text of a single skill. The name travels in the query rather than the address, because a name can carry the owner it came from and that will not fit in a path.",
+        })
+        .input(SkillIdSchema)
+        .output(SkillBodySchema),
     // Upsert by name: saving over an existing skill rewrites it, which is also how one is renamed (the old name
     // is a different skill and is deleted on its own). A saved skill is switched ON, you wrote it to use it.
-    save: oc.route({ method: "POST", path: "/skills" }).input(SkillDraftSchema).output(OkSchema),
-    remove: oc.route({ method: "POST", path: "/skills/remove" }).input(SkillRemoveSchema).output(OkSchema),
+    save: oc
+        .route({
+            method: "POST",
+            path: "/skills",
+            summary: "Write a skill",
+            description:
+                "Creates or rewrites a skill by name, and switches it on, because you wrote it in order to use it. Renaming is saving under the new name and deleting the old.",
+        })
+        .input(SkillDraftSchema)
+        .output(OkSchema),
+    remove: oc
+        .route({
+            method: "POST",
+            path: "/skills/remove",
+            summary: "Delete a skill",
+            description:
+                "Removes the text and takes it off the enabled list in one step, so a screen never has to sequence two calls and never leaves one half done.",
+        })
+        .input(SkillRemoveSchema)
+        .output(OkSchema),
 };

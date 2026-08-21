@@ -1,10 +1,11 @@
 import { aboutMeta } from "./about";
-import { apiHref, apiPages } from "./api";
+import { developersHref, developersPages } from "./developers";
 import { compareHref, compareIndex, comparePages } from "./compare";
 import { docsHref, docsPages } from "./docs";
 import { guidePages, guidesHref, guidesIndex } from "./guides";
 import { landingContent } from "./landing";
 import { productHref, productPages } from "./product";
+import { referenceHref, referencePages } from "./reference";
 
 export interface PageMeta {
     title: string;
@@ -114,7 +115,10 @@ export const pageMeta: Record<string, PageMeta> = {
     [compareHref("")]: compareIndex.meta,
     [guidesHref("")]: guidesIndex.meta,
     ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
-    ...Object.fromEntries(apiPages.map((page) => [apiHref(page.id), page.meta])),
+    ...Object.fromEntries(developersPages.map((page) => [developersHref(page.id), page.meta])),
+    // The API book, five authored pages and 37 generated ones. Its entries come from the tree exactly as the
+    // other two books' do, which is what keeps a generated page's <head> as real as an authored one's.
+    ...Object.fromEntries(referencePages.map((page) => [referenceHref(page.id), page.meta])),
     ...Object.fromEntries(productPages.map((page) => [productHref(page.slug), page.meta])),
     ...Object.fromEntries(comparePages.map((page) => [compareHref(page.slug), page.meta])),
     ...Object.fromEntries(guidePages.map((page) => [guidesHref(page.slug), page.meta])),

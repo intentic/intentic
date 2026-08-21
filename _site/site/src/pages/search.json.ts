@@ -1,5 +1,5 @@
 import { blocksFromPage, type SearchEntry } from "@intentic-dev/astro-integrations";
-import { apiBook } from "@intentic-dev/site-content/api";
+import { developersBook } from "@intentic-dev/site-content/developers";
 import { bookHref, bookPlacements } from "@intentic-dev/site-content/book";
 import { docsBook } from "@intentic-dev/site-content/docs";
 import type { APIRoute } from "astro";
@@ -21,7 +21,7 @@ import type { APIRoute } from "astro";
  * still exists rather than the build owning search outright.
  */
 
-const pages = [docsBook, apiBook].flatMap((book) =>
+const pages = [docsBook, developersBook].flatMap((book) =>
     bookPlacements(book).map(({ page, section }) => ({
         url: bookHref(book, page.id),
         title: page.title,

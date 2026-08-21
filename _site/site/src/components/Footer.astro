@@ -1,5 +1,6 @@
 ---
-import { apiHref } from "@intentic-dev/site-content/api";
+import { developersHref } from "@intentic-dev/site-content/developers";
+import { referenceHref } from "@intentic-dev/site-content/reference";
 import { compareFamilies, compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsDestinations } from "@intentic-dev/site-content/docs";
 import { guidePages, guidesHref } from "@intentic-dev/site-content/guides";
@@ -45,12 +46,16 @@ const columns: { label: string; links: { href: string; label: string; external?:
          * never surfaces. A footer row costs no attention and fixes exactly that. */
         label: "Developers",
         links: [
-            { href: apiHref(""), label: "Extension API" },
-            { href: apiHref("build"), label: "Build an extension" },
-            { href: apiHref("publish"), label: "Publish & registries" },
-            { href: apiHref("manifest"), label: "Manifest reference" },
-            { href: apiHref("http"), label: "HTTP API" },
-            { href: apiHref("services"), label: "Offer a paid service" },
+            { href: developersHref(""), label: "Extension API" },
+            { href: developersHref("build"), label: "Build an extension" },
+            { href: developersHref("publish"), label: "Publish & registries" },
+            { href: developersHref("manifest"), label: "Manifest reference" },
+            /* The wire API's sitewide row, pointing OUT of this column into its own book. It sits here rather
+             * than getting a column of its own for the same reason the docs column is four destinations and
+             * not nineteen pages: a footer column is a shortcut. The one shortcut worth having into a book of
+             * 42 pages is its front door. */
+            { href: referenceHref(""), label: "Sandbox API reference" },
+            { href: developersHref("services"), label: "Offer a paid service" },
             { href: "/earn/", label: "Earn & the creator pool" },
         ],
     },

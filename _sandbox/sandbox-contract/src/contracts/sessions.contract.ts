@@ -13,8 +13,22 @@ import { SessionIdParamSchema, SessionsListSchema } from "../schemas.js";
 // a switch either of them ignored would show as one field returning two different match sets.
 export const sessionsContract = {
     list: oc
-        .route({ method: "GET", path: "/sessions" })
+        .route({
+            method: "GET",
+            path: "/sessions",
+            summary: "Past conversations in this workspace",
+            description:
+                "Summaries for a history menu, filtered when you pass a search. Covers conversations that worked in their own private copies too, so nothing is hidden just because it happened on a branch.",
+        })
         .input(z.object({ query: z.string().optional(), caseSensitive: z.stringbool().optional() }))
         .output(SessionsListSchema),
-    get: oc.route({ method: "GET", path: "/sessions/{id}" }).input(SessionIdParamSchema).output(SessionTranscriptSchema),
+    get: oc
+        .route({
+            method: "GET",
+            path: "/sessions/{id}",
+            summary: "Read one past conversation",
+            description: "The full record of a single conversation, restored for display.",
+        })
+        .input(SessionIdParamSchema)
+        .output(SessionTranscriptSchema),
 };

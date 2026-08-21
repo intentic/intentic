@@ -11,7 +11,30 @@ import { AccountIdSchema, DeviceStartSchema, OauthAccountListSchema, OkSchema } 
 // Like Claude's, this contract is now the account handshake alone, the model catalog answers on the shared
 // /providers/{provider}/models route (providers.contract.ts).
 export const grokContract = {
-    start: oc.route({ method: "POST", path: "/grok/oauth/start" }).output(DeviceStartSchema),
-    accounts: oc.route({ method: "GET", path: "/grok/accounts" }).output(OauthAccountListSchema),
-    disconnect: oc.route({ method: "POST", path: "/grok/account/disconnect" }).input(AccountIdSchema).output(OkSchema),
+    start: oc
+        .route({
+            method: "POST",
+            path: "/grok/oauth/start",
+            summary: "Begin connecting a Grok account",
+            description:
+                "Hands back the page to open and the one-time code to type there. Nothing is pasted back afterwards: the sandbox waits for the sign-in to complete on its own, so poll the accounts call until it appears.",
+        })
+        .output(DeviceStartSchema),
+    accounts: oc
+        .route({
+            method: "GET",
+            path: "/grok/accounts",
+            summary: "Connected Grok account",
+            description: "What is signed in. A list for consistency with the other providers, though there is at most one.",
+        })
+        .output(OauthAccountListSchema),
+    disconnect: oc
+        .route({
+            method: "POST",
+            path: "/grok/account/disconnect",
+            summary: "Disconnect the Grok account",
+            description: "Clears the stored tokens.",
+        })
+        .input(AccountIdSchema)
+        .output(OkSchema),
 };

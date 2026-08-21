@@ -12,7 +12,11 @@ import { OutputFieldsSchema } from "./output-fields.js";
 
 // Success ack for routes that only report completion (push / disconnect / self-host register). A turn paused on
 // a plan/question that no longer exists, or a missing repo/path, is an ORPCError thrown by the handler instead.
-export const OkSchema = z.object({ ok: z.literal(true) });
+export const OkSchema = z.object({
+    ok: z
+        .literal(true)
+        .describe("Always true. A route that answers this either did the thing or refused with a status; there is no third outcome to report."),
+});
 
 // The trust tiers of everyone who can open this sandbox, ordered. `owner` is the one bound identity
 // (auth/auth.ts); the other three are granted per email on the daemon's /members list. viewer watches,
@@ -33,7 +37,13 @@ export const roleAtLeast = (role: MemberRole, floor: MemberRole): boolean => MEM
 // dir, which may be nested ("clients/foo"; URL-encoded in the path param). Kept as a bare string on the wire
 // (not an enum) so an unknown repo is a handler-thrown NOT_FOUND, matching the daemon's prior 404, rather
 // than an input-validation rejection.
-export const RepoParamSchema = z.object({ repo: z.string() });
+export const RepoParamSchema = z.object({
+    repo: z
+        .string()
+        .describe(
+            'Which repository. "root" is the workspace itself; anything else is a repository\'s folder relative to the workspace root, URL-encoded.',
+        ),
+});
 
 // ---- agent ----
 
@@ -71,12 +81,21 @@ export type RepoBase = z.infer<typeof RepoBaseSchema>;
 // prompts ("fix this") resolve without an @-mention. Selection is bounded, it's context, not an upload.
 export const EditorContextSchema = z.object({
     // Workspace-relative path of the file open in the editor.
-    file: z.string().min(1),
+    file: z.string().min(1).describe("The file open in the editor, as a workspace path."),
     // 1-based line range of the selection; absent when the whole file is the context.
-    startLine: z.number().int().min(1).optional(),
-    endLine: z.number().int().min(1).optional(),
+    startLine: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe("First line of the selection, counting from one. Leave both out when the whole file is the context."),
+    endLine: z.number().int().min(1).optional().describe("Last line of the selection, counting from one."),
     // The selected text itself, truncated client-side to the cap.
-    selection: z.string().max(20_000).optional(),
+    selection: z
+        .string()
+        .max(20_000)
+        .optional()
+        .describe("The selected text itself. Cut it down before sending if it is long: this is context, not an upload."),
 });
 export type EditorContext = z.infer<typeof EditorContextSchema>;
 
@@ -180,26 +199,34 @@ export type ForkedFrom = z.infer<typeof ForkedFromSchema>;
 
 export const AgentTurnSchema = z
     .object({
-        prompt: z.string(),
+        prompt: z.string().describe("What to say to the agent. May be empty if you are only attaching files."),
         // The client's display title for the conversation, seeds a FRESH registry entry (so a renamed draft's
         // first turn keeps its user-chosen title); an existing entry's title always wins.
-        title: z.string().max(80).optional(),
+        title: z
+            .string()
+            .max(80)
+            .optional()
+            .describe("A title for a conversation this turn is opening. Ignored for a conversation that already has one."),
         // Workspace-relative paths of files the user attached, already uploaded via /workspace/upload
         // (the browser puts them under .intentic/records/artifacts/attachments/<uuid>/<name>). The daemon hands them to the
         // provider: Claude reads them from disk via its Read tool; Codex gets images as native inputs.
-        attachments: z.array(z.string().min(1)).max(20).optional(),
+        attachments: z
+            .array(z.string().min(1))
+            .max(20)
+            .optional()
+            .describe("Files to hand the agent along with the prompt, as workspace paths. Upload them first."),
         // Which provider (model + account) serves the turn; absent = claude. A sessionId only resumes on the
         // provider that minted it (Claude Code sessions vs Codex threads vs Grok/OpenCode sessions are separate
         // stores), a mid-conversation provider/account/harness switch sends `history` instead of resuming.
-        agent: AgentProviderSchema.optional(),
+        agent: AgentProviderSchema.optional().describe("Which model provider serves this turn. Leave it out for Claude."),
         // Which harness (agentic loop) runs the turn, orthogonal to the provider above. Absent = "native": each
         // provider on its own runtime (Claude Code SDK / Codex CLI / opencode) with its subscription OAuth.
         // "claude-code" forces the Claude Code Agent SDK loop for ANY provider, codex/grok then drive their model
         // through the sandbox's bundled Anthropic↔OpenAI translator, which needs that provider's API key (its
         // subscription OAuth can't reach a gateway). For the claude provider the two are identical.
-        harness: AgentHarnessSchema.optional(),
+        harness: AgentHarnessSchema.optional().describe("Which agentic loop runs the turn. Leave it out to use each provider's own."),
         // Which connected account of that provider serves the turn; absent = the provider's first account.
-        account: z.string().optional(),
+        account: z.string().optional().describe("Which of that provider's connected accounts pays for the turn. Leave it out for the first one."),
         /* WHICH PERSONA THE TURN SHOWS THE OUTSIDE WORLD, a PersonaSchema id, deliberately NOT the `account`
          * directly above it. The two words are one letter apart in meaning and a world apart in consequence:
          * `account` is which subscription PAYS for the turn, `actsAs` is whose name is on what the turn posts.
@@ -211,27 +238,48 @@ export const AgentTurnSchema = z
          * keeps every connected account, because a person is there to catch a mistake; an `unattended` turn with
          * no persona gets NONE, because at 3am the prompt's wording is the only thing left and that is not
          * enough to bet an unrepeatable post on. */
-        actsAs: entryId.optional(),
-        sessionId: z.string().optional(),
+        actsAs: entryId.optional().describe("Which persona the turn speaks as out in the world. Not the same as which account pays for it."),
+        sessionId: z.string().optional().describe("Resume this provider session instead of starting a fresh one."),
         // The client-minted stable conversation identity (survives provider/account/harness switches, which
         // retire sessions). Keys the fleet registry entry and turn run, plus the worktree when isolated.
-        conversationId: ConversationIdSchema.optional(),
+        conversationId: ConversationIdSchema.optional().describe(
+            "The conversation this turn belongs to. You choose it, it survives model switches, and it is how you address the conversation later. Naming one that does not exist opens it.",
+        ),
         // When true, the turn runs in the conversation's isolated git worktree (created lazily on first use)
         // instead of the shared /work tree, the parallel-agents mode. Requires conversationId.
-        isolated: z.boolean().optional(),
+        isolated: z
+            .boolean()
+            .optional()
+            .describe(
+                "Work in this conversation's own private copy of the repos rather than the shared tree, so several agents can work at once. Needs a conversation id.",
+            ),
         /* Pin a NEW isolated conversation's worktree composition to these repository commits. Daemon-owned:
          * ordinary chats omit it and keep rebasing onto the current workspace; a workflow supplies the one
          * snapshot all of its candidates must share. Repeated iterations carry it too, which suppresses the
          * ordinary pre-turn rebase for the lifetime of that workflow step. */
-        worktreeBase: z.array(RepoBaseSchema).min(1).max(50).optional(),
+        worktreeBase: z
+            .array(RepoBaseSchema)
+            .min(1)
+            .max(50)
+            .optional()
+            .describe(
+                "Pin a new private copy to these exact commits instead of today's workspace. Used when several agents must start from identical files.",
+            ),
         // Override landing for this turn only. Workflow steps set false so candidate branches cannot leak into
         // the workspace before the synthesis step has compared them; ordinary turns inherit agent/workspace
         // posture exactly as before.
-        autoLand: z.boolean().optional(),
+        autoLand: z
+            .boolean()
+            .optional()
+            .describe(
+                "Whether this turn's work merges into the workspace when it finishes. Overrides the conversation's own setting for this turn only.",
+            ),
         // Set ONLY by the daemon's own automation dispatchers: this turn opens a conversation on behalf of an
         // outside message rather than a user. Recorded on the registry entry so the fleet can say where the
         // agent came from. Requires conversationId, there is nothing to record it on otherwise.
-        origin: AgentOriginSchema.optional(),
+        origin: AgentOriginSchema.optional().describe(
+            "Set by the sandbox alone: this turn opened a conversation on behalf of a message from outside rather than a person.",
+        ),
         // No `history` field: a turn that switched provider/account/harness carries no transcript up the wire.
         // The daemon seeds the replacement session from its OWN record of the conversation, which is keyed by
         // conversationId and outlives every session (sessions/turn-transcript.ts → handoffHistory).
@@ -251,13 +299,18 @@ export const AgentTurnSchema = z
          * the wrong files is the failure this whole field exists to prevent. */
         forkOf: z
             .object({
-                conversationId: ConversationIdSchema,
-                keep: z.number().int().nonnegative(),
-                files: z.enum(["then", "now"]),
+                conversationId: ConversationIdSchema.describe("The conversation this one was cut from."),
+                keep: z.number().int().nonnegative().describe("How many of that conversation's messages to copy in before this turn runs."),
+                files: z
+                    .enum(["then", "now"])
+                    .describe(
+                        'Which files the fork opens on: "now" is the workspace as it stands, "then" is the files as they were at the cut, which needs a private copy.',
+                    ),
             })
-            .optional(),
+            .optional()
+            .describe("Where this conversation was cut from, on its first turn only. Only the client knows this, so only the client can say it."),
         // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
-        model: z.string().optional(),
+        model: z.string().optional().describe("Which model to use. Leave it out for the provider's default."),
         /* NOBODY PICKED A MODEL FOR THIS TURN, a surface started it (Fix with agent, a Maintenance chore, a
          * Documentation or Acceptance run, the fix a failed pre-push check proposes) rather than a person at a
          * composer. That is the whole distinction the flag carries, and it is why it cannot be inferred: a chat
@@ -270,7 +323,12 @@ export const AgentTurnSchema = z
          * started. Naming one still wins: every surface-started run now carries a caret that overrides the list
          * for that run alone, and Acceptance picks per run because it fans a session out per story. Either way
          * the pick is the user's, made a second ago. */
-        unattended: z.boolean().optional(),
+        unattended: z
+            .boolean()
+            .optional()
+            .describe(
+                "Nobody chose a model for this turn because a screen started it rather than a person. The sandbox then fills in the model its owner picked for unwatched work.",
+            ),
         /* OUTSIDE CONTENT CAUSED THIS TURN, and what to call the source, "discord", "webchat", whichever
          * listener provider carried the message. Set by the dispatchers that wake an agent on somebody else's
          * words; absent for a turn the owner started, a schedule, or a workspace event.
@@ -280,20 +338,33 @@ export const AgentTurnSchema = z
          * gate reads before letting a command read credential material unasked. Distinct from `unattended`,
          * which is about whether anyone is WATCHING: a Front Desk wake is both, an owner asking the agent to read
          * a web page is neither, and each flag governs a different decision. */
-        outsideWake: z.string().min(1).optional(),
+        outsideWake: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+                "Content from outside caused this turn, and what to call the source. It is what makes the sandbox treat the turn as carrying somebody else's words.",
+            ),
         // How tool calls are gated for this turn (the SDK's permissionMode, verbatim). 'plan' runs the
         // propose → approve → execute flow; 'default' prompts per tool on the permission side channel;
         // 'acceptEdits' auto-accepts file edits; 'bypassPermissions' runs everything. The agent can move
         // itself between modes mid-turn (EnterPlanMode/ExitPlanMode), which rides back as a `mode` frame.
-        permissionMode: PermissionModeSchema.optional(),
+        permissionMode: PermissionModeSchema.optional().describe(
+            "How tool calls are gated: ask each time, accept file edits, propose a plan first, or run everything. The agent can move itself between these mid-turn.",
+        ),
         /* Narrows the turn to these tool names (the SDK option of the same name, not to be confused with the
          * daemon's MCP `tools`, which are servers). Absent ⇒ every tool the runtime has, which is what an
          * owner-driven chat wants. Set by the automation dispatchers from Automation.allowedTools: a wake driven
          * by an OUTSIDE message runs bypassPermissions like any other automation turn, so for a public Front Desk
          * this list is the actual boundary, prompt wording is advice, an empty toolbox is not. */
-        allowedTools: z.array(z.string().min(1)).optional(),
-        effort: z.string().optional(),
-        thinking: z.boolean().optional(),
+        allowedTools: z
+            .array(z.string().min(1))
+            .optional()
+            .describe(
+                "Narrow the turn to these tools. Leave it out for everything the runtime has. For a turn driven by an outside message this list is the real boundary, because prompt wording is only advice.",
+            ),
+        effort: z.string().optional().describe("How hard the model should think, where the provider offers a choice."),
+        thinking: z.boolean().optional().describe("Whether to show the model's reasoning as it works."),
         /* Ask the harness to serve this turn at fast speed, the same tokens at a higher rate, for a higher
          * per-token price. A REQUEST, never a promise: the harness answers it against the plan, the model and
          * the endpoint, and reports what it actually did on the `fast_mode` frame. Absent/false ⇒ standard
@@ -301,9 +372,16 @@ export const AgentTurnSchema = z
          *
          * Not a sandbox setting, for the same reason effort isn't: it changes what a turn COSTS, so it belongs
          * to the turn that spends it rather than to the workspace it ran in. */
-        fast: z.boolean().optional(),
+        fast: z
+            .boolean()
+            .optional()
+            .describe(
+                "Ask for the same work at a higher rate for a higher price. A request rather than a promise: the answer says what actually happened.",
+            ),
         // The opt-in editor context chip: what the user is looking at, folded into the prompt daemon-side.
-        editorContext: EditorContextSchema.optional(),
+        editorContext: EditorContextSchema.optional().describe(
+            'What the user has open in their editor, folded into the prompt so that pointing words like "this" resolve.',
+        ),
     })
     // An attachment-only send (no text) is legal; an entirely empty turn is not.
     .refine((turn) => turn.prompt.trim().length > 0 || (turn.attachments?.length ?? 0) > 0, {
@@ -339,21 +417,41 @@ export type AgentTurn = z.infer<typeof AgentTurnSchema>;
  * Both halves or neither, because a model id is only meaningful to the provider that vends it: half a pick
  * would send a Codex model id to Claude. Routes that accept this pass it through verbatim; a model this build
  * has never heard of is a supported pick, since the picker offers a custom-id escape hatch. */
-export const AgentRunPickSchema = z.object({ agent: z.string().min(1), model: z.string().min(1) }).optional();
+export const AgentRunPickSchema = z
+    .object({
+        agent: z.string().min(1).describe("Which provider."),
+        model: z
+            .string()
+            .min(1)
+            .describe("Which of its models. Both or neither, because a model name only means anything to the provider that serves it."),
+    })
+    .optional();
 export type AgentRunPick = z.infer<typeof AgentRunPickSchema>;
 
 // POST /agent's ack: the daemon-minted id of the detached turn run it started. The turn executes daemon-side
 // regardless of any client connection; every window, the initiator included, renders it via /agent/attach.
-export const StartedTurnSchema = z.object({ run: z.string() });
+export const StartedTurnSchema = z.object({
+    run: z.string().describe("The id of the run that just started. Hand it back when you attach, so the stream resumes rather than replaying."),
+});
 export type StartedTurn = z.infer<typeof StartedTurnSchema>;
 
 // Attach to a conversation's turn run (live, or finished within the retention window). `run`+`after` is the
 // resume cursor of a client whose stream dropped: frames after `after` replay when `run` still names the
 // current run; a mismatch (a newer turn started meanwhile) replays that run from its first frame instead.
 export const AttachTurnSchema = z.object({
-    conversationId: ConversationIdSchema,
-    run: z.string().optional(),
-    after: z.number().int().min(0).optional(),
+    conversationId: ConversationIdSchema.describe("Which conversation to watch."),
+    run: z
+        .string()
+        .optional()
+        .describe("The run you were watching. If a newer turn has started since, the stream replays that one from its beginning instead."),
+    after: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe(
+            "The last frame you already have. Everything after it replays, then the stream goes live. Leave it out to start from the beginning.",
+        ),
 });
 export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 
@@ -398,9 +496,28 @@ export type LoopContext = z.infer<typeof LoopContextSchema>;
  * All three land in ONE file per iteration, with one shape, differing only in strictness. See LoopDocumentSchema.
  */
 export const LoopOutputSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("none") }),
-    z.object({ kind: z.literal("claim") }),
-    z.object({ kind: z.literal("json"), fields: OutputFieldsSchema }),
+    z.object({
+        kind: z
+            .literal("none")
+            .describe(
+                "It produces nothing but its work. The classic make the suite pass: what it leaves behind is a passing suite, and asking it to also file a report is asking it to spend a round on paperwork.",
+            ),
+    }),
+    z.object({
+        kind: z
+            .literal("claim")
+            .describe(
+                "Each round says whether it is done and why. Structured prose: done is a value read rather than a sentence interpreted. Self-assessment, so advisory by construction; it exists because plenty of goals have no command that could check them.",
+            ),
+    }),
+    z.object({
+        kind: z
+            .literal("json")
+            .describe(
+                "Each round writes a real answer in a shape you declared. This is the one that makes a step's output usable as the next step's input: a paragraph mentioning three files cannot be fed to anything, a list of three files can.",
+            ),
+        fields: OutputFieldsSchema.describe("The shape that answer has to match."),
+    }),
 ]);
 export type LoopOutput = z.infer<typeof LoopOutputSchema>;
 
@@ -417,9 +534,24 @@ export type LoopOutput = z.infer<typeof LoopOutputSchema>;
  * from the work, or it is not a check. An output is what the worker says; a check is what someone else says.
  */
 export const LoopCheckSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("command"), command: z.string().min(1) }),
+    z.object({
+        kind: z
+            .literal("command")
+            .describe(
+                "Run something and see if it passes. Deterministic, free, and the only signal here whose answer does not come from a model. A passing test suite beats any amount of self-report.",
+            ),
+        command: z.string().min(1).describe("The command to run in the conversation's own tree. Exiting cleanly means satisfied."),
+    }),
     // The rubric is what the judge is asked; absent `model` runs it on the quick rung the other helpers use.
-    z.object({ kind: z.literal("judge"), rubric: z.string().min(1), model: z.string().optional() }),
+    z.object({
+        kind: z
+            .literal("judge")
+            .describe(
+                "Put the question to a separate model with no tools, which reads the round's own report and rules on it, having done none of the work and nothing invested in its being finished.",
+            ),
+        rubric: z.string().min(1).describe("What that judge is asked."),
+        model: z.string().optional().describe("Which model judges. Leave it out for the cheap one the other small jobs use."),
+    }),
 ]);
 export type LoopCheck = z.infer<typeof LoopCheckSchema>;
 
@@ -432,15 +564,23 @@ export type LoopCheck = z.infer<typeof LoopCheckSchema>;
  */
 export const LoopDocumentSchema = z.object({
     // Whether the goal is met NOW. The loop's own reading of this is the whole point of the file.
-    done: z.boolean(),
+    done: z.boolean().describe("Whether the goal is met. Reading this is the whole point of the file."),
     // One line: why it is or is not met. The single most-read string in the feature, it is what the next
     // iteration reads first and what the history row shows.
-    reason: z.string(),
+    reason: z.string().describe("Why, in one line. The most-read sentence in the feature: the next round reads it first and the history shows it."),
     // What the iteration checked to know that. Optional because a model with nothing to point at should say so
     // by omitting it rather than by inventing a sentence.
-    evidence: z.string().optional(),
+    evidence: z
+        .string()
+        .optional()
+        .describe(
+            "What was checked to know that. Optional, so a round with nothing to point at says so by leaving it out rather than by inventing a sentence.",
+        ),
     // The declared fields, present only for a `json` output and validated against them there.
-    data: z.record(z.string(), z.unknown()).optional(),
+    data: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("The declared answer, for a loop that asked for one, checked against the shape it declared."),
 });
 export type LoopDocument = z.infer<typeof LoopDocumentSchema>;
 
@@ -450,51 +590,97 @@ const LOOP_ITERATIONS_MAX = 50;
 
 export const LoopSchema = z.object({
     // The conversation the loop drives, its fleet card, its worktree, its transcript.
-    conversationId: ConversationIdSchema,
+    conversationId: ConversationIdSchema.describe(
+        "The conversation to loop. It need not exist yet: naming a fresh one opens it, which is what lets run this until it passes be the first thing you ever say.",
+    ),
     // What "done" means, in the user's words. Rides into every iteration's prompt (and into the judge's
     // question) so the model is told the goal it is being measured against rather than left to infer it.
-    goal: z.string().min(1),
+    goal: z
+        .string()
+        .min(1)
+        .describe(
+            "What done means, in your words. It goes into every round's instructions and into the judge's question, so the model is told the bar rather than left to infer it.",
+        ),
     // What each iteration is asked to DO. Separate from `goal` because they are different sentences: "make the
     // suite green" is the goal, "run the tests, pick the top failure, fix it" is the instruction.
-    prompt: z.string().min(1),
-    context: LoopContextSchema,
+    prompt: z
+        .string()
+        .min(1)
+        .describe("What each round is asked to do. The suite passes is the goal; run the tests, take the top failure, fix it is the instruction."),
+    context: LoopContextSchema.describe(
+        "How each round meets the last. Starting fresh makes the files the memory rather than the conversation, so the twentieth round reads the tree as clearly as the first, and costs a re-read each time. Carrying on is cheaper and keeps the reasoning, which suits a short polish-this loop and degrades on long ones: a session that has spent eleven rounds arguing for its own approach is the worst available judge of whether that approach is finished.",
+    ),
     output: LoopOutputSchema,
     /* Everything besides the worker's own word that has to hold before the loop may end. Ordinarily one or
      * none; a list because "the suite is green AND the report is written" is a real completion bar and
      * expressing it as two loops would run the work twice. */
-    checks: z.array(LoopCheckSchema),
-    maxIterations: z.number().int().min(1).max(LOOP_ITERATIONS_MAX),
+    checks: z
+        .array(LoopCheckSchema)
+        .describe(
+            "What else has to be true, all of them together. A list because the suite passes and the report is written is a real bar, and running it as two loops would do the work twice.",
+        ),
+    maxIterations: z
+        .number()
+        .int()
+        .min(1)
+        .max(LOOP_ITERATIONS_MAX)
+        .describe("How many rounds before it gives up. A loop that has not got there in fifty is not one round short of it."),
     // The spend ceiling in USD across the whole loop, summed from the turns' own usage frames. Optional because
     // a 3-iteration loop does not need one; strongly wanted on anything unattended, since this is the first
     // feature in the sandbox that can spend without a person pressing anything between turns.
-    maxSpendUsd: z.number().positive().optional(),
+    maxSpendUsd: z
+        .number()
+        .positive()
+        .optional()
+        .describe(
+            "A ceiling on what the whole loop may spend, in dollars. Optional for a short loop somebody is watching, and strongly wanted otherwise: this is the first thing here that can keep spending with nobody pressing anything between rounds.",
+        ),
     /* Stop after this many CONSECUTIVE iterations that changed nothing in the tree.
      *
      * The guard that matters most in practice, and the one whose absence is expensive. The failure mode of a
      * loop is not runaway success, it is an agent that re-reads the same three files, restates the same plan,
      * declares more work remains, and does that eleven times. Nothing about that is an error, every turn
      * succeeds, so only "the tree did not move" catches it. */
-    stallLimit: z.number().int().min(1),
+    stallLimit: z
+        .number()
+        .int()
+        .min(1)
+        .describe(
+            "Stop after this many rounds in a row that changed nothing on disk. The guard that matters most: a loop's failure is not runaway success, it is an agent re-reading the same three files, restating the same plan and declaring more work remains, eleven times. Every one of those rounds succeeds, so only the tree not moving catches it.",
+        ),
     // Whether the iterations run in the conversation's own worktree or on the shared tree. Recorded on the loop
     // rather than read off the conversation because a loop can OPEN one, and because it decides where the stop
     // command runs: a check against /work would be testing code an isolated loop has not landed yet.
-    isolated: z.boolean(),
+    isolated: z
+        .boolean()
+        .describe(
+            "Whether it works in the conversation's own private copy or in the shared tree. It also decides where a check runs: testing the shared tree would be testing code this loop has not merged yet.",
+        ),
     // Which provider / harness / model the iterations run on; absent ⇒ the conversation's own last choice, then
     // the provider default. The same three passthroughs an automation carries, for the same reason: a headless
     // driver has no composer to read them from.
-    agent: AgentProviderSchema.optional(),
-    harness: AgentHarnessSchema.optional(),
-    account: z.string().optional(),
-    model: z.string().optional(),
+    agent: AgentProviderSchema.optional().describe("Which provider the rounds run on. Absent falls back to the conversation's own last choice."),
+    harness: AgentHarnessSchema.optional().describe("Which agentic loop they run on."),
+    account: z.string().optional().describe("Which account pays."),
+    model: z.string().optional().describe("Which model."),
     // Which persona the iterations act as (AgentTurnSchema.actsAs, read its note for why this is not spelled
     // `account`). The fourth passthrough an automation carries, and it matters here for the automation's
     // reason: every iteration is unattended, and an unattended turn with no persona reaches no logged-in
     // account at all, pinning a card is the one way a loop gets hands.
-    actsAs: entryId.optional(),
+    actsAs: entryId
+        .optional()
+        .describe(
+            "Which persona the rounds act as. It matters here: every round is unwatched, and an unwatched turn naming no persona reaches no signed-in account at all, so pinning one is how a loop gets hands.",
+        ),
     // A workflow persists these on its underlying loop so restart recovery cannot silently change the checkout
     // or let a candidate inherit the sandbox's global auto-land posture on a later iteration.
-    worktreeBase: z.array(RepoBaseSchema).min(1).max(50).optional(),
-    autoLand: z.boolean().optional(),
+    worktreeBase: z
+        .array(RepoBaseSchema)
+        .min(1)
+        .max(50)
+        .optional()
+        .describe("Pin the private copy to these exact commits, so a restart cannot quietly change what the loop is working on."),
+    autoLand: z.boolean().optional().describe("Whether the work merges as it goes."),
 });
 export type Loop = z.infer<typeof LoopSchema>;
 
@@ -517,18 +703,25 @@ export const LOOP_DIR = `${STATE_DIR}/records/artifacts/loops`;
 // "not done yet"; `error` is a turn that surfaced an error frame, which does NOT end the loop by itself, a
 // failing turn is often exactly what the next iteration is supposed to fix.
 export const LoopIterationSchema = z.object({
-    n: z.number().int().min(1),
-    at: z.number(),
-    outcome: z.enum(["continue", "done", "error"]),
+    n: z.number().int().min(1).describe("Which round this was."),
+    at: z.number().describe("When it ran, in milliseconds."),
+    outcome: z
+        .enum(["continue", "done", "error"])
+        .describe(
+            "How the round ended, which is not the same question as how the loop did. A round that errored does not end the loop by itself: a failing turn is often exactly what the next round is meant to fix.",
+        ),
     // The stop check's own words, the guard's output tail, the claim's reason, the judge's verdict. What the
     // run history is actually read for: "why did it keep going" and "why did it stop".
-    detail: z.string().optional(),
-    costUsd: z.number().optional(),
+    detail: z
+        .string()
+        .optional()
+        .describe("What the check said, in its own words. What a run history is actually read for: why it kept going, and why it stopped."),
+    costUsd: z.number().optional().describe("What the round cost, in dollars."),
     // Whether the tree moved this iteration. Feeds the stall detector, and is worth showing per row: three
     // unchanged iterations in a history is the shape of a loop that is not working.
-    changed: z.boolean(),
+    changed: z.boolean().describe("Whether anything on disk moved. Three unchanged rounds in a row is the shape of a loop that is not working."),
     // The provider session this iteration ran on, the door from a history row to a readable transcript.
-    sessionId: z.string().optional(),
+    sessionId: z.string().optional().describe("The session it ran on, and the way from a history row to a readable record."),
 });
 export type LoopIteration = z.infer<typeof LoopIterationSchema>;
 
@@ -547,9 +740,11 @@ export const LoopStateSchema = z.enum(["running", "done", "exhausted", "stalled"
 export type LoopState = z.infer<typeof LoopStateSchema>;
 
 export const LoopRecordSchema = LoopSchema.extend({
-    state: LoopStateSchema,
-    startedAt: z.number(),
-    endedAt: z.number().optional(),
+    state: LoopStateSchema.describe(
+        "How it ended, and each of these is a different thing to be told. Out of rounds says give it more room; stalled says it is not making progress and more room will not help. Overspent, stopped by a person, and the loop itself failing are all their own answers.",
+    ),
+    startedAt: z.number().describe("When it began, in milliseconds."),
+    endedAt: z.number().optional().describe("When it ended, in milliseconds."),
     /* How many times a daemon BOOT has picked this loop back up. The record is its own journal: a loop still
      * marked `running` at boot is exactly one the daemon died under, which is the same trick turn-journal.ts
      * plays with its files and needs no second store to play it.
@@ -557,16 +752,26 @@ export const LoopRecordSchema = LoopSchema.extend({
      * Counted, not just flagged, for the reason the turn journal counts its attempts, a loop whose iteration
      * reliably kills the daemon (an OOM in a test it keeps running) would otherwise be resurrected on every
      * boot forever, and the container is recreated on every sandbox update. */
-    resumed: z.number().int().min(0),
+    resumed: z
+        .number()
+        .int()
+        .min(0)
+        .describe(
+            "How many times the sandbox restarted under it and picked it back up. Counted rather than flagged, so a loop whose round reliably kills the sandbox is not resurrected on every boot for ever.",
+        ),
     // Why the loop ended, for the states whose reason isn't in their name (`error`, and a `done` whose stop
     // check said something worth keeping).
-    detail: z.string().optional(),
-    iterations: z.array(LoopIterationSchema),
+    detail: z.string().optional().describe("Why it ended, for the endings whose reason is not in their name."),
+    iterations: z
+        .array(LoopIterationSchema)
+        .describe("Every round, in order. Why it stopped at the fourth is the question a loop gets read for, and this is the answer."),
 });
 export type LoopRecord = z.infer<typeof LoopRecordSchema>;
 
-export const LoopsListSchema = z.object({ loops: z.array(LoopRecordSchema) });
-export const LoopIdParamSchema = z.object({ conversationId: ConversationIdSchema });
+export const LoopsListSchema = z.object({
+    loops: z.array(LoopRecordSchema).describe("Every loop this workspace has run, newest first, kept after they end."),
+});
+export const LoopIdParamSchema = z.object({ conversationId: ConversationIdSchema.describe("Which conversation's loop.") });
 
 /* ---- saved loops: the machinery, kept; the job, typed fresh each time ----
  *
@@ -586,30 +791,46 @@ export const LoopIdParamSchema = z.object({ conversationId: ConversationIdSchema
  * remembered a conversation would be a loop that could only ever be run once.
  */
 export const LoopDesignSchema = z.object({
-    id: entryId,
+    id: entryId.describe("The design's id."),
     // What it is called on the composer badge and in the picker, so it has to survive being read at pill width.
-    name: z.string().min(1).max(60),
+    name: z.string().min(1).max(60).describe("What to call it. Short, because it has to be readable on a small badge."),
     // One line: what this loop is FOR. Optional, because a well-named loop has already said it.
-    description: z.string().max(280).optional(),
+    description: z.string().max(280).optional().describe("What it is for, in one line. Optional, because a well-named loop has already said it."),
     /* What each iteration is asked to do, when that is worth saying twice. Optional for the reason the ad-hoc
      * form made it optional: `goal` and `prompt` are different sentences, but making somebody write both before
      * anything runs doubles the cost of trying a loop at all. Absent ⇒ the iteration works towards the goal
      * however it sees fit. */
-    prompt: z.string().optional(),
-    context: LoopContextSchema,
-    output: LoopOutputSchema,
-    checks: z.array(LoopCheckSchema),
-    maxIterations: z.number().int().min(1).max(LOOP_ITERATIONS_MAX),
-    maxSpendUsd: z.number().positive().optional(),
-    stallLimit: z.number().int().min(1),
+    prompt: z
+        .string()
+        .optional()
+        .describe(
+            "What each round is asked to do, when that is worth saying separately from the goal. Absent means each round works towards the goal however it sees fit.",
+        ),
+    context: LoopContextSchema.describe("How each round meets the last: starting clean, or carrying on."),
+    output: LoopOutputSchema.describe("What it has to produce."),
+    checks: z.array(LoopCheckSchema).describe("What else has to be true."),
+    maxIterations: z.number().int().min(1).max(LOOP_ITERATIONS_MAX).describe("How many rounds before it gives up."),
+    maxSpendUsd: z.number().positive().optional().describe("A ceiling on what it may spend, in dollars."),
+    stallLimit: z.number().int().min(1).describe("Stop after this many rounds in a row that changed nothing."),
 });
 export type LoopDesign = z.infer<typeof LoopDesignSchema>;
 
-export const LoopDesignsListSchema = z.object({ designs: z.array(LoopDesignSchema) });
+export const LoopDesignsListSchema = z.object({
+    designs: z
+        .array(LoopDesignSchema)
+        .describe("Saved loops: the machinery with the goal left out, so one design can be pointed at a different job every time."),
+});
 // Create and update on one route with the intent spelled out, exactly as a workflow saves, so an id collision
 // cannot silently turn "new loop" into "replace the one you had".
-export const LoopDesignSaveSchema = z.object({ design: LoopDesignSchema, create: z.boolean() });
-export const LoopDesignIdParamSchema = z.object({ id: entryId });
+export const LoopDesignSaveSchema = z.object({
+    design: LoopDesignSchema.describe("The design to write."),
+    create: z
+        .boolean()
+        .describe(
+            "Whether you mean to make a new one or replace an existing one, so an id that happens to collide cannot silently overwrite the one you had.",
+        ),
+});
+export const LoopDesignIdParamSchema = z.object({ id: entryId.describe("Which saved loop.") });
 
 /* The design, aimed at an agent, the one conversion in the feature, kept here so the composer and anything
  * else that starts a saved loop cannot disagree about what a saved loop MEANS. The goal is the message the user
@@ -702,23 +923,25 @@ export const AgentStatusSchema = z.enum([
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 // The card's live activity snippet: the last tool the agent used (with its target) and the in-progress todo.
 export const AgentActivitySchema = z.object({
-    tool: z.string().optional(),
-    target: z.string().optional(),
-    todo: z.string().optional(),
+    tool: z.string().optional().describe("The last tool it reached for."),
+    target: z.string().optional().describe("What it reached for that tool with: a file, a command, a URL."),
+    todo: z.string().optional().describe("The item on its own list that it is working through."),
 });
 export type AgentActivity = z.infer<typeof AgentActivitySchema>;
 // Which "needs you" flags are raised, the fleet badge aggregates these across all agents.
 export const AgentAttentionSchema = z.object({
-    plan: z.boolean(),
-    question: z.boolean(),
-    permission: z.boolean(),
+    plan: z.boolean().describe("It has proposed a plan and is waiting for a yes."),
+    question: z.boolean().describe("It has asked you something."),
+    permission: z.boolean().describe("It wants to use a tool it needs permission for."),
     // A priced service run parked on the owner's click (platform/service-offer.ts), the one card where
     // waiting costs the agent its whole call, so the lane says "spend approval" rather than a generic pause.
-    service: z.boolean(),
+    service: z
+        .boolean()
+        .describe("It wants to spend money on a paid service and is waiting for approval. The one pause where waiting costs it the whole call."),
     // A missing capability parked on the owner's setup (capabilities/capability-offer.ts), the agent is
     // waiting for something to be connected, so the lane can say "setup needed" rather than a generic pause.
-    capability: z.boolean(),
-    conflict: z.boolean(),
+    capability: z.boolean().describe("It needs something connected that is not connected yet."),
+    conflict: z.boolean().describe("Its work cannot be merged without somebody resolving a clash."),
 });
 export type AgentAttention = z.infer<typeof AgentAttentionSchema>;
 
@@ -743,19 +966,31 @@ export const LandedMessageSchema = z.object({
      * conversation that opens "audit the review panel" and then spends four turns fixing what the audit found
      * still answers to "Review panel · audit", a good name for the session and a wrong subject for the
      * commit. This is read off the code instead, so it describes the change the user is about to record. */
-    subject: z.string(),
+    subject: z
+        .string()
+        .describe(
+            "One line saying what the merged work did, read off the code rather than off the opening request. A conversation that asks for an audit and then spends four turns fixing what it found needs a subject about the fixes.",
+        ),
     /* THE SAME LANDING, SAID TO A USER, the `Release-Note:` sentence the chip files in under the subject, for
      * a repo that keeps a changelog (SandboxSettings.changelogRepos).
      *
      * Usually absent, and that is the design: most landings change nothing a user would notice, and the model
      * is told to omit the note for those rather than to invent one. */
-    note: z.string().optional(),
+    note: z
+        .string()
+        .optional()
+        .describe(
+            "The same change said to somebody who uses the product, for a repository that keeps a changelog. Usually absent, because most changes are not ones a user would notice.",
+        ),
     /* WHAT THE SAME LANDING TAKES AWAY, the `Breaking-Note:` sentence, filed as its own trailer so the
      * release harvest can put it under "Breaking changes" and the update card can warn with it before the
      * update rather than after. Nearly always absent: the model is told a breaking note is for removals only,
      * and to omit it when in doubt, except when the landing shrinks a wire-contract lock, where the sentence
      * is REQUIRED and mechanically guaranteed (the daemon's git/contract-shrink.ts) rather than judged. */
-    breaking: z.string().optional(),
+    breaking: z
+        .string()
+        .optional()
+        .describe("What this change takes away, for anything already relying on it. Nearly always absent: it is for removals, not for additions."),
 });
 export type LandedMessage = z.infer<typeof LandedMessageSchema>;
 
@@ -768,14 +1003,16 @@ export type LandedMessage = z.infer<typeof LandedMessageSchema>;
  *              reason it gave back then. Skipping is the memo working, and it reads as such.
  * The steps arrive in the order they were spent, so the list IS the timeline. */
 export const LandedMessageStepSchema = z.object({
-    provider: z.string().min(1),
-    model: z.string().min(1),
-    status: z.enum(["asking", "answered", "refused", "skipped"]),
+    provider: z.string().min(1).describe("Which provider was asked."),
+    model: z.string().min(1).describe("Which of its models."),
+    status: z
+        .enum(["asking", "answered", "refused", "skipped"])
+        .describe("How this one went. Skipped means it was not asked at all, because it refused a few minutes ago and the walk stepped over it."),
     // When this rung started being asked, ms since epoch, what an in-flight step's ticking "12s…" is measured
     // from, client-side, without a frame per second. Absent for `skipped`, which cost no time at all.
-    at: z.number().optional(),
-    ms: z.number().optional(),
-    reason: z.string().optional(),
+    at: z.number().optional().describe("When it started being asked, in milliseconds. Absent for one that was skipped, which cost no time."),
+    ms: z.number().optional().describe("How long it took. Absent while it is still being asked."),
+    reason: z.string().optional().describe("Why it refused, in its own words."),
 });
 export type LandedMessageStep = z.infer<typeof LandedMessageStepSchema>;
 
@@ -790,48 +1027,72 @@ export type LandedMessageStep = z.infer<typeof LandedMessageStepSchema>;
  *             sentence, or the whole chain spent).
  * An empty `steps` with no outcome is the moment before the first model is asked, the diff is being read. */
 export const LandedMessageDraftSchema = z.object({
-    startedAt: z.number(),
-    steps: z.array(LandedMessageStepSchema),
-    outcome: z.enum(["written", "failed"]).optional(),
-    reason: z.string().optional(),
-    finishedAt: z.number().optional(),
+    startedAt: z.number().describe("When the drafting began, in milliseconds."),
+    steps: z
+        .array(LandedMessageStepSchema)
+        .describe(
+            "Each model that was asked, in the order they were spent, so the list is the timeline. Empty with no outcome means the diff is still being read.",
+        ),
+    outcome: z.enum(["written", "failed"]).optional().describe("How it ended. Absent means it is still going."),
+    reason: z
+        .string()
+        .optional()
+        .describe("The one-line account of a failure, for a screen with one line to spend. The steps carry each model's own words."),
+    finishedAt: z.number().optional().describe("When it ended, in milliseconds."),
 });
 export type LandedMessageDraft = z.infer<typeof LandedMessageDraftSchema>;
 
 export const AgentSummarySchema = z.object({
     // The conversationId.
-    id: z.string(),
-    sessionId: z.string().optional(),
+    id: z.string().describe("The conversation id, which is how every other call addresses it."),
+    sessionId: z.string().optional().describe("The provider session behind the last turn. It is retired whenever the model or account changes."),
     // First prompt, sanitized to one bounded line.
-    title: z.string().optional(),
-    status: AgentStatusSchema,
+    title: z.string().optional().describe("What to call it: the first prompt cut to one line, unless somebody renamed it."),
+    status: AgentStatusSchema.describe(
+        "What it is doing. Stopping and stopped are the two halves of somebody pressing stop, because a cancel is not instant; resuming means the sandbox is already putting right whatever killed the turn.",
+    ),
     /* WHY THE LAST TURN FAILED, the sentence it died on, carried beside the `error` status because that word
      * on its own is not an answer. A session refused on its first request (an organization with Claude Code
      * switched off, a spent allowance, a model the endpoint has never heard of) reached every surface as a grey
      * "error" and a link into the transcript, so the one place the reason existed was the dead conversation
      * itself, which is exactly where an unattended run, started from a fan-out nobody is watching, is least
      * likely to be read. Absent unless the last turn ended in failure, and cleared the moment it runs again. */
-    failure: z.string().optional(),
-    provider: AgentProviderSchema,
-    harness: AgentHarnessSchema,
+    failure: z
+        .string()
+        .optional()
+        .describe(
+            "Why the last turn failed, in the words it died on. Absent unless it did, and cleared the moment it runs again. Carried here because the word error on its own is not an answer, least of all for a run nobody was watching.",
+        ),
+    provider: AgentProviderSchema.describe("Which model provider it runs on."),
+    harness: AgentHarnessSchema.describe("Which agentic loop it runs on."),
     // What the agent's last turn ran with, the model, its reasoning effort, whether extended thinking was on,
     // and whether fast speed was asked for. Recorded per agent because they are facts about THIS conversation: a
     // client opening it seeds its composer from them, rather than from whatever that browser last picked in some
     // other tab. Absent for an agent whose turns predate the record (model has always been kept; the rest are
     // newer). `fast` is what was REQUESTED, not what was served, the served answer belongs to a turn and rides
     // its `fast_mode` frame, while this is the composer's memory of the user's own choice.
-    model: z.string().optional(),
-    effort: z.string().optional(),
-    thinking: z.boolean().optional(),
-    fast: z.boolean().optional(),
-    account: z.string().optional(),
+    model: z
+        .string()
+        .optional()
+        .describe(
+            "What its last turn ran with. Kept per conversation so opening it restores the choices made in it, rather than whatever some other tab last picked.",
+        ),
+    effort: z.string().optional().describe("How hard that turn was told to think."),
+    thinking: z.boolean().optional().describe("Whether that turn showed its reasoning."),
+    fast: z.boolean().optional().describe("Whether that turn asked for higher speed. What was asked for, not what was served."),
+    account: z.string().optional().describe("Which connected account paid for it."),
     // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
-    branch: z.string().optional(),
+    branch: z.string().optional().describe("The branch its private copy works on. Absent for a conversation that works directly in the shared tree."),
     // This agent's own answer to "land automatically at turn completion?", an explicit per-agent override of
     // the sandbox-wide `autoLand` setting. ABSENT ⇒ inherit, which is the common case and the one that keeps
     // the global toggle meaningful: an agent that never expressed an opinion follows the sandbox wherever it
     // is pointed next. Written by `agents.autoLand`; the UI shows the EFFECTIVE value (this ?? the setting).
-    autoLand: z.boolean().optional(),
+    autoLand: z
+        .boolean()
+        .optional()
+        .describe(
+            "This conversation's own answer to whether its work merges automatically. Absent means it follows the sandbox-wide setting, which is the common case.",
+        ),
     /* This agent's own answer to "re-run my turn when the model provider was what failed?", the same
      * two-level shape as `autoLand` above, and here for a sharper reason than symmetry.
      *
@@ -848,10 +1109,21 @@ export const AgentSummarySchema = z.object({
     // A collaborator asked for this agent's work to be landed (agents.requestLand), collaborators may drive
     // agents but not merge into the main tree, so the ask rides the summary where every maintainer's board
     // sees it. Cleared by the land or discard that answers it. Absent ⇒ nobody is waiting.
-    landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
+    landRequested: z
+        .object({
+            email: z.string().describe("Who asked."),
+            name: z.string().optional().describe("Their display name."),
+            at: z.number().describe("When they asked, in milliseconds."),
+        })
+        .optional()
+        .describe(
+            "A collaborator has asked a maintainer to merge this work. Cleared by whichever merge or discard answers it. Absent means nobody is waiting.",
+        ),
     // Present when the conversation was opened by an outside message rather than by the user (see
     // AgentOriginSchema), the card's provenance line. Absent ⇒ the user started it.
-    origin: AgentOriginSchema.optional(),
+    origin: AgentOriginSchema.optional().describe(
+        "Where the conversation came from when nobody typed it: a chat mention, a visitor's message, a webhook. Absent means a person started it.",
+    ),
     /* Where this conversation was cut from, when it was cut from another. Recorded once, from the fork's very
      * first turn, and never cleared, it is the relationship, not a pending state.
      *
@@ -859,16 +1131,18 @@ export const AgentSummarySchema = z.object({
      * that are obviously related and, without this, had no way to say how: the link has to survive closing
      * either tab and reopening it from history, and it has to be readable from the OTHER side, the source's
      * own transcript marks its cut points by looking for the conversations that name it. */
-    forkedFrom: ForkedFromSchema.optional(),
+    forkedFrom: ForkedFromSchema.optional().describe(
+        "The conversation this one was cut from. Recorded once and never cleared: it is the relationship, not a pending state.",
+    ),
     // The ROOT repo's short base sha, the checkout moment's display identity. Per-repo bases stay
     // daemon-internal (agents.diff already reports against them).
-    base: z.string().optional(),
-    costUsd: z.number().optional(),
-    inputTokens: z.number().optional(),
-    outputTokens: z.number().optional(),
-    contextTokens: z.number().optional(),
-    contextWindow: z.number().optional(),
-    activity: AgentActivitySchema.optional(),
+    base: z.string().optional().describe("The commit its private copy started from, shortened."),
+    costUsd: z.number().optional().describe("What it has cost so far, in dollars. A helper agent's spend is its own and is not folded in here."),
+    inputTokens: z.number().optional().describe("Tokens sent."),
+    outputTokens: z.number().optional().describe("Tokens received."),
+    contextTokens: z.number().optional().describe("How much of the window the conversation currently fills."),
+    contextWindow: z.number().optional().describe("How large that window is."),
+    activity: AgentActivitySchema.optional().describe("What it is doing at this moment."),
     /* THE WHOLE STORY OF THIS LANDING'S COMMIT MESSAGE BEING WRITTEN, present from the moment the land starts
      * the draft, updated on every transition, and kept after it ends until the next land replaces it.
      *
@@ -880,7 +1154,9 @@ export const AgentSummarySchema = z.object({
      *
      * Runtime only: nothing about it is persisted, so a daemon restart forgets it. That is correct rather than
      * lossy, a restart also killed the draft it would have been describing. */
-    landedMessageDraft: LandedMessageDraftSchema.optional(),
+    landedMessageDraft: LandedMessageDraftSchema.optional().describe(
+        "The whole story of this merge's commit message being written: which models were asked, how long each took, what refused and in what words. Forgotten on restart, which is right, because a restart also killed the drafting it describes.",
+    ),
     /* AND THE SENTENCE ITSELF, once the flag above clears, what this agent's landed work is called, for the
      * Changes panel's "From" chip to file into the commit box.
      *
@@ -897,19 +1173,26 @@ export const AgentSummarySchema = z.object({
      *
      * Absent for every agent that has not landed, and for a landing nothing could be written about. Replaced
      * wholesale by the next land, the claim grows and so does the sentence about it. */
-    landedMessage: LandedMessageSchema.optional(),
+    landedMessage: LandedMessageSchema.optional().describe(
+        "What this conversation's merged work is called, once the drafting above has finished. It arrives on the same push that ends the draft, so the promise and the answer travel together.",
+    ),
     // Present while a turn runs: its start, ms since epoch.
-    startedAt: z.number().optional(),
-    updatedAt: z.number(),
+    startedAt: z.number().optional().describe("When the running turn started, in milliseconds. Absent when none is running."),
+    updatedAt: z.number().describe("When it last did something, in milliseconds. Reading it does not count."),
     // When the agent was last OPENED, ms since epoch, the unread badge's reference point (`updatedAt >
     // seenAt` ⇒ the agent has done something you haven't looked at). Absent ⇒ never opened. Daemon-side on
     // purpose: read state is a fact about the WORK, not about one browser profile, so clearing site data or
     // picking up the phone must not resurrect every badge.
-    seenAt: z.number().optional(),
-    attention: AgentAttentionSchema,
+    seenAt: z
+        .number()
+        .optional()
+        .describe(
+            "When somebody last opened it, in milliseconds. Newer activity than this is what makes it unread. Kept by the sandbox rather than by a browser, so clearing site data or picking up a phone does not resurrect every badge.",
+        ),
+    attention: AgentAttentionSchema.describe("Which kinds of waiting-for-you it is doing."),
     // Completed turns and lifetime tool calls, the card's msgs/tools counters.
-    turns: z.number().optional(),
-    toolUses: z.number().optional(),
+    turns: z.number().optional().describe("Turns it has finished."),
+    toolUses: z.number().optional().describe("Tools it has used, over its whole life."),
     /* The agents THIS agent started (SubagentSessionSchema), live and lifetime. Absent ⇒ it has never delegated,
      * which is most agents, so the card's chip appears on content rather than reading "0" down the board.
      *
@@ -922,10 +1205,25 @@ export const AgentSummarySchema = z.object({
      * running five children looked exactly like an agent running none: the work was real, the spend was real, and
      * the board said nothing. The tokens are NOT folded into the parent's cost, a child's spend is its own, and
      * the Subagents area is where it is attributed. */
-    subagents: z.object({ running: z.number(), total: z.number() }).optional(),
+    subagents: z
+        .object({
+            running: z.number().describe("Helpers working right now."),
+            total: z.number().describe("Helpers it has started over its whole life."),
+        })
+        .optional()
+        .describe(
+            "Helper agents this one delegated to. Absent means it never has, which is most conversations. Their spend is their own and is not folded into this conversation's cost.",
+        ),
     // The agent's cumulative output (base → branch tip across every repo), refreshed on each land,
     // the card's "12 files · +412 −96" readout. Independent of what has landed.
-    diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
+    diff: z
+        .object({
+            files: z.number().describe("Files touched."),
+            insertions: z.number().describe("Lines added."),
+            deletions: z.number().describe("Lines removed."),
+        })
+        .optional()
+        .describe("Everything it has written, measured from where it started. Independent of how much has been merged."),
     /* HOW MUCH OF WHAT THIS AGENT LANDED IS STILL IN YOUR WORKING TREE, present only when some of it ISN'T.
      *
      * A land applies its delta to the main tree as uncommitted changes, so the user can discard it there like
@@ -941,7 +1239,15 @@ export const AgentSummarySchema = z.object({
      * Absent is the steady state and the quiet one: an agent that never landed and an agent whose work is
      * exactly where it left it both say nothing. Its PRESENCE is the signal, which is what keeps the board
      * from spending a line per card on the ordinary case. */
-    landedPresence: z.object({ landed: z.number(), present: z.number() }).optional(),
+    landedPresence: z
+        .object({
+            landed: z.number().describe("Paths this conversation merged in."),
+            present: z.number().describe("How many of them are still there, either pending or committed."),
+        })
+        .optional()
+        .describe(
+            "Present only when some of what it merged has since been thrown away. Absent is the steady state: its presence is the signal, so an ordinary card spends no line on it.",
+        ),
     /* The loop driving this conversation, when one is (or was), "iteration 3/12, until the suite is green".
      *
      * PROJECTED onto the card rather than fetched beside it, and that is the whole reason a loop needed no
@@ -952,8 +1258,14 @@ export const AgentSummarySchema = z.object({
      *
      * Absent ⇒ an ordinary conversation, which is nearly all of them. */
     loop: z
-        .object({ state: LoopStateSchema, iteration: z.number().int().min(0), maxIterations: z.number().int().min(1), goal: z.string() })
-        .optional(),
+        .object({
+            state: LoopStateSchema.describe("How the loop is going."),
+            iteration: z.number().int().min(0).describe("Which round it is on."),
+            maxIterations: z.number().int().min(1).describe("How many rounds it will attempt before giving up."),
+            goal: z.string().describe("What it is looping towards."),
+        })
+        .optional()
+        .describe("The loop driving this conversation, if one is. Absent for an ordinary conversation, which is nearly all of them."),
     /* The workflow run this conversation is a step of, "Ship the feature · step 3 of 4 · Review the change".
      *
      * Projected for the same reason the loop above is, and it answers a question only the board can be asked. A
@@ -973,27 +1285,41 @@ export const AgentSummarySchema = z.object({
      * Absent ⇒ an ordinary conversation. */
     workflow: z
         .object({
-            runId: z.string(),
-            name: z.string(),
-            step: z.string(),
-            index: z.number().int().min(1),
-            total: z.number().int().min(1),
+            runId: z.string().describe("The run this belongs to, which is how a board groups its steps together."),
+            name: z.string().describe("The workflow's name."),
+            step: z.string().describe("Which step this conversation is on now. It moves when steps are chained."),
+            index: z.number().int().min(1).describe("This step's place in the workflow, counting from one."),
+            total: z.number().int().min(1).describe("How many steps the workflow has."),
         })
-        .optional(),
+        .optional()
+        .describe(
+            "The workflow run this conversation is a step of. Without it, a four-step run reads as four unrelated conversations that happen to have started together.",
+        ),
     // When the agent was ARCHIVED (ms epoch), off the board, but nothing lost: its checkout was retired
     // (worktree removed) while the agent/<id> branch, the transcript, and every counter stayed. Absent ⇒ live
     // on the board. Archived agents are excluded from the roster the fleet renders; `agents.archived` lists
     // them, `agents.unarchive` brings one back, and the next turn re-attaches its worktree from the branch.
-    archivedAt: z.number().optional(),
+    archivedAt: z
+        .number()
+        .optional()
+        .describe(
+            "When it was put away, in milliseconds. Nothing was lost: its branch, its record and every counter stayed, and bringing it back gives it a fresh working copy. Absent means it is live on the board.",
+        ),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
 // AgentsListSchema lives further down, after AutomationApprovalSchema, the fleet list carries the held wakes,
 // and zod declaration order forces the ride-along to be declared first.
-export const AgentIdSchema = z.object({ id: z.string().min(1) });
+export const AgentIdSchema = z.object({ id: z.string().min(1).describe("Which conversation.") });
 // archive's input: the agents to take off the board. Absent `ids` ⇒ every finished agent that is archivable
 // right now (the lane header's "Clear"); unarchive always names its ids (a restore, or a bulk archive's undo).
-export const AgentArchiveSchema = z.object({ ids: z.array(z.string().min(1)).max(500).optional() });
-export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(500) });
+export const AgentArchiveSchema = z.object({
+    ids: z
+        .array(z.string().min(1))
+        .max(500)
+        .optional()
+        .describe("Which conversations to put away. Leave it out for every finished one that can be archived right now."),
+});
+export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(500).describe("Which conversations.") });
 // What actually MOVED, and deliberately NOT the roster afterwards. Two archives in flight at once each finish
 // holding a full-roster snapshot from a different instant, so a client that swapped one in wholesale would let
 // the slower response resurrect what the faster one just filed away, a delta composes where a snapshot races.
@@ -1001,13 +1327,30 @@ export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).
 // detail page addressed by id); the ids "Undo" needs come off them for free.
 // The agents an archive/unarchive actually moved, plus the registry revision that applied the move, the
 // browser holds its optimistic add/remove of exactly these ids until it sees a roster at or past `rev`.
-export const AgentsMovedSchema = z.object({ moved: z.array(AgentSummarySchema), rev: z.number() });
+export const AgentsMovedSchema = z.object({
+    moved: z
+        .array(AgentSummarySchema)
+        .describe(
+            "What actually moved, whole, rather than the fleet afterwards. Two archives finishing at once would each carry a snapshot from a different instant, and swapping one in wholesale would let the slower answer resurrect what the faster one just filed away.",
+        ),
+    rev: z
+        .number()
+        .describe(
+            "The version of the fleet that includes this move, so a caller can hold its own optimistic change until it sees a list at least that new.",
+        ),
+});
 export type AgentsMoved = z.infer<typeof AgentsMovedSchema>;
 // What a purge actually deleted. Ids, not summaries: these agents no longer exist anywhere, there is nothing
 // left to show and nothing to put back, so the only thing the caller can do with the answer is drop those rows
 // and count them. No revision either: archived agents are already off the broadcast roster (see `list`), so a
 // purge changes nothing the board's pending-move machinery has to hold a card against.
-export const AgentsRemovedSchema = z.object({ removed: z.array(z.string()) });
+export const AgentsRemovedSchema = z.object({
+    removed: z
+        .array(z.string())
+        .describe(
+            "Which conversations were deleted, as ids. Ids rather than whole cards, because these no longer exist anywhere: there is nothing left to show and nothing to put back.",
+        ),
+});
 export type AgentsRemoved = z.infer<typeof AgentsRemovedSchema>;
 /* Search the fleet by what was SAID in it, the board's filter (and the popped-out rail's).
  *
@@ -1029,7 +1372,16 @@ export type AgentsRemoved = z.infer<typeof AgentsRemovedSchema>;
  * one word means one thing across the daemon's search routes. Off is case-INSENSITIVE rather than smart case:
  * a filter that quietly changed rule when a capital was typed would make the switch beside it a lie.
  */
-export const AgentSearchQuerySchema = z.object({ query: z.string().trim().min(2), caseSensitive: z.stringbool().optional() });
+export const AgentSearchQuerySchema = z.object({
+    query: z
+        .string()
+        .trim()
+        .min(2)
+        .describe(
+            "What to look for. Searched against what was said, both sides of the conversation, and nothing else: not the thinking, not the tool output, which between them name nearly every identifier in the workspace and would return most of the board.",
+        ),
+    caseSensitive: z.stringbool().optional().describe("Whether capitals matter."),
+});
 /* WHY a row survived the filter: the matched line, windowed around the hit, and which side of the conversation
  * said it. A result that matches for a reason the reader cannot see is worse than no filter at all.
  *
@@ -1040,33 +1392,81 @@ export const AgentSearchQuerySchema = z.object({ query: z.string().trim().min(2)
  */
 export const SpeakerSchema = z.enum(["user", "agent"]);
 export type Speaker = z.infer<typeof SpeakerSchema>;
-export const MatchSnippetSchema = z.object({ text: z.string(), speaker: SpeakerSchema });
+export const MatchSnippetSchema = z.object({
+    text: z.string().describe("The matching line, with a little either side of it."),
+    speaker: SpeakerSchema.describe(
+        "Who said it. Carried with the words rather than beside them, because a line of the agent's prose under a card reads as something you typed until the row says otherwise.",
+    ),
+});
 export type MatchSnippet = z.infer<typeof MatchSnippetSchema>;
 // One matching agent, and the evidence for it. `snippet` is absent when the match is the TITLE, which the card
 // already shows, repeating it underneath is noise where evidence was wanted.
-export const AgentMatchSchema = z.object({ id: z.string(), snippet: MatchSnippetSchema.optional() });
+export const AgentMatchSchema = z.object({
+    id: z.string().describe("Which conversation matched."),
+    snippet: MatchSnippetSchema.optional().describe(
+        "Why, in its own words. Absent when the title was the match, which the card already shows: repeating it underneath is noise where evidence was wanted.",
+    ),
+});
 export type AgentMatch = z.infer<typeof AgentMatchSchema>;
 // `scanned` is how many agents the daemon actually read prompts for, so the board can say when a query saw
 // less than the whole fleet rather than implying it saw all of it.
-export const AgentSearchResultSchema = z.object({ matches: z.array(AgentMatchSchema), scanned: z.number() });
+export const AgentSearchResultSchema = z.object({
+    matches: z.array(AgentMatchSchema).describe("What matched, from the live fleet and the archive together."),
+    scanned: z
+        .number()
+        .describe(
+            "How many conversations were actually read, so a screen can say when a search saw less than everything rather than implying it saw all of it.",
+        ),
+});
 export type AgentSearchResult = z.infer<typeof AgentSearchResultSchema>;
 // rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).
-export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
+export const AgentRenameSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    title: z.string().trim().min(1).max(80).describe("What to call it from now on."),
+});
 /* place's input: words the user writes INTO the transcript wearing the agent's voice (see agentsContract.place).
  * Bounded well above anything a person types by hand and just above the handoff's per-message render cap
  * (runtime-history's MESSAGE_CHAR_CAP), a placed line longer than that would reach the agent truncated, which
  * silently breaks "it thinks these are its own words". Better to refuse at the door with a reason. */
-export const AgentPlaceSchema = z.object({ id: z.string().min(1), text: z.string().trim().min(1).max(8_000) });
+export const AgentPlaceSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    text: z
+        .string()
+        .trim()
+        .min(1)
+        .max(8_000)
+        .describe(
+            "The words to put in the agent's mouth. Bounded just above what the next turn can carry whole, because a line too long to be handed over intact would reach the agent truncated and quietly break the very thing this is for.",
+        ),
+});
 // autoLand's input: this agent's own land-at-completion posture. `null` CLEARS the override back to "inherit
 // the sandbox setting", the browser sends it whenever the user toggles back to what the global already says,
 // so agents don't accumulate frozen overrides that quietly stop following the global toggle.
-export const AgentAutoLandSchema = z.object({ id: z.string().min(1), autoLand: z.boolean().nullable() });
+export const AgentAutoLandSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    autoLand: z
+        .boolean()
+        .nullable()
+        .describe(
+            "Whether its work merges automatically when a turn finishes. Null clears the override and goes back to following the sandbox-wide setting, so a conversation does not sit holding a frozen copy of a default it has quietly stopped following.",
+        ),
+});
 // resumeAfterOutage's input: this ONE conversation's answer to a provider outage. `null` clears the override
 // back to "inherit the sandbox setting", sent whenever the user toggles back to what the global already says,
 // on the same reasoning as autoLand's null: an agent holding a frozen copy of a default has quietly stopped
 // following it, and nothing on screen would say so.
-export const AgentResumeAfterOutageSchema = z.object({ id: z.string().min(1), resumeAfterOutage: z.boolean().nullable() });
-export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });
+export const AgentResumeAfterOutageSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    resumeAfterOutage: z
+        .boolean()
+        .nullable()
+        .describe("Whether it retries by itself when the model provider was what failed. Null clears the override back to the sandbox-wide setting."),
+});
+export const AgentFileDiffQuerySchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    repo: z.string().min(1).describe("Which repository."),
+    path: z.string().min(1).describe("Which file, relative to that repository."),
+});
 /* WHY a path would not land. The distinction is the whole difference between an actionable report and a dead
  * end, because the three have nothing in common but their symptom:
  *   `workspace`, you have uncommitted edits on that path. Yours is the copy at risk; commit or stash it.
@@ -1076,7 +1476,12 @@ export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: 
  * The old report named only the first, which is the rarest of the three. */
 export const LandConflictReasonSchema = z.enum(["workspace", "diverged", "binary"]);
 export type LandConflictReason = z.infer<typeof LandConflictReasonSchema>;
-export const LandConflictPathSchema = z.object({ path: z.string(), reason: LandConflictReasonSchema });
+export const LandConflictPathSchema = z.object({
+    path: z.string().describe("Which file."),
+    reason: LandConflictReasonSchema.describe(
+        "Why it would not merge, and the three have nothing in common but the symptom. Your own uncommitted edits on that path, where yours is the copy at risk. The shared tree having moved under the conversation since it started, where nothing of yours is at risk. Or a file git cannot merge at all, where no automatic answer exists.",
+    ),
+});
 
 /* land's outcome, per repo of the composition. `paths` is the set that genuinely failed to apply. NOT the
  * whole delta, which is what the first version reported whenever it could not pin the cause down, turning
@@ -1084,14 +1489,27 @@ export const LandConflictPathSchema = z.object({ path: z.string(), reason: LandC
  * how much is being held back by how little, and offer to take it. An empty `paths` with `clean: 0` is the
  * repo-unavailable case: the main checkout is gone, and no path-level account exists. */
 export const LandConflictSchema = z.object({
-    repo: z.string(),
-    paths: z.array(LandConflictPathSchema),
-    clean: z.number(),
+    repo: z.string().describe("Which repository."),
+    paths: z
+        .array(LandConflictPathSchema)
+        .describe(
+            "The files that genuinely would not apply. Not the whole change: reporting everything whenever the cause could not be pinned down turned four real conflicts into a wall of fourteen.",
+        ),
+    clean: z
+        .number()
+        .describe(
+            "How many files would apply regardless, so a screen can say how much is being held back by how little and offer to take it. Zero alongside an empty list means the repository could not be reached at all.",
+        ),
     // The branch the user's checkout is on, the thing the agent has to rebase onto. Carried because only the
     // daemon can see it: an isolated turn's worktree is mounted over the agent's whole view, so the resolution
     // errand could otherwise only tell it to go and read the name off `git worktree list`. Absent on a detached
     // HEAD or a vanished checkout, where there is no name to give.
-    mainBranch: z.string().optional(),
+    mainBranch: z
+        .string()
+        .optional()
+        .describe(
+            "The branch your own checkout is on, which is what the conversation has to rebase onto. Carried because only the sandbox can see it. Absent where there is no name to give.",
+        ),
 });
 export type LandConflict = z.infer<typeof LandConflictSchema>;
 
@@ -1100,12 +1518,25 @@ export type LandConflict = z.infer<typeof LandConflictSchema>;
 // `merge` land: the paths written into the workspace carrying conflict markers, which the user finishes by
 // hand in their own editor exactly as they would any merge.
 export const LandResultSchema = z.object({
-    landed: z.boolean(),
-    conflicts: z.array(LandConflictSchema).optional(),
-    resolving: z.array(z.object({ repo: z.string(), paths: z.array(z.string()) })).optional(),
+    landed: z.boolean().describe("Whether anything was applied."),
+    conflicts: z.array(LandConflictSchema).optional().describe("What stopped it, per repository."),
+    resolving: z
+        .array(
+            z.object({
+                repo: z.string().describe("Which repository."),
+                paths: z.array(z.string()).describe("Which files now hold conflict markers to sort out by hand."),
+            }),
+        )
+        .optional()
+        .describe("Files left half-merged, when you asked for the mode that lands what it can and leaves the rest marked up."),
     // A `measure` outcome with an outstanding delta: nothing was applied and nothing failed, the work is
     // waiting on the branch for a deliberate Land. `landed: false` alone can't say that (it means refusal).
-    held: z.boolean().optional(),
+    held: z
+        .boolean()
+        .optional()
+        .describe(
+            "Nothing was applied and nothing failed: there is work waiting on the branch for a deliberate merge. Not merged on its own cannot say that, because on its own it means refused.",
+        ),
 });
 export type LandResult = z.infer<typeof LandResultSchema>;
 
@@ -1146,10 +1577,12 @@ export type AgentSpan = z.infer<typeof AgentSpanSchema>;
  * It does NOT cover a turn PARKED on a question or a permission card, nothing is being written there, so that
  * land needs no override and takes none (agents.routes.ts). This flag means "yes, mid-write, I know". */
 export const AgentLandSchema = z.object({
-    id: z.string().min(1),
-    mode: LandModeSchema.optional(),
-    span: AgentSpanSchema.optional(),
-    force: z.boolean().optional(),
+    id: z.string().min(1).describe("Which conversation's work to merge."),
+    mode: LandModeSchema.optional().describe(
+        "How to apply it. The default applies all of it or none, so a refusal leaves the workspace exactly as it was. The other lands every clean file and leaves the rest with conflict markers to resolve by hand.",
+    ),
+    span: AgentSpanSchema.optional().describe("How much of the work to take. Leave it out for everything not yet merged."),
+    force: z.boolean().optional().describe("Go ahead despite a check that would otherwise refuse."),
 });
 
 // ---- routed-provider subscriptions ----
@@ -1220,7 +1653,7 @@ export type AccountUsage = z.infer<typeof AccountUsageSchema>;
  * someone to reconnect a perfectly good account is the cost of believing the code over the sentence. */
 export const ProviderRefusalSchema = z.object({
     // Epoch MS, matching AccountUsage.measuredAt, the two are read side by side.
-    at: z.number(),
+    at: z.number().describe("When it refused, in milliseconds."),
     /* Three ways a plan says no, kept apart because WHAT ANSWERS EACH is different and a screen that conflates
      * them tells the user to do the wrong thing. A spent allowance is answered by a later reading with room in
      * it; a refused credential by the account being read at all through it; and an entitlement refusal, an
@@ -1228,15 +1661,25 @@ export const ProviderRefusalSchema = z.object({
      * token authenticates and its usage endpoint answers with real pools the whole time it cannot run a turn,
      * so filing it as `auth` let the very next quota sweep dismiss it and leave a full green ring over an
      * account that refused everything asked of it. Only a turn that actually runs settles this one. */
-    kind: z.enum(["limit", "auth", "entitlement"]),
+    kind: z
+        .enum(["limit", "auth", "entitlement"])
+        .describe(
+            "Three different noes, kept apart because what fixes each is different. A spent allowance is answered by waiting; a refused credential by signing in again; and an entitlement refusal, where somebody has switched this off for your seat, by neither of those. That last one authenticates fine and reports healthy limits the whole time it refuses everything.",
+        ),
     // The provider's own sentence, verbatim. It is the only part that says WHICH pool or WHICH credential.
-    message: z.string(),
+    message: z.string().describe("The provider's own words, verbatim. The only part that says which limit or which credential."),
     // The account that was serving, when the daemon knows it (native turns only, see above).
-    account: z.string().optional(),
+    account: z.string().optional().describe("Which account was serving, where that is known."),
 });
 export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
 
-export const ProviderRefusalsSchema = z.object({ refusals: z.record(z.string(), ProviderRefusalSchema) });
+export const ProviderRefusalsSchema = z.object({
+    refusals: z
+        .record(z.string(), ProviderRefusalSchema)
+        .describe(
+            "The most recent refusal per provider. Read alongside an account's usage: that says how full it was when last checked, this says whether it has since started saying no.",
+        ),
+});
 export type ProviderRefusals = z.infer<typeof ProviderRefusalsSchema>;
 
 // One connected subscription in the translator. `name` is CLIProxyAPI's auth-file name, the stable store key a
@@ -1273,27 +1716,39 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
     // interruption, landing anywhere else means approving a plan to run `git log` and then being asked whether
     // `git log` may run. Rejection feedback loops back into the model as the denial reason.
     z.object({
-        kind: z.literal("plan"),
-        requestId: z.string().min(1),
-        approve: z.boolean(),
-        feedback: z.string().optional(),
+        kind: z.literal("plan").describe("Answering a plan the agent proposed."),
+        requestId: z.string().min(1).describe("Which card you are answering, from the frame that raised it."),
+        approve: z
+            .boolean()
+            .describe(
+                "Whether to go ahead. Approving means the plan then runs without asking again per tool, because being asked whether a plan you just approved may run its first command is not a question worth having.",
+            ),
+        feedback: z.string().optional().describe("Why not, which goes back to the model as the reason."),
     }),
     // AskUserQuestion picks: question text → chosen option label(s) (+ any free-text "Other"). `cancelled`
     // is the dismissal, which tells the model to proceed on sensible defaults rather than leaving it parked.
     z.object({
-        kind: z.literal("question"),
-        requestId: z.string().min(1),
-        answers: z.record(z.string(), z.array(z.string())).optional(),
-        cancelled: z.boolean().optional(),
+        kind: z.literal("question").describe("Answering a question the agent asked."),
+        requestId: z.string().min(1).describe("Which card you are answering."),
+        answers: z
+            .record(z.string(), z.array(z.string()))
+            .optional()
+            .describe("What you chose, keyed by the question, with the chosen labels or your own words."),
+        cancelled: z
+            .boolean()
+            .optional()
+            .describe("Dismissing it instead, which tells the agent to carry on using sensible defaults rather than leaving it waiting."),
     }),
     // A per-tool permission prompt. 'once' allows this call only; 'always' allows the whole TOOL for the rest
     // of the session (plus the SDK's own narrower suggestions), which is what the card's label promises;
     // 'deny' blocks it and feeds `feedback` back as the reason.
     z.object({
-        kind: z.literal("permission"),
-        requestId: z.string().min(1),
-        decision: z.enum(["once", "always", "deny"]),
-        feedback: z.string().optional(),
+        kind: z.literal("permission").describe("Answering a request to use a tool."),
+        requestId: z.string().min(1).describe("Which card you are answering."),
+        decision: z
+            .enum(["once", "always", "deny"])
+            .describe("Once allows this call alone; always allows that whole tool for the rest of the conversation; no blocks it."),
+        feedback: z.string().optional().describe("Why not, which goes back to the model as the reason."),
     }),
     // A browser help request (the agent parked mid-sign-in on something only a person can clear, a captcha, a
     // password it does not hold). `helped: true` is "done, hand back": the user took control of the agent's
@@ -1301,45 +1756,65 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
     // help now", the agent is told so and moves on rather than waiting forever. `note` rides back to the model
     // either way ("typed the password, don't touch the remember-me box").
     z.object({
-        kind: z.literal("browser_help"),
-        requestId: z.string().min(1),
-        helped: z.boolean(),
-        note: z.string().optional(),
+        kind: z
+            .literal("browser_help")
+            .describe("Answering a request for help in the agent's browser: a captcha, a password it does not hold, a check on your phone."),
+        requestId: z.string().min(1).describe("Which card you are answering."),
+        helped: z
+            .boolean()
+            .describe(
+                "Whether you cleared it. Yes means the turn carries on from the page as you left it; no tells the agent so, and it moves on rather than waiting for ever.",
+            ),
+        note: z.string().optional().describe("Anything the agent should know, which goes back to it either way."),
     }),
     // A terminal help request, the same two answers as the browser's, for a command parked at a prompt only a
     // person can answer. `helped: true` is "typed it, carry on"; false is "can't right now". `note` rides back
     // either way, and on `helped` the daemon adds what the pane SAYS to the tool result: the user answering the
     // prompt is exactly the moment the agent cannot see, and it would otherwise have to ask them how it went.
     z.object({
-        kind: z.literal("terminal_help"),
-        requestId: z.string().min(1),
-        helped: z.boolean(),
-        note: z.string().optional(),
+        kind: z
+            .literal("terminal_help")
+            .describe("Answering a request for help at a terminal: a code to type, a confirmation only a person can give."),
+        requestId: z.string().min(1).describe("Which card you are answering."),
+        helped: z
+            .boolean()
+            .describe(
+                "Whether you did it. Yes also hands the agent what the terminal now says, because a person answering a prompt is exactly the moment the agent cannot see.",
+            ),
+        note: z.string().optional().describe("Anything the agent should know, which goes back to it either way."),
     }),
     // A premium service run's yes or no. The click is the ONLY way the spend can happen, the daemon holds the
     // agent's run request parked until this settles it (platform/service-offer.ts), so `approve` carries no
     // qualifiers: one true releases exactly one run, and anything else charges nothing.
     z.object({
-        kind: z.literal("service_offer"),
-        requestId: z.string().min(1),
-        approve: z.boolean(),
+        kind: z.literal("service_offer").describe("Answering a request to spend on a paid service."),
+        requestId: z.string().min(1).describe("Which card you are answering."),
+        approve: z
+            .boolean()
+            .describe("Yes releases exactly one run. Anything else charges nothing. This click is the only way the spend can happen."),
     }),
     // A missing-capability ask's yes or no. `connect: true` is "I'll set it up", it opens the card's setup
     // and keeps the agent's request parked while the daemon watches for the connection to come live
     // (capabilities/capability-offer.ts); false tells the agent to continue without it. The click decides
     // only the WATCHING: nothing is connected by the reply itself, the setup is the owner's own flow.
     z.object({
-        kind: z.literal("capability_offer"),
-        requestId: z.string().min(1),
-        connect: z.boolean(),
+        kind: z.literal("capability_offer").describe("Answering a request to connect something the agent needs."),
+        requestId: z.string().min(1).describe("Which card you are answering."),
+        connect: z
+            .boolean()
+            .describe(
+                "Yes keeps the agent waiting while you set it up, and it carries on the moment the connection comes alive. No tells it to continue without. The reply itself connects nothing: setting it up is still your own doing.",
+            ),
     }),
     // A USDC payment's yes or no. The click is the ONLY way the money can move, the daemon holds the agent's
     // `wallet fetch` parked until this settles it (wallet/payment-offer.ts), so `approve` carries no
     // qualifiers: one true releases exactly one payment, and anything else spends nothing.
     z.object({
-        kind: z.literal("payment_offer"),
-        requestId: z.string().min(1),
-        approve: z.boolean(),
+        kind: z.literal("payment_offer").describe("Answering a request to pay for something."),
+        requestId: z.string().min(1).describe("Which card you are answering."),
+        approve: z
+            .boolean()
+            .describe("Yes releases exactly one payment. Anything else spends nothing. This click is the only way the money can move."),
     }),
 ]);
 export type AgentReply = z.infer<typeof AgentReplySchema>;
@@ -1350,10 +1825,14 @@ export type AgentReply = z.infer<typeof AgentReplySchema>;
 // only takes bare text: the daemon folds the same notes into the injected message that a fresh turn gets.
 export const SteerSchema = z
     .object({
-        conversationId: z.string().min(1),
-        text: z.string().max(20_000),
-        attachments: z.array(z.string().min(1)).max(20).optional(),
-        editorContext: EditorContextSchema.optional(),
+        conversationId: z.string().min(1).describe("Which running conversation to interrupt."),
+        text: z.string().max(20_000).describe("What to say to it. It arrives mid-turn without stopping the turn."),
+        attachments: z
+            .array(z.string().min(1))
+            .max(20)
+            .optional()
+            .describe("Files to send with it, as workspace paths. A screenshot dropped in mid-turn with no words is a legitimate thing to send."),
+        editorContext: EditorContextSchema.optional().describe("What you have open, folded in so that pointing words resolve."),
     })
     // An attachment-only steer (a screenshot dropped in mid-turn) is legal; an entirely empty one is not.
     .refine((steer) => steer.text.trim().length > 0 || (steer.attachments?.length ?? 0) > 0, {
@@ -1361,7 +1840,7 @@ export const SteerSchema = z
     });
 // True cancel for the conversation's in-flight turn, aborts the agent daemon-side, unlike closing the
 // /agent fetch (which sends no cancel frame).
-export const StopTurnSchema = z.object({ conversationId: z.string().min(1) });
+export const StopTurnSchema = z.object({ conversationId: z.string().min(1).describe("Which conversation's running turn to cancel.") });
 
 // ---- claude rate-limit gate ----
 // The GATE signal: whether the provider is letting turns through right now, and, when it is refusing, which
@@ -1394,31 +1873,45 @@ export type FastModeState = z.infer<typeof FastModeStateSchema>;
 // ride this shape, connection status is existence in the list.
 
 export const OauthAccountSchema = z.object({
-    id: z.string(),
-    label: z.string(),
+    id: z.string().describe("The account's id, which is what a turn names to spend on it and what disconnecting takes."),
+    label: z.string().describe("What it is called here, which somebody can change."),
     // WHO this account signs in as, in the provider's own words. Anthropic returns the email and the
     // organization alongside the tokens, so a connection can name itself instead of arriving as a second row
     // called "Claude". Kept BESIDE `label` rather than folded into it: the label is the user's to rename, and a
     // renamed account still has to be able to say whose it is. Absent when the provider tells us nothing (a
     // pasted API key carries no identity), which is exactly when renaming is the only answer, so every
     // sandbox-owned account can be renamed.
-    email: z.string().optional(),
-    organization: z.string().optional(),
-    scope: z.string().optional(),
-    connectedAt: z.number(), // epoch ms
+    email: z
+        .string()
+        .optional()
+        .describe(
+            "Who it signs in as, in the provider's own words. Kept beside the label rather than folded into it, so a renamed account can still say whose it is. Absent when the provider says nothing, which is exactly when renaming is the only answer.",
+        ),
+    organization: z.string().optional().describe("Which organisation it belongs to, where the provider says."),
+    scope: z.string().optional().describe("What the credential is permitted to do, in the provider's terms."),
+    connectedAt: z.number().describe("When it was connected, in milliseconds."),
     // Set only when the account's stored credential can no longer be refreshed (revoked/expired refresh token)
     //, the user must reconnect. Absent ⇒ healthy or not-yet-probed; `detail` carries the reason for the UI.
     // Provider-agnostic; only Codex probes it today (Claude refreshes on-demand, Grok's tokens are OpenCode's).
-    needsReauth: z.boolean().optional(),
-    detail: z.string().optional(),
+    needsReauth: z
+        .boolean()
+        .optional()
+        .describe("Its stored credential can no longer be renewed and somebody has to sign in again. Absent means healthy, or not checked yet."),
+    detail: z.string().optional().describe("Why, in words a person can act on."),
     // The account's last known subscription-usage snapshot, so the picker can show what's left on each account
     // before the user commits a turn to one. Absent until a reading exists for it, an unmeasured account reads
     // as unknown, never 0%. Claude is the provider that fills it here, because its stream reports the windows;
     // the routed subscriptions carry the identical field on TranslatorAccount, filled by a pulled reading.
-    usage: AccountUsageSchema.optional(),
+    usage: AccountUsageSchema.optional().describe(
+        "How full its plan limits were when last measured, so a picker can show what is left before committing work to it. Absent until a reading exists, which reads as unknown rather than as nothing left.",
+    ),
 });
 export type OauthAccount = z.infer<typeof OauthAccountSchema>;
-export const OauthAccountListSchema = z.object({ accounts: z.array(OauthAccountSchema) });
+export const OauthAccountListSchema = z.object({
+    accounts: z
+        .array(OauthAccountSchema)
+        .describe("The connected accounts. Tokens never travel in this shape: being in this list is what connected means."),
+});
 export type OauthAccountList = z.infer<typeof OauthAccountListSchema>;
 /* RE-MEASURE THIS PROVIDER'S PLAN LIMITS BEFORE ANSWERING, rather than serving whatever reading is current
  * enough by the daemon's own bound. Every ordinary read of the list wants that bound, it is what keeps a page
@@ -1426,22 +1919,36 @@ export type OauthAccountList = z.infer<typeof OauthAccountListSchema>;
  * (a seat downgraded, a plan swapped, another device's spend) is asking precisely whether the reading they can
  * see is still true, and an answer from the last minute cannot tell them. Read off the query string, so the
  * caller says it as `?force=1`. */
-export const AccountListQuerySchema = z.object({ force: z.stringbool().default(false) });
+export const AccountListQuerySchema = z.object({
+    force: z
+        .stringbool()
+        .default(false)
+        .describe(
+            "Measure the plan limits again before answering, rather than serving a recent reading. Slower, and the right thing when somebody has just changed a plan and is asking whether what they can see is still true.",
+        ),
+});
 // Address one account of a provider (disconnect, and the turn's `account`).
-export const AccountIdSchema = z.object({ id: z.string().min(1) });
+export const AccountIdSchema = z.object({ id: z.string().min(1).describe("Which account.") });
 // Rename one account of a provider whose credential the sandbox owns (Claude, Kimi). Blank ⇒ the daemon falls
 // back to the derived name, so clearing a label restores the sign-in identity rather than leaving a nameless
 // row. Grok is absent for the same reason it holds one account: OpenCode owns that credential, not this store.
-export const AccountRenameSchema = z.object({ id: z.string().min(1), label: z.string().max(80) });
+export const AccountRenameSchema = z.object({
+    id: z.string().min(1).describe("Which account."),
+    label: z.string().max(80).describe("The new name. Blank restores the one derived from the sign-in, rather than leaving a nameless row."),
+});
 // The completing calls carry the user-chosen label (blank ⇒ the daemon derives one from the sign-in identity
 // or a provider default).
 export const OauthExchangeSchema = z.object({
-    code: z.string().min(1),
-    verifier: z.string().min(1),
-    state: z.string().min(1),
-    label: z.string().optional(),
+    code: z.string().min(1).describe("The code the sign-in handed back."),
+    verifier: z.string().min(1).describe("The proof from the start of the handshake, which is what stops somebody else's code being redeemed here."),
+    state: z.string().min(1).describe("The handshake this belongs to. A mismatch is refused."),
+    label: z.string().optional().describe("What to call the account. Blank derives one from the sign-in."),
 });
-export const AuthorizeChallengeSchema = z.object({ authorizeUrl: z.string(), verifier: z.string(), state: z.string() });
+export const AuthorizeChallengeSchema = z.object({
+    authorizeUrl: z.string().describe("Where to send somebody to sign in."),
+    verifier: z.string().describe("Keep this and send it back when finishing. It is what proves the code that comes back belongs to this handshake."),
+    state: z.string().describe("The handshake's own id, sent back with it."),
+});
 // xAI Grok (via OpenCode) uses subscription OAuth via the headless device-code method. `start` returns the
 // `url` the user opens (xAI's verification_uri_complete, which pre-fills the code) and `code`, the same
 // one-time code, surfaced so the card matches x.ai exactly. There is no paste-back: OpenCode polls to
@@ -1450,22 +1957,33 @@ export const AuthorizeChallengeSchema = z.object({ authorizeUrl: z.string(), ver
 // account would need an OpenCode server per data dir; add when there's demand.
 // A device-code login start: the verification URL + the one-time code the user enters there. The native Grok
 // flow (via OpenCode), see TranslatorStartSchema for the routed-provider connect, which adds `state`.
-export const DeviceStartSchema = z.object({ url: z.string(), code: z.string() });
+export const DeviceStartSchema = z.object({
+    url: z.string().describe("The page to open, which already has the code in it."),
+    code: z
+        .string()
+        .describe(
+            "The one-time code, shown as well so the page and the card say the same thing. Nothing is pasted back: the sandbox waits for the sign-in to complete on its own.",
+        ),
+});
 // A routed-provider subscription login start (codex/grok/kimi/gemini via CLIProxyAPI). Device flows poll to
 // completion after the user approves upstream; redirect flows need the browser's landing URL pasted back. The
 // explicit flow discriminator matters even when a provider's verification URL already embeds its optional code.
 export const TranslatorStartSchema = z.object({
-    url: z.string(),
-    code: z.string(),
-    state: z.string(),
-    flow: z.enum(["device", "redirect"]),
+    url: z.string().describe("The page to open."),
+    code: z.string().describe("The one-time code, where the provider uses one."),
+    state: z.string().describe("The handshake's id, which the finishing call sends back."),
+    flow: z
+        .enum(["device", "redirect"])
+        .describe(
+            "Which shape this is. A device sign-in finishes by itself and you poll the account list; a redirect needs the address it landed on handed back. Said outright rather than guessed at from whether a code happens to exist.",
+        ),
 });
 // The paste-back half of a redirect login: the URL the provider sent the browser to, carrying the grant as
 // ?code=&state=. `state` ties it to the handshake that issued it, the translator rejects a mismatch.
 export const TranslatorCompleteSchema = z.object({
-    provider: KeyedProviderSchema,
-    redirectUrl: z.string().min(1),
-    state: z.string().min(1),
+    provider: KeyedProviderSchema.describe("Which provider."),
+    redirectUrl: z.string().min(1).describe("The address the browser was sent to, whole. The grant is inside it."),
+    state: z.string().min(1).describe("The handshake this belongs to. A mismatch is refused."),
 });
 // A provider's model catalog, resolved daemon-side from live discovery with a persisted last-known-good list and
 // a seed floor (Grok via opencode.ts xaiModels, Codex via codex-models.ts, Claude via the Agent SDK's
@@ -1485,29 +2003,39 @@ export const TranslatorCompleteSchema = z.object({
 export const ModelBadgeSchema = z.enum(["reasoning", "fast"]);
 export type ModelBadge = z.infer<typeof ModelBadgeSchema>;
 export const ModelSchema = z.object({
-    id: z.string(),
-    label: z.string(),
-    efforts: z.array(z.string()).optional(),
-    description: z.string().optional(),
-    badges: z.array(ModelBadgeSchema).optional(),
+    id: z.string().describe("What to name when asking for this model."),
+    label: z.string().describe("What to call it on screen."),
+    efforts: z.array(z.string()).optional().describe("The thinking levels it accepts, where the provider says. Empty means use your own defaults."),
+    description: z
+        .string()
+        .optional()
+        .describe(
+            "What it is good for, in the provider's own words. Absent where the provider publishes only ids, which is the honest answer rather than something to paper over with a hand-written table.",
+        ),
+    badges: z.array(ModelBadgeSchema).optional().describe("What it is known for, where the provider says so."),
 });
 export type Model = z.infer<typeof ModelSchema>;
-export const ModelsSchema = z.object({ models: z.array(ModelSchema), default: z.string() });
+export const ModelsSchema = z.object({
+    models: z.array(ModelSchema).describe("What this provider serves, in its own preference order, which is not rearranged here. Never empty."),
+    default: z.string().describe("Which one a fresh conversation starts on. Always present."),
+});
 
 // ---- sessions ----
 
-export const SessionIdParamSchema = z.object({ id: z.string() });
+export const SessionIdParamSchema = z.object({ id: z.string().describe("Which past conversation.") });
 export const SessionSummarySchema = z.object({
-    id: z.string(),
-    title: z.string(),
-    updatedAt: z.number(),
+    id: z.string().describe("Its id."),
+    title: z.string().describe("What it is called."),
+    updatedAt: z.number().describe("When it last moved, in milliseconds."),
     // Why a searched session matched: the line the query hit, windowed around it, and who said it. Absent on an
     // unfiltered list, and on a match the title already shows, a snippet repeating the row's own heading is
     // noise, not evidence. See AgentMatchSchema for the same field on the fleet's side.
-    snippet: MatchSnippetSchema.optional(),
+    snippet: MatchSnippetSchema.optional().describe(
+        "Why a search matched: the line it hit, with a little around it, and who said it. Absent on an unfiltered list, and on a match the title already shows, where repeating it would be noise rather than evidence.",
+    ),
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
-export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySchema) });
+export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySchema).describe("Past conversations, newest first.") });
 
 // ---- settings: per-sandbox agent settings (.intentic/config/settings.json) ----
 
@@ -1661,23 +2189,39 @@ export const SkillSummarySchema = z.object({
     /* The handle the read/remove routes take. An `own` or `builtin` skill IS its name (they share one directory,
      * so names there are already unique); one that belongs to something else is `<origin>:<owner>:<name>`,
      * because two plugins may each ship a `review` and the list has to be able to tell them apart. */
-    id: z.string(),
-    name: z.string(),
+    id: z
+        .string()
+        .describe(
+            "Its handle, which reading and deleting take. A skill of your own is simply its name; one belonging to something else is qualified, because two packages may each ship a review.",
+        ),
+    name: z.string().describe("Its name."),
     // The frontmatter line the agent routes on, empty when a shipped skill declares none, which is worth
     // showing as the blank it is rather than papering over: a skill with no description is rarely picked.
-    description: z.string(),
-    origin: SkillOriginSchema,
+    description: z
+        .string()
+        .describe(
+            "What it is for, which is the line the agent reads to decide whether to reach for it. Empty when the skill declares none, which is worth showing as the blank it is: a skill with no description is rarely picked.",
+        ),
+    origin: SkillOriginSchema.describe("Where it came from."),
     // Who ships it, as the row names it, an extension's title, a plugin capability's id, a setting's name.
-    owner: z.string().optional(),
-    enabled: z.boolean(),
+    owner: z.string().optional().describe("Who ships it, as the row would name them."),
+    enabled: z.boolean().describe("Whether the agent can reach it."),
     /* Whether THIS surface can switch it. True only for the skills the settings `skills` list governs (baked
      * tools and the owner's own): everything else is on because its extension, its plugin or another setting is,
      * and a switch here that silently did nothing would be worse than no switch at all, the row names its
      * owner instead. */
-    switchable: z.boolean(),
+    switchable: z
+        .boolean()
+        .describe(
+            "Whether this surface can switch it. Everything else is on because its extension or its plugin is, and a switch here that silently did nothing would be worse than none, so the row names its owner instead.",
+        ),
     // Whether the owner may rewrite the text here. Their own skills only, a shipped one is its author's, and
     // editing it in place would be undone the next time the thing that ships it reconciles.
-    editable: z.boolean(),
+    editable: z
+        .boolean()
+        .describe(
+            "Whether it can be rewritten here. Your own only: editing somebody else's in place would be undone the next time the thing that ships it catches up.",
+        ),
     /* Whether it can be deleted from this surface. Wider than `editable` by exactly one case: a skill someone
      * dropped into the loaded folder is not the owner's to edit (its home is that folder, not their store) but is
      * absolutely theirs to clear out, and with no switch and no owning extension there would otherwise be no way
@@ -1691,27 +2235,36 @@ export const SkillsListSchema = z.array(SkillSummarySchema);
 // One skill's full text, for reading it on screen. Its own route rather than a field on the summary: bodies run
 // to thousands of words and a list of twenty would cost a hundred kilobytes to draw a group of one-line rows.
 export const SkillBodySchema = z.object({
-    id: z.string(),
-    name: z.string(),
+    id: z.string().describe("The skill's id, which can carry the owner it came from."),
+    name: z.string().describe("Its name."),
     // Everything after the frontmatter, the instructions themselves, as written.
-    body: z.string(),
+    body: z.string().describe("The instructions themselves, as written."),
 });
 export type SkillBody = z.infer<typeof SkillBodySchema>;
 
-export const SkillIdSchema = z.object({ id: z.string().min(1) });
+export const SkillIdSchema = z.object({
+    id: z
+        .string()
+        .min(1)
+        .describe(
+            "Which skill. It travels in the query rather than the address, because an id can name the owner it came from and that will not fit in a path.",
+        ),
+});
 
 /* A skill the owner writes. Three fields because a skill IS three things, what it is called, when to reach for
  * it, and what to do, and the daemon assembles the frontmatter from the first two so a saved skill can never
  * be one the loader skips over. `description` is required for the reason above: it is the only part the model
  * reads before deciding whether to open the rest. */
 export const SkillDraftSchema = z.object({
-    name: SkillNameSchema,
-    description: z.string().min(1).max(1024),
-    body: z.string().min(1),
+    name: SkillNameSchema.describe("What to call it. Saving over an existing name rewrites it, which is also how one is renamed."),
+    description: z.string().min(1).max(1024).describe("What it is for, which is what the agent reads to decide whether to reach for it."),
+    body: z.string().min(1).describe("The skill itself."),
 });
 export type SkillDraft = z.infer<typeof SkillDraftSchema>;
 
-export const SkillRemoveSchema = z.object({ name: SkillNameSchema });
+export const SkillRemoveSchema = z.object({
+    name: SkillNameSchema.describe("Which skill to delete. The text and the enabled list are both updated, so nothing is left half done."),
+});
 
 // Small user-owned config the /settings routes edit and streamAgent reads, all opt-in booleans the owner
 // toggles in the UI (so each can be A/B benchmarked):
@@ -1763,10 +2316,20 @@ export const SkillRemoveSchema = z.object({ name: SkillNameSchema });
 // than being discarded whole.
 
 export const SandboxSettingsSchema = z.object({
-    stableSystemPrompt: z.boolean().default(false),
-    skills: z.array(z.string()).default(["lsp"]),
-    hashlineEdits: z.boolean().default(false),
-    terseOutput: z.boolean().default(false),
+    stableSystemPrompt: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Keep the instructions identical between turns so the provider can cache them, moving anything that varies into the message instead. Cheaper, at the cost of some flexibility.",
+        ),
+    skills: z.array(z.string()).default(["lsp"]).describe("Which skills are switched on."),
+    hashlineEdits: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Have the agent edit files by line number rather than by quoting the text it wants replaced. Cheaper on large files, and less forgiving of a stale read.",
+        ),
+    terseOutput: z.boolean().default(false).describe("Ask the agent to say less. It changes how much it narrates, not how much it does."),
     /* Measurement control for the terse steer, at TURN level, the same trick `outputHoldout` plays over
      * commands, one layer up. A fraction [0,1] of otherwise-eligible turns run WITHOUT the steer and record
      * which arm they ran on (UsageTurn.terse), so the savings report can compare two real populations.
@@ -1774,7 +2337,14 @@ export const SandboxSettingsSchema = z.object({
      * It has to be an experiment: unlike a cleaned command, which yields its own raw baseline in the same
      * event, a turn cannot be re-run to see what it would have said unsteered. 0 ⇒ no measurement (every
      * eligible turn is steered), which is the default because the control costs the very tokens it measures. */
-    terseHoldout: z.number().min(0).max(1).default(0),
+    terseHoldout: z
+        .number()
+        .min(0)
+        .max(1)
+        .default(0)
+        .describe(
+            "What share of turns to run without that instruction, so the two can be compared honestly. It has to be measured this way, because a turn cannot be re-run to see what it would have said. Zero means no measurement, which is the default, since the comparison costs the very tokens it is measuring.",
+        ),
     /* WHICH SYSTEM PROMPT THE AGENT RUNS ON, the base, before anything this turn composes.
      *
      *   intentic. Intentic's own prompt, tuned for this harness (intentic-prompt.ts). The default.
@@ -1786,7 +2356,9 @@ export const SandboxSettingsSchema = z.object({
      * the chat's cards need, the checklist guidance behind the todo panel, the browser-tool guidance), plus the
      * delegation note and the terse steer. `custom` is the one that does not, by the owner's explicit choice,
      * see the field below. */
-    systemPromptMode: SystemPromptModeSchema.default("intentic"),
+    systemPromptMode: SystemPromptModeSchema.default("intentic").describe(
+        "Which instructions the agent starts from: intentic's own, the ones the installed Claude Code carries, or your own. The first two both get this product's own guidance added on top; your own gets nothing added, which is the point of it.",
+    ),
     /* The owner's own prompt, used only when `systemPromptMode` is "custom". Then it is the ENTIRE system
      * prompt: both built-in bases are gone and so is everything the daemon would otherwise append, the widget
      * guidance the chat's cards are driven by, and the terse-output steer (whose toggle goes inert). That is
@@ -1795,13 +2367,29 @@ export const SandboxSettingsSchema = z.object({
      * the system prompt already (the user-message preamble stableSystemPrompt puts it in).
      *
      * Cap is roomy, the bases it stands in for are ~6.8k characters, but finite, because every turn pays it. */
-    systemPrompt: z.string().max(20000).default(""),
-    iqSearch: z.boolean().default(false),
+    systemPrompt: z
+        .string()
+        .max(20000)
+        .default("")
+        .describe(
+            "Your own instructions, used only when the mode above says custom. Then it is the whole of them: both built-in bases go, and so does everything this product would otherwise add, including the guidance the chat's own cards are driven by. That is the price of total control.",
+        ),
+    iqSearch: z
+        .boolean()
+        .default(false)
+        .describe("Teach the agent how to use this workspace's own search tool, rather than leaving it to grep around."),
     /* Measurement control for the iq search teaching, at CONVERSATION level. A fraction [0,1] of conversations
      * run without the plugin/instruction and stamp that stable arm on every turn. Per-turn randomization is not
      * a valid control here: once the teaching enters a provider session, withholding it from the next request
      * does not make the model forget it. 0 ⇒ no measurement and every conversation receives the teaching. */
-    iqSearchHoldout: z.number().min(0).max(1).default(0),
+    iqSearchHoldout: z
+        .number()
+        .min(0)
+        .max(1)
+        .default(0)
+        .describe(
+            "What share of conversations to run without that teaching, so the two can be compared. Whole conversations rather than individual turns, because once the teaching is in a session, withholding it from the next request does not make the model forget it.",
+        ),
     /* THE MAP THE TURN OPENS WITH, which areas the project a run starts in has, one derived line on what each
      * is for, and where the run is standing among them (agent/workspace-map.ts).
      *
@@ -1818,9 +2406,22 @@ export const SandboxSettingsSchema = z.object({
      * system prompt or a hand-written CLAUDE.md: in the ten days that motivated it this repo's two busiest
      * top-level directories stopped existing, and every written-down copy of the layout was wrong by the end of
      * the window. Off by default, it spends its tokens on the opening message of every conversation. */
-    workspaceMap: z.boolean().default(false),
-    outputCleaners: z.string().default("off"),
-    outputHoldout: z.number().min(0).max(1).default(0),
+    workspaceMap: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Open every conversation with a map of the project it starts in: what is in it, what each part is for, and where the agent is standing. Worked out fresh each time rather than written down anywhere, because a written layout is wrong within a fortnight. Off by default, since it spends tokens on the first message of every conversation.",
+        ),
+    outputCleaners: z
+        .string()
+        .default("off")
+        .describe("Which command outputs to trim before the agent reads them, cutting the noise a build tool prints without cutting what it said."),
+    outputHoldout: z
+        .number()
+        .min(0)
+        .max(1)
+        .default(0)
+        .describe("What share of commands to leave untrimmed, so the saving can be measured against a real comparison rather than estimated."),
     /* The models behind the small automatic jobs that are not a conversation, today the commit message
      * written when an agent's work lands. An ORDERED list of `${provider}:${modelId}`, tried top to bottom, or
      * EMPTY for Auto.
@@ -1835,7 +2436,13 @@ export const SandboxSettingsSchema = z.object({
      * no credential for, it improves by itself when one is added, and it is a ladder too, the cheapest rung of
      * every connected provider, best first. Storing resolved ids here instead would go stale exactly like a
      * pinned model does. */
-    quickModel: z.array(z.string()).max(10).default([]),
+    quickModel: z
+        .array(z.string())
+        .max(10)
+        .default([])
+        .describe(
+            "Which models do the small automatic jobs that are not a conversation, such as writing a commit message. A list rather than one pick, tried in order, because the interesting failure is a model that is connected and simply will not answer today. Empty means work it out from whatever is connected, which improves by itself as accounts are added.",
+        ),
     /* WHICH REPOS KEEP A CHANGELOG, the repos whose commits carry a `Release-Note:` trailer, written by the
      * same quick model that drafts the subject (git/commit-message.ts) and harvested at release time.
      *
@@ -1849,7 +2456,13 @@ export const SandboxSettingsSchema = z.object({
      * Named by repo id ("root", or the root-relative dir discoverRepos reports), because a workspace holds
      * several repos and a commit can span them: the trailer is written when the commit touches a repo that
      * asked for one, and a repo that did not ask never gets a line it has to explain to its reviewers. */
-    changelogRepos: z.array(z.string()).max(50).default([]),
+    changelogRepos: z
+        .array(z.string())
+        .max(50)
+        .default([])
+        .describe(
+            "Which repositories keep a changelog, and so get a user-facing note written alongside each merge. A list rather than a switch, and empty by default, because the commit writer's standing rule is to copy the house style rather than impose one, and a repository that has never written such a note gives it nothing to copy.",
+        ),
     /* WHAT AN AGENT RUN OPENS ON, the tier above quickModel, and the answer for every turn a SURFACE starts
      * rather than a person at a composer: Fix with agent on a pipeline or a deployment, a Maintenance chore, a
      * Documentation or Acceptance run, the fix a failed pre-push check proposes. An ORDERED list of
@@ -1871,8 +2484,14 @@ export const SandboxSettingsSchema = z.object({
      * The daemon applies this to any turn flagged `unattended` that names no model of its own, one rule, so a
      * surface added tomorrow inherits it by saying what it is instead of re-deriving where models come from. A
      * surface MAY still name one (the shared run button's caret, Acceptance's per-run pick), and that wins. */
-    agentRunModels: z.array(z.string()).max(10).default([]),
-    agentRunEffort: z.string().default(""),
+    agentRunModels: z
+        .array(z.string())
+        .max(10)
+        .default([])
+        .describe(
+            "Which models run the work a screen starts rather than a person: fixing a red pipeline, a maintenance chore, an acceptance run. Tried in order, so one spent account does not take every such run down. Empty falls back to whatever the chat would have used, which is the honest floor because it is the model you already chose to work with.",
+        ),
+    agentRunEffort: z.string().default("").describe("How hard those runs should think."),
     /* AUTOMATIC TIER SELECTION: may the daemon run an easy-looking turn on a cheaper rung of the provider the
      * user is already on, instead of on the model they picked?
      *
@@ -1891,7 +2510,12 @@ export const SandboxSettingsSchema = z.object({
      * tier is the model the user already chose, so the worst case of a wrong verdict is one turn's quality on a
      * model they can see on the card and correct, never a bill they did not ask for. That asymmetry is why this
      * can default to shadow rather than to off: shadow costs nothing and `on` cannot overspend. */
-    autoTier: z.enum(["off", "shadow", "on"]).default("shadow"),
+    autoTier: z
+        .enum(["off", "shadow", "on"])
+        .default("shadow")
+        .describe(
+            "Whether an easy-looking turn may run on a cheaper model from the same provider. Three states rather than a switch, because the middle one is the only honest road to the third: it scores every turn and routes nothing, so the guess can become a measurement before it changes anything. It can only ever route down, so the worst case is one turn's quality rather than a bill nobody asked for.",
+        ),
     /* WHICH CHEAP MODEL A DOWNGRADED TURN LANDS ON, an ordered list of `${provider}:${model}` keys
      * (quickModelKey), or EMPTY for Auto.
      *
@@ -1905,12 +2529,25 @@ export const SandboxSettingsSchema = z.object({
      * dropped rather than tried, because switching provider retires the conversation's session (turnRequest.ts
      * `resumes`), and starting the conversation over to save a fraction of a cent is not a saving. The first
      * entry that names this provider AND is genuinely cheaper than the pick wins; if none does, Auto answers. */
-    autoFastModels: z.array(z.string()).max(10).default([]),
+    autoFastModels: z
+        .array(z.string())
+        .max(10)
+        .default([])
+        .describe(
+            "Which cheaper model a downgraded turn lands on. A list so a sandbox spanning providers can name a rung on each, but not a fallback ladder: an entry naming a different provider than the turn is on is skipped rather than tried, because switching provider retires the conversation and starting over to save a fraction of a penny is not a saving. Empty picks the cheapest the turn's own provider publishes.",
+        ),
     // How long a finished agent stays on the board before it is archived automatically (days; 0 ⇒ never).
     // Unlike every other flag here this one defaults ON, because the lane it governs is the board's only
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
     // holds is a live worktree checkout, not just a row.
-    agentRetentionDays: z.number().min(0).max(365).default(3),
+    agentRetentionDays: z
+        .number()
+        .min(0)
+        .max(365)
+        .default(3)
+        .describe(
+            "How many days a finished conversation stays on the board before being put away. Zero means never. The one setting here that defaults on, because each card left behind is a real working copy on disk, not just a row.",
+        ),
     /* THE SANDBOX-WIDE DEFAULT for "when a turn dies because the MODEL PROVIDER was failing (500/502/503, a
      * 529 at capacity, a dropped socket), re-run it on an escalating backoff until it goes through or the
      * attempts are spent".
@@ -1928,7 +2565,12 @@ export const SandboxSettingsSchema = z.object({
      * arms that very turn the moment it is armed for that conversation. Worth turning ON for a sandbox whose
      * turns mostly have nobody in the room (automation wakes, Discord, webhooks), which is the case no browser
      * could rescue and the case a per-conversation press cannot reach. */
-    resumeAfterOutage: z.boolean().default(false),
+    resumeAfterOutage: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Whether a turn killed by the model provider failing is re-run automatically, backing off between attempts. The sandbox-wide default; any one conversation can say otherwise. Off to begin with, because a retry spends your allowance on a turn you sent once and only you can say whether it was worth paying for twice. Worth turning on for a sandbox whose work mostly happens with nobody in the room.",
+        ),
     /* When the daemon dies under a running turn, re-run that turn once it is back (agent/turn-journal.ts records
      * every in-flight turn; the boot pass in agent/turn-resume.ts re-runs what survived). OFF by default, like
      * the outage resume above and for the same reason: a boot that re-runs turns spends the user's allowance on
@@ -1939,7 +2581,12 @@ export const SandboxSettingsSchema = z.object({
      *
      * OFF still records the interruption: the fleet card reads `interrupted` (see AgentStatusSchema) and an
      * automation's row shows an `interrupted` run, nothing is re-run, but nothing is silently lost either. */
-    autoResumeOnRestart: z.boolean().default(false),
+    autoResumeOnRestart: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Whether a turn killed by the sandbox restarting is re-run once it comes back. Off to begin with, for the same reason: it would spend your allowance on work you are not watching and edit files while you are still waiting for the sandbox to return. Either way the interruption is recorded rather than silently lost.",
+        ),
     /* THE RULE TABLE, every standing instruction the owner gives the sandbox about its own work: ask for
      * proof before a turn ends, run a command before a push, hold or release finished work, and whatever they
      * add next. See RuleSchema for the shape and for why the four action kinds are four.
@@ -1953,7 +2600,13 @@ export const SandboxSettingsSchema = z.object({
      * gate a push, so the first version answers to the person whose sandbox it is and to nobody else. Repo-
      * committed and extension-contributed rules are worth having and are deliberately not here yet, they need
      * the question of what a rule from somewhere else may WIDEN answered first. */
-    rules: z.array(RuleSchema).max(50).default([]),
+    rules: z
+        .array(RuleSchema)
+        .max(50)
+        .default([])
+        .describe(
+            "Standing instructions you give the sandbox about its own work: ask for proof before a turn ends, run something before a push, hold or release finished work. Empty is the default and is exactly the behaviour of a fresh sandbox, because each of those defaults is what no rule matched means at its own moment.",
+        ),
     /* STOP AN AUTOMATION THAT ONLY EVER FAILS. After this many consecutive `error` runs the scheduler disables
      * it and says so on the row, instead of firing a job that has proven it cannot succeed every minute until
      * someone notices. 0 ⇒ never, which is the default.
@@ -1967,17 +2620,29 @@ export const SandboxSettingsSchema = z.object({
      *
      * Only `error` counts. A `skipped` run is a guard doing its job, and an `interrupted` one means the daemon
      * died mid-fire, which says nothing about the automation, counting either would quarantine healthy jobs. */
-    automationFailureLimit: z.number().min(0).max(20).default(0),
+    automationFailureLimit: z
+        .number()
+        .min(0)
+        .max(20)
+        .default(0)
+        .describe(
+            "How many failures in a row before an automation switches itself off. Zero means never, which is the default, because the failure is not always the automation's fault and a job disabled at three in the morning is one nobody re-enables. Only real errors count: a guard deciding there was nothing to do, or the sandbox dying mid-run, say nothing about the automation.",
+        ),
     /* WHO MAY START A SESSION WITHOUT YOU, the admission floor, per wake source (see AdmissionPolicySchema).
      * Defaults all-allow, so a fresh sandbox behaves exactly as before the floor existed and the per-automation
      * `requireApproval` stays the way most owners meet holds. */
-    admission: AdmissionPolicySchema.prefault({}),
+    admission: AdmissionPolicySchema.prefault({}).describe(
+        "Whether work started from outside may run, per kind of trigger: let it, hold it for approval, or refuse it. Composes with each automation's own setting, and the stricter of the two wins, so holding every visitor's message needs no edit to each automation.",
+    ),
     /* THE SNIFFER'S RULEBOOK, verdicts for in-turn actions the outbound gate classifies, keyed by
      * `<provider>.<type>` ("discord.message.send") with `<provider>.*` as the per-provider wildcard; exact key
      * wins. An action with no rule is allowed, the empty default wires no hook at all, so an unconfigured
      * workspace pays nothing. "hold" cannot park a running turn (nobody may be there to answer); it refuses the
      * live call and points the agent at the drafts outbox, which IS the held form of a send. */
-    actionRules: z.record(z.string(), AdmissionRuleSchema).default({}),
+    actionRules: z
+        .record(z.string(), AdmissionRuleSchema)
+        .default({})
+        .describe("What an agent may do out in the world, per kind of action: go ahead, ask first, or never."),
     /* THE COMMAND GATE'S RULEBOOK, a verdict per CommandClass, for shell commands the agent runs itself. This
      * is the layer that still applies once a session is already running: the admission floor above decides who
      * may wake the agent, and after that every command it types is inside one already-admitted session.
@@ -1990,7 +2655,12 @@ export const SandboxSettingsSchema = z.object({
      * An unlisted class is allowed, and an empty rulebook wires no hook at all, an owner who has never opened
      * this pays nothing for it. Keys are the CommandClass enum, so a typo is a settings error rather than a rule
      * that silently never matches. */
-    commandRules: z.partialRecord(CommandClassSchema, AdmissionRuleSchema).default({}),
+    commandRules: z
+        .partialRecord(CommandClassSchema, AdmissionRuleSchema)
+        .default({})
+        .describe(
+            "What an agent may run inside the sandbox, for the five kinds of command that are hard to take back: rewriting git history, deleting recursively, reading credential files, publishing a package, reaching out to the network. Everything else is recoverable in a container that is itself disposable, and gating it would be friction bought with nothing.",
+        ),
     /* HOW MUCH AN AGENT MAY DELEGATE, the three ceilings the Claude Code harness enforces on its own Agent
      * tool, surfaced here because their defaults are tuned for a laptop and this is a container the owner sized.
      *
@@ -2008,11 +2678,16 @@ export const SandboxSettingsSchema = z.object({
      * The refusal an agent sees names the env var (`ask them to raise CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`),
      * which is why these three exist as settings at all: without them the only answer to that ask is editing
      * the container's environment and restarting the daemon. */
-    subagentsAtOnce: z.number().min(1).max(200).default(20),
-    subagentsPerTurn: z.number().min(1).max(2000).default(200),
+    subagentsAtOnce: z.number().min(1).max(200).default(20).describe("How many helper agents may work at the same time."),
+    subagentsPerTurn: z.number().min(1).max(2000).default(200).describe("How many a single turn may start in total."),
     // Depth 1 = an agent may delegate, but its children may not. The CLI's own default is 3, and it is the one
     // of the three whose runaway case is unbounded rather than merely wide, each level multiplies the last.
-    subagentDepth: z.number().min(1).max(10).default(3),
+    subagentDepth: z
+        .number()
+        .min(1)
+        .max(10)
+        .default(3)
+        .describe("How many levels deep the delegation may go, since a helper can start helpers of its own."),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 
@@ -2188,22 +2863,44 @@ export const IntenticRunSchema = z.object({ args: z.array(z.string()) });
 // stages and then records the whole index, which is why it is safe, and why it also survives a merge, where
 // git refuses a partial commit outright (and refuses it only AFTER moving the index).
 export const CommitSchema = RepoParamSchema.extend({
-    message: z.string().min(1),
-    all: z.boolean().optional(),
-    paths: z.array(z.string().min(1)).max(500).optional(),
+    message: z.string().min(1).describe("The commit message."),
+    all: z
+        .boolean()
+        .optional()
+        .describe("Stage every change in the repository first, then commit. An alternative to naming paths, not a companion to it."),
+    paths: z
+        .array(z.string().min(1))
+        .max(500)
+        .optional()
+        .describe("Stage exactly these paths, then commit everything staged. Leave this and `all` out to commit whatever is already staged."),
 });
 export const DiscardSchema = RepoParamSchema.extend({
     // Repo-relative paths to discard; absent ⇒ discard every uncommitted change in the repo.
-    paths: z.array(z.string().min(1)).max(500).optional(),
+    paths: z
+        .array(z.string().min(1))
+        .max(500)
+        .optional()
+        .describe("Which paths to throw away. Leave it out to discard every uncommitted change in the repository."),
 });
 // Index moves. Both are per-path and never touch the worktree, so they are always safe and need no checkpoint.
-export const GitStageSchema = RepoParamSchema.extend({ paths: z.array(z.string().min(1)).max(500) });
+export const GitStageSchema = RepoParamSchema.extend({
+    paths: z.array(z.string().min(1)).max(500).describe("The paths to move. Nothing on disk changes, so this is always safe and always reversible."),
+});
 // `branch` defaults to the checked-out one. There is deliberately no "set upstream" flag: the daemon publishes
 // (`push -u`) exactly when the branch has no upstream yet, which is never destructive and is the only way the
 // result is coherent, see pushBranch.
-export const PushSchema = RepoParamSchema.extend({ branch: z.string().min(1).optional() });
-export const GitFileQuerySchema = RepoParamSchema.extend({ path: z.string().min(1) });
-export const GitFileWriteSchema = RepoParamSchema.extend({ path: z.string().min(1), content: z.string() });
+export const PushSchema = RepoParamSchema.extend({
+    branch: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Which branch to push. Leave it out for the checked-out one. A branch with no upstream yet gets one set on this push."),
+});
+export const GitFileQuerySchema = RepoParamSchema.extend({ path: z.string().min(1).describe("The file to read, relative to the repository root.") });
+export const GitFileWriteSchema = RepoParamSchema.extend({
+    path: z.string().min(1).describe("Where to write, relative to the repository root. Missing folders are created."),
+    content: z.string().describe("The file's whole new contents."),
+});
 // Which of the working tree's diffs to open, the same split the Changes panel lists under. A path that is
 // staged AND edited again has genuinely different diffs, so the side is required rather than defaulted: a
 // caller that doesn't say which one it means doesn't know what it is showing.
@@ -2213,15 +2910,32 @@ export const GitFileWriteSchema = RepoParamSchema.extend({ path: z.string().min(
 //                                    has no stage 0, so the index is not a side it can be diffed against)
 export const GitDiffSideSchema = z.enum(["staged", "unstaged", "conflicted"]);
 export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
-export const GitFileDiffQuerySchema = RepoParamSchema.extend({ path: z.string().min(1), side: GitDiffSideSchema });
-export const GitStatusSchema = z.object({ branch: z.string(), dirty: z.boolean(), files: z.array(z.string()) });
-export const GitFilesSchema = z.object({ files: z.array(z.string()) });
-export const GitFileSchema = z.object({ path: z.string(), content: z.string() });
+export const GitFileDiffQuerySchema = RepoParamSchema.extend({
+    path: z.string().min(1).describe("The file, relative to the repository root."),
+    side: GitDiffSideSchema.describe(
+        "Which comparison you want. A file that is staged and then edited again has genuinely different answers for each, which is why this is required rather than assumed.",
+    ),
+});
+export const GitStatusSchema = z.object({
+    branch: z.string().describe("The checked-out branch."),
+    dirty: z.boolean().describe("Whether anything is uncommitted."),
+    files: z.array(z.string()).describe("Every path with something pending, staged or not."),
+});
+export const GitFilesSchema = z.object({
+    files: z.array(z.string()).describe("Every path git tracks, relative to the repository root. Ignored and untracked files are not here."),
+});
+export const GitFileSchema = z.object({
+    path: z.string().describe("The path, as asked for."),
+    content: z.string().describe("The file's contents as they stand on disk."),
+});
 // CommitResultSchema is declared further down, after the RepoChanges/OriginAgent shapes a commit answers with.
 
 // One repo's slice of a workspace-wide git action: the whole repo, or only the repo-relative paths named. The
 // same pair the per-repo routes take as {repo} + `paths`, in the one shape a caller that spans repos can send.
-export const RepoPathsSchema = z.object({ repo: z.string().min(1), paths: z.array(z.string().min(1)).max(500).optional() });
+export const RepoPathsSchema = z.object({
+    repo: z.string().min(1).describe("Which repository."),
+    paths: z.array(z.string().min(1)).max(500).optional().describe("Which of its paths. Leave it out for the whole repository."),
+});
 export type RepoPaths = z.infer<typeof RepoPathsSchema>;
 
 // One change to a file, an uncommitted working-tree change (status vs HEAD, untracked included), an agent
@@ -2229,14 +2943,19 @@ export type RepoPaths = z.infer<typeof RepoPathsSchema>;
 // undefined for a binary file (git reports "-"/"-") or an untracked file (no HEAD blob to diff against).
 export const GitChangeSchema = z.object({
     // Repo-relative path with forward slashes; for "renamed" the NEW path (`from` carries the old one).
-    path: z.string(),
+    path: z.string().describe("The path, relative to the repository root. For a rename this is the new one."),
     // "conflicted" is git's unmerged state (`U`), and it is not a kind of modification: the index holds "ours"
     // and "theirs" at stages 2/3 with NO stage 0, so there is nothing a commit could record for this path and
     // git refuses to commit while one exists. It belongs to neither side, see RepoChanges.conflicted.
-    status: z.enum(["added", "modified", "deleted", "renamed", "type-changed", "conflicted"]),
-    from: z.string().optional(),
-    additions: z.number().optional(),
-    deletions: z.number().optional(),
+    status: z
+        .enum(["added", "modified", "deleted", "renamed", "type-changed", "conflicted"])
+        .describe("What happened to it. Conflicted is not a kind of edit: nothing can be committed anywhere in the repository while one exists."),
+    from: z.string().optional().describe("Where a renamed file came from."),
+    additions: z
+        .number()
+        .optional()
+        .describe("Lines added. Absent for a binary file, and for an untracked one, which has nothing to compare against."),
+    deletions: z.number().optional().describe("Lines removed. Absent for the same reasons additions is."),
 });
 export type GitChange = z.infer<typeof GitChangeSchema>;
 
@@ -2248,13 +2967,18 @@ export const GitRemoteStateSchema = z.object({
     // The remote this branch pushes to: its OWN remote when it tracks one, else the first `git remote` lists
     // (where a never-pushed branch would publish). Those differ in a fork, `origin` and `upstream` both
     // configured, and pushing to the wrong one succeeds while leaving `ahead` stuck. Absent ⇒ no remote.
-    remote: z.string().optional(),
+    remote: z
+        .string()
+        .optional()
+        .describe(
+            "The remote this branch pushes to. Absent means none is configured. In a fork with two remotes, pushing to the wrong one succeeds and leaves the count stuck, which is why this says which.",
+        ),
     // The checked-out branch; absent on a detached HEAD or an unborn repo.
-    branch: z.string().optional(),
+    branch: z.string().optional().describe("The checked-out branch. Absent when the repository is on a bare commit, or has no commits yet."),
     // The tracking ref ("origin/main"); absent ⇒ this branch has no upstream, so the next push publishes it.
-    upstream: z.string().optional(),
-    ahead: z.number(),
-    behind: z.number(),
+    upstream: z.string().optional().describe("The branch on the remote this one follows. Absent means the next push will publish it."),
+    ahead: z.number().describe("Commits you have that the remote does not."),
+    behind: z.number().describe("Commits the remote has that you do not, as of the last fetch. Fetch before trusting it."),
 });
 export type GitRemoteState = z.infer<typeof GitRemoteStateSchema>;
 
@@ -2266,15 +2990,20 @@ const RefNameSchema = z
 
 // One local branch, for the switcher. `at` is its tip's committer time in ms (the list sorts newest-first).
 export const GitBranchSchema = z.object({
-    name: z.string(),
-    current: z.boolean(),
-    upstream: z.string().optional(),
-    ahead: z.number(),
-    behind: z.number(),
+    name: z.string().describe("The branch name."),
+    current: z.boolean().describe("Whether this is the one checked out."),
+    upstream: z.string().optional().describe("The branch on the remote it follows, if any."),
+    ahead: z.number().describe("Commits this branch has that its remote counterpart does not."),
+    behind: z.number().describe("Commits its remote counterpart has that it does not."),
     // The configured upstream no longer exists on the remote (a merged PR's deleted branch), distinct from
     // "no upstream", and the signal that this local branch is safe to delete.
-    gone: z.boolean().optional(),
-    at: z.number(),
+    gone: z
+        .boolean()
+        .optional()
+        .describe(
+            "The branch it followed no longer exists on the remote, usually because a merged pull request deleted it. The signal that this one is safe to delete.",
+        ),
+    at: z.number().describe("When its tip was committed, in milliseconds. Lists are newest first."),
 });
 export type GitBranch = z.infer<typeof GitBranchSchema>;
 /* One REMOTE-TRACKING branch, somebody else's tip, as this repo last saw it.
@@ -2283,19 +3012,35 @@ export type GitBranch = z.infer<typeof GitBranchSchema>;
  * differ: a remote-tracking branch has no upstream of its own and no ahead/behind, and giving it those fields
  * as zeroes would make it look like a synced local branch. `name` is the full `origin/main`; `remote` and
  * `branch` are it split, so a selector can group by remote without re-parsing. */
-export const GitRemoteBranchSchema = z.object({ name: z.string(), remote: z.string(), branch: z.string(), at: z.number() });
+export const GitRemoteBranchSchema = z.object({
+    name: z.string().describe("The full name, such as origin/main."),
+    remote: z.string().describe("Just the remote part, so a picker can group by it without re-parsing."),
+    branch: z.string().describe("Just the branch part."),
+    at: z.number().describe("When its tip was committed, in milliseconds, as this repository last saw it."),
+});
 export type GitRemoteBranch = z.infer<typeof GitRemoteBranchSchema>;
 // Locals and remote-tracking branches in one response: the switcher pairs them, and two round trips to draw one
 // list would only ever show a half-populated one first.
-export const GitBranchesSchema = z.object({ branches: z.array(GitBranchSchema), remotes: z.array(GitRemoteBranchSchema) });
+export const GitBranchesSchema = z.object({
+    branches: z.array(GitBranchSchema).describe("Branches in this repository."),
+    remotes: z
+        .array(GitRemoteBranchSchema)
+        .describe("Branches on its remotes, as last seen. Sent together with the locals so a switcher never draws a half-filled list."),
+});
 // Create at `start` (a sha or ref; absent ⇒ HEAD); `checkout` switches to it immediately (`git switch -c`).
 export const GitBranchCreateAtSchema = RepoParamSchema.extend({
-    name: RefNameSchema,
-    start: z.string().min(1).optional(),
-    checkout: z.boolean().optional(),
+    name: RefNameSchema.describe("The new branch's name."),
+    start: z.string().min(1).optional().describe("Where to start it: a commit or another branch. Leave it out to start from where you are."),
+    checkout: z.boolean().optional().describe("Switch to it as well as creating it."),
 });
 // `force` is the deliberate retry after git refuses to drop an unmerged branch.
-export const GitBranchDeleteSchema = RepoParamSchema.extend({ name: RefNameSchema, force: z.boolean().optional() });
+export const GitBranchDeleteSchema = RepoParamSchema.extend({
+    name: RefNameSchema.describe("The branch to delete."),
+    force: z
+        .boolean()
+        .optional()
+        .describe("Delete it even though it holds work that was never merged. The deliberate retry after the first attempt refuses."),
+});
 
 /* THE OPERATION A REPO IS HALTED IN THE MIDDLE OF, a merge, rebase, cherry-pick or revert that stopped on a
  * conflict and was never finished or aborted.
@@ -2306,48 +3051,78 @@ export const GitBranchDeleteSchema = RepoParamSchema.extend({ name: RefNameSchem
  * Absent means the worktree is not mid-anything. */
 export const GitOperationSchema = z.enum(["merge", "rebase", "cherry-pick", "revert"]);
 export type GitOperation = z.infer<typeof GitOperationSchema>;
-export const GitOperationStateSchema = z.object({ repo: z.string(), operation: GitOperationSchema.optional() });
+export const GitOperationStateSchema = z.object({
+    repo: z.string().describe("The repository asked about."),
+    operation: GitOperationSchema.optional().describe(
+        "Which operation the working tree is stuck inside. Absent means it is not stuck at all, which is almost always. While one is present git refuses nearly everything else, and abandoning it is the only way out.",
+    ),
+});
 export type GitOperationState = z.infer<typeof GitOperationStateSchema>;
 
 export const RepoChangesSchema = z.object({
     // The {repo} param the per-repo git routes accept: "root" or a repo id (its root-relative dir).
     repo: z.string(),
     // Absent on an unborn HEAD (a repo initialized but never committed).
-    branch: z.string().optional(),
+    branch: z.string().optional().describe("The checked-out branch. Absent in a repository that has no commits yet."),
     // Unmerged paths, a merge, rebase, cherry-pick or pull that git could not finish. First, because until
     // they are resolved nothing else in this repo can be committed at all: git refuses outright. Held apart
     // from the two sides rather than listed in them, because "staged or not" is not a question an unmerged path
     // has an answer to. Staging one (`git add`) is exactly how you tell git it is resolved.
-    conflicted: z.array(GitChangeSchema),
+    conflicted: z
+        .array(GitChangeSchema)
+        .describe(
+            "Paths a merge or rebase could not finish. First, because nothing anywhere in this repository can be committed until they are resolved. Held apart from the two lists below, because staged or not is not a question one of these has an answer to.",
+        ),
     /* The merge/rebase/cherry-pick/revert this repo is halted in the middle of, when it is. Carried on the SCAN
      * rather than fetched per repo because it belongs beside `conflicted`: the panel already lists the files,
      * and this is the sentence that says why they are conflicted and what ends it. Absent = not mid-anything,
      * which is every repo almost all of the time. */
-    operation: GitOperationSchema.optional(),
+    operation: GitOperationSchema.optional().describe(
+        "What halted, when something did. This is the sentence that explains the conflicts above and names the way out of them.",
+    ),
     // The two sides git actually models, kept apart because a path can appear on BOTH with different statuses
     // (a staged edit that was then edited again, the classic `MM`). `staged` is index-vs-HEAD: exactly what a
     // bare `git commit` would record. `unstaged` is worktree-vs-index plus untracked files. Each side's
     // additions/deletions describe the diff it is listed under, never a conflation of the two.
-    staged: z.array(GitChangeSchema),
-    unstaged: z.array(GitChangeSchema),
+    staged: z.array(GitChangeSchema).describe("What a plain commit would record right now."),
+    unstaged: z
+        .array(GitChangeSchema)
+        .describe(
+            "Edits on disk that are not staged, plus untracked files. A path can be in both lists at once with different line counts, which is why they are separate.",
+        ),
     // How many changes were CUT from the two sides above (conflicts are never cut). A cloned monorepo or a
     // mass delete carries six-figure change lists, a payload no panel can render and no browser should hold,
     // so past the daemon's per-repo budget the lists arrive truncated and this carries the dropped count, which
     // the panel adds to its badges and states under the group. Absent ⇒ the lists are complete.
-    truncated: z.number().optional(),
+    truncated: z
+        .number()
+        .optional()
+        .describe(
+            "How many changes were cut from the two lists above. A freshly cloned monorepo or a mass delete runs to six figures, which no screen can draw, so past a budget the lists arrive short and this says by how much. Absent means they are complete.",
+        ),
     // Where this repo stands against its remote; `ahead`/`behind` are 0 with no remote or no upstream.
-    remote: GitRemoteStateSchema.optional(),
+    remote: GitRemoteStateSchema.optional().describe("Where this repository stands against its remote."),
     // WHICH AGENT PUT IT THERE: repo-relative path → the agent ids that landed it, newest land first. Keyed by
     // PATH rather than carried on each GitChange because a path can be listed on two sides at once (staged and
     // edited again) and its origin is the same fact for both. Only branch-backed agents whose work passed
     // through land can appear here; workspace conversations, terminal edits and the user's typing are absent
     // (see agents/origins.ts), so the panel badges an attributable agent and says nothing for anyone else.
     // Ids, not titles: the identity for every id named here rides the response once, in `originAgents`.
-    origins: z.record(z.string(), z.array(z.string())).optional(),
+    origins: z
+        .record(z.string(), z.array(z.string()))
+        .optional()
+        .describe(
+            "Which conversation put each path here, newest first, keyed by path. Only work that went through a merge can appear: edits made in the shared tree, in a terminal, or by a person are simply absent rather than guessed at.",
+        ),
     // Why the repo could not be scanned at all, condensed to git's own one-line reason ("fatal: bad object HEAD").
     // A repo left torn by a canceled or failed upload used to be dropped from the response entirely, so it just
     // vanished from the panel with nothing to act on; it now arrives with empty change lists and this set instead.
-    error: z.string().optional(),
+    error: z
+        .string()
+        .optional()
+        .describe(
+            "Why the repository could not be read at all, in git's own words. A repository left broken by a failed import arrives with empty lists and this set, rather than vanishing from the answer with nothing to act on.",
+        ),
 });
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
 
@@ -2360,8 +3135,8 @@ export type RepoChanges = z.infer<typeof RepoChangesSchema>;
 // they cannot disagree. Per response, not per repo: one agent commonly lands into several.
 export const OriginAgentSchema = z.object({
     // Absent for an entry that never got a title (a turn that failed before one was derived).
-    title: z.string().optional(),
-    provider: AgentProviderSchema,
+    title: z.string().optional().describe("The conversation's title. Absent for one that never got as far as having a title."),
+    provider: AgentProviderSchema.describe("Which model provider it ran on."),
     /* WHAT THE LANDED WORK DID, the same drafted message the agent's own card carries (LandedMessage), on the
      * road that outlives the card. The panel reads the roster's copy first and this one when the roster has no
      * entry left to read, which is the case this whole schema exists for: an archived agent's lines are still
@@ -2371,19 +3146,30 @@ export const OriginAgentSchema = z.object({
      * sentence is still being drafted. Those two are told apart by `landedMessageDraft` on the agent's card, and
      * neither has a title-shaped fallback: guessing a subject from the ask is exactly the habit this replaced,
      * so a chip with no message files nothing and simply filters. */
-    landedMessage: LandedMessageSchema.optional(),
+    landedMessage: LandedMessageSchema.optional().describe(
+        "What the merged work did, drafted by the conversation itself. Carried here as well as on its card, because merged lines outlive the card: archiving a finished conversation does not uncommit its work.",
+    ),
 });
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 
 // The aggregated review set across every repo (root + every discovered repo); a repo appears when it has changes,
 // when it is out of sync with its remote, or when it failed to scan.
 export const GitChangesSchema = z.object({
-    repos: z.array(RepoChangesSchema),
+    repos: z
+        .array(RepoChangesSchema)
+        .describe(
+            "One entry per repository that has something pending, is out of step with its remote, or could not be read. A clean repository is simply absent.",
+        ),
     // Keyed by agent id; covers every id any repo's `origins` names, and only those. Absent when nothing in
     // the review is attributable. An id can still be missing from it, the retention sweep can retire an
     // entry whose landed lines are somehow still uncommitted, and the panel keeps its id-shaped fallback for
     // exactly that, rather than dropping the chip and re-attributing the file to the user.
-    originAgents: z.record(z.string(), OriginAgentSchema).optional(),
+    originAgents: z
+        .record(z.string(), OriginAgentSchema)
+        .optional()
+        .describe(
+            "Who each conversation named above is, keyed by id, so a caller need not look them up. Absent when nothing in the review can be attributed.",
+        ),
     /* WHICH REPOS HAVE A COMMIT RUNNING RIGHT NOW, the daemon's answer, not the browser's.
      *
      * A commit is one request that outlives the tab that fired it. Reload the page mid-commit and that tab's
@@ -2396,7 +3182,12 @@ export const GitChangesSchema = z.object({
      * the scan is memoized for half a second and this must describe the instant it is sent. Absent ⇒ nothing is
      * committing, which is the overwhelmingly common case and the reason it is optional rather than an empty
      * array on every response. */
-    committing: z.array(z.string()).optional(),
+    committing: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Repositories with a commit running right now. The sandbox's answer rather than any one tab's, so a reload, a second window and another device all know. Absent means nothing is committing.",
+        ),
 });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 
@@ -2413,9 +3204,16 @@ export type GitChanges = z.infer<typeof GitChangesSchema>;
  * covers the ids this repo's `origins` names and only those, on GitChangesSchema's terms; the panel merges it
  * over what it already holds rather than replacing, since the other repos' rows still name their own agents. */
 export const CommitResultSchema = z.object({
-    committed: z.boolean(),
-    changes: RepoChangesSchema.optional(),
-    originAgents: z.record(z.string(), OriginAgentSchema).optional(),
+    committed: z.boolean().describe("Whether a commit was actually recorded."),
+    changes: RepoChangesSchema.optional().describe(
+        "What this repository looks like now, read in the same breath as the commit so a caller can redraw from here instead of asking for a fresh scan. Absent means there is nothing left to show.",
+    ),
+    originAgents: z
+        .record(z.string(), OriginAgentSchema)
+        .optional()
+        .describe(
+            "Who the conversations named in those changes are. Merge it over what you already hold rather than replacing: other repositories still name their own.",
+        ),
 });
 export type CommitResult = z.infer<typeof CommitResultSchema>;
 
@@ -2428,11 +3226,17 @@ export type CommitResult = z.infer<typeof CommitResultSchema>;
  * own: the workspace read below (/workspace/modules, the Changes panel) speaks for /work, and every agent's
  * diff carries its own (AgentRepoChanges.modules) because an agent's files live in a worktree /work cannot
  * see. */
-export const WorkspaceModuleSchema = z.object({ dir: z.string(), name: z.string() });
+export const WorkspaceModuleSchema = z.object({
+    dir: z.string().describe("Where the package lives, relative to its repository. Empty when the repository is itself one package."),
+    name: z.string().describe("The name the package declares for itself."),
+});
 export type WorkspaceModule = z.infer<typeof WorkspaceModuleSchema>;
-export const RepoModulesSchema = z.object({ repo: z.string(), modules: z.array(WorkspaceModuleSchema) });
+export const RepoModulesSchema = z.object({
+    repo: z.string().describe("Which repository."),
+    modules: z.array(WorkspaceModuleSchema).describe("Its packages."),
+});
 export type RepoModules = z.infer<typeof RepoModulesSchema>;
-export const WorkspaceModulesSchema = z.object({ repos: z.array(RepoModulesSchema) });
+export const WorkspaceModulesSchema = z.object({ repos: z.array(RepoModulesSchema).describe("Every repository with the packages inside it.") });
 export type WorkspaceModules = z.infer<typeof WorkspaceModulesSchema>;
 
 // One file an agent touched, plus whether that change is ALREADY in the main tree. The review lists the
@@ -2440,7 +3244,13 @@ export type WorkspaceModules = z.infer<typeof WorkspaceModulesSchema>;
 // the end of the review: a clean turn auto-lands within milliseconds, and a list scoped to the remainder shows
 // the user an empty panel for work they never got to look at. `landed` is what still separates the two, the
 // remainder is what "Land now" would apply, and the panel filters on exactly this flag.
-export const AgentChangeSchema = GitChangeSchema.extend({ landed: z.boolean() });
+export const AgentChangeSchema = GitChangeSchema.extend({
+    landed: z
+        .boolean()
+        .describe(
+            "Whether this change is already in the shared tree. The list is everything the conversation wrote, not just what is left over, because a clean turn merges in milliseconds and a list of leftovers would show an empty panel for work nobody had looked at yet.",
+        ),
+});
 export type AgentChange = z.infer<typeof AgentChangeSchema>;
 
 // An agent conversation-worktree's delta vs its recorded base, deliberately NOT RepoChanges. There is no index
@@ -2448,9 +3258,9 @@ export type AgentChange = z.infer<typeof AgentChangeSchema>;
 // set. Sharing the working-tree shape would have forced a meaningless empty `staged` on every
 // row and invited the panel to render a staging affordance that cannot work on a worktree the user never checks out.
 export const AgentRepoChangesSchema = z.object({
-    repo: z.string(),
-    branch: z.string().optional(),
-    changes: z.array(AgentChangeSchema),
+    repo: z.string().describe("Which repository."),
+    branch: z.string().optional().describe("The branch this conversation's work sits on."),
+    changes: z.array(AgentChangeSchema).describe("What it changed there."),
     /* THE PACKAGE LAYOUT OF THE TREE THESE CHANGES CAME FROM, so the review can group them by module the way
      * the workspace's Changes panel does. It rides the changes rather than being fetched beside them, because
      * an agent works in a worktree the main tree cannot see: a package the agent has just created exists only
@@ -2458,7 +3268,11 @@ export const AgentRepoChangesSchema = z.object({
      *, which for a new package is all of them, fell into the unnamed "loose in this repo" bucket.
      *
      * Same read, same instant, same tree as the rows it groups: that is what stops the two from disagreeing. */
-    modules: z.array(WorkspaceModuleSchema),
+    modules: z
+        .array(WorkspaceModuleSchema)
+        .describe(
+            "The packages of the tree these changes came from, so a review can group by package. Carried with the changes rather than looked up separately, because a package the conversation has just created exists only in its own copy and the shared tree has never heard of it.",
+        ),
 });
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
 /* The review, plus WHY the last land refused, because a conflict is discovered by the daemon (a clean turn
@@ -2469,7 +3283,15 @@ export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
  * moment the UI had promised something to resolve. It rides the review because that is the surface that
  * resolves it, and it refreshes with it: every land invalidates this query, so the report is never staler
  * than the last attempt. */
-export const AgentChangesSchema = z.object({ repos: z.array(AgentRepoChangesSchema), conflicts: z.array(LandConflictSchema).optional() });
+export const AgentChangesSchema = z.object({
+    repos: z.array(AgentRepoChangesSchema).describe("One entry per repository the conversation touched."),
+    conflicts: z
+        .array(LandConflictSchema)
+        .optional()
+        .describe(
+            "Why the last merge refused, when one did. Carried here as well as in the merge's own answer, because a conflict is found the moment a turn ends and dealt with hours later on this surface, which would otherwise open with nothing to explain what it promised to resolve.",
+        ),
+});
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;
 
 // ---- git history graph (the "Git Graph" view over a repo's real commits) ----
@@ -2481,39 +3303,57 @@ const ShaSchema = z.string().regex(/^[0-9a-f]{4,64}$/);
 // "HEAD" marker is lifted into `head` instead). `at` is author time in ms since epoch; `short` is git's
 // abbreviated sha; `body` is the message minus its subject line.
 export const GitCommitSchema = z.object({
-    sha: z.string(),
-    short: z.string(),
-    parents: z.array(z.string()),
-    subject: z.string(),
-    body: z.string(),
-    author: z.string(),
-    email: z.string(),
-    at: z.number(),
-    refs: z.array(z.string()),
-    head: z.boolean(),
+    sha: z.string().describe("The commit, in full."),
+    short: z.string().describe("The abbreviated form, for showing."),
+    parents: z
+        .array(z.string())
+        .describe(
+            "What it came from. None means the first commit, one is ordinary, two or more is a merge, which is what a graph draws its lanes from.",
+        ),
+    subject: z.string().describe("Its first line."),
+    body: z.string().describe("Everything after that."),
+    author: z.string().describe("Who wrote it."),
+    email: z.string().describe("Their address."),
+    at: z.number().describe("When they wrote it, in milliseconds."),
+    refs: z.array(z.string()).describe("Branches and tags sitting on it."),
+    head: z.boolean().describe("Whether this is where the repository currently stands."),
 });
 export type GitCommit = z.infer<typeof GitCommitSchema>;
 // One repo's log: commits newest-first across ALL refs (branch topology is the point of a graph), plus the
 // checked-out branch (absent on a detached HEAD or an unborn repo).
 export const GitLogSchema = z.object({
-    repo: z.string(),
-    branch: z.string().optional(),
-    commits: z.array(GitCommitSchema),
+    repo: z.string().describe("Which repository."),
+    branch: z.string().optional().describe("Which branch these are from."),
+    commits: z.array(GitCommitSchema).describe("The commits, newest first."),
     // Whether a further page exists behind this one. The daemon learns it by asking git for one commit more than
     // it returns, see commitLog. It is also what stops the oldest row of a page from being drawn as a ROOT
     // commit, which is how a truncated history used to claim it began where the page happened to stop.
-    hasMore: z.boolean(),
+    hasMore: z
+        .boolean()
+        .describe(
+            "There are older ones behind this page. It is also what stops the last row being drawn as the beginning of history, which is how a truncated log used to claim it started where the page happened to stop.",
+        ),
 });
 export type GitLog = z.infer<typeof GitLogSchema>;
 export const GitLogQuerySchema = RepoParamSchema.extend({
-    limit: z.coerce.number().int().positive().max(2000).optional(),
+    limit: z.coerce.number().int().positive().max(2000).optional().describe("How many commits to return."),
     // How many newer commits to step over, the page cursor. Paged rather than one big read because a large
     // repository's log is tens of thousands of rows, and every one of them costs a zod validation, a wire
     // payload and a lane computation before anything is drawn.
-    skip: z.coerce.number().int().nonnegative().max(1_000_000).optional(),
+    skip: z.coerce
+        .number()
+        .int()
+        .nonnegative()
+        .max(1_000_000)
+        .optional()
+        .describe(
+            "How many newer commits to step over, which is how you page further back. Paged rather than read whole, because a large repository's history is tens of thousands of rows.",
+        ),
 });
 // Every real git repo under /work as root-relative dir ids ("root" is implicit, the /work repo itself).
-export const GitReposSchema = z.object({ repos: z.array(z.string()) });
+export const GitReposSchema = z.object({
+    repos: z.array(z.string()).describe('Every repository\'s id. The workspace itself is always present as "root".'),
+});
 export type GitRepos = z.infer<typeof GitReposSchema>;
 
 /* WHERE EACH WORKSPACE REPO LIVES ONLINE, one entry per repo that has a parseable remote, as the host and the
@@ -2523,9 +3363,15 @@ export type GitRepos = z.infer<typeof GitReposSchema>;
  *
  * A repo with no remote, or one naming a local path, is absent rather than present-and-empty: "this repo is
  * nowhere online" and "this repo is at X" are different answers and only one of them can be matched against. */
-export const GitRemoteRepoSchema = z.object({ repo: z.string(), host: z.string(), project: z.string() });
+export const GitRemoteRepoSchema = z.object({
+    repo: z.string().describe("The workspace repository."),
+    host: z.string().describe("Which forge its remote points at."),
+    project: z.string().describe("Which project there, as owner and name."),
+});
 export type GitRemoteRepo = z.infer<typeof GitRemoteRepoSchema>;
-export const GitRemoteReposSchema = z.object({ repos: z.array(GitRemoteRepoSchema) });
+export const GitRemoteReposSchema = z.object({
+    repos: z.array(GitRemoteRepoSchema).describe("Each repository matched to the project its remote points at."),
+});
 export type GitRemoteRepos = z.infer<typeof GitRemoteReposSchema>;
 
 /* PUT ONE FILE ON THE DEFAULT BRANCH AND PUBLISH IT, write, commit that path alone, push, in one call.
@@ -2537,7 +3383,11 @@ export type GitRemoteRepos = z.infer<typeof GitRemoteReposSchema>;
  *
  * `message` is the caller's because the commit shows up in the user's own history and a generic subject there
  * is litter. */
-export const GitPublishFileSchema = RepoParamSchema.extend({ path: z.string().min(1), content: z.string(), message: z.string().min(1) });
+export const GitPublishFileSchema = RepoParamSchema.extend({
+    path: z.string().min(1).describe("Which file, relative to the repository."),
+    content: z.string().describe("Its whole new contents."),
+    message: z.string().min(1).describe("The commit message."),
+});
 
 /* HOW FAR THE PUBLISH GOT, in the terms the screen has to explain it in. `ok` is "the file is on the default
  * branch of the remote" and nothing less, the only state that makes a public read of it succeed.
@@ -2551,23 +3401,37 @@ export const GitPublishFileSchema = RepoParamSchema.extend({ path: z.string().mi
  * `branch` and `defaultBranch` ride along so a refusal can name both sides of the mismatch rather than saying
  * "wrong branch" at someone who cannot see which one they are on. */
 export const GitPublishFileResultSchema = z.object({
-    ok: z.boolean(),
-    wrote: z.boolean(),
-    committed: z.boolean(),
-    pushed: z.boolean(),
-    branch: z.string().optional(),
-    defaultBranch: z.string().optional(),
-    reason: z.string().optional(),
+    ok: z.boolean().describe("Whether the whole thing went through."),
+    wrote: z.boolean().describe("The file was written."),
+    committed: z.boolean().describe("The commit was recorded."),
+    pushed: z.boolean().describe("It reached the remote."),
+    branch: z.string().optional().describe("Which branch it happened on."),
+    defaultBranch: z.string().optional().describe("Which branch the repository considers its main one, so a caller can see it was on a side branch."),
+    reason: z
+        .string()
+        .optional()
+        .describe(
+            "Why it stopped where it did. Being on a side branch, having no remote and having no credentials are all reported here rather than raised.",
+        ),
 });
 export type GitPublishFileResult = z.infer<typeof GitPublishFileResultSchema>;
 
-export const GitCommitDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema });
+export const GitCommitDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema.describe("Which commit.") });
 // A commit's changed files (vs its first parent; a root commit vs the empty tree), the graph's detail tree
 // renders these (line stats included) and reuses the diff UI on click. Just GitChanges: the line stats live on
 // GitChange now, so working-tree and commit files share one shape.
-export const GitCommitDiffSchema = z.object({ files: z.array(GitChangeSchema) });
+export const GitCommitDiffSchema = z.object({
+    files: z
+        .array(GitChangeSchema)
+        .describe(
+            "Which files it touched, with counts but not contents. Fetch any one file's contents separately, so a commit with a thousand files stays one cheap answer.",
+        ),
+});
 export type GitCommitDiff = z.infer<typeof GitCommitDiffSchema>;
-export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema, path: z.string().min(1) });
+export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({
+    sha: ShaSchema.describe("Which commit."),
+    path: z.string().min(1).describe("Which file in it."),
+});
 // Git write actions from the graph's commit context menu (VSCode "Git Graph" parity). Non-destructive: branch
 // and tag just add a ref (HEAD + worktree untouched, no checkpoint). Sequence ops (revert / cherry-pick /
 // merge / rebase / drop) add or replay commits and are auto-checkpointed daemon-side; a conflict aborts and
@@ -2575,17 +3439,44 @@ export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSch
 // the worktree), also auto-checkpointed. A `{repo, sha}` names the target commit for every commit-scoped
 // action; a ref name (branch/tag) is validated structurally, git enforces the rest of ref-name legality
 // (RefNameSchema is declared above, with the branch schemas that first use it).
-export const GitBranchCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
-export const GitTagCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
-export const GitCheckoutSchema = RepoParamSchema.extend({ ref: RefNameSchema });
+export const GitBranchCreateSchema = RepoParamSchema.extend({
+    sha: ShaSchema.describe("Which commit to start it at."),
+    name: RefNameSchema.describe("The new branch's name."),
+});
+export const GitTagCreateSchema = RepoParamSchema.extend({
+    sha: ShaSchema.describe("Which commit to tag."),
+    name: RefNameSchema.describe("The tag's name."),
+});
+export const GitCheckoutSchema = RepoParamSchema.extend({ ref: RefNameSchema.describe("Where to switch to: a branch, a tag, or a commit.") });
 // Deleting a tag locally, and, when a remote is named, on that remote too. The remote half is best-effort: a
 // tag that was never pushed must not make deleting the local one report a failure.
-export const GitTagDeleteSchema = RepoParamSchema.extend({ name: RefNameSchema, remote: RefNameSchema.optional() });
+export const GitTagDeleteSchema = RepoParamSchema.extend({
+    name: RefNameSchema.describe("Which tag."),
+    remote: RefNameSchema.optional().describe("Also delete it there. Leave it out to remove it locally only."),
+});
 // Publishing ONE tag, named explicitly so it never drags every other unpushed tag along with it.
-export const GitTagPushSchema = RepoParamSchema.extend({ name: RefNameSchema, remote: RefNameSchema });
-export const GitResetSchema = RepoParamSchema.extend({ sha: ShaSchema, mode: z.enum(["soft", "mixed", "hard"]) });
-export const GitCommitActionSchema = RepoParamSchema.extend({ sha: ShaSchema });
-export const GitActionResultSchema = z.object({ ok: z.boolean(), reason: z.string().optional() });
+export const GitTagPushSchema = RepoParamSchema.extend({
+    name: RefNameSchema.describe("Which tag."),
+    remote: RefNameSchema.describe("Which remote to send it to."),
+});
+export const GitResetSchema = RepoParamSchema.extend({
+    sha: ShaSchema.describe("Which commit to move the branch to."),
+    mode: z
+        .enum(["soft", "mixed", "hard"])
+        .describe(
+            "How much to take with it: move the branch alone, also unstage, or also throw away what is on disk. The last one takes a checkpoint first.",
+        ),
+});
+export const GitCommitActionSchema = RepoParamSchema.extend({ sha: ShaSchema.describe("Which commit to act on.") });
+export const GitActionResultSchema = z.object({
+    ok: z.boolean().describe("Whether it worked."),
+    reason: z
+        .string()
+        .optional()
+        .describe(
+            "Why not, in git's own words. A conflict, a missing remote and missing credentials are all reported here rather than raised, because they are things a screen has to render rather than breakages.",
+        ),
+});
 export type GitActionResult = z.infer<typeof GitActionResultSchema>;
 
 /* THE STASH, work set aside without committing it, and the one part of a repository's real state the workspace
@@ -2599,25 +3490,34 @@ export type GitActionResult = z.infer<typeof GitActionResultSchema>;
  * `ref` (`stash@{0}`) is the handle every verb takes, and it is POSITIONAL, dropping one renumbers the rest, so
  * a caller must re-read the list after any mutation rather than holding an index across it. */
 export const StashEntrySchema = z.object({
-    ref: z.string(),
-    sha: z.string(),
-    short: z.string(),
+    ref: z.string().describe("How to address it, which applying and dropping take."),
+    sha: z.string().describe("The commit behind it, because a stash entry is a commit."),
+    short: z.string().describe("The abbreviated form, for showing."),
     // git's own `WIP on <branch>: …` scaffolding stripped, leaving what a reader would call the message.
-    subject: z.string(),
-    branch: z.string().optional(),
-    at: z.number(),
-    parents: z.array(z.string()),
+    subject: z.string().describe("What it was set aside as, with git's own scaffolding stripped off."),
+    branch: z.string().optional().describe("Which branch it was set aside from."),
+    at: z.number().describe("When, in milliseconds."),
+    parents: z.array(z.string()).describe("What it sits on, so a graph can draw it like any other commit."),
 });
 export type StashEntry = z.infer<typeof StashEntrySchema>;
-export const StashListSchema = z.object({ repo: z.string(), stashes: z.array(StashEntrySchema) });
+export const StashListSchema = z.object({
+    repo: z.string().describe("Which repository."),
+    stashes: z.array(StashEntrySchema).describe("What is set aside, newest first."),
+});
 // A stash ref as git numbers them. Constrained rather than free text because it reaches a shell argument.
 const StashRefSchema = z.string().regex(/^stash@\{\d{1,4}\}$/);
-export const StashPushSchema = RepoParamSchema.extend({ message: z.string().max(500).optional(), includeUntracked: z.boolean().optional() });
+export const StashPushSchema = RepoParamSchema.extend({
+    message: z.string().max(500).optional().describe("What to call it, so you know what it was later."),
+    includeUntracked: z.boolean().optional().describe("Also set aside files git is not yet tracking, which are otherwise left where they are."),
+});
 // `pop` drops the entry on a clean apply; `apply` keeps it. Git's own distinction, and both are things people
 // mean: pop is "resume this", apply is "try this here too".
-export const StashApplySchema = RepoParamSchema.extend({ ref: StashRefSchema, pop: z.boolean().optional() });
-export const StashRefParamSchema = RepoParamSchema.extend({ ref: StashRefSchema });
-export const StashDiffQuerySchema = RepoParamSchema.extend({ ref: StashRefSchema });
+export const StashApplySchema = RepoParamSchema.extend({
+    ref: StashRefSchema.describe("Which entry."),
+    pop: z.boolean().optional().describe("Remove it from the stash once it has been applied cleanly."),
+});
+export const StashRefParamSchema = RepoParamSchema.extend({ ref: StashRefSchema.describe("Which entry.") });
+export const StashDiffQuerySchema = RepoParamSchema.extend({ ref: StashRefSchema.describe("Which entry.") });
 
 /* THE LAST THING THAT MOVED THIS BRANCH, and whether it can be walked back.
  *
@@ -2633,20 +3533,34 @@ export const StashDiffQuerySchema = RepoParamSchema.extend({ ref: StashRefSchema
 export const UndoKindSchema = z.enum(["commit", "amend", "merge", "rebase", "cherry-pick", "revert", "reset", "pull", "other"]);
 export type UndoKind = z.infer<typeof UndoKindSchema>;
 export const UndoableActionSchema = z.object({
-    kind: UndoKindSchema,
-    description: z.string(),
-    branch: z.string(),
-    sha: z.string(),
-    previousSha: z.string(),
+    kind: UndoKindSchema.describe("What the last action was."),
+    description: z.string().describe("What undoing it would do, in words."),
+    branch: z.string().describe("Which branch would move."),
+    sha: z.string().describe("Where it stands now."),
+    previousSha: z
+        .string()
+        .describe(
+            "Where it would go back to. Send this with the undo as proof you looked, so one prepared against a view that has since moved is refused rather than landing somewhere unexamined.",
+        ),
     // The action rewrote FILES as well as the ref, so undoing it faithfully needs a hard reset. The UI uses this
     // to decide whether it has to warn about losing work.
-    changesWorkingTree: z.boolean(),
+    changesWorkingTree: z
+        .boolean()
+        .describe("Undoing would rewrite files as well as moving the branch, so anything offering it should warn about losing work."),
 });
 export type UndoableAction = z.infer<typeof UndoableActionSchema>;
-export const GitUndoStateSchema = z.object({ repo: z.string(), action: UndoableActionSchema.optional() });
+export const GitUndoStateSchema = z.object({
+    repo: z.string().describe("Which repository."),
+    action: UndoableActionSchema.optional().describe("What undoing would reverse. Absent means there is nothing to go back from."),
+});
 export type GitUndoState = z.infer<typeof GitUndoStateSchema>;
 // `previousSha` is the position the caller was shown; `discardChanges` picks a hard reset over a soft one.
-export const GitUndoSchema = RepoParamSchema.extend({ previousSha: ShaSchema, discardChanges: z.boolean().optional() });
+export const GitUndoSchema = RepoParamSchema.extend({
+    previousSha: ShaSchema.describe(
+        "Where to go back to, from the matching read. It is also proof you looked: one prepared against a stale view is refused.",
+    ),
+    discardChanges: z.boolean().optional().describe("Also rewrite the files, rather than only moving the branch."),
+});
 
 // ---- history: daemon-owned workspace snapshots (diff + restore) ----
 // The daemon snapshots /work into bare git dirs on /history (outside the agent's reach). A "snapshot" groups
@@ -2657,12 +3571,14 @@ export const GitUndoSchema = RepoParamSchema.extend({ previousSha: ShaSchema, di
 export const SnapshotTriggerSchema = z.enum(["turn", "interval", "pre-restore", "restore", "user"]);
 export type SnapshotTrigger = z.infer<typeof SnapshotTriggerSchema>;
 export const SnapshotSchema = z.object({
-    id: z.string(),
+    id: z.string().describe("The saved point's id, which is what restoring and diffing take."),
     // Committer time, ms since epoch.
-    at: z.number(),
-    trigger: SnapshotTriggerSchema,
+    at: z.number().describe("When it was taken, in milliseconds."),
+    trigger: SnapshotTriggerSchema.describe(
+        "What caused it. The automatic between-turn captures are a safety net and are not listed; they dissolve into the next visible point's differences.",
+    ),
     // Human-readable checkpoint label, the turn's prompt for "turn" snapshots; absent otherwise.
-    label: z.string().optional(),
+    label: z.string().optional().describe("What to call it. For one taken before a turn, that turn's prompt."),
 });
 export type Snapshot = z.infer<typeof SnapshotSchema>;
 
@@ -2673,7 +3589,7 @@ export interface SnapshotTurn {
     readonly conversationId: string;
     readonly index: number;
 }
-export const SnapshotsListSchema = z.object({ snapshots: z.array(SnapshotSchema) });
+export const SnapshotsListSchema = z.object({ snapshots: z.array(SnapshotSchema).describe("Every point you can go back to, newest first.") });
 
 /* REWIND, go back to a message and carry on from there. Restores the workspace to that turn's checkpoint,
  * drops every message after it, and forgets the provider session so the next turn opens a fresh one.
@@ -2682,39 +3598,52 @@ export const SnapshotsListSchema = z.object({ snapshots: z.array(SnapshotSchema)
  * survive, rewinding to the first message of a conversation keeps none of it and restores the workspace to
  * before it ran. */
 export const RewindTurnSchema = z.object({
-    conversationId: z.string().min(1),
-    index: z.number().int().nonnegative(),
+    conversationId: z.string().min(1).describe("Which conversation to rewind."),
+    index: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe(
+            "Which message to go back to, counting from the start. It is also how many messages survive: rewinding to the first keeps none of them and puts the files back to before it ran.",
+        ),
 });
 export const RewindResultSchema = z.object({
     /* The checkpoint the workspace was restored to, for the History timeline to select. Absent when the
      * conversation works in a checkout of its own: that rewind moved the conversation's own branch, which the
      * workspace timeline does not carry, there is no row there to select. */
-    snapshot: z.string().optional(),
+    snapshot: z
+        .string()
+        .optional()
+        .describe(
+            "The saved point the files were put back to. Absent for a conversation working in its own copy, whose rewind moved a branch rather than the shared timeline.",
+        ),
     // Messages dropped from the transcript, what the client removes from its own bubbles.
-    dropped: z.number().int().nonnegative(),
+    dropped: z.number().int().nonnegative().describe("How many messages were removed."),
 });
 export type RewindResult = z.infer<typeof RewindResultSchema>;
-export const SnapshotIdSchema = z.object({ id: z.string().min(1) });
+export const SnapshotIdSchema = z.object({ id: z.string().min(1).describe("Which saved point.") });
 export const SnapshotChangeSchema = z.object({
-    scope: z.string(),
+    scope: z.string().describe("Which part of the workspace the path belongs to: the workspace root, or one of the repositories inside it."),
     // Scope-relative path with forward slashes.
-    path: z.string(),
-    status: z.enum(["added", "modified", "deleted", "type-changed"]),
+    path: z.string().describe("The path, relative to that scope."),
+    status: z.enum(["added", "modified", "deleted", "type-changed"]).describe("What happened to it."),
 });
 export type SnapshotChange = z.infer<typeof SnapshotChangeSchema>;
-export const SnapshotDiffSchema = z.object({ changes: z.array(SnapshotChangeSchema) });
+export const SnapshotDiffSchema = z.object({
+    changes: z.array(SnapshotChangeSchema).describe("Everything that differs between this saved point and the one before it."),
+});
 export const SnapshotFileDiffQuerySchema = z.object({
-    id: z.string().min(1),
-    scope: z.string().min(1),
-    path: z.string().min(1),
+    id: z.string().min(1).describe("Which saved point."),
+    scope: z.string().min(1).describe("Which part of the workspace the path belongs to."),
+    path: z.string().min(1).describe("The file, relative to that scope."),
 });
 // Both sides of a file diff, a snapshot vs its parent, or a working tree vs HEAD; an absent side means the
 // file was added/deleted. Binary or oversized content is flagged instead of shipped.
 export const FileDiffSchema = z.object({
-    before: z.string().optional(),
-    after: z.string().optional(),
-    binary: z.boolean().optional(),
-    truncated: z.boolean().optional(),
+    before: z.string().optional().describe("The whole file as it was. Absent when it did not exist yet."),
+    after: z.string().optional().describe("The whole file as it is now. Absent when it was deleted."),
+    binary: z.boolean().optional().describe("The file is not text, so neither side is sent."),
+    truncated: z.boolean().optional().describe("The file was too large to send whole, so what you have is the start of it."),
 });
 export type FileDiff = z.infer<typeof FileDiffSchema>;
 
@@ -2737,7 +3666,11 @@ export type FileDiff = z.infer<typeof FileDiffSchema>;
  * A conversation that is not isolated resolves BACK to the shared tree rather than failing: the shared tree
  * genuinely is its tree, and a caller should not have to know which mode a conversation runs in to link to a
  * file in it. */
-export const WorkspaceScopeSchema = z.object({ agent: ConversationIdSchema.optional() });
+export const WorkspaceScopeSchema = z.object({
+    agent: ConversationIdSchema.optional().describe(
+        "Read a conversation's own private copy of the workspace rather than the shared tree. Leave it out for the shared tree. A conversation that is not working privately resolves back to the shared tree rather than failing, so a link need not know which mode it runs in.",
+    ),
+});
 export type WorkspaceScope = z.infer<typeof WorkspaceScopeSchema>;
 
 /* One node of the full /work filesystem tree the agent sees (untracked + generated files included), distinct
@@ -2767,8 +3700,15 @@ export interface WorkspaceLink {
     readonly state?: "broken" | "outside" | undefined;
 }
 export const WorkspaceLinkSchema = z.object({
-    to: z.string(),
-    state: z.enum(["broken", "outside"]).optional(),
+    to: z
+        .string()
+        .describe("What the link says, verbatim, rather than where it ends up. That is what the person who made it wrote, and what they would edit."),
+    state: z
+        .enum(["broken", "outside"])
+        .optional()
+        .describe(
+            "Absent for an ordinary link. Broken means there is nothing at the other end, and it is listed anyway because a dangling link is worth seeing. Outside means it leads out of the workspace, so it is shown and refused.",
+        ),
 });
 
 export interface WorkspaceTreeEntry {
@@ -2786,64 +3726,98 @@ export interface WorkspaceTreeEntry {
     readonly children?: readonly WorkspaceTreeEntry[] | undefined;
 }
 export const WorkspaceTreeEntrySchema: z.ZodType<WorkspaceTreeEntry> = z.object({
-    name: z.string(),
-    path: z.string(),
-    type: z.enum(["file", "dir"]),
-    size: z.number().optional(),
-    ignored: z.boolean().optional(),
-    link: WorkspaceLinkSchema.optional(),
+    name: z.string().describe("Just this entry's own name."),
+    path: z.string().describe("Its full path from the workspace root, which feeds straight back into the file routes."),
+    type: z.enum(["file", "dir"]).describe("What it is. For a link, what it points at, so a link to a folder opens like a folder."),
+    size: z.number().optional().describe("Size in bytes, for a file."),
+    ignored: z
+        .boolean()
+        .optional()
+        .describe("Tooling ignores it: installed packages, git internals, anything the ignore rules exclude. Usually drawn greyed out."),
+    link: WorkspaceLinkSchema.optional().describe("Present when this entry is a link."),
     get children() {
-        return z.array(WorkspaceTreeEntrySchema).optional();
+        return z
+            .array(WorkspaceTreeEntrySchema)
+            .optional()
+            .describe(
+                "What is inside a folder. Absent means it was not opened, either because it is ignored or because the walk ran out of budget above it, so ask for it separately. An empty list means it really is empty.",
+            );
     },
 });
 export const WorkspaceTreeSchema = z.object({
-    root: z.string(),
-    tree: z.array(WorkspaceTreeEntrySchema),
+    root: z.string().describe("The path everything below is relative to."),
+    tree: z.array(WorkspaceTreeEntrySchema).describe("The workspace, one entry per file and folder."),
     // How many of the ROOT's own entries the budget cut (0 = complete); per-dir cuts are counted on each dir entry.
-    hidden: z.number(),
+    hidden: z.number().describe("How many entries at the top level were cut for size. Zero means the listing is complete."),
 });
 export type WorkspaceTree = z.infer<typeof WorkspaceTreeSchema>;
 // Lazy-load one directory's children, for a dir the tree walk listed but didn't descend into. Child dirs again
 // carry no `children`, so they lazy-load on their own expand. `hidden` = how many entries the cap cut (0 = all
 // listed).
-export const WorkspaceChildrenQuerySchema = WorkspaceScopeSchema.extend({ path: z.string().min(1) });
+export const WorkspaceChildrenQuerySchema = WorkspaceScopeSchema.extend({
+    path: z.string().min(1).describe("The folder to open, as a workspace path."),
+});
 export const WorkspaceChildrenSchema = z.object({
-    entries: z.array(WorkspaceTreeEntrySchema),
-    hidden: z.number(),
+    entries: z
+        .array(WorkspaceTreeEntrySchema)
+        .describe("What is directly inside it. Folders in here carry no contents of their own, so they open the same way."),
+    hidden: z.number().describe("How many entries were cut for size. Zero means the listing is complete."),
 });
 export type WorkspaceChildren = z.infer<typeof WorkspaceChildrenSchema>;
 // Write routes (delete) and the read they mirror. No scope: a conversation's own checkout is READ-ONLY through
 // the file API, see workspaceRootFor for why the refusal lives daemon-side rather than in each screen.
-export const WorkspaceFileQuerySchema = z.object({ path: z.string().min(1) });
-export const WorkspaceMediaTicketQuerySchema = WorkspaceScopeSchema.extend({ path: z.string().min(1) });
+export const WorkspaceFileQuerySchema = z.object({ path: z.string().min(1).describe("The file or folder, as a workspace path.") });
+export const WorkspaceMediaTicketQuerySchema = WorkspaceScopeSchema.extend({
+    path: z.string().min(1).describe("The media file the ticket should cover."),
+});
 /* The credential a <video>/<audio> element carries to GET /workspace/media, which is the one workspace route a
  * browser cannot put a header on. Minted here, over the ordinary bearer-authenticated contract, and scoped to
  * the single FILE it was asked for, the resolved one, so a ticket minted against a conversation's checkout
  * buys that file and not its shared-tree namesake (see auth/media-tickets.ts for why scope rather than
  * single-use is what bounds it). `expiresAt` is epoch ms so a player can tell a dead ticket from a dead file. */
-export const WorkspaceMediaTicketSchema = z.object({ ticket: z.string(), expiresAt: z.number() });
+export const WorkspaceMediaTicketSchema = z.object({
+    ticket: z.string().describe("Hand this to the streaming route in the query string. It buys exactly the one file it was minted for."),
+    expiresAt: z.number().describe("When it stops working, in milliseconds, so a player can tell a dead ticket from a dead file."),
+});
 /* A text read is a read of a WINDOW: `offset` is the byte to start at (negative reads that many bytes from the
  * END, which is what following a growing log means, the tail's offset isn't knowable until the size is), and
  * `limit` how many bytes to serve. The daemon clamps `limit` to its own cap, so an omitted or oversized one is
  * the cap rather than the file. Coerced: these arrive as query strings. */
 export const WorkspaceFileReadQuerySchema = WorkspaceScopeSchema.extend({
-    path: z.string().min(1),
-    offset: z.coerce.number().int().optional(),
-    limit: z.coerce.number().int().min(1).optional(),
+    path: z.string().min(1).describe("The file to read, as a workspace path."),
+    offset: z.coerce
+        .number()
+        .int()
+        .optional()
+        .describe(
+            "Which byte to start at. A negative number reads that many bytes from the end, which is how you follow a growing log without knowing its size first.",
+        ),
+    limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe(
+            "How many bytes to read. Capped by the sandbox, so leaving it out or asking for too much gives you the cap rather than the whole file.",
+        ),
 });
 // `size` is the whole file; `offset`/`bytes` the byte range `content` decodes from, so the reader can tell a
 // window from a whole file (offset > 0 || offset + bytes < size ⇒ there is more) and ask for the next one.
 export const WorkspaceFilePresentSchema = z.object({
-    present: z.literal(true),
-    path: z.string(),
-    content: z.string(),
-    size: z.number(),
-    offset: z.number(),
-    bytes: z.number(),
+    present: z.literal(true).describe("There is something at that path."),
+    path: z.string().describe("The path, as asked for."),
+    content: z.string().describe("The bytes of the window you asked for, as text."),
+    size: z.number().describe("How large the whole file is. Compare it with the window below to know whether there is more."),
+    offset: z.number().describe("Which byte the window starts at."),
+    bytes: z.number().describe("How many bytes the window holds."),
     // Which tree answered. Always true when no `agent` was asked for; true DESPITE one when that conversation's
     // checkout doesn't carry the path (see scopedTarget, its checkout is not a superset of /work), which is
     // the one case the reader has to be told about rather than left to assume.
-    shared: z.boolean(),
+    shared: z
+        .boolean()
+        .describe(
+            "Which tree answered. True when no conversation was named, and also when one was but its own copy has no such file, which is the case a reader has to be told about rather than left to assume.",
+        ),
 });
 /* NOTHING TO READ AT THAT PATH, an ANSWER, not a failure, which is the whole reason this branch exists.
  *
@@ -2856,18 +3830,38 @@ export const WorkspaceFilePresentSchema = z.object({
  *
  * A read that is REFUSED (an escape, the control plane, a denylisted path) is still an error, because that is a
  * real answer about the caller rather than about the file. */
-export const WorkspaceFileAbsentSchema = z.object({ present: z.literal(false), path: z.string() });
+export const WorkspaceFileAbsentSchema = z.object({
+    present: z
+        .literal(false)
+        .describe(
+            "Nothing there. An answer, not a failure: reading a file that may not exist yet is the ordinary case for half the reads in this product.",
+        ),
+    path: z.string().describe("The path, as asked for."),
+});
 export const WorkspaceFileSchema = z.discriminatedUnion("present", [WorkspaceFilePresentSchema, WorkspaceFileAbsentSchema]);
 // Resolve a file reference an agent (or a compiler, or a terminal) NAMED to the workspace path it means. Prose
 // paths are routinely partial, a model that has been discussing `_editor/web/src` writes
 // `pages/workspace/Foo.vue`, so a clickable mention has to be matched as a path SUFFIX against the real tree,
 // not read as root-relative. `path` is absent when nothing in the workspace ends in that reference.
-export const WorkspaceResolveQuerySchema = WorkspaceScopeSchema.extend({ path: z.string().min(1).max(512) });
-export const WorkspaceResolveSchema = z.object({ path: z.string().optional() });
+export const WorkspaceResolveQuerySchema = WorkspaceScopeSchema.extend({
+    path: z
+        .string()
+        .min(1)
+        .max(512)
+        .describe(
+            "The reference as somebody wrote it. Often only the tail of the real path, which is why this is matched against the tree rather than read as-is.",
+        ),
+});
+export const WorkspaceResolveSchema = z.object({
+    path: z.string().optional().describe("The real path it means. Absent when nothing in the workspace ends that way."),
+});
 // Direct file management over the /work tree (delete / new folder / rename+move / copy). Byte writes + the
 // editor's text save go through the plain POST /workspace/upload route (a body doesn't fit oRPC), not here.
-export const WorkspaceDirSchema = z.object({ path: z.string().min(1) });
-export const WorkspaceMoveSchema = z.object({ from: z.string().min(1), to: z.string().min(1) });
+export const WorkspaceDirSchema = z.object({ path: z.string().min(1).describe("The folder to create. Missing folders above it are created too.") });
+export const WorkspaceMoveSchema = z.object({
+    from: z.string().min(1).describe("What to move or copy, as a workspace path."),
+    to: z.string().min(1).describe("Where it should end up. Changing only the last part is how you rename something."),
+});
 // Deterministic (no-LLM) classification of the dropped workspace: each repo dir and loose file sorted into one
 // coarse bucket. Read-only, the browser turns it into a proposed layout and applies the accepted moves via the
 // existing /workspace/move route. `reason` records the winning signal (magic:<mime>, ext:<ext>,
@@ -2875,7 +3869,17 @@ export const WorkspaceMoveSchema = z.object({ from: z.string().min(1), to: z.str
 export const WorkspaceBucketSchema = z.enum(["repositories", "documents", "media", "archives", "other"]);
 export type WorkspaceBucket = z.infer<typeof WorkspaceBucketSchema>;
 export const WorkspaceClassificationSchema = z.object({
-    classifications: z.array(z.object({ path: z.string(), bucket: WorkspaceBucketSchema, reason: z.string() })),
+    classifications: z
+        .array(
+            z.object({
+                path: z.string().describe("What was looked at."),
+                bucket: WorkspaceBucketSchema.describe("Which bucket it was sorted into."),
+                reason: z.string().describe("The signal that decided it, so the proposal can be argued with rather than trusted."),
+            }),
+        )
+        .describe(
+            "One entry per repository folder and loose file at the top of the workspace. A read-only proposal: nothing moves until you apply it.",
+        ),
 });
 export type WorkspaceClassification = z.infer<typeof WorkspaceClassificationSchema>;
 // ---- workspace search ----
@@ -2886,90 +3890,138 @@ export type WorkspaceClassification = z.infer<typeof WorkspaceClassificationSche
 // order); each hit carries the match-reason tags the fused engines contributed, and the char spans within `text`
 // that matched, so clients highlight without re-finding the needle.
 export const WorkspaceSearchQuerySchema = z.object({
-    query: z.string().min(2).max(512),
+    query: z.string().min(2).max(512).describe("What to look for. Plain words, a pattern, a symbol name, or a question."),
     // Search verbs only, anchor/git verbs (outline, context, log, who, …) are CLI-only surface. Natural language
     // has no verb of its own: `q` classifies the query and answers it semantically when the words call for it.
-    mode: z.enum(["q", "find", "files", "def", "refs", "sym", "ast"]).optional(),
-    includeIgnored: z.stringbool().optional(),
+    mode: z
+        .enum(["q", "find", "files", "def", "refs", "sym", "ast"])
+        .optional()
+        .describe(
+            "Narrow the search to one kind: plain text, filenames, definitions, references, symbols, or code structure. Leave it out to blend them, which also answers a question asked in words.",
+        ),
+    includeIgnored: z.stringbool().optional().describe("Search inside installed packages and other ignored folders too."),
     // How `find` reads the query, the three switches every editor's search box has (VSCode: Aa, ab, .*).
     // `literal` treats it as fixed text instead of a regex; `caseSensitive` off means case-INSENSITIVE, not
     // ripgrep's smart case.
-    literal: z.stringbool().optional(),
-    word: z.stringbool().optional(),
-    caseSensitive: z.stringbool().optional(),
+    literal: z.stringbool().optional().describe("Treat the query as fixed text rather than a pattern."),
+    word: z.stringbool().optional().describe("Match whole words only."),
+    caseSensitive: z.stringbool().optional().describe("Whether capitals matter. Off means they do not, rather than being guessed at from the query."),
     // Which FILES the query is asked of, in VSCode's files-to-include grammar, as TYPED, because the reading
     // of it is shared (search-globs.ts) rather than each end guessing: comma-separated patterns, each matched
     // at any depth unless `./` anchors it, a leading `!` excluding instead. Distinct from `includeIgnored`,
     // which decides whether the ignored layers are searched at all, this narrows within what that admitted.
-    include: z.string().max(512).optional(),
-    limit: z.coerce.number().int().positive().optional(),
-    after: z.string().optional(),
+    include: z
+        .string()
+        .max(512)
+        .optional()
+        .describe(
+            "Which files to ask, in the same grammar an editor's files-to-include box takes: comma-separated patterns, matched at any depth unless anchored, a leading exclamation mark excluding instead.",
+        ),
+    limit: z.coerce.number().int().positive().optional().describe("How many results to return."),
+    after: z.string().optional().describe("Resume from the cursor a previous answer handed back."),
 });
 export const WorkspaceSearchTagSchema = z.object({
-    kind: z.enum(["def", "text", "sem", "bm25", "rerank", "path", "import", "call", "type", "write", "fuzzy", "heuristic"]),
-    score: z.number().optional(),
+    kind: z
+        .enum(["def", "text", "sem", "bm25", "rerank", "path", "import", "call", "type", "write", "fuzzy", "heuristic"])
+        .describe(
+            "Why this line matched: the literal text, its meaning, the path, a definition, a call, and so on. Several kinds can agree on one line.",
+        ),
+    score: z.number().optional().describe("How strongly that reason applied."),
 });
 export type WorkspaceSearchTag = z.infer<typeof WorkspaceSearchTagSchema>;
-export const WorkspaceSearchSpanSchema = z.object({ start: z.number(), end: z.number() });
+export const WorkspaceSearchSpanSchema = z.object({
+    start: z.number().describe("First character of the match within the line."),
+    end: z.number().describe("One past the last."),
+});
 export type WorkspaceSearchSpan = z.infer<typeof WorkspaceSearchSpanSchema>;
 export const WorkspaceSearchHitSchema = z.object({
-    line: z.number(),
-    text: z.string(),
+    line: z.number().describe("Which line, counting from one."),
+    text: z.string().describe("The line itself."),
     // Every matched span in `text`, in order, a text search marks all of them, the way an editor does. Empty
     // where the LINE is the match and no span of it is (a semantic or definition hit reports none).
-    spans: z.array(WorkspaceSearchSpanSchema),
-    tags: z.array(WorkspaceSearchTagSchema),
+    spans: z
+        .array(WorkspaceSearchSpanSchema)
+        .describe(
+            "Where in the line the matches are, so you can highlight without searching again. Empty when the whole line is the match rather than part of it.",
+        ),
+    tags: z.array(WorkspaceSearchTagSchema).describe("Why it matched."),
     // Enclosing symbol ("createWidget (fn)"), parent-document context so the reader often needs no follow-up.
-    context: z.string().optional(),
+    context: z
+        .string()
+        .optional()
+        .describe("What it sits inside: the function, the class, the heading. Often enough that you need not open the file."),
 });
 export type WorkspaceSearchHit = z.infer<typeof WorkspaceSearchHitSchema>;
 export const WorkspaceSearchGroupSchema = z.object({
-    path: z.string(),
-    score: z.number(),
-    hits: z.array(WorkspaceSearchHitSchema),
+    path: z.string().describe("The file."),
+    score: z.number().describe("How well it matched. Groups arrive best first, never in path order."),
+    hits: z.array(WorkspaceSearchHitSchema).describe("The matching lines in it."),
     // This file had more matching lines than the engine keeps per file, so `hits` is a floor, a panel showing a
     // per-file count has to say "50+" rather than "50".
-    capped: z.boolean().optional(),
+    capped: z
+        .boolean()
+        .optional()
+        .describe("This file had more matches than are kept per file, so the count is a floor. Say fifty-plus rather than fifty."),
 });
 export type WorkspaceSearchGroup = z.infer<typeof WorkspaceSearchGroupSchema>;
 // `building` = index still filling (progress 0..1, e.g. embeddings pending); `stale` = revalidation was skipped
 // (cursor replay). ageMs = time since the index last matched the disk state.
 export const WorkspaceSearchFreshnessSchema = z.object({
-    state: z.enum(["fresh", "building", "stale"]),
-    ageMs: z.number().optional(),
-    progress: z.number().optional(),
+    state: z.enum(["fresh", "building", "stale"]).describe("Whether the index matches what is on disk, is still filling, or has fallen behind."),
+    ageMs: z.number().optional().describe("How long since it last matched the disk, in milliseconds."),
+    progress: z.number().optional().describe("How far through building it is, from zero to one."),
     // How many files the index has not caught up with, when it is stale. A count is reportable; "stale" alone
     // reads as a warning about the answer, which it almost never is.
-    behind: z.number().optional(),
+    behind: z
+        .number()
+        .optional()
+        .describe(
+            "How many files it has not caught up with. Worth showing, because the word stale on its own reads as a warning about the answer, which it almost never is.",
+        ),
 });
 export type WorkspaceSearchFreshness = z.infer<typeof WorkspaceSearchFreshnessSchema>;
 export const WorkspaceSearchResultSchema = z.object({
-    mode: z.string(),
-    total: z.number(),
+    mode: z.string().describe("Which kind of search actually ran, which matters when you let it choose."),
+    total: z.number().describe("Matching lines across the whole workspace, not just this page."),
     // Files the query matched in total, which `groups` reports only for the page it carries, the count a
     // results panel puts beside the hit total ("218 results in 61 files").
-    files: z.number(),
-    shown: z.number(),
-    groups: z.array(WorkspaceSearchGroupSchema),
-    freshness: WorkspaceSearchFreshnessSchema,
-    truncated: z.boolean(),
+    files: z.number().describe("Files the query matched in total."),
+    shown: z.number().describe("How many of those lines are on this page."),
+    groups: z.array(WorkspaceSearchGroupSchema).describe("The results, grouped by file, best first."),
+    freshness: WorkspaceSearchFreshnessSchema.describe("Whether the index behind the answer is up to date."),
+    truncated: z.boolean().describe("This page is not all of it. Use the cursor."),
     // `total` is a FLOOR: at least one file had more matches than the engine keeps per file. Distinct from
     // `truncated`, which is about this PAGE, a result can be complete on the page and still count partially.
-    partial: z.boolean().optional(),
-    cursor: z.string().optional(),
-    hint: z.string().optional(),
+    partial: z
+        .boolean()
+        .optional()
+        .describe(
+            "At least one file had more matches than are kept per file, so the total is a floor. Different from the page being truncated: a complete page can still count partially.",
+        ),
+    cursor: z.string().optional().describe("Pass this back as `after` to get the next page."),
+    hint: z.string().optional().describe("A suggestion for getting a better answer out of this query."),
     // What the engine did with the query that the query did not ask for, a pattern rerun as literal text
     // because it is not valid regex, grep-style escapes rewritten, a language filter that matched no files. The
     // text surface has always printed this above the results; a JSON caller could not see it at all.
-    note: z.string().optional(),
+    note: z
+        .string()
+        .optional()
+        .describe(
+            "What the engine did that you did not ask for: a pattern rerun as plain text because it was not valid, escapes rewritten, a language filter that matched nothing.",
+        ),
     // Code-graph neighbors of the top hits (definition anchors + the strongest caller of each).
-    related: z.array(z.string()).optional(),
+    related: z.array(z.string()).optional().describe("Places next door to the best results: where each is defined, and whatever calls it most."),
     // Ranked `path:line` anchors that placed but were NOT shown, best first, the answer often sits at rank 5–13,
     // behind groups the budget spent itself on. The text surface has always printed this map; a JSON caller could
     // not see it, so it had to page through `cursor` to learn what the terminal was told up front.
-    candidates: z.array(z.string()).optional(),
+    candidates: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Ranked places that scored but did not make the page, best first. The answer often sits at rank five to thirteen, so this saves paging through to find out.",
+        ),
     // Run provenance for benchmarking: retrieval stages DISABLED this invocation (absent = full pipeline).
-    features: z.array(z.string()).optional(),
+    features: z.array(z.string()).optional().describe("Which stages of the search were switched off for this run. Absent means all of them ran."),
 });
 export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
 
@@ -2987,10 +4039,20 @@ export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
 export const HEALTH_LIMIT = 20;
 export const WorkspaceHealthQuerySchema = z.object({
     // "root" (the /work repo) or a nested repo's root-relative dir, the same {repo} ids the git routes take.
-    repo: z.string().min(1),
+    repo: z.string().min(1).describe("Which repository, using the same ids the git routes take."),
     // Churn window (2d, 12h, 1w, 3m). Absent = all of history, which is what a hotspot ranking wants by default.
-    since: z.string().max(16).optional(),
-    limit: z.coerce.number().int().positive().max(200).optional(),
+    since: z
+        .string()
+        .max(16)
+        .optional()
+        .describe("How far back to count changes, written as a span such as 2d, 12h, 1w or 3m. Leave it out for all of history."),
+    limit: z.coerce
+        .number()
+        .int()
+        .positive()
+        .max(200)
+        .optional()
+        .describe("How many files and modules to rank. A leaderboard rather than an inventory: past a screenful the ranking stops being the point."),
 });
 // One file that is BOTH churning and tangled. `score` is the product the ranking sorts by, carried explicitly
 // so the panel plots the number it ranks by rather than recomputing it.
@@ -3009,19 +4071,21 @@ export type WorkspaceHotspot = z.infer<typeof WorkspaceHotspotSchema>;
 export const WorkspaceKeyModuleSchema = z.object({ path: z.string(), exports: z.number() });
 export type WorkspaceKeyModule = z.infer<typeof WorkspaceKeyModuleSchema>;
 export const WorkspaceHealthSchema = z.object({
-    repo: z.string(),
-    totals: z.object({
-        files: z.number(),
-        symbols: z.number(),
-        // Summed branch points across the scoped files.
-        complexity: z.number(),
-        // How many files qualify as hotspots at all, the lists below are capped, this is not.
-        hotspots: z.number(),
-    }),
-    hotspots: z.array(WorkspaceHotspotSchema),
-    modules: z.array(WorkspaceKeyModuleSchema),
+    repo: z.string().describe("Which repository this describes."),
+    totals: z
+        .object({
+            files: z.number().describe("Files counted."),
+            symbols: z.number().describe("Named things they export."),
+            complexity: z.number().describe("Branch points across all of them added up."),
+            hotspots: z.number().describe("How many files qualify as hotspots at all. The list below is capped; this is not."),
+        })
+        .describe(
+            "Counts anybody could recount in the files themselves. Deliberately no single maintainability grade: those cannot be checked and are not comparable between projects.",
+        ),
+    hotspots: z.array(WorkspaceHotspotSchema).describe("Files that change often and are complicated at the same time, worst first."),
+    modules: z.array(WorkspaceKeyModuleSchema).describe("The parts of the codebase the rest of it leans on most."),
     // Same index-freshness signal the search route reports: a panel drawn off a half-built index says so.
-    freshness: WorkspaceSearchFreshnessSchema,
+    freshness: WorkspaceSearchFreshnessSchema.describe("Whether the index these numbers were read from is up to date."),
 });
 export type WorkspaceHealth = z.infer<typeof WorkspaceHealthSchema>;
 
@@ -3037,53 +4101,85 @@ export type WorkspaceHealth = z.infer<typeof WorkspaceHealthSchema>;
 //        which is what an agent leaves behind when it adds one and does not install it. Same command fixes it,
 //        so `missing` (how many names cannot resolve) is what separates the two in the UI's wording.
 export const ProjectSetupSchema = z.object({
-    dir: z.string(),
-    ecosystem: z.enum(["node", "python"]),
-    manager: z.string(),
-    command: z.string(),
-    evidence: z.string(),
-    state: z.enum(["ready", "installing", "needs-setup", "unsupported", "stale"]),
-    missing: z.number().optional(),
+    dir: z.string().describe("Where the project is, relative to the workspace root. Empty means the root itself."),
+    ecosystem: z.enum(["node", "python"]).describe("Which language's tooling it uses."),
+    manager: z.string().describe("The tool that would do the installing."),
+    command: z.string().describe("The exact command that would run."),
+    evidence: z.string().describe("The file that decided all of the above, so the answer can be checked rather than trusted."),
+    state: z
+        .enum(["ready", "installing", "needs-setup", "unsupported", "stale"])
+        .describe(
+            "Ready means its dependencies are really there. Stale means it was installed once and has since outgrown that, which is what an agent leaves behind when it adds a dependency without installing it. Unsupported means this sandbox has no such tool.",
+        ),
+    missing: z.number().optional().describe("How many declared dependencies cannot be found on disk. What separates never-installed from outgrown."),
 });
 export type ProjectSetup = z.infer<typeof ProjectSetupSchema>;
-export const WorkspaceSetupSchema = z.object({ projects: z.array(ProjectSetupSchema) });
+export const WorkspaceSetupSchema = z.object({
+    projects: z.array(ProjectSetupSchema).describe("Every project the sandbox found, and whether each is usable."),
+});
 export type WorkspaceSetup = z.infer<typeof WorkspaceSetupSchema>;
 // Install these projects' dependencies. Dirs already ready, already installing, or whose manager is missing are
 // skipped server-side, so a stale client list can't spawn redundant installs, `started` is what actually ran.
-export const WorkspaceInstallSchema = z.object({ dirs: z.array(z.string().max(500)).min(1).max(50) });
-export const WorkspaceInstallResultSchema = z.object({ queued: z.array(z.string()) });
+export const WorkspaceInstallSchema = z.object({
+    dirs: z
+        .array(z.string().max(500))
+        .min(1)
+        .max(50)
+        .describe(
+            "Which projects to install, by folder. Ones already ready, already installing, or with no tool to install them are skipped rather than refused.",
+        ),
+});
+export const WorkspaceInstallResultSchema = z.object({
+    queued: z.array(z.string()).describe("Which of them actually started, which is not necessarily what you asked for."),
+});
 
 // ---- workspace repos ----
 
 // Every discovered repo's id (root-relative dir under /work), sorted, roles included.
-export const ReposListSchema = z.object({ repos: z.array(z.string()) });
-export const CloneRepoSchema = z.object({ name: z.string().min(1), cloneUrl: z.string().min(1), branch: z.string().optional() });
-export const CloneResultSchema = z.object({ name: z.string(), path: z.string() });
+export const ReposListSchema = z.object({
+    repos: z
+        .array(z.string())
+        .describe('Every repository\'s id, sorted. An id is its folder relative to the workspace root, and "root" is the workspace itself.'),
+});
+export const CloneRepoSchema = z.object({
+    name: z.string().min(1).describe("What to call it in the workspace."),
+    cloneUrl: z.string().min(1).describe("Where to clone it from."),
+    branch: z.string().optional().describe("Which branch to check out. Leave it out for the repository's default."),
+});
+export const CloneResultSchema = z.object({
+    name: z.string().describe("What it ended up called."),
+    path: z.string().describe("Where it landed."),
+});
 // Per-repo result of a workspace sync (fetch + guarded fast-forward). `status` mirrors GitSyncResult plus the
 // turn-orchestration outcomes skipped/error; behind/ahead/head/message are present per status (see RepoSyncOutcome).
 export const RepoSyncSchema = z.object({
-    repo: z.string(),
-    status: z.enum(["updated", "current", "dirty", "diverged", "no-remote", "skipped", "error"]),
-    behind: z.number().optional(),
-    ahead: z.number().optional(),
-    head: z.string().optional(),
-    message: z.string().optional(),
+    repo: z.string().describe("Which repository."),
+    status: z
+        .enum(["updated", "current", "dirty", "diverged", "no-remote", "skipped", "error"])
+        .describe(
+            "What happened to it. Dirty and diverged are why a repository was left alone: it had uncommitted work, or it had moved in a way that cannot be fast-forwarded.",
+        ),
+    behind: z.number().optional().describe("How many commits it was behind."),
+    ahead: z.number().optional().describe("How many commits it was ahead."),
+    head: z.string().optional().describe("The commit it ended up on."),
+    message: z.string().optional().describe("What went wrong, when something did."),
 });
-export const WorkspaceSyncSchema = z.object({ repos: z.array(RepoSyncSchema) });
+export const WorkspaceSyncSchema = z.object({ repos: z.array(RepoSyncSchema).describe("One entry per repository, saying what happened to it.") });
 // Add one or more named app instances into an EXISTING monorepo. Each entry pairs a template key from the
 // source repo's templates.json manifest (e.g. "api", "web", "landing") with a user-chosen instance name
 // (e.g. "shop-api"); {repo} names the target monorepo.
 export const AppInstanceInputSchema = z.object({
-    template: z.string().min(1),
+    template: z.string().min(1).describe("Which kind of app to scaffold, by its key in the template list."),
     name: z
         .string()
         .min(1)
-        .regex(/^[a-z][a-z0-9-]*$/),
+        .regex(/^[a-z][a-z0-9-]*$/)
+        .describe("What to call this one."),
 });
 export type AppInstanceInput = z.infer<typeof AppInstanceInputSchema>;
 export const AddAppsSchema = z.object({
-    repo: z.string(),
-    apps: z.array(AppInstanceInputSchema).min(1),
+    repo: z.string().describe("Which repository to scaffold into."),
+    apps: z.array(AppInstanceInputSchema).min(1).describe("The apps to add."),
 });
 
 // Run vitest for one or more repo-relative project dirs in a named one-shot tmux panel session
@@ -3091,16 +4187,22 @@ export const AddAppsSchema = z.object({
 // (an app/package name as `<name>__test`, or `tests` for the library section); `dirs` are repo-relative
 // package dirs, where "" targets the repo root.
 export const RunTestsSchema = z.object({
-    repo: z.string(),
-    session: z.string(),
-    dirs: z.array(z.string()).min(1),
+    repo: z.string().describe("Which repository."),
+    session: z.string().describe("What to call the terminal this runs in, so you can find it again."),
+    dirs: z.array(z.string()).min(1).describe("Which projects to test, as folders relative to the repository. Empty targets the repository root."),
 });
 
 // One addable app type the configured source repo offers (from its templates.json), listed for the operator
 // panel's Add-app picker: the manifest key + its label/description.
-export const TemplateSummarySchema = z.object({ key: z.string(), label: z.string(), description: z.string() });
+export const TemplateSummarySchema = z.object({
+    key: z.string().describe("The id to name when scaffolding one."),
+    label: z.string().describe("What to call it on screen."),
+    description: z.string().describe("What you get."),
+});
 export type TemplateSummary = z.infer<typeof TemplateSummarySchema>;
-export const TemplatesListSchema = z.object({ templates: z.array(TemplateSummarySchema) });
+export const TemplatesListSchema = z.object({
+    templates: z.array(TemplateSummarySchema).describe("The kinds of app the configured source repository knows how to scaffold."),
+});
 export type TemplatesList = z.infer<typeof TemplatesListSchema>;
 
 // One app instance currently in a monorepo, with its own preview dev server + live status (started/stopped
@@ -3109,37 +4211,54 @@ export type TemplatesList = z.infer<typeof TemplatesListSchema>;
 // dependencies (astro/next/…), and absent when it was discovered purely by its `dev` script. previewUrl is
 // https://preview-<repo>--<app>-<sandboxId>.<zone> (absent on loopback, no zone or no connect token).
 export const RepoAppSchema = z.object({
-    app: z.string(),
-    kind: z.string().optional(),
-    previewUrl: z.string().optional(),
-    running: z.boolean(),
-    healthy: z.boolean(),
+    app: z.string().describe("The app's name, which is also its folder."),
+    kind: z
+        .string()
+        .optional()
+        .describe(
+            "What sort of app it is: the template it came from, or the framework worked out from its dependencies. Absent when it was found purely by having a dev script.",
+        ),
+    previewUrl: z.string().optional().describe("Where to open it. Absent when this sandbox has no outside address."),
+    running: z.boolean().describe("Whether its dev server is up."),
+    healthy: z.boolean().describe("Whether it is actually answering."),
 });
 export type RepoApp = z.infer<typeof RepoAppSchema>;
-export const AppsListSchema = z.object({ apps: z.array(RepoAppSchema) });
+export const AppsListSchema = z.object({ apps: z.array(RepoAppSchema).describe("The apps in this repository.") });
 export type AppsList = z.infer<typeof AppsListSchema>;
 // One workspace package in a pnpm monorepo, discovered from pnpm-workspace.yaml's packages globs. `dir` is the
 // repo-relative package dir (e.g. "_editor/web"); `group` is its top-level dir segment (e.g. "_editor"), the
 // dependencies view's coloring axis.
-export const WorkspacePackageSchema = z.object({ name: z.string(), dir: z.string(), group: z.string() });
+export const WorkspacePackageSchema = z.object({
+    name: z.string().describe("The name the package declares."),
+    dir: z.string().describe("Where it lives, relative to the repository."),
+    group: z.string().describe("The top-level folder it sits under, which is what a diagram colours by."),
+});
 export type WorkspacePackage = z.infer<typeof WorkspacePackageSchema>;
 export const WorkspaceDepTypeSchema = z.enum(["prod", "dev", "peer"]);
 export type WorkspaceDepType = z.infer<typeof WorkspaceDepTypeSchema>;
 // A workspace-internal dependency edge: `from` DEPENDS ON `to` (from's package.json lists to), typed by which
 // dependency block declared it. Pure data, layout/direction is the client's concern.
-export const WorkspaceDepEdgeSchema = z.object({ from: z.string(), to: z.string(), type: WorkspaceDepTypeSchema });
+export const WorkspaceDepEdgeSchema = z.object({
+    from: z.string().describe("The package that depends."),
+    to: z.string().describe("The package it depends on."),
+    type: WorkspaceDepTypeSchema.describe("Which kind of dependency declared it."),
+});
 export type WorkspaceDepEdge = z.infer<typeof WorkspaceDepEdgeSchema>;
-export const WorkspaceGraphSchema = z.object({ packages: z.array(WorkspacePackageSchema), edges: z.array(WorkspaceDepEdgeSchema) });
+export const WorkspaceGraphSchema = z.object({
+    packages: z.array(WorkspacePackageSchema).describe("Every package in the repository."),
+    edges: z.array(WorkspaceDepEdgeSchema).describe("Which of them use which. Pure data: how to lay it out is yours to decide."),
+});
 export type WorkspaceGraph = z.infer<typeof WorkspaceGraphSchema>;
 // Path params for the per-repo apps routes: the monorepo name (validated in the handler like PanelRepoParam)
 // and, for per-app preview control (start/stop), the app key (api/web/landing).
-export const RepoAppsParamSchema = z.object({ repo: z.string() });
+export const RepoAppsParamSchema = z.object({ repo: z.string().describe("Which repository.") });
 export const AppParamSchema = z.object({
-    repo: z.string(),
+    repo: z.string().describe("Which repository."),
     app: z
         .string()
         .min(1)
-        .regex(/^[a-z][a-z0-9-]*$/),
+        .regex(/^[a-z][a-z0-9-]*$/)
+        .describe("Which app inside it."),
 });
 
 // ---- inventory: the i.have.* / i.want.service entries in deploy.config.ts's managed region ----
@@ -3160,27 +4279,27 @@ const inventoryName = z
     .max(60)
     .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/);
 export const BackendEntrySchema = z.object({
-    kind: z.literal("backend"),
-    provider: InventoryProviderSchema,
-    name: z.string(),
-    values: InventoryValuesSchema,
+    kind: z.literal("backend").describe("Something you already have: a machine, an account with a hosting provider."),
+    provider: InventoryProviderSchema.describe("Which provider it is with."),
+    name: z.string().describe("What to call it, which is also how everything else refers to it."),
+    values: InventoryValuesSchema.describe("Its settings. Anything secret is stored separately and referred to here, never written in."),
 });
 export const ServiceEntrySchema = z.object({
-    kind: z.literal("service"),
-    service: ServiceKindSchema,
-    name: z.string(),
-    values: InventoryValuesSchema,
-    on: z.string(),
-    expose: z.string(),
+    kind: z.literal("service").describe("Something you want provisioned."),
+    service: ServiceKindSchema.describe("Which service."),
+    name: z.string().describe("What to call it."),
+    values: InventoryValuesSchema.describe("Its settings."),
+    on: z.string().describe("Which of your machines to put it on."),
+    expose: z.string().describe("How it should be reachable."),
 });
 // i.want.app, a deployable app built from source. Single production environment on `main`; `values.domain` is
 // where it's exposed. Multi-env/teams/use wiring is hand-authored outside the managed region.
 export const AppEntrySchema = z.object({
-    kind: z.literal("app"),
-    name: z.string(),
-    values: InventoryValuesSchema,
-    on: z.string(),
-    expose: z.string(),
+    kind: z.literal("app").describe("An app of your own, built from source and deployed."),
+    name: z.string().describe("What to call it."),
+    values: InventoryValuesSchema.describe("Its settings, including the address it should answer on."),
+    on: z.string().describe("Which of your machines to put it on."),
+    expose: z.string().describe("How it should be reachable."),
 });
 export const InventoryEntrySchema = z.discriminatedUnion("kind", [BackendEntrySchema, ServiceEntrySchema, AppEntrySchema]);
 export type InventoryEntry = z.infer<typeof InventoryEntrySchema>;
@@ -3190,8 +4309,10 @@ export const AddInventoryInputSchema = z.discriminatedUnion("kind", [
     AppEntrySchema.extend({ name: inventoryName }),
 ]);
 export type AddInventoryInput = z.infer<typeof AddInventoryInputSchema>;
-export const InventoryNameParamSchema = z.object({ name: z.string() });
-export const InventoryListSchema = z.object({ entries: z.array(InventoryEntrySchema) });
+export const InventoryNameParamSchema = z.object({ name: z.string().describe("Which entry, by name.") });
+export const InventoryListSchema = z.object({
+    entries: z.array(InventoryEntrySchema).describe("Everything declared: what you have, and what you want provisioned."),
+});
 
 // A deploy-target host self-registering via the connect-host script's POST /enroll (connect-token auth). The SSH
 // key (+ optional Cloudflare token) is written to desired-state/.env; the host (+ cf) is upserted into inventory.
@@ -3240,53 +4361,74 @@ export const CapabilityStateSchema = z.enum(["active", "pending", "error", "inac
 export type CapabilityState = z.infer<typeof CapabilityStateSchema>;
 
 // Per-kind config. Secrets (an mcp token) live here and are denylisted like tools.json.
-export const McpConfigSchema = z.object({ url: z.url(), token: z.string().optional() });
+export const McpConfigSchema = z.object({
+    url: z.url().describe("Where the tool server answers."),
+    token: z.string().optional().describe("The credential it needs, if any. Stored, never echoed back."),
+});
 export const ServiceConfigSchema = z.object({
-    service: ServiceKindSchema,
-    domain: z.string().min(1),
-    on: z.string().min(1),
-    expose: z.string().min(1),
+    service: ServiceKindSchema.describe("Which service to provision."),
+    domain: z.string().min(1).describe("The address it should answer on."),
+    on: z.string().min(1).describe("Which machine to put it on."),
+    expose: z.string().min(1).describe("How it should be reachable."),
 });
 // External-app credential injected into DEPLOYED apps (i.have.stripe → STRIPE_API_KEY from env). Agent-facing
 // connectors are `cli` capabilities instead (see below), not integrations.
 // Closed, unlike a `cli` provider: this becomes an `i.have.<provider>` entry in deploy.config.ts, and the
 // desired-state resolver only knows the providers in InventoryProviderSchema. So an integration card is NOT
 // extension-contributable, the vocabulary belongs to the deploy engine, not to a manifest.
-export const IntegrationConfigSchema = z.object({ provider: z.literal("stripe") });
+export const IntegrationConfigSchema = z.object({
+    provider: z.literal("stripe").describe("Which outside service's credential to make available to deployed apps."),
+});
 // A `cli` capability gives the AGENT an authenticated command-line tool (not a deployed-app credential like
 // `integration`): the credential + any non-secret URL are stored here and injected into the agent's env each
 // turn (see cliEnvOf), and an .agents/skills/<id> cheatsheet teaches the agent to use it via curl. The provider
 // data (fields, env, skill, image fragment) is DATA in an installed extension's `contributes.capabilities`, not
 // a per-provider schema arm, so the config is `provider` + arbitrary string fields, validated against the
 // card's declared fields at add-time (see the sandbox's capabilities/contributions.ts) rather than by this schema.
-export const CliConfigSchema = z.object({ provider: z.string().min(1) }).catchall(z.string());
+export const CliConfigSchema = z
+    .object({
+        provider: z
+            .string()
+            .min(1)
+            .describe(
+                "Which tool to give the agent. The rest of the fields are whatever that tool's own card declares it needs, and are checked against it when you connect.",
+            ),
+    })
+    .catchall(z.string());
 // A Claude Code plugin from a git repo. The daemon only owns the checkout; the Agent SDK's plugin loader reads
 // its internals (skills/agents/hooks/commands/.mcp.json). `path` = subdirectory for plugins that live inside a
 // marketplace/monorepo checkout. `token` = https auth for private repos (never echoed; becomes hasToken).
 export const PluginConfigSchema = z.object({
-    url: z.url(),
+    url: z.url().describe("The repository to take the plugin from."),
     // Branch / tag / commit sha to pin; absent = the default branch's HEAD.
-    ref: z.string().min(1).optional(),
+    ref: z.string().min(1).optional().describe("A branch, tag or commit to pin to. Leave it out to follow the default branch."),
     path: z
         .string()
         .min(1)
         .refine((value) => !value.split("/").includes(".."), { message: "path must stay inside the checkout" })
-        .optional(),
-    token: z.string().min(1).optional(),
+        .optional()
+        .describe("Where inside the repository the plugin lives, for one that sits in a larger checkout."),
+    token: z.string().min(1).optional().describe("A credential for a private repository. Stored, never echoed back."),
 });
 // An intentic extension from a git repo (an intentic-extension.json checkout. UI bundle + agent contributions
 // + processes). Unlike `plugin`, `ref` is a REQUIRED full commit sha: extension code runs trusted in the
 // owner's browser, so the owner approves exactly the code that runs, pin by construction, updates are explicit
 // re-adds at a new sha. `path`/`token` as in PluginConfigSchema.
 export const ExtensionConfigSchema = z.object({
-    url: z.url(),
-    ref: z.string().regex(/^[0-9a-f]{40}$/, "ref must be a full 40-character commit sha"),
+    url: z.url().describe("The repository to take the extension from."),
+    ref: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/, "ref must be a full 40-character commit sha")
+        .describe(
+            "The exact commit to install, in full. Required rather than optional because extension code runs with your browser's trust: the owner approves precisely the code that runs, and an update is a deliberate re-install at a new commit.",
+        ),
     path: z
         .string()
         .min(1)
         .refine((value) => !value.split("/").includes(".."), { message: "path must stay inside the checkout" })
-        .optional(),
-    token: z.string().min(1).optional(),
+        .optional()
+        .describe("Where inside the repository the extension lives, for one that sits in a larger checkout."),
+    token: z.string().min(1).optional().describe("A credential for a private repository. Stored, never echoed back."),
     /* The registry row's tier, copied onto the install by the browse pre-fill. `premium` is what the daemon's
      * two pool duties key off: installing (or updating) donates the owner's credits to the publisher, the
      * gate the apply passes through, and enabling needs the owner's membership. An absent tier means free,
@@ -3294,12 +4436,22 @@ export const ExtensionConfigSchema = z.object({
      * than verified against the registry (the daemon is the owner's own machine; a stripped marker skips a
      * donation the owner was choosing to make, which cheats the creator once, and is exactly the honesty the
      * open-source posture accepts and the docs state). */
-    tier: z.enum(["free", "premium"]).optional(),
+    tier: z
+        .enum(["free", "premium"])
+        .optional()
+        .describe(
+            "Whether installing this donates credits to its publisher. Absent means free, which donates nothing and asks for nothing. Taken from the listing rather than checked against it, which is the honesty an open-source posture accepts.",
+        ),
     /* The registry this install's row lives in, copied on by the browse pre-fill like `tier`, what the update
      * check compares the pinned sha against and reads advisories from. Absent (a hand-typed git install) falls
      * back to the official registry: if the extension is listed there, its updates and its blocked-markings
      * concern this owner exactly as much as anyone's. */
-    registry: z.url().optional(),
+    registry: z
+        .url()
+        .optional()
+        .describe(
+            "Which registry this install came from, which is what update checks and security advisories are read against. Absent falls back to the official one.",
+        ),
 });
 // A remote machine the AGENT can reach over SSH. One capability = one machine; the id is its ssh-config Host
 // alias, so the agent runs `ssh <id> "…"`. The handler writes a per-machine config block + a 0600 key/password
@@ -3307,18 +4459,18 @@ export const ExtensionConfigSchema = z.object({
 // several machines never collide. Discriminated by auth so exactly one credential shape is required.
 export const SshConfigSchema = z.discriminatedUnion("auth", [
     z.object({
-        auth: z.literal("key"),
-        host: z.string().min(1),
-        port: z.coerce.number().default(22),
-        user: z.string().min(1),
-        privateKey: z.string().min(1),
+        auth: z.literal("key").describe("Sign in with a key."),
+        host: z.string().min(1).describe("The machine's address."),
+        port: z.coerce.number().default(22).describe("Which port it listens on."),
+        user: z.string().min(1).describe("Which user to connect as."),
+        privateKey: z.string().min(1).describe("The private key, whole. Stored with tight permissions and never echoed back."),
     }),
     z.object({
-        auth: z.literal("password"),
-        host: z.string().min(1),
-        port: z.coerce.number().default(22),
-        user: z.string().min(1),
-        password: z.string().min(1),
+        auth: z.literal("password").describe("Sign in with a password."),
+        host: z.string().min(1).describe("The machine's address."),
+        port: z.coerce.number().default(22).describe("Which port it listens on."),
+        user: z.string().min(1).describe("Which user to connect as."),
+        password: z.string().min(1).describe("The password. Stored, never echoed back."),
     }),
 ]);
 // ---- vpn ----
@@ -3900,17 +5052,30 @@ export type Capability = z.infer<typeof CapabilitySchema>;
  * absent `powers` means today's full toolbox, and a workspace that never opens this notices nothing. */
 export const PersonaPowersSchema = z.object({
     // "read" is look-and-search only; "write" adds creating and changing; "none" takes both away.
-    files: z.enum(["none", "read", "write"]).default("write"),
+    files: z
+        .enum(["none", "read", "write"])
+        .default("write")
+        .describe("What it may do with files: nothing, look and search, or also create and change."),
     // Shell commands, and with them the terminals, the test runs, and every CLI on the image. See the header:
     // this is the switch the others' strength depends on.
-    shell: z.boolean().default(true),
+    shell: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Whether it may run commands, and with them the terminals, the test runs and every tool on the image. The switch the strength of the others depends on.",
+        ),
     /* The JS execution backend (AgentCapabilities.execution): the model writes a script instead of a command
      * line, run in a permission-fenced Node subprocess. Its fence is REAL where the shell's is not, reads and
      * writes follow the `files` answer, and it can start no other program unless `shell` is also on, with one
      * stated gap: the fence cannot cut the network, so a script can fetch whatever `web` says. */
-    code: z.boolean().default(true),
+    code: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Whether it may write and run a script rather than a command line. Its fence is real where the shell's is not: reads and writes follow the files answer, and it can start no other program unless commands are allowed too. The one stated gap is that the fence cannot cut the network.",
+        ),
     // Fetch a page, run a search.
-    web: z.boolean().default(true),
+    web: z.boolean().default(true).describe("Whether it may fetch a page or run a search."),
     // The credential-free browser. The SIGNED-IN browsers are `capabilities` below, a different question, and
     // the reason this one is safe to leave on: it holds nobody's account.
     browser: z.boolean().default(true),
@@ -3944,32 +5109,45 @@ export type PersonaPowers = z.infer<typeof PersonaPowersSchema>;
  * way to choose between. A persona starts where it is told and works in its own copy. */
 export const PersonaWorkspaceSchema = z.object({
     // The repo (or folder) under the workspace a session starts in. Absent ⇒ the workspace root, as today.
-    startIn: z.string().max(200).optional(),
+    startIn: z.string().max(200).optional().describe("Which folder a conversation opens in."),
     // Workspace-relative folders the file tools may touch. Absent ⇒ anywhere under the workspace.
-    folders: z.array(z.string().min(1)).max(50).optional(),
+    folders: z.array(z.string().min(1)).max(50).optional().describe("Which folders it may touch at all. Absent means the whole workspace."),
 });
 export type PersonaWorkspace = z.infer<typeof PersonaWorkspaceSchema>;
 
 export const PersonaSchema = z.object({
-    id: entryId,
+    id: entryId.describe("The persona's id."),
     // What the owner calls it in the composer chip. Absent ⇒ surfaces read the id, which is already human-chosen.
-    label: z.string().max(60).optional(),
+    label: z.string().max(60).optional().describe("What to call it on screen. Absent falls back to the id, which somebody chose anyway."),
     /* The capability ids this persona acts THROUGH, the logged-in browser accounts (and, later, the credential
      * connectors) that are its hands. Ids rather than platforms, because "two accounts of one site" is the whole
      * problem: `reddit-work` and `reddit-personal` are two capabilities and exactly one of them belongs here.
      *
      * An id naming a capability that isn't connected is not an error, it is a card describing an account this
      * sandbox has yet to sign into, which is precisely what a freshly cloned workspace looks like. */
-    capabilities: z.array(entryId).max(50),
+    capabilities: z
+        .array(entryId)
+        .max(50)
+        .describe(
+            "Which connected accounts are its hands. Named individually rather than by site, because two accounts on one site is the whole problem this solves. Naming one that is not connected yet is not an error: it is a card describing an account this sandbox has still to sign into.",
+        ),
     /* Which workspace repos prefer this persona, so a chat opened on a project starts with the right chip already
      * selected. A PREFERENCE, not a fence, the owner's chosen chat default is still "every account", and it
      * lives on the card rather than in each project's own config so that one account named by three repos stays
      * one definition instead of three that drift. */
-    repos: z.array(z.string().min(1)).max(50).optional(),
+    repos: z
+        .array(z.string().min(1))
+        .max(50)
+        .optional()
+        .describe(
+            "Which repositories prefer this persona, so a conversation opened on one starts with the right choice already made. A preference rather than a fence.",
+        ),
     // What a session wearing this card may do, and where it works. Both absent ⇒ the full toolbox and the whole
     // workspace, so a card written before these existed keeps behaving exactly as it did.
-    powers: PersonaPowersSchema.optional(),
-    workspace: PersonaWorkspaceSchema.optional(),
+    powers: PersonaPowersSchema.optional().describe(
+        "What a conversation wearing it may do. Absent means the full toolbox, so a card written before this existed behaves exactly as it did.",
+    ),
+    workspace: PersonaWorkspaceSchema.optional().describe("Where it works. Absent means the whole workspace."),
     /* WHICH SYSTEM PROMPT A SESSION WEARING THIS CARD RUNS ON, the same three bases the sandbox chooses
      * between, asked per card. ABSENT is the fourth answer and the default: follow the sandbox, which is what
      * every card meant before this field existed and what almost every card will go on meaning.
@@ -4041,15 +5219,19 @@ export const personaBounds = (persona: Persona): string => {
     return limits === 0 ? "Full powers" : `${limits} limit${limits === 1 ? "" : "s"}`;
 };
 
-export const PersonaIdParamSchema = z.object({ id: entryId });
+export const PersonaIdParamSchema = z.object({ id: entryId.describe("Which persona.") });
 /* Every persona, plus which of the accounts they name this sandbox is actually signed into. The second half is
  * what makes the list honest on a freshly cloned workspace: every card is present and most of them cannot act
  * yet, and a surface that showed only the cards would present a persona that is one login away from working as
  * though it already did. Ids the manifest has no capability for at all are `connected: false` too, a card may
  * name an account nobody has added here. */
 export const PersonasListSchema = z.object({
-    personas: z.array(PersonaSchema),
-    connected: z.array(z.string()),
+    personas: z.array(PersonaSchema).describe("The characters an agent can wear."),
+    connected: z
+        .array(z.string())
+        .describe(
+            "Which accounts are actually connected right now, so a persona naming one that has since been disconnected can be shown as broken rather than as working.",
+        ),
 });
 
 /* A PERSONA'S KIT, as one read, the prompt it runs on and the skills it carries.
@@ -4062,26 +5244,48 @@ export const PersonasListSchema = z.object({
  * An empty prompt is a card with no PROMPT.md, which is every card until somebody writes one. It is "" rather
  * than absent because the field behind it is a textarea, and a textarea's empty value is "". */
 export const PersonaKitSchema = z.object({
-    prompt: z.string(),
-    skills: z.array(z.object({ name: z.string(), description: z.string() })),
+    prompt: z
+        .string()
+        .describe("What this persona is told, on top of everything else. Empty means it simply follows the sandbox's own instructions."),
+    skills: z
+        .array(
+            z.object({
+                name: z.string().describe("The skill's name."),
+                description: z.string().describe("What it is for."),
+            }),
+        )
+        .describe(
+            "Skills only this persona's conversations can reach. A different question from what the agent knows generally, with a different answer.",
+        ),
 });
 export type PersonaKit = z.infer<typeof PersonaKitSchema>;
 
-export const PersonaPromptSchema = PersonaIdParamSchema.extend({ prompt: z.string().max(20000) });
+export const PersonaPromptSchema = PersonaIdParamSchema.extend({
+    prompt: z
+        .string()
+        .max(20000)
+        .describe(
+            "What to tell this persona. Sending an empty one removes it entirely rather than storing a blank, so the persona falls back to the sandbox's own instructions.",
+        ),
+});
 export const PersonaSkillSchema = PersonaIdParamSchema.extend(SkillDraftSchema.shape);
-export const PersonaSkillNameSchema = PersonaIdParamSchema.extend({ name: SkillNameSchema });
+export const PersonaSkillNameSchema = PersonaIdParamSchema.extend({ name: SkillNameSchema.describe("Which skill.") });
 // One kit skill's instructions, for editing it, the same split the sandbox's own skills make between a listing
 // and a body, and for the same reason.
-export const PersonaSkillBodySchema = z.object({ name: z.string(), description: z.string(), body: z.string() });
+export const PersonaSkillBodySchema = z.object({
+    name: z.string().describe("The skill's name."),
+    description: z.string().describe("What it is for."),
+    body: z.string().describe("The skill itself, in full."),
+});
 
 /* `code` is a credential the owner has to TYPE SOMEWHERE ELSE to finish this connection. WhatsApp's
  * link-a-device code, typed into the phone. It is not part of `detail` because the card does not merely print
  * it: it sets it in a size you can read across a desk, next to a copy button, and replaces it in place when the
  * provider mints a new one. A sentence with a code buried in it cannot be any of those things. */
 export const CapabilityStatusSchema = z.object({
-    state: CapabilityStateSchema,
-    detail: z.string().optional(),
-    code: z.string().optional(),
+    state: CapabilityStateSchema.describe("Whether it is live, still coming up, broken, or switched off."),
+    detail: z.string().optional().describe("What is wrong, in words a person can act on."),
+    code: z.string().optional().describe("A short marker for that reason, for anything deciding what to do about it."),
 });
 export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
 /* The list row: manifest entry + live status. Secrets are never returned (an mcp token becomes hasToken).
@@ -4096,13 +5300,16 @@ export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
  * field the user left blank is absent and a card that gained a credential since is present. The form reads it as
  * "show dots, and let blank mean keep" (VAULTED, capability-secrets.ts). */
 export const CapabilitySummarySchema = z.object({
-    id: z.string(),
-    kind: CapabilityKindSchema,
-    status: CapabilityStatusSchema,
-    config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+    id: z.string().describe("The connection's id."),
+    kind: CapabilityKindSchema.describe("What sort of thing it is."),
+    status: CapabilityStatusSchema.describe("Whether it is working."),
+    config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).describe("Its settings, minus anything secret."),
     // Defaulted for the daemon-older-than-browser seam, like `recommendations` below: a required field would
     // fail the whole list parse against a sandbox predating this, taking the page down to hide some dots.
-    secrets: z.array(z.string()).default([]),
+    secrets: z
+        .array(z.string())
+        .default([])
+        .describe("Which credentials it holds, by name. The values are on one route only, and it is not this one."),
 });
 /* A capability the WORKSPACE asks for but the manifest doesn't carry, derived from what is checked out under
  * /work, not from anything the user configured. It exists because the failures it prevents are illegible: a
@@ -4122,38 +5329,54 @@ export const CapabilitySummarySchema = z.object({
  * the card's form so the user supplies only the credential. Secrets are NEVER in here, even when one is sitting
  * in a checked-in file: the flow points at such a file as evidence, it does not absorb what is in it. */
 export const CapabilityRecommendationSchema = z.object({
-    card: z.string(),
-    evidence: z.string(),
-    reason: z.string(),
-    prefill: z.record(z.string(), z.string()),
+    card: z.string().describe("Which connection is being suggested."),
+    evidence: z
+        .string()
+        .describe("What was seen that prompted it: a file, a remote, printed verbatim so the claim can be checked rather than believed."),
+    reason: z.string().describe("The same claim in words, without repeating the evidence into it."),
+    prefill: z
+        .record(z.string(), z.string())
+        .describe(
+            "Settings the scan could read, to fill the form so you supply only the credential. Never a secret, even when one is sitting in a checked-in file: the suggestion points at such a file, it does not absorb what is in it.",
+        ),
 });
 export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSchema>;
 export const CapabilitiesListSchema = z.object({
-    capabilities: z.array(CapabilitySummarySchema),
+    capabilities: z.array(CapabilitySummarySchema).describe("What this sandbox is connected to."),
     // Defaulted for the daemon-older-than-browser seam: the platform's web app talks to whichever sandbox
     // version the user has, and a required field here would fail the parse, taking the whole Capabilities page
     // down on every sandbox predating this route, to hide a badge.
-    recommendations: z.array(CapabilityRecommendationSchema).default([]),
+    recommendations: z
+        .array(CapabilityRecommendationSchema)
+        .default([])
+        .describe(
+            "Things worth connecting, worked out from what is actually in the workspace rather than from anything you configured. Re-derived on every read, so one whose evidence has moved simply stops being suggested.",
+        ),
 });
-export const CapabilityIdParamSchema = z.object({ id: z.string() });
+export const CapabilityIdParamSchema = z.object({ id: z.string().describe("Which connection.") });
 /* One capability's config VERBATIM, secrets included, for the connection route (capabilities.connection).
  * The one read on this surface that does not echo secrets as hasToken booleans, which is exactly why it is
  * never served to a browser: its handler refuses any caller with a member identity, leaving only the daemon's
  * header grants (an extension backend's minted token, which must declare the route in permissions.daemon).
  * The values are the strings the capability stored; the caller knows its own kind's field names. */
 export const CapabilityConnectionSchema = z.object({
-    id: z.string(),
-    kind: z.string(),
-    config: z.record(z.string(), z.string()),
+    id: z.string().describe("The connection's id."),
+    kind: z.string().describe("What sort of thing it is."),
+    config: z
+        .record(z.string(), z.string())
+        .describe("Its settings exactly as stored, credentials included. The field names are its own kind's, which the caller already knows."),
 });
 export type CapabilityConnection = z.infer<typeof CapabilityConnectionSchema>;
 // DELETE /capabilities/recommendations/{card}: the user said this one is not wanted. The EVIDENCE it was
 // declined against is recorded daemon-side rather than sent, so the client cannot dismiss a claim other than the
 // one it was shown, and so the recommendation comes back by itself when the workspace changes under it.
-export const CapabilityCardParamSchema = z.object({ card: z.string() });
+export const CapabilityCardParamSchema = z.object({ card: z.string().describe("Which suggestion to stop making.") });
 // POST /capabilities/{id}/secret body: replace just the capability's secret field (its key is per-kind, see the
 // sandbox's secretField) and re-run its idempotent apply, the /secrets page's edit path.
-export const CapabilitySecretInputSchema = z.object({ id: z.string(), value: z.string().min(1) });
+export const CapabilitySecretInputSchema = z.object({
+    id: z.string().describe("Which connection."),
+    value: z.string().min(1).describe("The new credential. Its other settings are left alone."),
+});
 /* POST /capabilities/{id}/rename body: the name this connection should answer to from now on.
  *
  * A capability's id IS the agent's handle for it, its skill file, its tool prefix, its env suffix, the alias
@@ -4171,11 +5394,16 @@ export const CapabilityRenameSchema = z.object({
 });
 // POST /capabilities/{id}/login response: the interactive tmux session running the agent's loginCommand,
 // which the web surfaces in the terminal panel for the user to complete the sign-in.
-export const CapabilityLoginSchema = z.object({ session: z.string() });
+export const CapabilityLoginSchema = z.object({ session: z.string().describe("The terminal the sign-in is happening in. Attach to it to type.") });
 // GET /capabilities/{id}/otp response: one freshly minted TOTP code off the capability's stored seed, what the
 // in-sandbox `otp` command prints. The seed itself never crosses; secondsRemaining is the caller's cue to
 // re-mint rather than submit a code about to die.
-export const CapabilityOtpSchema = z.object({ code: z.string(), secondsRemaining: z.number() });
+export const CapabilityOtpSchema = z.object({
+    code: z.string().describe("The code."),
+    secondsRemaining: z
+        .number()
+        .describe("How long it lasts. Its expiring is what makes handing one to an agent safe, since the seed behind it is never revealed."),
+});
 
 // ---- hosts: the user's own connected computers (the `host` capability's live half) ----
 // The manifest says which machines the user INTENDS to have connected; this says which are actually holding a
@@ -4235,62 +5463,97 @@ export const VpnStateSchema = z.enum([
 export type VpnState = z.infer<typeof VpnStateSchema>;
 
 export const VpnLinkSchema = z.object({
-    id: z.string(),
-    provider: VpnProviderSchema,
-    state: VpnStateSchema,
+    id: z.string().describe("Which tunnel."),
+    provider: VpnProviderSchema.describe("What kind of tunnel it is."),
+    state: VpnStateSchema.describe(
+        "Whether it is up, dialling, resting, failed, or not installable yet because its client needs a rebuild to arrive.",
+    ),
     // The gateway this tunnel dials, host:port for fortinet, the [Peer] endpoint for wireguard, the IKE peer
     // for ipsec. Display only; never a secret.
-    gateway: z.string().optional(),
+    gateway: z.string().optional().describe("What it dials. For display only, and never a credential."),
     // The tun/wg interface carrying the tunnel, once it exists.
-    interface: z.string().optional(),
+    interface: z.string().optional().describe("The network interface carrying it, once one exists."),
     // The address the gateway assigned this sandbox, the single most useful "am I on the VPN?" fact.
-    address: z.string().optional(),
+    address: z
+        .string()
+        .optional()
+        .describe("The address the far end gave this sandbox, which is the single most useful answer to whether you are on the VPN."),
     // The CIDRs routed into the tunnel ("0.0.0.0/0" = full tunnel). Empty until the link is up.
-    routes: z.array(z.string()).default([]),
+    routes: z
+        .array(z.string())
+        .default([])
+        .describe("What goes through it. Everything, when the range covers the whole internet. Empty until it is up."),
     // DNS servers the tunnel pushed, when it pushed any.
-    dns: z.array(z.string()).default([]),
+    dns: z.array(z.string()).default([]).describe("Name servers it pushed, when it pushed any."),
     // Epoch ms the link came up, the UI renders "connected 14m ago". Absent unless connected.
-    since: z.number().optional(),
+    since: z.number().optional().describe("When it came up, in milliseconds. Absent unless it is."),
     // Whether the daemon re-dials this tunnel on boot (the manifest's autoConnect).
-    autoConnect: z.boolean(),
+    autoConnect: z.boolean().describe("Whether it dials itself when the sandbox starts."),
     // Why it is failed/unavailable, or an extra note on a healthy link. Never carries credentials.
-    detail: z.string().optional(),
+    detail: z.string().optional().describe("Why it failed, or a note about a healthy one. Never a credential."),
 });
 export type VpnLink = z.infer<typeof VpnLinkSchema>;
-export const VpnListSchema = z.object({ links: z.array(VpnLinkSchema) });
+export const VpnListSchema = z.object({
+    links: z
+        .array(VpnLinkSchema)
+        .describe("Every configured tunnel with its live state, read back from the operating system each time rather than remembered."),
+});
 
 // POST /vpn/{id}/connect body. `otp` is a one-time 2FA code, supplied per dial and NEVER stored, a FortiGate
 // with token auth rejects the dial without it, and the daemon surfaces that as a retry-with-a-code error.
-export const VpnConnectInputSchema = z.object({ id: z.string(), otp: z.string().min(1).optional() });
-export const VpnIdParamSchema = z.object({ id: z.string() });
+export const VpnConnectInputSchema = z.object({
+    id: z.string().describe("Which tunnel to dial."),
+    otp: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("A one-time code, where the gateway wants one. Supplied per dial and never stored; without it such a gateway refuses and says so."),
+});
+export const VpnIdParamSchema = z.object({ id: z.string().describe("Which tunnel.") });
 
 // POST /vpn/import-forticlient: parse an exported FortiClient configuration (the XML FortiClient writes from
 // File → Settings → Backup) into addable connections. Credentials in that file are wrapped in FortiClient's
 // proprietary "EncX …" encryption, which is NOT reversible here, so a parsed connection carries the endpoint
 // and, when it was stored in the clear, the username; the password is always typed by the user afterwards.
-export const ForticlientImportInputSchema = z.object({ xml: z.string().min(1) });
+export const ForticlientImportInputSchema = z.object({
+    xml: z.string().min(1).describe("The exported configuration file, whole. Nothing is stored: it is read and thrown away."),
+});
 export const ForticlientConnectionSchema = z.object({
     // FortiClient's connection name, slugged into a legal capability id.
-    id: z.string(),
+    id: z.string().describe("The id it would be added under."),
     // The original <name>, shown so the user recognises the connection they picked.
-    label: z.string(),
-    provider: VpnProviderSchema,
-    server: z.string(),
-    port: z.number(),
+    label: z.string().describe("Its name as the file has it, so somebody recognises the connection they are picking."),
+    provider: VpnProviderSchema.describe("What kind of tunnel it is."),
+    server: z.string().describe("Where it dials."),
+    port: z.number().describe("On which port."),
     // Present only when FortiClient stored it unencrypted; an EncX-wrapped username is dropped, not guessed.
-    username: z.string().optional(),
-    description: z.string().optional(),
+    username: z
+        .string()
+        .optional()
+        .describe("The username, but only when the file stored it in the clear. An encrypted one is dropped rather than guessed at."),
+    description: z.string().optional().describe("Whatever the file said about it."),
     // ipsec-only, and only when the file stored them in the clear.
-    localId: z.string().optional(),
-    aggressive: z.boolean().optional(),
+    localId: z.string().optional().describe("An identity some tunnel types need, when the file stored it readably."),
+    aggressive: z.boolean().optional().describe("Which negotiation mode it used."),
     // Phase-2 settings, read from <ipsec_settings>, the pair that decides whether quick mode can succeed.
-    pfs: z.boolean().optional(),
-    dhGroup: z.string().optional(),
+    pfs: z.boolean().optional().describe("Whether it asked for forward secrecy."),
+    dhGroup: z
+        .string()
+        .optional()
+        .describe(
+            "Which key-exchange group it used. Together with the setting above, this is what decides whether the connection can complete at all.",
+        ),
     // What the user still has to supply for this connection to dial (always at least the password).
-    needs: z.array(z.string()),
+    needs: z
+        .array(z.string())
+        .describe(
+            "What you still have to type in before it can dial. Always at least the password, because the export wraps credentials in encryption that cannot be undone here.",
+        ),
 });
 export type ForticlientConnection = z.infer<typeof ForticlientConnectionSchema>;
-export const ForticlientImportSchema = z.object({ connections: z.array(ForticlientConnectionSchema) });
+export const ForticlientImportSchema = z.object({
+    connections: z.array(ForticlientConnectionSchema).describe("The connections found in the file, ready to be added one at a time."),
+});
 
 // ---- exit: live state, the catalog, and the observation that makes a switch true ----
 // The manifest says which exits EXIST; this says which are up, where they come out, and what the world sees.
@@ -4316,11 +5579,16 @@ export type ExitState = z.infer<typeof ExitStateSchema>;
  * report that the egress address is now German. Every start, use and rotate ends by producing one of these,
  * and a switch that cannot produce one fails instead of quietly leaving traffic where it was. */
 export const ExitObservationSchema = z.object({
-    ip: z.string(),
+    ip: z.string().describe("The address the world sees, looked up through the exit's own proxy rather than assumed."),
     // Absent when the lookup answered with an address but no country: a switch is judged on the country when
     // one is known, and on the address having CHANGED when it is not.
-    country: z.string().optional(),
-    countryName: z.string().optional(),
+    country: z
+        .string()
+        .optional()
+        .describe(
+            "Which country that address is in. Absent when the lookup gave an address and no country, in which case a switch is judged on the address having changed instead.",
+        ),
+    countryName: z.string().optional().describe("That country's name, spelled out."),
 });
 export type ExitObservation = z.infer<typeof ExitObservationSchema>;
 
@@ -4328,45 +5596,65 @@ export type ExitObservation = z.infer<typeof ExitObservationSchema>;
  * are what stop a country list being a lie: Tor lists 52 countries and a third of them are one underpowered
  * relay, so the ranking has to carry how much is actually there, not just that the flag exists. */
 export const ExitPointSchema = z.object({
-    country: z.string(),
-    countryName: z.string(),
+    country: z.string().describe("The country's code."),
+    countryName: z.string().describe("Its name, spelled out."),
     // How many relays/servers this provider has there right now.
-    servers: z.number(),
+    servers: z.number().describe("How many servers this provider has there."),
     // This country's share of the provider's total exit capacity, 0..1. Used to sort and to grey out the
     // countries that technically exist and practically do not.
-    share: z.number().optional(),
+    share: z
+        .number()
+        .optional()
+        .describe(
+            "How much of the provider's actual capacity is there, from zero to one. This is what a list should be sorted by: a third of the countries on offer are one overloaded machine behind a flag, and a count of servers would rank them first.",
+        ),
 });
 export type ExitPoint = z.infer<typeof ExitPointSchema>;
 export const ExitCountriesSchema = z.object({
-    countries: z.array(ExitPointSchema),
+    countries: z.array(ExitPointSchema).describe("Where this exit can put you, best-supplied first."),
     // Whether this list came off the provider live or out of the baked fallback (no network, or the provider
     // is down). The picker says so rather than presenting a stale list as current.
-    live: z.boolean(),
+    live: z
+        .boolean()
+        .describe("Whether the provider answered, or this came from a built-in list. Said out loud rather than presenting an old list as current."),
 });
 
 export const ExitLinkSchema = z.object({
-    id: z.string(),
-    provider: ExitProviderSchema,
-    state: ExitStateSchema,
+    id: z.string().describe("Which exit."),
+    provider: ExitProviderSchema.describe("What it runs on."),
+    state: ExitStateSchema.describe(
+        "Whether it is carrying traffic, coming up, resting, failed, or not installable yet because its client needs a rebuild to arrive.",
+    ),
     // The SOCKS endpoint callers point at. Fixed per exit and stable across country switches, which is what
     // lets a long task change country halfway without reconfiguring anything downstream.
-    proxy: z.string(),
+    proxy: z
+        .string()
+        .describe(
+            "Where to point traffic that should go through it. Fixed per exit and unchanged by a country switch, which is what lets a long job move country halfway through without reconfiguring anything.",
+        ),
     // The country ASKED for (manifest preference, or the last `use`). Absent = provider's choice.
-    country: z.string().optional(),
+    country: z.string().optional().describe("Where it was asked to come out. Absent means the provider chose."),
     // The country actually OBSERVED at the last check, and the address behind it. These two disagreeing is
     // the single most useful fault signal this feature has, so they are separate fields, never merged.
-    observedCountry: z.string().optional(),
-    ip: z.string().optional(),
+    observedCountry: z
+        .string()
+        .optional()
+        .describe(
+            "Where it actually comes out, as last checked. Kept separate from what was asked for, because those two disagreeing is the most useful fault signal this whole feature has.",
+        ),
+    ip: z.string().optional().describe("The address behind that observation."),
     // Epoch ms of the observation above, so a stale reading can be rendered as stale.
-    checkedAt: z.number().optional(),
+    checkedAt: z.number().optional().describe("When that was checked, in milliseconds, so an old reading can be shown as old."),
     // The tunnel interface, for the providers that have one (vpngate, wireguard). Tor has none by design.
-    interface: z.string().optional(),
-    since: z.number().optional(),
-    autoStart: z.boolean(),
-    detail: z.string().optional(),
+    interface: z.string().optional().describe("The network interface, for the kinds that have one."),
+    since: z.number().optional().describe("When it came up, in milliseconds."),
+    autoStart: z.boolean().describe("Whether it starts itself when the sandbox does."),
+    detail: z.string().optional().describe("Why it failed, or a note about a healthy one."),
 });
 export type ExitLink = z.infer<typeof ExitLinkSchema>;
-export const ExitListSchema = z.object({ links: z.array(ExitLinkSchema) });
+export const ExitListSchema = z.object({
+    links: z.array(ExitLinkSchema).describe("Every configured exit, with where it was asked to come out and where it actually does."),
+});
 
 /* WHERE EACH FREE PROVIDER CAN ACTUALLY COME OUT, as measured, and the reason it lives in the contract rather
  * than in the daemon: two consumers need the same answer and must not drift. The daemon uses it as the
@@ -4419,18 +5707,35 @@ export const VPNGATE_EXIT_COUNTRIES: readonly ExitPoint[] = [
     { country: "BY", countryName: "Belarus", servers: 1, share: 0.01 },
 ];
 
-export const ExitIdParamSchema = z.object({ id: z.string() });
+export const ExitIdParamSchema = z.object({ id: z.string().describe("Which exit.") });
 // POST /exit/{id}/use body. An absent country means "let the provider choose", the same thing an absent
 // `country` in the manifest means, so clearing a country is expressible rather than only setting one.
-export const ExitUseInputSchema = z.object({ id: z.string(), country: CountryCodeSchema.optional() });
+export const ExitUseInputSchema = z.object({
+    id: z.string().describe("Which exit."),
+    country: CountryCodeSchema.optional().describe(
+        "Where to come out. Leaving it out means letting the provider choose, so clearing a country is something you can actually say rather than only setting one.",
+    ),
+});
 
 // Browse an extension/plugin registry (a git repo with .claude-plugin/marketplace.json, see
 // @intentic/registry for the format). POST so the optional token for a private registry never rides a URL or
 // an access log.
-export const MarketplaceRequestSchema = z.object({ url: z.url(), token: z.string().min(1).optional() });
+export const MarketplaceRequestSchema = z.object({
+    url: z.url().describe("The registry to read."),
+    token: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("A credential for a private one. Sent as a body rather than in the address, so it never lands in a log."),
+});
 // The rows are RegistryEntry, the curated decision joined to the resolved pointer and the scanner's upstream
 // facts, exactly as the site's gallery renders them, so browsing in the app and browsing the web show one list.
-export const MarketplaceSchema = z.object({ name: z.string(), plugins: z.array(RegistryEntrySchema) });
+export const MarketplaceSchema = z.object({
+    name: z.string().describe("What the registry calls itself."),
+    plugins: z
+        .array(RegistryEntrySchema)
+        .describe("What it lists, each with the curated decision, the resolved pointer and what a scan found upstream."),
+});
 export type Marketplace = z.infer<typeof MarketplaceSchema>;
 
 // ---- extensions: installed extension-kind capabilities resolved to their manifests ----
@@ -4461,32 +5766,52 @@ export type ExtensionUpdatePolicy = z.infer<typeof ExtensionUpdatePolicySchema>;
 // A newer sha the registry lists for an installed extension, the "update available" badge's substance. The
 // pointer (url/path) rides along because updating follows the ROW as it stands now, not the install as it was.
 export const ExtensionUpdateSchema = z.object({
-    ref: z.string(),
-    version: z.string().optional(),
-    url: z.string(),
-    path: z.string().optional(),
-    trust: z.enum(["verified", "listed"]),
+    ref: z.string().describe("The commit being offered."),
+    version: z.string().optional().describe("What it calls itself."),
+    url: z.string().describe("Where it comes from."),
+    path: z.string().optional().describe("Where inside that repository it lives."),
+    trust: z.enum(["verified", "listed"]).describe("Whether anybody vouched for it, or it is merely listed."),
     // The listing says this release fixes a security problem in earlier ones, the badge goes loud, because
     // here the OLD version is the dangerous one.
-    securityFix: z.boolean().optional(),
-    registry: z.string(),
-    at: z.string(),
+    securityFix: z
+        .boolean()
+        .optional()
+        .describe("This release fixes a security problem in earlier ones, so here the old version is the dangerous one."),
+    registry: z.string().describe("Which registry said so."),
+    at: z.string().describe("When it was published."),
     // Why the auto rung refused this one and fell back to notify ("powers grew", "not verified"), the card
     // leads with it so the owner knows the click is theirs for a reason.
-    needsReview: z.string().optional(),
+    needsReview: z
+        .string()
+        .optional()
+        .describe(
+            "Why this one was not taken automatically and is asking for a person instead: it wants more than it used to, or nobody has vouched for it.",
+        ),
     // The agent-prepared rung's work: the conversation where the owner's agent already read the diff between
     // the installed sha and this one. The card links it instead of offering to start it.
-    review: z.object({ conversationId: z.string(), at: z.string() }).optional(),
+    review: z
+        .object({
+            conversationId: z.string().describe("Where to read what it found."),
+            at: z.string().describe("When it looked."),
+        })
+        .optional()
+        .describe(
+            "An agent has already read the difference between what is installed and this, so the card can link to what it found rather than offer to start looking.",
+        ),
 });
 export type ExtensionUpdate = z.infer<typeof ExtensionUpdateSchema>;
 
 // The registry blocked this installed extension's listing. Delisting protects people browsing; this record is
 // for the person already running it, the reason verbatim, and whether the daemon already pulled the switch.
 export const ExtensionAdvisorySchema = z.object({
-    reason: z.string(),
-    registry: z.string(),
-    at: z.string(),
-    autoDisabled: z.boolean(),
+    reason: z
+        .string()
+        .describe(
+            "Why the registry pulled the listing, in its own words. Delisting protects people browsing; this record is for the person already running it.",
+        ),
+    registry: z.string().describe("Which registry said so."),
+    at: z.string().describe("When."),
+    autoDisabled: z.boolean().describe("Whether the sandbox has already switched it off."),
 });
 export type ExtensionAdvisory = z.infer<typeof ExtensionAdvisorySchema>;
 
@@ -4494,62 +5819,97 @@ export type ExtensionAdvisory = z.infer<typeof ExtensionAdvisorySchema>;
 // that what the new version declared actually came up (autoStart processes running, backend activated).
 // `fromRef` is the sha the kept-previous checkout holds, what a revert returns to.
 export const ExtensionHealthSchema = z.object({
-    state: z.enum(["watching", "healthy", "unhealthy"]),
-    detail: z.string().optional(),
-    fromRef: z.string().optional(),
-    at: z.string(),
+    state: z
+        .enum(["watching", "healthy", "unhealthy"])
+        .describe("How it has behaved since the last update. Checks catch broken, not wrong, so for a while after a swap it is simply watched."),
+    detail: z.string().optional().describe("What is going wrong, when something is."),
+    fromRef: z.string().optional().describe("Which version it was updated from, which is what going back would return to."),
+    at: z.string().describe("When the watching started."),
     // The auto rung's failure path already ran: the update was rolled back unattended, and the record stays to
     // say so rather than pretending the attempt never happened.
-    autoReverted: z.boolean().optional(),
+    autoReverted: z
+        .boolean()
+        .optional()
+        .describe("The update was already rolled back without anybody asking. The record stays rather than pretending the attempt never happened."),
 });
 export type ExtensionHealth = z.infer<typeof ExtensionHealthSchema>;
 
 // The mechanical comparison of two manifests' declared reach (extension-manifest's diffPowers), plain
 // sentences, so the update dialog renders exactly what approval is being asked to cover.
-export const PowersDiffSchema = z.object({ added: z.array(z.string()), removed: z.array(z.string()), unchanged: z.array(z.string()) });
+export const PowersDiffSchema = z.object({
+    added: z.array(z.string()).describe("What the new version asks for that the running one does not. The whole point of the comparison."),
+    removed: z.array(z.string()).describe("What it no longer asks for."),
+    unchanged: z.array(z.string()).describe("What stays the same."),
+});
 export type PowersDiff = z.infer<typeof PowersDiffSchema>;
 
 // What an owner reads before clicking Update: the offered sha's manifest folded to the version story, the
 // engines verdict, and the powers diff against the installed manifest. `ref` optional on the way in, absent
 // means "the update the check recorded", which is the only caller most of the time.
 export const ExtensionUpdateActionSchema = z.object({
-    id: extensionId,
+    id: extensionId.describe("Which extension."),
     ref: z
         .string()
         .regex(/^[0-9a-f]{40}$/)
-        .optional(),
+        .optional()
+        .describe("Which commit, in full. Leave it out for whatever the last check found, which is what most callers mean."),
 });
 export const ExtensionUpdatePreviewSchema = z.object({
-    ref: z.string(),
-    version: z.string(),
-    installedVersion: z.string(),
-    engines: z.string(),
-    compatible: z.boolean(),
-    powers: PowersDiffSchema,
+    ref: z.string().describe("The commit this would install."),
+    version: z.string().describe("What that version calls itself."),
+    installedVersion: z.string().describe("What is running now."),
+    engines: z.string().describe("Which sandbox versions the new one says it needs."),
+    compatible: z.boolean().describe("Whether this sandbox is one of them."),
+    powers: PowersDiffSchema.describe(
+        "Exactly what the new code asks for that the running one does not. This is what approving an update is approving.",
+    ),
 });
 // `rebuildNeeded` (update only): the new version's environment fragment changed the composed overlay, so the
 // card must say a one-time image rebuild is pending rather than let the update read as wholly landed.
-export const ExtensionUpdateAppliedSchema = z.object({ ok: z.literal(true), ref: z.string(), rebuildNeeded: z.boolean().optional() });
-export const ExtensionUpdatePolicyInputSchema = z.object({
-    id: extensionId,
-    updates: z.enum(["notify", "agent", "auto"]).optional(),
-    advisories: z.enum(["auto-disable", "notify"]).optional(),
+export const ExtensionUpdateAppliedSchema = z.object({
+    ok: z.literal(true).describe("It went through."),
+    ref: z.string().describe("Which commit is now running."),
+    rebuildNeeded: z
+        .boolean()
+        .optional()
+        .describe(
+            "The new version changes what the sandbox image contains, so a one-time rebuild is still pending and the update is not wholly landed yet.",
+        ),
 });
-export const ExtensionUpdatesCheckedSchema = z.object({ ok: z.literal(true), checkedAt: z.string() });
+export const ExtensionUpdatePolicyInputSchema = z.object({
+    id: extensionId.describe("Which extension."),
+    updates: z
+        .enum(["notify", "agent", "auto"])
+        .optional()
+        .describe("What to do about a newer version: tell you, have an agent read the difference first, or just take it."),
+    advisories: z.enum(["auto-disable", "notify"]).optional().describe("What to do about a security warning: switch it off at once, or tell you."),
+});
+export const ExtensionUpdatesCheckedSchema = z.object({
+    ok: z.literal(true).describe("The check ran."),
+    checkedAt: z.string().describe("When, so a screen can date the answer."),
+});
 
 export const ExtensionSummarySchema = z.object({
-    id: extensionId,
-    manifest: ExtensionManifestSchema,
-    commit: z.string(),
+    id: extensionId.describe("The extension's id."),
+    manifest: ExtensionManifestSchema.describe("What it declares about itself: what it contributes, what it needs, and what it may reach."),
+    commit: z.string().describe("Exactly which commit is installed."),
     /* Where the code comes from, which is also what the web varies per row: `builtin` (image-baked, no git
      * checkout, not removable) hides the uninstall affordance, `installed` (a git capability) shows the pinned
      * commit, `workspace` (a directory under .intentic/config/workspace-extensions/, created and edited in place,
      * typically by an agent) is "uninstalled" by deleting its directory. */
-    source: z.enum(["builtin", "installed", "workspace"]),
+    source: z
+        .enum(["builtin", "installed", "workspace"])
+        .describe(
+            "Where the code comes from: baked into the sandbox image and not removable, installed from a repository at a pinned commit, or written in this workspace and edited in place.",
+        ),
     // The owner's switch (.intentic/config/extension-enablement.json). A disabled extension is still listed, that's
     // what makes it switchable back on, but the daemon wires none of its contributions up and the web host
     // doesn't activate it.
-    enabled: z.boolean(),
+    enabled: z
+        .boolean()
+        .describe(
+            "The owner's switch. A switched-off extension is still listed, which is what makes it switchable back on, but nothing it contributes is wired up.",
+        ),
     /* THE SWITCH IS FIXED ON, this extension is the only control surface for an engine the daemon runs
      * regardless. The automations scheduler fires turns on a clock whether or not anything draws them, and
      * hiding the one page that can see, stop or approve those fires would not stop the spend, it would only
@@ -4559,13 +5919,26 @@ export const ExtensionSummarySchema = z.object({
      * Declared by the CORE about its own engines' surfaces, never by a manifest: a field an extension could set
      * on itself would be a pack making itself un-removable, which is a self-granted privilege the approval flow
      * exists to prevent. */
-    essential: z.boolean().optional(),
+    essential: z
+        .boolean()
+        .optional()
+        .describe(
+            "Its switch is fixed on, because it is the only way to see or stop an engine the sandbox runs regardless. Hiding that page would not stop the spending, only your ability to notice it. Declared by the core about its own surfaces, never by an extension about itself, which would be a pack making itself un-removable.",
+        ),
     /* How much of the reach this extension asked for it has actually used, keyed by the DECLARED entry so a row
      * joins straight onto `permissions.sandbox`. Absent for an extension that has never been observed calling
      * anything, which is a different claim from "uses none of them" and has to stay tellable: a freshly installed
      * extension has an empty ledger and an unexercised one does too, and reading either as "these permissions are
      * unnecessary" would turn this from evidence into a guess with a number on it. */
-    usage: z.record(z.string(), z.object({ calls: z.number().int().nonnegative(), last: z.string() })).optional(),
+    usage: z
+        .record(
+            z.string(),
+            z.object({ calls: z.number().int().nonnegative().describe("How many times."), last: z.string().describe("When, most recently.") }),
+        )
+        .optional()
+        .describe(
+            "How much of the reach it asked for it has actually used, keyed by what it declared. Absent means never observed doing anything, which is a different claim from uses none of them, and the two have to stay tellable apart: reading either as these permissions are unnecessary turns evidence into a guess with a number on it.",
+        ),
     /* The BACKEND half's state, present only for an extension whose manifest ships a `server` bundle: what the
      * daemon's backend host reports for it (running / an activation error with its message), or what only the
      * daemon can know (absent, the code is not in this image; incompatible, its engines exclude this daemon;
@@ -4573,72 +5946,124 @@ export const ExtensionSummarySchema = z.object({
      * that failed to activate is a sentence, not a namespace that 404s. */
     backend: z
         .object({
-            state: z.enum(["running", "error", "absent", "incompatible", "starting", "stopped"]),
-            detail: z.string().optional(),
+            state: z
+                .enum(["running", "error", "absent", "incompatible", "starting", "stopped"])
+                .describe(
+                    "How its server half is doing. Absent means the code is not in this image at all; incompatible means it needs a different sandbox version.",
+                ),
+            detail: z
+                .string()
+                .optional()
+                .describe("What went wrong, so a backend that failed to start is a sentence rather than an address that answers nothing."),
         })
-        .optional(),
+        .optional()
+        .describe("Present only for an extension that ships a server half."),
     /* The update lifecycle, present only where it can exist, a git-installed extension. `update` is the badge,
      * `advisory` the alarm, `health` the after-the-click watch, `previous` the way back (the kept one-back
      * checkout's sha), `updatePolicy` the owner's standing answer. A builtin updates with the image and a
      * workspace one is live-edited, so all five stay absent for them. */
-    update: ExtensionUpdateSchema.optional(),
-    advisory: ExtensionAdvisorySchema.optional(),
-    health: ExtensionHealthSchema.optional(),
-    previous: z.object({ ref: z.string(), version: z.string().optional() }).optional(),
-    updatePolicy: ExtensionUpdatePolicySchema.optional(),
+    update: ExtensionUpdateSchema.optional().describe(
+        "A newer version waiting. All five of these exist only for one installed from a repository: a built-in updates with the image and one written here is edited live.",
+    ),
+    advisory: ExtensionAdvisorySchema.optional().describe("A security warning about the installed version."),
+    health: ExtensionHealthSchema.optional().describe("How it has behaved since the last update, which is what decides whether that update sticks."),
+    previous: z
+        .object({
+            ref: z.string().describe("The commit that was running before."),
+            version: z.string().optional().describe("What it called itself."),
+        })
+        .optional()
+        .describe("The version kept one step back, which is what going back means."),
+    updatePolicy: ExtensionUpdatePolicySchema.optional().describe(
+        "The owner's standing answer for this one: tell me, have an agent look, or just do it.",
+    ),
 });
 export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
 // A workspace-extension directory that failed to enumerate, and why. Its only feedback channel: there is no
 // install moment to reject a bad manifest, so the parse failure (or id collision) rides the list instead of
 // silently dropping the row, the Extensions tab renders it, and an authoring agent reads it off GET /extensions.
-export const InvalidWorkspaceExtensionSchema = z.object({ dir: z.string(), error: z.string() });
+export const InvalidWorkspaceExtensionSchema = z.object({
+    dir: z.string().describe("Which folder."),
+    error: z.string().describe("Why it could not be read."),
+});
 export type InvalidWorkspaceExtension = z.infer<typeof InvalidWorkspaceExtensionSchema>;
 export const ExtensionsListSchema = z.object({
-    extensions: z.array(ExtensionSummarySchema),
-    invalid: z.array(InvalidWorkspaceExtensionSchema),
+    extensions: z.array(ExtensionSummarySchema).describe("What is installed."),
+    invalid: z
+        .array(InvalidWorkspaceExtensionSchema)
+        .describe(
+            "Extensions written here that could not be read at all. Listed rather than dropped, because there is no install moment at which to reject a broken one, so this is its only way of saying anything.",
+        ),
     // When the registry comparison last ran, absent until the first check completes. Serving it on the list is
     // what lets the tab say "checked an hour ago" instead of presenting staleness as certainty.
-    updatesCheckedAt: z.string().optional(),
+    updatesCheckedAt: z
+        .string()
+        .optional()
+        .describe(
+            "When updates were last looked for. Absent until the first check has run. Sent so a screen can say checked an hour ago rather than presenting staleness as certainty.",
+        ),
 });
 // The extension's contributes.settings values, persisted daemon-side (.intentic/config/extension-settings.json) keyed
 // by the manifest-derived extension id, the checkout stays pristine, so a re-clone update never loses them.
 // Secret-marked values are stripped from `settings`; `secretsSet` lists the secret keys that DO hold a value,
 // so the UI renders "•••• (set)" without ever receiving the secret back.
 export const ExtensionSettingsSchema = z.object({
-    settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
-    secretsSet: z.array(z.string()),
+    settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).describe("The values, minus anything marked secret."),
+    secretsSet: z
+        .array(z.string())
+        .describe("Which of its secret settings actually hold a value. Names only: the values themselves never come back."),
 });
 export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>;
 export const ExtensionSettingsInputSchema = z.object({
-    id: z.string(),
-    settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+    id: z.string().describe("Which extension."),
+    settings: z
+        .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+        .describe("The values to write. A key the extension never declared is refused rather than quietly stored."),
 });
 // Flip one extension on or off. Persisted by publisher.name (like settings), so the choice outlives the
 // checkout; the daemon's immediate half of the flip, declared processes, converges in the same handler.
-export const ExtensionEnabledInputSchema = z.object({ id: z.string(), enabled: z.boolean() });
+export const ExtensionEnabledInputSchema = z.object({
+    id: z.string().describe("Which extension."),
+    enabled: z.boolean().describe("On or off."),
+});
 /* Create a workspace extension: the identity, and deliberately nothing else. What gets written is the daemon's
  * decision, not a form the author fills in, the point of the action is that a running extension exists a second
  * after it is asked for, and shaping it happens by editing the files it wrote (or by asking an agent to). The two
  * slugs are the same shape the manifest schema demands, checked again here because `name` becomes a directory. */
 export const WorkspaceExtensionCreateSchema = z.object({
-    publisher: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-    name: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+    publisher: z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]*$/)
+        .describe("Who it is by, which together with the name makes its id."),
+    name: z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]*$/)
+        .describe("What it is called."),
 });
 // Where it landed. `dir` is workspace-root-relative so the caller can name the files it should open next.
-export const WorkspaceExtensionCreatedSchema = z.object({ id: z.string(), dir: z.string() });
+export const WorkspaceExtensionCreatedSchema = z.object({
+    id: z.string().describe("The id it was given."),
+    dir: z.string().describe("Where its files are, so you can open them."),
+});
 /* A batch of calls the host observed against this extension's declared routes, entry → how many since the last
  * report. Counts rather than events, and declared entries rather than concrete paths, because the question the
  * ledger answers is "is this permission earned?": a finer record would be a log of what the owner was doing,
  * indexed by extension, which is not a thing this product should be accumulating to answer it. */
-export const ExtensionUsageInputSchema = z.object({ id: z.string(), used: z.record(z.string(), z.number().int().positive()) });
+export const ExtensionUsageInputSchema = z.object({
+    id: z.string().describe("Which extension."),
+    used: z.record(z.string(), z.number().int().positive()).describe("Which of its declared powers it exercised, and how many times."),
+});
 // One declared background process (contributes.processes), status/start/stop, addressed by the capability
 // entry id + the manifest's process name. Undeclared names are NOT_FOUND, the manifest-honesty rule again.
-export const ExtensionProcessParamSchema = z.object({ id: z.string(), name: z.string() });
+export const ExtensionProcessParamSchema = z.object({
+    id: z.string().describe("Which extension."),
+    name: z.string().describe("Which of its declared processes."),
+});
 export const ExtensionProcessStatusSchema = z.object({
-    name: z.string(),
-    running: z.boolean(),
-    port: z.number().optional(),
-    previewUrl: z.string().optional(),
+    name: z.string().describe("Which process."),
+    running: z.boolean().describe("Whether it is up."),
+    port: z.number().optional().describe("The port it was given."),
+    previewUrl: z.string().optional().describe("Where to open it, when it has an address."),
 });
 export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema>;
 
@@ -4726,21 +6151,39 @@ export const WorkspaceEventSchema = z.object({
 export type WorkspaceEvent = z.infer<typeof WorkspaceEventSchema>;
 
 export const TriggerSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("schedule"), cron: z.string().min(1) }),
-    z.object({ kind: z.literal("event"), token: z.string().min(1).optional() }),
     z.object({
-        kind: z.literal("listener"),
-        provider: z.string().min(1),
-        channelId: z.string().min(1).optional(),
-        eventType: z.string().min(1).optional(),
-        mentioned: z.boolean().optional(),
+        kind: z.literal("schedule").describe("On a clock."),
+        cron: z.string().min(1).describe("When, in cron notation."),
+    }),
+    z.object({
+        kind: z.literal("event").describe("When something calls its webhook."),
+        token: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("The credential a caller presents. It is the only one in the exchange, because an outside sender has no identity here."),
+    }),
+    z.object({
+        kind: z.literal("listener").describe("When a message arrives from somewhere outside."),
+        provider: z.string().min(1).describe("Which service to listen to."),
+        channelId: z.string().min(1).optional().describe("Narrow it to one channel or thread."),
+        eventType: z.string().min(1).optional().describe("Narrow it to one kind of event."),
+        mentioned: z.boolean().optional().describe("Only when the agent is actually addressed, rather than on everything said in earshot."),
         // ci only: the git ref the pipeline ran on. Absent ⇒ every branch of the matched repos.
-        branch: z.string().min(1).optional(),
+        branch: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Narrow it to one branch, for the sources that have branches. Absent means every branch of the repositories it matches."),
         // webchat only: the website origins allowed to POST to the widget endpoint. Absent/empty ⇒ none admitted.
-        allowedOrigins: z.array(z.string()).optional(),
+        allowedOrigins: z.array(z.string()).optional().describe("Which websites may reach the chat widget. Absent or empty admits nobody."),
     }),
     // `repo` narrows to events whose span touches one workspace repo ("root" or a repo id); absent ⇒ any.
-    z.object({ kind: z.literal("workspace"), event: WorkspaceEventKindSchema, repo: z.string().min(1).optional() }),
+    z.object({
+        kind: z.literal("workspace").describe("When something happens to the files or the repositories."),
+        event: WorkspaceEventKindSchema.describe("Which happening."),
+        repo: z.string().min(1).optional().describe("Narrow it to one repository. Absent means any of them."),
+    }),
 ]);
 export type Trigger = z.infer<typeof TriggerSchema>;
 
@@ -4755,20 +6198,38 @@ export type Trigger = z.infer<typeof TriggerSchema>;
 export const WebchatConfigSchema = z.object({
     // `public` admits anyone; `google` refuses a message that carries no verifiable Google ID token. Absent ⇒
     // public, a Front Desk with no access setting is the anonymous support box it looks like.
-    access: z.enum(["public", "google"]).optional(),
+    access: z
+        .enum(["public", "google"])
+        .optional()
+        .describe("Who may write to it. Absent means anyone, which is the anonymous support box it looks like."),
     // Ask an anonymous visitor for a display name before the first message. Cosmetic: the name is typed, so it
     // reaches the model as untrusted `displayName`, never as identity.
-    requireName: z.boolean().optional(),
+    requireName: z
+        .boolean()
+        .optional()
+        .describe(
+            "Ask a visitor for a name first. Cosmetic: the name is typed, so it reaches the model as something a stranger said, never as identity.",
+        ),
     /* The bot ceiling. `turnstile` is Cloudflare's (invisible, needs the site's own keys); `pow` is a
      * hashcash-style challenge the daemon issues and the widget solves in a worker, so a site with no
      * Cloudflare account still has something. Absent ⇒ off: the origin allowlist and the rate limit are then
      * the whole boundary, which is the right default for an internal or invite-only page. */
-    antiBot: z.enum(["turnstile", "pow"]).optional(),
-    turnstileSiteKey: z.string().optional(),
-    turnstileSecret: z.string().optional(),
+    antiBot: z
+        .enum(["turnstile", "pow"])
+        .optional()
+        .describe(
+            "How to keep bots out: a third-party check that needs the site's own keys, or a puzzle the sandbox sets and the widget solves, so a site with no such account still has something. Absent leaves the site allowlist and the rate limit as the whole boundary.",
+        ),
+    turnstileSiteKey: z.string().optional().describe("The public half of those keys, which ships to the visitor's browser."),
+    turnstileSecret: z.string().optional().describe("The private half, which the sandbox keeps and the widget never sees."),
     // The site's OWN Google OAuth web client id. It cannot be intentic's: Google Identity Services only issues
     // a token to an authorized JavaScript origin, and intentic's client can't list every customer domain.
-    googleClientId: z.string().optional(),
+    googleClientId: z
+        .string()
+        .optional()
+        .describe(
+            "The site's own sign-in client id. It cannot be ours: a sign-in is only issued to an approved origin, and no single client can list every customer's domain.",
+        ),
     /* Widget chrome. `position` picks the launcher corner.
      *
      * `accent` is a HEX colour, not any CSS colour, because the widget derives values from its channels rather
@@ -4865,13 +6326,19 @@ export const WebchatMessageSchema = z.object({
 export type WebchatMessage = z.infer<typeof WebchatMessageSchema>;
 
 export const AutomationSchema = z.object({
-    id: entryId,
-    trigger: TriggerSchema,
+    id: entryId.describe("The automation's id."),
+    trigger: TriggerSchema.describe("What sets it off: a schedule, an event in the workspace, a message arriving from outside, or a webhook."),
     // Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
-    guard: z.string().min(1).optional(),
-    prompt: z.string().min(1),
+    guard: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+            "A command run before the wake that decides whether there is anything to do. Skipped by the guard is often the most useful thing an automation can report.",
+        ),
+    prompt: z.string().min(1).describe("What the woken agent is told."),
     // The Front Desk widget's settings, `webchat` listener automations only, ignored on every other trigger.
-    webchat: WebchatConfigSchema.optional(),
+    webchat: WebchatConfigSchema.optional().describe("Settings for the public chat widget, for an automation that answers visitors."),
     /* NARROW THIS ONE JOB FURTHER than the persona it runs as, raw tool names, and the escape hatch under the
      * shelves rather than the way anyone is expected to answer this question.
      *
@@ -4879,9 +6346,14 @@ export const AutomationSchema = z.object({
      * reusing: the same bounds apply to the chat, the workflow and the Front Desk that name the same card. This
      * stays for the job that needs LESS than its persona allows, and only less, which is a rule the composer
      * enforces rather than a convention: an edit here can never hand back a shelf the persona switched off. */
-    allowedTools: z.array(z.string().min(1)).optional(),
+    allowedTools: z
+        .array(z.string().min(1))
+        .optional()
+        .describe(
+            "Narrow the woken turn to these tools. For one driven by an outside message this list is the real boundary, because prompt wording is only advice and an empty toolbox is not.",
+        ),
     // Which provider adapter serves the wake; absent ⇒ claude. Same dispatch as a chat turn (AgentTurnSchema.agent).
-    agent: AgentProviderSchema.optional(),
+    agent: AgentProviderSchema.optional().describe("Which provider serves the wake."),
     /* Which connected account of that provider serves the wake; absent ⇒ the provider's first account, exactly
      * as for a chat turn (AgentTurnSchema.account).
      *
@@ -4890,7 +6362,7 @@ export const AutomationSchema = z.object({
      * an organization that has disabled the plan, every fire of every automation errors against it until a
      * human happens to read the row. Pinning the wake to an account that can actually run is the difference
      * between "my nightly sweep is quiet" and a Front Desk that turns visitors away all day. */
-    account: z.string().optional(),
+    account: z.string().optional().describe("Which account pays for it."),
     /* WHICH FACE THE WAKE SHOWS THE OUTSIDE WORLD (AgentTurnSchema.actsAs, read its note for why this is not
      * spelled `account`, which is the field directly above and means who PAYS).
      *
@@ -4900,25 +6372,28 @@ export const AutomationSchema = z.object({
      * `allowedTools` above already carries this exact reasoning for tools; an unrepeatable public post deserves
      * it at least as much. An automation that genuinely means "post as us" says so, once, in a field a reviewer
      * can see. */
-    actsAs: entryId.optional(),
+    actsAs: entryId.optional().describe("Which persona it speaks as. An unwatched turn naming none reaches no signed-in account at all."),
     // Which harness (agentic loop) runs the wake; absent ⇒ native. Same semantics as AgentTurnSchema.harness.
-    harness: AgentHarnessSchema.optional(),
+    harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it."),
     // Which model the wake runs on (see agent-catalog.ts modelsFor); absent ⇒ the provider's default.
-    model: z.string().optional(),
+    model: z.string().optional().describe("Which model runs it."),
     // When true, a fire doesn't wake the agent, it's held in the approvals queue until the owner approves.
-    requireApproval: z.boolean().optional(),
+    requireApproval: z.boolean().optional().describe("Hold every fire for a person instead of running it. Only a person can release one of those."),
     /* The middle ground between firing instantly and requiring a click: the fire is held in the same approvals
      * queue, visibly, and the daemon runs it ITSELF once the hold has elapsed AND no agent turn is live, the
      * owner's window to cancel or start it early, with silence as consent. What a fix chore wants: time to see
      * "checks broke, a fix is about to start" without a standing decision to make. `requireApproval` wins when
      * both are set, an explicit "ask me" must never quietly become "unless I'm slow". */
-    holdForSeconds: z.number().optional(),
+    holdForSeconds: z.number().optional().describe("Hold each fire this long before running it anyway, which is a delay rather than a decision."),
     // A code CHORE: maintenance of THIS codebase rather than a reaction to the outside world. Purely a
     // classification, the daemon fires a chore exactly like any other automation, but it cannot be derived
     // from the trigger, which is why it is stored: a nightly `pnpm audit` sweep and a nightly Stripe poll are
     // both `schedule`, and belong on different shelves. Absent ⇒ an ordinary automation.
-    chore: z.boolean().optional(),
-    enabled: z.boolean(),
+    chore: z
+        .boolean()
+        .optional()
+        .describe("This automation is a maintenance job, which is what files it under chores rather than among ordinary automations."),
+    enabled: z.boolean().describe("Whether it fires at all."),
 });
 export type Automation = z.infer<typeof AutomationSchema>;
 
@@ -4926,14 +6401,21 @@ export type Automation = z.infer<typeof AutomationSchema>;
 // trigger payload so an approved run replays exactly what fired, even across a daemon restart. The id is minted
 // by the daemon (an entryId-safe filename).
 export const AutomationApprovalSchema = z.object({
-    id: entryId,
-    automationId: z.string(),
+    id: entryId.describe("This waiting item's own id, which approving and rejecting take."),
+    automationId: z.string().describe("Which automation it came from."),
     // The event/listener payload the wake would have carried; absent for schedule triggers.
-    payload: z.string().optional(),
+    payload: z
+        .string()
+        .optional()
+        .describe(
+            "What set it off, kept whole so an approved wake carries the same thing it would have had. Absent for one on a schedule, which carries nothing.",
+        ),
     // The provenance + title the held wake would have opened its conversation with, snapshotted alongside the
     // payload so an approved external wake surfaces on the fleet exactly as an auto one would have.
-    origin: AgentOriginSchema.optional(),
-    title: z.string().optional(),
+    origin: AgentOriginSchema.optional().describe(
+        "Where the message came from, kept alongside the payload so an approved wake appears on the board exactly as an automatic one would have.",
+    ),
+    title: z.string().optional().describe("What the conversation would be called."),
     /* The CONTINUING THREAD this wake belonged to, when it had one, the conversation the dispatcher had
      * already opened for it and the provider session that conversation last ran on.
      *
@@ -4942,13 +6424,23 @@ export const AutomationApprovalSchema = z.object({
      * per approved message instead of the single thread the dispatcher had opened for them, a second worktree
      * each time, and an agent that met the visitor again on every turn. Absent for a schedule or a webhook,
      * which own no thread. */
-    conversationId: z.string().optional(),
-    sessionId: z.string().optional(),
-    createdAt: z.number(),
+    conversationId: z
+        .string()
+        .optional()
+        .describe(
+            "The thread this belongs to, when it has one, so approving continues that conversation rather than opening a new one. Without it, one visitor's chat becomes a card per approved message and an agent that meets them again every turn.",
+        ),
+    sessionId: z.string().optional().describe("The provider session that thread last ran on."),
+    createdAt: z.number().describe("When it started waiting, in milliseconds."),
     /* Epoch ms after which the daemon may run this wake itself (a `holdForSeconds` hold), the countdown the
      * row renders, and the deadline the scheduler's tick checks against. Absent on a `requireApproval` hold,
      * which only the owner may release. */
-    autoRunAt: z.number().optional(),
+    autoRunAt: z
+        .number()
+        .optional()
+        .describe(
+            "When it goes ahead on its own, in milliseconds, for a hold that is only a delay. Absent for one that genuinely waits on a person.",
+        ),
 });
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
 
@@ -4960,14 +6452,23 @@ export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
 // `held` is the approvals queue projected onto the board, the wakes waiting at the door, so "needs you" sits
 // beside "running" instead of in a page nobody opens. Defaulted so an older daemon's roster still parses.
 export const AgentsListSchema = z.object({
-    agents: z.array(AgentSummarySchema),
-    rev: z.number(),
-    held: z.array(AutomationApprovalSchema).default([]),
+    agents: z.array(AgentSummarySchema).describe("The conversations."),
+    rev: z
+        .number()
+        .describe(
+            "Which version of the fleet this is. The fleet is published as whole snapshots, so without a version a list read before a change but delivered after it would silently undo that change. Drop any list older than the newest you have already applied.",
+        ),
+    held: z
+        .array(AutomationApprovalSchema)
+        .default([])
+        .describe(
+            "Automations waiting at the door for a yes, put alongside the running conversations so needs-you sits beside working rather than on a page nobody opens.",
+        ),
 });
 export type AgentsList = z.infer<typeof AgentsListSchema>;
 
-export const AutomationApprovalsListSchema = z.object({ approvals: z.array(AutomationApprovalSchema) });
-export const AutomationApprovalIdParamSchema = z.object({ id: z.string() });
+export const AutomationApprovalsListSchema = z.object({ approvals: z.array(AutomationApprovalSchema).describe("Everything waiting for a yes.") });
+export const AutomationApprovalIdParamSchema = z.object({ id: z.string().describe("Which waiting item.") });
 
 export const AutomationRunSchema = z.object({
     at: z.number(),
@@ -5138,9 +6639,9 @@ export type WorkflowHandoff = z.infer<typeof WorkflowHandoffSchema>;
 const WORKFLOW_STEPS_MAX = 24;
 
 export const WorkflowStepSchema = z.object({
-    id: StepIdSchema,
+    id: StepIdSchema.describe("This step's own name, which other steps use to say they wait on it."),
     // What the node says on the graph. Short, the prompt is where the detail goes.
-    title: z.string().min(1).max(60),
+    title: z.string().min(1).max(60).describe("What to call it on screen. Short: the instruction below is where the detail goes."),
     /* What "done" means for this step, in the user's words. Put to the judge, and restated to the model unless
      * its instruction already carries it (loop-brief); it is the sentence the step is measured against.
      *
@@ -5151,7 +6652,13 @@ export const WorkflowStepSchema = z.object({
      * which is what anyone would have written anyway. Declare one only where the step's bar is genuinely its
      * own ("the suite is green") rather than the run's.
      */
-    goal: z.string().min(1).optional(),
+    goal: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+            "What done means for this step, in your words. It is what the step is judged against, and a different sentence from what it is told to do.",
+        ),
     /* What the step is told to DO. A different sentence from the goal: "the suite is green" is the goal,
      * "run the tests, take the top failure, fix it" is the instruction.
      *
@@ -5161,30 +6668,54 @@ export const WorkflowStepSchema = z.object({
      * whose whole job is "do what was asked" has nothing to add to it. A step that DOES declare a prompt is
      * saying it has a job of its own, review this, merge those, and gets the full brief, request included.
      */
-    prompt: z.string().min(1).optional(),
+    prompt: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+            "What the step is told to do. The goal is the suite is green; this is run the tests, take the top failure, fix it. Leaving it out hands over the run's own request untouched, which is right for a step whose whole job is do what was asked.",
+        ),
     // The steps that must finish before this one starts. Empty ⇒ a root, started when the run starts. The
     // graph must be acyclic and every id must exist; both are checked when the workflow is saved.
-    needs: z.array(StepIdSchema),
-    handoff: WorkflowHandoffSchema,
-    output: LoopOutputSchema,
-    checks: z.array(LoopCheckSchema),
+    needs: z
+        .array(StepIdSchema)
+        .describe(
+            "Which steps must finish first. Empty means it starts when the run does. Naming a step that does not exist, or a loop between steps, is refused when the workflow is saved.",
+        ),
+    handoff: WorkflowHandoffSchema.describe(
+        "How it meets what came before: a fresh conversation handed the previous step's result, or the same conversation carried on.",
+    ),
+    output: LoopOutputSchema.describe("What it has to produce for the step to count."),
+    checks: z.array(LoopCheckSchema).describe("What has to pass before it counts as done."),
     // How the step's own ITERATIONS meet each other, the Ralph question, one level down from `handoff`. A
     // long-running step wants `fresh` (no context rot); a short refine-this step wants `continue`.
-    context: LoopContextSchema,
+    context: LoopContextSchema.describe(
+        "How the step's own repeats meet each other. A long-running step wants to start clean each round; a short polish-this step wants to carry on.",
+    ),
     /* Iteration/stall limits remain scheduler backstops rather than form questions. Spend is different: it is
      * the one resource the owner cannot recover after an unattended fan-out, and the underlying loop already
      * enforces it exactly. Absent remains uncapped for short, person-started work. */
-    maxSpendUsd: z.number().positive().optional(),
-    agent: AgentProviderSchema.optional(),
-    harness: AgentHarnessSchema.optional(),
-    account: z.string().optional(),
-    model: z.string().optional(),
+    maxSpendUsd: z
+        .number()
+        .positive()
+        .optional()
+        .describe(
+            "A ceiling on what this step may spend. The one resource that cannot be recovered after an unattended fan-out, which is why it is here and iteration limits are not. Absent is uncapped.",
+        ),
+    agent: AgentProviderSchema.optional().describe("Which provider runs it."),
+    harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it."),
+    account: z.string().optional().describe("Which account pays for it."),
+    model: z.string().optional().describe("Which model runs it."),
     /* Which persona the step acts as, the same field a chat turn and an automation carry (AgentTurnSchema.
      * actsAs), because a step IS an unattended turn under the loop machinery. Unpinned, a step keeps the
      * strict unattended default: full tools, no logged-in accounts. Pinning a card is how a gated release
      * check gets a voice, a folder scope, or the one Reddit it is allowed to post from, a decision the owner
      * already wrote down once, on the card. */
-    actsAs: entryId.optional(),
+    actsAs: entryId
+        .optional()
+        .describe(
+            "Which persona it acts as. Unpinned, a step gets the strict unwatched default: every tool, and no signed-in accounts at all. Pinning one is how a release check gets a voice, a folder to work in, or the single account it may post from.",
+        ),
 });
 export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
 
@@ -5204,26 +6735,50 @@ export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
 export const WorkflowGateSchema = z.object({
     // Which step's declared output carries the decision. Ordinarily a leaf that weighs up the steps before it;
     // nothing requires that, and a one-step workflow naming its only step is the common small case.
-    step: StepIdSchema,
+    step: StepIdSchema.describe(
+        "Which step's answer carries the decision. Usually a last step that weighs up the ones before it, though nothing requires that.",
+    ),
     // Which of that step's declared fields is read. Checked against what the step actually declares when the
     // workflow is saved, a gate pointed at a field nobody writes answers `blocked` on every run, forever.
-    field: z.string().min(1),
+    field: z
+        .string()
+        .min(1)
+        .describe(
+            "Which of that step's declared answers to read. A declared field is the one part of a step's answer that was checked rather than fished out of prose, which is the whole rule here. Checked when the workflow is saved.",
+        ),
     /* The values of that field that mean SHIP IT. Everything else fails the gate.
      *
      * An allowlist rather than a blocklist, because the two are not symmetric under a model's vocabulary. A
      * step that answers "mostly-pass", "pass-with-notes" or "pass (2 minor defects)" must not ship, and the
      * allowlist gets that right without anyone having had to enumerate the ways a model can hedge.
      */
-    pass: z.array(z.string().min(1)).min(1),
+    pass: z
+        .array(z.string().min(1))
+        .min(1)
+        .describe(
+            "Which values mean ship it. Everything else fails. A list of what passes rather than what fails, because a step answering mostly-pass or pass-with-notes must not ship, and this gets that right without anybody having had to enumerate the ways a model can hedge.",
+        ),
     // The webhook's own auth, minted on save exactly as an event automation's is. The caller is a pipeline
     // runner with no Google identity, so this is the only credential in the exchange.
-    token: z.string().optional(),
+    token: z
+        .string()
+        .optional()
+        .describe(
+            "The credential the calling pipeline presents. It is the only one in the exchange, because a build runner has no identity of its own here.",
+        ),
     /* Runs per UTC day, across every caller. A gate is a paid endpoint reachable with no person in the loop:
      * one of these wired into a push-triggered pipeline is a fan-out of sessions per commit, and the
      * per-request deadline bounds one call's WALL CLOCK without bounding the day's SPEND. Absent ⇒
      * GATE_DAILY_MAX_DEFAULT, not uncapped, for the reason the Front Desk's ceiling is not optional either.
      */
-    dailyMax: z.number().int().positive().optional(),
+    dailyMax: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+            "How many runs a day, across every caller. A gate is a paid door with nobody in the loop: one wired into a push-triggered pipeline is a fan-out of conversations per commit. Absent is a small default rather than unlimited.",
+        ),
 });
 export type WorkflowGate = z.infer<typeof WorkflowGateSchema>;
 
@@ -5245,22 +6800,35 @@ export type GateOutcome = z.infer<typeof GateOutcomeSchema>;
 // What the gate route answers with. `value` is the field as the step actually wrote it, absent when the gate
 // never got one to read, which is every `blocked` that is not a disagreement about the value.
 export const GateVerdictSchema = z.object({
-    outcome: GateOutcomeSchema,
+    outcome: GateOutcomeSchema.describe(
+        "Ship it, do not, or we could not tell. That third answer exists because could not reach a judgement is not the product is broken: a gate that reported its own outages as failures is one a team switches off, so it should be the honest answer far more often than the convenient one, and it means a neutral build rather than a red one.",
+    ),
     // One line: why. Realistically the only part of this a pipeline log will ever show.
-    reason: z.string(),
-    runId: z.string(),
-    value: z.string().optional(),
+    reason: z.string().describe("Why, in one line. Realistically the only part of this a build log will ever show."),
+    runId: z.string().describe("The run behind the verdict, so somebody can go and read it."),
+    value: z
+        .string()
+        .optional()
+        .describe("What the step actually answered. Absent when there was nothing to read, which is most of the could-not-tell cases."),
 });
 export type GateVerdict = z.infer<typeof GateVerdictSchema>;
 
 export const WorkflowSchema = z.object({
-    id: entryId,
-    name: z.string().min(1).max(80),
-    description: z.string().max(400).optional(),
-    steps: z.array(WorkflowStepSchema).min(1).max(WORKFLOW_STEPS_MAX),
+    id: entryId.describe("The workflow's id."),
+    name: z.string().min(1).max(80).describe("What to call it."),
+    description: z.string().max(400).optional().describe("What it is for."),
+    steps: z
+        .array(WorkflowStepSchema)
+        .min(1)
+        .max(WORKFLOW_STEPS_MAX)
+        .describe(
+            "The steps, each with what it waits on. Every one runs in its own private copy of the repos, always, because parallel steps sharing a tree collide.",
+        ),
     // Present ⇒ this design can be run by a machine and answers a release decision. Absent ⇒ an ordinary
     // workflow, started by a person from the workflows page, with no public door onto it at all.
-    gate: WorkflowGateSchema.optional(),
+    gate: WorkflowGateSchema.optional().describe(
+        "Present means a machine can run this design and get a ship-it answer back. Absent means an ordinary workflow, started by a person, with no outside door onto it at all.",
+    ),
     /* EVERY STEP RUNS IN ITS OWN WORKTREE, always, with no toggle, the same thing an isolated agent session
      * does, which is what every session in this product already is.
      *
@@ -5272,7 +6840,14 @@ export const WorkflowSchema = z.object({
      */
     // How many steps may run at once. Bounded because a fan-out of twelve is twelve provider sessions, twelve
     // worktrees and twelve times the burn rate, and because the machine this runs on is one machine.
-    maxParallel: z.number().int().min(1).max(8),
+    maxParallel: z
+        .number()
+        .int()
+        .min(1)
+        .max(8)
+        .describe(
+            "How many steps may run at once. Bounded, because a fan-out of twelve is twelve model sessions, twelve working copies and twelve times the burn rate, on one machine.",
+        ),
 });
 export type Workflow = z.infer<typeof WorkflowSchema>;
 
@@ -5287,28 +6862,48 @@ export const WorkflowStepStateSchema = z.enum(["pending", "running", "done", "fa
 export type WorkflowStepState = z.infer<typeof WorkflowStepStateSchema>;
 
 export const WorkflowStepRunSchema = z.object({
-    stepId: StepIdSchema,
-    state: WorkflowStepStateSchema,
+    stepId: StepIdSchema.describe("Which step this is."),
+    state: WorkflowStepStateSchema.describe(
+        "How it went. Skipped carries what the others cannot: it never ran, because something it was waiting on did not finish. That is why a failed run shows one red step and a trail of grey ones.",
+    ),
     // The conversation this step ran on, derived, and the door from a node on the graph to a real transcript.
     // Shared with the predecessor when the handoff is `continue`, which is what makes those steps one card.
-    conversationId: z.string(),
-    startedAt: z.number().optional(),
-    endedAt: z.number().optional(),
-    iterations: z.number().int().min(0),
-    costUsd: z.number().optional(),
+    conversationId: z
+        .string()
+        .describe(
+            "The conversation it ran on, and the way from a node on the graph to a real record. Shared with the step before it when they were chained, which is what makes those two one card.",
+        ),
+    startedAt: z.number().optional().describe("When it began, in milliseconds."),
+    endedAt: z.number().optional().describe("When it ended, in milliseconds."),
+    iterations: z.number().int().min(0).describe("How many rounds it took."),
+    costUsd: z.number().optional().describe("What it cost, in dollars."),
     // How the step's LOOP ended, `exhausted` and `stalled` both land as a `failed` step, and the difference
     // between them is the difference between "give it more room" and "more room will not help".
-    loopState: LoopStateSchema.optional(),
-    detail: z.string().optional(),
+    loopState: LoopStateSchema.optional().describe(
+        "How its repeating ended. Out of rounds and stuck both come out as a failed step, and the difference between them is the difference between give it more room and more room will not help.",
+    ),
+    detail: z.string().optional().describe("What went wrong, when something did."),
     // What the step produced. Present once the step has written a valid document, which for a `json` output
     // means it matched the declared fields. This is what the steps downstream are given.
-    document: LoopDocumentSchema.optional(),
+    document: LoopDocumentSchema.optional().describe(
+        "What it produced, once it has produced something that passes its own declared shape. This is what the steps after it are handed.",
+    ),
     /* A bounded preview of the step's closing words. The complete response lives at `reportPath`, so a long-form
      * handoff is not silently reduced to its last few thousand characters and the ledger stays bounded. */
-    report: z.string().optional(),
+    report: z
+        .string()
+        .optional()
+        .describe(
+            "The start of its closing words. Bounded, so a long answer is not silently cut down to its last few thousand characters and the record stays a sensible size.",
+        ),
     // Workspace-relative shared-state artifact containing the complete response. Fresh worktrees and a resumed
     // daemon see the same .intentic mount, so downstream steps can read it without copying it into their prompt.
-    reportPath: z.string().optional(),
+    reportPath: z
+        .string()
+        .optional()
+        .describe(
+            "Where the whole answer is, as a workspace path. Every step can read it, so a long handoff need not be copied into anybody's prompt.",
+        ),
 });
 export type WorkflowStepRun = z.infer<typeof WorkflowStepRunSchema>;
 
@@ -5318,16 +6913,24 @@ export const WorkflowRunStateSchema = z.enum(["running", "done", "failed", "stop
 export type WorkflowRunState = z.infer<typeof WorkflowRunStateSchema>;
 
 export const WorkflowRunSchema = z.object({
-    runId: z.string().min(1),
+    runId: z.string().min(1).describe("This run's id."),
     /* The workflow AS IT WAS WHEN THE RUN STARTED, snapshotted rather than referenced. Three things need this
      * and none of them tolerate a live lookup: the run view draws the graph the run actually ran (not the one
      * that has been edited twice since), the boot resume needs the step definitions of a workflow that may have
      * been deleted, and a history row for a deleted workflow is otherwise an id and nothing else. */
-    workflow: WorkflowSchema,
+    workflow: WorkflowSchema.describe(
+        "The design as it stood when the run started, copied rather than looked up. The run has to keep showing the graph it actually ran, not the one edited twice since, and a run of a deleted workflow has to stay readable.",
+    ),
     /* The workspace as this run began, one immutable commit per repository. Every fresh step branches from
      * these exact commits, even if main moves while a wide fan-out is still opening worktrees. Handoffs use the
      * same bases in their diff commands, so provenance works in nested repositories as well as at root. */
-    repos: z.array(RepoBaseSchema).min(1).max(50),
+    repos: z
+        .array(RepoBaseSchema)
+        .min(1)
+        .max(50)
+        .describe(
+            "The workspace as this run began, one exact commit per repository. Every step branches from these, even if the shared tree moves while a wide fan-out is still opening its copies, so the steps can be compared with each other afterwards.",
+        ),
     /* WHAT THIS RUN WAS ASKED TO DO, the sentence the user typed when they started it, handed to every step
      * on top of its own prompt. Absent for a run started from the workflows page, which has no composer.
      *
@@ -5339,16 +6942,27 @@ export const WorkflowRunSchema = z.object({
      * Snapshotted on the run beside the workflow, and for the same reason: the run has to stay readable, and
      * "what was this one about" is the first thing anyone asks of a row in the history.
      */
-    request: z.string().optional(),
-    state: WorkflowRunStateSchema,
-    startedAt: z.number(),
-    endedAt: z.number().optional(),
+    request: z
+        .string()
+        .optional()
+        .describe(
+            "What this run was asked to do, handed to every step on top of its own instructions. It is what makes one saved design worth keeping: two models, one task is a shape, and the task is different every time. Absent for a run started with nowhere to type one.",
+        ),
+    state: WorkflowRunStateSchema.describe(
+        "How the run is going. Finished means every step that ran got there; a run with skipped steps counts as failed, because a graph that never reached its end did not do what it was asked whatever the survivors managed.",
+    ),
+    startedAt: z.number().describe("When it began, in milliseconds."),
+    endedAt: z.number().optional().describe("When it ended, in milliseconds."),
     // How many daemon boots have picked this run back up, the same counter, and the same reason, as a loop's.
-    resumed: z.number().int().min(0),
-    detail: z.string().optional(),
+    resumed: z.number().int().min(0).describe("How many times the sandbox restarted under it and picked it back up."),
+    detail: z.string().optional().describe("What went wrong, when something did."),
     // One entry per step, in the workflow's own order. Written at start with every step `pending`, so the graph
     // is complete from the first frame and a node's absence never has to mean two things.
-    steps: z.array(WorkflowStepRunSchema),
+    steps: z
+        .array(WorkflowStepRunSchema)
+        .describe(
+            "One entry per step, in the design's own order. Every one is written down as waiting when the run starts, so the picture is complete from the first frame and a missing step never has to mean two things.",
+        ),
     /* When the run was ARCHIVED (ms epoch), off the board, exactly as an agent's `archivedAt` takes a card off
      * it, and the same promise: the run record stays readable in the history and every step's branch,
      * transcript and counters are untouched. Absent ⇒ live on the board.
@@ -5358,27 +6972,50 @@ export const WorkflowRunSchema = z.object({
      * so deleting the record was releasing five loose conversations back onto the board at the moment the user
      * said they were finished with the job. Archiving the run archives its sessions with it and unarchiving
      * brings both back, so "done with this" means the same thing for a workflow as it does for an agent. */
-    archivedAt: z.number().optional(),
+    archivedAt: z
+        .number()
+        .optional()
+        .describe(
+            "When it was put away, in milliseconds. The record stays readable and every step's branch, transcript and counters are untouched. Its conversations are put away with it, and brought back with it. Absent means live on the board.",
+        ),
 });
 export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;
 
 // The list row: the stored workflow plus the runs it has had, newest first.
-export const WorkflowSummarySchema = WorkflowSchema.extend({ runs: z.array(WorkflowRunSchema) });
+export const WorkflowSummarySchema = WorkflowSchema.extend({ runs: z.array(WorkflowRunSchema).describe("Its runs, newest first.") });
 export type WorkflowSummary = z.infer<typeof WorkflowSummarySchema>;
 
-export const WorkflowsListSchema = z.object({ workflows: z.array(WorkflowSummarySchema) });
-export const WorkflowRunsListSchema = z.object({ runs: z.array(WorkflowRunSchema) });
-export const WorkflowIdParamSchema = z.object({ id: z.string() });
-export const WorkflowRunIdParamSchema = z.object({ runId: z.string() });
+export const WorkflowsListSchema = z.object({ workflows: z.array(WorkflowSummarySchema).describe("Every saved design with its own run history.") });
+export const WorkflowRunsListSchema = z.object({
+    runs: z.array(WorkflowRunSchema).describe("Every run across every workflow, newest first, including runs of workflows since deleted."),
+});
+export const WorkflowIdParamSchema = z.object({ id: z.string().describe("Which workflow.") });
+export const WorkflowRunIdParamSchema = z.object({ runId: z.string().describe("Which run.") });
 /* Starting a run: which design, and what to point it at. The request is optional because the workflows page
  * starts runs with no composer to read one from, a design whose steps already say what they want is complete
  * on its own, and only a design written as a shape needs today's sentence. */
-export const WorkflowRunStartSchema = WorkflowIdParamSchema.extend({ request: z.string().min(1).max(20_000).optional() });
+export const WorkflowRunStartSchema = WorkflowIdParamSchema.extend({
+    request: z
+        .string()
+        .min(1)
+        .max(20_000)
+        .optional()
+        .describe(
+            "What to point it at. Optional, because a design whose steps already say what they want is complete on its own; only one written as a shape needs today's sentence.",
+        ),
+});
 
 // Creation and replacement are deliberately distinct. An id collision on create is a conflict; an update of
 // a missing id is not an implicit create. That makes the daemon, rather than a browser naming convention, the
 // authority that prevents one saved design from overwriting another.
-export const WorkflowSaveSchema = z.object({ workflow: WorkflowSchema, create: z.boolean() });
+export const WorkflowSaveSchema = z.object({
+    workflow: WorkflowSchema.describe("The design to write."),
+    create: z
+        .boolean()
+        .describe(
+            "Whether you mean to make a new one or replace an existing one. Said outright rather than inferred, so an id that happens to collide is a refusal instead of one saved design quietly overwriting another.",
+        ),
+});
 
 // ---- ci: pipeline runs on the workspace repos' github/gitlab remotes ----
 // The daemon maps each workspace repo to the CI project behind its remote (a connected github/gitlab
@@ -5398,33 +7035,48 @@ export type PipelineStatus = z.infer<typeof PipelineStatusSchema>;
 
 export const PipelineRunSchema = z.object({
     // The workspace repo dir (the panels `repo` convention), the join key back to the tree and to triggers.
-    repo: z.string(),
-    host: CiHostSchema,
+    repo: z.string().describe("Which workspace repository it belongs to."),
+    host: CiHostSchema.describe("Which forge is running it."),
     // owner/name (github) or the full project path (gitlab).
-    project: z.string(),
+    project: z.string().describe("The project there, as that forge names it."),
     // The vendor's numeric run/pipeline id, what rerun/cancel address.
-    runId: z.number(),
+    runId: z.number().describe("The forge's own id for the run, which is what re-running and cancelling take."),
     // The run's headline: github's display_title (the commit subject, or the PR title when a PR triggered it),
     // gitlab's pipeline name or the head commit's subject. Absent ⇒ the view falls back to ref@sha.
-    title: z.string().optional(),
+    title: z
+        .string()
+        .optional()
+        .describe("The run's headline, usually the commit subject or the pull request's title. Absent means falling back to the branch and commit."),
     // Who the vendor credits for the run, the actor who set it off, matching what both vendors' own UIs
     // show. The avatar is a vendor-hosted URL; absent ⇒ the view draws the author's initials instead.
-    authorName: z.string().optional(),
-    authorAvatarUrl: z.string().optional(),
+    authorName: z.string().optional().describe("Who the forge credits for setting it off."),
+    authorAvatarUrl: z.string().optional().describe("Their picture, hosted by the forge. Absent means drawing their initials instead."),
     // What set the run off, in the vendor's own vocabulary: gitlab's pipeline `source` (push, schedule,
     // merge_request_event, web, api, trigger…) or github's `event` (push, pull_request, schedule,
     // workflow_dispatch…). Left raw rather than flattened into a shared enum, the vendor's word is the
     // precise one, and the view only calls it out when it isn't the everyday push.
-    trigger: z.string().optional(),
-    branch: z.string(),
-    sha: z.string(),
-    status: PipelineStatusSchema,
+    trigger: z
+        .string()
+        .optional()
+        .describe(
+            "What set it off, in the forge's own word rather than flattened into a shared vocabulary, because the forge's word is the precise one.",
+        ),
+    branch: z.string().describe("Which branch."),
+    sha: z.string().describe("Which commit."),
+    status: PipelineStatusSchema.describe(
+        "How it is going. Running covers everything still moving, since the only distinction that matters is that against the three ways it can stop.",
+    ),
     // The vendor's run page, the deep link out.
-    url: z.string(),
-    createdAt: z.number(),
-    durationSeconds: z.number().optional(),
+    url: z.string().describe("Its page on the forge."),
+    createdAt: z.number().describe("When it started, in milliseconds."),
+    durationSeconds: z.number().optional().describe("How long it took."),
     // Names of the failed jobs, fetched only for failed runs (one extra call), so a wake or a view names what broke.
-    failedJobs: z.array(z.string()).optional(),
+    failedJobs: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "What broke, by name. Fetched only for failed runs, so that a notification or a screen can say what went wrong rather than just that something did.",
+        ),
 });
 export type PipelineRun = z.infer<typeof PipelineRunSchema>;
 
@@ -5441,22 +7093,27 @@ export type PipelineRun = z.infer<typeof PipelineRunSchema>;
  *      ran in parallel. Honest about when things happened, silent about what actually gated what.
  * Both timestamps are epoch ms; absent while a job is still queued. */
 export const PipelineJobSchema = z.object({
-    name: z.string(),
-    status: PipelineStatusSchema,
-    stage: z.string().optional(),
+    name: z.string().describe("The job's name."),
+    status: PipelineStatusSchema.describe("How it went."),
+    stage: z.string().optional().describe("Which stage it belongs to, where the pipeline groups its jobs that way."),
     // Names of jobs IN THIS RUN that this one declared it waits on. Absent ⇒ nothing was resolved and the view
     // must fall back; an empty array is the different, meaningful claim that this job is a root.
-    needs: z.array(z.string()).optional(),
-    startedAt: z.number().optional(),
-    finishedAt: z.number().optional(),
-    durationSeconds: z.number().optional(),
+    needs: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Which jobs in this run it declared it waits on: the real shape of the pipeline. Absent means nothing could be read, which is different from an empty list, which is the claim that it waits on nothing.",
+        ),
+    startedAt: z.number().optional().describe("When it began, in milliseconds. Absent while it is queued."),
+    finishedAt: z.number().optional().describe("When it ended, in milliseconds."),
+    durationSeconds: z.number().optional().describe("How long it took."),
     // The job's page on its host, the shortest path from "this step failed" to the log that says why.
-    webUrl: z.string().optional(),
+    webUrl: z.string().optional().describe("Its page on the forge, which is the shortest path from this step failed to the log that says why."),
 });
 export type PipelineJob = z.infer<typeof PipelineJobSchema>;
 
 export const CiJobsResponseSchema = z.object({
-    jobs: z.array(PipelineJobSchema),
+    jobs: z.array(PipelineJobSchema).describe("The steps inside one run. Fetched separately from the run list, so that list stays cheap."),
 });
 export type CiJobsResponse = z.infer<typeof CiJobsResponseSchema>;
 
@@ -5464,12 +7121,17 @@ export type CiJobsResponse = z.infer<typeof CiJobsResponseSchema>;
 // refused (token scope, role) or impossible (no public URL): what happened plus the target URL + secret to
 // paste into the repo's webhook settings, the git-access sshRegistrationWarning pattern.
 export const CiRepoSchema = z.object({
-    repo: z.string(),
-    host: CiHostSchema,
-    project: z.string(),
+    repo: z.string().describe("Which workspace repository."),
+    host: CiHostSchema.describe("Which forge it lives on."),
+    project: z.string().describe("The project there."),
     // The project's home page on its host.
-    url: z.string(),
-    hookWarning: z.string().optional(),
+    url: z.string().describe("Its page on the forge."),
+    hookWarning: z
+        .string()
+        .optional()
+        .describe(
+            "Present when the sandbox could not register for instant notifications, with what happened and what to paste in by hand. Without them the sandbox polls instead, so this costs a couple of minutes' delay rather than the feature.",
+        ),
 });
 export type CiRepo = z.infer<typeof CiRepoSchema>;
 
@@ -5483,32 +7145,52 @@ export type CiRepo = z.infer<typeof CiRepoSchema>;
 export const CI_POLL_INTERVAL_MS = 2 * 60_000;
 
 export const CiRunsResponseSchema = z.object({
-    repos: z.array(CiRepoSchema),
+    repos: z.array(CiRepoSchema).describe("Which workspace repositories are wired to a forge, and how each one's notifications are set up."),
     // Newest first, across all mapped repos.
-    runs: z.array(PipelineRunSchema),
+    runs: z.array(PipelineRunSchema).describe("Runs across all of them, newest first."),
     // When the owner last opened the pipelines view. Rides the runs response so the rail can decide what is
     // NEW without a second call, a breakage older than this has already been seen and must not badge again.
     // Absent ⇒ never opened, so everything counts as unseen.
-    seenAt: z.number().optional(),
+    seenAt: z
+        .number()
+        .optional()
+        .describe(
+            "When this was last looked at, in milliseconds, so a badge can tell new breakages from ones already read without a second call. Absent means never, so everything counts as new.",
+        ),
 });
 export type CiRunsResponse = z.infer<typeof CiRunsResponseSchema>;
 
 // Stamping the view as read hands back the timestamp it wrote, so the client updates without a refetch.
-export const CiSeenResponseSchema = z.object({ seenAt: z.number() });
+export const CiSeenResponseSchema = z.object({
+    seenAt: z.number().describe("The timestamp that was written, handed back so a caller can update without asking again."),
+});
 export type CiSeenResponse = z.infer<typeof CiSeenResponseSchema>;
 
 // rerun/cancel/fix address a run by repo + vendor id; the daemon re-resolves repo → project + token per call,
 // so a stale card can't act on a project the workspace no longer maps to.
-export const CiRunParamSchema = z.object({ repo: z.string(), runId: z.number() });
+export const CiRunParamSchema = z.object({
+    repo: z
+        .string()
+        .describe(
+            "Which workspace repository. The project behind it is resolved fresh each call, so a stale screen cannot act on one the workspace no longer maps to.",
+        ),
+    runId: z.number().describe("Which run, by the forge's own id."),
+});
 export type CiRunParam = z.infer<typeof CiRunParamSchema>;
 
 // Fixing takes one thing the vendor proxies do not: which model to open the session on, when the user reached
 // for the caret beside the button rather than pressing it (AgentRunPickSchema). Absent is the ordinary path.
-export const CiFixParamSchema = CiRunParamSchema.extend({ pick: AgentRunPickSchema });
+export const CiFixParamSchema = CiRunParamSchema.extend({
+    pick: AgentRunPickSchema.describe(
+        "Which model to open the conversation on, when somebody chose one. Leave it out for the sandbox's own choice, which is the ordinary path.",
+    ),
+});
 export type CiFixParam = z.infer<typeof CiFixParamSchema>;
 
 // The fix route opens an isolated conversation (fleet card + chat tab) seeded with the failure context.
-export const CiFixResponseSchema = z.object({ conversationId: z.string() });
+export const CiFixResponseSchema = z.object({
+    conversationId: z.string().describe("The conversation that was opened, already holding the failure. Open it to watch, or attach to its turn."),
+});
 export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
 
 /* ---- the pre-push check: the workspace's own answer to "would this push go red" ----
@@ -5543,27 +7225,42 @@ export const PrepushStatusSchema = z.enum(["idle", "running", "passed", "failed"
 export type PrepushStatus = z.infer<typeof PrepushStatusSchema>;
 
 export const PrepushRunSchema = z.object({
-    status: PrepushStatusSchema,
+    status: PrepushStatusSchema.describe(
+        "Where the run is. Failed and error are deliberately different: failed means the code is wrong, error means the command could not be run at all, and calling the second one a test failure would send an agent hunting a bug that is not there.",
+    ),
     // The command this run executed, echoed rather than read back from settings: a result read after the
     // setting changed still has to say what produced it.
-    command: z.string(),
-    startedAt: z.number().optional(),
-    finishedAt: z.number().optional(),
-    exitCode: z.number().optional(),
-    timedOut: z.boolean().optional(),
+    command: z
+        .string()
+        .describe(
+            "What actually ran, echoed here rather than read back from the settings, so a result looked at after the setting changed still says what produced it.",
+        ),
+    startedAt: z.number().optional().describe("When it began, in milliseconds."),
+    finishedAt: z.number().optional().describe("When it ended, in milliseconds."),
+    exitCode: z.number().optional().describe("How the command exited."),
+    timedOut: z.boolean().optional().describe("It was killed for taking too long rather than finishing."),
     /* The tmux session the suite runs in, for the browser to open the terminals panel on, the check is a
      * visible terminal like every other shell command the daemon runs on a click (terminal/terminal-run.ts), so
      * WATCHING it is not this object's job and never was. Absent where the sandbox has no tmux wrapper (local
      * dev): the runner falls back to an invisible shell, and a name nothing can attach to would send the browser
      * after a tab that is never going to be listed. */
-    session: z.string().optional(),
+    session: z
+        .string()
+        .optional()
+        .describe(
+            "The terminal it runs in, which is where to watch it. Absent where the sandbox has no terminals, in which case there is nothing to attach to.",
+        ),
     /* What the fix proposal quotes, and its only reader, tail-capped (PREPUSH_OUTPUT_BYTES) so a prompt seeded
      * from a red run stays about fixing rather than scrolling. The TAIL, not the head: a suite's verdict and its
      * failure summary are at the end. PLAIN TEXT, not what the terminal received: the suite's colour codes and
      * redrawn progress lines are resolved away (terminal/plain-text.ts) before the cap, so a quoted tail reads
      * as a failure instead of as litter. Empty while the run is going, and for a run that was killed: the pane
      * (and its log) is where the whole of it lives. */
-    output: z.string(),
+    output: z
+        .string()
+        .describe(
+            "The end of what it printed, as plain text with the colour codes and redrawn progress lines resolved away. The end rather than the beginning, because a suite's verdict is at the end. Empty while it runs, and for one that was killed.",
+        ),
 });
 export type PrepushRun = z.infer<typeof PrepushRunSchema>;
 
@@ -5582,7 +7279,10 @@ export type DraftStatus = z.infer<typeof DraftStatusSchema>;
 export const DraftSchema = z.object({
     // Which skill posts it: "x" | "reddit" | "youtube" | "discord" | …, a bare string so new platforms need
     // no contract change; an unknown platform simply fails at posting time.
-    platform: z.string().min(1),
+    platform: z
+        .string()
+        .min(1)
+        .describe("Where it should go. A plain name, so a new site needs no change here; an unknown one simply fails when it tries to post."),
     /* WHOSE NAME THIS GOES OUT UNDER, a PersonaSchema id, handed to the publish turn as AgentTurnSchema.actsAs.
      * Required in practice for every platform outside DIRECT_PUBLISH_PLATFORMS, and the reason is the whole
      * shape of turnPersona: publishing through a browser needs a logged-in account, and an UNATTENDED turn that
@@ -5598,47 +7298,80 @@ export const DraftSchema = z.object({
      * The daemon never guesses it. One site can be connected several times over, five Reddit logins here, and
      * picking for the owner means picking wrong in public, with no undo. A draft that needs a turn and names
      * nobody is failed with that sentence instead of sent. */
-    actsAs: entryId.optional(),
-    content: z.string().min(1),
+    actsAs: entryId
+        .optional()
+        .describe(
+            "Whose name it goes out under. Needed for anywhere that requires being logged in, because an unwatched turn naming nobody is allowed no account at all. Never guessed: one site can be connected five times over, and picking for you means picking wrong in public with no undo.",
+        ),
+    content: z.string().min(1).describe("The post itself."),
     // Reddit posts / YouTube uploads need one.
-    title: z.string().optional(),
+    title: z.string().optional().describe("A title, where the site wants one."),
     /* Where on the platform: subreddit / Discord channel id / community. OR the URL of the thing this draft
      * replies to. A URL target means the draft is a reply, and on reddit the difference between a thread's
      * address and one comment's permalink is the difference between talking to the room and answering the
      * person: the publisher opens exactly this and replies where it lands. */
-    target: z.string().optional(),
+    target: z
+        .string()
+        .optional()
+        .describe(
+            "Where on the site: a community, a channel. Or the address of the thing this replies to, in which case it is a reply, and on some sites the difference between a thread's address and one comment's is the difference between talking to the room and answering the person.",
+        ),
     // Workspace-relative attachment paths, e.g. ".intentic/config/drafts/media/chart.png".
-    media: z.array(z.string()).optional(),
+    media: z.array(z.string()).optional().describe("Anything to attach, as workspace paths."),
     // Suggested post time (epoch ms, the at/nextRun convention). Optional, the agent may propose without a
     // date and the owner sets one at approval; an approved draft with no date posts as soon as it's picked up.
-    scheduledAt: z.number().optional(),
+    scheduledAt: z
+        .number()
+        .optional()
+        .describe(
+            "When it should go out, in milliseconds. An agent may propose without one and you set it when approving; an approved draft with no time goes as soon as it is picked up.",
+        ),
     // Agent-written files only need platform + content; status defaults, the rest are optional, so a
     // well-formed proposal never lands in `invalid` just for omitting bookkeeping fields.
-    status: DraftStatusSchema.default("proposed"),
-    createdAt: z.number().optional(),
+    status: DraftStatusSchema.default("proposed").describe(
+        "Where it is: proposed by the agent, approved by you, being sent, sent, or failed. Rejecting is deleting it; retrying is approving a failed one again.",
+    ),
+    createdAt: z.number().optional().describe("When it was written, in milliseconds."),
     // When sending STARTED, stamped with status "posting". The publisher needs it to tell a send that is under
     // way from one whose run died mid-flight, and those two are indistinguishable from the due time, a post
     // scheduled for last week is not a post that has been sending since last week.
-    postingAt: z.number().optional(),
-    postedAt: z.number().optional(),
+    postingAt: z
+        .number()
+        .optional()
+        .describe(
+            "When sending started, in milliseconds. Needed to tell a send that is under way from one whose run died mid-flight, which the scheduled time cannot: a post due last week is not a post that has been sending since last week.",
+        ),
+    postedAt: z.number().optional().describe("When it went out, in milliseconds."),
     // Where it landed, when the platform hands back an address for it. The one thing a posted row can offer
     // that reading the draft cannot: the post itself, to go and look at.
-    postedUrl: z.string().optional(),
+    postedUrl: z
+        .string()
+        .optional()
+        .describe(
+            "Where it landed, when the site hands back an address. The one thing a sent draft can offer that reading it cannot: the post itself, to go and look at.",
+        ),
     // Why posting failed; set with status "failed". Written for the owner to read in the queue, so it is a
     // sentence rather than a code.
-    error: z.string().optional(),
+    error: z.string().optional().describe("Why it failed, written as a sentence for a person to read rather than as a code."),
 });
 export type Draft = z.infer<typeof DraftSchema>;
 
 // The list row / upsert input: the file body plus its filename id.
-export const DraftSummarySchema = DraftSchema.extend({ id: entryId });
+export const DraftSummarySchema = DraftSchema.extend({ id: entryId.describe("The draft's id.") });
 export type DraftSummary = z.infer<typeof DraftSummarySchema>;
 // `invalid` = filenames that failed to parse. Agent-written files are a trust boundary, without this a typo'd
 // draft would silently never post.
-export const DraftsListSchema = z.object({ drafts: z.array(DraftSummarySchema), invalid: z.array(z.string()) });
+export const DraftsListSchema = z.object({
+    drafts: z.array(DraftSummarySchema).describe("The queue."),
+    invalid: z
+        .array(z.string())
+        .describe(
+            "Drafts that could not be read at all. Listed rather than skipped, because an agent writes these files directly and a malformed one would otherwise never post and never say why.",
+        ),
+});
 export type DraftsList = z.infer<typeof DraftsListSchema>;
 // entryId, not a bare string: the id becomes a filename under .intentic/config/drafts/.
-export const DraftIdParamSchema = z.object({ id: entryId });
+export const DraftIdParamSchema = z.object({ id: entryId.describe("Which draft.") });
 
 // ---- panels: per-repository dev servers + the content facts extensions detect on ----
 // Every discovered git repo under /work is one list row: its runnable-panel runtime status (a `dev` script at
@@ -5648,18 +7381,27 @@ export const DraftIdParamSchema = z.object({ id: entryId });
 
 export const PanelSummarySchema = z.object({
     // The repo id: its root-relative dir under /work (slashes become `--` in the preview subdomain label).
-    repo: z.string(),
+    repo: z.string().describe("Which repository."),
     // Whether the repo ships a runnable dev server (a package.json `dev` script at operator/ or the root).
-    hasPanel: z.boolean(),
-    running: z.boolean(),
+    hasPanel: z.boolean().describe("Whether it has anything runnable at all."),
+    running: z.boolean().describe("Whether the sandbox has it running."),
     // Whether anything this repo owns is answering, see `servers`. Not the same question as `running`: a panel
     // whose install is still going is running and not yet healthy, and a dev server someone started in their own
     // terminal is healthy without the daemon running it.
-    healthy: z.boolean(),
+    healthy: z
+        .boolean()
+        .describe(
+            "Whether anything it owns is actually answering. A different question: a server still installing is running and not yet healthy, and one somebody started by hand is healthy without the sandbox running it.",
+        ),
     // The dev server's OS-assigned port; absent when not running. What the daemon TOLD the repo to bind (the
     // preview proxy forwards it), `servers` is what the repo actually bound, which for a repo that pins its own
     // ports is a different number entirely.
-    port: z.number().optional(),
+    port: z
+        .number()
+        .optional()
+        .describe(
+            "The port the sandbox told it to use. What it actually bound is below, and for a repository that pins its own ports those are different numbers.",
+        ),
     // Every dev server the repo is really serving, discovered from the sandbox's listening sockets and probed for
     // the scheme each speaks (a Vite on a committed dev cert serves https). One entry for the ordinary repo; a
     // monorepo whose `dev` fans out across packages has one per app, which is why `dir` is here, `_editor/web` vs
@@ -5668,30 +7410,57 @@ export const PanelSummarySchema = z.object({
     // `session` is the terminal it is running in: the panel's own when the daemon started it, the user's when
     // they ran it by hand, and ABSENT when nothing in the sandbox owns it. That last case is the one worth
     // designing for, the repo is plainly answering, and no terminal here can show, stop or restart it.
-    servers: z.array(z.object({ url: z.string(), dir: z.string().optional(), session: z.string().optional() })),
+    servers: z
+        .array(
+            z.object({
+                url: z.string().describe("Where it answers, with the right scheme: a server on its own certificate is served over https."),
+                dir: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "Which part of the repository it belongs to, which for a repository whose dev command fans out is the only thing telling them apart.",
+                    ),
+                session: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "The terminal it runs in: the sandbox's when it started it, yours when you did, and absent when nothing here owns it, which is the case worth designing for.",
+                    ),
+            }),
+        )
+        .describe("Every server this repository is really serving, found by looking at what is listening. Empty when nothing answers."),
     // https://preview-<repo>-<sandboxId>.<zone>; absent when the sandbox has no zone or connect token (loopback/tests).
-    previewUrl: z.string().optional(),
+    previewUrl: z.string().optional().describe("Where to open it from outside. Absent on a sandbox with no outside address."),
     // The workspace role this repo dir occupies (the three fixed dirs); absent for extra clones.
-    role: z.enum(["intent", "desired-state", "app"]).optional(),
+    role: z
+        .enum(["intent", "desired-state", "app"])
+        .optional()
+        .describe("Which of the workspace's three fixed roles this repository fills. Absent for one that was simply cloned in."),
     // Content facts: deploy.config.ts (the intent ledger's day-one marker), desired-state.json (present after
     // the first resolve), .intentic/ui/index.html (a sandboxed directory UI), pnpm-workspace.yaml +
     // turbo.json (a pnpm+turbo monorepo), vitest evidence (a root vitest.config.ts, or "vitest" in the
     // root manifest / workspace catalog), docs/user-stories (a directory of stories an agent can test
     // against the running app, the one fact here that says nothing about the repo's language), and
     // docs/architecture (the repo carries generated architecture documentation).
-    deployConfig: z.boolean(),
-    desiredState: z.boolean(),
-    directoryUi: z.boolean(),
-    monorepo: z.boolean(),
-    vitest: z.boolean(),
-    userStories: z.boolean(),
-    docs: z.boolean(),
+    deployConfig: z.boolean().describe("It declares infrastructure."),
+    desiredState: z.boolean().describe("That declaration has been resolved at least once."),
+    directoryUi: z.boolean().describe("It carries a small interface of its own."),
+    monorepo: z.boolean().describe("It holds several packages."),
+    vitest: z.boolean().describe("It has tests that can be run."),
+    userStories: z
+        .boolean()
+        .describe("It carries stories an agent could test the running app against. The one fact here that says nothing about the language."),
+    docs: z.boolean().describe("It carries generated architecture documentation."),
 });
 export type PanelSummary = z.infer<typeof PanelSummarySchema>;
-export const PanelsListSchema = z.object({ panels: z.array(PanelSummarySchema) });
+export const PanelsListSchema = z.object({
+    panels: z
+        .array(PanelSummarySchema)
+        .describe("One entry per repository, worked out in a single pass so nothing has to walk the workspace file by file."),
+});
 export type PanelsList = z.infer<typeof PanelsListSchema>;
 // The {repo} path param on the start/stop/terminals routes (a bare string: unknown repo is a handler NOT_FOUND).
-export const PanelRepoParamSchema = z.object({ repo: z.string() });
+export const PanelRepoParamSchema = z.object({ repo: z.string().describe("Which repository.") });
 
 // ---- ports: every listening TCP socket in the sandbox + explicit port forwarding ----
 // Anything run in a terminal (a turbo TUI fanning out dev servers, `python -m http.server`, an agent's ad-hoc
@@ -5701,18 +7470,26 @@ export const PanelRepoParamSchema = z.object({ repo: z.string() });
 // previews are public, so nothing is exposed until the owner (or an agent acting for them) asks.
 
 export const PortSummarySchema = z.object({
-    port: z.number(),
+    port: z.number().describe("The port number."),
     // The loopback address the listener actually answers at inside the sandbox, a `localhost` bind can land
     // on ::1 only (Vite). The preview proxy and the desktop mirror (Mutagen forward) both dial this.
-    host: z.enum(["127.0.0.1", "::1"]),
+    host: z
+        .enum(["127.0.0.1", "::1"])
+        .describe("Which loopback address it actually answers on. Some tools bind only one of the two, and anything dialling it has to know which."),
     // Whether the proxy can actually reach the listener at `host`. False for a bind to a loopback alias like
     // Docker's embedded DNS (127.0.0.11), which answers only at its own address, not 127.0.0.1, such rows are
     // listed for transparency but the Ports view hides Preview and forwarding them is refused.
-    forwardable: z.boolean(),
+    forwardable: z
+        .boolean()
+        .describe(
+            "Whether it can be exposed at all. Some listeners answer only at their own address and nowhere else; those are listed for honesty and refused for forwarding.",
+        ),
     // Which bucket the Ports view files it under: `workspace` = user-run (dev servers in repos, terminal
     // processes, published container ports), the previewable set; `system` = the sandbox's own machinery
     // (agent runtimes, translator, dockerd, sshd), listed for transparency but nobody previews it.
-    kind: z.enum(["workspace", "system"]),
+    kind: z
+        .enum(["workspace", "system"])
+        .describe("Whether somebody's own work put it there, or the sandbox's own machinery did. Only the first kind is worth previewing."),
     /* WHAT IS ON THIS PORT, IN WORDS: resolved by the daemon (ports/port-identity.ts), because the two facts
      * that attribute a listener (the panel key → extension index, the workspace root) exist there and nowhere
      * else. `title` is what a person would call it ("Vite dev server", "Sandbox service", "Container port"),
@@ -5722,32 +7499,52 @@ export const PortSummarySchema = z.object({
      * All three are required. A listener nothing can explain still gets a name ("Unclaimed port") and a
      * sentence that says so out loud, because the alternative (a raw argv, or nothing) is what made this
      * view unreadable, and the button beside the row publishes the port to the internet. */
-    title: z.string(),
-    purpose: z.string(),
-    origin: z.enum(["terminal", "agent", "panel", "extension", "container", "sandbox", "unknown"]),
+    title: z
+        .string()
+        .describe(
+            "What a person would call it. Always present: a listener nothing can explain is still named, because the button beside it publishes the port to the internet.",
+        ),
+    purpose: z.string().describe("One sentence about what it is for, including when the honest answer is that nothing could work it out."),
+    origin: z
+        .enum(["terminal", "agent", "panel", "extension", "container", "sandbox", "unknown"])
+        .describe("Who put it there, which is the question somebody is really asking: mine, my agent's, or the box's own."),
     // The owning process, resolved from procfs; absent when no /proc/*/fd entry matched the socket's inode.
-    pid: z.number().optional(),
+    pid: z.number().optional().describe("The process holding it. Absent when nothing could be matched to the socket."),
     // How the row is labeled: the process argv joined with spaces ("node /work/app/node_modules/.bin/vite"),
     // falling back to the kernel `comm` name when argv is empty, or a synthesized name for attributable
     // infrastructure the pid walk can't reach ("Docker embedded DNS"). Absent only when wholly unattributable.
-    command: z.string().optional(),
+    command: z.string().optional().describe("The command behind it, as it was run. Absent only when nothing could be attributed at all."),
     // The process working directory (how the UI attributes a port to a repo).
-    cwd: z.string().optional(),
+    cwd: z.string().optional().describe("Where it is running from, which is how a port gets attributed to a repository."),
     // The tmux session the listener descends from, the terminal to watch it in or stop it from. Absent when
     // nothing in its ancestry is a pane (a daemon-managed runtime, a published container's docker-proxy), which
     // is the honest "you cannot reach this from here" rather than a terminal that would open onto nothing.
-    session: z.string().optional(),
-    forwarded: z.boolean(),
+    session: z
+        .string()
+        .optional()
+        .describe(
+            'The terminal it came from, to watch it in or stop it from. Absent when nothing in its ancestry is one, which is the honest "you cannot reach this from here".',
+        ),
+    forwarded: z.boolean().describe("Whether it is currently reachable from outside."),
     // https://port-<slot>-<sandboxId>.<zone>; present only while forwarded AND the sandbox has a zone + id.
-    previewUrl: z.string().optional(),
+    previewUrl: z.string().optional().describe("Where to open it. Present only while forwarded, and only on a sandbox that has an outside address."),
 });
 export type PortSummary = z.infer<typeof PortSummarySchema>;
-export const PortsListSchema = z.object({ ports: z.array(PortSummarySchema) });
+export const PortsListSchema = z.object({
+    ports: z
+        .array(PortSummarySchema)
+        .describe("Everything listening inside the sandbox right now, read fresh each time rather than from a register the sandbox keeps."),
+});
 export type PortsList = z.infer<typeof PortsListSchema>;
 
-export const PortParamSchema = z.object({ port: z.number().int().min(1).max(65535) });
+export const PortParamSchema = z.object({ port: z.number().int().min(1).max(65535).describe("Which port.") });
 // `previewUrl` is absent on a loopback/no-tunnel sandbox, the slot is mapped, but no public hostname exists.
-export const PortForwardResultSchema = z.object({ previewUrl: z.string().optional() });
+export const PortForwardResultSchema = z.object({
+    previewUrl: z
+        .string()
+        .optional()
+        .describe("Where it can now be reached. Absent on a sandbox with no outside address, where the mapping exists but has no public name."),
+});
 export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 
 // ---- computers: what ONE of the user's own machines is running ----
@@ -6021,29 +7818,49 @@ export type SyncStatus = z.infer<typeof SyncStatusSchema>;
 
 export const PublicFileSchema = z.object({
     // Outbox-relative, forward-slash ("report.pdf", "site/index.html").
-    path: z.string(),
-    size: z.number(),
-    modifiedAt: z.number(),
+    path: z.string().describe("Where it sits inside the outbox."),
+    size: z.number().describe("Size in bytes."),
+    modifiedAt: z.number().describe("When it last changed, in milliseconds."),
     // The file's public URL. Absent when the sandbox has no tunnel, or when a guard refuses this file.
-    url: z.string().optional(),
+    url: z.string().optional().describe("Its public address. Absent when this sandbox has no outside address, or when the file is being refused."),
     // Why a file sitting in the outbox is NOT served, a hidden name, a credential-shaped name, contents that
     // match a known token format, or sheer size. The publisher reads it here; a stranger requesting the same
     // file only ever gets the same 404 every other miss returns, so this list can't be probed from outside.
-    blocked: z.string().optional(),
+    blocked: z
+        .string()
+        .optional()
+        .describe(
+            "Why a file sitting in the outbox is not being served: a hidden name, a credential-shaped name, contents that look like a token, or sheer size. Only the publisher sees this; a stranger asking for the same file gets the same nothing every other miss gets.",
+        ),
 });
 export type PublicFile = z.infer<typeof PublicFileSchema>;
 
 // `url` is the outbox root, the base every file's URL hangs off, and what the view shows as "your public
 // address". Absent on a loopback/no-tunnel sandbox, which has nowhere to publish to.
-export const PublicListSchema = z.object({ url: z.string().optional(), files: z.array(PublicFileSchema) });
+export const PublicListSchema = z.object({
+    url: z.string().optional().describe("Your public address, which every file's own hangs off. Absent on a sandbox with nowhere to publish to."),
+    files: z.array(PublicFileSchema).describe("What the outbox holds."),
+});
 export type PublicList = z.infer<typeof PublicListSchema>;
 
 // A WORKSPACE-relative path (the space the file tree speaks) to copy into the outbox. A copy, not a move: the
 // repo a build output came from must not lose it because someone shared it.
-export const PublishSchema = z.object({ path: z.string().min(1) });
+export const PublishSchema = z.object({
+    path: z
+        .string()
+        .min(1)
+        .describe(
+            "What to publish, as a workspace path. It is copied rather than moved, so a repository does not lose its build output because somebody shared it.",
+        ),
+});
 // An OUTBOX-relative path to withdraw, the path space PublicFile.path speaks, not the workspace's.
-export const UnpublishSchema = z.object({ path: z.string().min(1) });
-export const PublishResultSchema = z.object({ path: z.string(), url: z.string().optional() });
+export const UnpublishSchema = z.object({
+    path: z.string().min(1).describe("What to withdraw, as a path inside the outbox rather than a workspace path."),
+});
+export const PublishResultSchema = z.object({
+    path: z.string().describe("Where it landed inside the outbox."),
+    url: z.string().optional().describe("Its public address. Absent on a sandbox with nowhere to publish to."),
+});
 export type PublishResult = z.infer<typeof PublishResultSchema>;
 
 // ---- share: a conversation published as a page ----
@@ -6074,37 +7891,51 @@ export const SharedConversationSchema = z.object({
      * one is a memorable pair (`swift-otter-k9m2`, see conversation-ids.ts) chosen to be guessable BY A HUMAN
      * at a glance, which is the opposite of what should name a page whose only protection is that its address
      * is not enumerable. Minted per share, so re-sharing the same conversation twice yields two links. */
-    id: z.string(),
+    id: z
+        .string()
+        .describe(
+            "The share's own id, minted fresh each time, so sharing one conversation twice gives two links. Deliberately not the conversation's id, which is memorable by design and would make a page's address guessable.",
+        ),
     // Which conversation the snapshot was taken from, what Update re-reads, and what the chat matches against
     // to know it already has a share.
-    conversationId: z.string(),
-    title: z.string(),
-    detail: ShareDetailSchema,
+    conversationId: z.string().describe("Which conversation it was taken from."),
+    title: z.string().describe("The title on the page, which is the sharer's choice rather than the conversation's own."),
+    detail: ShareDetailSchema.describe(
+        "How much travels: the two speakers' words alone, or the whole record including the agent's work and thinking, which necessarily publishes the code and command output in it.",
+    ),
     // When the snapshot was taken (epoch ms). A share is frozen, so this dates what a recipient can see,
     // not when the conversation happened.
-    sharedAt: z.number(),
+    sharedAt: z
+        .number()
+        .describe(
+            "When the snapshot was taken, in milliseconds. A share is frozen, so this dates what a recipient can see rather than when the conversation happened.",
+        ),
     // How many messages the snapshot holds, so a row can say how much is behind the link without opening it.
-    messages: z.number(),
+    messages: z.number().describe("How many messages are behind the link."),
     // The page's public URL. Absent on a sandbox with no tunnel, which has nowhere to publish to, the same
     // rule (and the same cause) as PublicFile.url.
-    url: z.string().optional(),
+    url: z.string().optional().describe("The page's address. Absent on a sandbox with nowhere to publish to."),
 });
 export type SharedConversation = z.infer<typeof SharedConversationSchema>;
 
-export const ShareListSchema = z.object({ shares: z.array(SharedConversationSchema) });
+export const ShareListSchema = z.object({ shares: z.array(SharedConversationSchema).describe("Every conversation currently published as a page.") });
 export type ShareList = z.infer<typeof ShareListSchema>;
 
 // The title is the sharer's, not the conversation's: the chat's own name is only the default the dialog opens
 // with. Bounded at the registry's title budget (title.ts MAX_LENGTH) so one surface can't store what the others
 // truncate away.
 export const ShareCreateSchema = z.object({
-    conversationId: z.string().min(1),
-    title: z.string().min(1).max(80),
-    detail: ShareDetailSchema,
+    conversationId: z.string().min(1).describe("Which conversation to publish."),
+    title: z.string().min(1).max(80).describe("The title for the page. The conversation's own name is only what a dialog would open with."),
+    detail: ShareDetailSchema.describe(
+        "How much to publish. Two levels rather than a set of switches, because every extra toggle is another thing to get wrong about a link that cannot be recalled.",
+    ),
 });
 // Re-take an existing share's snapshot, keeping its id, and therefore its link, which has already been sent.
-export const ShareUpdateSchema = z.object({ id: z.string().min(1) });
-export const ShareRemoveSchema = z.object({ id: z.string().min(1) });
+export const ShareUpdateSchema = z.object({
+    id: z.string().min(1).describe("Which share to re-take. Its link stays the same, which matters because it has already been sent."),
+});
+export const ShareRemoveSchema = z.object({ id: z.string().min(1).describe("Which share to take down.") });
 
 // ---- terminal ----
 // EVERY live surface in the sandbox the web app's ONE global panel can show. Mostly tmux sessions (the
@@ -6132,32 +7963,57 @@ export const ShareRemoveSchema = z.object({ id: z.string().min(1) });
 // rows by the one and dates them off it, and the daemon's retention sweep ages sessions out by the same clock.
 // 0 is "tmux didn't say", treated as unknown by both, never as 1970.
 export const TerminalSessionSchema = z.object({
-    name: z.string(),
-    label: z.string().optional(),
-    kind: z.enum(["shell", "panel", "agent", "job", "process"]),
-    running: z.boolean(),
-    activityAt: z.number(),
-    exitCode: z.number().optional(),
+    name: z.string().describe("Its id, and what the close route takes."),
+    label: z.string().optional().describe("What to call it on screen."),
+    kind: z
+        .enum(["shell", "panel", "agent", "job", "process"])
+        .describe(
+            "What sort of thing it is: a terminal somebody opened, a repository's dev server, where an agent's commands run, a job the sandbox started, or a background process that is watched rather than typed into.",
+        ),
+    running: z
+        .boolean()
+        .describe("Whether it is alive. A finished one-shot job leaves a dead shell behind, which reads as false and is how it gets swept up."),
+    activityAt: z.number().describe("When it last produced output, in milliseconds. Zero means it did not say, which is unknown rather than 1970."),
+    exitCode: z.number().optional().describe("How the last thing in it ended. Absent while that pane is still alive."),
     /* WHAT THIS SESSION IS RUNNING RIGHT NOW, `pane_current_command` of its live pane, and ABSENT when it is
      * sitting at its shell prompt. Not a second spelling of `running`: that field says whether a session is a
      * live thing at all (and for a `web-*` shell it is unconditionally true, prompt or build), whereas this one
      * says whether anything is HAPPENING in it. Killing a terminal is final, so the panel confirms on this
      * field before its × ends a session that has work in it, and names the command in the question, see the
      * daemon's `foreground` (system/system.routes.ts) for why a word rather than a flag. */
-    command: z.string().optional(),
-    extensionId: z.string().optional(),
-    processName: z.string().optional(),
+    command: z
+        .string()
+        .optional()
+        .describe(
+            "What is running in it right now. Absent when it is sitting at a prompt. Not a second spelling of whether it is alive: this says whether anything is happening, which is what a close button should ask about before it ends something.",
+        ),
+    extensionId: z.string().optional().describe("Which extension declared this process, when one did."),
+    processName: z
+        .string()
+        .optional()
+        .describe("Which of that extension's processes it is, which together with the id above addresses its start and stop routes."),
     // The agent has parked on a command that stopped for a PERSON, an OTP prompt, a security-key touch, a
     // confirm it cannot answer, and is waiting at this session's live pane. `message` is its own account of
     // what it needs. The terminal panel renders it as a banner over that session's tab (where the prompt the
     // user has to answer already is) and its buttons settle the parked card through `POST /agent/reply` with
     // `requestId`, exactly as the chat card does. The same shape as a browser's `help` below, on purpose: the
     // two handovers differ in WHERE the person acts, not in what is being asked. Present only while open.
-    help: z.object({ requestId: z.string(), message: z.string(), requestedAt: z.number() }).optional(),
+    help: z
+        .object({
+            requestId: z.string().describe("What to send back when you answer, through the agent reply route."),
+            message: z.string().describe("What the agent needs, in its own words."),
+            requestedAt: z.number().describe("When it asked, in milliseconds."),
+        })
+        .optional()
+        .describe("The agent has stopped at something only a person can clear, and is waiting at this terminal. Present only while it is waiting."),
 });
-export const TerminalsListSchema = z.object({ sessions: z.array(TerminalSessionSchema) });
+export const TerminalsListSchema = z.object({
+    sessions: z
+        .array(TerminalSessionSchema)
+        .describe("Every live surface the sandbox is holding, in one list, because the question they all answer is the same one."),
+});
 export type TerminalsList = z.infer<typeof TerminalsListSchema>;
-export const TerminalNameParamSchema = z.object({ name: z.string() });
+export const TerminalNameParamSchema = z.object({ name: z.string().describe("Which terminal.") });
 
 // One session's PANE HISTORY as plain text. This route exists because the browser cannot reach it any other
 // way: a tmux client runs on the ALTERNATE screen, which has no scrollback of its own, so what the wheel moves
@@ -6165,15 +8021,15 @@ export const TerminalNameParamSchema = z.object({ name: z.string() });
 // `lines` is how far back to ask for, tmux clamps it to the history it actually has, and `truncated` says the
 // answer stopped at the request rather than at the beginning.
 export const TerminalScrollbackQuerySchema = z.object({
-    name: z.string(),
-    lines: z.coerce.number().min(1).max(100_000).default(20_000),
+    name: z.string().describe("Which terminal."),
+    lines: z.coerce.number().min(1).max(100_000).default(20_000).describe("How far back to ask for. Clamped to the history that actually exists."),
 });
 export const TerminalScrollbackSchema = z.object({
-    name: z.string(),
+    name: z.string().describe("Which terminal this is from."),
     // Oldest line first, wrapped lines rejoined so a copied URL or path comes back whole.
-    text: z.string(),
-    lines: z.number(),
-    truncated: z.boolean(),
+    text: z.string().describe("The history, oldest line first, with wrapped lines rejoined so a copied address or path comes back whole."),
+    lines: z.number().describe("How many lines you got."),
+    truncated: z.boolean().describe("It stopped because you asked for that many, not because the history ran out."),
 });
 export type TerminalScrollback = z.infer<typeof TerminalScrollbackSchema>;
 
@@ -6190,40 +8046,63 @@ export type TerminalScrollback = z.infer<typeof TerminalScrollbackSchema>;
  * `id` is opaque and minted per session, and it is what makes a tab survive a relist: it is stable for the life
  * of the page, unlike its url (the agent navigates away) or its position (a closed tab renumbers the rest). */
 export const BrowserPageSchema = z.object({
-    id: z.string(),
+    id: z
+        .string()
+        .describe(
+            "Stable for the life of the page, which is what lets a tab survive a refresh of this list. Its address changes as the agent navigates and its position changes when a sibling closes.",
+        ),
     // The page's own title. Absent mid-navigation, which is exactly when a tab still needs to render.
-    title: z.string().optional(),
-    url: z.string(),
+    title: z.string().optional().describe("The page's title. Absent mid-navigation, which is exactly when a tab still has to be drawn."),
+    url: z.string().describe("Where it is."),
     // The page the agent last drove, on a finished session, the one it ended on. Exactly one page has it.
-    active: z.boolean(),
+    active: z.boolean().describe("The one the agent last touched, or for a finished session, the one it ended on. Exactly one page has this."),
 });
 export const BrowserSessionSchema = z.object({
-    name: z.string(),
+    name: z.string().describe("Its id, and what the close route takes."),
     // The pill's text: the active page's title, else its host, else which browser this is.
-    label: z.string(),
+    label: z.string().describe("What to call it on screen: the open page's title, or its site, or which browser this is."),
     // Which MCP server drives it: `web` (the credential-free browser) or a logged-in capability's id, the
     // difference between a throwaway page and one signed in as the user, which is worth saying out loud.
-    server: z.string(),
+    server: z
+        .string()
+        .describe(
+            "Which browser drives it: the credential-free one, or a signed-in account's. The difference between a throwaway page and one logged in as you, which is worth saying out loud.",
+        ),
     // False once that Chromium is gone (the turn ended, the agent closed it, it crashed). A finished session
     // still lists for a while, with the pages it had, the record of where the agent went.
-    running: z.boolean(),
-    activityAt: z.number(),
+    running: z
+        .boolean()
+        .describe("Whether it is still open. A closed one is listed for a while with the pages it had, as the record of where the agent went."),
+    activityAt: z.number().describe("When it last did anything, in milliseconds."),
     // When that Chromium went away, for the "closed 20m ago" line a finished session leads with. Absent while
     // running, which is the same fact as `running`, but the view needs the timestamp, not just the flag.
-    finishedAt: z.number().optional(),
+    finishedAt: z.number().optional().describe("When it closed, in milliseconds. Absent while it is open."),
     // The agent has hit something only a person can clear (a captcha, a password it does not hold, a phone
     // check) and is PARKED on it: `message` is its own account of what it needs, in the user's language. The
     // Browsers view renders it as a banner over the live stage, where "Take control" already is, and its
     // buttons settle the parked card through `POST /agent/reply` with `requestId`, exactly as the chat card
     // does; the field clears when the waiter settles, never by direct edit. Present only while open.
-    help: z.object({ requestId: z.string(), message: z.string(), requestedAt: z.number() }).optional(),
-    pages: z.array(BrowserPageSchema),
+    help: z
+        .object({
+            requestId: z.string().describe("What to send back when you answer, through the agent reply route."),
+            message: z.string().describe("What the agent needs, in its own words."),
+            requestedAt: z.number().describe("When it asked, in milliseconds."),
+        })
+        .optional()
+        .describe(
+            "The agent has hit something only a person can clear: a captcha, a password it does not hold, a check on your phone. Present only while it is waiting.",
+        ),
+    pages: z
+        .array(BrowserPageSchema)
+        .describe("Every page it has open. A browser holds several at once, which is the reason it is listed apart from the terminals."),
 });
 export type BrowserPage = z.infer<typeof BrowserPageSchema>;
 export type BrowserSession = z.infer<typeof BrowserSessionSchema>;
-export const BrowsersListSchema = z.object({ sessions: z.array(BrowserSessionSchema) });
+export const BrowsersListSchema = z.object({
+    sessions: z.array(BrowserSessionSchema).describe("Every browser the agents have running, open or recently closed."),
+});
 export type BrowsersList = z.infer<typeof BrowsersListSchema>;
-export const BrowserNameParamSchema = z.object({ name: z.string() });
+export const BrowserNameParamSchema = z.object({ name: z.string().describe("Which browser.") });
 
 /* ---- subagents: the agents an agent starts ----
  *
@@ -6258,42 +8137,73 @@ export const SubagentStatusSchema = z.enum(["pending", "running", "blocked", "co
 export type SubagentStatus = z.infer<typeof SubagentStatusSchema>;
 
 export const SubagentSessionSchema = z.object({
-    id: z.string(),
-    kind: SubagentKindSchema,
+    id: z
+        .string()
+        .describe(
+            "The id of the tool call that started it, which every side already holds, so a card links to its helper with the id it has and the helper points back the same way.",
+        ),
+    kind: SubagentKindSchema.describe(
+        "What sort of helper: one the runtime spawned, or a separate tool the agent drove from a shell. It changes only how you watch it.",
+    ),
     // The conversation whose turn spawned this, what the area groups its rows by, and the way back to the chat
     // the card lives in.
-    conversationId: z.string(),
+    conversationId: z.string().describe("The conversation whose turn started it, and the way back to the chat it belongs to."),
     // What it is and what it was asked to do: the subagent type (`Explore`, `general-purpose`) or the delegated
     // provider's model, and the caller's one-line description. The area's row and the card's title read as
     // `Explore · Locate claimIndexer definition`.
-    agentType: z.string().optional(),
-    description: z.string().optional(),
-    model: z.string().optional(),
+    agentType: z.string().optional().describe("What kind of helper it is."),
+    description: z.string().optional().describe("What it was asked to do, in one line."),
+    model: z.string().optional().describe("Which model it runs on."),
     // How deep in the spawn tree (1 = spawned by the turn itself). From the SDK's meta.json; a subagent may
     // itself delegate, and a flat list that cannot say so reads as though the turn started all of them.
-    spawnDepth: z.number().optional(),
+    spawnDepth: z
+        .number()
+        .optional()
+        .describe(
+            "How deep in the chain it sits, where one means the turn itself started it. A helper can start helpers, and a flat list that could not say so would read as though the turn started all of them.",
+        ),
     // Backgrounded: the parent went on working instead of waiting for it. This is the whole reason the list
     // exists, a backgrounded child used to be invisible until its result landed, sometimes minutes later.
-    background: z.boolean().optional(),
-    status: SubagentStatusSchema,
-    startedAt: z.number(),
-    endedAt: z.number().optional(),
-    activityAt: z.number(),
+    background: z
+        .boolean()
+        .optional()
+        .describe(
+            "The parent carried on working instead of waiting for it. This is the whole reason the list exists: such a helper used to be invisible until its result landed, sometimes minutes later.",
+        ),
+    status: SubagentStatusSchema.describe(
+        "How it is going. Blocked means it needs an answer, which a parent and an operator act on differently from it simply working.",
+    ),
+    startedAt: z.number().describe("When it started, in milliseconds."),
+    endedAt: z.number().optional().describe("When it finished, in milliseconds. Absent while it works."),
+    activityAt: z.number().describe("When it last did anything, in milliseconds."),
     // What it has spent and done so far (task_progress). Tokens are the child's own, so a parent's cost line and
     // the sum of its children's are two different true numbers.
-    tokens: z.number().optional(),
-    toolUses: z.number().optional(),
-    lastTool: z.string().optional(),
+    tokens: z
+        .number()
+        .optional()
+        .describe("What it has spent. Its own, so a parent's cost and the sum of its helpers' are two different true numbers."),
+    toolUses: z.number().optional().describe("How many tools it has used."),
+    lastTool: z.string().optional().describe("The last one it reached for."),
     // Its report, the last assistant message (SubagentStop) or the task summary. The answer to "what did it
     // conclude?" without opening the transcript, which is the question a finished child is read for.
-    summary: z.string().optional(),
-    error: z.string().optional(),
+    summary: z
+        .string()
+        .optional()
+        .describe("Its report: what it concluded, without opening its record. The question a finished helper gets read for."),
+    error: z.string().optional().describe("Why it failed, when it did."),
     // A delegation's live view: the tmux session its command runs in. Absent for an SDK subagent, which has no
     // process of its own to attach to.
-    terminal: z.string().optional(),
+    terminal: z
+        .string()
+        .optional()
+        .describe(
+            "The terminal its command runs in, when there is one. Absent for a helper with no process of its own, which is watched by reading its record instead.",
+        ),
 });
 export type SubagentSession = z.infer<typeof SubagentSessionSchema>;
-export const SubagentsListSchema = z.object({ sessions: z.array(SubagentSessionSchema) });
+export const SubagentsListSchema = z.object({
+    sessions: z.array(SubagentSessionSchema).describe("Every helper this sandbox's conversations have started."),
+});
 export type SubagentsList = z.infer<typeof SubagentsListSchema>;
 export const SubagentIdParamSchema = z.object({ id: z.string() });
 
@@ -6552,12 +8462,15 @@ export const SecretSetSchema = z.object({
     key: z
         .string()
         .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
-        .max(128),
-    value: z.string().min(1),
+        .max(128)
+        .describe("The name to store it under, which is the name a process will find it by."),
+    value: z.string().min(1).describe("The value. It goes straight to your sandbox and never through the platform."),
 });
-export const SecretKeysSchema = z.object({ keys: z.array(z.string()) });
-export const SecretKeyParamSchema = z.object({ key: z.string() });
-export const SecretRevealSchema = z.object({ value: z.string() });
+export const SecretKeysSchema = z.object({
+    keys: z.array(z.string()).describe("The names that exist here. Only the names: the values never leave the sandbox."),
+});
+export const SecretKeyParamSchema = z.object({ key: z.string().describe("Which secret, by name.") });
+export const SecretRevealSchema = z.object({ value: z.string().describe("The value itself. The only place in this API one is ever returned.") });
 
 // One entry per secret the sandbox knows about, across every store: intent env secrets and intentic-generated
 // passwords (from the desired-state repo), capability credentials, and AI-provider accounts. Values never ride
@@ -6565,26 +8478,50 @@ export const SecretRevealSchema = z.object({ value: z.string() });
 export const SecretInventoryEntrySchema = z.object({
     // Env-var key for env|generated; `<provider>:<accountId>` for provider entries; capability instance id
     // otherwise. Unique within the inventory, several accounts of one provider each get their own entry.
-    key: z.string(),
-    kind: z.enum(["env", "generated", "capability", "provider"]),
+    key: z.string().describe("What identifies it. Unique across the whole inventory, so several accounts of one provider each get their own entry."),
+    kind: z
+        .enum(["env", "generated", "capability", "provider"])
+        .describe("Where it came from: you set it, the sandbox generated it, a connection needs it, or it is a model account's credential."),
     // Display name for provider entries: "<ProviderName> · <accountLabel>". Absent on env/generated entries.
-    label: z.string().optional(),
-    status: z.enum(["missing", "set", "connected"]),
+    label: z.string().optional().describe("A friendlier name, for entries that have one."),
+    status: z.enum(["missing", "set", "connected"]).describe("Whether it exists and, for a connection, whether it is working."),
     // The artifact resources referencing this secret ({$secret} refs); [] for capability/provider entries.
-    requiredBy: z.array(z.object({ resourceId: z.string(), type: z.string() })),
+    requiredBy: z
+        .array(z.object({ resourceId: z.string().describe("Which resource."), type: z.string().describe("What kind of resource it is.") }))
+        .describe("What is waiting on it. Empty for a connection's or an account's own credential."),
     // Human-readable provenance, e.g. "desired-state/.env", the UI's "where does this live" line.
-    storedAt: z.string(),
-    revealable: z.boolean(),
+    storedAt: z.string().describe("Where it actually lives, in words."),
+    revealable: z.boolean().describe("Whether its value can be shown at all. Everything except a model account's credential can be."),
     // Forgejo Actions replication state, present only after adopt on env|generated entries.
-    ci: z.object({ synced: z.boolean(), pushedAt: z.string().optional() }).optional(),
+    ci: z
+        .object({
+            synced: z.boolean().describe("Whether the pipeline has it."),
+            pushedAt: z.string().optional().describe("When it was last sent there."),
+        })
+        .optional()
+        .describe("Whether a copy has been given to the build pipeline."),
     /* The newest row of the use ledger that concerns this entry, when the agent last SPENT it, on which lane
      * (a shell command, a JS run's script, a browser field), and where it went (the head of the command or
      * script, or the page's host). Names and destinations only, never values. Absent while a secret has never
      * been used, which most never are. */
-    lastUse: z.object({ at: z.number(), lane: z.enum(["shell", "code", "browser"]), detail: z.string().optional() }).optional(),
+    lastUse: z
+        .object({
+            at: z.number().describe("When, in milliseconds."),
+            lane: z.enum(["shell", "code", "browser"]).describe("How it was used: a command, a script, or typed into a page."),
+            detail: z
+                .string()
+                .optional()
+                .describe("Where it went: the start of the command or script, or the site. Names and destinations only, never values."),
+        })
+        .optional()
+        .describe("The last time an agent actually spent this secret. Absent while it never has been, which most never are."),
 });
 export type SecretInventoryEntry = z.infer<typeof SecretInventoryEntrySchema>;
-export const SecretInventorySchema = z.object({ entries: z.array(SecretInventoryEntrySchema) });
+export const SecretInventorySchema = z.object({
+    entries: z
+        .array(SecretInventoryEntrySchema)
+        .describe("One entry per secret this sandbox knows about, from every place they live. No values, ever."),
+});
 
 // ---- system ----
 
@@ -6595,10 +8532,14 @@ export const SecretInventorySchema = z.object({ entries: z.array(SecretInventory
  * "unavailable" and grey out a provider the user can in fact use, so surfaces treat it as
  * available-but-unverified rather than as a soft no. */
 export const AdapterHealthSchema = z.object({
-    state: z.enum(["ready", "unavailable", "unknown"]),
+    state: z
+        .enum(["ready", "unavailable", "unknown"])
+        .describe(
+            "Whether this runtime can serve a turn. Unknown is a real answer rather than a soft no: a check that could not run must not grey out a provider you can in fact use.",
+        ),
     // Why it cannot serve, in the user's terms and naming what to do about it. Absent when ready.
-    detail: z.string().optional(),
-    checkedAt: z.number(),
+    detail: z.string().optional().describe("Why it cannot, and what to do about it. Absent when it can."),
+    checkedAt: z.number().describe("When it was last checked, in milliseconds."),
 });
 export type AdapterHealthReport = z.infer<typeof AdapterHealthSchema>;
 
@@ -6618,30 +8559,42 @@ export type AdapterHealthReport = z.infer<typeof AdapterHealthSchema>;
 export const StagedUpdateSchema = z.object({
     // The version the staged image reports about itself. Absent when the image would not say (an older build,
     // a probe that failed), which reads as "ready, version unknown", never as nothing being ready.
-    version: z.string().optional(),
+    version: z.string().optional().describe("What the downloaded build says it is. Absent means ready but unnamed, never that nothing is ready."),
     // The release channel it was staged FROM, which is not necessarily the one this sandbox follows: preparing
     // a beta build is not moving onto beta.
-    channel: z.string(),
+    channel: z
+        .string()
+        .describe(
+            "Which channel it was taken from. Not necessarily the one this sandbox follows: downloading a beta build is not the same as moving onto beta.",
+        ),
     // When it finished downloading, epoch ms, what answers "is this still the update I am being offered?"
-    at: z.number(),
+    at: z.number().describe("When the download finished, in milliseconds, which answers whether this is still the update being offered."),
 });
 export type StagedUpdate = z.infer<typeof StagedUpdateSchema>;
 
 export const InfoSchema = z.object({
-    name: z.string().optional(),
-    image: z.string().optional(),
-    version: z.string().optional(),
-    latest: z.string().optional(),
-    updateAvailable: z.boolean().optional(),
+    name: z.string().optional().describe("What this sandbox is called."),
+    image: z.string().optional().describe("The image it is running."),
+    version: z.string().optional().describe("The version of that image."),
+    latest: z.string().optional().describe("The newest published version on its channel."),
+    updateAvailable: z.boolean().optional().describe("Whether those two differ."),
     // Keyed by AgentCapabilities.runtime. Absent until the first background sweep lands, which reads the same
     // as every entry being "unknown", one of the two cannot go stale, so the daemon sends the absence.
-    runtimes: z.record(z.string(), AdapterHealthSchema).optional(),
+    runtimes: z
+        .record(z.string(), AdapterHealthSchema)
+        .optional()
+        .describe(
+            "Which agent runtimes can serve a turn right now, keyed by runtime. Absent until the first check has run, which reads the same as every entry being unknown.",
+        ),
     /* Which release channel this sandbox follows (`stable` unless it was moved), and the base image the last
      * swap replaced, both set on the container by the host script that performed the swap, since neither is
      * knowable from inside afterwards. `previousImage` is what a rollback returns to; absent means there is
      * nothing to go back to and no rollback is offered. */
-    channel: z.string().optional(),
-    previousImage: z.string().optional(),
+    channel: z.string().optional().describe("Which release channel this sandbox follows."),
+    previousImage: z
+        .string()
+        .optional()
+        .describe("The image the last update replaced, which is what a rollback would return to. Absent means there is nothing to go back to."),
     /* WHAT IS IN THE UPDATE, in the words of the people it is for, the user-facing lines from every release
      * between `version` and `latest`, newest first (platform/release-notes.ts reads them off the published
      * GitHub Releases).
@@ -6653,18 +8606,35 @@ export const InfoSchema = z.object({
      * Absent, or empty, whenever there is nothing to say: the notes cache is cold, GitHub is unreachable, or
      * every release in the gap changed only things nobody outside the project would notice. All three read the
      * same way on the card, which shows the offer without them, exactly as it did before. */
-    updateNotes: z.array(z.string()).optional(),
+    updateNotes: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "What is in the update, in the words of the people it is for, newest first. Absent or empty whenever there is nothing worth saying, which reads on screen exactly as it did before there were notes at all.",
+        ),
     // How many further notes the gap holds beyond the ones sent, for a sandbox that has been left alone a long
     // time. Absent or 0 ⇒ `updateNotes` is the whole of it.
-    moreUpdateNotes: z.number().optional(),
+    moreUpdateNotes: z
+        .number()
+        .optional()
+        .describe(
+            "How many further notes there are beyond the ones sent, for a sandbox left alone a long time. Absent or zero means you have all of them.",
+        ),
     /* WHAT THE UPDATE TAKES AWAY, the "Breaking changes" lines from every release in the same gap, uncapped
      * (a warning that fell off a truncated list is a breaking update taken unwarned). Their presence is what
      * turns the update card from an offer into a warning that asks to be read before it hands over the
      * command. Absent for the overwhelming majority of updates, which break nothing. */
-    breakingNotes: z.array(z.string()).optional(),
+    breakingNotes: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "What the update takes away, uncapped, because a warning that fell off a shortened list is a breaking update taken unwarned. Absent for the overwhelming majority, which break nothing.",
+        ),
     /* AN UPDATE THAT HAS ALREADY BEEN DOWNLOADED AND BUILT on the machine that runs this container, and is
      * waiting for the restart that applies it. Absent for the ordinary case where nothing is staged. */
-    staged: StagedUpdateSchema.optional(),
+    staged: StagedUpdateSchema.optional().describe(
+        "An update already downloaded and built on the machine running this container, waiting only for the restart that applies it. That restart is seconds, where an unprepared update is minutes, which is a different decision entirely. Absent when nothing is waiting.",
+    ),
 });
 export type Info = z.infer<typeof InfoSchema>;
 
@@ -6685,15 +8655,24 @@ export type Info = z.infer<typeof InfoSchema>;
  * files a person CAN fix (REPORTED_MANIFEST_PATHS in workspace-state.ts). A daemon-written ledger that stops
  * matching a tightened schema is not a repair job to hand the owner; it recovers on its own next write. */
 export const ManifestProblemSchema = z.object({
-    kind: z.enum(["unreadable", "unknownKey", "invalidEntry"]),
-    detail: z.string(),
-    suggestion: z.string().optional(),
+    kind: z
+        .enum(["unreadable", "unknownKey", "invalidEntry"])
+        .describe(
+            "What to do about it. Unreadable means the whole file is being ignored and everything in it is at its default. An unknown key means only that key is ignored. An invalid entry means one item of a list was skipped and the rest is fine.",
+        ),
+    detail: z.string().describe("What exactly was wrong."),
+    suggestion: z.string().optional().describe("The name it was probably meant to be, when one is close enough to guess honestly."),
 });
 export type ManifestProblem = z.infer<typeof ManifestProblemSchema>;
 
 // Workspace-relative path (`.intentic/config/settings.json`) and everything currently wrong with that file. A file
 // with nothing wrong is absent from the list rather than present and empty.
-export const ManifestProblemReportSchema = z.object({ path: z.string(), problems: z.array(ManifestProblemSchema) });
+export const ManifestProblemReportSchema = z.object({
+    path: z.string().describe("The file, as a workspace path. The file is the unit somebody fixes, which is why problems are grouped by it."),
+    problems: z
+        .array(ManifestProblemSchema)
+        .describe("Everything currently wrong with it. A file with nothing wrong is absent rather than present and empty."),
+});
 export type ManifestProblemReport = z.infer<typeof ManifestProblemReportSchema>;
 
 export const ManifestProblemsSchema = z.array(ManifestProblemReportSchema);
@@ -6701,7 +8680,11 @@ export const ManifestProblemsSchema = z.array(ManifestProblemReportSchema);
 // A daemon-minted session (system.session): the steady-state browser credential, exchanged for a verified
 // Google ID token so Google UI is a sign-in moment instead of an hourly renewal. `expiresAt` is epoch ms,
 // the browser renews ahead of it without parsing the token; `email` is who the daemon verified.
-export const DaemonSessionSchema = z.object({ token: z.string(), expiresAt: z.number(), email: z.string() });
+export const DaemonSessionSchema = z.object({
+    token: z.string().describe("The credential every other call carries. Present it as a bearer token."),
+    expiresAt: z.number().describe("When it stops working, in milliseconds, so a caller can renew ahead of it without reading the token."),
+    email: z.string().describe("Who the sandbox verified you as."),
+});
 export type DaemonSession = z.infer<typeof DaemonSessionSchema>;
 
 // ---- activity: the activity audit log (historyRoot/activity.jsonl) ----
@@ -6710,15 +8693,18 @@ export type DaemonSession = z.infer<typeof DaemonSessionSchema>;
 // is the first source; other cli providers reuse the same shape.
 
 export const ActivityEventSchema = z.object({
-    id: z.string(),
+    id: z.string().describe("The entry's own id."),
     // Epoch ms; also the paging cursor.
-    at: z.number(),
+    at: z.number().describe("When it happened, in milliseconds. Also what you page by."),
     // "discord", …; absent on provider-less system events (a cron automation.run).
-    provider: z.string().optional(),
+    provider: z.string().optional().describe("Which outside service, when one was involved. Absent for the sandbox's own events."),
     // Which provider account handled the turn, the attribution key for per-account usage totals. Absent on
     // provider-less events and turns that ran on the provider's default account.
-    account: z.string().optional(),
-    direction: z.enum(["in", "out", "system"]),
+    account: z
+        .string()
+        .optional()
+        .describe("Which account handled it. Absent for the sandbox's own events and for work run on a provider's default."),
+    direction: z.enum(["in", "out", "system"]).describe("Whether something arrived, something went out, or the sandbox did it to itself."),
     // in: message.received | voice_utterance.received | voice_transcript.received
     // out: message.send | reaction.add | messages.read | api.call (unclassified provider endpoint)
     // system: gateway.login_failed | dispatch.failed | voice.session_started | voice.session_ended | automation.run
@@ -6727,63 +8713,101 @@ export const ActivityEventSchema = z.object({
     //           Only the three outcomes a person would otherwise have no explanation for: a push that did not
     //           go, work that did not arrive, a turn that did not end. A rule that ran and passed says nothing,
     //           because a feed that logs every green check is one the eye learns to skip.)
-    type: z.string(),
-    channelId: z.string().optional(),
+    type: z
+        .string()
+        .describe(
+            "Exactly what happened: a message received or sent, a reaction, a turn starting or ending, a rule doing something. A rule that ran and passed says nothing here, because a feed of green ticks is one the eye learns to skip.",
+        ),
+    channelId: z.string().optional().describe("Which channel or thread it happened in."),
     // Inbound author display name.
-    author: z.string().optional(),
+    author: z.string().optional().describe("Who sent it, for something that arrived."),
     // Full message text (inbound) or sent payload content (outbound).
-    content: z.string().optional(),
+    content: z.string().optional().describe("The message, in full, whichever direction it went."),
     // Outbound HTTP method + endpoint path (tokens ride headers, never URLs).
-    method: z.string().optional(),
-    endpoint: z.string().optional(),
+    method: z.string().optional().describe("The verb of an outgoing call."),
+    endpoint: z.string().optional().describe("The address of an outgoing call. Credentials travel in headers, so they are never here."),
     // The agent turn that made/handled it, the join key between an inbound wake and its outbound calls.
-    sessionId: z.string().optional(),
+    sessionId: z.string().optional().describe("The provider session behind it."),
     /* ONE TURN'S EVENTS, TIED TOGETHER. A turn writes four lifecycle events plus one per outbound provider call,
      * and read as five rows they say one thing five times, so the feed groups on this instead. It cannot be
      * sessionId: the runtime does not mint one until the stream's first frame, which is AFTER turn.started, so
      * the very event carrying the prompt is the one that could never be joined. Minted by the turn itself. */
-    turnId: z.string().optional(),
+    turnId: z
+        .string()
+        .optional()
+        .describe(
+            "Ties one turn's entries together. A turn writes several, and read as separate rows they say one thing several times, so a feed groups on this.",
+        ),
     // The stable conversation the turn belongs to. Outlives sessionId, which a provider/account/harness switch
     // retires mid-conversation, so this, not sessionId, is what "the same agent" means across a feed.
-    conversationId: z.string().optional(),
+    conversationId: z
+        .string()
+        .optional()
+        .describe(
+            "Which conversation. This, rather than the provider session, is what the same agent means across a feed, because a session is retired whenever the model changes.",
+        ),
     // The conversation's display title as it stood when the event was written. Denormalised on purpose: the
     // registry entry it came from is prunable and renameable, and an audit row must still read as words years
     // later. Absent on the first event of a fresh conversation, the auto-namer has not run yet.
-    title: z.string().optional(),
+    title: z
+        .string()
+        .optional()
+        .describe(
+            "What that conversation was called at the time. Copied in rather than looked up, because an audit entry must still read as words years later, after the conversation has been renamed or pruned.",
+        ),
     // What woke the conversation from outside, when something did (see AgentOriginSchema), the feed's "who
     // called me" attribution, and how a turn is filed under Discord rather than under the runtime that served it.
-    origin: AgentOriginSchema.optional(),
-    automationIds: z.array(z.string()).optional(),
-    outcome: z.enum(["ok", "error"]).optional(),
-    error: z.string().optional(),
+    origin: AgentOriginSchema.optional().describe(
+        "What woke the conversation from outside, when something did. It is how a turn gets filed under the chat service that caused it rather than under the model that served it.",
+    ),
+    automationIds: z.array(z.string()).optional().describe("Which automations were involved."),
+    outcome: z.enum(["ok", "error"]).optional().describe("How it ended."),
+    error: z.string().optional().describe("What went wrong, when something did."),
     // Source-specific detail: guildId, attachments, transcript path, participants…
-    extra: z.record(z.string(), z.unknown()).optional(),
+    extra: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Whatever else the source had to say: attachments, participants, a recording's path. Shape varies by source."),
 });
 export type ActivityEvent = z.infer<typeof ActivityEventSchema>;
 
 export const ActivityQuerySchema = z.object({
-    provider: z.string().optional(),
-    limit: z.coerce.number().min(1).max(500).default(100),
+    provider: z.string().optional().describe("Narrow it to one outside service."),
+    limit: z.coerce.number().min(1).max(500).default(100).describe("How many entries to return."),
     // `at` cursor, exclusive, newest-first paging.
-    before: z.coerce.number().optional(),
+    before: z.coerce.number().optional().describe("Only entries older than this timestamp, so paging walks backwards through the feed."),
 });
 export type ActivityQuery = z.infer<typeof ActivityQuerySchema>;
-export const ActivityListSchema = z.object({ events: z.array(ActivityEventSchema) });
+export const ActivityListSchema = z.object({ events: z.array(ActivityEventSchema).describe("The audit entries, newest first.") });
 
 // Live connection health, probed per provider capability (not stored): gateway state from the client pool
 // (idle = the gateway is up but has no enabled listener automation to connect for, distinct from a
 // connection that should be up but isn't; pairing = the socket is up but the credential is a ceremony nobody
 // has finished, which no amount of waiting fixes), lastError from the newest system-error event in the log.
 export const ActivityConnectionSchema = z.object({
-    capabilityId: z.string(),
-    provider: z.string(),
-    gateway: z.enum(["ready", "connecting", "pairing", "disconnected", "idle"]),
-    lastError: z.string().optional(),
+    capabilityId: z.string().describe("Which connection."),
+    provider: z.string().describe("Which service it is."),
+    gateway: z
+        .enum(["ready", "connecting", "pairing", "disconnected", "idle"])
+        .describe(
+            "Idle means it is up but has nothing to listen for, which is different from a connection that should be up and is not. Pairing means somebody started a sign-in and never finished it, which no amount of waiting will fix.",
+        ),
+    lastError: z.string().optional().describe("The most recent thing that went wrong on it."),
 });
 export const ActivityStatusSchema = z.object({
-    connections: z.array(ActivityConnectionSchema),
+    connections: z
+        .array(ActivityConnectionSchema)
+        .describe("Each source feeding the record, and whether it is working. Probed now rather than remembered."),
     // The daemon's live voice session, when one is up.
-    voice: z.object({ channelId: z.string(), channelName: z.string(), startedAt: z.number(), participants: z.array(z.string()) }).optional(),
+    voice: z
+        .object({
+            channelId: z.string().describe("Which channel."),
+            channelName: z.string().describe("What it is called."),
+            startedAt: z.number().describe("When it joined, in milliseconds."),
+            participants: z.array(z.string()).describe("Who else is in it."),
+        })
+        .optional()
+        .describe("A voice call the sandbox is currently in, when it is in one."),
 });
 export type ActivityStatus = z.infer<typeof ActivityStatusSchema>;
 
@@ -6796,28 +8820,40 @@ export type ActivityStatus = z.infer<typeof ActivityStatusSchema>;
 export const UsageTurnSchema = z.object({
     // Epoch ms at turn end. Kept alongside `day` so a future timezone-aware rollup is a pure change over data
     // already on disk.
-    at: z.number(),
+    at: z.number().describe("When the turn ended, in milliseconds."),
     // The UTC calendar day (YYYY-MM-DD) `at` fell in, precomputed so a rollup never re-derives a timezone.
-    day: z.string(),
-    provider: z.string(),
+    day: z.string().describe("The day it fell in, as YYYY-MM-DD in UTC, worked out once so nothing downstream has to do timezone arithmetic."),
+    provider: z.string().describe("Which model provider served it."),
     // Absent on an env-token turn, which has no account to attribute to (same rule as the activity log).
-    account: z.string().optional(),
+    account: z.string().optional().describe("Which account paid. Absent for a turn run on a plain key, which belongs to no account."),
     // The model the turn ACTUALLY ran, resolved past the client's pick and every provider default. Absent only
     // when the provider's own subscription default served it without the daemon naming one.
-    model: z.string().optional(),
-    harness: z.string(),
+    model: z
+        .string()
+        .optional()
+        .describe(
+            "The model that actually ran, past whatever was asked for and every default. Absent only when the provider's own default served it without being named.",
+        ),
+    harness: z.string().describe("Which agentic loop it ran on."),
     // The conversation this turn belonged to, so spend can join to a fleet agent. Absent only for an internal
     // one-shot turn that has no conversation identity.
-    conversationId: z.string().optional(),
+    conversationId: z
+        .string()
+        .optional()
+        .describe(
+            "Which conversation it belonged to, so spending can be traced to a card. Absent only for an internal one-off with no conversation at all.",
+        ),
     // The provider's own turn count for the request (a Claude "turn" can be several under the hood), so turns
     // and cost stay comparable across providers. 1 when the provider reported none.
-    turns: z.number(),
-    inputTokens: z.number(),
-    outputTokens: z.number(),
-    cacheReadTokens: z.number(),
-    cacheCreationTokens: z.number(),
-    costUsd: z.number(),
-    durationMs: z.number(),
+    turns: z
+        .number()
+        .describe("The provider's own count for the request, since one exchange can be several under the hood. One when it reported none."),
+    inputTokens: z.number().describe("Tokens sent."),
+    outputTokens: z.number().describe("Tokens received."),
+    cacheReadTokens: z.number().describe("Tokens served from cache, which cost less."),
+    cacheCreationTokens: z.number().describe("Tokens written to cache, which cost more up front and less afterwards."),
+    costUsd: z.number().describe("What it cost, in dollars."),
+    durationMs: z.number().describe("How long it took, in milliseconds."),
     /* Which arm of the terse experiment this turn ran on (settings.terseHoldout), the only record of it, and
      * the reason the savings report can say what the steer is worth instead of guessing.
      *
@@ -6913,30 +8949,41 @@ export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 // cumulative, all-time one, reading it beside a "last 7 days" filter would print an all-time number under a
 // windowed heading, which is the shrinking-totals bug wearing a different hat.
 export const UsageRollupRowSchema = z.object({
-    day: z.string(),
-    provider: z.string(),
-    account: z.string().optional(),
-    model: z.string().optional(),
-    harness: z.string(),
-    conversationId: z.string().optional(),
-    turns: z.number(),
-    inputTokens: z.number(),
-    outputTokens: z.number(),
-    cacheReadTokens: z.number(),
-    cacheCreationTokens: z.number(),
-    costUsd: z.number(),
-    durationMs: z.number(),
+    day: z.string().describe("The day, as YYYY-MM-DD in UTC."),
+    provider: z.string().describe("Which model provider."),
+    account: z.string().optional().describe("Which account. Absent for work run on a plain key."),
+    model: z.string().optional().describe("Which model."),
+    harness: z.string().describe("Which agentic loop."),
+    conversationId: z.string().optional().describe("Which conversation."),
+    turns: z.number().describe("Turns in this group."),
+    inputTokens: z.number().describe("Tokens sent."),
+    outputTokens: z.number().describe("Tokens received."),
+    cacheReadTokens: z.number().describe("Tokens served from cache."),
+    cacheCreationTokens: z.number().describe("Tokens written to cache."),
+    costUsd: z.number().describe("What the group cost, in dollars."),
+    durationMs: z.number().describe("Time spent, in milliseconds."),
 });
 export type UsageRollupRow = z.infer<typeof UsageRollupRowSchema>;
 // Inclusive UTC day bounds (YYYY-MM-DD). Both absent ⇒ the whole ledger. Shared by every windowed read of a
 // daemon ledger (spend, savings): one window shape, so a screen that filters two ledgers at once filters them
 // with the same calendar.
 export const DayWindowQuerySchema = z.object({
-    from: z.string().optional(),
-    to: z.string().optional(),
+    from: z.string().optional().describe("First day to include, as YYYY-MM-DD in UTC. Leave it out for everything up to the end day."),
+    to: z
+        .string()
+        .optional()
+        .describe(
+            "Last day to include, as YYYY-MM-DD in UTC, and it is included rather than excluded. Leave it out for everything from the start day onwards.",
+        ),
 });
 export type DayWindowQuery = z.infer<typeof DayWindowQuerySchema>;
-export const UsageRollupSchema = z.object({ rows: z.array(UsageRollupRowSchema) });
+export const UsageRollupSchema = z.object({
+    rows: z
+        .array(UsageRollupRowSchema)
+        .describe(
+            "Spending grouped by day, provider, account, model and conversation. Everything a cost screen shows is a rearrangement of these rows, which is why there is no second call for any of it.",
+        ),
+});
 
 // ---- usage: per-account token/cost totals ----
 // The account picker's headroom readout, folded from the ledger above (all-time, not a log window), grouped by
@@ -6961,37 +9008,49 @@ export const UsageSummarySchema = z.object({ accounts: z.array(UsageAccountSchem
 
 export const LogFileEntrySchema = z.object({
     // Path relative to the logs root, e.g. "terminals/web-1-%0.log" or "daemon.log".
-    name: z.string(),
-    sizeBytes: z.number(),
+    name: z.string().describe("Its name, which is what the read route takes."),
+    sizeBytes: z.number().describe("Size in bytes."),
     // Epoch ms mtime.
-    modifiedAt: z.number(),
+    modifiedAt: z.number().describe("When it last changed, in milliseconds."),
 });
 export type LogFileEntry = z.infer<typeof LogFileEntrySchema>;
-export const LogsListSchema = z.object({ files: z.array(LogFileEntrySchema) });
+export const LogsListSchema = z.object({
+    files: z.array(LogFileEntrySchema).describe("Every log the sandbox keeps: captured terminal output, command runs, and its own log."),
+});
 
 // `name` rides the query (log names contain slashes, which don't fit a path segment); `bytes` is the tail
 // size, the newest bytes win when the file is larger.
 export const LogReadQuerySchema = z.object({
-    name: z.string().min(1),
-    bytes: z.coerce.number().min(1).max(1_048_576).default(65_536),
+    name: z.string().min(1).describe("Which log. It travels in the query rather than the address, because log names contain slashes."),
+    bytes: z.coerce
+        .number()
+        .min(1)
+        .max(1_048_576)
+        .default(65_536)
+        .describe("How much of the end to read. The newest bytes win when the file is larger."),
 });
 export const LogReadSchema = z.object({
-    name: z.string(),
-    sizeBytes: z.number(),
+    name: z.string().describe("Which log this is from."),
+    sizeBytes: z.number().describe("How large the whole file is."),
     // The tail text; truncated when the file holds more than the requested bytes.
-    text: z.string(),
-    truncated: z.boolean(),
+    text: z.string().describe("The end of it, as text."),
+    truncated: z.boolean().describe("There is more before what you got."),
 });
 export type LogRead = z.infer<typeof LogReadSchema>;
 
 // A tab's self-report of what it is looking at, keyed by its /events connection's clientId. Full replace,
 // not a merge, an absent field means "cleared", so a tab leaving a file drops the path with the same report.
 export const PresenceReportSchema = z.object({
-    clientId: z.string(),
-    idle: z.boolean(),
-    view: z.string().optional(),
-    sessionId: z.string().optional(),
-    path: z.string().optional(),
+    clientId: z.string().describe("This connection's own id, the same one it gave the event stream."),
+    idle: z.boolean().describe("Whether the person has stopped doing anything."),
+    view: z.string().optional().describe("Which view they are on."),
+    sessionId: z.string().optional().describe("Which conversation they have open."),
+    path: z
+        .string()
+        .optional()
+        .describe(
+            "Which file they are looking at. Sent whole rather than merged: leaving a field out clears it, so a tab that closes a file drops the path in the same report.",
+        ),
 });
 export type PresenceReport = z.infer<typeof PresenceReportSchema>;
 
@@ -7011,13 +9070,14 @@ export type PresenceReport = z.infer<typeof PresenceReportSchema>;
 // A browser's PushSubscription, in the exact shape `web-push` consumes, the browser produces it via
 // PushManager.subscribe() and the client posts it back verbatim, so the daemon never reshapes it.
 export const WebPushChannelSchema = z.object({
-    kind: z.literal("webpush"),
-    endpoint: z.url(),
-    keys: z.object({
-        // The client's public key and auth secret for payload encryption (RFC 8291). Opaque base64url here.
-        p256dh: z.string().min(1),
-        auth: z.string().min(1),
-    }),
+    kind: z.literal("webpush").describe("A browser, which the sandbox can reach directly and encrypt end to end."),
+    endpoint: z.url().describe("Where that browser's push service accepts sends. It also identifies the device everywhere else in this group."),
+    keys: z
+        .object({
+            p256dh: z.string().min(1).describe("The browser's public key, for encrypting what is sent."),
+            auth: z.string().min(1).describe("The browser's secret, for the same."),
+        })
+        .describe("What the browser handed you when it subscribed. Post it back exactly as it came; nothing reshapes it."),
 });
 export type WebPushChannel = z.infer<typeof WebPushChannelSchema>;
 
@@ -7025,11 +9085,15 @@ export type WebPushChannel = z.infer<typeof WebPushChannelSchema>;
 // registration, the daemon proves it may notify this device by presenting it; the relay never learns which
 // sandbox is calling. `deviceId` doubles as the channel's identity (see channelId below).
 export const RelayChannelSchema = z.object({
-    kind: z.literal("relay"),
+    kind: z
+        .literal("relay")
+        .describe(
+            "A native app, whose operating system only accepts sends from the app's publisher, so the sandbox posts through a relay instead. The message passes through that relay readable, which is the price of the publisher having to be in the loop.",
+        ),
     // The absolute URL the daemon POSTs a send to, minted by the relay at registration, stored verbatim.
-    url: z.url(),
-    deviceId: z.string().min(1),
-    secret: z.string().min(1),
+    url: z.url().describe("Where to post a send. Recorded rather than assumed, so the sandbox need not know any platform by name."),
+    deviceId: z.string().min(1).describe("The device's id, which also identifies this registration everywhere else in this group."),
+    secret: z.string().min(1).describe("Proof that this sandbox may notify this device. The relay never learns which sandbox is calling."),
 });
 export type RelayChannel = z.infer<typeof RelayChannelSchema>;
 
@@ -7048,29 +9112,64 @@ export const channelId = (channel: PushChannel): string => (channel.kind === "we
 // transcript or a diff, the notification is a pointer back into the workspace, not a delivery mechanism
 // for content.
 export const PushNotificationSchema = z.object({
-    title: z.string().min(1),
-    body: z.string(),
-    url: z.string().optional(),
-    tag: z.string().optional(),
+    title: z.string().min(1).describe("The headline."),
+    body: z
+        .string()
+        .describe(
+            "The line under it. Push services cap the whole payload at a few kilobytes, which is why nothing here carries a transcript or a diff: a notification is a pointer back, not a delivery.",
+        ),
+    url: z.string().optional().describe("Where tapping it goes. An existing tab is focused rather than a new one opened."),
+    tag: z
+        .string()
+        .optional()
+        .describe("Collapses repeats: a second notification with the same tag replaces the first instead of stacking beside it."),
     // Whether the notification stays on screen until dismissed. Set for the "agent is blocked on you" cases,
     // where a notification that auto-dismisses is a request that silently went unanswered.
-    requireInteraction: z.boolean().optional(),
+    requireInteraction: z
+        .boolean()
+        .optional()
+        .describe(
+            "Keep it on screen until it is dismissed. Used when the agent is waiting for you, where one that fades away is a question that went unanswered in silence.",
+        ),
 });
 export type PushNotification = z.infer<typeof PushNotificationSchema>;
 
 // The VAPID public key a browser needs to subscribe (native shells ignore it), plus whether the asking
 // device's channel is already known, so the settings toggle can render its true state instead of trusting
 // the device's permission alone (a granted permission with no daemon-side row would notify nothing).
-export const PushConfigSchema = z.object({ publicKey: z.string(), subscribed: z.boolean() });
-export const PushChannelIdSchema = z.object({ id: z.string().min(1) });
+export const PushConfigSchema = z.object({
+    publicKey: z.string().describe("The key a browser needs in order to subscribe. Native apps ignore it."),
+    subscribed: z
+        .boolean()
+        .describe(
+            "Whether the asking device is already registered, so a toggle can show its real state instead of trusting the device's own permission, which can be granted with nothing behind it.",
+        ),
+});
+export const PushChannelIdSchema = z.object({
+    id: z.string().min(1).describe("Which device: a browser's push address, or a native install's device id."),
+});
 // The optional `id` says WHICH device is asking (see channelId); without it `subscribed` could only speak
 // for the sandbox as a whole, which is never the question the settings toggle needs answered.
-export const PushConfigQuerySchema = z.object({ id: z.string().min(1).optional() });
+export const PushConfigQuerySchema = z.object({
+    id: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Which device is asking. Without it the answer can only speak for the sandbox as a whole, which is rarely the question."),
+});
 
 // What a test send actually achieved. `{ ok: true }` would be a lie the one place it matters most: the button
 // exists to prove a chain the user cannot inspect, so "the daemon accepted the request" is not the answer to
 // the question being asked. A count separates "your OS swallowed it" from "nothing was sent at all".
-export const PushTestSchema = z.object({ delivered: z.number().int().nonnegative() });
+export const PushTestSchema = z.object({
+    delivered: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe(
+            "How many devices actually accepted it. A count rather than a yes, because this button exists to prove a chain nobody can inspect, and the sandbox having accepted the request is not the question being asked.",
+        ),
+});
 export type PushTest = z.infer<typeof PushTestSchema>;
 
 // ---- maintenance: the standing evidence a chore is decided from ----
@@ -7094,27 +9193,42 @@ export type ProbeId = z.infer<typeof ProbeIdSchema>;
 // One dependency the registry has moved past. `kind` is the SEMVER distance, which is the whole reason this is
 // not one number: forty patch releases behind is a morning's work and one major is a project.
 export const OutdatedPackageSchema = z.object({
-    name: z.string(),
-    current: z.string(),
-    latest: z.string(),
-    kind: z.enum(["major", "minor", "patch"]),
+    name: z.string().describe("The dependency."),
+    current: z.string().describe("What you are on."),
+    latest: z.string().describe("What is published."),
+    kind: z
+        .enum(["major", "minor", "patch"])
+        .describe(
+            "How far apart those are. This is not one number because forty patch releases behind is a morning's work and one major version is a project.",
+        ),
     // "dependencies" / "devDependencies" / "optionalDependencies", a dev-only major is a different risk.
-    section: z.string(),
+    section: z
+        .string()
+        .describe("Which part of the manifest declares it. A major version behind on a build-time tool is a different risk from one that ships."),
 });
 export type OutdatedPackage = z.infer<typeof OutdatedPackageSchema>;
 
 // One advisory, reduced to what a decision needs. No CVSS vector and no reference list: those are for reading on
 // the advisory page, and carrying them would put a kilobyte of prose per finding on every poll of this route.
 export const AdvisorySchema = z.object({
-    name: z.string(),
-    severity: z.enum(["critical", "high", "moderate", "low", "info"]),
-    title: z.string(),
+    name: z.string().describe("The dependency it concerns."),
+    severity: z.enum(["critical", "high", "moderate", "low", "info"]).describe("How bad it is said to be."),
+    title: z
+        .string()
+        .describe(
+            "What it is, in one line. No scoring vector and no reference list: those are for reading on the advisory's own page, and carrying them would put a kilobyte of prose per finding on every poll.",
+        ),
     // The range that fixes it, when the advisory names one. Absent ⇒ no patch published yet, which is the case
     // where a chore must NOT offer to bump and say so instead.
-    patched: z.string().optional(),
+    patched: z
+        .string()
+        .optional()
+        .describe(
+            "Which versions fix it. Absent means no fix has been published, which is exactly when nothing should offer to upgrade and something should say so instead.",
+        ),
     // Whether it reaches a production dependency path. A build-time-only tool's transitive CVE is a different
     // problem, and the chore's prompt says so rather than treating every advisory alike.
-    dev: z.boolean(),
+    dev: z.boolean().describe("Whether it only reaches build-time tooling, which is a different problem from one that reaches what you ship."),
 });
 export type Advisory = z.infer<typeof AdvisorySchema>;
 
@@ -7122,22 +9236,38 @@ export type Advisory = z.infer<typeof AdvisorySchema>;
 // agent re-runs knip itself against the live tree (a list from a probe hours old would send it at files that are
 // already gone), so what travels here only has to be enough to decide whether the turn is worth starting.
 export const DeadCodeSchema = z.object({
-    files: z.number().int().nonnegative(),
-    exports: z.number().int().nonnegative(),
-    types: z.number().int().nonnegative(),
-    dependencies: z.number().int().nonnegative(),
-    devDependencies: z.number().int().nonnegative(),
+    files: z.number().int().nonnegative().describe("Files nothing reaches."),
+    exports: z.number().int().nonnegative().describe("Exported things nothing uses."),
+    types: z.number().int().nonnegative().describe("Types nothing uses."),
+    dependencies: z.number().int().nonnegative().describe("Declared dependencies nothing imports."),
+    devDependencies: z.number().int().nonnegative().describe("The same, for build-time ones."),
     // A handful of the unreferenced files, for the panel to show instead of asking the reader to take "31" on faith.
-    sample: z.array(z.string()),
+    sample: z
+        .array(z.string())
+        .describe(
+            "A handful of the files, so a reader need not take the count on faith. Counts and a sample rather than the whole list, because an agent re-measures against the live tree anyway.",
+        ),
 });
 export type DeadCode = z.infer<typeof DeadCodeSchema>;
 
 // jscpd's headline plus the biggest clones. `percentage` is of scanned lines, which is the figure a threshold is
 // worth setting against, a clone COUNT grows with the repo and would mean something different every quarter.
 export const DuplicationSchema = z.object({
-    percentage: z.number(),
-    clones: z.number().int().nonnegative(),
-    top: z.array(z.object({ lines: z.number().int().nonnegative(), first: z.string(), second: z.string() })),
+    percentage: z
+        .number()
+        .describe(
+            "How much of the scanned code is duplicated. A share rather than a count, because a count grows with the repository and would mean something different every quarter.",
+        ),
+    clones: z.number().int().nonnegative().describe("How many duplicated stretches were found."),
+    top: z
+        .array(
+            z.object({
+                lines: z.number().int().nonnegative().describe("How long the duplicated stretch is."),
+                first: z.string().describe("One of the two places."),
+                second: z.string().describe("The other."),
+            }),
+        )
+        .describe("The largest of them."),
 });
 export type Duplication = z.infer<typeof DuplicationSchema>;
 
@@ -7151,13 +9281,33 @@ export type Duplication = z.infer<typeof DuplicationSchema>;
 export const UiScanSchema = z.object({
     // Framework-shaped source files, tests, stories and generated output excluded. The inventory that makes a
     // duplication finding a COMPONENT duplication finding rather than a generic one.
-    components: z.array(z.string()),
+    components: z.array(z.string()).describe("The interface's own source files, with tests, stories and generated output left out."),
     // Where the design system was routed around, and how often in each file.
-    bypasses: z.array(z.object({ path: z.string(), count: z.number().int().positive() })),
+    bypasses: z
+        .array(
+            z.object({
+                path: z.string().describe("The file."),
+                count: z.number().int().positive().describe("How many times, in that file."),
+            }),
+        )
+        .describe(
+            "Where the design system was routed around and a value hard-coded instead. Counted per file, because a reader deciding what to open is served by a file and a number, not by eleven snippets.",
+        ),
     // Files still on an idiom their framework has replaced, grouped by which one. `id` is looked up in the stack
     // table rather than enumerated here: the rules are a product decision that ships with the browser, and a
     // daemon an image behind must be able to report one this schema has never heard of.
-    idioms: z.array(z.object({ id: z.string(), files: z.array(z.string()) })),
+    idioms: z
+        .array(
+            z.object({
+                id: z
+                    .string()
+                    .describe(
+                        "Which outdated idiom. Looked up rather than listed here, so a sandbox one version behind can still report one this list has never heard of.",
+                    ),
+                files: z.array(z.string()).describe("The files still on it."),
+            }),
+        )
+        .describe("Files still written the way their framework has since replaced."),
 });
 export type UiScan = z.infer<typeof UiScanSchema>;
 
@@ -7170,10 +9320,28 @@ export type UiScan = z.infer<typeof UiScanSchema>;
  * "this chunk is big" and "this chunk is big and incompressible", which are different problems. */
 export const BundleSchema = z.object({
     // Which directory was measured, so the panel can say what it is talking about rather than implying it built.
-    dir: z.string(),
-    totalBytes: z.number().int().nonnegative(),
-    totalGzip: z.number().int().nonnegative(),
-    assets: z.array(z.object({ path: z.string(), bytes: z.number().int().nonnegative(), gzip: z.number().int().nonnegative() })),
+    dir: z
+        .string()
+        .describe(
+            "Which folder was measured. Read from build output already on disk rather than by building, so this is sometimes a commit behind and never leaves anything in your working tree.",
+        ),
+    totalBytes: z.number().int().nonnegative().describe("The whole thing, raw."),
+    totalGzip: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe(
+            "The whole thing, compressed. The ratio between the two is the difference between big and big-and-incompressible, which are different problems.",
+        ),
+    assets: z
+        .array(
+            z.object({
+                path: z.string().describe("The file."),
+                bytes: z.number().int().nonnegative().describe("Its raw size."),
+                gzip: z.number().int().nonnegative().describe("Its compressed size."),
+            }),
+        )
+        .describe("What is in it, piece by piece."),
 });
 export type Bundle = z.infer<typeof BundleSchema>;
 
@@ -7204,19 +9372,28 @@ export const ProbeFactsSchema = z.discriminatedUnion("id", [
 export type ProbeFacts = z.infer<typeof ProbeFactsSchema>;
 
 export const ProbeResultSchema = z.object({
-    id: ProbeIdSchema,
-    state: ProbeStateSchema,
+    id: ProbeIdSchema.describe("Which measurement this is."),
+    state: ProbeStateSchema.describe(
+        "Whether the tool ran and reported, is not part of this repository at all, or broke. The middle one is not evidence of health: the check simply cannot be made here.",
+    ),
     // When the probe last COMPLETED, the age the panel shows, and what the runner's TTL is measured from.
-    ranAt: z.number(),
+    ranAt: z.number().describe("When it last finished, in milliseconds, which is what its age is measured from."),
     // How long it took. Shown because a seven-minute jscpd is why the tier-2 refresh is weekly, and a reader
     // deciding whether to force a refresh deserves to know what they are asking for.
-    tookMs: z.number().int().nonnegative(),
-    facts: ProbeFactsSchema.optional(),
+    tookMs: z.number().int().nonnegative().describe("How long it took. Worth knowing before asking for it again: some of these run for minutes."),
+    facts: ProbeFactsSchema.optional().describe(
+        "What it found, including finding nothing, which is a real answer and the one that keeps a chore quiet.",
+    ),
     // On `failed`, how it broke, a bounded quote of the tool's own output, never a summary of it. On
     // `unavailable`, what is missing, in the probe spec's own words ("no lockfile"): there is no tool output to
     // quote when the tool never ran, and the alternative, a sentence built from the probe's name, would have an
     // unmeasured probe claiming there is nothing to measure.
-    reason: z.string().optional(),
+    reason: z
+        .string()
+        .optional()
+        .describe(
+            "Why it broke, quoted from the tool rather than summarised, or, when it never ran, what is missing. Never a sentence built from the check's own name, which would have an unmeasured check claiming there is nothing to measure.",
+        ),
 });
 export type ProbeResult = z.infer<typeof ProbeResultSchema>;
 
@@ -7225,13 +9402,13 @@ export type ProbeResult = z.infer<typeof ProbeResultSchema>;
 // one derived field: whether <dir>/README.md exists, a stat per package. A package's architecture document IS
 // its README in this workspace, which is what makes that a stat on the package itself rather than a lookup.
 export const ChorePackageSchema = z.object({
-    dir: z.string(),
-    name: z.string(),
+    dir: z.string().describe("Where the package lives."),
+    name: z.string().describe("What it declares itself as."),
     // The manifest's `engines` map, verbatim, the runtime chore compares it against what the daemon is running.
-    engines: z.record(z.string(), z.string()).optional(),
-    dependencies: z.array(z.string()),
-    devDependencies: z.array(z.string()),
-    documented: z.boolean(),
+    engines: z.record(z.string(), z.string()).optional().describe("Which runtime versions it says it needs, verbatim."),
+    dependencies: z.array(z.string()).describe("What it depends on."),
+    devDependencies: z.array(z.string()).describe("What it needs only to build."),
+    documented: z.boolean().describe("Whether it has a README, which in this workspace is what a package's own documentation is."),
 });
 export type ChorePackage = z.infer<typeof ChorePackageSchema>;
 
@@ -7256,16 +9433,24 @@ export const ChoreShapeSchema = z.object({
     // drift survey needs to know there is something to re-read. Package pages are READMEs and are counted per
     // package by `ChorePackage.documented`; a repo with a map has been through the documentation flow at all,
     // which is the question this gate actually asks.
-    docs: z.array(z.string()),
-    dockerfiles: z.array(z.string()),
+    docs: z
+        .array(z.string())
+        .describe(
+            "The repository's own architecture documents, when it has any. Their existence is the question: a repository with none has never been through the documentation flow at all.",
+        ),
+    dockerfiles: z.array(z.string()).describe("Container definitions in it."),
     // CI pipeline definitions: .github/workflows/*.yml, .gitlab-ci.yml, and the other single-file conventions.
-    ci: z.array(z.string()),
+    ci: z.array(z.string()).describe("Pipeline definitions in it."),
     // Whether dependencies are resolved to a lockfile, what makes an audit mean anything.
-    lockfile: z.boolean(),
+    lockfile: z.boolean().describe("Whether dependencies are pinned to exact versions, which is what makes a security audit mean anything."),
     // A package.json at the repo root. The gate for every chore whose subject is the JavaScript dependency tree:
     // a Rust or Go repository has no majors to be behind on and no engines field to be pinned by, and offering it
     // those chores would be this surface guessing at what it is looking at.
-    packageManifest: z.boolean(),
+    packageManifest: z
+        .boolean()
+        .describe(
+            "Whether it is a JavaScript project at all. A Rust or Go repository has no majors to be behind on, and offering it those checks would be this surface guessing at what it is looking at.",
+        ),
     /* EVERY DEPENDENCY NAME DECLARED ANYWHERE IN THE REPO, the root manifest's blocks unioned with every
      * workspace package's, sorted and deduplicated.
      *
@@ -7277,19 +9462,34 @@ export const ChoreShapeSchema = z.object({
      * NAMES, not a `framework: "react"` verdict. Which names amount to "this is a React app" is a product
      * decision, and product decisions live in the chore book that ships with the browser, a daemon baked into an
      * image months ago must not be the thing that decides Svelte is not a UI framework. */
-    deps: z.array(z.string()),
+    deps: z
+        .array(z.string())
+        .describe(
+            "Every dependency name declared anywhere in the repository. Names rather than a verdict about which framework this is, because that judgement belongs to whatever reads this, not to a sandbox baked months ago.",
+        ),
 });
 export type ChoreShape = z.infer<typeof ChoreShapeSchema>;
 
 export const ChoreSignalsSchema = z.object({
-    packages: z.array(ChorePackageSchema),
-    shape: ChoreShapeSchema,
-    hotspots: z.array(WorkspaceHotspotSchema),
-    keyModules: z.array(WorkspaceKeyModuleSchema),
-    totals: z.object({ files: z.number(), symbols: z.number(), complexity: z.number(), hotspots: z.number() }),
+    packages: z.array(ChorePackageSchema).describe("Each package in the repository, as its own manifest declares it."),
+    shape: ChoreShapeSchema.describe("What the repository is made of, which decides whether a given chore is even a sensible question to ask of it."),
+    hotspots: z
+        .array(WorkspaceHotspotSchema)
+        .describe(
+            "Files that change often and are complicated at once, capped tight: a chore only asks whether something has entered the top of the ranking.",
+        ),
+    keyModules: z.array(WorkspaceKeyModuleSchema).describe("The parts the rest of the code leans on most, capped the same way."),
+    totals: z
+        .object({
+            files: z.number().describe("Files counted."),
+            symbols: z.number().describe("Named things they export."),
+            complexity: z.number().describe("Branch points added up."),
+            hotspots: z.number().describe("How many files qualify as hotspots at all."),
+        })
+        .describe("The repository in numbers."),
     // Whether the index these rankings came from is current. A chore must not fire on a half-built index, and
     // this is how the browser knows to hold its verdict rather than act on a partial ranking.
-    indexed: z.boolean(),
+    indexed: z.boolean().describe("Whether the index these rankings came from is finished. Nothing should act on a half-built one."),
 });
 export type ChoreSignals = z.infer<typeof ChoreSignalsSchema>;
 
@@ -7305,15 +9505,26 @@ export type ChoreOutcome = z.infer<typeof ChoreOutcomeSchema>;
  * panel, saying when it ran and what it concluded. Nothing here can hide a chore from the view; it only decides
  * whether the rail is allowed to speak. */
 export const ChoreLedgerEntrySchema = z.object({
-    repo: z.string(),
-    chore: z.string(),
-    ranAt: z.number(),
-    runId: z.string(),
-    outcome: ChoreOutcomeSchema,
-    digest: z.string(),
+    repo: z.string().describe("Which repository."),
+    chore: z.string().describe("Which chore."),
+    ranAt: z.number().describe("When it ran, in milliseconds."),
+    runId: z.string().describe("The conversation that ran it, so its whole record can be opened."),
+    outcome: ChoreOutcomeSchema.describe(
+        "What it concluded: it did something, it wrote something down, or it looked and found the finding to be false. That last one matters most, or the same turn starts again for ever.",
+    ),
+    digest: z
+        .string()
+        .describe(
+            "A fingerprint of the evidence standing at the time. A chore whose evidence has since changed is due again on its own merits; one whose evidence has not stays quiet.",
+        ),
     // Set by the owner from the panel, the chore stays visible and stays out of the badge until this passes.
     // Distinct from opting out, which is the absence of the chore from `enabled` in the sandbox's settings.
-    snoozedUntil: z.number().optional(),
+    snoozedUntil: z
+        .number()
+        .optional()
+        .describe(
+            "Not until then, in milliseconds. The chore stays visible and stays out of the badge. Different from switching it off, which is a setting.",
+        ),
 });
 export type ChoreLedgerEntry = z.infer<typeof ChoreLedgerEntrySchema>;
 
@@ -7327,11 +9538,16 @@ export type ChoreLedgerEntry = z.infer<typeof ChoreLedgerEntrySchema>;
  * has ONE lane across the whole sandbox, so "queued" is a real and common state, and a reader told "measuring"
  * about a probe that has not started is being lied to about how long it has left. */
 export const RunningProbeSchema = z.object({
-    repo: z.string(),
-    id: ProbeIdSchema,
+    repo: z.string().describe("Which repository."),
+    id: ProbeIdSchema.describe("Which measurement."),
     // When this was asked for. Always present, so a waiting probe can still say how long it has been waiting.
-    askedAt: z.number(),
-    startedAt: z.number().optional(),
+    askedAt: z.number().describe("When it was asked for, in milliseconds, so one still waiting can say how long it has waited."),
+    startedAt: z
+        .number()
+        .optional()
+        .describe(
+            "When it actually began. Absent while it is queued behind another, which is a real and common state: there is one lane for the whole sandbox.",
+        ),
 });
 export type RunningProbe = z.infer<typeof RunningProbeSchema>;
 
@@ -7339,22 +9555,45 @@ export type RunningProbe = z.infer<typeof RunningProbeSchema>;
 // one per repo because the rail badge scans ALL of them on a timer, and N requests a minute to answer "is
 // anything due" is the kind of poll that shows up in a battery graph.
 export const ChoresReportSchema = z.object({
-    repos: z.array(z.object({ repo: z.string(), probes: z.array(ProbeResultSchema), signals: ChoreSignalsSchema })),
-    ledger: z.array(ChoreLedgerEntrySchema),
+    repos: z
+        .array(
+            z.object({
+                repo: z.string().describe("Which repository."),
+                probes: z
+                    .array(ProbeResultSchema)
+                    .describe("The expensive measurements, served from a cache with an age on each rather than run on demand."),
+                signals: ChoreSignalsSchema.describe("The cheap facts, worked out fresh every time."),
+            }),
+        )
+        .describe(
+            "Every repository's standing evidence. One answer for all of them, because a badge polls this on a timer and one request per repository is the kind of poll that shows up in a battery graph.",
+        ),
+    ledger: z.array(ChoreLedgerEntrySchema).describe("What has already been done about all of it."),
     // What the runner is measuring and what is waiting behind it, right now. Part of the standing read rather
     // than a route of its own: it is the same question ("what does this repo currently say") asked about work in
     // flight, and a panel that had to ask twice would show the two halves disagreeing.
-    running: z.array(RunningProbeSchema),
+    running: z
+        .array(RunningProbeSchema)
+        .describe(
+            "What is being measured right now and what is waiting behind it. Part of this read rather than a route of its own, because a screen that had to ask twice would show the two halves disagreeing.",
+        ),
     // The daemon's own runtime, for the chore that asks whether this sandbox is running something end-of-life.
     // Read off the process rather than a manifest: what is INSTALLED is the fact that matters, and an `engines`
     // range is a wish.
-    node: z.string(),
+    node: z
+        .string()
+        .describe(
+            "The runtime version this sandbox is actually running, read off the process rather than off a manifest, because what is installed is the fact that matters and a declared range is a wish.",
+        ),
 });
 export type ChoresReport = z.infer<typeof ChoresReportSchema>;
 
 // POST /chores/probe, force one probe to re-run now, ahead of its TTL. Returns immediately; the runner does the
 // work and the next GET /chores carries the result, the same shape the panel already polls.
-export const ChoreProbeRequestSchema = z.object({ repo: z.string().min(1), id: ProbeIdSchema });
+export const ChoreProbeRequestSchema = z.object({
+    repo: z.string().min(1).describe("Which repository."),
+    id: ProbeIdSchema.describe("Which measurement to retake, ahead of its usual schedule."),
+});
 // POST /chores/ledger, record a run, or snooze. Written daemon-side rather than by the browser so a chore turn
 // started from anywhere (the panel, an automation, the agent itself) lands in one ledger.
 export const ChoreLedgerWriteSchema = ChoreLedgerEntrySchema;
@@ -7363,9 +9602,11 @@ export const ChoreLedgerWriteSchema = ChoreLedgerEntrySchema;
  * check has nothing to say about an extension nobody has exercised yet, and reporting that as a pass would be
  * the check lying at the exact moment it matters most. */
 export const ReadinessCheckSchema = z.object({
-    id: z.string(),
-    label: z.string(),
-    status: z.enum(["pass", "warn", "fail"]),
-    detail: z.string(),
+    id: z.string().describe("Which check."),
+    label: z.string().describe("What it is called."),
+    status: z.enum(["pass", "warn", "fail"]).describe("How it went. A warning is a real third answer rather than a soft failure."),
+    detail: z.string().describe("What it found."),
 });
-export const ExtensionReadinessSchema = z.object({ checks: z.array(ReadinessCheckSchema) });
+export const ExtensionReadinessSchema = z.object({
+    checks: z.array(ReadinessCheckSchema).describe("Everything that can be checked from the extension's own files, for an author about to publish."),
+});

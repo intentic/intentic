@@ -265,7 +265,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         gap: 0.35rem;
     }
     /* THE BRAND'S OWN FACE. Inter here read as another site's furniture bolted onto this one; a titling
-       serif read as something you have to look at twice. The bar is a logo and six words, so it takes the
+       serif read as something you have to look at twice. The bar is a logo and seven words, so it takes the
        logo's face: a rounded geometric, about as legible as small type gets. 16px rather than 15, because
        this face runs a touch small for its point size. */
     .bar-link {
@@ -542,9 +542,11 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         transform: translateY(-7px) rotate(-45deg);
     }
 
-    /* The bar holds six labels, two marks and a cartouche; below 68rem it cannot, so the labels go and what
-       stays is the brand, the one call, and the way into the same six. */
-    @media (max-width: 68rem) {
+    /* The bar holds seven labels, two marks and a cartouche; below 72rem it cannot, so the labels go and what
+       stays is the brand, the one call, and the way into the same seven. The threshold moved with the seventh
+       label (API): at 68rem the row had started wrapping under the wordmark on a narrow laptop, which reads as
+       a broken bar rather than a full one. */
+    @media (max-width: 72rem) {
         .bar-links {
             display: none;
         }

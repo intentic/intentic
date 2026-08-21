@@ -1,12 +1,13 @@
 import sitemap from "@astrojs/sitemap";
 import { docsSearch, lastModForUrl, llmsText } from "@intentic-dev/astro-integrations";
-import { apiBook, apiHref, apiPages } from "@intentic-dev/site-content/api";
+import { developersBook, developersHref, developersPages } from "@intentic-dev/site-content/developers";
 import { bookHref, bookPlacements } from "@intentic-dev/site-content/book";
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsBook, docsHref, docsPages } from "@intentic-dev/site-content/docs";
 import { guidePages, guidesHref } from "@intentic-dev/site-content/guides";
 import { landingContent } from "@intentic-dev/site-content/landing";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
+import { referenceBook, referenceHref, referencePages } from "@intentic-dev/site-content/reference";
 import { ORG_NAME, SITE_URL } from "@intentic-dev/site-content/site";
 import tailwindcss from "@tailwindcss/vite";
 import indexNow from "astro-indexnow";
@@ -160,16 +161,24 @@ export default defineConfig({
                 // The authoring book as its own section, not folded into Docs: an answer engine asked "how do I
                 // write an intentic extension" should be able to reach the eight pages that answer it without
                 // reading the seventeen that do not.
-                { label: "Extension API", paths: apiPages.map((page) => apiHref(page.id)) },
+                { label: "Extension API", paths: developersPages.map((page) => developersHref(page.id)) },
+                /* The wire API, as its own section and after the authoring one. A model asked what an intentic
+                 * sandbox can be told to DO has 37 pages here that answer it exactly, each one a route group
+                 * with its calls, their inputs and their answers, and none of that is derivable from the prose
+                 * sections above. It goes last of the content sections because it is the longest and the most
+                 * specific: a reader who needs it knows they need it. */
+                { label: "Sandbox HTTP API", paths: referencePages.map((page) => referenceHref(page.id)) },
                 { label: "Optional", paths: ["/privacy/", "/terms/", "/acceptable-use/", "/dpa/", "/subprocessors/"] },
             ],
         }),
         /* The search index, rebuilt from the pages that were just written: it replaces the near-empty file the
          * /search.json route emits in a build. Driven by the TREES, so a page no rail can reach is never indexed
-         * and the shelf a result names is the one the reader navigates by. Both books feed one index: a reader
-         * looking a word up should not have to know which of them documents it. */
+         * and the shelf a result names is the one the reader navigates by. All three books feed one index: a
+         * reader looking a word up should not have to know which of them documents it, and the generated book
+         * needs it most of all, because "which group holds the route that stops a turn" is exactly the question
+         * a reader arrives with and cannot answer from a rail of 37 labels. */
         docsSearch({
-            pages: [docsBook, apiBook].flatMap((book) =>
+            pages: [docsBook, developersBook, referenceBook].flatMap((book) =>
                 bookPlacements(book).map(({ page, section }) => ({
                     url: bookHref(book, page.id),
                     title: page.title,

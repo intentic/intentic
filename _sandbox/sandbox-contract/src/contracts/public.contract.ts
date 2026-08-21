@@ -8,7 +8,33 @@ import { OkSchema, PublicListSchema, PublishResultSchema, PublishSchema, Unpubli
 // unauthenticated `public-<slot>` hostname, and a second, authenticated way in would just be the workspace file
 // API with extra steps.
 export const publicContract = {
-    list: oc.route({ method: "GET", path: "/public" }).output(PublicListSchema),
-    publish: oc.route({ method: "POST", path: "/public/publish" }).input(PublishSchema).output(PublishResultSchema),
-    unpublish: oc.route({ method: "POST", path: "/public/unpublish" }).input(UnpublishSchema).output(OkSchema),
+    list: oc
+        .route({
+            method: "GET",
+            path: "/public",
+            summary: "What is published to the internet",
+            description:
+                "Everything currently in the outbox and the address it answers on. There is no call to read a published file back: it is served openly to anyone with the link, which is the entire point of having put it there.",
+        })
+        .output(PublicListSchema),
+    publish: oc
+        .route({
+            method: "POST",
+            path: "/public/publish",
+            summary: "Put a file on the internet",
+            description:
+                "Copies a workspace file or folder into the outbox, where it is served to anyone with the link and no sign-in. Answers with the address.",
+        })
+        .input(PublishSchema)
+        .output(PublishResultSchema),
+    unpublish: oc
+        .route({
+            method: "POST",
+            path: "/public/unpublish",
+            summary: "Take something off the internet",
+            description:
+                "Withdraws one published entry. When the last one goes, the outbox goes with it, so its existing at all always means something is published.",
+        })
+        .input(UnpublishSchema)
+        .output(OkSchema),
 };

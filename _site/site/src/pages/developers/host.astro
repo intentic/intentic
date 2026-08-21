@@ -1,5 +1,5 @@
 ---
-import { apiBook } from "@intentic-dev/site-content/api";
+import { developersBook } from "@intentic-dev/site-content/developers";
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
@@ -75,7 +75,7 @@ const packages = [
 ---
 
 <DocsLayout
-    book={apiBook}
+    book={developersBook}
     pageId="host"
     heading="Host API"
     lead="The same daemon, from inside the app. An extension's activate() is handed one IntenticApi object: the authenticated transport, the workspace facts, and every surface of the shell it may contribute to."
@@ -128,7 +128,7 @@ const packages = [
     <DocsCodeBlock code={rpc} lang="typescript" title="A typed read, cached correctly" />
     <p>
         You get the shell's own Vue and vue-query instances, so your components join the app's single query cache and re-theme with it. The
-        routes behind <code>rpc</code> are the ones on the <a href="/developers/http/">HTTP API</a> page.
+        routes behind <code>rpc</code> are the ones on the <a href="/api/">Sandbox API</a> page.
     </p>
 
     <h2>api.workspace: repos, files and diffs</h2>
@@ -331,7 +331,7 @@ const packages = [
 
     <DocsRelated
         links={[
-            { href: "/developers/http/", title: "HTTP API", why: "the routes behind <code>api.sandbox.rpc</code>, and how to call them without a browser." },
+            { href: "/api/", title: "Sandbox API", why: "the routes behind <code>api.sandbox.rpc</code>, and how to call them without a browser." },
             { href: "/developers/build/", title: "Build an extension", why: "the same surface as a walkthrough, ending in a real install." },
             { href: "/developers/manifest/", title: "Manifest reference", why: "every contribution point these registrations have to match." },
         ]}

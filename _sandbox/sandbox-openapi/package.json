@@ -1,0 +1,65 @@
+{
+    "name": "@intentic/sandbox-openapi",
+    "version": "0.0.0",
+    "description": "The sandbox daemon's wire contract as an OpenAPI 3.1 document, generated from @intentic/sandbox-contract",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/sandbox-openapi"
+    },
+    "files": [
+        "dist",
+        "src"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        },
+        "./groups": {
+            "types": "./dist/groups.d.ts",
+            "import": {
+                "@intentic/src": "./src/groups.ts",
+                "default": "./dist/groups.js"
+            },
+            "require": {
+                "@intentic/src": "./src/groups.ts",
+                "default": "./dist/groups.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@intentic/sandbox-contract": "workspace:*",
+        "@orpc/contract": "catalog:",
+        "@orpc/openapi": "catalog:",
+        "json-schema-typed": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

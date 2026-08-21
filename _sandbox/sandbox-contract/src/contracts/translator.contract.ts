@@ -12,14 +12,42 @@ import { KeyedProviderSchema, OkSchema, TranslatorAccountsSchema, TranslatorComp
 // URL this sandbox can't receive, so `complete` hands the landing URL to the translator. `connect.flow` tells the
 // card which mechanic it received without inferring it from whether an optional device code happened to exist.
 export const translatorContract = {
-    accounts: oc.route({ method: "GET", path: "/translator/accounts" }).output(TranslatorAccountsSchema),
+    accounts: oc
+        .route({
+            method: "GET",
+            path: "/translator/accounts",
+            summary: "Subscriptions connected through the translator",
+            description:
+                "What is signed in per provider. Each provider can hold several accounts at once, and the translator spreads work across them.",
+        })
+        .output(TranslatorAccountsSchema),
     connect: oc
-        .route({ method: "POST", path: "/translator/{provider}/connect" })
+        .route({
+            method: "POST",
+            path: "/translator/{provider}/connect",
+            summary: "Start connecting a subscription",
+            description:
+                "Begins the sign-in for one provider and says which of the two shapes it is: a code you type into a device page, which finishes by itself in the background, or a redirect whose landing address you hand back afterwards.",
+        })
         .input(z.object({ provider: KeyedProviderSchema }))
         .output(TranslatorStartSchema),
-    complete: oc.route({ method: "POST", path: "/translator/{provider}/complete" }).input(TranslatorCompleteSchema).output(OkSchema),
+    complete: oc
+        .route({
+            method: "POST",
+            path: "/translator/{provider}/complete",
+            summary: "Finish a redirect sign-in",
+            description:
+                "For the providers that redirect somewhere this sandbox cannot receive: hand back the address you landed on and the connection completes.",
+        })
+        .input(TranslatorCompleteSchema)
+        .output(OkSchema),
     disconnect: oc
-        .route({ method: "POST", path: "/translator/{provider}/disconnect" })
+        .route({
+            method: "POST",
+            path: "/translator/{provider}/disconnect",
+            summary: "Disconnect one subscription",
+            description: "Clears a single account by name. Any others under the same provider stay connected.",
+        })
         .input(z.object({ provider: KeyedProviderSchema, name: z.string().min(1) }))
         .output(OkSchema),
 };

@@ -1,5 +1,5 @@
 ---
-import { apiBook } from "@intentic-dev/site-content/api";
+import { developersBook } from "@intentic-dev/site-content/developers";
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsIndexTable, { type DocsIndexRow } from "../../components/DocsIndexTable.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
@@ -80,7 +80,7 @@ const processes = `"processes": [
 ---
 
 <DocsLayout
-    book={apiBook}
+    book={developersBook}
     pageId="manifest"
     heading="Manifest reference"
     lead="Every field of intentic-extension.json. The manifest is both the approval dialog the owner reads and the gate the host enforces, so what's here is exactly what your extension can do."
@@ -129,7 +129,7 @@ const processes = `"processes": [
     <p>
         Keep both as narrow as the feature needs. These lists are what a reviewer reads to understand declared daemon API use, not a complete
         confinement boundary for browser or process code. The{" "}
-        <a href="/developers/http/">HTTP API</a> page is what the routes are. An extension's <em>own</em> namespace, <code>/x/&lt;id&gt;/…</code>,
+        <a href="/api/">Sandbox API</a> page is what the routes are. An extension's <em>own</em> namespace, <code>/x/&lt;id&gt;/…</code>,
         needs no entry on either list: its backend is its own code from the same approved checkout.
     </p>
 

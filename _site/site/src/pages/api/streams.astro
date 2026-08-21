@@ -1,0 +1,111 @@
+---
+import { specGroup } from "@intentic/sandbox-openapi/groups";
+import { referenceHref } from "@intentic-dev/site-content/reference";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import { openApiDocument } from "../../lib/api-reference";
+
+/* THE STREAMING ROUTES, FOUND RATHER THAN LISTED. A route becomes a stream by answering `text/event-stream`,
+ * which is a fact the generated document already carries, so this table is a filter over it. The version of
+ * this page that lived under /developers listed four by hand and had missed two by the time it was read. */
+const document = await openApiDocument();
+const paths = (document.paths ?? {}) as Record<string, Record<string, { operationId?: string; summary?: string; responses?: Record<string, { content?: Record<string, unknown> }> }>>;
+
+const streams = Object.entries(paths)
+    .flatMap(([path, item]) => Object.entries(item).map(([method, operation]) => ({ path, method: method.toUpperCase(), operation })))
+    .filter((entry) => "text/event-stream" in (entry.operation.responses?.["200"]?.content ?? {}))
+    .map((entry) => {
+        const group = (entry.operation.operationId ?? "").split(".")[0] ?? "";
+        return {
+            method: entry.method,
+            path: entry.path,
+            summary: entry.operation.summary ?? "",
+            group,
+            label: specGroup(group)?.label ?? group,
+        };
+    });
+
+const events = `curl -N "$SANDBOX/events" -H "authorization: Bearer $SESSION"
+
+data: {"kind":"hello","workspaceId":"…","routes":["agent.run","git.status", …],"build":"…"}
+
+data: {"kind":"heartbeat"}
+
+data: {"kind":"workspaceChanged","paths":["src/app.ts","README.md"]}
+
+data: {"kind":"refsChanged","repos":["root"]}`;
+
+const headings = [
+    { id: "how-to-read-one", text: "How to read one", level: 2 as const },
+    { id: "which-routes", text: "Which routes stream", level: 2 as const },
+    { id: "the-sandbox-feed", text: "The sandbox-wide feed", level: 2 as const },
+    { id: "the-websocket", text: "The one that is a WebSocket", level: 2 as const },
+];
+---
+
+<ReferenceLayout
+    pageId="streams"
+    heading="Streams"
+    lead={`${streams.length} routes answer a stream rather than a value: a turn as it happens, the sandbox's own live feed, and the operations that take minutes. They are server-sent events, and reading one takes no library.`}
+    headings={headings}
+>
+    <h2 id="how-to-read-one">How to read one</h2>
+    <p>
+        A stream is a response that stays open. Frames are separated by a blank line and each carries one <code>data:</code> line holding
+        JSON. Anything that can read a line can read one; in a browser it is <code>EventSource</code> for the GET routes and a plain
+        <code>fetch</code> reader for the POST ones.
+    </p>
+    <DocsCodeBlock code={events} lang="bash" title="The live feed, on the command line" />
+    <p>
+        The <code>-N</code> matters. Without it the output is buffered, so a stream you are watching arrives in silence and then all at once,
+        which looks exactly like a route that does not work.
+    </p>
+
+    <h2 id="which-routes">Which routes stream</h2>
+    <p>
+        Found from the contract rather than listed here, so this table cannot fall behind: a route streams when it answers
+        <code>text/event-stream</code>, and every one that does is below.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Route</th><th>Carries</th><th>Group</th></tr>
+        </thead>
+        <tbody>
+            {
+                streams.map((stream) => (
+                    <tr>
+                        <td>
+                            <code>
+                                {stream.method} {stream.path}
+                            </code>
+                        </td>
+                        <td>{stream.summary}</td>
+                        <td>
+                            <a href={referenceHref(stream.group)}>{stream.label}</a>
+                        </td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+
+    <h2 id="the-sandbox-feed">The sandbox-wide feed</h2>
+    <p>
+        <code>GET /events</code> is the one to hold open for as long as your program runs. It carries the sandbox's liveness and everything
+        that changed out of band: an opening frame naming this daemon and the routes it implements, heartbeats, boot progress, batches of
+        changed file paths, which repositories' branches moved, the roster of who else is looking, and the fleet.
+    </p>
+    <p>
+        Those change pushes are not a nicety. An intentic workspace is file-first: the agent edits files and moves branches with its own
+        tools, entirely out of band from every route in this reference. Without the feed, a client is only ever as fresh as the last thing
+        somebody clicked.
+    </p>
+
+    <h2 id="the-websocket">The one that is a WebSocket</h2>
+    <p>
+        <code>GET /system/terminal</code> carries a terminal session's raw bytes, and it is a WebSocket rather than an event stream because
+        the traffic goes both ways: you type into it. A WebSocket cannot set headers, so it authorises with a short-lived ticket in the query
+        string instead of the credential every other route takes. It is not in this reference for the same reason the byte routes are not:
+        it is not a JSON contract and cannot be described as one.
+    </p>
+</ReferenceLayout>

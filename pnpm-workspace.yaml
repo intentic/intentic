@@ -224,6 +224,9 @@ catalog:
   imapflow: 1.6.5
   jose: 6.2.5
   jsdom: 29.1.1
+  # Types only, and pinned to what @orpc/openapi itself resolves: it is the JSON Schema dialect oRPC's
+  # generator declares in its own signatures, so a converter feeding that generator has to speak the same one.
+  json-schema-typed: 8.0.2
   knip: 6.31.0
   mailparser: 3.9.14
   marked: 18.0.7

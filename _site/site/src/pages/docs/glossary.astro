@@ -49,8 +49,8 @@ const families: Family[] = [
             {
                 word: "Daemon",
                 what: "The program inside the sandbox that everything talks to. It serves the HTTP API, verifies who you are against Google directly, runs the agent, and owns the files and git history. When these docs say the daemon enforces something, they mean it is enforced by the container on your hardware rather than by a screen you could bypass.",
-                href: "/developers/http/",
-                page: "HTTP API",
+                href: "/api/",
+                page: "Sandbox API",
             },
             {
                 word: "The platform",
@@ -97,8 +97,8 @@ const families: Family[] = [
             {
                 word: "Turn",
                 what: "One request to the agent and the work it does in reply. It runs detached inside the daemon, so closing the tab, reloading, or watching from a second device changes nothing about it.",
-                href: "/developers/http/#drive-an-agent",
-                page: "HTTP API",
+                href: "/api/agent/",
+                page: "One agent",
             },
             {
                 word: "Worktree",
@@ -187,8 +187,8 @@ const families: Family[] = [
             {
                 word: "Control token",
                 what: "The credential a program presents instead of signing in: a CI job, a script, an editor bridge. Minted with a fixed scope, shown once, revocable one at a time.",
-                href: "/developers/http/#how-a-call-is-authorized",
-                page: "HTTP API",
+                href: "/api/auth/",
+                page: "Authorising a call",
             },
             {
                 word: "Role",

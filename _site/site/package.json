@@ -16,6 +16,7 @@
         "@intentic-dev/astro-integrations": "workspace:*",
         "@intentic-dev/site-content": "workspace:*",
         "@intentic/registry": "workspace:*",
+        "@intentic/sandbox-openapi": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "astro": "catalog:",
         "astro-indexnow": "catalog:",

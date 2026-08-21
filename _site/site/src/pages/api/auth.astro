@@ -1,0 +1,111 @@
+---
+import { CONTROL_SCOPE_REACH } from "@intentic/sandbox-openapi";
+import { referenceHref } from "@intentic-dev/site-content/reference";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import ReferenceLayout from "../../components/ReferenceLayout.astro";
+
+/* The scope ladder is IMPORTED rather than retyped, from the same module that puts it in the generated
+ * document's security schemes. It is the one part of authorisation the daemon has an opinion about in code,
+ * so a table here that could disagree with it would be the exact drift this whole book exists to end. */
+
+const mint = `curl -X POST "$SANDBOX/system/control/tokens" \\
+  -H "authorization: Bearer $OWNER_SESSION" \\
+  -H "content-type: application/json" \\
+  -d '{"label":"nightly CI","scope":"read"}'
+
+{ "id": "6f1c…", "token": "ict_9wQ…" }`;
+
+const use = `# A program, anywhere: the control token
+curl "$SANDBOX/git/root/status" -H "x-intentic-control: $INTENTIC_TOKEN"
+
+# A person, in a browser: the session minted from their sign-in
+curl "$SANDBOX/git/root/status" -H "authorization: Bearer $SESSION"`;
+
+const headings = [
+    { id: "two-callers", text: "Two kinds of caller", level: 2 as const },
+    { id: "a-person", text: "A person, in a browser", level: 2 as const },
+    { id: "a-program", text: "A program, anywhere", level: 2 as const },
+    { id: "scopes", text: "What a scope reaches", level: 2 as const },
+    { id: "open-on-purpose", text: "Open on purpose", level: 2 as const },
+];
+---
+
+<ReferenceLayout
+    pageId="auth"
+    heading="Authorising a call"
+    lead="Two credentials reach a sandbox, and the difference between them is whether a person is present. Everything else about authorisation follows from that."
+    headings={headings}
+>
+    <h2 id="two-callers">Two kinds of caller</h2>
+    <p>
+        A browser has a signed-in human behind it and can be sent through a sign-in flow. A script cannot. So there are two credentials, one
+        for each, and every route on this site accepts either.
+    </p>
+    <DocsCodeBlock code={use} lang="bash" title="The same call, both ways" />
+
+    <h2 id="a-person">A person, in a browser</h2>
+    <p>
+        The sandbox authenticates the end user <strong>directly against Google</strong>: the browser presents a Google identity token and the
+        daemon verifies its signature against Google's published keys. The platform never holds or signs it, which is why a compromise of the
+        platform cannot command your sandbox. The first verified identity to arrive becomes the owner, and the owner grants everyone else a
+        role that decides how far they reach.
+    </p>
+    <p>
+        <code>POST /system/session</code> exchanges that token for a session the daemon minted, and that session is what every steady-state
+        call carries as <code>authorization: Bearer …</code>. Calling the same route again with a session that has not expired renews it, so a
+        long-lived tab never has to sign in twice.
+    </p>
+
+    <h2 id="a-program">A program, anywhere</h2>
+    <p>
+        Anything outside a browser presents a <strong>control token</strong> in the <code>x-intentic-control</code> header instead. A control
+        token is shown once, when it is minted. The daemon keeps only its hash, so it cannot be recovered and it can be revoked at any moment.
+    </p>
+    <DocsCodeBlock code={mint} lang="bash" title="Minting one as the owner" />
+    <p>
+        The app mints one for you under <strong>Sandbox → Computers → Editor bridge</strong>, at <code>editor</code> scope, together with the
+        settings an editor needs to use it. Any other scope is minted through the route above, which requires an owner session.
+    </p>
+
+    <h2 id="scopes">What a scope reaches</h2>
+    <p>
+        A scope is chosen when the token is minted and stored with it, rather than worked out from the caller. That is deliberate: the daemon
+        cannot tell an editor from a build job from a cron script, because all three are just a program holding a secret. The only honest
+        moment to decide how far one reaches is when a person decides it.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Scope</th><th>Reaches</th></tr>
+        </thead>
+        <tbody>
+            {
+                CONTROL_SCOPE_REACH.map((scope) => (
+                    <tr>
+                        <td>
+                            <code>{scope.scope}</code>
+                        </td>
+                        <td>
+                            {scope.reach} <span class="text-subtle">{scope.note}</span>
+                        </td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        Worth saying plainly: at <code>drive</code> and above, a stolen token is the agent's reach, because driving an agent means editing
+        files and running commands in this sandbox. <code>read</code> exists separately for exactly that reason rather than as a politeness. A
+        token presented on a route outside its scope gets a <a href={referenceHref("errors")}>403 that says so</a>, never a confusing 401.
+    </p>
+
+    <h2 id="open-on-purpose">Open on purpose</h2>
+    <p>
+        A handful of routes check no credential, because the caller provably cannot present one: <code>/health</code>, the web-chat widget's
+        routes, an automation's webhook, a forge's pipeline webhook, a workflow gate, and the enrolment routes a new computer redeems a
+        one-time pairing token on. Each carries its own narrower check instead of the general one.
+    </p>
+    <p>
+        Only <code>/health</code> is missing from this reference, and that is on purpose too: it is not part of the contract. It exists so a
+        script can tell a live sandbox from a dead port, and it deliberately checks nothing.
+    </p>
+</ReferenceLayout>

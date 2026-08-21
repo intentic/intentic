@@ -8,6 +8,10 @@ import { type Book, bookDestinations, bookHref, bookPages } from "./book";
  * words mean, and only some of it is reference. "API" over that is a promise of reference the book does not
  * keep, and a reader who clicked "Developers" should not have to notice they landed somewhere else.
  *
+ * /api/ NOW KEEPS THAT PROMISE, as its own book (reference.ts): every route the daemon serves, generated from
+ * the contract. This file is named for its book rather than for its old path, because a module called api.ts
+ * exporting the Developers tree, next to a book that IS the API, is a trap set for the next reader.
+ *
  * TWO SHELVES, AND THEY ARE THE TWO JOBS. "Build" is the code: the format, the APIs, a working extension, and
  * the reference you open at a field name. "Ship" is the process: getting a pointer into a registry, what the
  * trust words claim, and staying listed release after release. The old single "lifecycle" shelf braided the
@@ -23,7 +27,7 @@ import { type Book, bookDestinations, bookHref, bookPages } from "./book";
  * to back, by someone shipping their first extension; the reference is never walked at all: it is opened at
  * a field name by someone who already shipped one. The "Reference" group label is what keeps a forty-row
  * route table from making the getting-started guide look like reference material. */
-export const apiBook: Book = {
+export const developersBook: Book = {
     id: "developers",
     label: "Developers",
     sections: [
@@ -83,20 +87,18 @@ export const apiBook: Book = {
                                 datePublished: "2026-08-07",
                             },
                         },
-                        {
-                            /* A PEER of the host API, not a child of it: one is the daemon you call over the wire, the
-                             * other is the object an extension is handed in-process. A reader is picking between them,
-                             * and nesting one under the other said the wire API was a detail of the in-process one. */
-                            id: "http",
-                            title: "HTTP API",
-                            blurb: "Every route your sandbox serves, and the credential to call it",
-                            meta: {
-                                title: "Sandbox HTTP API · intentic API",
-                                description:
-                                    "Call your own sandbox over HTTP: the base URL, control tokens and their scopes, the route groups, the event streams, and the failures.",
-                                datePublished: "2026-08-07",
-                            },
-                        },
+                        /* THE WIRE API USED TO BE A THIRD ROW HERE, and it has left for /api/ (reference.ts).
+                         *
+                         * It was a page that said, honestly, that it would not enumerate the routes because
+                         * "the enumeration is what dates fastest" — and then described 34 groups in a table
+                         * that had drifted from the contract by the time anyone read it, listing three groups
+                         * the daemon no longer has. The enumeration now exists and is generated, so the page
+                         * that stood in for it has nothing left to do.
+                         *
+                         * Not kept as a pointer, either. A row whose only content is "the thing you want is
+                         * over there" costs a click and teaches a reader that this book's rows are unreliable.
+                         * The pages that linked to it now link into /api/ directly, at the page that answers
+                         * the question each of them was asking, and worker.ts forwards the old address. */
                     ],
                 },
             ],
@@ -184,11 +186,11 @@ export const apiBook: Book = {
     ],
 };
 
-export const apiPages = bookPages(apiBook);
-export const apiDestinations = bookDestinations(apiBook);
+export const developersPages = bookPages(developersBook);
+export const developersDestinations = bookDestinations(developersBook);
 
-export function apiHref(id: string): string {
-    return bookHref(apiBook, id);
+export function developersHref(id: string): string {
+    return bookHref(developersBook, id);
 }
 
 /* THE ONE PAGE THAT IS ALSO A NAV ROW, and the single exception to "the bar shows shelves, not pages".
@@ -203,12 +205,12 @@ export function apiHref(id: string): string {
  * Derived from the book entry rather than retyped, so the row still cannot drift from the page: rename the
  * page and the bar, the phone menu and the footer all follow. The throw is the anti-drift half of the same
  * bargain, turning a page that moved into a loud build failure instead of a blank menu row. */
-const servicesPage = apiPages.find((page) => page.id === "services");
+const servicesPage = developersPages.find((page) => page.id === "services");
 if (servicesPage === undefined) throw new Error("The api book has no services page for the nav row to derive from.");
 
-export const apiServicesDestination = {
+export const developersServicesDestination = {
     label: servicesPage.title,
-    href: apiHref(servicesPage.id),
+    href: developersHref(servicesPage.id),
     description: servicesPage.blurb,
 };
 
@@ -225,11 +227,11 @@ export const apiServicesDestination = {
  * EVERY STEP IS NAMED FOR THE PAGE IT LINKS TO. Publish, not "List"; Maintain, not "Update", because a chip
  * that says one word and lands on a page titled another teaches the reader that the site has two vocabularies. */
 export const extensionLifecycle: readonly { step: string; href: string; what: string; audience: "author" | "user" }[] = [
-    { step: "Build", href: apiHref("build"), what: "A directory with a manifest, in your own repo.", audience: "author" },
-    { step: "Publish", href: apiHref("publish"), what: "One topic, and a pull request opens itself.", audience: "author" },
-    { step: "Verify", href: apiHref("verify"), what: "The pointer is checked; the code may be read.", audience: "author" },
+    { step: "Build", href: developersHref("build"), what: "A directory with a manifest, in your own repo.", audience: "author" },
+    { step: "Publish", href: developersHref("publish"), what: "One topic, and a pull request opens itself.", audience: "author" },
+    { step: "Verify", href: developersHref("verify"), what: "The pointer is checked; the code may be read.", audience: "author" },
     { step: "Discover", href: "/extensions/", what: "The gallery, and browse from inside the app.", audience: "user" },
     { step: "Install", href: "/docs/extensions/", what: "One commit, approved by its owner.", audience: "user" },
     { step: "Earn", href: "/earn/", what: "Premium listings draw from the creator pool.", audience: "author" },
-    { step: "Maintain", href: apiHref("maintain"), what: "A new sha, and the cycle runs again.", audience: "author" },
+    { step: "Maintain", href: developersHref("maintain"), what: "A new sha, and the cycle runs again.", audience: "author" },
 ];

@@ -1,13 +1,22 @@
 /* A BOOK is one documentation tree with its own root path, its own rail and its own search scope.
  *
- * There are two, and the split is by WHO IS READING rather than by subject: /docs is written for someone using
- * intentic, /developers for someone building on it. That is the same cut code.visualstudio.com makes, and it exists
- * because the two readers share almost no vocabulary: one is deciding whether to trust an extension, the other
- * is deciding what to put in its manifest, while a single rail forced them to scroll past each other's work.
+ * There are three, and the split is by WHO IS READING rather than by subject: /docs is written for someone
+ * using intentic, /developers for someone building on it, /api for someone calling it. The first cut is the one
+ * code.visualstudio.com makes, and it exists because the two readers share almost no vocabulary: one is
+ * deciding whether to trust an extension, the other is deciding what to put in its manifest, while a single
+ * rail forced them to scroll past each other's work.
  *
- * Everything below is the shape both books share. The trees themselves are docs.ts and api.ts, and every derived
- * surface, including the rail, top bar, footer, breadcrumb, previous/next links, page metadata, sitemap and
- * search index, is computed from them here. A page can only appear where its book says it does.
+ * THE THIRD BOOK IS NOT HAND-WRITTEN, and that is the only way it differs. /docs and /developers are pages
+ * somebody authored; /api's reference shelf is GENERATED from the daemon's wire contract, one page per route
+ * group, so a route added to the contract is a documented route the same day. It is a Book anyway, and takes
+ * the same shape, because everything downstream, the rail, the bar, the footer, the breadcrumb, the search
+ * index, the sitemap, reads books and nothing else: making the generated tree a fourth kind of thing would
+ * have meant teaching all six surfaces about it.
+ *
+ * Everything below is the shape all three share. The trees themselves are docs.ts, developers.ts and
+ * reference.ts, and every derived surface, including the rail, top bar, footer, breadcrumb, previous/next
+ * links, page metadata, sitemap and search index, is computed from them here. A page can only appear where its
+ * book says it does.
  */
 
 export interface BookPage {
@@ -49,7 +58,7 @@ export interface BookSection {
 
 export interface Book {
     /** The first path segment, and the word the breadcrumb and the search index use. */
-    id: "docs" | "developers";
+    id: "docs" | "developers" | "api";
     /** The top bar's label and the breadcrumb's root. */
     label: string;
     sections: BookSection[];

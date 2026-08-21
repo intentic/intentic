@@ -1,0 +1,118 @@
+---
+import { referenceHref } from "@intentic-dev/site-content/reference";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import { groupCounts } from "../../lib/api-reference";
+
+/* The count is COUNTED, not typed. A page whose whole argument is "two rules cover every route" is the one
+ * page that must not name a number that has stopped being true, and this section's heading is the sentence a
+ * reader is most likely to check. */
+const total = Object.values(await groupCounts()).reduce((sum, count) => sum + count, 0);
+
+const health = `curl https://sandbox-a1b2c3d4e5f6.intentic.dev/health
+
+{ "ok": true, "sandboxId": "a1b2c3d4e5f6", "boot": { … }, "announce": { … } }`;
+
+const call = `SANDBOX=https://sandbox-a1b2c3d4e5f6.intentic.dev
+
+# GET: input rides the query string
+curl "$SANDBOX/workspace/file?path=README.md" \\
+  -H "x-intentic-control: $INTENTIC_TOKEN"
+
+# Everything else: input rides the JSON body, including DELETE
+curl -X POST "$SANDBOX/git/root/commit" \\
+  -H "x-intentic-control: $INTENTIC_TOKEN" \\
+  -H "content-type: application/json" \\
+  -d '{"message":"Fix the flaky parser test"}'`;
+
+const headings = [
+    { id: "where-it-is", text: "Where the sandbox is", level: 2 as const },
+    { id: "two-conventions", text: `Two conventions, all ${total} routes`, level: 2 as const },
+    { id: "path-parameters", text: "Path parameters", level: 2 as const },
+    { id: "not-json", text: "Routes that answer bytes", level: 2 as const },
+    { id: "old-daemon", text: "Old daemon, new client", level: 2 as const },
+];
+---
+
+<ReferenceLayout
+    pageId="calls"
+    heading="The shape of a call"
+    lead="There is no envelope and no versioning scheme. The contract's path is the URL, the body you send is the declared shape, and two conventions cover every route on the site."
+    headings={headings}
+>
+    <h2 id="where-it-is">Where the sandbox is</h2>
+    <p>
+        Each sandbox answers on its own hostname, <code>https://sandbox-&lt;id&gt;.&lt;zone&gt;</code>, over its private tunnel. The app shows
+        the exact address under <strong>Sandbox → Overview</strong>. One route stays open, and it is the one every launch script and readiness
+        loop asks first.
+    </p>
+    <DocsCodeBlock code={health} lang="bash" title="Is a daemon there" />
+    <p>
+        The sandbox id in that answer is how a caller proves it reached <em>this</em> daemon rather than something else on the same port. On
+        the machine actually running the sandbox there is also <code>https://local-&lt;id&gt;.&lt;zone&gt;</code>, a public name that resolves
+        to the loopback address: a real certificate on <code>127.0.0.1</code>, so a browser on that machine skips the round trip out through
+        the tunnel and back.
+    </p>
+
+    <h2 id="two-conventions">Two conventions, all {total} routes</h2>
+    <table>
+        <thead>
+            <tr><th>Convention</th><th>Detail</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Input on GET</td><td>The query string.</td></tr>
+            <tr>
+                <td>Input on everything else</td>
+                <td>A JSON body. Including <code>DELETE</code>, which sends its parameters in the body rather than the query.</td>
+            </tr>
+            <tr><td>Output</td><td>JSON, except the byte routes below and the <a href={referenceHref("streams")}>streams</a>.</td></tr>
+            <tr><td>Failure</td><td>A JSON object with a <code>message</code>, never an empty body. See <a href={referenceHref("errors")}>when a call fails</a>.</td></tr>
+        </tbody>
+    </table>
+    <DocsCodeBlock code={call} lang="bash" title="Two calls" />
+
+    <h2 id="path-parameters">Path parameters</h2>
+    <p>
+        A templated segment is written <code set:text="{repo}" /> or <code set:text="{id}" /> throughout this reference, and is URL-encoded in
+        the request. For every git route, <code>root</code> is the workspace repository itself and any other value is a repository's directory
+        relative to the workspace root.
+    </p>
+
+    <h2 id="not-json">Routes that answer bytes</h2>
+    <p>Four routes fall outside the JSON contract entirely, because bytes are not a shape a JSON contract can describe.</p>
+    <table>
+        <thead>
+            <tr><th>Route</th><th>Why it's different</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>GET /workspace/raw</code></td>
+                <td>A file's bytes with a content type worked out from its extension: how an image or a PDF is previewed, where the text route would corrupt it.</td>
+            </tr>
+            <tr>
+                <td><code>GET /workspace/media</code></td>
+                <td>
+                    A streamed byte range for audio and video. A media element cannot send a header, so this takes a short-lived ticket minted
+                    by <code>POST /workspace/media-ticket</code>, which <em>is</em> in the reference.
+                </td>
+            </tr>
+            <tr>
+                <td><code>POST /workspace/upload</code></td>
+                <td>Raw bytes, in parts, so a large file stays under the edge's body limit.</td>
+            </tr>
+            <tr>
+                <td><code set:text="GET /extensions/{id}/bundle" /></td>
+                <td>An installed extension's code, as bytes.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2 id="old-daemon">Old daemon, new client</h2>
+    <p>
+        Your browser is routinely newer than the daemon it is talking to: one released app plane serves every sandbox, whatever image each
+        user last pulled. That is supported rather than tolerated, and it is why the identity route and the event stream's opening frame both
+        advertise the route names this particular daemon implements. A client compares that list against the contract it was built with, so a
+        route the daemon predates surfaces as a named gap instead of a 404 nobody can attribute.
+    </p>
+    <p>Pin nothing; ask.</p>
+</ReferenceLayout>

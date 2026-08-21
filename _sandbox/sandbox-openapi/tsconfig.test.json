@@ -1,0 +1,15 @@
+/* Type-checks this package's TESTS along with its source, for the reason sandbox-contract's twin states: the
+ * build config emits to dist and therefore excludes *.test.ts, which silently takes every test file out of the
+ * repo's type check. noEmit, so it never writes anything. */
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
+    },
+    "include": ["./src/**/*"],
+    "exclude": []
+}

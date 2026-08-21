@@ -19,5 +19,14 @@ import { ModelsSchema, NativeProviderParamSchema } from "../schemas.js";
 export const providersContract = {
     // One provider's models (+ its default id), never empty, live discovery with a persisted/seed floor behind
     // it. Order is the provider's own preference order and is not re-ranked here; see ModelsSchema.
-    models: oc.route({ method: "GET", path: "/providers/{provider}/models" }).input(NativeProviderParamSchema).output(ModelsSchema),
+    models: oc
+        .route({
+            method: "GET",
+            path: "/providers/{provider}/models",
+            summary: "Models one provider offers",
+            description:
+                "Every model this provider serves and which one it defaults to. Never empty: it is discovered live with a stored list behind it. The order is the provider's own preference and is not rearranged here.",
+        })
+        .input(NativeProviderParamSchema)
+        .output(ModelsSchema),
 };

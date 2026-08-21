@@ -1,7 +1,8 @@
-import { apiDestinations, apiServicesDestination } from "./api";
+import { developersDestinations, developersServicesDestination } from "./developers";
 import { docsDestinations } from "./docs";
 import type { ShotImage } from "./landing";
 import { productHref, productPages } from "./product";
+import { referenceDestinations, referenceHref } from "./reference";
 import { DEMO_PATH } from "./site";
 
 /* The site's navigation, as data.
@@ -128,7 +129,7 @@ export const navEntries: NavEntry[] = [
      * now named on the one surface every visitor passes: the shelves cover the extension, and the service
      * gets the row it cannot get any other way, because one endpoint will never be a shelf of its own. This
      * is the ONLY place the derived-from-shelves rule bends, and it bends because the rule was written to
-     * stop a menu listing twenty pages, not to hide one of two artifacts (see apiServicesDestination).
+     * stop a menu listing twenty pages, not to hide one of two artifacts (see developersServicesDestination).
      *
      * It is a menu row rather than a top-level label on purpose. In the bar it would read as a peer
      * destination, announcing a paid-service catalog to every visitor who has no endpoint to sell, and the
@@ -142,8 +143,34 @@ export const navEntries: NavEntry[] = [
         type: "menu",
         label: "Developers",
         prefix: "/developers",
-        sections: [{ items: [...apiDestinations, apiServicesDestination] }],
+        sections: [{ items: [...developersDestinations, developersServicesDestination] }],
         action: { label: "Browse the gallery", href: "/extensions/" },
+    },
+    /* THE WIRE API, its own label rather than a row inside Developers, and this is the one place the bar was
+     * genuinely worth widening for.
+     *
+     * The two books next to each other are a fair test of the site's own cut, which is by READER. Developers is
+     * written for somebody extending intentic: they write a manifest, ship a bundle, get listed. This is for
+     * somebody CALLING a sandbox: a script, a dashboard, another agent, none of which will ever author an
+     * extension. Filed as a row under Developers, the whole HTTP surface would have been announced only to
+     * people who had already decided they were writing an extension.
+     *
+     * It is also simply bigger than the book it would have joined: 255 calls across 37 groups, against eight
+     * authored pages. A shelf that outweighs its book is a book.
+     *
+     * "API" is the accurate word here, and it is the word Developers gave up (see developers.ts): that book
+     * holds registry policy and trust definitions alongside its reference, and "API" over those was a promise
+     * it did not keep. Over this it is exactly the promise being made.
+     *
+     * The rows are the reference's own shelves, derived like every other menu, so a shelf added to the
+     * generated tree is a menu row without an edit here. The action is the document itself, for a reader whose
+     * next move is to point their own tooling at it rather than to read anything. */
+    {
+        type: "menu",
+        label: "API",
+        prefix: "/api",
+        sections: [{ items: [...referenceDestinations] }],
+        action: { label: "Download the OpenAPI document", href: `${referenceHref("")}openapi.json` },
     },
     // A bare link: the gallery's contents come from the registry repo at build time, so there is no authored
     // list here to build a menu out of.

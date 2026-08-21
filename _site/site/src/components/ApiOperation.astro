@@ -1,0 +1,167 @@
+---
+import { Code } from "astro:components";
+import type { RefOperation, RefRow } from "../lib/api-reference";
+import { intenticWarm } from "../lib/shiki-theme";
+
+/* ONE ROUTE, as a row you can open.
+ *
+ * CLOSED BY DEFAULT ON A LONG GROUP, and this is the decision the whole page hangs on. The git group has 43
+ * routes; rendered open, that is about sixty screens, and a reader who arrived wanting `commit` has to scroll
+ * past `stash-drop` to find it. Closed, the page is 43 lines — method, path, and what it does — which is a
+ * list you can read. A small group opens flat instead, because scanning six lines is not a job anyone needs
+ * an affordance for.
+ *
+ * A REAL <details>, so it works with JavaScript off, so the browser's own find-in-page reaches inside it, and
+ * so a search engine sees the whole thing: the content is in the document either way, only its height is not.
+ * The script in ApiPlayground opens whichever one the URL's fragment names, which is what keeps a deep link
+ * from landing on a closed row.
+ */
+
+interface Props {
+    operation: RefOperation;
+    /** Open on arrival. True for a group small enough that scanning is not the reader's problem. */
+    open: boolean;
+}
+
+const { operation, open } = Astro.props;
+
+/* The verb, coloured. Four of them, and the colour is doing one job: telling a reader at a glance which rows
+ * in a list of 43 change something. Reads-only is the site's gold; everything that writes takes the ember,
+ * and the one that deletes takes the danger tone the rest of the site already uses for it. */
+const METHOD_TONE: Record<string, string> = {
+    GET: "border-line-strong text-gold",
+    POST: "border-primary-600 text-primary-400",
+    PUT: "border-primary-600 text-primary-300",
+    DELETE: "border-danger/50 text-danger",
+};
+
+/* A child sits one step in from its parent, as a data attribute rather than a utility class. The table's own
+ * `.api-table td` padding rule is a class-plus-element selector, so it outranks any single-class helper and
+ * the nesting silently flattened: every field in a four-level answer sat at the same indent, which is the one
+ * thing this table has to get right. A data attribute puts the two rules at the same weight, and later wins. */
+const rowIndent = (row: RefRow): string => String(Math.min(row.depth, 3));
+
+const hasInput = operation.params.length > 0 || operation.body !== undefined;
+---
+
+<details class="api-op" id={operation.id} open={open} data-api-op={operation.id}>
+    <summary class="api-op-summary">
+        <span class:list={["api-method", METHOD_TONE[operation.method] ?? "border-line text-muted"]}>{operation.method}</span>
+        <code class="api-path">{operation.path}</code>
+        <span class="api-op-title">{operation.summary}</span>
+        {operation.streams && <span class="api-badge">stream</span>}
+    </summary>
+
+    <div class="api-op-body">
+        {operation.description && <p class="api-lede">{operation.description}</p>}
+
+        <div class="api-split">
+            <section>
+                <h3 class="api-h3">What you send</h3>
+                {
+                    hasInput ? (
+                        <table class="api-table">
+                            <thead>
+                                <tr>
+                                    <th>Field</th>
+                                    <th>Type</th>
+                                    <th>Where</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {operation.params.map((parameter) => (
+                                    <tr>
+                                        <td>
+                                            <code>{parameter.name}</code>
+                                            {parameter.required && <span class="api-req">required</span>}
+                                            {parameter.description && <span class="api-note">{parameter.description}</span>}
+                                        </td>
+                                        <td class="api-type">{parameter.type}</td>
+                                        <td class="api-where">{parameter.in === "path" ? "address" : "query"}</td>
+                                    </tr>
+                                ))}
+                                {operation.body?.rows.map((row) => (
+                                    <tr>
+                                        <td data-depth={rowIndent(row)}>
+                                            <code>{row.name}</code>
+                                            {row.required && <span class="api-req">required</span>}
+                                            {row.description && <span class="api-note">{row.description}</span>}
+                                        </td>
+                                        <td class="api-type">{row.type}</td>
+                                        <td class="api-where">body</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <p class="api-empty">Nothing. Call it as it is.</p>
+                    )
+                }
+            </section>
+
+            <section>
+                <h3 class="api-h3">What comes back</h3>
+                {
+                    operation.answer.rows.length > 0 ? (
+                        <table class="api-table">
+                            <thead>
+                                <tr>
+                                    <th>Field</th>
+                                    <th>Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {operation.answer.rows.map((row) => (
+                                    <tr>
+                                        <td data-depth={rowIndent(row)}>
+                                            <code>{row.name}</code>
+                                            {row.description && <span class="api-note">{row.description}</span>}
+                                        </td>
+                                        <td class="api-type">{row.type}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <p class="api-empty">
+                            {operation.streams
+                                ? "A stream of frames rather than one value. The example below is what the first few look like."
+                                : "A plain value rather than an object. The example below is the whole of it."}
+                        </p>
+                    )
+                }
+            </section>
+        </div>
+
+        {/* The playground. Its markup is here and its behaviour is the one script on the page, which finds it
+            by the operation id and reads that operation's entry out of the group's payload. */}
+        <div class="api-play" data-play={operation.id}>
+            <div class="api-play-head">
+                <span class="eyebrow eyebrow-bare">Try it</span>
+                <span class="api-play-note">answered in this tab</span>
+            </div>
+            <div class="api-play-fields" data-play-fields></div>
+            <div class="api-play-bar">
+                <button type="button" class="api-send" data-play-send>Send</button>
+                <button type="button" class="api-reset" data-play-reset>Reset</button>
+                <code class="api-play-url" data-play-url></code>
+            </div>
+            <div class="api-play-out" data-play-out hidden></div>
+        </div>
+
+        <div class="api-snippets">
+            <div>
+                <div class="eyebrow eyebrow-bare mb-2">curl</div>
+                <div class="code-window">
+                    <Code code={operation.curl} lang="bash" theme={intenticWarm} />
+                </div>
+            </div>
+            <div>
+                <div class="eyebrow eyebrow-bare mb-2">TypeScript</div>
+                <div class="code-window">
+                    <Code code={operation.typescript} lang="typescript" theme={intenticWarm} />
+                </div>
+            </div>
+        </div>
+    </div>
+</details>

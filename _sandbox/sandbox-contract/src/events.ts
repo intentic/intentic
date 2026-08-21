@@ -21,17 +21,17 @@ import {
 
 // One interactive question the agent asks via the `ask` tool (mirrors AskUserQuestion's input shape).
 export const AskOptionSchema = z.object({
-    label: z.string(),
-    description: z.string(),
-    preview: z.string().optional(),
+    label: z.string().describe("The choice, in a few words."),
+    description: z.string().describe("What picking it means."),
+    preview: z.string().optional().describe("Something to look at while deciding: a mock-up, a snippet, a layout."),
 });
 export type AskOption = z.infer<typeof AskOptionSchema>;
 
 export const AskQuestionSchema = z.object({
-    question: z.string(),
-    header: z.string(),
-    multiSelect: z.boolean(),
-    options: z.array(AskOptionSchema),
+    question: z.string().describe("What the agent is asking."),
+    header: z.string().describe("A short label for the question."),
+    multiSelect: z.boolean().describe("Whether more than one answer can be picked."),
+    options: z.array(AskOptionSchema).describe("The choices offered. A free-text answer is always possible as well."),
 });
 export type AskQuestion = z.infer<typeof AskQuestionSchema>;
 
@@ -40,17 +40,22 @@ export type AskQuestion = z.infer<typeof AskQuestionSchema>;
 // Code words it. `alwaysLabel` is present only when the SDK offered rules to persist, without it the card
 // shows allow-once / deny alone, because there is nothing an "always" answer could remember.
 export const PermissionAskSchema = z.object({
-    toolName: z.string(),
+    toolName: z.string().describe("Which tool it wants to use."),
     // "Claude wants to read foo.txt", the full prompt sentence, when the bridge rendered one.
-    title: z.string().optional(),
+    title: z.string().optional().describe("The whole question, as a sentence, exactly as the runtime words it."),
     // Short noun phrase for the allow button ("Read file").
-    displayName: z.string().optional(),
-    description: z.string().optional(),
+    displayName: z.string().optional().describe("A short phrase for the button, such as read file."),
+    description: z.string().optional().describe("More about what it is asking for."),
     // Why the prompt fired ('rule' | 'mode' | 'classifier' | …), shown as the card's muted subline.
-    reason: z.string().optional(),
+    reason: z.string().optional().describe("Why it is asking at all: a rule, the current mode, something that looked risky."),
     // The file the request is about, when it is about one (workspace-root-relative).
-    path: z.string().optional(),
-    alwaysLabel: z.string().optional(),
+    path: z.string().optional().describe("Which file it concerns, when it concerns one."),
+    alwaysLabel: z
+        .string()
+        .optional()
+        .describe(
+            "The wording for an always-allow answer. Present only when there is something an always could actually remember; without it the only answers are once and no.",
+        ),
 });
 export type PermissionAsk = z.infer<typeof PermissionAskSchema>;
 
@@ -61,24 +66,40 @@ export type PermissionAsk = z.infer<typeof PermissionAskSchema>;
  * to misquote, and the click on it the only way the run can happen. */
 export const ServiceOfferSchema = z.object({
     // The service, as the platform lists it: `<slug>` is what the run names, the rest is the catalog row.
-    slug: z.string(),
-    name: z.string(),
-    publisher: z.string(),
-    description: z.string(),
-    creditsPerRun: z.number(),
+    slug: z.string().describe("Which service."),
+    name: z.string().describe("What it is called."),
+    publisher: z.string().describe("Who runs it."),
+    description: z.string().describe("What it does."),
+    creditsPerRun: z
+        .number()
+        .describe(
+            "What one run costs. Stated by the platform rather than by the agent asking, which is what makes the price impossible to misquote.",
+        ),
     /* Whether the platform still has this listing on probation, a new provider that passed admission's
      * mechanical gates but has not yet served enough runs cleanly to graduate. It rides the card because
      * probation is the honest form of "listed automatically, not vouched for": the member approving the
      * spend is the person who should know that, and the platform is the only party that can say it. */
-    probation: z.boolean().optional(),
+    probation: z
+        .boolean()
+        .optional()
+        .describe(
+            "The listing is new and has not yet served enough runs cleanly to be trusted. The honest form of listed automatically but not vouched for, and the person approving the spend is who should know it.",
+        ),
     // The owner's meter as the platform stated it with the catalog, what "N left today" renders from. Absent
     // when the platform sent none (it answers a meter only to a member, and membership was already checked
     // before this card went up, so in practice it is present; the field stays honest about the wire).
-    credits: z.object({ allowance: z.number(), remaining: z.number(), resetsAt: z.string() }).optional(),
+    credits: z
+        .object({
+            allowance: z.number().describe("How many credits the period gives."),
+            remaining: z.number().describe("How many are left."),
+            resetsAt: z.string().describe("When they refill."),
+        })
+        .optional()
+        .describe("Your own meter, as the platform stated it."),
     // The request body the agent wants forwarded, verbatim, shown so the owner can see what leaves.
-    request: z.string(),
+    request: z.string().describe("Exactly what would be sent, so you can see what leaves before agreeing to it."),
     // The agent's one-line case for spending, the only prose on the card that is the model's.
-    why: z.string().optional(),
+    why: z.string().optional().describe("The agent's case for spending, and the only words on this card that are the agent's."),
 });
 export type ServiceOffer = z.infer<typeof ServiceOfferSchema>;
 
@@ -89,8 +110,14 @@ export type ServiceOffer = z.infer<typeof ServiceOfferSchema>;
  * `result`, whose `data` is the answer the agent acts on. The union is where future event kinds land when
  * services start streaming richer transcript elements; today's two are the smallest honest set. */
 export const ServiceStreamEventSchema = z.discriminatedUnion(`event`, [
-    z.object({ event: z.literal(`status`), text: z.string() }),
-    z.object({ event: z.literal(`result`), data: z.unknown() }),
+    z.object({
+        event: z.literal(`status`).describe("Progress. Each one replaces the last: a label, not a log."),
+        text: z.string().describe("What it is doing."),
+    }),
+    z.object({
+        event: z.literal(`result`).describe("The answer. Exactly one of these ends a run."),
+        data: z.unknown().describe("The answer itself, in whatever shape that service returns."),
+    }),
 ]);
 export type ServiceStreamEvent = z.infer<typeof ServiceStreamEventSchema>;
 
@@ -101,10 +128,10 @@ export type ServiceStreamEvent = z.infer<typeof ServiceStreamEventSchema>;
  * impossible to misrepresent, and the click on it the only way anything gets connected. */
 export const CapabilityOfferSchema = z.object({
     // The catalog card being asked for, and how the catalog itself titles it ("Notion", "GitHub", "Docker").
-    card: z.string(),
-    name: z.string(),
+    card: z.string().describe("Which connection is being asked for."),
+    name: z.string().describe("What it is called, as the catalogue titles it rather than as the agent named it."),
     // The agent's one-line case for connecting it, the only prose on the card that is the model's.
-    why: z.string().optional(),
+    why: z.string().optional().describe("The agent's case for connecting it, and the only words on this card that are the agent's."),
 });
 export type CapabilityOffer = z.infer<typeof CapabilityOfferSchema>;
 
@@ -112,10 +139,12 @@ export type CapabilityOffer = z.infer<typeof CapabilityOfferSchema>;
  * speaking after the stream settled. `ok` means the run served and was charged (`remaining` is the meter
  * after); `refunded` means the provider's stream died before its `result` and the charge was reversed. */
 export const ServiceRunReceiptSchema = z.object({
-    event: z.literal(`receipt`),
-    outcome: z.enum([`ok`, `refunded`]),
-    credits: z.number(),
-    remaining: z.number().optional(),
+    event: z
+        .literal(`receipt`)
+        .describe("The last line of a run, added by the platform rather than by the service. The ledger speaking after the fact."),
+    outcome: z.enum([`ok`, `refunded`]).describe("Whether it served and was charged, or died before answering and the charge was reversed."),
+    credits: z.number().describe("What it cost."),
+    remaining: z.number().optional().describe("What is left afterwards."),
 });
 export type ServiceRunReceipt = z.infer<typeof ServiceRunReceiptSchema>;
 
@@ -126,22 +155,22 @@ export type ServiceRunReceipt = z.infer<typeof ServiceRunReceiptSchema>;
  * impossible to misquote, and the click on it the only way the money can move. */
 export const PaymentOfferSchema = z.object({
     // The paid resource, as the endpoint's challenge stated it.
-    url: z.string(),
-    description: z.string().optional(),
+    url: z.string().describe("What is being paid for."),
+    description: z.string().optional().describe("What the endpoint says it is."),
     // Where the money goes, verbatim off the challenge: recipient address, CAIP-2 network, token contract.
-    payTo: z.string(),
-    network: z.string(),
-    asset: z.string(),
+    payTo: z.string().describe("Where the money goes, taken verbatim from the endpoint's own demand."),
+    network: z.string().describe("On which network."),
+    asset: z.string().describe("In which token."),
     // The token's display name ("USDC"), dollar-pegged, which is what lets every amount below read as USD.
-    assetName: z.string(),
+    assetName: z.string().describe("That token's name. It is pegged to the dollar, which is what lets every amount here read as dollars."),
     // The exact price in display units ("0.10"), the x402 exact scheme has no ranges, so this is the whole
     // spend, not a ceiling.
-    amountUsd: z.string(),
+    amountUsd: z.string().describe("The exact price. Not a ceiling: this scheme has no ranges, so this is the whole spend."),
     // The wallet's meter as the daemon's ledger states it, what "spent today / cap" renders from.
-    spentTodayUsd: z.string(),
-    dailyCapUsd: z.string(),
+    spentTodayUsd: z.string().describe("What has already gone out today."),
+    dailyCapUsd: z.string().describe("What may go out in a day."),
     // The agent's one-line case for paying, the only prose on the card that is the model's.
-    why: z.string().optional(),
+    why: z.string().optional().describe("The agent's case for paying, and the only words on this card that are the agent's."),
 });
 export type PaymentOffer = z.infer<typeof PaymentOfferSchema>;
 
@@ -149,29 +178,36 @@ export type PaymentOffer = z.infer<typeof PaymentOfferSchema>;
 // supportedCommands() (its built-ins plus the workspace's own .claude/commands and any plugin/skill commands).
 // `hint` is the argument placeholder the popover shows after the name.
 export const AgentCommandSchema = z.object({
-    name: z.string(),
-    description: z.string(),
-    hint: z.string().optional(),
+    name: z.string().describe("What to type, without the leading slash."),
+    description: z.string().describe("What it does."),
+    hint: z.string().optional().describe("What its argument should look like, shown after the name."),
 });
 export type AgentCommand = z.infer<typeof AgentCommandSchema>;
 
 // GET /agent/commands, which provider's last-published list to read; absent = claude, matching AgentTurn.
-export const AgentCommandsQuerySchema = z.object({ agent: AgentProviderSchema.optional() });
-export const AgentCommandsSchema = z.object({ commands: z.array(AgentCommandSchema) });
+export const AgentCommandsQuerySchema = z.object({
+    agent: AgentProviderSchema.optional().describe("Whose commands to read. Leave it out for Claude."),
+});
+export const AgentCommandsSchema = z.object({
+    commands: z.array(AgentCommandSchema).describe("The shortcut commands, as the provider last published them."),
+});
 
 // One TodoWrite/Task checklist item, surfaced live so the UI shows the agent's plan-of-work (Claude Code style).
 export const TodoItemSchema = z.object({
-    content: z.string(),
-    status: z.enum(["pending", "in_progress", "completed"]),
-    activeForm: z.string().optional(),
+    content: z.string().describe("The item, as the agent wrote it."),
+    status: z.enum(["pending", "in_progress", "completed"]).describe("Where it is."),
+    activeForm: z
+        .string()
+        .optional()
+        .describe("How to phrase it while it is happening, so a screen can say what the agent is doing rather than what it plans to do."),
 });
 export type TodoItem = z.infer<typeof TodoItemSchema>;
 
 // Context-window fill for a conversation: how many tokens the latest request sent vs the model's window, so
 // the UI can warn as the chat nears auto-compaction. Per-conversation, unlike the account-wide usage above.
 export const ContextUsageSchema = z.object({
-    tokens: z.number(), // full input of the latest request (input + cache read + cache creation)
-    contextWindow: z.number(), // the model's context window
+    tokens: z.number().describe("How much the latest request sent, all told."),
+    contextWindow: z.number().describe("How much the model can hold. The gap between these two is how close the conversation is to being compacted."),
 });
 export type ContextUsage = z.infer<typeof ContextUsageSchema>;
 
@@ -186,8 +222,8 @@ export type ToolCallStatus = z.infer<typeof ToolCallStatusSchema>;
 // A file a tool call touches. Workspace-root-relative, forward-slash (the tree/file route space), adapters
 // normalize from the turn's cwd. `line` is 1-based.
 export const ToolCallLocationSchema = z.object({
-    path: z.string(),
-    line: z.number().optional(),
+    path: z.string().describe("The file, as a workspace path, whatever directory the tool was run from."),
+    line: z.number().optional().describe("Which line, counting from one."),
 });
 export type ToolCallLocation = z.infer<typeof ToolCallLocationSchema>;
 
@@ -202,15 +238,25 @@ export type ToolCallLocation = z.infer<typeof ToolCallLocationSchema>;
 // the path also keeps the picture openable afterwards. Root-relative, forward-slash: the same route space as
 // ToolCallLocation.
 export const ToolCallContentSchema = z.discriminatedUnion("type", [
-    z.object({ type: z.literal("text"), text: z.string() }),
     z.object({
-        type: z.literal("diff"),
-        path: z.string(),
-        oldText: z.string().optional(),
-        newText: z.string(),
-        truncated: z.boolean().optional(),
+        type: z.literal("text").describe("Plain output."),
+        text: z.string().describe("What the tool said."),
     }),
-    z.object({ type: z.literal("image"), path: z.string() }),
+    z.object({
+        type: z.literal("diff").describe("A change to a file."),
+        path: z.string().describe("Which file, as a workspace path."),
+        oldText: z.string().optional().describe("What was there. Absent for a new file, or where the previous contents are not known."),
+        newText: z.string().describe("What is there now."),
+        truncated: z.boolean().optional().describe("One of the two sides was too large to send whole."),
+    }),
+    z.object({
+        type: z.literal("image").describe("A picture the tool produced."),
+        path: z
+            .string()
+            .describe(
+                "Where it is, as a workspace path. A path rather than the bytes, because the workspace already serves it, sending it inline would bloat every stored record, and this way the picture stays openable afterwards.",
+            ),
+    }),
 ]);
 export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
 
@@ -228,15 +274,22 @@ export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
 // z.lazy because the shape refers to itself: a subagent that delegates nests one level deeper.
 export const RestoredToolCallSchema: z.ZodType<RestoredToolCall> = z.lazy(() =>
     z.object({
-        id: z.string(),
-        name: z.string(),
-        category: ToolKindSchema,
-        status: ToolCallStatusSchema,
-        target: z.string().optional(),
-        locations: z.array(ToolCallLocationSchema).optional(),
-        content: z.array(ToolCallContentSchema).optional(),
-        children: z.array(RestoredToolCallSchema).optional(),
-        thinking: z.string().optional(),
+        id: z.string().describe("The call's id."),
+        name: z.string().describe("Which tool."),
+        category: ToolKindSchema.describe(
+            "What kind of thing it does: read, edit, delete, move, search, run, think, fetch. Named the same way whatever the backend called the tool.",
+        ),
+        status: ToolCallStatusSchema.describe("How it went."),
+        target: z.string().optional().describe("What it acted on, in one line: a file, a command, an address."),
+        locations: z.array(ToolCallLocationSchema).optional().describe("The files it touched."),
+        content: z.array(ToolCallContentSchema).optional().describe("What it produced: text, a change to a file, or a picture."),
+        children: z
+            .array(RestoredToolCallSchema)
+            .optional()
+            .describe(
+                "Calls a delegated helper made, nested under the call that started it, so a reopened conversation redraws the delegation rather than collapsing it into one result.",
+            ),
+        thinking: z.string().optional().describe("What the agent was reasoning about around this call."),
     }),
 );
 // Mutable, unlike most of this file: both builders settle a card IN PLACE when its result arrives turns later
@@ -256,7 +309,10 @@ export interface RestoredToolCall {
 /* ONE NOTE THE DAEMON PUT IN FRONT OF A USER'S MESSAGE, as both audiences see it: the model reads `text`, and
  * the chat draws `title` on a collapsed row that opens to that same `text`. Shared by the live frame and the
  * restored transcript so a note reads identically whether the tab watched it arrive or reopened an hour later. */
-export const TurnNoteSchema = z.object({ title: z.string(), text: z.string() });
+export const TurnNoteSchema = z.object({
+    title: z.string().describe("The one line a reader sees, on a row that opens to the text below."),
+    text: z.string().describe("The note itself, which is also exactly what the model was told."),
+});
 export type TurnNote = z.infer<typeof TurnNoteSchema>;
 
 // One restored bubble. Each stored assistant message becomes its own, which is what reproduces the live
@@ -268,8 +324,12 @@ export const RestoredMessageSchema = z.object({
      * organization has disabled Claude subscription access" produced no assistant text, so a transcript of the
      * two speakers alone ends on the user's message and the session reads as broken. It is the same muted line
      * the live client draws for the codes it does not turn red (ChatRole's `notice`). */
-    role: z.enum(["user", "assistant", "notice"]),
-    text: z.string(),
+    role: z
+        .enum(["user", "assistant", "notice"])
+        .describe(
+            "Who said it. A notice is neither side: it is something that happened to the turn, recorded so a reopened conversation can say it. Without those, a turn a provider refused ends on the user's message and reads as broken.",
+        ),
+    text: z.string().describe("The words."),
     /* WHEN THIS TURN WAS SENT, in epoch milliseconds (user rows only), what the chat shows on the bubble it
      * belongs to. The turn's START, not the moment the record was written: a turn that ran for twenty minutes
      * was still sent when the user pressed send, and a stamp taken at settlement would say the conversation
@@ -279,16 +339,26 @@ export const RestoredMessageSchema = z.object({
      * turn's frames arrive with no clock of their own, so an assistant bubble could only ever be stamped with
      * the whole turn's start or end, a number that says nothing about when that particular block was written.
      * Rows recorded before this existed simply have none, and the chat draws nothing for them. */
-    sentAt: z.number().optional(),
+    sentAt: z
+        .number()
+        .optional()
+        .describe(
+            "When it was sent, in milliseconds. On the user's rows only, because that is the only moment actually known: a turn's own frames arrive with no clock, so stamping the agent's rows could only ever mean the whole turn's start or end.",
+        ),
     // Files the user attached to this turn (user bubbles only) as workspace-relative paths, recovered from
     // the stored prompt's attachment note, so a reopened tab redraws chips, not the injected protocol text.
-    attachments: z.array(z.string()).optional(),
+    attachments: z.array(z.string()).optional().describe("Files attached to this message, as workspace paths."),
     /* The checkpoint this message can be rewound to (user bubbles only), filled in when the transcript is read
      * back. Not stored in the record itself, it is looked up per read from the daemon's rewind points, which
      * a rewind rewrites, so a reopened tab offers exactly the turns that are still there to go back to. */
-    checkpointId: z.string().optional(),
-    thinking: z.string().optional(),
-    tools: z.array(RestoredToolCallSchema).optional(),
+    checkpointId: z
+        .string()
+        .optional()
+        .describe(
+            "The saved point this message can be rewound to. Looked up on each read rather than stored, so what is offered is exactly what is still there to go back to.",
+        ),
+    thinking: z.string().optional().describe("What the agent was reasoning about."),
+    tools: z.array(RestoredToolCallSchema).optional().describe("The tool calls this part of the turn made."),
     /* What the daemon added to this turn's message (user rows only), the same notes the live `preamble` frame
      * carries, recovered from the stored prompt when the transcript is read back. The reader that strips them out
      * of the user's words is the one that hands them over here instead of dropping them on the floor.
@@ -296,7 +366,12 @@ export const RestoredMessageSchema = z.object({
      * On the message rather than as a row of its own, and that matters twice: they ARE part of what was
      * sent, and a record row per turn preamble would break the one-row-per-bubble correspondence a branch counts
      * with (see the client's recordedRows, notices are drawn locally and never recorded). */
-    notes: z.array(TurnNoteSchema).optional(),
+    notes: z
+        .array(TurnNoteSchema)
+        .optional()
+        .describe(
+            "What the sandbox added to this message before the model saw it. Carried on the message rather than as rows of their own, because they genuinely were part of what was sent.",
+        ),
     /* THE USER WROTE THIS ROW WEARING THE AGENT'S VOICE (assistant rows only), the composer's "as agent" mode
      * appending straight into the record, with no turn behind it (agents.place).
      *
@@ -306,12 +381,25 @@ export const RestoredMessageSchema = z.object({
      * fresh runtime session (agent/runtime-history.ts), which renders role and text alone, so there the line is
      * indistinguishable from anything the agent genuinely said. Keep it that way: rendering this flag into any
      * agent-facing text would break the feature's whole contract. */
-    placed: z.boolean().optional(),
+    placed: z
+        .boolean()
+        .optional()
+        .describe(
+            "A person wrote this in the agent's voice, with no turn behind it. Marked for the human re-reading the conversation months later, so their own words do not pass as the agent's. The agent itself never sees the mark.",
+        ),
 });
 export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
 
-export const SessionTranscriptSchema = z.object({ messages: z.array(RestoredMessageSchema) });
-export const AgentTranscriptSchema = SessionTranscriptSchema.extend({ sessionId: z.string().optional() });
+export const SessionTranscriptSchema = z.object({
+    messages: z
+        .array(RestoredMessageSchema)
+        .describe(
+            "The conversation, in order. Each block of the agent's prose is its own message with the tools that block introduced, which is what reproduces the way it actually unfolded.",
+        ),
+});
+export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
+    sessionId: z.string().optional().describe("The provider session behind the last turn, when there is one."),
+});
 
 /* WHAT A PUBLISHED CONVERSATION'S PAGE IS HANDED, the whole of it, baked into the page as one JSON block.
  *
@@ -339,9 +427,20 @@ export type SharePayload = z.infer<typeof SharePayloadSchema>;
  * the restart that killed the process holding it. The two handover cards are deliberately not among them:
  * `browser_help`'s Chromium and `terminal_help`'s waiting command both die with the container, so those parks
  * cannot be restored, only reported. */
-const PlanCardSchema = z.object({ kind: z.literal("plan"), requestId: z.string(), text: z.string() });
-const QuestionCardSchema = z.object({ kind: z.literal("question"), requestId: z.string(), questions: z.array(AskQuestionSchema) });
-const PermissionCardSchema = PermissionAskSchema.extend({ kind: z.literal("permission"), requestId: z.string() });
+const PlanCardSchema = z.object({
+    kind: z.literal("plan").describe("The agent has written a plan and is waiting for a yes."),
+    requestId: z.string().describe("What to send back when you answer."),
+    text: z.string().describe("The plan itself."),
+});
+const QuestionCardSchema = z.object({
+    kind: z.literal("question").describe("The agent has asked you something and is waiting."),
+    requestId: z.string().describe("What to send back when you answer."),
+    questions: z.array(AskQuestionSchema).describe("What it wants to know."),
+});
+const PermissionCardSchema = PermissionAskSchema.extend({
+    kind: z.literal("permission").describe("The agent wants to use a tool it needs permission for."),
+    requestId: z.string().describe("What to send back when you answer."),
+});
 export const ParkedCardSchema = z.discriminatedUnion("kind", [PlanCardSchema, QuestionCardSchema, PermissionCardSchema]);
 export type ParkedCard = z.infer<typeof ParkedCardSchema>;
 
@@ -795,9 +894,29 @@ export type AgentEvent = z.infer<typeof AgentEventSchema>;
 // second window, another device) synthesize the user bubble and the elapsed readout; its `seq` is the log
 // length at attach time, the replay/live boundary.
 export const AttachFrameSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("attached"), run: z.string(), prompt: z.string(), startedAt: z.number(), seq: z.number() }),
-    z.object({ kind: z.literal("frame"), seq: z.number(), event: AgentEventSchema }),
-    z.object({ kind: z.literal("end") }),
+    z.object({
+        kind: z.literal("attached").describe("The first frame, identifying the run you have joined."),
+        run: z.string().describe("The run's id."),
+        prompt: z.string().describe("What was said to start it, so a window that did not start the turn can still draw the message."),
+        startedAt: z.number().describe("When it started, in milliseconds, so a window joining late can show how long it has been going."),
+        seq: z.number().describe("How many frames already exist. Everything at or below this number is replay; everything above it is live."),
+    }),
+    z.object({
+        kind: z.literal("frame").describe("One thing that happened."),
+        seq: z
+            .number()
+            .describe("Its position in the run, counting from one. Keep the last one you saw and hand it back to resume rather than replay."),
+        event: AgentEventSchema.describe(
+            "What happened, as one of about forty shapes: the agent's words arriving piece by piece, a tool being called and answering, a plan or a question it is waiting on, a mode change, the turn's cost. Each carries its own `kind`.",
+        ),
+    }),
+    z.object({
+        kind: z
+            .literal("end")
+            .describe(
+                "The run is over and every frame has been delivered. A stream that closes without this was dropped mid-run, so re-attach with the last position you hold rather than assuming the turn finished.",
+            ),
+    }),
 ]);
 export type AttachFrame = z.infer<typeof AttachFrameSchema>;
 

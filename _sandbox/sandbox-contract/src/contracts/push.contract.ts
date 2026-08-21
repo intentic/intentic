@@ -11,8 +11,41 @@ import { OkSchema, PushChannelIdSchema, PushChannelSchema, PushConfigQuerySchema
 // (device permission, service-worker or shell registration, the daemon's key, the push service itself), a
 // button that proves the whole chain end-to-end is worth more than any amount of status rendering.
 export const pushContract = {
-    config: oc.route({ method: "GET", path: "/push/config" }).input(PushConfigQuerySchema).output(PushConfigSchema),
-    subscribe: oc.route({ method: "POST", path: "/push/subscribe" }).input(PushChannelSchema).output(OkSchema),
-    unsubscribe: oc.route({ method: "POST", path: "/push/unsubscribe" }).input(PushChannelIdSchema).output(OkSchema),
-    test: oc.route({ method: "POST", path: "/push/test" }).output(PushTestSchema),
+    config: oc
+        .route({
+            method: "GET",
+            path: "/push/config",
+            summary: "What a device needs to subscribe",
+            description: "The public key and settings a browser or app needs before it can register for notifications from this sandbox.",
+        })
+        .input(PushConfigQuerySchema)
+        .output(PushConfigSchema),
+    subscribe: oc
+        .route({
+            method: "POST",
+            path: "/push/subscribe",
+            summary: "Send notifications to this device",
+            description:
+                "Registers one device. The sandbox only interrupts you on the three moments where attention is genuinely wanted: a turn has finished, the agent is stuck on a question, and something is waiting for approval.",
+        })
+        .input(PushChannelSchema)
+        .output(OkSchema),
+    unsubscribe: oc
+        .route({
+            method: "POST",
+            path: "/push/unsubscribe",
+            summary: "Stop notifying a device",
+            description: "Removes one registered device. Others keep receiving.",
+        })
+        .input(PushChannelIdSchema)
+        .output(OkSchema),
+    test: oc
+        .route({
+            method: "POST",
+            path: "/push/test",
+            summary: "Send a test notification",
+            description:
+                "Proves the whole chain end to end. Worth having, because there are four separate places a notification can be lost that nobody can inspect from the outside: the device's permission, its registration, the sandbox's key, and the delivery service.",
+        })
+        .output(PushTestSchema),
 };

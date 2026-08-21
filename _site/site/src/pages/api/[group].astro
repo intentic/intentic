@@ -1,0 +1,71 @@
+---
+import { referenceGroups } from "@intentic-dev/site-content/reference";
+import ApiOperation from "../../components/ApiOperation.astro";
+import ApiPlayground from "../../components/ApiPlayground.astro";
+import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import { groupOperations, playgroundPayload } from "../../lib/api-reference";
+
+/* ONE PAGE PER ROUTE GROUP, and there is no list of them anywhere.
+ *
+ * `referenceGroups` walks the generated document's own group list, so adding a contract file to the daemon
+ * adds a page here, in the rail, in the search index, in llms.txt and in the sitemap, with nobody editing
+ * anything. The one thing that is still hand-written is the group's paragraph, and the generator's tests fail
+ * the build until somebody writes it — which is the trade this whole approach rests on: the enumeration is
+ * derived, the prose is required.
+ */
+
+/* The group travels as a prop rather than being looked up from the param, so the page cannot be reached for a
+ * group that is not in the tree: `getStaticPaths` is the only thing that decides which pages exist, and it
+ * reads the same list the rail and the search index do. Astro infers the prop's type from here, which is why
+ * there is no `Props` interface: one would be a second declaration of the same shape, and unused. */
+export const getStaticPaths = () =>
+    referenceGroups.map(({ group }) => ({
+        params: { group: group.name },
+        props: { group },
+    }));
+
+const { group } = Astro.props;
+const operations = await groupOperations(group.name);
+
+/* Open flat when the group is short enough to read, collapsed when it is a list to scan. Six is where the
+ * page stops being a page and starts being an index: below it, opening rows one at a time is friction for no
+ * gain; above it, the closed list IS the navigation. */
+const openFlat = operations.length <= 6;
+
+// The section rail's entries are the operations themselves, known before any markup exists. That is the one
+// thing this layout gains from not discovering headings: no page has ever had a more accurate list.
+const headings = operations.map((operation) => ({ id: operation.id, text: operation.summary, level: 2 as const }));
+---
+
+<ReferenceLayout
+    pageId={group.name}
+    heading={group.label}
+    lead={group.summary}
+    headings={headings}
+    simulated={true}
+>
+    <p>{group.description}</p>
+
+    {
+        !openFlat && (
+            <Fragment>
+                <p class="text-sm text-subtle">
+                    {operations.length} calls. Pick one to open it, or use the list on the right.
+                </p>
+                <nav class="api-index" aria-label={`${group.label} routes`}>
+                    {operations.map((operation) => (
+                        <a href={`#${operation.id}`}>
+                            <span class="api-method border-line text-subtle">{operation.method}</span>
+                            <code class="api-path">{operation.path}</code>
+                            <span class="api-op-title">{operation.summary}</span>
+                        </a>
+                    ))}
+                </nav>
+            </Fragment>
+        )
+    }
+
+    {operations.map((operation) => <ApiOperation operation={operation} open={openFlat} />)}
+
+    <ApiPlayground payload={playgroundPayload(operations)} />
+</ReferenceLayout>

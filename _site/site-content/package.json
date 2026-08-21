@@ -11,7 +11,8 @@
         "check": "tsgo --noEmit"
     },
     "dependencies": {
-        "@intentic/constants": "workspace:*"
+        "@intentic/constants": "workspace:*",
+        "@intentic/sandbox-openapi": "workspace:*"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",

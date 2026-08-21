@@ -1,5 +1,5 @@
 ---
-import { apiBook } from "@intentic-dev/site-content/api";
+import { developersBook } from "@intentic-dev/site-content/developers";
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
@@ -114,7 +114,7 @@ const shapeParts = [
 ---
 
 <DocsLayout
-    book={apiBook}
+    book={developersBook}
     pageId="publish"
     heading="Publish & registries"
     lead="Your extension stays in your repo. A registry is a git repo of pointers to other repos, so listing costs a pull request and nobody has to trust a build service."

@@ -1,0 +1,172 @@
+---
+import { specShelves } from "@intentic/sandbox-openapi/groups";
+import { referenceHref } from "@intentic-dev/site-content/reference";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import { groupCounts } from "../../lib/api-reference";
+
+/* THE BOOK'S FRONT DOOR. Its job is to answer two questions in the first screen — whose API is this, and where
+ * is the thing I came for — and then get out of the way. Everything below the fold is the map. */
+
+const counts = await groupCounts();
+const shelves = specShelves();
+const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+
+const quickstart = `SANDBOX=https://sandbox-a1b2c3d4e5f6.intentic.dev
+
+# Say something to an agent. It answers as soon as the run exists; the work is detached.
+curl -X POST "$SANDBOX/agent" \\
+  -H "x-intentic-control: $INTENTIC_TOKEN" \\
+  -H "content-type: application/json" \\
+  -d '{"prompt":"Update the changelog for the last five commits.",
+       "conversationId":"nightly-changelog",
+       "isolated":true}'
+
+{ "run": "run_8c2f41d9" }
+
+# Watch it happen, from the start or from wherever you got to.
+curl -N -X POST "$SANDBOX/agent/attach" \\
+  -H "x-intentic-control: $INTENTIC_TOKEN" \\
+  -H "content-type: application/json" \\
+  -d '{"conversationId":"nightly-changelog","after":0}'`;
+
+const headings = [
+    { id: "whose-api", text: "Whose API this is", level: 2 as const },
+    { id: "in-one-minute", text: "In one minute", level: 2 as const },
+    { id: "the-map", text: "The whole surface", level: 2 as const },
+    { id: "how-this-page-is-made", text: "How this is made", level: 2 as const },
+];
+---
+
+<ReferenceLayout
+    pageId=""
+    heading="Sandbox API"
+    lead={`Every call an intentic sandbox answers — ${total} of them — generated from the wire contract the daemon and its own browser client both import. Each one has a playground on its page that answers you back.`}
+    headings={headings}
+>
+    <h2 id="whose-api">Whose API this is</h2>
+    <p>
+        There is no intentic API in the cloud that reaches your code. The platform holds your identity and your sandbox's address and nothing
+        else. Everything documented here is served by <strong>your</strong> daemon, inside <strong>your</strong> container, on hardware you
+        own, and the only way in is a credential you minted yourself.
+    </p>
+    <p>
+        That is also why the playgrounds on these pages answer from a simulation in your own tab rather than by calling anything. There is no
+        shared server to point a demo at, and a demo that needed you to have a sandbox, sign in to it and open its door first would be a demo
+        almost nobody reached. What the playground gives you instead is every one of the {total} calls, including the destructive ones, with
+        the real address, the real fields and the real shapes — and beside each one, the <code>curl</code> that does it for real.
+    </p>
+
+    <h2 id="in-one-minute">In one minute</h2>
+    <p>The call most people are here for, and the one that shows the API's whole personality: start work, then watch it.</p>
+    <DocsCodeBlock code={quickstart} lang="bash" title="Drive an agent from a script" />
+    <p>
+        Starting a turn hands back a run id and nothing else, because the work runs inside the sandbox whether or not you stay connected.
+        Any number of watchers can attach to the same run from any number of devices; a reload loses nothing. Read{" "}
+        <a href={referenceHref("auth")}>Authorising a call</a> for where that token comes from, and{" "}
+        <a href={referenceHref("calls")}>The shape of a call</a> for the two conventions that cover all {total}.
+    </p>
+
+    <h2 id="the-map">The whole surface</h2>
+    <p>
+        Thirty-seven groups on seven shelves. Nothing below was typed by hand: the groups, their routes and every field in them come from the
+        contract, and only the sentence under each name is written by a person.
+    </p>
+
+    {
+        shelves.map(({ shelf, groups }) => (
+            <section class="api-shelf">
+                <h3 class="api-shelf-label">{shelf.label}</h3>
+                <p class="api-shelf-audience">{shelf.audience}</p>
+                <div class="api-cards">
+                    {groups.map((group) => (
+                        <a href={referenceHref(group.name)} class="api-card">
+                            <span class="api-card-head">
+                                <span class="api-card-name">{group.label}</span>
+                                <span class="api-card-count">{counts[group.name] ?? 0}</span>
+                            </span>
+                            <span class="api-card-what">{group.summary}</span>
+                        </a>
+                    ))}
+                </div>
+            </section>
+        ))
+    }
+
+    <h2 id="how-this-page-is-made">How this is made</h2>
+    <p>
+        The daemon and the app share one typed contract: it declares every route's method, path, input shape and output shape, and both sides
+        import it rather than agreeing to match. These pages are that contract rendered, so they cannot describe a route the daemon does not
+        serve, and a route added to the contract is documented the day it lands.
+    </p>
+    <p>
+        The same thing is served as a machine-readable document at <a href={`${referenceHref("")}openapi.json`}>openapi.json</a>: OpenAPI 3.1,
+        for a client generator, an editor's HTTP plugin, or a model that needs to be told what a sandbox can do.
+    </p>
+</ReferenceLayout>
+
+<style is:global>
+    .api-shelf {
+        margin-top: 2rem;
+    }
+    .api-shelf-label {
+        margin: 0;
+        font-family: var(--font-mark);
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--color-content);
+    }
+    .api-shelf-audience {
+        margin: 0.15rem 0 0.75rem;
+        font-size: 0.8125rem;
+        color: var(--color-subtle);
+    }
+    .api-cards {
+        display: grid;
+        gap: 0.6rem;
+        grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    }
+    .api-card {
+        display: block;
+        padding: 0.7rem 0.85rem;
+        border: 1px solid var(--color-line);
+        background: var(--color-card);
+        text-decoration: none;
+        transition:
+            border-color 0.15s ease,
+            background 0.15s ease;
+    }
+    .api-card:hover {
+        border-color: var(--color-line-strong);
+        background: var(--color-overlay);
+    }
+    .api-card-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .api-card-name {
+        font-family: var(--font-mark);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--color-content);
+    }
+    .api-card-count {
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        color: var(--color-gold);
+    }
+    .api-card-what {
+        display: block;
+        margin-top: 0.25rem;
+        font-size: 0.8125rem;
+        line-height: 1.5;
+        color: var(--color-subtle);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .api-card {
+            transition: none;
+        }
+    }
+</style>
