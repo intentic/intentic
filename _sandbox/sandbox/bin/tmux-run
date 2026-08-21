@@ -94,8 +94,16 @@ printf '%s\n' "$cmd" > "$d/cmd"
 # (src/system/system.routes.ts paneStates). It changes nothing
 # else — `remain-on-exit on` keeps the window whatever the status, and the wrapper's own exit code still comes
 # from the status file below, which is written first so a failure can't lose it.
+#
+# THE STATUS FILE IS PUBLISHED BY RENAME, never written in place. The wait loop below treats the file's
+# EXISTENCE as "the command is finished and its code is readable", and `> $d/status` cannot honour that: the
+# redirection creates the file empty and the shell writes the digit into it a moment later, so a loaded machine
+# can schedule the poll into that gap. The reader then saw an empty status for a command that had SUCCEEDED,
+# and handed its caller `exit ""` — which bash refuses ("numeric argument required") by exiting 2. That is how a
+# clean `git clone` came back as "exited 2" with its own untroubled output attached, once in a full test run and
+# never on a re-run. `mv` within one directory is atomic, so the file appears already complete or not at all.
 epitaph='#{?#{==:#{pane_dead_status},0},#[fg=green]✓ finished,#[fg=red]✗ #{?#{!=:#{pane_dead_signal},},signal #{pane_dead_signal},exit #{pane_dead_status}}}#[default] · #{t:pane_dead_time}'
-printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\ntmux set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nbash %q/cmd 2>&1 | tee -a %q/out\ncode=${PIPESTATUS[0]}\necho "$code" > %q/status\nexit $code\n' "$epitaph" "$d" "$d" "$d" > "$d/runner"
+printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\ntmux set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nbash %q/cmd 2>&1 | tee -a %q/out\ncode=${PIPESTATUS[0]}\necho "$code" > %q/status.part\nmv %q/status.part %q/status\nexit $code\n' "$epitaph" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
 
 # The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
 # text by pane-log-clean) — the filter's footer points the agent here for the full output. Path known only
@@ -188,8 +196,12 @@ while [ ! -f "$d/status" ]; do
     for _ in 1 2 3 4 5; do [ -f "$d/status" ] && break; sleep 0.05; done
     break
 done
-# Missing status file means the pane was killed mid-command — report failure honestly.
-code="$(cat "$d/status" 2>/dev/null || echo 1)"
+# Missing status file means the pane was killed mid-command — report failure honestly. Anything that is not a
+# plain number is the same kind of nothing and reports the same way: the code is about to be handed to `exit`,
+# which turns any non-number into a 2 of its own invention — a code the command never returned, attached to
+# whatever the command actually printed. A wrapper that cannot read a result must say "failed", not make one up.
+code="$(cat "$d/status" 2>/dev/null)"
+case "$code" in '' | *[!0-9]*) code=1 ;; esac
 # Emit the complete captured output once — the SDK captures this stdout as the whole Bash tool result.
 emit "$code"
 rm -rf "$d"

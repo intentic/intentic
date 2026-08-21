@@ -22,12 +22,16 @@ const TMUX_RUN = join(packageRoot(import.meta.url), "bin", "tmux-run");
 // window sweep actually fires (it is the call that used to reach tmux through `xargs`). `nsenter` records its
 // argv the same way and then EXECS the rest, so a hopped call shows up as both a nsenter line and the tmux
 // line it carried: the ordering that proves the hop wrapped the client rather than replacing it.
+// STATUS_BYTES, when the case below sets it, has the stub plant that exact content as the finished command's
+// status file — the capture dir is the one it is handed on the `bash <dir>/runner` argv it is asked to run.
+const plantStatus = `for a in "$@"; do case "$a" in "bash "*/runner) p="\${a#bash }"; [ -n "\${STATUS_BYTES+x}" ] && printf '%s' "$STATUS_BYTES" > "\${p%/runner}/status" ;; esac; done\n`;
+
 const stubs = async (): Promise<{ dir: string; calls: () => Promise<string[]> }> => {
     const dir = await mkdtemp(join(tmpdir(), "tmux-run-"));
     const log = join(dir, "calls");
     await writeFile(
         join(dir, "tmux"),
-        `#!/usr/bin/env bash\nprintf 'tmux %s\\n' "$*" >> ${JSON.stringify(log)}\ncase "$1" in\n  new-session|new-window) echo '%7' ;;\n  list-panes) echo '1 @3' ;;\n  display) echo 1 ;;\nesac\nexit 0\n`,
+        `#!/usr/bin/env bash\nprintf 'tmux %s\\n' "$*" >> ${JSON.stringify(log)}\ncase "$1" in\n  new-session|new-window) ${plantStatus}    echo '%7' ;;\n  list-panes) echo '1 @3' ;;\n  display) echo 1 ;;\nesac\nexit 0\n`,
         { mode: 0o755 },
     );
     await writeFile(join(dir, "nsenter"), `#!/usr/bin/env bash\nprintf 'nsenter %s\\n' "$1" >> ${JSON.stringify(log)}\nshift 2\nexec "$@"\n`, {
@@ -64,4 +68,43 @@ test("without the var the wrapper talks to tmux directly: the daemon's own runne
     const calls = await run({});
     expect(calls.filter((call) => call.startsWith("tmux "))).not.toHaveLength(0);
     expect(calls.some((call) => call.startsWith("nsenter"))).toBe(false);
+});
+
+/* A STATUS IT CANNOT READ IS A FAILURE, NEVER A CODE OF THE WRAPPER'S OWN INVENTION.
+ *
+ * The last line of the wrapper is `exit $code`, and bash answers anything that is not a number by complaining
+ * and exiting 2 — a code the command never returned, handed back attached to the output of a command that had
+ * in fact SUCCEEDED. A half-written status file was enough to reach it: the wait loop takes the file EXISTING
+ * as "finished, code readable", and `> $d/status` creates it empty a moment before the digit lands, which a
+ * machine running every package's suite at once has all the time in the world to schedule into. It surfaced as
+ * a capability install reporting `git clone … exited 2` under two lines of ordinary clone output, once in a
+ * full run and green on every re-run after.
+ *
+ * The write is a rename now, so the file cannot be seen half-made; this holds the READER to the same rule for
+ * whatever else might truncate it (a killed pane, a full disk), because inventing a 2 is the failure that
+ * costs the most: it is indistinguishable from the command having really failed.
+ */
+const statusProbe = async (bytes: string): Promise<number> => {
+    const { dir } = await stubs();
+    const { INTENTIC_TMUX_NS: _inherited, ...base } = process.env;
+    const failure = await execFileAsync("bash", [TMUX_RUN, "agent-status", "true", "probe"], {
+        env: {
+            ...base,
+            PATH: `${dir}:${process.env["PATH"] ?? ""}`,
+            INTENTIC_RUN_FILTER: "0",
+            INTENTIC_RUN_SOFT_TIMEOUT_S: "0",
+            STATUS_BYTES: bytes,
+        },
+    }).then(
+        () => ({ code: 0, stderr: "" }),
+        (error: { code?: number; stderr?: string }) => ({ code: error.code ?? -1, stderr: error.stderr ?? "" }),
+    );
+    // bash's own complaint about the bad argument, which is the tell that the value reached `exit` unchecked.
+    expect(failure.stderr).not.toContain("numeric argument required");
+    return failure.code;
+};
+
+test("a status file that is empty or not a number exits 1, the honest failure, rather than bash's invented 2", async () => {
+    expect(await statusProbe("")).toBe(1);
+    expect(await statusProbe("not-a-number")).toBe(1);
 });
