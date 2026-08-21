@@ -101,8 +101,13 @@ jobs:
         run: node scripts/prepare-native.mjs
       # Simulator, unsigned: compilation is the fact being checked, and it is the whole of what a runner
       # without the team's signing identity can check.
+      #
+      # `-project`, not `-workspace`: Capacitor generates the dependency wiring as a Swift package (CapApp-SPM)
+      # whenever every installed plugin ships a Package.swift, and that path never runs CocoaPods, so no
+      # App.xcworkspace is written at all — asking for one fails before a single file compiles. Capacitor's own
+      # `cap build ios` branches the same way (dist/ios/build.js), and `-scheme App` is unchanged either way.
       - name: Compile
         run: |
-          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release \
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO build

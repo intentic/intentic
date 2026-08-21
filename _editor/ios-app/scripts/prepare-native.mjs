@@ -13,7 +13,7 @@
  *    APP delegate and not to the scene's, so this file is the only place they can live.
  *
  * 2. WIRE the push entitlement into the App target alone. The obvious shortcut: CODE_SIGN_ENTITLEMENTS as an
- *    xcodebuild command-line override: applies to every target the workspace builds, Pods frameworks
+ *    xcodebuild command-line override: applies to every target the build touches, the Capacitor Swift package's
  *    included, which is exactly where an entitlements file does not belong. So the file is copied beside the
  *    app sources and the setting written into the app project's two build configurations, recognized by the
  *    bundle-identifier line that only the App target carries.

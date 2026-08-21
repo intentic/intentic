@@ -18,6 +18,7 @@
     "appVersionCode": 1,
     "minSdkVersion": 21,
     "orientation": "default",
+    "splashScreenFadeOutDuration": 300,
     "enableNotifications": true,
     "isChromeOSOnly": false,
     "isMetaQuest": false,

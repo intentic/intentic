@@ -35,7 +35,7 @@ certificates and profiles are minted on demand by the App Store Connect API key,
 anywhere but Apple's console. [scripts/prepare-native.mjs](scripts/prepare-native.mjs) finishes the generated
 project right after generation: it writes the two AppDelegate methods that hand the APNs device token to the
 push plugin (Capacitor's template leaves those to the app, and without them an install waits forever for a
-token), and points the App target (never the Pods, which a global build flag would also hit) at
+token), and points the App target (never the bundled Swift package, which a global build flag would also hit) at
 [native/App.entitlements](native/App.entitlements). Both edits assert their anchor, so a Capacitor upgrade that
 reshapes the template stops the build instead of shipping an app that cannot receive a notification.
 

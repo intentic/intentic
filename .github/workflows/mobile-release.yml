@@ -150,6 +150,9 @@ jobs:
       # Cloud signing end to end: automatic signing + the API key lets xcodebuild mint the distribution
       # certificate and profile itself, and register the push capability the entitlements file asks for —
       # no .p12, no profile secret, nothing that expires outside Apple's own console.
+      #
+      # `-project`, not `-workspace`, for the same reason mobile.yml compiles that way: the generated project
+      # wires its dependencies as a Swift package, CocoaPods never runs, and no App.xcworkspace exists to open.
       - name: Archive
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -158,7 +161,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release \
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
             -allowProvisioningUpdates \
