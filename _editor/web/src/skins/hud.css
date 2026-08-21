@@ -396,18 +396,19 @@
             0 0 18px color-mix(in oklab, var(--color-primary-500) 22%, transparent);
     }
 
-    /* THE SEARCH BAND — the command palette's top row (shell/QuickOpen.vue), whose input is `field-bare`
-     * because the frame belongs to the row, not to the field. So the slot is cut at the ROW's width: the same
-     * recess and the same lit top edge as any field here, edge to edge across the panel, and on focus the
-     * lower lip lights instead of a halo being drawn around a borderless box inside a bordered one. */
+    /* THE SEARCH BAND — every filter row in the app (the command palette's, and every SearchBar), whose input
+     * is `field-bare` because the frame belongs to the row, not to the field. So the slot is cut at the ROW's
+     * width: the same recess and the same lit top edge as any field here, edge to edge across the panel, rather
+     * than a halo drawn around a borderless box inside a bordered one. */
     [data-skin="hud"] .ui-search-row {
         background-color: oklch(11% 0.028 232);
         box-shadow: inset 0 1px 3px oklch(6% 0.02 232 / 0.75);
     }
+    /* Focus lights the slot rather than a lip of it: same reason as the other skin, one fewer line drawn inside
+     * a panel already made of them. */
     [data-skin="hud"] .ui-search-row:focus-within {
-        box-shadow:
-            inset 0 1px 3px oklch(6% 0.02 232 / 0.75),
-            inset 0 -1px 0 color-mix(in oklab, var(--hud-glow) 75%, transparent);
+        background-color: color-mix(in oklab, var(--hud-glow) 10%, oklch(11% 0.028 232));
+        box-shadow: inset 0 1px 3px oklch(6% 0.02 232 / 0.75);
     }
 
     /* Buttons keep their tinted-fill recipe — that is the app's own language and the skin has no quarrel with

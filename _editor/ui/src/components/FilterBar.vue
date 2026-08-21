@@ -42,7 +42,7 @@ const query = defineModel<string>({ required: true });
 
 <template>
     <div class="flex flex-wrap items-center gap-2">
-        <div class="flex h-8 min-w-40 flex-1 items-center overflow-hidden rounded-md border border-line bg-canvas">
+        <div class="ui-search-row flex h-8 min-w-40 flex-1 items-center overflow-hidden rounded-md border border-line bg-canvas">
             <SearchBar
                 v-model="query"
                 :placeholder="placeholder"

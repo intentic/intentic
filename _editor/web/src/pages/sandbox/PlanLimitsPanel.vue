@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { ui, RowGroup } from "@intentic/ui";
+import { ui, RowGroup, SearchBar } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/providerAccounts";
@@ -386,12 +386,14 @@ const roster = computed(() => {
                 >
                     {{ providerLabel(rosterProvider) }}<Icon name="times" />
                 </button>
-                <input
+                <SearchBar
                     v-if="rosterOpen"
                     v-model="rosterQuery"
-                    type="search"
+                    variant="field"
+                    clearable
+                    aria-label="Filter accounts"
                     placeholder="Filter accounts…"
-                    :class="ui.input(`ml-auto h-7 w-full text-2xs @xl:w-56`)"
+                    class="ml-auto w-full @xl:w-56"
                 />
             </div>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, Popover, timeAgo } from "@intentic/extension-ui";
+import { Icon, Popover, SearchBar, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { useBranches } from "./useBranches.js";
 
@@ -103,12 +103,7 @@ const confirmDelete = async (name: string): Promise<void> => {
 
         <Popover ref="popover">
             <div class="flex w-72 flex-col gap-1.5">
-                <input
-                    v-model="filter"
-                    type="text"
-                    placeholder="Filter branches…"
-                    class="w-full rounded-md border border-line bg-canvas px-2 py-1 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                />
+                <SearchBar v-model="filter" variant="field" clearable aria-label="Filter branches" placeholder="Filter branches…" />
 
                 <p v-if="actionError" class="truncate text-2xs text-danger" v-tooltip.bottom.overflow="actionError">{{ actionError }}</p>
 

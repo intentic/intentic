@@ -660,9 +660,10 @@
     }
 
     /* ── THE SEARCH BAND, WHICH IS A CHANNEL THE WIDTH OF THE PANEL ───────────────────────────────────────
-     * The command palette's top row (shell/QuickOpen.vue). Its input is `field-bare`, so the recess and the
-     * focus rim above never touch it; what the reader sees as "the search" is this row, and so this row is
-     * where the skin says it.
+     * Every filter row in the app: the command palette's top band, and every SearchBar (the model picker's
+     * first row, the panel filters, the standalone bordered one). Their inputs are `field-bare`, so the recess
+     * and the focus rim above never touch them; what the reader sees as "the search" is this row, and so this
+     * row is where the skin says it.
      *
      * SAME IDEA AS EVERY OTHER FIELD HERE, AT THE PANEL'S SCALE: the fill cut a step below the panel around
      * it, and the light caught on the upper lip of the cut. The alternative was to leave the band flat and let
@@ -678,12 +679,13 @@
         background-color: color-mix(in oklab, var(--color-surface-950) 66%, black);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
     }
-    /* Three quarters of the gold rather than all of it: at full strength this one line is the brightest thing
-     * in the panel, and what it has to beat is a hairline — the divider it lies over — not the list under it. */
+    /* FOCUS IS THE CHANNEL WARMING, not a line under it. A lit lower lip was still an EDGE, and an edge inside a
+     * panel that already draws two of them (the dialog's rim, the divider this lip lay on) reads as the doubled
+     * highlight it was meant to replace. Warming the fill instead keeps the count of lines in the panel exactly
+     * where it was and says the same thing: the light has moved to the channel the reader is typing into. */
     [data-skin="sanctum"] .ui-search-row:focus-within {
-        box-shadow:
-            inset 0 1px 3px rgba(0, 0, 0, 0.5),
-            inset 0 -1px 0 rgba(201, 160, 92, 0.75);
+        background-color: color-mix(in oklab, var(--sanctum-gold) 9%, color-mix(in oklab, var(--color-surface-950) 66%, black));
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
     }
 
     /* A BUTTON IS A CUT PLATE, AND IT HAS TO LOOK CUT. The app's own tinted fill, a rule mixed from whatever

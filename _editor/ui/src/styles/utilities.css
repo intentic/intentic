@@ -166,6 +166,35 @@
     }
 }
 
+/* THE SEARCH ROW — the one filter field, wherever it is worn: the command palette's top band, the model
+   picker's first row, every panel filter SearchBar draws, and the standalone bordered variant above a list.
+
+   FOCUS IS A TINT, NOT AN EDGE, and that is the whole point of the class. A search field is either edge to edge
+   inside a panel that already has a border, or a borderless slot in a box that already has one, so a focus rim
+   drawn around the field itself lands as a second frame a few pixels inside the first — the doubled highlight
+   the skins kept re-inventing. A fill has no edge to collide with: it says "the keystrokes land here" by making
+   the channel itself the lit thing. The input inside carries `field-bare` for the same reason, which is what
+   keeps a skin's field recipe off it and leaves the state to the row.
+
+   Kept faint on purpose. This is a field that is focused nearly all the time it is on screen — the palette
+   opens focused — so it has to read as "live", not as an alarm. */
+@layer components {
+    .ui-search-row {
+        transition: background-color 0.12s ease-out;
+    }
+
+    .ui-search-row:focus-within {
+        background-color: color-mix(in srgb, var(--color-primary-500) 8%, transparent);
+    }
+
+    /* A row inside a row is one assembly, so only the outer one takes the tint: FilterBar wraps the bar in a
+       box that also holds the result count, and two translucent fills stacked painted the field a shade darker
+       than the number beside it — a seam down the middle of one control. */
+    .ui-search-row .ui-search-row:focus-within {
+        background-color: transparent;
+    }
+}
+
 /* A SCROLLBAR THAT IS ONLY THERE WHEN WANTED — for the narrow columns, where `.scrollbar-thin`'s permanently
    `line-strong` thumb is a second vertical line running the full height of a 16rem index that is otherwise
    drawing no lines at all. At rest this one is a whisper, enough to say the list continues past the fold; it

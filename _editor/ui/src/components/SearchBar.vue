@@ -73,8 +73,8 @@ const passAttrs = computed(() => {
 });
 const rootClass = computed(() =>
     twMerge(
-        `relative min-w-0`,
-        variant === `panel` ? `border-b border-line` : `rounded-md border border-line bg-canvas focus-within:border-line-strong`,
+        `ui-search-row relative min-w-0`,
+        variant === `panel` ? `border-b border-line` : `rounded-md border border-line bg-canvas`,
         typeof attrs[`class`] === `string` ? attrs[`class`] : ``,
     ),
 );
@@ -89,7 +89,7 @@ const RIGHT_ROOM = {
 const controls = computed(() => (clearable ? 1 : 0) + (matchCase.value === undefined ? 0 : 1));
 const inputClass = computed(() =>
     twMerge(
-        `w-full min-w-0 bg-transparent text-base text-content placeholder:text-subtle focus:outline-none md:text-xs`,
+        `field-bare w-full min-w-0 bg-transparent text-base text-content placeholder:text-subtle focus:outline-none md:text-xs`,
         variant === `panel` ? `py-2 pl-9 pr-3` : `py-1 pl-7 pr-3 max-md:h-9`,
         RIGHT_ROOM[variant][controls.value] ?? ``,
     ),

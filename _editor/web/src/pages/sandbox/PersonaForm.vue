@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SystemPromptMode } from "@intentic/sandbox-contract";
-import { BrandMark, ui, Notice, type NoticeModel, SegmentedControl } from "@intentic/ui";
+import { BrandMark, ui, Notice, type NoticeModel, SearchBar, SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
 import FolderPicker from "./FolderPicker.vue";
 import PersonaKitFields from "./PersonaKitFields.vue";
@@ -202,12 +202,13 @@ const folderBound = computed(() => draft.folders.length > 0);
                          sandbox is signed into: every account this box holds is pickable, and none of them decides
                          how much room the rest of the form gets. -->
                     <div v-if="open" class="mt-1 flex flex-col gap-2 rounded-lg border border-line bg-overlay/50 p-2">
-                        <input
+                        <SearchBar
                             v-if="accounts.length > 6"
                             v-model="filter"
-                            :class="ui.input('w-full py-1 text-xs')"
-                            placeholder="Filter by name or site"
+                            variant="field"
+                            clearable
                             aria-label="Filter accounts"
+                            placeholder="Filter by name or site"
                         />
                         <!-- Toggles rather than a multi-select: picking several is the normal case, and every entry
                              carries a second fact a <select> has nowhere to put, whether it is signed in. The brand
