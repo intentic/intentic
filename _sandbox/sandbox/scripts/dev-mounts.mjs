@@ -13,8 +13,8 @@
 // `tsgo` plus `docker restart`: seconds. See dev-reload.sh.
 //
 // Only compiled output is mounted, never node_modules: each baked package keeps the image's own installed
-// dependencies (including its native builds: node-pty and @discordjs/opus are rebuilt inside the image against
-// its ABI, and a host copy would be wrong).
+// dependencies (including its native builds: node-pty is rebuilt inside the image against its ABI, and a host
+// copy would be wrong).
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

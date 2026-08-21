@@ -155,7 +155,7 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 # from source, and corepack strips the exec bit off its bundled node-gyp gyp_main.py (else Error 126).
 RUN corepack enable && corepack prepare pnpm@11.21.0 --activate \
     && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
-# node-gyp on PATH, for the native rebuild that runs after the tree COPYs below (node-pty, @discordjs/opus) and
+# node-gyp on PATH, for the native rebuild that runs after the tree COPYs below (node-pty) and
 # for an agent compiling a native dep by hand. Installed HERE, above those COPYs, because it used to share the
 # rebuild's RUN — where every source change re-downloaded it, unpinned, before any compiling started. Pinned
 # like every other tool in this image so a bad upstream release fails a deliberate bump, not the next pipeline.

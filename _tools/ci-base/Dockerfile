@@ -5,8 +5,8 @@
 #
 # The base is the SAME digest-pinned image the sandbox runtime uses (_sandbox/sandbox/Dockerfile) — deliberately,
 # not coincidentally. prepare-image-trees.sh runs `pnpm deploy` in THIS image and the resulting node_modules is
-# COPY'd into THAT one, so sharing a base makes the compiled natives (node-pty, @discordjs/opus) and the
-# manylinux prebuilts (sharp, onnxruntime, ast-grep, davey) glibc-identical by construction. It also rules out
+# COPY'd into THAT one, so sharing a base makes the compiled native (node-pty) and the manylinux
+# prebuilts (sharp, onnxruntime, ast-grep, davey, mediaplex) glibc-identical by construction. It also rules out
 # the tempting shortcut of a docker-cli-alpine base with node bolted on: under musl, pnpm resolves musl builds
 # of those prebuilts and the glibc sandbox cannot load them.
 # ponytail: bump this digest together with _sandbox/sandbox/Dockerfile's FROM — they must stay identical.

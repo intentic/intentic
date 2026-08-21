@@ -59,6 +59,14 @@ overrides:
   # miniflare (wrangler's local Workers runtime, a devDependency of the site) pins undici 7.28.0, which has five
   # request/response-smuggling advisories. Patch bump inside the same major.
   "miniflare>undici": 7.29.0
+  # Two packages pin deepmerge-ts to the 7.x line — @prisma/config to an exact 7.1.5 and html-to-text (via
+  # mailparser) to ^7.1.5 — and every 7.x release blows the stack on a recursive object graph
+  # (GHSA-ggr8-5vv4-36mx, fixed only in 8.0.0; the 7.1.6 that landed just before it is still vulnerable).
+  # Reachable on the IMAP path: html-to-text merges caller options with its defaults while rendering
+  # attacker-supplied mail. Same package shape across the major (dual CJS/ESM, same exports map) and v8's
+  # breaks are deep-Map merging plus two type renames, neither of which either consumer touches — both merge
+  # plain option objects.
+  deepmerge-ts: 8.0.1
 
 minimumReleaseAgeExclude:
   - knip@6.29.0
@@ -87,7 +95,6 @@ allowBuilds:
   "@ast-grep/lang-java": true
   "@ast-grep/lang-python": true
   "@ast-grep/lang-rust": true
-  '@discordjs/opus': true
   # The workspace watcher's native backend. Its `install` script only builds from source; the platform binding
   # ships as a prebuilt optional dependency (@parcel/watcher-linux-x64-glibc and friends), so skipping the
   # script still yields a working native watcher — verified by loading it with scripts disabled.

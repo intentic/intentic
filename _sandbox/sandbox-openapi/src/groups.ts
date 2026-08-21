@@ -12,7 +12,7 @@
  * SHELVES ARE CONSECUTIVE RUNS OF THAT ORDER, never a second ordering laid over the first. The reference site
  * builds its rail from `SPEC_SHELVES`, and the generated document orders its paths by this list; if a shelf
  * could gather groups from anywhere, the rail and the document would present two different books with the same
- * contents. `groups.test.ts` fails a shelf whose groups are not contiguous, so the two orders are one order.
+ * contents. `spec.test.ts` fails a shelf whose groups are not contiguous, so the two orders are one order.
  *
  * COMPLETENESS IS GUARDED, NOT TRUSTED. The tests walk the contract and fail if a group here has no routes or
  * a group in the contract has no entry, so adding a contract file is a build error until it is described. That

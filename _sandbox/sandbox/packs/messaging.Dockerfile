@@ -3,13 +3,12 @@
 # messaging connector on a core image instead — extensions/extension-readiness.ts). Their MANIFESTS are baked
 # in every image by the core Dockerfile so the capability cards exist either way; these COPYs put the runnable
 # gateways behind them.
+# The discord gateway's voice stack needs no rebuild after this COPY: its Opus decoder is mediaplex, a napi-rs
+# binding whose per-platform build arrives as a prebuilt optional dependency with no install script, so the
+# deployed tree is already correct for this image. It used to rebuild @discordjs/opus here, source-compiled
+# against whatever host ran pnpm deploy — that binding is gone, and with it the tar 6.2.1 its node-pre-gyp
+# installer dragged in.
 COPY --from=trees extensions/discord /opt/extensions/discord
-# Same glibc rationale as the daemon tree's node-pty rebuild — the discord gateway's voice stack compiles opus
-# from source, linked against whatever host ran pnpm deploy.
-RUN cd /opt/extensions/discord/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \
-    && rm -rf prebuild build-tmp-napi-v3 \
-    && npm run install \
-    && npm cache clean --force
 COPY --from=trees extensions/imap /opt/extensions/imap
 # The slack gateway is pure JS (Socket Mode over undici) — no native build step to redo after the COPY.
 COPY --from=trees extensions/slack /opt/extensions/slack
