@@ -244,13 +244,15 @@
      * sold it rather than a near-miss of it. */
     --sanctum-brushed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.23 0 0 0 0 0.07 0.5 0 0 0 -0.16'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23b)'/%3E%3C/svg%3E");
 
-    /* THE ORNAMENT KIT — three of the site's four (ornaments.ts), redrawn as data URLs because a
-     * background-image cannot take `currentColor`. The LOZENGE opens every section label. The TURNED CORNER is
-     * turned into the dialog's four corners and nowhere else. The LOTUS — the brand's own mark — is cut into the
-     * corner of an empty niche, the way a mason signs a stone he has dressed and left blank. The divider is not
-     * here: it wants more room than any surface in a workspace has to spare. */
+    /* THE ORNAMENT KIT — two of the site's four (ornaments.ts), redrawn as data URLs because a background-image
+     * cannot take `currentColor`. The LOZENGE opens every section label. The LOTUS — the brand's own mark — is
+     * cut into the corner of an empty niche, the way a mason signs a stone he has dressed and left blank.
+     *
+     * TWO OF THE FOUR ARE REFUSED, for the same reason in two sizes. The DIVIDER wants more room than any
+     * surface in a workspace has to spare. The TURNED CORNER wanted a panel whose corners are its own to
+     * decorate, and no panel here has that: see the note over `.p-dialog`, where it used to live. What is left
+     * is the pair that attaches to a THING — a label, an empty niche — rather than to a rectangle. */
     --sanctum-lozenge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 .8 11.2 6 6 11.2.8 6z' fill='none' stroke='%23c9a05c' stroke-width='1.3'/%3E%3Cpath d='M6 3.6 8.4 6 6 8.4 3.6 6z' fill='%23c9a05c' fill-opacity='.6'/%3E%3C/svg%3E");
-    --sanctum-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 44'%3E%3Cg fill='none' stroke='%23c9a05c' stroke-opacity='0.55' stroke-width='1.1' stroke-linecap='round'%3E%3Cpath d='M43 1H13.5A12.5 12.5 0 0 0 1 13.5V43'/%3E%3Cpath d='M43 7H16a9 9 0 0 0-9 9v27' stroke-opacity='0.3'/%3E%3Cpath d='M25 1c0 3.9-3.1 7-7 7'/%3E%3Cpath d='M1 25c3.9 0 7-3.1 7-7'/%3E%3Cpath d='M12.5 8.6 16.4 12.5 12.5 16.4 8.6 12.5z' stroke-width='1'/%3E%3C/g%3E%3C/svg%3E");
     --sanctum-lotus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -1.3 32 32' fill='%23c9a05c' fill-opacity='0.22'%3E%3Cpath d='M8.4 25.6c-3.2 0-5.6-1-7.2-3 3.6-1.2 6.6-.7 9 1.4z' opacity='.42'/%3E%3Cpath d='M23.6 25.6c3.2 0 5.6-1 7.2-3-3.6-1.2-6.6-.7-9 1.4z' opacity='.42'/%3E%3Cpath d='M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z' transform='rotate(-74 16 22.6)' opacity='.55'/%3E%3Cpath d='M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z' transform='rotate(74 16 22.6)' opacity='.55'/%3E%3Cpath d='M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z' transform='rotate(-39 16 21.7)' opacity='.78'/%3E%3Cpath d='M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z' transform='rotate(39 16 21.7)' opacity='.78'/%3E%3Cpath d='M16 3.4c2.8 4 4.2 7.5 4.2 10.6 0 2.9-1.4 5.4-4.2 7.3-2.8-1.9-4.2-4.4-4.2-7.3 0-3.1 1.4-6.6 4.2-10.6z'/%3E%3C/svg%3E");
 
     /* ── THE FACES ────────────────────────────────────────────────────────────────────────────────────────
@@ -590,33 +592,23 @@
         box-shadow: 0 18px 48px rgba(0, 0, 0, 0.66);
     }
 
-    /* THE DIALOG WEARS THE TURNED CORNER, and it is the only thing in the app that does. The site turns every
-     * frame's corners with an ornament instead of a fillet; at 14px that ornament is a smudge, but a dialog is
-     * the biggest panel the app draws and it is on screen alone, which is exactly the surface that can carry
-     * one. Four background images, one per corner, so nothing is added to the DOM and a dialog's own
-     * pseudo-elements stay its own.
+    /* THE DIALOG WORE THE TURNED CORNER AND IT IS GONE, ornament and token both. The idea was that a dialog is
+     * the biggest panel the app draws and is on screen alone, so it is the one surface that can carry the site's
+     * elbow. What that reasoned about was the dialog's BOX. What the ornament actually lands on is the dialog's
+     * CONTENT, and a dialog does not own its content: four corners of a rectangle whose size, padding and
+     * fill belong to whoever opened it.
      *
-     * 22px is the size the drawing was made to read at, and it stops well short of PrimeVue's 20px of dialog
-     * padding plus the header's own line — so the elbow never crosses anything written inside.
+     * The command palette is the proof and it is not an edge case, it is the most-opened dialog in the app. It
+     * asks for no chrome, so its own content runs flush to all four edges: a full-width search field across the
+     * top and a scrolling list under it. The two top elbows landed INSIDE the search field, on top of the
+     * placeholder and against the field's own focus rim, and the bottom pair landed in the list. No inset can
+     * fix that, because there is nothing to inset past — the content starts at the edge.
      *
-     * INSET SEVEN PIXELS FROM EACH EDGE, WHICH IS NOT A NUDGE. A background image is clipped to the border
-     * box, and the border box is now rounded, so an elbow drawn flush into the corner has its own corner
-     * shaved off by the panel's radius — four ornaments each missing the one part that made them ornaments.
-     * Cleared past the curve they read as an INNER corner standing just inside the frame, which is what the
-     * site's own double rule does anyway. 7px is a hair over the 8.8px radius' visual reach at 45°. */
+     * An ornament that has to be told which dialogs it may appear on is not a house style, it is a decoration
+     * with a list of exceptions, and this file already spends the site's character where it survives repetition:
+     * the gold rule on every edge, the lozenge on every section label, the lotus in an empty niche. A dialog
+     * keeps the deepest drop in the skin, which is the cue that actually says "in front of everything". */
     [data-skin="sanctum"] .p-dialog {
-        background-image:
-            var(--sanctum-corner),
-            var(--sanctum-corner),
-            var(--sanctum-corner),
-            var(--sanctum-corner);
-        background-size: 22px 22px;
-        background-position:
-            left 7px top 7px,
-            right 7px top 7px,
-            left 7px bottom 7px,
-            right 7px bottom 7px;
-        background-repeat: no-repeat;
         box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
     }
 
@@ -673,6 +665,33 @@
         box-shadow:
             inset 0 0 0 1px rgba(229, 196, 137, 0.3),
             0 0 0 3px color-mix(in oklab, var(--color-primary-500) 24%, transparent);
+    }
+
+    /* ── THE SEARCH BAND, WHICH IS A CHANNEL THE WIDTH OF THE PANEL ───────────────────────────────────────
+     * The command palette's top row (shell/QuickOpen.vue). Its input is `field-bare`, so the recess and the
+     * focus rim above never touch it; what the reader sees as "the search" is this row, and so this row is
+     * where the skin says it.
+     *
+     * SAME IDEA AS EVERY OTHER FIELD HERE, AT THE PANEL'S SCALE: the fill cut a step below the panel around
+     * it, and the light caught on the upper lip of the cut. The alternative was to leave the band flat and let
+     * the divider do all the work, which reads as a panel that happens to start with some text — nothing on it
+     * says "type". A channel does, and it says it in the material the rest of the skin is already made of.
+     *
+     * FOCUS IS THE LOWER LIP GOING GOLD, one line, and it is drawn as a shadow rather than as a border colour
+     * for a cascade reason worth knowing: the divider is a Tailwind `border-line` utility, and a utility beats
+     * anything this layer can say about `border-bottom-color`. An inset shadow is a property no utility here
+     * sets, so it lands — and it lands on the rule the reader is already looking at, instead of adding a
+     * fourth edge to a panel that just lost its second and third. */
+    [data-skin="sanctum"] .ui-search-row {
+        background-color: oklch(10.5% 0.005 78);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+    /* Three quarters of the gold rather than all of it: at full strength this one line is the brightest thing
+     * in the panel, and what it has to beat is a hairline — the divider it lies over — not the list under it. */
+    [data-skin="sanctum"] .ui-search-row:focus-within {
+        box-shadow:
+            inset 0 1px 3px rgba(0, 0, 0, 0.5),
+            inset 0 -1px 0 rgba(201, 160, 92, 0.75);
     }
 
     /* A BUTTON IS A CUT PLATE, AND IT HAS TO LOOK CUT. The app's own tinted fill, a rule mixed from whatever
@@ -743,40 +762,30 @@
                     .ui-button-loud
                 )
         ) {
-        /* ── THE LABEL IS AN INCISION, WHICH IS THREE SHADOWS AND NOT ONE ─────────────────────────────────
-         * A cut letter is not dark ink on stone; it is a groove, and a groove lit from above shows three
-         * things. Its upper wall is turned AWAY from the light and goes to hard shade. That shade does not
-         * stop at the edge of the cut — it spreads a little onto the face above it, because the wall it came
-         * off is rough. And its lower wall is turned TOWARDS the light and is the brightest thing on the
-         * plaque. So: a hard dark line above the glyph, a soft one spreading up from it, a hard lit lip under.
+        /* ── THE LABEL IS ONE LIT LIP, AND THE RELIEF THAT TRIED TO BE MORE IS REVERTED ───────────────────
+         * A cut letter lit from above shows a shaded upper wall and a lit lower one, so the full description
+         * of an incision is a dark line above the glyph and a bright one under it. That full description was
+         * written here — three shadows, the upper wall hard, its spill soft, the lower lip bright — and at the
+         * size this label is actually drawn, 13 to 14 pixels, it read as BLUR. Reported as blur, and correctly.
          *
-         * IT USED TO BE THE LIT LIP ALONE, at a quarter alpha, and one edge of a groove is not a groove — it
-         * is ink with a highlight, which is what the label was reported as. The shade above is the half that
-         * says "the stone continues over the top of this letter": without it the eye has no reason to read
-         * the dark shape as a hollow rather than as paint. Both halves, or neither.
+         * WHY THE FULL RECIPE CANNOT WORK AT THIS SIZE. A stem of Inter at 13px is under two pixels wide, and
+         * every part of that relief is a whole pixel: the shade above is half a stroke thick, the soft spill is
+         * two, so together they are a grey cloud around a letter rather than a wall behind it. It looked right
+         * at 5× and wrong at 1×, and 1× is the only size anybody uses. A groove needs several pixels across its
+         * mouth before it can show two walls, which display type has and a button label never will.
          *
-         * THE LIP IS LISTED FIRST BECAUSE SHADOWS STACK IN SOURCE ORDER, earliest on top, and the one place
-         * two of these meet is under a descender that hangs over the line below. There the lit edge is the
-         * one that must survive: it is the only thing in the recipe carrying the direction of the light.
+         * SO IT IS THE LIT LIP ALONE, at the alpha it had before: ONE pale hairline under each letter, which is
+         * as much of a cut as a pixel and a half can carry, and nothing above the glyph to soften its top edge.
+         * The label stays as crisp as unshadowed text, because the only thing added to it sits entirely OUTSIDE
+         * the strokes.
          *
-         * IT IS THE STONE'S OWN LIGHT, NOT WHITE. A near-white lip at this alpha stops reading as a lit face
-         * and starts reading as a drawn outline — the sticker effect — because nothing else on the plaque is
-         * within twenty levels of white. Warmed to the ash the plaque is cut from, it reads as the same rock
-         * catching the same lamp.
-         *
-         * READABILITY IS SET BY THE GLYPH, NOT BY THE RELIEF, and that is what keeps this safe. The letter's
-         * own colour is a warm near-black that clears about six to one on the dressed face — measured on the
-         * texture, at the foot of the wash, where the stone is darkest — and the relief is one pixel of it,
-         * so it sharpens the edge rather than thickening the stroke. A hair of tracking comes with it: a cut
-         * letter needs air around it or the shadows of two neighbouring stems meet and fill the gap between
-         * them. Inscriptional lettering is spaced for exactly this reason. */
-        color: #211a10;
+         * WHAT CARRIES THE CARVING INSTEAD IS THE FACE, and that is the trade worth naming: the plaque now has
+         * a real dressed surface under the words (the pitting and its lit lips, a few rules up), and a dark
+         * letter on visibly cut stone reads as cut without the letter itself having to argue for it. Material
+         * first, then type — spending the relief budget on the ground rather than on 13px glyphs. */
+        color: #1d160e;
         font-weight: 600;
-        letter-spacing: 0.012em;
-        text-shadow:
-            0 1px 0 rgba(244, 236, 218, 0.55),
-            0 -1px 0 rgba(24, 18, 10, 0.8),
-            0 -2px 2px rgba(24, 18, 10, 0.22);
+        text-shadow: 0 1px 0 rgba(255, 250, 238, 0.26);
         /* THE FACE COMES DOWN EIGHT LIGHTNESS POINTS, from a bone that read as ivory or as warm plastic to a
          * limestone the wall could plausibly have been quarried from. What is lost is nothing: a pale plaque
          * was never carrying the contrast — the ink is, and it has six to one either way — and what is gained
@@ -902,7 +911,7 @@
                     .ui-button-loud
                 )
         ):enabled:hover {
-        color: #211a10;
+        color: #1d160e;
         background-color: #c1b5a1;
         background-image:
             var(--sanctum-pit-lip),

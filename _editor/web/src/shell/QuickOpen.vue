@@ -147,7 +147,15 @@ const onShow = async (): Promise<void> => {
 <template>
     <Modal v-model:open="isOpen" size="md" :chrome="false" :scroll="false" position="top" @show="onShow">
         <div role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Go to file">
-            <div class="relative border-b border-line">
+            <!-- THE FRAME BELONGS TO THE ROW, NOT TO THE FIELD, which is why the input is `field-bare` (the
+                 chat composer's textarea is the same species, for the same reason). A palette's search is not a
+                 box on a page: it is the top band of the panel, edge to edge, and the panel's own border plus
+                 this divider are already its frame. Left to be a field in its own right it collected a second
+                 one — a rim and a soft accent ring drawn tight around a borderless full-width slot, inside the
+                 dialog's rounded edge — which is the doubled border a reader sees and cannot name. A skin that
+                 wants to say something about this field says it on `ui-search-row`, where it lands on the whole
+                 assembly. -->
+            <div class="ui-search-row relative border-b border-line">
                 <Icon
                     class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle"
                     aria-hidden="true"
@@ -159,7 +167,7 @@ const onShow = async (): Promise<void> => {
                     v-model="query"
                     type="text"
                     placeholder="Go to file, or paste a session id… (> for commands)"
-                    class="w-full min-w-0 bg-transparent py-2.5 pl-9 pr-3 text-sm text-content placeholder:text-subtle focus:outline-none"
+                    class="field-bare w-full min-w-0 bg-transparent py-2.5 pl-9 pr-3 text-sm text-content placeholder:text-subtle focus:outline-none"
                     role="searchbox"
                     aria-controls="quick-open-list"
                     :aria-activedescendant="activeIndex < rowCount ? `quick-open-opt-${activeIndex}` : undefined"
