@@ -11,16 +11,17 @@ There are two, and they are deliberately opposite materials:
 - **Sanctum** (`sanctum.css`) — **the site's design system, worn by the app**. Same metals, same ink, same
   materials, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground with a
   tooth in it, one gold rule round everything, cream ink, and the site's two faces. The rail and every overlay
-  are faced in the site's woven cloth; the one loud button is a panel of dark timber; nothing else is either. A
-  distant temple stands on the floor of the window where the app has put nothing in front of it.
+  are faced in the site's woven cloth; the one loud button is a cast plaque with the words cut into it; nothing
+  else is either. A distant temple stands on the floor of the window where the app has put nothing in front of
+  it.
 
 **They part company on the accent, and that is the interesting difference.** The HUD is *lit* by the colour the
 user picked: every glow, edge and focus ring is mixed from `--color-primary-*`, so Lagoon gives it cyan and Ember
 gives the same instrument panel amber. Sanctum's structure is **fixed gold** (`#c9a05c`, the site's own) whatever
-the picker says, and spends the accent only where it means something: a link, a focus ring, a ticked box, the
-light in the timber button. That is not a smaller idea, it is the site's own rule — *structure is gold, the ember
-is spent, never spread* — and it is what stopped the skin reading as one warm smear. A skin that lets the accent
-paint its hairlines has a thousand of them to paint.
+the picker says, and spends the accent only where it means something: a link, a focus ring, a ticked box. That is
+not a smaller idea, it is the site's own rule — *structure is gold, the ember is spent, never spread* — and it is
+what stopped the skin reading as one warm smear. A skin that lets the accent paint its hairlines has a thousand
+of them to paint.
 
 ## The rule both of them keep
 
@@ -35,7 +36,7 @@ Sanctum read the rule as "no background-image on a plate" for one cut, and shipp
 in which every surface anyone actually looked at was a flat rectangle. The plates carry a tooth now, measured at
 under a hundredth of a contrast ratio point.
 
-Sanctum has paid for that rule and five others, and the notes are kept at the top of the file:
+Sanctum has paid for that rule and eight others, and the notes are kept at the top of the file:
 
 - **Ornament on an edge becomes noise at UI size.** A carved arcade that reads as stone at 40px reads as a torn,
   dithered edge at 14px — and every panel in an app is a 14px edge. Character has to come from the material, the
@@ -49,9 +50,24 @@ Sanctum has paid for that rule and five others, and the notes are kept at the to
   warm thing and none of them could be the brightest. The ground lost its colour and the metal kept it.
 - **The app's accent tier is six warm chips on a settings page.** `<Button>` tints itself from the picked colour,
   and a screen carries half a dozen: Change, Save, Open, New workflow, Land now. In this skin that tier is a gold
-  cartouche with a cream label — the site's `.btn` — and the timber `ui-button-loud` is the only lit control
-  left. The severities (`danger`, `warn`, `success`) keep their own tones, and have to be excluded **by name**:
-  the app sets each one's tone in `@layer primeng`, and a skin's `components` layer beats that layer outright.
+  cartouche with a cream label — the site's `.btn` — and `ui-button-loud` is the only filled control left. The
+  severities (`danger`, `warn`, `success`) keep their own tones, and have to be excluded **by name**: the app
+  sets each one's tone in `@layer primeng`, and a skin's `components` layer beats that layer outright.
+- **A dark primary on a dark window is not a primary.** For two cuts the one loud button was a panel of dark
+  timber with a warm rule round it — a lovely object, and indistinguishable at a glance from a card, a field, a
+  secondary button or a panel edge, because the eye finds differences of *lightness* first and there were none.
+  It inverts now: a cast plaque, the only light-on-dark thing in the app, with the label cut into it. The site
+  reached the identical conclusion about its own hero (see the note over `.btn-primary` in `global.css`) — but
+  its plaque is *polished*, and a specular highlight that is right for ninety seconds on a page is a lamp in the
+  corner of the eye for nine hours in a window. Same three layers, a third of the sweep, no outer halo.
+- **A light texture raises the ground it lies on.** The wall's tooth lifted the canvas by about five luminance
+  levels, so a canvas token written at the app's own value *shipped* lighter than the app's — and the plates lost
+  most of their step off it, which is why cards started reading as panes of glass. Surface tokens under a
+  texture have to be chosen against what renders, not against what is written. Anything else keyed to the wall
+  (the temple's alpha, the lane's fill) has to be re-checked whenever it moves.
+- **Two surfaces the app calls one material must render as one material.** The rail is `bg-card` in the shell's
+  own markup — the same surface as the file-tree header it stands beside — and painting it a colour of its own
+  did not make it a feature, it made a seam. A skin dresses a surface; it does not reassign it.
 - **A site's squareness does not survive being repeated.** Sanctum copied the site's hard corner outright and it
   was wrong for the same reason it is right over there: a landing page draws about fifteen frames and they are
   large, a workspace draws hundreds and most of them are a 28px row or a 20px chip. At that size a right angle

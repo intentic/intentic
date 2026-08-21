@@ -7,7 +7,7 @@ import { useTheme } from "@intentic/ui";
  * of". `none` is the app as designed. `hud` is the heads-up display in skins/hud.css, deep cool glass over a
  * survey grid, lit hairlines, angular geometry. `sanctum` is skins/sanctum.css, the SITE'S design system worn by
  * the app: warm ash stone with a tooth in it, a gold rule round everything, woven cloth on the rail and the
- * overlays, one panel of dark timber, and every edge eased.
+ * overlays, one cast plaque for the loud button, and every edge eased.
  *
  * ONE ATTRIBUTE ON <html>, and that is the entire mechanism. Every rule in a skin's stylesheet is scoped to
  * `[data-skin="<name>"]`, so the workspace's normal look is not a set of overrides being undone, it is the

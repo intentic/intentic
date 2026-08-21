@@ -8,9 +8,9 @@
  * day. Structure is GOLD: every rule, every frame, every mark. The accent is EMBER and it is SPENT, never
  * spread: one lit control, the focus ring, a ticked box. The GROUND IS STONE and stone here is nearly
  * colourless — a warm ash that reads as rock rather than as brown. The site's other two materials appear once
- * each and nowhere else: CLOTH on the navigation rail and on every overlay, TIMBER on the one loud button.
- * Ink is cream, because white on this ground reads as a hole cut in it. Every edge is eased, nothing is a
- * pill, and every surface has a surface.
+ * each and nowhere else: CLOTH on the navigation rail and on every overlay, CAST METAL on the one loud
+ * button. Ink is cream, because white on this ground reads as a hole cut in it. Every edge is eased, nothing
+ * is a pill, and every surface has a surface.
  *
  * ── WHAT THIS FILE LEARNED, AND WHY THE PREVIOUS CUT WAS TIRING ───────────────────────────────────────────
  * THE GROUND WAS BROWN AND THE LINES WERE LIT. The stone ramp carried three times this chroma at a redder hue,
@@ -25,7 +25,7 @@
  *   · THE GOLD IS FIXED, NOT DERIVED. `#c9a05c`, the site's own, whatever accent the user picked. A skin is a
  *     MATERIAL; the accent picker answers what colour the app is lit in, and letting it also repaint the
  *     structure is what turned one warm choice into a warm everything. The accent still shows — links, focus,
- *     ticked controls, the timber panel's glow — and now it shows AGAINST something.
+ *     ticked controls — and now it shows AGAINST something.
  *
  * ── AND WHY THE CUT AFTER IT WAS STILL TIRING, WHICH IS A DIFFERENT FAULT ─────────────────────────────────
  * The stone came right and the metal came right, and the app was still hard to sit in front of, for three
@@ -112,12 +112,22 @@
      * rectangles. `0.20 * R - 0.055` instead: almost every pixel gets SOMETHING, averaging around four per
      * cent, peaking near a tenth. That is the difference between dust on a surface and the surface having a
      * surface — and at this frequency it stays under the eye's resolution as pattern, so it reads as tooth
-     * rather than as noise. `stitchTiles` makes the 240px tile seamless, so a 4K window has no grid in it. */
-    --sanctum-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.52 0 0 0 0 0.52 0 0 0 0 0.52 0.20 0 0 0 -0.055'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
+     * rather than as noise. `stitchTiles` makes the 240px tile seamless, so a 4K window has no grid in it.
+     *
+     * IT LIFTS THE GROUND IT LIES ON, WHICH IS WHY `--role-canvas` IS STATED DARK. A light speckle averages
+     * upward, and there is no way to have one that does not. So the wall's token is chosen against what this
+     * actually renders, not against the number written in it. */
+    --sanctum-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.52 0 0 0 0 0.52 0 0 0 0 0.52 0.17 0 0 0 -0.05'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
 
-    /* THE SAME TOOTH, QUIETER, for the surfaces that DO hold sentences — the cards, the slabs, the lanes. The
-     * wall's curve scaled back by about a sixth (`0.17 * R - 0.045`), because a plate sits nearer the reader's
-     * eye than the wall behind it and because a plate is where the words are.
+    /* THE PLATE'S OWN STONE, for the surfaces that hold sentences — the cards, the slabs, the lanes.
+     *
+     * IT IS A DIFFERENT STONE FROM THE WALL, AND THAT IS THE WHOLE POINT OF IT BEING A SEPARATE TOKEN. For one
+     * cut the plates simply wore the wall's grain at a lower alpha, and the result was cards that read as
+     * PANES OF GLASS: identical speckle, identical colour, identical scale on both sides of the border, so the
+     * eye had nothing saying "different material" and read the only remaining difference — the value step — as
+     * a translucent sheet lying over the wall. Two things separate them now. The tooth is WARM (a limestone
+     * grey with the gold's hue in it) against the wall's neutral grit, and it is a THIRD of the wall's
+     * strength: a dressed face beside a rough one. The value step does the rest, and it is bigger than it was.
      *
      * THIS IS NOT THE THING THE FILE BANS, and the distinction is the whole reason it can exist. What ruins a
      * paragraph is a GRADIENT — a ground that is one value at the first line and another at the last, so the
@@ -127,7 +137,7 @@
      * was filled with a paint bucket. Measured against flat, cream ink on this moves by under a hundredth of a
      * ratio point, which is nothing, and it is the difference between a screen made of material and a screen
      * made of rectangles. */
-    --sanctum-tooth: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.56 0 0 0 0 0.56 0 0 0 0 0.56 0.17 0 0 0 -0.045'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
+    --sanctum-tooth: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.55' numOctaves='2' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.68 0 0 0 0 0.62 0 0 0 0 0.51 0.13 0 0 0 -0.042'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
 
     /* THE HORIZON — five towers on a stepped plinth, standing on the floor of the window. The site opens every
      * page on a temple; this is that temple seen from a long way off. It earns its place by being FAR AWAY:
@@ -135,16 +145,18 @@
      * at a sixth opacity. An earlier version scaled with the viewport and at 1900px became a lit mountain range
      * across the bottom third of the screen — the one thing that made the skin look broken rather than quiet.
      *
-     * MEASURED AGAINST THE PLATES, not chosen by eye. At a fifth opacity the silhouette came out brighter than
-     * a card — a decoration outranking the content in front of it, which is exactly backwards for something
-     * whose whole claim is to be far away. A sixth puts it under the card and above the wall, which is where a
-     * distant thing belongs. The grey is warmed to the stone's own family besides: a neutral grey silhouette
-     * on a warm wall reads as cool, and the one thing this shape must not look like is weather.
+     * MEASURED AGAINST THE PLATES, not chosen by eye, and re-measured every time the wall moves — which is the
+     * part worth remembering. This is an alpha over the canvas, so darkening the canvas RAISES its contrast
+     * against everything around it: the same 0.16 that sat correctly under a card on the old lighter wall came
+     * out brighter than one the moment the wall dropped. A tenth is what puts it back under the plates and
+     * above the wall, which is where a distant thing belongs. The grey is warmed to the stone's own family
+     * besides: a neutral grey silhouette on a warm wall reads as cool, and the one thing this shape must not
+     * look like is weather.
      *
      * It is a background layer, not an element, which is what makes it behave: every plate in this skin is
      * opaque, so the temple is simply occluded by whatever the app has put in front of it. A full board hides
      * it completely and an empty pane is all horizon, with no condition anywhere for anyone to maintain. */
-    --sanctum-horizon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='92' viewBox='0 0 260 92' fill='%23a39a8c' fill-opacity='0.16' stroke='none'%3E%3Cpath d='M104 76V66H109.2V56H113.9V46H118V36H122.2V28C122.2 19 126.5 15 130 7C133.5 15 137.8 19 137.8 28V36H142V46H146.1V56H150.8V66H156V76Z'/%3E%3Cpath d='M58 76V69H62V62H65.6V55H68.8V48H71.6V42C71.6 36 75 33 78 26C81 33 84.4 36 84.4 42V48H87.2V55H90.4V62H94V69H98V76Z'/%3E%3Cpath d='M162 76V69H166V62H169.6V55H172.8V48H175.6V42C175.6 36 179 33 182 26C185 33 188.4 36 188.4 42V48H191.2V55H194.4V62H198V69H202V76Z'/%3E%3Cpath d='M15 76V71H18V66H20.7V61H23.1V56H25.2V52C25.2 48 27.5 46 30 40C32.5 46 34.8 48 34.8 52V56H36.9V61H39.3V66H42V71H45V76Z'/%3E%3Cpath d='M215 76V71H218V66H220.7V61H223.1V56H225.2V52C225.2 48 227.5 46 230 40C232.5 46 234.8 48 234.8 52V56H236.9V61H239.3V66H242V71H245V76Z'/%3E%3Cpath d='M20 76H240V70H20Z'/%3E%3Cpath d='M0 92H260V84H250V78H10V84H0Z'/%3E%3C/svg%3E");
+    --sanctum-horizon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='92' viewBox='0 0 260 92' fill='%23a39a8c' fill-opacity='0.1' stroke='none'%3E%3Cpath d='M104 76V66H109.2V56H113.9V46H118V36H122.2V28C122.2 19 126.5 15 130 7C133.5 15 137.8 19 137.8 28V36H142V46H146.1V56H150.8V66H156V76Z'/%3E%3Cpath d='M58 76V69H62V62H65.6V55H68.8V48H71.6V42C71.6 36 75 33 78 26C81 33 84.4 36 84.4 42V48H87.2V55H90.4V62H94V69H98V76Z'/%3E%3Cpath d='M162 76V69H166V62H169.6V55H172.8V48H175.6V42C175.6 36 179 33 182 26C185 33 188.4 36 188.4 42V48H191.2V55H194.4V62H198V69H202V76Z'/%3E%3Cpath d='M15 76V71H18V66H20.7V61H23.1V56H25.2V52C25.2 48 27.5 46 30 40C32.5 46 34.8 48 34.8 52V56H36.9V61H39.3V66H42V71H45V76Z'/%3E%3Cpath d='M215 76V71H218V66H220.7V61H223.1V56H225.2V52C225.2 48 227.5 46 230 40C232.5 46 234.8 48 234.8 52V56H236.9V61H239.3V66H242V71H245V76Z'/%3E%3Cpath d='M20 76H240V70H20Z'/%3E%3Cpath d='M0 92H260V84H250V78H10V84H0Z'/%3E%3C/svg%3E");
 
     /* CLOTH — the site's navigation panel, brought over whole (`.menu-panel` in _site/site/src/components/
      * Nav.astro). A dark warm linen: three turbulence fields in one tile, a slow cloud for the fibre and then
@@ -157,24 +169,24 @@
      * low-resolution photograph. A weave is isotropic and fine — it holds its scale at any width, because a
      * thread count does not care how wide the cloth is cut.
      *
-     * TILED, NOT STRETCHED, and that is the difference from the button's timber below. A plank is cut to the
-     * board, so its grain scales with it; cloth is woven at a fixed gauge and then cut, so the thread count
-     * stays put whatever height the window happens to be. */
+     * TILED, NOT STRETCHED, and that is the difference from the plaque's brush marks below. A piece of metal is
+     * brushed after it is cut, so its drag marks scale with it; cloth is woven at a fixed gauge and then cut,
+     * so the thread count stays put whatever height the window happens to be. */
     --sanctum-cloth: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='m' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.025 0 0 0 0 0.012 0.5 0 0 0 -0.13'/%3E%3C/filter%3E%3Cfilter id='h' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.72' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.2 0 0 0 -0.1'/%3E%3C/filter%3E%3Cfilter id='v' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72 0.03' numOctaves='1' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.17 0 0 0 -0.09'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23m)'/%3E%3Crect width='200' height='200' filter='url(%23h)'/%3E%3Crect width='200' height='200' filter='url(%23v)'/%3E%3C/svg%3E");
 
-    /* TIMBER — one board, generated rather than striped, and the reason it is generated is worth keeping. A
-     * repeating gradient tilted off the axis has to step down a pixel row every so often, and every stop is a
-     * hard edge the rasteriser cannot anti-alias along its length: a moiré, and it reads as a low-resolution
-     * photograph of wood rather than as wood. So the grain is two `feTurbulence` fields the engine rasterises
-     * at whatever size the surface happens to be. Frequency is deliberately lopsided — high ACROSS the board,
-     * near-nothing ALONG it — which turns isotropic noise into streaks running the board's length. Two fields,
-     * because real grain is two things: `d` is the dark figure, wide and slow, and `l` the fine pale fleck over
-     * it, an order finer and on its own seed so the two can never line up into corduroy. Both are matrixed to
-     * a FLAT colour with the noise driving only ALPHA — tinting the noise itself gives mud, since what varies
-     * in timber is how much light the fibre returns, not its hue.
+    /* THE DRAG MARKS OF A WIRE BRUSH, which is what turns a swatch of yellow into a piece of metal. Generated
+     * rather than drawn as striped gradients, for the reason the site gives: a repeating gradient off-axis has
+     * to step a pixel row every so often, and every stop is a hard edge the rasteriser cannot anti-alias along
+     * its length, so it staircases at button size and beats into moiré. Turbulence has no period to beat
+     * against itself. Frequency is lopsided — near-nothing ACROSS the plate, high DOWN it — which is what
+     * turns isotropic noise into brush drag; and it is matrixed to a FLAT dark gold driving ALPHA only,
+     * because what varies across brushed metal is how much light a scratch throws back, not its hue.
      *
-     * ONE ORIENTATION, because there is one board left: the loud button, whose length is horizontal. */
-    --sanctum-timber-x: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='d' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.005 0.17' numOctaves='4' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.026 0 0 0 0 0.012 0.8 0 0 0 -0.22'/%3E%3C/filter%3E%3Cfilter id='l' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.009 0.95' numOctaves='3' seed='19'/%3E%3CfeColorMatrix values='0 0 0 0 0.74 0 0 0 0 0.52 0 0 0 0 0.3 0.34 0 0 0 -0.22'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23d)'/%3E%3Crect width='320' height='64' filter='url(%23l)'/%3E%3C/svg%3E");
+     * A THIRD DEEPER THAN THE SITE'S (0.54 R − 0.16 against its 0.5 R − 0.16). The site's plaque is polished
+     * and can carry its character in the specular sweep; this one has had most of that sweep taken away, so
+     * the grain has to be what says "metal" — and a deeper brush is also what says "cast and left" rather than
+     * "just buffed". */
+    --sanctum-brushed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.3 0 0 0 0 0.2 0 0 0 0 0.06 0.54 0 0 0 -0.16'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23b)'/%3E%3C/svg%3E");
 
     /* THE ORNAMENT KIT — three of the site's four (ornaments.ts), redrawn as data URLs because a
      * background-image cannot take `currentColor`. The LOZENGE opens every section label. The TURNED CORNER is
@@ -208,11 +220,16 @@
      * a plate, and opacity is also what lets a sticky header occlude the rows sliding under it.
      *
      * THE GROUND IS DEEP, AND IT IS NOT BLACK. The site's canvas is near-black because a page is looked at for
-     * ninety seconds; a window is looked at for nine hours, and cream ink on true black haloes. So the three
-     * grounds are the app's own dark scheme, one step warm: 17 / 23 / 28. The first cut of this skin ran them at
-     * 15.5 / 19.5 / 24, and a four-point step between the wall and a plate is a panel you can only see by its
-     * border. */
-    --role-canvas: oklch(17% 0.006 78);
+     * ninety seconds; a window is looked at for nine hours, and cream ink on true black haloes.
+     *
+     * THE WALL IS STATED BELOW WHERE IT SHOULD LAND, BECAUSE THE GRAIN PUTS IT BACK. This is the one number in
+     * the file that cannot be read on its own: the tooth on the wall is a LIGHT speckle, so it lifts the mean
+     * of whatever it lies on — measured, by about five luminance levels. Stating the canvas at the app's own
+     * 17% therefore SHIPPED a wall lighter than the app's, which is the opposite of what the token says, and it
+     * cost the plates most of their step off it. 13.5% is what renders at roughly the app's 17% once the grain
+     * is on. Card and overlay are untouched, so the ladder is now a nine-point climb from wall to plate rather
+     * than a six-point one, which is most of why a card stopped reading as a pane of glass over the wall. */
+    --role-canvas: oklch(13.5% 0.006 78);
     --role-card: oklch(23% 0.008 78);
     --role-overlay: oklch(28% 0.009 78);
     --role-line: var(--sanctum-rule);
@@ -355,9 +372,16 @@
         background-color: var(--color-card);
         background-image: var(--sanctum-tooth);
         border-color: var(--sanctum-rule);
+        /* THE LEDGE IS THREE LINES AND ALL THREE ARE LOAD-BEARING. A lit hairline inside the top edge and a
+         * dark one inside the foot is a bevel at this size; the drop under the plate is what says it is
+         * standing on something rather than cut into it. The shadow used to be one wide, very soft blur, and a
+         * wide soft blur on a near-black wall is invisible — it is the TIGHT half, offset two pixels and dark,
+         * that a person actually reads as contact. */
         box-shadow:
-            inset 0 1px 0 rgba(229, 196, 137, 0.05),
-            0 10px 28px -14px rgba(0, 0, 0, 0.7);
+            inset 0 1px 0 rgba(240, 214, 168, 0.07),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+            0 2px 4px -1px rgba(0, 0, 0, 0.55),
+            0 12px 28px -12px rgba(0, 0, 0, 0.6);
     }
 
     /* A dashed card is a PLACE for something rather than a thing: no ledge, no shadow, and the dashes carry the
@@ -387,8 +411,31 @@
      *
      * It reaches the 20px chips and insets too, which is fine and was not always: an earlier cut drew a second
      * hairline INSIDE every card-painted thing, and at chip size that read as a smudge. A speckle has no such
-     * failure mode — it has no edge to be in the wrong place. */
+     * failure mode — it has no edge to be in the wrong place.
+     *
+     * AND IT GETS THE LEDGE, at half the plates' weight. A board card is the surface the app draws most of and
+     * it was the surface with the least evidence of being a surface: same tooth as the wall, no bevel, no
+     * contact shadow, only a value step and a hairline. A lit top edge and a short drop are two declarations
+     * and they are the difference between an object and a hole. Small chips get it too and are the better for
+     * it — at 20px the pair reads as inlay, which is what a chip is. Anything wanting a shadow of its own
+     * writes a Tailwind utility, and utilities outrank this layer. */
     [data-skin="sanctum"] .bg-card {
+        background-image: var(--sanctum-tooth);
+        box-shadow:
+            inset 0 1px 0 rgba(240, 214, 168, 0.06),
+            0 1px 3px -1px rgba(0, 0, 0, 0.5);
+    }
+
+    /* THE STEP ABOVE A CARD TAKES THE SAME STONE, and it has to, for a reason that only shows up once the tooth
+     * exists: the tooth LIFTS the surface it lies on by several luminance levels, so a plate that has it and a
+     * plate that does not are no longer in the order their tokens put them in. The fleet board's selected card
+     * is painted `bg-overlay` — a step ABOVE `bg-card` — and beside its untouched neighbours it came out
+     * looking flatter and darker than they did, which is the picked card reading as the dimmed one.
+     *
+     * No ledge here. This class is also every resting chip and inset in the app, and those are cut INTO their
+     * plate rather than standing on it; the hover form (`hover:bg-overlay`) is a different generated class and
+     * is not touched at all, so nothing grows a shadow under the pointer. */
+    [data-skin="sanctum"] .bg-overlay {
         background-image: var(--sanctum-tooth);
     }
 
@@ -403,7 +450,7 @@
      * of. A recess is stated by being darker than the wall; the rule gives the recess a lip; that is the end. */
     [data-skin="sanctum"] .lane,
     [data-skin="sanctum"] .lane-header {
-        --lane-fill: oklch(14% 0.006 78);
+        --lane-fill: oklch(10.5% 0.005 78);
     }
     [data-skin="sanctum"] .lane {
         background-image: var(--sanctum-tooth);
@@ -426,23 +473,30 @@
     /* ── THE HANGING ──────────────────────────────────────────────────────────────────────────────────────
      * THE NAVIGATION RAIL IS THE ONE COLUMN THAT CAN AFFORD A LOUD TEXTURE, and it is where this skin spends
      * its material budget most cheaply: it is 48px wide, it holds icons rather than prose, and nothing in it
-     * is read as a sentence. So it is not stone at all — it is the site's navigation panel turned on its end
-     * and hung the height of the window, which is the same joke the site makes and the same cloth.
+     * is read as a sentence. It is the site's navigation panel turned on its end and hung the height of the
+     * window — the same joke the site makes, and the same cloth.
      *
-     * IT WAS A PLANK AND THE PLANK DID NOT SURVIVE THE WIDTH. Timber's grain runs one way, and at 48px a
-     * length-running grain has room for perhaps three strokes across the column: not figure, just smears, and
-     * a smear beside a wall of fine stone tooth is the surface that makes the whole window look badly
-     * compressed. Cloth has no direction and a fixed gauge, so it reads as material at any width.
+     * TWO THINGS IT MUST NOT BE, both learned the same way. It was a TIMBER PLANK first, and timber's grain
+     * runs one way: at 48px a length-running grain has room for about three strokes across the column, which
+     * is not figure, it is smears. Then it was cloth on a BROWN GROUND OF ITS OWN (#1f1710), and that was the
+     * subtler mistake — the rail is `bg-card` in the shell's own markup, which means it is the same surface as
+     * the file-tree header and the tab strip standing right next to it in the workspace. Painting it a
+     * different colour did not make it a feature, it made a seam: two panels the app says are one material,
+     * rendered as two. So the ground is `--color-card`, exactly what the app asked for, and the cloth is a
+     * TREATMENT on it rather than a substitute for it.
      *
-     * DARKER THAN THE CLOTH IT DEPICTS, for the same reason the site's button is: icons sit ON this, so the
-     * weave's job is to be a ground rather than a subject. The raking gradient is the light this whole skin is
-     * lit by, falling on the hanging from the window side. Elsewhere in this file a texture under words is
-     * held to a whisper; here there are no words to sit under, so the weave runs at its own strength. */
+     * The raking gradient is the light this whole skin is lit by, falling on the hanging from the window side.
+     * IT IS SHALLOW ON PURPOSE, and the shallowness is measured rather than felt: the far end of that ramp is
+     * the rail's RIGHT edge, which is the exact pixel where the rail meets the panel beside it. At a third of
+     * an alpha the joint lost ten luminance levels, so the two surfaces the app calls one material parted
+     * company precisely where a reader looks to see whether they are one material. At a fourteenth the falloff
+     * is still there and the far edge lands a few levels off the header standing next to it, which reads as
+     * shading rather than as a different panel. */
     [data-skin="sanctum"] .icon-rail {
-        background-color: #1f1710;
+        background-color: var(--color-card);
         background-image:
             var(--sanctum-cloth),
-            linear-gradient(90deg, rgba(255, 232, 196, 0.05), transparent 34%, rgba(0, 0, 0, 0.34));
+            linear-gradient(90deg, rgba(255, 232, 196, 0.055), transparent 52%, rgba(0, 0, 0, 0.07));
         background-size:
             200px 200px,
             100% 100%;
@@ -533,7 +587,7 @@
     [data-skin="sanctum"] input[type="email"],
     [data-skin="sanctum"] input[type="password"],
     [data-skin="sanctum"] input[type="number"] {
-        background-color: oklch(14% 0.006 78);
+        background-color: oklch(10.5% 0.005 78);
         border-color: var(--sanctum-rule-strong);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
     }
@@ -559,13 +613,22 @@
             0 0 0 3px color-mix(in oklab, var(--color-primary-500) 24%, transparent);
     }
 
-    /* A button is a cut plate: the app's own tinted fill, a rule mixed from whatever tone it is tinted with, and
-     * a whisper of light inside the top edge. No fill gradient — the tint is the meaning, and a sheen over it
-     * only makes the label's ground uneven. */
+    /* A BUTTON IS A CUT PLATE, AND IT HAS TO LOOK CUT. The app's own tinted fill, a rule mixed from whatever
+     * tone it is tinted with, the plates' stone face, and a bevel: light along the top lip, shade along the
+     * foot, a short drop underneath.
+     *
+     * The face and the bevel are the correction. Every button in the skin used to be a flat fill inside a thin
+     * warm rule, which is the same description as a card, a field, a chip and a panel edge — so a screenful of
+     * controls had nothing in it that looked like a thing you press, and the whole app read as one weight. No
+     * fill GRADIENT still: the tint is the meaning, and a sheen over it makes the label's ground uneven. A
+     * uniform tooth and a one-pixel bevel do not. */
     [data-skin="sanctum"] .p-button {
-        background-image: none;
+        background-image: var(--sanctum-tooth);
         border-color: color-mix(in oklab, var(--ui-button-tone, var(--sanctum-gold)) 24%, transparent);
-        box-shadow: inset 0 1px 0 var(--sanctum-whisper);
+        box-shadow:
+            inset 0 1px 0 rgba(240, 214, 168, 0.08),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+            0 1px 2px rgba(0, 0, 0, 0.4);
         transition:
             box-shadow 0.18s ease-out,
             background-color 0.18s ease-out,
@@ -578,7 +641,7 @@
      * warm ground is the "everything is the brightest thing" failure, and it is why the previous cut of this
      * skin was tiring to sit in front of.
      *
-     * The site has exactly two buttons: a stone cartouche framed in gold, and one panel of lit timber. So the
+     * The site has exactly two buttons: a stone cartouche framed in gold, and one filled plaque of metal. So the
      * accent tier takes the STRUCTURAL metal and a cream label, which is the site's `.btn`, and the loud tier
      * below is the site's `.btn-primary`. The accent is not lost — it is spent where it means something.
      *
@@ -586,7 +649,7 @@
      * rules. `danger`, `warn` and `success` are TONES that say what a press does; the app sets each one's tone
      * in a separate one-class rule in `@layer primeng`, and this file's layer beats that layer outright — so a
      * tone set here without the exclusions repaints the destructive button gold, which is a destructive button
-     * nobody sees. `ui-button-loud` is excluded for the same reason: it is timber, three rules down. */
+     * nobody sees. `ui-button-loud` is excluded for the same reason: it is a filled plaque, three rules down. */
     [data-skin="sanctum"]
         .p-button:where(
             :not(
@@ -611,7 +674,10 @@
 
     [data-skin="sanctum"] .p-button:enabled:hover {
         border-color: color-mix(in oklab, var(--ui-button-tone, var(--sanctum-gold)) 42%, transparent);
-        box-shadow: inset 0 1px 0 rgba(229, 196, 137, 0.14);
+        box-shadow:
+            inset 0 1px 0 rgba(240, 214, 168, 0.16),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+            0 1px 2px rgba(0, 0, 0, 0.4);
     }
 
     /* Hover brightens the metal rather than the label's ground: the app's own rule repaints the label in the
@@ -635,62 +701,79 @@
         border-color: color-mix(in oklab, var(--sanctum-gold) 52%, transparent);
     }
 
-    /* ── THE ONE LOUD BUTTON, AS A PANEL OF DARK TIMBER ───────────────────────────────────────────────────
-     * The site's hero control, brought over whole: a board seated in a lit rule, its label glowing on it. It is
-     * the app's `ui-button-loud` — at most one per screen, the place a screen asks for money — so this is the
-     * second and last surface in the skin made of wood, and the loudest thing the skin ever does.
+    /* ── THE ONE LOUD BUTTON, AS A CAST PLAQUE ────────────────────────────────────────────────────────────
+     * The app's `ui-button-loud` — at most one per screen, the place a screen asks for money.
      *
-     * THE PANEL IS DARKER THAN THE WOOD IT DEPICTS, which is the whole trick and was learned on the site: the
-     * label sits ON this, so the body runs a dark walnut and the grain is held under a third of an alpha, which
-     * puts the label around 9:1 against its own ground instead of the ~4:1 a mid-brown gave it. The warmth is
-     * carried by the sheen at the foot and the rule around it, never by lightening the field the words have to
-     * be read against.
+     * IT WAS A PANEL OF DARK TIMBER AND IT FAILED THE ONLY TEST THAT MATTERS FOR A PRIMARY. As an object the
+     * board was the nicest thing in the file; as the one control a reader is meant to find, it was a dark
+     * plate on a dark window with a thin warm rule round it — and so was every card, every field, every
+     * secondary button and every panel edge on the screen. The eye finds differences of LIGHTNESS before it
+     * finds anything else, and there were none. Nothing said "this one". (The site learned this first and in
+     * the same words: see the note over `.btn-primary` in global.css.)
      *
-     * THE LIGHT IN IT IS THE USER'S ACCENT, not the site's fixed ember. This is the app, and the one control
-     * that shouts is the right place for the colour they chose to be unmistakable. */
+     * SO THE PRIMARY INVERTS. It is the only light-on-dark object in the app: a plaque with the words cut INTO
+     * it, dark on metal, where everything else here is cream on stone. One glance finds it across a full
+     * board, and it cannot be mistaken for a frame, because no frame in this skin is filled.
+     *
+     * IT IS CAST, NOT POLISHED, and that is the whole difference from the site's. A landing page is looked at
+     * for ninety seconds and can afford a mirror: the site's plaque runs a bright specular sweep, a lit outer
+     * halo and a pale body. In a window somebody sits in front of for nine hours, a highlight that bright is a
+     * lamp in the corner of the eye. So the same three layers are built at a lower temperature — the sweep at
+     * a third of its strength and raking flatter, the halo gone entirely, the body a full step deeper and
+     * duller, a weathered bronze rather than fresh gilt. It reads as the site's object, aged.
+     *
+     * IT IS GOLD, NOT THE USER'S ACCENT, which reverses this file's earlier decision on purpose. The timber
+     * panel was lit with the picked colour on the argument that the one shouting control should wear it. But
+     * that made the app's loudest object change material with a setting, and it spent the accent — the thing
+     * this skin keeps scarce so that a link, a focus ring and a ticked box can be found — on the largest warm
+     * area on the screen. Gold is the structural metal and is already in every rule here; raising it from a
+     * hairline to a solid in exactly one place is a promotion, not a new colour.
+     *
+     * The label is a warm near-black with a pale hairline over each letter, so the stroke reads as an edge
+     * with depth rather than as ink: ~9:1 on the plate, and the pairing holds whatever accent is picked
+     * because neither side of it is the accent. */
     [data-skin="sanctum"] .p-button.ui-button-loud,
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover,
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:active {
-        color: var(--color-primary-300);
-        /* The letters are on texture, so they carry their own separation. Tight and nearly opaque: at this size
-         * a soft shadow is a smudge, and what is wanted is a cut edge rather than a glow. */
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
-        background-color: #1b1008;
+        color: #241708;
+        font-weight: 600;
+        text-shadow: 0 1px 0 rgba(255, 248, 232, 0.34);
+        background-color: #b19765;
         background-image:
-            var(--sanctum-timber-x),
-            radial-gradient(135% 170% at 50% 124%, color-mix(in oklab, var(--color-primary-400) 22%, transparent) 0%, transparent 74%),
-            linear-gradient(180deg, #2a1a0d 0%, #1d1108 56%, #120a05 100%);
+            linear-gradient(104deg, transparent 24%, rgba(255, 250, 236, 0.15) 45%, rgba(255, 250, 236, 0.03) 56%, transparent 70%),
+            var(--sanctum-brushed),
+            linear-gradient(180deg, #c6ae7f 0%, #b19765 42%, #9a8153 76%, #88713f 100%);
         /* Stretched to the button rather than tiled: turbulence has no seam, so a repeat would show its joins,
-         * and one field scaled to the panel is exactly how a board is cut from a plank. */
+         * and one field scaled to the plate is how a piece is brushed after it is cast. */
         background-size: 100% 100%;
         background-repeat: no-repeat;
-        border-color: color-mix(in oklab, var(--color-primary-500) 52%, transparent);
-        /* THE PANEL IS SEATED IN ITS RULE, not laid on it. A lit hairline along the top and a shadow along the
-         * foot is the whole of a bevel at this size; the wide inner shadow behind them pulls the four edges
-         * down so the board sits INSIDE the rule rather than floating level with it. */
+        border-color: rgba(78, 58, 26, 0.7);
+        /* A lit hairline along the top edge and a shade along the foot is the whole of a bevel at this size.
+         * The drop under it is what the plate sits on. No outer glow: that is the part that made the site's
+         * version a lamp, and a lamp is exactly what a workspace cannot have. */
         box-shadow:
-            inset 0 1px 0 rgba(255, 219, 170, 0.11),
-            inset 0 -1px 0 rgba(0, 0, 0, 0.55),
-            inset 0 0 18px rgba(0, 0, 0, 0.5);
+            inset 0 1px 0 rgba(255, 252, 242, 0.5),
+            inset 0 -1px 0 rgba(66, 46, 18, 0.55),
+            inset 0 0 14px rgba(96, 70, 30, 0.22),
+            0 3px 10px -3px rgba(0, 0, 0, 0.7);
     }
 
-    /* Hover lifts the light rather than the board: the rule brightens and the ember at the foot comes up, which
-     * is one property each and both interpolate cleanly. */
+    /* Under the pointer the plate catches more of the same light rather than changing colour, and the
+     * engraving does NOT lighten — metal that brightens does not turn its cut letters pale. */
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover {
-        color: var(--color-primary-200);
-        border-color: color-mix(in oklab, var(--color-primary-400) 78%, transparent);
-        box-shadow:
-            inset 0 1px 0 rgba(255, 219, 170, 0.14),
-            inset 0 -1px 0 rgba(0, 0, 0, 0.55),
-            inset 0 0 26px color-mix(in oklab, var(--color-primary-500) 16%, transparent),
-            0 0 18px color-mix(in oklab, var(--color-primary-500) 14%, transparent);
+        background-color: #c0a674;
+        background-image:
+            linear-gradient(104deg, transparent 22%, rgba(255, 250, 236, 0.26) 45%, rgba(255, 250, 236, 0.06) 57%, transparent 72%),
+            var(--sanctum-brushed),
+            linear-gradient(180deg, #d5bd8d 0%, #c0a674 42%, #a88f61 76%, #957e4c 100%);
+        border-color: rgba(96, 72, 32, 0.8);
     }
 
     /* Solid accent controls — checkbox, radio, switch — read as inlay: the unticked box is cut down into the
      * plate like a field, and the ticked one is the metal filling it. */
     [data-skin="sanctum"] .p-checkbox-box,
     [data-skin="sanctum"] .p-radiobutton-box {
-        background-color: oklch(14% 0.006 78);
+        background-color: oklch(10.5% 0.005 78);
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
     }
 
@@ -709,7 +792,7 @@
     }
 
     [data-skin="sanctum"] .p-progressbar {
-        background-color: oklch(14% 0.006 78);
+        background-color: oklch(10.5% 0.005 78);
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.55);
     }
 
@@ -857,10 +940,17 @@
  * they appear together because they are one treatment.
  *
  * UNLAYERED, like the inscriptions below and for the same reason: both properties are set by utilities, and a
- * rule in `@layer components` loses to a utility however specific it is. */
+ * rule in `@layer components` loses to a utility however specific it is.
+ *
+ * AND IT IS A HALO, NOT A FRAME. Recolouring alone was not enough: solid gold on the border plus a two-pixel
+ * ring at nearly half strength is a THREE-PIXEL BAND of metal round the card, and a band that wide stops
+ * reading as "this one is picked" and starts reading as a second, brighter card. The border comes down to
+ * two-thirds strength and the ring to a fifth, which leaves a soft glow around a plate rather than a rim on
+ * it. Selection has three cues here and the frame only has to be one of them: the app also lifts the card to
+ * the overlay surface, and this skin's plates already carry a shadow that a lifted one carries further. */
 [data-skin="sanctum"] .border-primary-500.ring-primary-500\/50 {
-    border-color: var(--sanctum-gold);
-    --tw-ring-color: rgba(201, 160, 92, 0.38);
+    border-color: color-mix(in oklab, var(--sanctum-gold) 66%, transparent);
+    --tw-ring-color: rgba(201, 160, 92, 0.2);
 }
 
 /* ── THE INSCRIPTIONS ──────────────────────────────────────────────────────────────────────────────────────
