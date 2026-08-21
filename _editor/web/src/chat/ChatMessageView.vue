@@ -1074,7 +1074,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                      card's body. Weight alone separates it from the options under it, and one step of it is
                      enough. The other card headers (plan / permission) keep the title tier: they are single
                      truncated lines, not prose. -->
-                <div class="chat-question-header flex items-start gap-2 border-b border-line px-3.5 py-2">
+                <div class="chat-question-header flex items-start gap-2 px-3.5 py-2">
                     <Icon name="comments" class="mt-0.5 text-sm text-link" />
                     <span class="min-w-0 flex-1 text-xs font-medium text-content">{{
                         message.question.questions.length > 1 ? "A few questions" : message.question.questions[0]?.question
