@@ -78,6 +78,8 @@ rules:
     artipacked:
         ignore:
             - release.yml:61
-            # Was 349; the two image-smoke steps above it moved `publish`'s checkout down nine lines. Re-read
-            # and re-approved as the paragraph above requires: same checkout, same job, same reason.
-            - release.yml:358
+            # Was 349, then 358, now 385 — `publish`'s checkout keeps sliding down as steps and `env:` land
+            # above it, most recently the twenty-seven lines of Windows Authenticode signing config. Re-read
+            # and re-approved as the paragraph above requires: same checkout, same `publish` job, same
+            # `pnpm exec semantic-release` a few steps below it, same reason.
+            - release.yml:385
