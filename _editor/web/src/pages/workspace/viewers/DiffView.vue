@@ -6,7 +6,7 @@ import { useLayout } from "../../../composables/useLayout";
 import type { CodeAnalysis } from "../../../composables/workspace/codeAnalysis";
 import { requestCodeAnalysis } from "../../../composables/workspace/codeAnalysisClient";
 import { lineStat, type LineStat } from "../../../composables/workspace/codeStat";
-import { firstChangeBeyondImports, type ImportSide } from "../../../composables/workspace/codeImports";
+import { landingChange, type ImportSide } from "../../../composables/workspace/codeLanding";
 import { editorType, useMonaco, watchEditorType } from "../../../composables/workspace/useMonaco";
 import { highlightLangFor } from "../fileType";
 
@@ -19,7 +19,7 @@ import { highlightLangFor } from "../fileType";
  * Comments are stripped from both sides unless the reader asks for them (useLayout.showComments, off by default):
  * the diff is then computed on code alone, so comment churn stops registering as change at all. Both reading
  * settings are the reader's, held in useLayout and driven by DiffToolbar, which every host renders above this.
- * A third, where the diff OPENS (useLayout.skipImports), is set in Settings rather than up there: it decides
+ * A third, where the diff OPENS (useLayout.diffOpen), is set in Settings rather than up there: it decides
  * where this lands the reader on the way in, so a control over the code would look like it did nothing. */
 
 const { before, after, path } = defineProps<{ before?: string; after?: string; path: string }>();
@@ -31,7 +31,7 @@ const emit = defineEmits<{ stat: [LineStat | undefined] }>();
 
 const { mobile } = useDevice();
 const { ensureMonaco, ensureLanguage } = useMonaco();
-const { showComments, toggleShowComments, diffLayout, skipImports } = useLayout();
+const { showComments, toggleShowComments, diffLayout, diffOpen } = useLayout();
 // The stored preference is a desktop one: two panes cannot fit a phone, so mobile is always inline regardless.
 const split = computed(() => !mobile.value && diffLayout.value === `split`);
 
@@ -92,9 +92,10 @@ const modelImports = (analysis: CodeAnalysis): ReadonlySet<number> => {
 };
 
 const side = async (text: string): Promise<DisplaySide> => {
-    // Hiding comments needs the analysis; showing them only needs it when import skipping will consume the other
-    // half of the same result. In either case a warmed review normally answers from the client cache.
-    const analysis = !showComments.value || skipImports.value ? await requestCodeAnalysis(text, stripLang) : undefined;
+    // Hiding comments needs the analysis; showing them only needs it when the landing rule will consume the other
+    // half of the same result, which is both rules that read imports. In either case a warmed review normally
+    // answers from the client cache.
+    const analysis = !showComments.value || diffOpen.value !== `top` ? await requestCodeAnalysis(text, stripLang) : undefined;
     if (showComments.value || analysis === undefined) {
         return { text, lineNumbers: `on`, stripped: false, imports: new Set(analysis?.imports ?? []) };
     }
@@ -127,10 +128,10 @@ const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
 };
 
 /* Land the reader on a change instead of line 1: the change is often mid-file, and Monaco opens at the top,
- * leaving it to be found by scrolling. WHICH change is the reader's preference: the first one, or (skipImports)
- * the first that touches something other than an import, since a file's import list is the change a review keeps
- * opening on and never the one it came for. A change-less result: an identical file, or a diff whose every
- * change was a comment: reveals nothing either way. Call this straight after `render` fills the models. */
+ * leaving it to be found by scrolling. WHICH change is the reader's preference (useLayout.diffOpen, resolved by
+ * codeLanding): the first one, the first that touches something other than an import, or the heaviest block in
+ * the file. A change-less result: an identical file, or a diff whose every change was a comment: reveals nothing
+ * whichever was asked for. Call this straight after `render` fills the models. */
 const reveal = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void> => {
     /* Monaco diffs in a worker, so the hunks are not there yet: its own revealFirstDiff waits that out
      * internally, and choosing a hunk instead means waiting for it here. Subscribed before this function awaits
@@ -147,7 +148,7 @@ const reveal = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
         return; // unmounted (fast file-switch) while the sides were scanned
     }
     const changes = editor.getLineChanges() ?? [];
-    const target = !skipImports.value ? changes[0] : firstChangeBeyondImports(changes, importSides[0], importSides[1]);
+    const target = landingChange(diffOpen.value, changes, importSides[0], importSides[1]);
     if (target === undefined) {
         return;
     }

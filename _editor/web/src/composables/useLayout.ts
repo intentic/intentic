@@ -15,6 +15,9 @@ export type ChatHome = "side" | "rail";
 export type SidebarPanel = "files" | "changes" | "history";
 // How a diff renders its two sides. One setting for every diff surface, see DIFF_LAYOUT_KEY.
 export type DiffLayout = "split" | "unified";
+// Where a diff LANDS the reader, see DIFF_OPEN_KEY. `top` is Monaco's own answer (the first change in the file,
+// import list and all); the other two are reading strategies, and codeLanding.ts turns each into a hunk.
+export type DiffOpen = "top" | "imports" | "biggest";
 
 const STORAGE_KEY = `ui-chat-position`;
 const WIDTH_KEY = `ui-chat-width`;
@@ -126,16 +129,23 @@ const HIDE_FILE_COMMENTS_KEY = `ui-file-hide-comments`;
 // two panes don't fit a phone, so the stored value is the desktop preference and survives a trip through one.
 const DIFF_LAYOUT_KEY = `ui-diff-layout`;
 
-// Where a diff OPENS, the third of the reader's diff settings. Monaco lands on the first change, which is the
-// import list far more often than it is the change the file was opened for, every review then starts with the
-// same scroll past the same block. So the diff opens on the first change that touches something other than an
-// import (a file whose only changes ARE imports still opens on them, there is nothing else to show).
-//
-// On by default, like the comment strip above it and for the same reason: the reader came to see what the code
-// now does, and both settings hold back the part of the file that isn't that answer. Neither HIDES anything,
-// the imports are one scroll up, so the cost of the default being wrong for someone is a scroll, against a
-// scroll on every file of every review for leaving it off. Persists.
-const SKIP_IMPORTS_KEY = `ui-diff-skip-imports`;
+/* Where a diff OPENS, the third of the reader's diff settings, and the one with three answers rather than two.
+ * Monaco lands on the first change, which is the import list far more often than it is the change the file was
+ * opened for, so every review starts with the same scroll past the same block. Two ways out of that, and they
+ * are not the same request:
+ *
+ *   `imports`  the first change that touches something other than an import. Reading order is intact: the only
+ *              thing above where you land is the import list, so nothing can be missed by starting here. The
+ *              DEFAULT, for the same reason the comment strip above ships on: the reader came to see what the
+ *              code now does, and this is the cheapest way to start on it.
+ *   `biggest`  the block with the most changed lines in the file, imports never counted. Lands on the meat and
+ *              gives up reading order for it: hunks above the landing are now BEHIND the reader. A triage
+ *              setting, chosen by someone skimming a large review, not the one to hand a careful read.
+ *   `top`      Monaco's own, for a reader who wants no cleverness at all.
+ *
+ * None of the three HIDES anything, they only choose a scroll position, and the overview ruler still marks every
+ * hunk in the file. Persists. */
+const DIFF_OPEN_KEY = `ui-diff-open`;
 
 // The markdown preview's outline rail, the heading list beside a rendered document (MarkdownOutline.vue). ON by
 // default: it costs a document nothing (it draws in the gutter the centred prose already leaves, so the reading
@@ -237,7 +247,7 @@ const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
 const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
 const hideFileComments = ref<boolean>(readBool(HIDE_FILE_COMMENTS_KEY));
 const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
-const skipImports = ref<boolean>(readBool(SKIP_IMPORTS_KEY, true));
+const diffOpen = ref<DiffOpen>(readEnum(DIFF_OPEN_KEY, [`top`, `imports`, `biggest`] as const, `imports`));
 const markdownOutline = ref<boolean>(readBool(MARKDOWN_OUTLINE_KEY, true));
 
 const set = (value: ChatPosition): void => {
@@ -345,9 +355,9 @@ const setDiffLayout = (value: DiffLayout): void => {
     write(DIFF_LAYOUT_KEY, value);
 };
 
-const toggleSkipImports = (): void => {
-    skipImports.value = !skipImports.value;
-    write(SKIP_IMPORTS_KEY, skipImports.value ? `1` : `0`);
+const setDiffOpen = (value: DiffOpen): void => {
+    diffOpen.value = value;
+    write(DIFF_OPEN_KEY, value);
 };
 
 const toggleMarkdownOutline = (): void => {
@@ -371,7 +381,7 @@ export function useLayout() {
         showComments,
         hideFileComments,
         diffLayout,
-        skipImports,
+        diffOpen,
         markdownOutline,
         set,
         toggle,
@@ -393,7 +403,7 @@ export function useLayout() {
         toggleShowComments,
         toggleHideFileComments,
         setDiffLayout,
-        toggleSkipImports,
+        setDiffOpen,
         toggleMarkdownOutline,
     };
 }

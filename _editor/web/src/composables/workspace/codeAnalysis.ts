@@ -39,7 +39,7 @@ const stripLine = (line: string, tokens: readonly Token[]): string | undefined =
 };
 
 /* Scope families that name an import. Matching the dotted family keeps lookalikes such as SCSS's @include
- * mixin and C#'s using statement out; codeImports.test.ts pins the language-specific cases. */
+ * mixin and C#'s using statement out; codeLanding.test.ts pins the language-specific cases. */
 const IMPORT_SCOPES = [
     `meta.import`,
     `keyword.control.import`,

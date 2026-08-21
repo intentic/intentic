@@ -5,7 +5,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useToolCalls } from "../../composables/chat/useToolCalls";
 import { showWorkTerminals } from "../../composables/terminal/useWorkTerminals";
-import { useLayout } from "../../composables/useLayout";
+import { type DiffOpen, useLayout } from "../../composables/useLayout";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useImportedTheme } from "../../composables/theme/useImportedTheme";
@@ -31,9 +31,20 @@ const { groupByModule } = useChangeGrouping();
 const { showToolCalls } = useToolCalls();
 // The explorer's two filters, the same preferences the workspace toolbar's funnel flips, which is where someone
 // already staring at node_modules will reach for them; this is where they'll look for them afterwards.
-// skipImports has no such second home: it decides where a diff OPENS, so a control on the diff itself would look
+// diffOpen has no such second home: it decides where a diff OPENS, so a control on the diff itself would look
 // like it did nothing at all. This page is the only place it can be asked for.
-const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests, skipImports, toggleSkipImports } = useLayout();
+const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests, diffOpen, setDiffOpen } = useLayout();
+
+/* Where a diff lands, in the order a reader gives up ground: Monaco's own, then past the import list (reading
+ * order intact), then straight to the heaviest block (reading order given up for the meat). The labels say what
+ * you get rather than naming the rule, and the hover lines carry the catch, which is only ever about what ends
+ * up ABOVE the landing. `Biggest change` rather than any "hotspot" wording on purpose: hotspot elsewhere in the
+ * trade means a file that churns over months, and this is one block in one file. */
+const DIFF_OPEN_OPTIONS = [
+    { label: `Top`, value: `top`, title: `The first change in the file, imports and all` },
+    { label: `Past imports`, value: `imports`, title: `The first change that isn't an import: nothing above it but the import list` },
+    { label: `Biggest change`, value: `biggest`, title: `The block with the most changed lines: earlier changes end up above you` },
+] as const satisfies readonly { label: string; value: DiffOpen; title: string }[];
 
 // Import a VSCode theme JSON → recolor the app's chrome tokens live (the biggest "familiar for developers" lever).
 const { active: importedTheme, importThemeJson, clearImportedTheme } = useImportedTheme();
@@ -215,15 +226,16 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             >
                 <template #control><ToggleSwitch v-model="groupByModule" /></template>
             </Row>
+            <!-- Not `as="label"`, unlike the switches around it: a label wrapping three buttons hands every
+                 click on the description to the first of them. -->
             <Row
-                as="label"
                 icon="forward"
-                title="Open past the imports"
-                description="Open every diff on the first change that isn't an import, instead of on the import list at the top of the file. The imports are still there to scroll up to, and a file whose only changes are imports opens on those."
+                title="Where a diff opens"
+                description="Which change every diff lands on: the top of the file, the first change that isn't an import, or the biggest block of changed lines. The biggest one can leave earlier changes above you. Nothing is ever hidden."
             >
-                <template #control>
-                    <ToggleSwitch :model-value="skipImports" @update:model-value="toggleSkipImports()" />
-                </template>
+                <template #control
+                    ><SegmentedControl :model-value="diffOpen" :options="DIFF_OPEN_OPTIONS" @update:model-value="setDiffOpen"
+                /></template>
             </Row>
         </RowGroup>
 
