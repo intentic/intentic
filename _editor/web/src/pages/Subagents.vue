@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { type AgentProvider, NATIVE_PROVIDERS, type RestoredMessage, type SubagentSession } from "@intentic/sandbox-contract";
-import { formatTokens, Icon, type IconName, Markdown, useDevice } from "@intentic/ui";
+import { formatTokens, Icon, type IconName, Markdown, ui, useDevice } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { activityIcon } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
@@ -230,16 +230,122 @@ const messages = computed<RestoredMessage[]>(() => transcript.data.value ?? []);
 // works in its parent's tree, and the paths it names are that tree's.
 const decorate = fileLinkDecorator();
 
-// The transcript pane scrolls itself to the bottom as a running child writes: the same expectation the chat sets.
-const pane = ref<HTMLElement | undefined>();
-watch(messages, () => {
-    requestAnimationFrame(() => {
+/* WHAT IT REPORTED BACK, when that is not the same string as how it failed: a delegation's error IS its last
+ * output, and the header's own error panel already says it. Lifted out of the template because three things now
+ * turn on whether there is a report at all: the block, the label that separates it from the work, and where the
+ * column lands when you select this child. */
+const report = computed<string | undefined>(() => {
+    const summary = current.value?.summary;
+    return summary !== undefined && summary !== current.value?.error ? summary : undefined;
+});
+
+/* THE REPORT'S CEILING, AND WHY IT IS A CLAMP AND NOT A BOX OF ITS OWN.
+ *
+ * This pane used to be TWO SCROLLERS stacked: the report in a fixed 14rem letterbox with a scrollbar of its
+ * own, the work in the column below it with another. Same ground, same reading column, same type, and nothing
+ * whatsoever at the seam — so a long report's clipped last line ran straight into the transcript's first, and
+ * the two documents read as one document with a sentence broken in the middle of it. The worse half was
+ * invisible: which of the two boxes the wheel moved depended on a boundary the reader had no way to see, so
+ * scrolling did one of two different things and the page looked broken rather than dense.
+ *
+ * The report is now the first block INSIDE the transcript's scroller — one wheel, one column, one scroll
+ * position — and the two are told apart the way the rail beside them tells its lanes apart: by a label and by
+ * air, not by a hairline this surface has none of. What the letterbox was actually FOR (keeping a long report
+ * from pushing the work off the bottom of the page) is what this clamp does, minus the trap: the answer's
+ * opening still fits above the fold, the fade says there is more, and asking for the rest grows it in place.
+ *
+ * Whether there IS a rest has to be measured, not computed: it is a question about wrapped height at the width
+ * this pane happens to be, which moves with a dragged panel edge. Same reasoning, same shape as Code.vue. */
+const reportExpanded = ref(false);
+// Nullable for the reason the pane's ref is: Vue empties a template ref to `null`, both when the element goes
+// (a child with no report) and on unmount, so truthiness is the only check that covers it.
+const reportBox = ref<HTMLElement | null>(null);
+const reportOverflows = ref(false);
+const reportClamped = computed(() => !reportExpanded.value);
+// Kept once expanded, for Code.vue's reason: the measurement says "nothing more to show" the instant the clamp
+// lifts, and a toggle that vanishes on use leaves the reader no way back to the short form.
+const reportToggle = computed(() => reportExpanded.value || reportOverflows.value);
+const measureReport = (): void => {
+    const el = reportBox.value;
+    reportOverflows.value = el !== null && el.scrollHeight > el.clientHeight + 1;
+};
+/* Observed on the CONTENT as well as on the box. While clamped, the box's own height is pinned by its
+ * max-height, so it never resizes and an observer watching only it never fires — the report could double in
+ * length under a toggle that still said there was nothing more. The prose inside it is what changes. */
+/* `flush: post`, so the element observed is the one on screen: the report's markup is re-rendered by the very
+ * change that triggers this, and measured before the patch it is the OLD document's height that comes back. */
+let reportWatcher: ResizeObserver | undefined;
+watch(
+    [reportBox, report],
+    (_next, _old, onCleanup) => {
+        reportWatcher?.disconnect();
+        const el = reportBox.value;
+        if (!el) {
+            reportOverflows.value = false;
+            return;
+        }
+        reportWatcher ??= new ResizeObserver(() => measureReport());
+        reportWatcher.observe(el);
+        const content = el.firstElementChild;
+        if (content !== null) {
+            reportWatcher.observe(content);
+        }
+        measureReport();
+        onCleanup(() => reportWatcher?.disconnect());
+    },
+    { flush: `post` },
+);
+onUnmounted(() => reportWatcher?.disconnect());
+
+/* WHERE THE ONE COLUMN SITS, which a single scroller has to decide for itself.
+ *
+ * It used to be simple and wrong: every arriving frame slammed the transcript to the bottom. That was harmless
+ * while the report lived in its own box above, and is not now — merged in, an unconditional jump scrolls the
+ * answer off the top of the surface the moment the poll returns, and drags the page out from under anyone
+ * reading back through the work.
+ *
+ * So it FOLLOWS rather than forces: a reader already at the foot of the column is one watching it happen and
+ * stays pinned there as the child writes; a reader who has scrolled up is left exactly where they are. And the
+ * two kinds of child land in the two places worth landing: a running one at the bottom, where the work it is
+ * doing this second is, and a finished one at the top, where its report is — that answer being the whole reason
+ * the delegation happened. */
+// Nullable, not just optional: Vue empties a template ref on unmount by setting it to `null`, and a frame this
+// queues can land after the page has gone. Truthiness is the check that covers both, and the reason it is one.
+const pane = ref<HTMLElement | null>(null);
+// Slack enough that the last line's descenders or a one-pixel rounding never read as "scrolled away".
+const FOLLOW_SLACK_PX = 64;
+const following = ref(true);
+const onPaneScroll = (): void => {
+    const el = pane.value;
+    if (el) {
+        following.value = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_SLACK_PX;
+    }
+};
+const settle = (): void =>
+    void requestAnimationFrame(() => {
         const el = pane.value;
-        if (el !== undefined) {
-            el.scrollTop = el.scrollHeight;
+        if (el) {
+            el.scrollTop = following.value ? el.scrollHeight : 0;
         }
     });
+watch(messages, () => {
+    if (following.value) {
+        settle();
+    }
 });
+/* A different child is a different document: its own clamp state, and its own landing place. Immediate,
+ * because the FIRST child shown is picked the same way (the daemon sorts live-first and the rail falls back to
+ * row one) — left to the messages watcher alone, landing here on a finished agent would have scrolled its
+ * report away before it was read. */
+watch(
+    selected,
+    () => {
+        reportExpanded.value = false;
+        following.value = current.value !== undefined && subagentLive(current.value);
+        settle();
+    },
+    { immediate: true },
+);
 </script>
 
 <template>
@@ -264,8 +370,8 @@ watch(messages, () => {
             <div class="text-sm text-content">{{ focus === undefined ? "No agents started" : "Nothing running for this agent" }}</div>
             <div class="max-w-sm text-xs text-muted">
                 <template v-if="focus === undefined">
-                    When an agent delegates: with its Agent tool, or by driving Codex or Grok from its shell, the agent it started appears here,
-                    with its own transcript.
+                    When an agent delegates: with its Agent tool, or by driving Codex or Grok from its shell, the agent it started appears here, with
+                    its own transcript.
                 </template>
                 <template v-else>
                     The agents {{ focusTitle }} started have finished and aged out of this list. Its own transcript is the record of what they
@@ -427,67 +533,114 @@ watch(messages, () => {
                     {{ current.error }}
                 </p>
 
-                <!-- ITS REPORT, above its work: the answer is what the delegation was for, so it keeps the
-                     top of the column. Two things it must not be: raw, and unbounded. A child's last words
-                     are a document: headings, tables, file references, which poured out as plain text read
-                     as literal asterisks and pipes, so it goes through the renderer the chat's own prose
-                     does. And a long one grew this column taller than the surface under it, which is what
-                     put the transcript off the bottom of the page; a ceiling of its own to scroll inside is
-                     what keeps the work below it reachable. It takes the transcript's column (.chat-turns)
-                     so the report and the work it summarizes share one left edge and one reading width.
-                     That it FAILED is not said in here: the header's status glyph already says so, and a
-                     page of body text in danger red is the least readable way to repeat it. -->
-                <div
-                    v-if="current?.summary !== undefined && current.summary !== current.error"
-                    class="scrollbar-thin max-h-56 shrink-0 overflow-y-auto py-2"
-                >
-                    <Markdown :source="current.summary" :decorate="decorate" class="chat-turns chat-markdown chat-markdown-compact" />
-                </div>
+                <!-- ONE SCROLLER FOR THE WHOLE COLUMN: the report and the work it summarizes, in that order,
+                     down one reading measure (.chat-turns) with one wheel and one scroll position. They were
+                     two scrollers, and the pair was the surface's worst edge: identical ground, identical
+                     column, identical type, nothing at the seam, so the clipped tail of a long report butted
+                     into the transcript's first line and read as one document torn mid-sentence — while which
+                     box the wheel actually moved turned on a boundary nothing on screen drew.
+                     Merged, the two are told apart the way the rail beside them tells its lanes apart: by a
+                     label in the lane header's own voice and by air. No rule between them, for the reason the
+                     pane's own header has none — this surface's structure is cards, lanes and gaps, and a
+                     hairline here would be its only one. -->
+                <div ref="pane" class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto py-2" @scroll.passive="onPaneScroll">
+                    <div class="chat-turns">
+                        <!-- The two sections' own spacing, set here rather than borrowed from the column's
+                             --chat-gap: that gap is the distance between two events INSIDE a transcript, and
+                             the distance between the report and the entire transcript is a bigger fact than
+                             the distance between one tool call and the next. -->
+                        <div class="flex min-w-0 flex-col gap-5">
+                            <!-- ITS REPORT, keeping the top of the column: the answer is what the delegation
+                                 was for. Two things it must not be: raw, and unbounded. A child's last words
+                                 are a document — headings, tables, file references — which poured out as
+                                 plain text read as literal asterisks and pipes, so it goes through the
+                                 renderer the chat's own prose does. And left unbounded it pushed the work
+                                 clean off the bottom of the page, which is what the old letterbox was for;
+                                 a clamp with a fade and a toggle does that job without trapping the answer
+                                 in a scrollbox the size of a stamp.
+                                 That it FAILED is not said in here: the header's status glyph already says
+                                 so, and a page of body text in danger red is the least readable way to
+                                 repeat it. -->
+                            <section v-if="report !== undefined" class="flex min-w-0 flex-col gap-1.5">
+                                <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Report</span>
+                                <!-- THE CEILING IS A SHARE OF THE WINDOW, not a count of pixels. A fixed one
+                                     (this was 14rem, then 20rem) is wrong at both ends: on a tall window it
+                                     cut a report off with half the pane standing empty below it, which reads
+                                     as damage rather than as a fold; on a short one it left the work no room
+                                     at all. Sixty per cent keeps the proportion the two deserve — the answer
+                                     takes most of the surface, the work stays visibly present under it — at
+                                     every size, and this pane is the window minus a header, so viewport
+                                     height is the honest measure of it and costs no observer to read. -->
+                                <div ref="reportBox" class="relative" :class="reportClamped ? `max-h-[60vh] overflow-hidden` : undefined">
+                                    <Markdown :source="report" :decorate="decorate" class="chat-markdown chat-markdown-compact" />
+                                    <!-- The fade is what says "there is more". A hard cut halfway through a
+                                         heading is exactly what made this block read as a rendering fault. -->
+                                    <div
+                                        v-if="reportClamped && reportOverflows"
+                                        class="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-card to-transparent"
+                                    ></div>
+                                </div>
+                                <button
+                                    v-if="reportToggle"
+                                    type="button"
+                                    :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
+                                    @click="reportExpanded = !reportExpanded"
+                                >
+                                    {{ reportExpanded ? `Show less` : `Show the full report` }}
+                                    <Icon :name="reportExpanded ? `chevron-up` : `chevron-down`" />
+                                </button>
+                            </section>
 
-                <!-- ITS WORK, in the chat's own shapes: prose as prose, tool calls as the very cards the
-                     conversation draws (children and all: a child that itself delegates nests here too):
-                     and on the chat's own column (.chat-turns), for the reason that column exists. Left to
-                     fill this pane, a report's paragraphs ran past 200 characters a line on a wide window,
-                     which is where the eye loses the start of the next one. -->
-                <div ref="pane" class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto py-2">
-                    <div class="chat-turns flex flex-col">
-                        <div v-for="(message, index) in messages" :key="index" class="chat-stack flex flex-col">
-                            <!-- The prompt it was given reads as a prompt: the same right-aligned bubble the
-                                 chat gives the user's own words, because from the child's side that is what
-                                 it is. -->
-                            <p
-                                v-if="message.role === 'user'"
-                                class="self-end whitespace-pre-wrap rounded-lg bg-overlay px-2.5 py-1.5 text-xs leading-relaxed text-content"
-                            >
-                                {{ message.text }}
-                            </p>
-                            <template v-else>
-                                <div v-if="message.thinking" class="text-2xs italic leading-relaxed text-subtle">{{ message.thinking }}</div>
-                                <!-- <Markdown> brings `md-prose` with it, which is what dresses the output:
-                                     every rule in prose.css hangs off that class, and rendered without it the
-                                     headings, lists, tables and code blocks all came out as undifferentiated
-                                     body text. `chat-markdown` is only the transcript's tuning of those
-                                     tokens. -->
-                                <Markdown v-if="message.text" :source="message.text" :decorate="decorate" class="chat-markdown" />
-                                <ChatToolCard
-                                    v-for="tool in message.tools ?? []"
-                                    :key="tool.id"
-                                    :tool="tool"
-                                    :live="current !== undefined && subagentLive(current)"
-                                />
-                            </template>
+                            <!-- ITS WORK, in the chat's own shapes: prose as prose, tool calls as the very
+                                 cards the conversation draws (children and all: a child that itself delegates
+                                 nests here too). Its label earns its row only when there is a report above to
+                                 be told apart from — heading a pane that holds nothing else is decoration,
+                                 and this column has no air to spend on any. -->
+                            <section class="flex min-w-0 flex-col gap-1.5">
+                                <span v-if="report !== undefined" class="text-2xs font-semibold uppercase tracking-wide text-muted">Work</span>
+                                <div class="chat-stack flex min-w-0 flex-col">
+                                    <div v-for="(message, index) in messages" :key="index" class="chat-stack flex flex-col">
+                                        <!-- The prompt it was given reads as a prompt: the same right-aligned
+                                             bubble the chat gives the user's own words, because from the
+                                             child's side that is what it is. -->
+                                        <p
+                                            v-if="message.role === 'user'"
+                                            class="self-end whitespace-pre-wrap rounded-lg bg-overlay px-2.5 py-1.5 text-xs leading-relaxed text-content"
+                                        >
+                                            {{ message.text }}
+                                        </p>
+                                        <template v-else>
+                                            <div v-if="message.thinking" class="text-2xs italic leading-relaxed text-subtle">
+                                                {{ message.thinking }}
+                                            </div>
+                                            <!-- <Markdown> brings `md-prose` with it, which is what dresses the
+                                                 output: every rule in prose.css hangs off that class, and
+                                                 rendered without it the headings, lists, tables and code blocks
+                                                 all came out as undifferentiated body text. `chat-markdown` is
+                                                 only the transcript's tuning of those tokens. -->
+                                            <Markdown v-if="message.text" :source="message.text" :decorate="decorate" class="chat-markdown" />
+                                            <ChatToolCard
+                                                v-for="tool in message.tools ?? []"
+                                                :key="tool.id"
+                                                :tool="tool"
+                                                :live="current !== undefined && subagentLive(current)"
+                                            />
+                                        </template>
+                                    </div>
+                                    <!-- WHERE THE LIVE VIEW COMES FROM, said out loud. A running child is read
+                                         out of its parent turn's stream, which fills in as it works, so an
+                                         empty pane here means "nothing yet", not "nothing is coming", and
+                                         those two read identically when the surface says neither. -->
+                                    <p v-if="messages.length === 0" class="px-1 py-3 text-center text-2xs text-subtle">
+                                        {{
+                                            current !== undefined && subagentLive(current)
+                                                ? "Watching live: what this agent writes lands here as it works."
+                                                : "No transcript was recorded for this agent."
+                                        }}
+                                    </p>
+                                </div>
+                            </section>
                         </div>
-                        <!-- WHERE THE LIVE VIEW COMES FROM, said out loud. A running child is read out of its
-                             parent turn's stream, which fills in as it works, so an empty pane here means
-                             "nothing yet", not "nothing is coming", and those two read identically when the
-                             surface says neither. -->
-                        <p v-if="messages.length === 0" class="px-1 py-3 text-center text-2xs text-subtle">
-                            {{
-                                current !== undefined && subagentLive(current)
-                                    ? "Watching live: what this agent writes lands here as it works."
-                                    : "No transcript was recorded for this agent."
-                            }}
-                        </p>
                     </div>
                 </div>
             </div>
