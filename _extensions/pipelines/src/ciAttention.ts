@@ -12,6 +12,11 @@ import { host } from "./host";
  * It reads THROUGH the host's vue-query cache: the latest badge poll is therefore also the board's first paint,
  * and concurrent reads coalesce instead of opening a second request beside it.
  *
+ * A TIMER BECAUSE THERE IS NOTHING TO PUSH. Every other badge in the workspace derives from workspace files and
+ * so wakes on the write (background.ts); this one's subject is a CI provider's API, which nothing local observes,
+ * so an interval is the whole feed rather than a backstop. Declaring a file binding here would be a declaration
+ * over nothing.
+ *
  * Slow on purpose. This drives a glance, not a screen: a breakage that surfaces within the minute is timely,
  * and the view's own polling is what serves someone actually watching. */
 const { state: runs, start: startCiAttention } = sandboxPoll<CiRunsResponse>({

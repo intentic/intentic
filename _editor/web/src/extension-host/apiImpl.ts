@@ -28,6 +28,7 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { diffTabId } from "../pages/workspace/workspaceTabs";
 import { documentProvider, registerDocumentProvider } from "../core-views/documentRegistry";
+import { onFilesChanged } from "./fileEvents";
 import { onRefsChanged } from "./refEvents";
 import { registerView } from "../core-views/registry";
 import { registerViewer } from "../core-views/viewerRegistry";
@@ -133,6 +134,9 @@ export const createExtensionApi = (
     if (contributes?.files !== undefined) {
         track(registerFileBindings(extensionId, contributes.files));
     }
+    // The same declaration, as the prefixes `onDidChangeFiles` scopes a listener to. Read once here rather than
+    // per subscription: it is the approved manifest's, so an extension cannot widen what it is woken by.
+    const declaredFilePaths = (contributes?.files ?? []).map((file) => file.path);
 
     // Manifest defaults under the persisted values; the shared store keeps this api and the Sandbox hub's
     // Extensions tab looking at the same record.
@@ -339,6 +343,11 @@ export const createExtensionApi = (
                 return track({ dispose: () => stop() });
             },
             onDidChangeRefs: (listener) => track(onRefsChanged(listener)),
+            // Scoped to the APPROVED manifest's paths, so an extension that declared nothing is never woken and
+            // one that declared a directory hears about that directory only. An empty declaration still yields a
+            // live Disposable: `sandboxPoll` subscribes unconditionally, and a poll with no file binding behind
+            // it should degrade to its timer rather than have to ask whether it has one.
+            onDidChangeFiles: (listener) => track(onFilesChanged(declaredFilePaths, listener)),
             /* Opens the tab, then, on mobile only, navigates to it, because the mobile workspace has no tab
              * strip and renders whichever diff `?diff=` names. Same two steps as WorkspaceMobile's own
              * openDiffNav, which is what the app's Changes and History panels go through; an extension must not

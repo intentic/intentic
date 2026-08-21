@@ -9,17 +9,24 @@ import { draftsQuery, owedOf } from "./useDrafts";
  * Drafts used to appear only once something was waiting, which made the whole area unlearnable (a surface that
  * exists intermittently cannot be checked, only stumbled into). The tile is the place; the badge is the news.
  *
- * THE BADGE POLLS FROM MODULE STATE, not from the view: a count that only updated while the owner was already
- * reading the queue could never tell them anything. The poll and the view name the SAME HostQuery, so the
- * badge's read is also the view's first paint, and the manifest's `.intentic/config/drafts/` file binding invalidates
- * both the moment the agent writes a proposal. */
+ * THE BADGE READS FROM MODULE STATE, not from the view: a count that only updated while the owner was already
+ * reading the queue could never tell them anything. The read and the view name the SAME HostQuery, so the
+ * badge's answer is also the view's first paint, and the manifest's `.intentic/config/drafts/` file binding is
+ * what makes both of them move the moment a draft file is written, approved or deleted. */
 
-// The queue as a badge, kept current while the view is closed (background.ts). Sandbox-scoped, because a
-// proposal waiting in one workspace is not a claim on the reader's attention in another: "3 waiting on you"
-// pointing at an empty queue is the badge lying.
+/* The queue as a badge, kept current while the view is closed (background.ts). Sandbox-scoped, because a
+ * proposal waiting in one workspace is not a claim on the reader's attention in another: "3 waiting on you"
+ * pointing at an empty queue is the badge lying.
+ *
+ * DRIVEN BY THE FILE BINDING, not by the interval. Every way this number can change is a write under
+ * `.intentic/config/drafts/`: the agent proposing, the owner approving or rejecting, the publish automation
+ * marking one posted or failed. So the push is the feed and `everyMs` is only the frame nobody delivered, which
+ * is why it is ten minutes rather than one. It used to be one, and that was the whole bug: clearing the queue
+ * left the tile claiming six for the rest of the minute, which is exactly long enough to be read and disbelieved.
+ */
 const { state: badge, start: startDraftsAttention } = sandboxPoll<ViewBadge | undefined>({
     host,
-    everyMs: 60_000,
+    everyMs: 10 * 60_000,
     initial: () => undefined,
     read: async (api) => {
         const { owed, broken } = owedOf(await api.sandbox.fetch(draftsQuery()));

@@ -22,6 +22,7 @@
         ]
     },
     "contributes": {
-        "views": [{ "id": "acceptance", "label": "Acceptance", "surface": "rail", "badge": true }]
+        "views": [{ "id": "acceptance", "label": "Acceptance", "surface": "rail", "badge": true }],
+        "files": [{ "path": ".intentic/records/artifacts/acceptance/", "invalidates": ["acceptance"] }]
     }
 }

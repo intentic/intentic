@@ -347,6 +347,26 @@ export interface IntenticApi {
          * as the last thing the user clicked. `repos` are root-relative ids ("root" is the workspace repo itself).
          */
         onDidChangeRefs(listener: (repos: readonly string[]) => void): Disposable;
+        /* ONE OF YOUR OWN `contributes.files` PATHS WAS WRITTEN, scoped to that declaration: the listener is
+         * registered with your manifest's prefixes, so it never fires for a write you did not claim and you never
+         * write the prefix matching yourself. `paths` are the matching ones, workspace-root-relative.
+         *
+         * The declaration already made the daemon's push evict the query keys it names, and for anything the
+         * user is LOOKING at that is the whole story. It is not the story for what an extension does while none
+         * of it is on screen: an eviction only reaches a query something is observing, and a rail badge is by
+         * definition read with nothing mounted, so the tile went on saying whatever it last said until its own
+         * timer came round. Every badge in the workspace was therefore as fresh as its interval, up to ten
+         * minutes for the slowest, and a queue the owner had just emptied kept claiming its old count.
+         *
+         * You are unlikely to need this directly: `sandboxPoll` already wakes on it (background.ts), which is
+         * what turns a declared file binding into a badge that moves with the write. Reach for it when you keep
+         * background state some other way.
+         *
+         * FIRES WITH YOUR WHOLE DECLARATION when the host cannot say what moved: past a few hundred paths the
+         * daemon stops listing them, and a reconnected stream may have missed frames outright. Both are "assume
+         * yours changed", which is the safe direction for a badge, one re-read against a badge that is silently
+         * wrong for as long as the connection was away. */
+        onDidChangeFiles(listener: (paths: readonly string[]) => void): Disposable;
         /* OPEN A DIFF IN THE EDITOR AREA, the host's tab strip, beside the files the diff is about.
          *
          * The shell owns the strip, the viewer, the close orchestration and the edit-buffer bookkeeping; the

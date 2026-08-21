@@ -36,6 +36,12 @@ interface RecordedSurface {
     // api.sandbox's own members, recorded from 2.3.0 on: the sub-surface where drift actually happened (rpc
     // arrived unrecorded; role() is why this exists). Optional because earlier entries predate it.
     readonly sandboxApi?: readonly string[];
+    /* api.workspace's own members, recorded from 2.10.0 on, and it is the second block to earn a list for the
+     * first block's exact reason: `onDidChangeFiles` was added there, and a top-level record cannot see inside
+     * `workspace`, so the whole release would have recorded a surface identical to its predecessor's. A version
+     * whose entry is indistinguishable from the one before it is the untrue number this file exists to prevent.
+     * Optional because earlier entries predate it. */
+    readonly workspaceApi?: readonly string[];
     /* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still
      * unrecorded.
      *
@@ -94,6 +100,7 @@ const liveSurface = (): RecordedSurface => ({
     api: apiMembers(),
     listener: Object.keys(ListenerContributionSchema.shape).toSorted(),
     sandboxApi: nestedMembers(`sandbox`),
+    workspaceApi: nestedMembers(`workspace`),
     // The runtime exports only. Types are the api object's business (recorded above) and a package that
     // re-exports thirty interfaces would drown the one line that says a new FUNCTION arrived.
     moduleExports: Object.keys(sdkModule)

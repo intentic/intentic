@@ -68,6 +68,11 @@ const hasPublishedMap = async (repo: string): Promise<boolean> => {
  * minutes apart, and the two moments that matter (publish, discard) call refresh() directly rather than
  * waiting.
  *
+ * A MINUTE RATHER THAN THE BADGE'S TEN, and the difference is which half of this read the file binding covers.
+ * The STAGED side lives under `.intentic/config/docs/`, so a run writing into it wakes this (background.ts). The
+ * PUBLISHED side is `docs/architecture` inside each repo, ordinary source under no declaration anyone could
+ * write narrowly, so a hand-edited or agent-committed page is still learnt on the interval.
+ *
  * Sandbox-scoped, and this is the state where carrying over is most visibly wrong: the keys are workspace
  * paths, the Workspace tree draws an icon on every row it has an entry for, and two sandboxes of the same
  * monorepo share nearly every path. A switch would leave the tree offering documents that were generated in the

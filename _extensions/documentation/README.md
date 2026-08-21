@@ -136,9 +136,11 @@ a fact nobody has. Hidden, a documented monorepo looked exactly like an undocume
 found because there is one of it, and the per-package layer under it was invisible. Standing, the tree also reads
 as coverage: a package with no page is now the row without a mark.
 
-The presence of a document is module state on a slow poll ([src/docPresence.ts](src/docPresence.ts)), not a query:
-the host asks `detect(path)` while nothing of this extension is mounted, and nothing observes an unmounted view:
-so neither a vue-query nor the file-change push could answer. One index read per repository covers every package it
+The presence of a document is module state ([src/docPresence.ts](src/docPresence.ts)), not a query: the host asks
+`detect(path)` while nothing of this extension is mounted, and nothing observes an unmounted view, so no vue-query
+could answer it. The file-change push does, now that it is announced as well as spent on the cache: the staging
+tree is a declared binding, so a run writing into it refreshes this. The slow interval behind it is what covers
+the PUBLISHED side, `docs/architecture` inside each repo, which is ordinary source and under no narrow binding. One index read per repository covers every package it
 documents, tooltips included, because `index.json` already carries the one-liners. A repository's *own* row asks a
 different question (does its map exist) because an index is derived bookkeeping that can be written for a
 directory nobody wrote an overview for, and a row that promises a document has to open one.

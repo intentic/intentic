@@ -37,18 +37,24 @@ import { host } from "./host";
  * tomorrow's. */
 const seen = sandboxLedger(host, `${STATE_DIR}/records/chores/seen.json`);
 
-/* The tile's whole source. Its own timer rather than the view's query, a badge that only updated while you were
+/* The tile's whole source. Module state rather than the view's query, a badge that only updated while you were
  * already looking at Maintenance could never tell you anything you did not know, and nothing observes an
- * unmounted view, so neither the file push nor the panel's query can serve it (background.ts).
+ * unmounted view, so the panel's query cannot serve it (background.ts).
  *
  * The read goes THROUGH the host's cache, not straight at the route, so this poll and the panel are one read. It
  * was fetching precisely what the panel renders, six times an hour, and handing it to nobody else; the panel then
  * opened on a skeleton and asked again. Filed under the panel's key, the most recent poll IS what the panel
  * paints from the moment it is opened.
  *
- * Slow on purpose, and slower than any other attention poll in the workspace. Probes refresh on a daily-to-weekly
+ * Slow on purpose, and slower than any other attention read in the workspace. Probes refresh on a daily-to-weekly
  * TTL, so the answer to "has anything changed" changes a few times a week; polling this faster would be spending
- * requests to re-learn the same thing. */
+ * requests to re-learn the same thing.
+ *
+ * WHICH IS EXACTLY WHY THE FILE WAKE MATTERS MOST HERE. The interval being honest about how rarely the answer
+ * moves is also what made this the worst tile in the workspace at the moment it DID move: a probe landing right
+ * after a tick left the rail silent for ten minutes, and acknowledging a chore left it lit for ten. Everything
+ * this reads lives under `.intentic/records/chores/`, which the manifest declares, so the write is the feed now
+ * and the interval is the frame nobody delivered. */
 const { state: unseen, start: startMaintenanceAttention } = sandboxPoll<readonly ChoreVerdict[]>({
     host,
     everyMs: 10 * 60_000,

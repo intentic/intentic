@@ -1,5 +1,6 @@
 import { fileBoundQueryKeys, runtimeBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { contributedFileBindings } from "../../extension-host/fileBindings";
+import { emitFilesChanged } from "../../extension-host/fileEvents";
 import { emitRefsChanged } from "../../extension-host/refEvents";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { desyncAgents, refreshAgents, setAgents } from "../agents/useAgents";
@@ -102,6 +103,10 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             for (const key of fileBoundQueryKeys(contributedFileBindings())) {
                 void queryClient.invalidateQueries({ queryKey: [key] });
             }
+            // And the same catch-up for what an invalidation cannot reach: a rail badge has nothing mounted, so
+            // marking its query stale moves nothing until something reads it. Announced as an empty batch, which
+            // is this channel's "something changed and we cannot say what" (fileEvents.ts).
+            emitFilesChanged([]);
             /* And every RUNTIME-bound view, for the same reason and with more of it to miss: a panel that
              * finished starting, a session that exited, a port that closed while this browser was away were all
              * pushed once, to a stream that had already ended. These views carry no poll to catch up on their
@@ -164,12 +169,28 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
         }
         case `workspaceChanged`: {
             markWorkspaceChanged(event.paths);
-            // Core's table unioned with what the ACTIVATED extensions declared, one push, both halves. An
-            // extension that isn't running contributes nothing, which is the point of asking the host rather
-            // than the installed list.
-            for (const key of staleQueryKeys(event.paths, contributedFileBindings())) {
+            /* Core's table unioned with what the ACTIVATED extensions declared, one push, both halves. An
+             * extension that isn't running contributes nothing, which is the point of asking the host rather
+             * than the installed list.
+             *
+             * AN EMPTY BATCH TAKES EVERY KEY, and it used to take none: the daemon sends no path list past
+             * MAX_PATHS, and matching "no paths" against a prefix table yields nothing, so the one frame that
+             * means the MOST changed (a branch switch, a codegen run, a mass delete) was the one frame that made
+             * nothing stale. Every file-bound view then sat on pre-switch content until its file's next
+             * individual write. Same union, same one-cheap-read-per-key cost as a reconnect. */
+            const stale =
+                event.paths.length === 0 ? fileBoundQueryKeys(contributedFileBindings()) : staleQueryKeys(event.paths, contributedFileBindings());
+            for (const key of stale) {
                 void queryClient.invalidateQueries({ queryKey: [key] });
             }
+            /* THE SAME FRAME, ANNOUNCED, for the readers an invalidation can never reach: a rail badge is fed by
+             * a query with nothing mounted on it, so evicting the entry above changes what the tile says only
+             * once somebody asks again. This is what makes a badge react to the write instead of to a timer.
+             *
+             * Unconditional on `event.paths`, unlike the eviction: an empty batch is the daemon's "more paths
+             * than fit in a frame", so it is the LARGEST change there is, and matching it against nothing would
+             * drop precisely that one (fileEvents.ts). */
+            emitFilesChanged(event.paths);
             // Any worktree write surfaces in the Changes review, but not during a streaming turn, whose
             // constant writes would hammer `git status`; useChanges' stream-end invalidation covers that batch.
             if (!useChat().streaming.value) {

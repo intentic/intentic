@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { IntenticApi } from "@intentic/extension-api";
 import { resetSandboxScope, sandboxLedger, sandboxPoll } from "@intentic/extension-api";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,9 +16,14 @@ const flush = async (): Promise<void> => {
     await Promise.resolve();
 };
 
-// The smallest api a poll or a ledger touches. `reachable` is a field so a test can take the daemon away.
-const fakeApi = (over: { reachable?: boolean; file?: unknown; write?: (path: string, body: string) => void } = {}) => {
+/* The smallest api a poll or a ledger touches. `reachable` is a field so a test can take the daemon away.
+ *
+ * `onDidChangeFiles` is present only when a test asks for it (`watching: true`), which is deliberate: an older
+ * host does not have it, and every test that leaves it out is therefore also checking that a poll on such a host
+ * still runs on its timer instead of failing to start. */
+const fakeApi = (over: { reachable?: boolean; file?: unknown; watching?: boolean; write?: (path: string, body: string) => void } = {}) => {
     const written: { path: string; body: string }[] = [];
+    const listeners = new Set<(paths: readonly string[]) => void>();
     const api = {
         sandbox: { reachable: () => over.reachable !== false },
         workspace: {
@@ -27,9 +33,23 @@ const fakeApi = (over: { reachable?: boolean; file?: unknown; write?: (path: str
                 over.write?.(path, body);
                 return Promise.resolve();
             },
+            ...(over.watching === true
+                ? {
+                      onDidChangeFiles: (listener: (paths: readonly string[]) => void) => {
+                          listeners.add(listener);
+                          return { dispose: () => void listeners.delete(listener) };
+                      },
+                  }
+                : {}),
         },
     } as unknown as IntenticApi;
-    return { api, written };
+    // What the host does when the daemon reports a write under one of this extension's declared paths.
+    const writeLanded = (paths: readonly string[] = [`${STATE_DIR}/config/drafts/one.json`]): void => {
+        for (const listener of listeners) {
+            listener(paths);
+        }
+    };
+    return { api, written, writeLanded, watchers: () => listeners.size };
 };
 
 beforeEach(() => {
@@ -161,6 +181,75 @@ describe(`sandboxPoll`, () => {
         await flush();
 
         expect(poll.state.value).toEqual([`round`, `round`]);
+    });
+
+    /* THE BUG THIS PAIR WAS SUPPOSED TO PREVENT AND DID NOT: the badge said six after the queue was emptied.
+     * Every input to a drafts count is a write under a path the manifest declares, and the host was already
+     * pushing that write, so a whole minute of a wrong number was a minute nobody had to pay for. */
+    it(`re-reads when one of the extension's declared files is written, without waiting out the interval`, async () => {
+        vi.useFakeTimers();
+        const { api, writeLanded } = fakeApi({ watching: true });
+        const read = vi.fn(async () => `answer`);
+        const poll = sandboxPoll({ host: () => api, everyMs: 600_000, initial: () => ``, read });
+
+        const running = poll.start();
+        await flush();
+        expect(read).toHaveBeenCalledTimes(1);
+
+        writeLanded();
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(read).toHaveBeenCalledTimes(2);
+
+        running.dispose();
+    });
+
+    // A run writing a result file per story, a publish rewriting a staging tree: one logical event, many frames.
+    // The widest badge scan in the workspace must not be re-run per frame.
+    it(`coalesces a burst of writes into one read`, async () => {
+        vi.useFakeTimers();
+        const { api, writeLanded } = fakeApi({ watching: true });
+        const read = vi.fn(async () => `answer`);
+        const poll = sandboxPoll({ host: () => api, everyMs: 600_000, immediate: false, initial: () => ``, read });
+
+        const running = poll.start();
+        for (let frame = 0; frame < 5; frame++) {
+            writeLanded();
+            await vi.advanceTimersByTimeAsync(50);
+        }
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        expect(read).toHaveBeenCalledTimes(1);
+        running.dispose();
+    });
+
+    it(`stops listening for writes when the extension is disposed`, async () => {
+        vi.useFakeTimers();
+        const { api, writeLanded, watchers } = fakeApi({ watching: true });
+        const read = vi.fn(async () => `answer`);
+        const poll = sandboxPoll({ host: () => api, everyMs: 600_000, immediate: false, initial: () => ``, read });
+
+        poll.start().dispose();
+        expect(watchers()).toBe(0);
+        writeLanded();
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        expect(read).not.toHaveBeenCalled();
+    });
+
+    /* An extension may declare `engines.intentic` wider than the release that added the channel, so the SDK can
+     * find itself on a host without it. A slower badge is the right degradation; a poll that fails to start is
+     * not, and that is what an uncaught call on `undefined` inside start() would be. */
+    it(`still runs on its timer on a host that cannot announce file writes`, async () => {
+        vi.useFakeTimers();
+        const { api } = fakeApi();
+        const read = vi.fn(async () => `answer`);
+        const poll = sandboxPoll({ host: () => api, everyMs: 1_000, immediate: false, initial: () => ``, read });
+
+        const running = poll.start();
+        await vi.advanceTimersByTimeAsync(2_500);
+
+        expect(read).toHaveBeenCalledTimes(2);
+        running.dispose();
     });
 
     it(`empties on a sandbox switch, because its state is a sandboxRef`, async () => {

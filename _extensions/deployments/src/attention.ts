@@ -24,7 +24,11 @@ import { host } from "./host";
  * behind it. See sandboxValue in extension-api/scope.ts. */
 const watched = sandboxValue<readonly string[]>(() => []);
 
-/* Slow on purpose, the ciAttention budget. This drives a glance, not a screen: a breakage that surfaces within
+/* A TIMER BECAUSE THERE IS NOTHING TO PUSH, the same reason ciAttention keeps one: the subject is a Komodo
+ * server's API, not a workspace file, so no watcher can notice it and the interval is the whole feed rather than
+ * the backstop it is for a file-derived badge (background.ts).
+ *
+ * Slow on purpose, the ciAttention budget. This drives a glance, not a screen: a breakage that surfaces within
  * the minute is timely, and the view's own faster polling is what serves someone actually watching.
  *
  * NO OPENING READ (`immediate: false`), unlike every other badge here: at activation this knows of no

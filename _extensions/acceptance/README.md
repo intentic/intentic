@@ -52,7 +52,9 @@ tested" is the honest evidence for offering the area.
   authored criterion appears verbatim and in order. Report images are resolved only from a flat `shots/*.png`
   path inside that story's own run directory.
 - Opening Acceptance acknowledges the failed and blocked results that exist at that moment, not the age of their
-  run. A failure that finishes after the view closes is still new and lights the badge on the next scan.
+  run. A failure that finishes after the view closes is still new, and the `result.json` landing is what lights
+  the badge: the run directory is a declared file binding, so the write wakes the scan instead of a timer
+  reaching it up to a minute later.
 - A registered session that DIED is a first-class outcome, not a blank. It writes no verdict and no report, so
   both surfaces read its standing from the fleet instead (`storyStanding`, and the session's own `failure`
   sentence on the row).

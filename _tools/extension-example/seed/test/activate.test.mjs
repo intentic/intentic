@@ -20,13 +20,15 @@ const { activate } = await import(`../dist/extension.js`);
 const declaredViews = new Set((manifest.contributes?.views ?? []).map((view) => view.id));
 const declaredCommands = new Set((manifest.contributes?.commands ?? []).map((entry) => entry.command));
 const declaredRoutes = manifest.permissions?.sandbox ?? [];
+// The paths the host is allowed to wake this extension for, which is exactly what `contributes.files` declares.
+const declaredFiles = (manifest.contributes?.files ?? []).map((file) => file.path);
 
 const disposable = () => ({ dispose: () => {} });
 
 const hostStub = () => {
-    const registered = { views: [], commands: [], requested: [] };
+    const registered = { views: [], commands: [], requested: [], watchers: [] };
     const api = {
-        apiVersion: `2.1.0`,
+        apiVersion: `2.10.0`,
         views: {
             register: (view) => {
                 assert.ok(declaredViews.has(view.id), `view "${view.id}" is not declared in contributes.views`);
@@ -50,9 +52,26 @@ const hostStub = () => {
                 return { path, content: JSON.stringify({ notes: [{ at: `2026-01-01T00:00:00.000Z`, text: `hello` }] }) };
             },
         },
+        workspace: {
+            // The host announces a write to one of the paths `contributes.files` declared, scoped to that
+            // declaration. Recorded rather than ignored: a badge that does not subscribe is a badge that is only
+            // as fresh as its interval, which is the thing this extension is showing you how not to build.
+            onDidChangeFiles: (listener) => {
+                registered.watchers.push(listener);
+                return disposable();
+            },
+        },
         navigate: () => {},
     };
-    return { api, registered };
+    /* What the daemon's push does: the notes file was written, so anything derived from it should re-read. The
+     * path comes off the MANIFEST rather than being typed again here, which is this file's whole method: the
+     * declaration is the contract, and a test that spells its own copy of it stops noticing when the two drift. */
+    const notesWritten = () => {
+        for (const listener of registered.watchers) {
+            listener(declaredFiles);
+        }
+    };
+    return { api, registered, notesWritten };
 };
 
 test(`activate registers exactly what the manifest declares`, async () => {
@@ -92,6 +111,26 @@ test(`the badge stays quiet until there is something unread, and clears the time
     await new Promise((resolve) => setImmediate(resolve));
     assert.ok(registered.requested.some((path) => path.startsWith(`/workspace/file?path=`)));
     assert.equal(view.badge(view.detect([], [])[0])?.count, 1);
+
+    for (const subscription of context.subscriptions) {
+        subscription.dispose();
+    }
+});
+
+test(`the badge re-reads when the file it derives from is written, rather than at the next tick`, async () => {
+    const { api, registered, notesWritten } = hostStub();
+    const context = { extensionId: `intentic.example`, subscriptions: [] };
+    await activate(api, context);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const afterActivation = registered.requested.length;
+
+    notesWritten();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // The interval here is ten minutes. Without this subscription the tile would be that far behind a file the
+    // reader can already see the contents of, which is what makes a count stop being believed.
+    assert.ok(registered.requested.length > afterActivation);
 
     for (const subscription of context.subscriptions) {
         subscription.dispose();

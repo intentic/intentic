@@ -110,7 +110,7 @@ need `sandboxRef` directly for one:
 ```ts
 const { state: unseen, start } = sandboxPoll<readonly Finding[]>({
     host,                       // your hostSlot's accessor — nothing is bound until activate()
-    everyMs: 60_000,            // no default: the right interval is a claim about how fast the answer moves
+    everyMs: 10 * 60_000,       // a backstop here: the file binding below is what actually refreshes this
     initial: () => [],
     read: async (api) => findings(await api.sandbox.fetch(query())),
 });
@@ -122,6 +122,15 @@ reject, skip an unreachable daemon, discard an answer that outlived its sandbox,
 failure, stop the clock on disposal, are the poll's, not yours. Pass `immediate: false` if there is nothing
 worth asking until something else tells you what to ask about, and read `previous` in `read` if a round
 accumulates onto what you already hold rather than replacing it.
+
+**If the answer lives in a file, the write is the feed and the interval is only a backstop.** `start()`
+subscribes to your own `contributes.files` paths being written (`api.workspace.onDidChangeFiles`), so a
+declaration you already made is what moves the tile, within a frame of the file changing rather than at the next
+tick. Nothing to opt into: declare the paths your views derive from and the badge over them reacts; declare none
+and the poll is the timer it always was. Bursts coalesce, so a run writing a file per story costs one read, and a
+reconnect wakes it too, because a frame pushed while the stream was down is a frame nobody resends. Pick
+`everyMs` accordingly: minutes for a file-backed badge (it is covering a dropped event, not carrying the news),
+and the honest cadence of the source for anything behind somebody else's API, where nothing can push at all.
 
 What the tile SAYS stays yours: `badge()` is the judgement each surface exists to make, and no two of them
 agree about tone or wording.

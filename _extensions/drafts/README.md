@@ -20,7 +20,8 @@ with the agent, never the UI. Approving starts a visible one-minute countdown, n
 - [src/useDrafts.ts](src/useDrafts.ts): the list and the writes, plus `owedOf`, the one definition of what the
   queue owes (the badge, the view and the phone's Review tab all count with it).
 - [src/postText.ts](src/postText.ts): platform caps, countdown words, and what makes a post a title.
-- [src/extension.ts](src/extension.ts): activation, the permanent tile, and the badge's own timer.
+- [src/extension.ts](src/extension.ts): activation, the permanent tile, and the badge, which the queue's own
+  files refresh (the manifest's `contributes.files` binding) with a slow interval behind it as a backstop.
 
 ## How it fits
 

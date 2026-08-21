@@ -573,10 +573,16 @@ existed, none of them let go of it. The primitive is `sandboxRef`
 refuses any other way of keeping module state in an extension's browser-side source: a population it finds by
 walking each extension's UI entry through its own imports, rather than by a filter over what a file happens to
 name. Above that primitive sit the two shapes every badging surface needed and each had written out itself
-([background.ts](_sandbox/extension-api/src/background.ts)): `sandboxPoll`, the timer that fills a badge while
-its view is unmounted, and `sandboxLedger`, the workspace file recording what the owner has already seen. What
-a tile SAYS is deliberately not shared: the count, the tone and the wording are the judgement each surface
-exists to make. The shell's own singletons are re-scoped from one place beside it
+([background.ts](_sandbox/extension-api/src/background.ts)): `sandboxPoll`, which fills a badge while its view is
+unmounted, and `sandboxLedger`, the workspace file recording what the owner has already seen. What a tile SAYS is
+deliberately not shared: the count, the tone and the wording are the judgement each surface exists to make. That
+poll is driven by the FILE WRITE wherever the answer lives in one: `contributes.files` already named the paths a
+view derives from, and the push it produces was spent entirely on evicting query keys, which reaches only a query
+something observes and therefore never a badge. The frame is announced as well as consumed
+([fileEvents.ts](_editor/web/src/extension-host/fileEvents.ts), `api.workspace.onDidChangeFiles`, scoped to the
+subscriber's own declaration), so a tile moves with the file instead of at the next tick, and the interval is left
+as the backstop for a dropped frame, or as the only feed for a source no watcher can see (a CI provider, a Komodo
+server). The shell's own singletons are re-scoped from one place beside it
 ([sandboxScope.ts](_editor/web/src/composables/sandbox/sandboxScope.ts)); cached reads need neither, since
 every key carries the active sandbox id.
 

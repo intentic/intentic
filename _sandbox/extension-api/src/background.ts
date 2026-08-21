@@ -6,8 +6,21 @@ import { sandboxRef, sandboxScopeGuard } from "./scope.js";
  * turned out to need, and had been writing out by hand.
  *
  * A tile has to be able to say something before it is opened. That rules out the view's own query, which stops
- * when the component unmounts, and it rules out the file-change push, which only reaches a query something is
- * observing. So the state lives at module scope (scope.ts) and something refreshes it on a timer.
+ * when the component unmounts, and it rules out the file-change push AS AN INVALIDATION, because evicting a
+ * cache entry only reaches a query something is observing. So the state lives at module scope (scope.ts) and
+ * something refreshes it.
+ *
+ * THAT SOMETHING IS THE WRITE ITSELF WHEREVER THE ANSWER LIVES IN A FILE, and the timer is the backstop. The
+ * push was already arriving and already naming this extension's paths, it was simply spent entirely on the cache
+ * (`api.workspace.onDidChangeFiles`), so every badge in the workspace was as fresh as its own interval and no
+ * fresher: a drafts queue the owner had just emptied went on claiming six items for a minute, and the slowest
+ * tile here is ten minutes behind the file it describes. A count that is wrong for minutes at a time is worse
+ * than no count, because the owner learns to distrust the one they cannot check without clicking.
+ *
+ * What the interval is still FOR, and why it did not simply go away: a source that is not a file at all (a CI
+ * provider, a Komodo deployment) has nothing to push, so for those it remains the only feed; and for the rest it
+ * covers the gap no push can close, a watcher that dropped an event, an exclusion nobody noticed. Where a file
+ * binding carries the news, `everyMs` is honestly a slow safety net and the extensions here say so.
  *
  * Seven modules across six extensions arrived at the identical shape for that timer, and it carries five rules
  * that are each invisible until they are broken:
@@ -29,7 +42,13 @@ export interface SandboxPoll<T> {
      * own computed repaints when it moves; write to it directly for the local fold a "mark as seen" does, which
      * is what clears a tile on the spot instead of at the next tick. */
     readonly state: Ref<T>;
-    // Begin polling. Push the Disposable onto `context.subscriptions` and the clock stops with the extension.
+    /* Begin reading: on the extension's own `contributes.files` being written, and on the interval. Push the
+     * Disposable onto `context.subscriptions` and both stop with the extension.
+     *
+     * The file wake needs nothing declared here. An extension that named the paths its views derive from has
+     * already said which writes change this answer, so subscribing is unconditional and an extension that
+     * declared none is simply never woken.
+     */
     start(): Disposable;
     // Read now, off-cycle, for the moments that change the answer and should not wait out the interval: a
     // connection appearing, a draft published, a run discarded.
@@ -42,7 +61,11 @@ export interface SandboxPollOptions<T> {
     readonly host: () => IntenticApi;
     /* How often, in milliseconds. There is no default on purpose: the right interval is a claim about how fast
      * the answer actually changes, and a surface that has not thought about it will inherit whatever number
-     * happened to be chosen here. A badge is glanced at, so the honest range is minutes, not seconds. */
+     * happened to be chosen here. A badge is glanced at, so the honest range is minutes, not seconds.
+     *
+     * Read it against `start()`'s file wake. If the answer lives in a path your manifest declares, the write
+     * already refreshes this and the interval is a BACKSTOP for the frame nobody delivered, so the honest number
+     * there is slow. If it lives behind somebody else's API, nothing pushes and this is the only feed. */
     readonly everyMs: number;
     // The value before anything has been read, rebuilt on every sandbox switch (sandboxRef).
     readonly initial: () => T;
@@ -58,6 +81,45 @@ export interface SandboxPollOptions<T> {
     // For a value that owns something the garbage collector will not take back; see sandboxRef.
     readonly dispose?: (previous: T) => void;
 }
+
+/* HOW LONG A BURST OF WRITES IS ALLOWED TO COALESCE before the wake reads. The daemon already batches its
+ * watcher at 250ms, but one logical event is often several batches, an acceptance run writing a result file per
+ * story, a publish rewriting a staging tree, so without this the widest scan in the workspace would be re-run
+ * per frame. Trailing rather than leading: the last write in a burst is the one whose answer is true.
+ *
+ * Short enough that the badge still moves while the owner is looking at the screen that caused the write, which
+ * is the entire point of not waiting for the interval. */
+const WAKE_MS = 400;
+
+/* Re-read when the extension's own declared files are written.
+ *
+ * Contained in a try/catch because BOTH of its failure modes are ordinary rather than exceptional: `host()`
+ * throws until activate() has bound a handle, and an older host has no `onDidChangeFiles` at all (this arrived in
+ * api 2.10.0, and an extension may declare `engines.intentic` wider than that). Either way the poll falls back to
+ * exactly the timer it had before, which is a slower badge and never a broken one. */
+const wakeOnFiles = (host: () => IntenticApi, read: () => void): Disposable => {
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    let subscription: Disposable | undefined;
+    try {
+        subscription = host().workspace.onDidChangeFiles(() => {
+            pending ??= setTimeout(() => {
+                pending = undefined;
+                read();
+            }, WAKE_MS);
+        });
+    } catch {
+        subscription = undefined;
+    }
+    return {
+        dispose: (): void => {
+            if (pending !== undefined) {
+                clearTimeout(pending);
+                pending = undefined;
+            }
+            subscription?.dispose();
+        },
+    };
+};
 
 export const sandboxPoll = <T>(options: SandboxPollOptions<T>): SandboxPoll<T> => {
     const state = sandboxRef(options.initial, options.dispose);
@@ -88,7 +150,13 @@ export const sandboxPoll = <T>(options: SandboxPollOptions<T>): SandboxPoll<T> =
                 void once();
             }
             const timer = setInterval(() => void once(), options.everyMs);
-            return { dispose: () => clearInterval(timer) };
+            const wake = wakeOnFiles(options.host, () => void once());
+            return {
+                dispose: () => {
+                    clearInterval(timer);
+                    wake.dispose();
+                },
+            };
         },
     };
 };

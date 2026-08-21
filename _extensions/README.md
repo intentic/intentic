@@ -66,6 +66,15 @@ and no two of these agree about any of them. A poll takes its interval explicitl
 when a round adds to what it holds rather than replacing it, and skips its opening read when there is nothing
 to ask until something else says what to ask about.
 
+**A badge over a file reacts to the write, not to the clock.** `contributes.files` already told the host which
+paths a pack's views derive from, and the host already evicted the query keys it named: what it could not do is
+reach state with nothing mounted on it, which is every badge by definition. So the same push is announced
+(`api.workspace.onDidChangeFiles`) and `sandboxPoll` wakes on it, which is why the file-backed packs here now
+carry interval in the minutes and say in one line that it is a backstop. Four of the six badges in this
+directory are file-backed and were each wrong for up to their own interval after the thing they describe had
+already landed; the two that are not (Pipelines' CI, Deployments' Komodo) have nothing local to notice, so
+their timer is still the whole feed and says so where it is set.
+
 This is not a convention: `sandboxScope.guard.test.ts` in the web app walks each pack's UI entry through its
 own imports and refuses module-level `ref`/`shallowRef`/`reactive`, any reassignable module binding, and any
 repeating clock in what it reaches. Six packs here had the same omission at once, which is how a Maintenance

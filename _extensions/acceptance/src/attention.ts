@@ -60,11 +60,17 @@ const findings = async (api: IntenticApi): Promise<AcceptanceFinding[]> => {
 /* Module state owned by activate(), NOT by the view: a badge that only updated while you were already looking
  * at Acceptance would never tell you anything you didn't know (background.ts).
  *
- * Slow on purpose. This drives a glance; the view's own polling serves anyone actually watching a run, and this
- * read is the widest of any badge in the workspace, a directory of runs plus two files per story. */
+ * DRIVEN BY THE FILE BINDING the manifest declares over the runs directory, which is where every input to this
+ * answer is written: an agent's `result.json` landing is the finding, and `seen.json` is the acknowledgement. The
+ * binding is new, and its absence is why this tile was the last one still learning about a failed story from a
+ * timer, up to a minute after the run had already written the verdict to disk.
+ *
+ * `everyMs` is now the frame nobody delivered, and slow for a second reason: this read is the widest of any badge
+ * in the workspace, a directory of runs plus two files per story. The wake coalesces a burst (background.ts), so a
+ * run writing a result per story costs one scan rather than one per story. */
 const { state: unseen, start: startAcceptanceAttention } = sandboxPoll<AcceptanceFinding[]>({
     host,
-    everyMs: 60_000,
+    everyMs: 10 * 60_000,
     initial: () => [],
     read: async (api) => unseenFindings(await findings(api), await seen.read()),
 });

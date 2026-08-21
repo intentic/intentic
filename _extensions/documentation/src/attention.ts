@@ -29,10 +29,13 @@ const seen = sandboxLedger(host, SEEN_PATH);
  * over a switch would not show a stale number, it would name repositories that exist in the new box too and say
  * something untrue about them.
  *
- * Slow on purpose. This drives a glance; the view's own reads serve anyone actually watching a run. */
+ * DRIVEN BY THE FILE BINDING, not by the interval. A staged set appears and disappears as writes under
+ * `.intentic/config/docs/`, which the manifest declares, so the run finishing is what lights the tile and the
+ * discard is what clears it. `everyMs` is the frame nobody delivered, hence ten minutes rather than one: a badge
+ * that waits out a timer after the thing it describes is already on disk is a badge that has to be distrusted. */
 const { state: pending, start: startDocumentationAttention } = sandboxPoll<readonly string[]>({
     host,
-    everyMs: 60_000,
+    everyMs: 10 * 60_000,
     initial: () => [],
     read: async (api) => {
         const acknowledged = await seen.read();

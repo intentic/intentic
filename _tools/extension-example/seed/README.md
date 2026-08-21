@@ -15,9 +15,14 @@ The agent leaves short notes with a CLI; the owner reads them in a rail tile tha
 intentic-example add "the flaky test only fails with a cold cache"
         ↓ writes .intentic/example-notes.json
         ↓ the daemon's file watcher matches contributes.files
-        ↓ invalidates the `example-notes` query key
-   the Example tile refreshes — no polling, nothing subscribed
+        ↓ invalidates the `example-notes` query key   → the OPEN view repaints
+        ↓ and announces the write (onDidChangeFiles)  → the CLOSED tile's badge re-reads
+   both halves of the Example tile refresh — no polling for either
 ```
+
+The second arrow is the one that is easy to leave out. An invalidation only reaches a query something is
+observing, and a badge is read with nothing mounted, so a tile wired to the first arrow alone is only ever as
+true as its own timer.
 
 That loop is the smallest thing that touches both halves of an extension: the agent's side (a tool on PATH, a
 skill telling it when to reach for it) and the owner's side (a view, a badge, a setting).
@@ -30,7 +35,7 @@ skill telling it when to reach for it) and the owner's side (a view, a badge, a 
 | `src/extension.ts` | `activate()` | Registers the view and the command, and starts the badge. Everything it registers is disposed through `context.subscriptions`. |
 | `src/ExampleView.vue` | `views` | The rail view. Read the comment at the top before styling anything of your own. |
 | `src/useNotes.ts` | `files` | The query key whose first part is what `contributes.files` invalidates: the entire wiring for live updates. |
-| `src/badge.ts` | `views[].badge` | Module state on its own timer, and the two reasons it cannot be the view's query or the file push. |
+| `src/badge.ts` | `views[].badge` | Module state, why it cannot be the view's query, and the write-driven refresh with a slow timer behind it as a backstop. |
 | `bin/intentic-example` | `bin` | Plain ESM, no build step: the daemon puts this directory on the agent's PATH and the file itself is the approved code. |
 | `plugin/` | `agent` | A Claude Code plugin directory, handed to the Agent SDK as-is. The skill is how the agent learns the CLI exists. |
 | `test/activate.test.mjs` |: | Runs the built bundle against a host stub that enforces the manifest. Catches code/manifest drift, which is the failure that actually happens. |
