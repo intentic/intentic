@@ -1203,10 +1203,35 @@
  * The border is left in the layer on purpose: `border-line` sets that one, and `--color-line` is already this
  * skin's own gold, so there is nothing to win. */
 [data-skin="sanctum"] .icon-rail {
-    background-color: color-mix(in oklab, var(--color-surface-950) 40%, black);
+    background-color: color-mix(in oklab, var(--color-surface-950) 80%, black);
     background-image: var(--sanctum-pit-lip), var(--sanctum-pit), var(--sanctum-tooth-cut), var(--sanctum-mottle), linear-gradient(180deg, rgba(255, 250, 238, 0.05), transparent 46%, rgba(0, 0, 0, 0.07));
     background-size: 123%;
     background-repeat: repeat;
+}
+
+/* ICONS ON THE RAIL ARE CUT IN STONE — the same bevel the site's headlines carry, scaled to icon weight.
+ * Two pale shadows up-left for the lit lip of the cut, one hard black below for its depth, and one soft
+ * one for the shadow the glyph throws on the wall. The effect is subtle at this size: relief, not drama. */
+[data-skin="sanctum"] .icon-rail-tile > svg,
+[data-skin="sanctum"] .icon-rail-tile > .icon {
+    filter: drop-shadow(0 -1px 0 rgba(247, 234, 208, 0.25))
+            drop-shadow(0 1px 0 rgba(0, 0, 0, 0.7))
+            drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+}
+
+/* HOVER IS GOLD, NOT GREY. The app's `hover:bg-overlay` lands as a near-black wash on the near-black rail,
+ * invisible. The skin overrides it to a gold tint — the structural metal catching light under the pointer —
+ * and lifts the icon toward the lit ink. The active state deepens the tint. */
+[data-skin="sanctum"] .icon-rail-tile:hover {
+    background: rgba(201, 160, 92, 0.12) !important;
+}
+[data-skin="sanctum"] .icon-rail-tile:active {
+    background: rgba(201, 160, 92, 0.2) !important;
+}
+/* The picked tile — the page the user is on — carries the gold at rest, so it reads as the one lit niche.
+ * The app marks it with `bg-primary-600/15`; this replaces that accent wash with the structural metal. */
+[data-skin="sanctum"] .icon-rail-tile.bg-primary-600\/15 {
+    background: rgba(201, 160, 92, 0.15) !important;
 }
 
 /* ── THE PICKED CARD, IN THE SAME METAL AS THE PICKED ROW ──────────────────────────────────────────────────
