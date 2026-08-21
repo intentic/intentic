@@ -164,7 +164,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
 
     const live = (): ReturnType<typeof makeWASocket> => {
         if (sock === undefined || phase !== "ready") {
-            throw new Error("WhatsApp is not connected — pair the device from the capability card first");
+            throw new Error("WhatsApp is not connected: pair the device from the capability card first");
         }
         return sock;
     };
@@ -232,7 +232,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
                     connections.delete(capabilityId);
                     closers.delete(capabilityId);
                     void rm(sessionDir, { recursive: true, force: true }).finally(() =>
-                        options.onLoggedOut("WhatsApp unlinked this device — a fresh pairing code will appear on the capability card"),
+                        options.onLoggedOut("WhatsApp unlinked this device: a fresh pairing code will appear on the capability card"),
                     );
                     return;
                 }

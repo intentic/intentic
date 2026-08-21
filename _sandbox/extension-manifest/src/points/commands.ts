@@ -31,7 +31,7 @@ export const CommandContributionSchema = z.object({
         .refine(isWhenExpression, { message: "not a valid `when` condition" })
         .optional()
         .describe(
-            "When the shortcut applies, as a condition over the shell's context keys — `tabSurface == 'chat'`, `!editableTarget`. Without one the chord is claimed everywhere, including inside a terminal where a bare key belongs to the program running in it. The command palette ignores this: a command is always runnable by name.",
+            "When the shortcut applies, as a condition over the shell's context keys, `tabSurface == 'chat'`, `!editableTarget`. Without one the chord is claimed everywhere, including inside a terminal where a bare key belongs to the program running in it. The command palette ignores this: a command is always runnable by name.",
         ),
 });
 export type CommandContribution = z.infer<typeof CommandContributionSchema>;

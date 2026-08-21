@@ -6,7 +6,7 @@ import { openBrowserAccount } from "./open-account.js";
 
 /* THE AGENT FILING AN ACCOUNT IT JUST OPENED. What these hold is the one property the whole records-of-accounts
  * design rests on: NO SITE IS UNFILEABLE. The moment a signup the agent can perform is a signup it cannot
- * record, the record moves to a file somebody maintains by hand — which is exactly where it had gone, and that
+ * record, the record moves to a file somebody maintains by hand, which is exactly where it had gone, and that
  * file was stale within days of being written. */
 
 const identity = (id: string, openAccounts: "on" | "off"): Capability =>
@@ -44,12 +44,12 @@ test("files a carded site on its own card, with the account's purpose and the da
     // The card's own URLs are pinned, so the entry must not carry a second opinion about them.
     expect(config["homeUrl"]).toBeUndefined();
     // The account is real the moment it is filed: a roster line on the SITE's skill is what gives the agent
-    // the playbook — one skill per site, never one per account.
+    // the playbook: one skill per site, never one per account.
     expect(written.get(loadedSkillFile(deps.workspace.root, "reddit"))).toContain("- `reddit-scout`");
 });
 
-/* THE CASE THAT USED TO BE REFUSED. An uncarded site — the four Product Hunt accounts this replaced were exactly
- * this — now rides the generic browser session instead of failing, so the signup can be recorded where every
+/* THE CASE THAT USED TO BE REFUSED. An uncarded site: the four Product Hunt accounts this replaced were exactly
+ * this: now rides the generic browser session instead of failing, so the signup can be recorded where every
  * other account lives rather than in prose somewhere. */
 test("files an uncarded site on the generic session rather than refusing it", async () => {
     const { store, services: deps } = harness([identity("scout", "on")]);
@@ -70,7 +70,7 @@ test("files an uncarded site on the generic session rather than refusing it", as
     expect(report).toContain('No site card for "producthunt"');
 });
 
-// The generic card pins no URLs, so an uncarded site with no address has nowhere to open — caught here, where
+// The generic card pins no URLs, so an uncarded site with no address has nowhere to open: caught here, where
 // the agent can still answer it, rather than later as a browser that comes up blank.
 test("refuses an uncarded site with no address, and says which field would fix it", async () => {
     const { services: deps } = harness([identity("scout", "on")]);
@@ -80,7 +80,7 @@ test("refuses an uncarded site with no address, and says which field would fix i
     ).rejects.toThrow(/homeUrl/);
 });
 
-// An account nobody can say the point of is one a later session cannot decide whether to reuse — which is the
+// An account nobody can say the point of is one a later session cannot decide whether to reuse, which is the
 // only question the record exists to answer.
 test("refuses an account with no purpose", async () => {
     const { services: deps } = harness([identity("scout", "on")]);

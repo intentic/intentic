@@ -72,7 +72,7 @@ export const maintenanceBadge = (): ViewBadge | undefined => {
     return {
         count,
         tone: carrying.length > 0 ? `warning` : `info`,
-        tooltip: `${subject.length === 1 ? `` : `${subject.length} chores, newest: `}${subject[0]?.chore.title} — ${subject[0]?.headline}`,
+        tooltip: `${subject.length === 1 ? `` : `${subject.length} chores, newest: `}${subject[0]?.chore.title}, ${subject[0]?.headline}`,
     };
 };
 

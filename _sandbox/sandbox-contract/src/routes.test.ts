@@ -87,14 +87,14 @@ describe(`routeShapes`, () => {
         expect(after).not.toBe(before);
     });
 
-    it(`is blind to the order fields are declared in — a reordered object is not a wire change`, () => {
+    it(`is blind to the order fields are declared in: a reordered object is not a wire change`, () => {
         const one = routeShapes(shaped(z.object({ a: z.string(), b: z.number() })))[`vpn.list`];
         const other = routeShapes(shaped(z.object({ b: z.number(), a: z.string() })))[`vpn.list`];
         expect(other).toBe(one);
     });
 
     it(`reads a defaulted field differently on the way in than on the way out`, () => {
-        // `.default()` makes a field optional going in and required coming out — the same declaration, two
+        // `.default()` makes a field optional going in and required coming out: the same declaration, two
         // wire shapes. Reading both directions the same way would call them identical.
         const one = z.object({ a: z.string().default(`x`) });
         const asOutput = routeShapes(shaped(one))[`vpn.list`];
@@ -114,7 +114,7 @@ describe(`routeShapes`, () => {
 
     it(`omits a route whose shape cannot be expressed rather than failing the walk`, () => {
         // An oRPC event iterator wraps its output in an opaque type with no schema underneath. The route keeps
-        // its NAME (it is still advertised as existing) and simply carries no shape — which reads downstream as
+        // its NAME (it is still advertised as existing) and simply carries no shape, which reads downstream as
         // "assume compatible". The two neighbours still get fingerprinted, which is the part that matters: one
         // unexpressable route must not cost the whole walk.
         const withStream = {

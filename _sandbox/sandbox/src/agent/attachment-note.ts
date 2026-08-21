@@ -19,9 +19,9 @@ export const splitAttachments = (attachments: readonly string[] = []): { images:
 };
 
 export const withFileNote = (prompt: string, files: readonly string[]): string =>
-    files.length === 0 ? prompt : `${prompt}\n\nThe user attached these files — read them as needed:\n${files.map((path) => `- ${path}`).join("\n")}`;
+    files.length === 0 ? prompt : `${prompt}\n\nThe user attached these files: read them as needed:\n${files.map((path) => `- ${path}`).join("\n")}`;
 
-const NOTE_HEADER = "The user attached these files — read them with the Read tool as needed:";
+const NOTE_HEADER = "The user attached these files: read them with the Read tool as needed:";
 
 // Fold attached-file paths into the prompt. Claude Code's canonical attachment mechanism (its Read tool
 // handles images and PDFs from disk natively, same as dragging a file into the CLI). An empty prompt is the

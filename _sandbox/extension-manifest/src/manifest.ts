@@ -20,7 +20,7 @@ export const ExtensionManifestSchema = z.object({
     publisher: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     name: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     // The extension's own semver, display/identity only; the installed code identity is the pinned commit sha.
-    version: z.string().min(1).describe("Your own semver — display and identity only. The installed code's identity is the pinned commit sha."),
+    version: z.string().min(1).describe("Your own semver, display and identity only. The installed code's identity is the pinned commit sha."),
     /* The section this extension sits under in the Sandbox hub's Extensions tab, a grouping by what it is FOR,
      * declared because it cannot be derived. Nine of the first-party extensions contribute a rail tile, so a
      * grouping read off `contributes` puts more than half the list in one section and says nothing about any of
@@ -32,7 +32,7 @@ export const ExtensionManifestSchema = z.object({
         .min(1)
         .optional()
         .describe(
-            "Which section of the Extensions tab this sits under — a grouping by what it is FOR, which cannot be derived from what it contributes. A section this app has never heard of lands in “Other” rather than failing to install.",
+            "Which section of the Extensions tab this sits under: a grouping by what it is FOR, which cannot be derived from what it contributes. A section this app has never heard of lands in 'Other' rather than failing to install.",
         ),
     /* What the extension is drawn as wherever it is LISTED rather than used, the Extensions tab, a registry
      * being browsed, the gallery. Deliberately here and not on a view: `Activation.icon` is the glyph of one
@@ -83,17 +83,17 @@ export const ExtensionManifestSchema = z.object({
             sandbox: z
                 .array(z.string())
                 .optional()
-                .describe("Daemon routes your UI half may call. Your own backend namespace needs no entry — its backend is your own code."),
+                .describe("Daemon routes your UI half may call. Your own backend namespace needs no entry: its backend is your own code."),
             daemon: z
                 .array(z.string())
                 .optional()
                 .describe(
-                    "Daemon routes your SERVER half may call. Separate from `sandbox` because the two halves run as different principals — the UI as the owner's session, the backend as a minted per-extension token — so a grant to one must never quietly widen the other.",
+                    "Daemon routes your SERVER half may call. Separate from `sandbox` because the two halves run as different principals: the UI as the owner's session, the backend as a minted per-extension token, so a grant to one must never quietly widen the other.",
                 ),
         })
         .optional()
         .describe(
-            'How far this extension may reach into the daemon, as "<METHOD> <path-glob>" entries where `*` matches one path segment — e.g. "GET /panels", "POST /panels/*/start". The install dialog shows these, the host refuses anything undeclared, and the usage ledger records which were actually earned.',
+            'How far this extension may reach into the daemon, as "<METHOD> <path-glob>" entries where `*` matches one path segment: e.g. "GET /panels", "POST /panels/*/start". The install dialog shows these, the host refuses anything undeclared, and the usage ledger records which were actually earned.',
         ),
     contributes: contributesSchema.optional(),
 });

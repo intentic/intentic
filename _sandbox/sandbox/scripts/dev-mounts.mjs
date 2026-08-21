@@ -8,12 +8,12 @@
 //
 // Why this exists: the daemon is COPY'd into the image (Dockerfile: `COPY --from=trees sandbox /opt/sandbox`),
 // so without these mounts the only way a running container can reflect a source edit is a full
-// `pnpm build:sandbox` — turbo, six `pnpm deploy` prunes, and a docker build, minutes per edit. That latency is
+// `pnpm build:sandbox`: turbo, six `pnpm deploy` prunes, and a docker build, minutes per edit. That latency is
 // what made "did my change even land?" the most expensive question in the project. With them, a daemon edit is
 // `tsgo` plus `docker restart`: seconds. See dev-reload.sh.
 //
 // Only compiled output is mounted, never node_modules: each baked package keeps the image's own installed
-// dependencies (including its native builds — node-pty and @discordjs/opus are rebuilt inside the image against
+// dependencies (including its native builds: node-pty and @discordjs/opus are rebuilt inside the image against
 // its ABI, and a host copy would be wrong).
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -26,7 +26,7 @@ const REPO_ROOT = resolve(SCRIPT_DIR, "../../..");
 const SANDBOX_ROOT = "/opt/sandbox";
 const packageDir = (name) => `${SANDBOX_ROOT}/node_modules/${name}`;
 
-// Every workspace package in the repo, by its declared name — the mapping from `@intentic/sandbox-contract` to
+// Every workspace package in the repo, by its declared name: the mapping from `@intentic/sandbox-contract` to
 // `_sandbox/sandbox-contract` is read, never assumed (`@intentic/lsp` lives in `_search/lsp`, not `_sandbox/lsp`).
 // Groups are discovered, not listed: every `_`-prefixed root directory is a package group (pnpm-workspace.yaml).
 const workspacePackages = () => {
@@ -54,7 +54,7 @@ const workspacePackages = () => {
                     found.set(name, dir);
                 }
             } catch {
-                // An unparseable manifest is not this script's problem — it just can't contribute a mount.
+                // An unparseable manifest is not this script's problem: it just can't contribute a mount.
             }
         }
     }

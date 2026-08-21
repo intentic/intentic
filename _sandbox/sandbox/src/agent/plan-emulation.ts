@@ -8,9 +8,9 @@ import { createRequest } from "./agent-requests.js";
  * phase actually runs (its runner, sandbox modes, capture mechanics). */
 
 export const PLAN_PREAMBLE =
-    "Before making any changes, propose a clear, concise plan for the request below and stop — do not execute it yet. End your reply with the plan itself.\n\n";
+    "Before making any changes, propose a clear, concise plan for the request below and stop: do not execute it yet. End your reply with the plan itself.\n\n";
 
-export const EXECUTE_PROMPT = "The plan is approved — execute it now.";
+export const EXECUTE_PROMPT = "The plan is approved: execute it now.";
 
 // What one planning phase captured: the session to resume for the next phase, the proposed plan text, and
 // whether the phase errored (an error frame already streamed, so no plan may be proposed from partial output).

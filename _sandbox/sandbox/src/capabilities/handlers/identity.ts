@@ -71,18 +71,18 @@ export const identityHandler: CapabilityHandler = {
     apply: async function* (ctx, id, config) {
         const { email, mailbox } = config as IdentityConfig;
         if (!email.includes("@")) {
-            throw new Error(`"${email}" is not an email address — the identity IS an address, so this field is the card`);
+            throw new Error(`"${email}" is not an email address: the identity IS an address, so this field is the card`);
         }
         // A linked mailbox must be a real connected entry, checked here where the reader is still on the form,
         // a dangling reference would otherwise surface turns later as a code tool that shrugs.
         if (mailbox !== undefined && mailbox !== "" && (await ctx.capabilities.get(mailbox)) === undefined) {
-            throw new Error(`no capability "${mailbox}" to read mail from — connect the mailbox (IMAP) first, or leave the field empty`);
+            throw new Error(`no capability "${mailbox}" to read mail from: connect the mailbox (IMAP) first, or leave the field empty`);
         }
         // The route upserts AFTER apply, so the entry rides in as the delta rather than being read back.
         await convergeAccountSkills(ctx, { upsert: { id, kind: "identity", config: config as IdentityConfig } });
         yield {
             kind: "log",
-            message: `Identity "${id}" (${email}) is set up. Rebuild the sandbox if prompted, then open "Log in" and sign into the email provider yourself — that one login stays human. Accounts the agent opens through it will share this browser.`,
+            message: `Identity "${id}" (${email}) is set up. Rebuild the sandbox if prompted, then open "Log in" and sign into the email provider yourself, that one login stays human. Accounts the agent opens through it will share this browser.`,
         };
     },
     status: async (ctx, id) => {
@@ -93,7 +93,7 @@ export const identityHandler: CapabilityHandler = {
             return { state: "pending", detail: "rebuild the sandbox to finish browser setup (Environment card)" };
         }
         if (!hasSession(ctx.workspace.root, id)) {
-            return { state: "pending", detail: "log in to the email provider yourself — this one sign-in stays human" };
+            return { state: "pending", detail: "log in to the email provider yourself, this one sign-in stays human" };
         }
         return { state: "active" };
     },
@@ -106,7 +106,7 @@ export const identityHandler: CapabilityHandler = {
         );
         if (born.length > 0) {
             throw new Error(
-                `"${id}" still has accounts living in its browser: ${born.map((capability) => capability.id).join(", ")} — remove them first`,
+                `"${id}" still has accounts living in its browser: ${born.map((capability) => capability.id).join(", ")}, remove them first`,
             );
         }
         // The route deletes the entry AFTER this hook, so the converge is told to leave it out.

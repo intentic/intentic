@@ -48,7 +48,7 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
     expect(await res.json()).toMatchObject({ ok: true });
     expect(await (await createApp(services()).request("/health")).json()).not.toHaveProperty("sandboxId");
 
-    // With one, the id is the SAME digest the tunnel hostname and the published port derive from — that
+    // With one, the id is the SAME digest the tunnel hostname and the published port derive from: that
     // agreement is what makes the browser's "did I reach the right daemon" check meaningful.
     const named = await createApp(services({ config: { ...testConfig, connectToken: "tok" } })).request("/health");
     expect(await named.json()).toMatchObject({ ok: true, sandboxId: sandboxIdFromToken("tok") });
@@ -59,7 +59,7 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
     expect(await (await createApp(local).request("/health")).json()).toMatchObject({ profile: "local" });
 });
 
-/* /health is the one route that answers a stranger, and it answers with the sandbox id — which is also what the
+/* /health is the one route that answers a stranger, and it answers with the sandbox id, which is also what the
  * loopback listener's port derives from. So CORS is not decoration here: without an allowlist, any page the user
  * happens to have open can walk the loopback port range, read the id off this route, and derive every preview
  * hostname the sandbox publishes. The wildcard this replaces made that a few seconds of fetches. */
@@ -72,17 +72,17 @@ test("CORS names the configured origins and no others, so an arbitrary page cann
     );
     const originOf = async (origin: string) => (await app.request("/health", { headers: { origin } })).headers.get("access-control-allow-origin");
 
-    // Each configured origin is reflected verbatim — a list, so one sandbox serves the hosted SPA and a dev origin.
+    // Each configured origin is reflected verbatim: a list, so one sandbox serves the hosted SPA and a dev origin.
     expect(await originOf("https://app.intentic.dev")).toBe("https://app.intentic.dev");
     expect(await originOf("https://localhost:47145")).toBe("https://localhost:47145");
 
-    // The same emission with NO auth at all — the local profile's shape, where the host application serves
+    // The same emission with NO auth at all: the local profile's shape, where the host application serves
     // the app from its own origin and the browser preflights loopback like any cross-origin call.
     const authless = createApp(services({ config: { ...testConfig, webOrigin: "http://127.0.0.1:47188" } }));
     const authlessProbe = await authless.request("/health", { headers: { origin: "http://127.0.0.1:47188" } });
     expect(authlessProbe.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:47188");
 
-    // A family entry admits one floating label and nothing more — an editor webview's per-session origin,
+    // A family entry admits one floating label and nothing more: an editor webview's per-session origin,
     // without opening the suffix to subdomain chains or foreign hosts.
     const family = createApp(services({ config: { ...testConfig, webOrigin: "https://*.webview.example.net" } }));
     const familyOf = async (origin: string) => (await family.request("/health", { headers: { origin } })).headers.get("access-control-allow-origin");
@@ -91,12 +91,12 @@ test("CORS names the configured origins and no others, so an arbitrary page cann
     expect(await familyOf("https://webview.example.net")).toBeNull();
     expect(await familyOf("https://x.webview.example.net.evil.dev")).toBeNull();
 
-    // Anything else gets NO header, not a wildcard and not someone else's origin — the browser refuses the read.
+    // Anything else gets NO header, not a wildcard and not someone else's origin: the browser refuses the read.
     expect(await originOf("https://evil.example")).toBeNull();
     // Including a lookalike that merely contains a configured origin: reflection is exact-match only.
     expect(await originOf("https://app.intentic.dev.evil.example")).toBeNull();
 
-    // The body is still served — the daemon has nothing to hide from a request it can't attribute (the launch
+    // The body is still served: the daemon has nothing to hide from a request it can't attribute (the launch
     // scripts and the loopback probe are not browsers). CORS decides who may READ it, which is the whole point.
     expect(await (await app.request("/health", { headers: { origin: "https://evil.example" } })).json()).toMatchObject({
         ok: true,
@@ -123,7 +123,7 @@ test("the boot gate holds data routes and lets the probe and the session exchang
     boot.declare([{ key: "registry", label: "Loading conversations" }]);
     const app = createApp(services({ boot }));
 
-    // A data route parks until the chain converges — an early request WAITS instead of reading half-built state.
+    // A data route parks until the chain converges: an early request WAITS instead of reading half-built state.
     let settled = false;
     const held = (async (): Promise<Response> => {
         const response = await app.request("/settings");
@@ -135,7 +135,7 @@ test("the boot gate holds data routes and lets the probe and the session exchang
 
     // The exempt ones answer straight through. /system/session especially: it is the credential a browser needs
     // before it can open /events at all, so parking it left a cold browser unable to watch the very boot it
-    // was waiting on. Its 4xx/5xx here is the auth-less shape refusing to mint — what matters is that it
+    // was waiting on. Its 4xx/5xx here is the auth-less shape refusing to mint: what matters is that it
     // ANSWERS rather than joining the queue.
     expect((await app.request("/health")).status).toBe(200);
     expect((await app.request("/system/session", { method: "POST" })).status).not.toBe(200);
@@ -144,13 +144,13 @@ test("the boot gate holds data routes and lets the probe and the session exchang
     expect((await held).status).toBe(200);
 });
 
-test("system.session in loopback mode (no auth, no identity) answers 401 — there is no session to mint", async () => {
+test("system.session in loopback mode (no auth, no identity) answers 401: there is no session to mint", async () => {
     expect((await postJson(createApp(services({})), "/system/session")).status).toBe(401);
 });
 
 /* The WebSocket upgrades can't carry an Authorization header, so the credential is spent here instead and the
  * URL gets a ticket. This route is the reason no bearer appears in a query string any more, which means it has
- * to be gated exactly like every other authenticated route — by the middleware, on a header. */
+ * to be gated exactly like every other authenticated route: by the middleware, on a header. */
 test("POST /system/ws-ticket mints a one-shot ticket for the verified caller, and 401s an unauthenticated one", async () => {
     const app = createApp(
         services({ auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: rejectForbidden } }),
@@ -165,7 +165,7 @@ test("POST /system/ws-ticket mints a one-shot ticket for the verified caller, an
     expect((await postJson(closed, "/system/ws-ticket")).status).toBe(401);
 });
 
-test("/system/ws-ticket 404s in loopback mode — no identity to bind, and the upgrades are ungated there", async () => {
+test("/system/ws-ticket 404s in loopback mode: no identity to bind, and the upgrades are ungated there", async () => {
     expect((await postJson(createApp(services({})), "/system/ws-ticket")).status).toBe(404);
 });
 
@@ -273,7 +273,7 @@ test("an editor-scoped control token reaches the agent-conversation surface and 
     );
     const editor = { "x-intentic-control": "ict_valid" };
     expect((await app.request("/sessions", { headers: editor })).status).toBe(200);
-    // An unknown token is 401 on every route — it has no stored scope to check, so the daemon cannot say
+    // An unknown token is 401 on every route: it has no stored scope to check, so the daemon cannot say
     // anything about reach without first telling a stranger which routes exist.
     expect((await app.request("/sessions", { headers: { "x-intentic-control": "ict_wrong" } })).status).toBe(401);
     // A REAL token out of its scope is an explicit 403 (clear DX, not a baffling missing-bearer 401).
@@ -292,13 +292,13 @@ test("control-token scopes widen: read observes, drive works, only land merges",
     expect(await forbidden("ict_read-token", "/agent", "POST")).toBe(true);
     expect(await forbidden("ict_read-token", "/agents/abc/land", "POST")).toBe(true);
 
-    // `drive` works the agent but stops at the main tree — the whole reason the rung exists.
+    // `drive` works the agent but stops at the main tree: the whole reason the rung exists.
     expect((await as("ict_drive-token", "/agents")).status).toBe(200);
     expect(await forbidden("ict_drive-token", "/agents/abc/land", "POST")).toBe(true);
     expect(await forbidden("ict_drive-token", "/agents/abc/discard", "POST")).toBe(true);
 
     // `land` is the only scope the merge is open to. NOT_FOUND (the agent is fictional) proves it got past
-    // the gate and reached the route, which is what this asserts — the handler's own answer is its business.
+    // the gate and reached the route, which is what this asserts: the handler's own answer is its business.
     expect((await as("ict_land-token", "/agents/abc/land", "POST")).status).not.toBe(403);
 
     // The floor holds for all three.
@@ -368,7 +368,7 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
     const withToken = (path: string, method = "GET") => app.request(path, { method, headers: { "x-intentic-sync": syncToken } });
     const list = await withToken("/ports");
     expect(list.status).toBe(200);
-    // Every row carries what it IS as well as where it answers — a listener with no command and no session is
+    // Every row carries what it IS as well as where it answers: a listener with no command and no session is
     // named as exactly that rather than guessed at (ports/port-identity.ts).
     expect(await list.json()).toEqual({
         ports: [
@@ -379,12 +379,12 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
                 kind: "system",
                 forwarded: false,
                 title: "Unclaimed port",
-                purpose: "Something is listening here that no process in this sandbox owns — usually container plumbing.",
+                purpose: "Something is listening here that no process in this sandbox owns, usually container plumbing.",
                 origin: "unknown",
             },
         ],
     });
-    /* The one WRITE the token carries: the machine's own report — the folders/ports/watcher half of desktop sync
+    /* The one WRITE the token carries: the machine's own report, the folders/ports/watcher half of desktop sync
      * that the daemon has no other way to learn (SYNC_DIR never reaches it). Filed under the enrollment that
      * presented the token, so the `hostname` in the body is a label and never an identity. */
     const report = {
@@ -403,7 +403,7 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
         body: JSON.stringify(report),
     });
     expect(filed.status).toBe(200);
-    // A body that isn't a report is refused as malformed rather than stored — this route takes a shape, not JSON.
+    // A body that isn't a report is refused as malformed rather than stored: this route takes a shape, not JSON.
     const malformed = await app.request("/system/sync/report", {
         method: "POST",
         headers: { "content-type": "application/json", "x-intentic-sync": syncToken },
@@ -418,7 +418,7 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
     });
     expect(forged.status).toBe(401);
 
-    // Out of scope (403): any other route, and even the ports MUTATIONS — the token reads one list and writes
+    // Out of scope (403): any other route, and even the ports MUTATIONS, the token reads one list and writes
     // one report, and the report grants nothing back.
     expect((await withToken("/panels")).status).toBe(403);
     expect((await withToken("/ports/forward", "POST")).status).toBe(403);
@@ -452,11 +452,11 @@ test("POST /automations/:id/fire skips bearer auth, enforces the automation toke
     expect((await store.get("deploy"))?.runs[0]?.outcome).toBe("completed");
 });
 
-test("automations.run fires by hand on the real path — a disabled automation too, and past the approval gate", async () => {
+test("automations.run fires by hand on the real path: a disabled automation too, and past the approval gate", async () => {
     const store = memoryAutomationsStore([
         { id: "cron", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "sweep the logs", enabled: true, runs: [] },
-        // Trying a prompt BEFORE switching the automation on is the main reason to press Run now, so — unlike the
-        // webhook, which fails closed at 409 against an outside sender — an off automation still fires by hand.
+        // Trying a prompt BEFORE switching the automation on is the main reason to press Run now, so: unlike the
+        // webhook, which fails closed at 409 against an outside sender: an off automation still fires by hand.
         { id: "paused", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "x", enabled: false, runs: [] },
         // requireApproval would hold a scheduled fire in the owner's queue. Their own click is the approval.
         { id: "gated", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "x", requireApproval: true, enabled: true, runs: [] },
@@ -465,7 +465,7 @@ test("automations.run fires by hand on the real path — a disabled automation t
 
     await expect(client.automations.run({ id: "ghost" })).rejects.toThrow();
 
-    // The turn runs detached — the ack does not wait on it, because the guard alone may take a minute.
+    // The turn runs detached: the ack does not wait on it, because the guard alone may take a minute.
     expect(await client.automations.run({ id: "cron" })).toEqual({ ok: true });
     await vi.waitFor(async () => expect((await store.get("cron"))?.runs).toHaveLength(1), TURN_SETTLES);
     expect((await store.get("cron"))?.runs[0]?.outcome).toBe("completed");
@@ -515,7 +515,7 @@ test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist
         },
     ]);
     // Bearer auth rejects everything, so reaching the route at all (not a 401) proves the exemption; the origin
-    // allowlist is the real gate. The widget's own origin is deliberately NOT in allowOrigins — /webchat reflects
+    // allowlist is the real gate. The widget's own origin is deliberately NOT in allowOrigins: /webchat reflects
     // the caller's origin regardless, which is what lets a legit embed on a third-party site through.
     const app = createApp(
         services({
@@ -531,7 +531,7 @@ test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist
             body: JSON.stringify(body),
         });
 
-    // A disallowed / missing origin is refused by the route's own 403 — NOT the bearer middleware's 401.
+    // A disallowed / missing origin is refused by the route's own 403: NOT the bearer middleware's 401.
     expect((await send("https://evil.example")).status).toBe(403);
     expect((await send(undefined)).status).toBe(403);
 
@@ -666,7 +666,7 @@ test("agent.run gates a Codex turn with no subscription and no api key as subscr
 
 /* GEMINI HAS NO CLAUDE CODE ROAD LEFT, and this is the test that holds the door shut.
  *
- * It used to have one — every Gemini turn was routed through that loop before it got a native runtime. Then
+ * It used to have one: every Gemini turn was routed through that loop before it got a native runtime. Then
  * Google's Antigravity channel began refusing on the identity line the Claude Code CLI bakes into every request
  * and no option removes, reporting it as a spent quota it never was. That made the selection not a slower
  * option but an impossible one, so the contract stopped offering it at all: capabilitiesOf answers Gemini's own
@@ -746,7 +746,7 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
         disconnect: async () => {},
         models: async () => [],
     };
-    // Read off the NATIVE runner, which is the only one a Gemini turn reaches now — the catalog-membership rule
+    // Read off the NATIVE runner, which is the only one a Gemini turn reaches now: the catalog-membership rule
     // itself is unchanged, and it is the rule this test is about.
     const run = async (model: string): Promise<string | undefined> => {
         let seen: { model?: string } | undefined;
@@ -775,7 +775,7 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
 });
 
 // No Google account is still a refusal that names the fix, and it is the NATIVE runtime that owns that gate now
-// — both loops always wanted the same credential (the translator's), so removing the routed road cost the check
+//: both loops always wanted the same credential (the translator's), so removing the routed road cost the check
 // nothing. Asserted on the sentence rather than the code: this refusal comes from the turn plan, which speaks
 // prose, where the routed gate carried the composer's `subscription-required` discriminator.
 test("agent.run gates a Gemini turn with no Google account connected", async () => {
@@ -798,14 +798,14 @@ test("agent.run gates a Gemini turn with no Google account connected", async () 
     expect(events.some((event) => event.kind === "error" && /Connect your Google account/.test(String(event.message)))).toBe(true);
 });
 
-/* A GEMINI TURN THAT NAMES NO HARNESS TAKES THE NATIVE RUNTIME — the default flipped when Gemini got one, and
+/* A GEMINI TURN THAT NAMES NO HARNESS TAKES THE NATIVE RUNTIME: the default flipped when Gemini got one, and
  * this is the test that says so out loud rather than leaving it to be discovered.
  *
  * It matters because `native` is what agent.routes fills in for a turn that omits the field, so this is the
  * answer for every API caller and every stored conversation that predates the switch. Flipping it is the point:
  * the Claude Code loop is the road Google refuses, so defaulting to it would default to the broken one.
  *
- * Asserted through the RUNNER that was reached — geminiAgent is the OpenCode loop, `agent` is Claude Code — so
+ * Asserted through the RUNNER that was reached: geminiAgent is the OpenCode loop, `agent` is Claude Code, so
  * this pins the dispatch rather than a message about it. */
 test("agent.run sends a Gemini turn with no harness to the native OpenCode runtime, not the Claude Code loop", async () => {
     let claudeCodeCalled = false;
@@ -814,7 +814,7 @@ test("agent.run sends a Gemini turn with no harness to the native OpenCode runti
         createApp(
             services({
                 config: withTranslator,
-                // The native runtime's credential is the translator's, exactly as the routed one's is — one
+                // The native runtime's credential is the translator's, exactly as the routed one's is: one
                 // connected Google account is all either harness needs.
                 cliProxy: {
                     accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [{ name: "antigravity-user.json", label: "user@gmail.com" }] }),
@@ -858,7 +858,7 @@ test("agent.run runs a Codex turn whose thread is gone as a fresh one, rather th
         ),
     );
     const events = await runAgentTurn(client, { prompt: "hi", agent: "codex", sessionId: "gone" });
-    // The dead id is dropped rather than handed on — a resume against it fails opaquely inside the CLI.
+    // The dead id is dropped rather than handed on: a resume against it fails opaquely inside the CLI.
     expect(seen?.sessionId).toBeUndefined();
     expect(events.some((event) => event.kind === "error")).toBe(false);
 });
@@ -920,12 +920,12 @@ test("agent.run merges internal (env) tools with the mcp-kind capabilities for t
     ]);
 });
 
-test("capabilities.setSecret replaces just the secret, and reveal returns it — even pre-scaffold", async () => {
+test("capabilities.setSecret replaces just the secret, and reveal returns it: even pre-scaffold", async () => {
     const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "gh-1" } };
     const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
     const client = clientFor(createApp(services({ capabilities: memoryCapabilitiesStore([github, reddit]) })));
     await client.capabilities.setSecret({ id: "github", value: "gh-2" });
-    // No desired-state repo under test — capability reveal works before DevOps scaffolds it.
+    // No desired-state repo under test: capability reveal works before DevOps scaffolds it.
     expect(await client.secrets.reveal({ key: "github" })).toEqual({ value: "gh-2" });
     // A secretless capability is CONFLICT; an unknown id is NOT_FOUND.
     expect(await errorCode(client.capabilities.setSecret({ id: "reddit", value: "x" }))).toBe("CONFLICT");
@@ -941,7 +941,7 @@ test("capabilities.otp mints an expiring code off the stored seed and never reve
     const bare: Capability = { id: "bare", kind: "cli", config: { provider: "npm", token: "npm-tok" } };
     const client = clientFor(createApp(services({ capabilities: memoryCapabilitiesStore([npm, bare]) })));
     const minted = await client.capabilities.otp({ id: "npm" });
-    // A six-digit code with its period's countdown — and nothing that could be the seed itself.
+    // A six-digit code with its period's countdown, and nothing that could be the seed itself.
     expect(minted).toEqual({ code: expect.stringMatching(/^\d{6}$/), secondsRemaining: expect.any(Number) });
     expect(minted.secondsRemaining).toBeGreaterThan(0);
     expect(minted.secondsRemaining).toBeLessThanOrEqual(30);
@@ -964,7 +964,7 @@ test("agent.run surfaces a connect-your-account error (not an opaque CLI failure
         ),
     );
     const events = await runAgentTurn(client, { prompt: "do it" });
-    // The turn never reaches the agent — the user gets an actionable message instead of exit-code-1.
+    // The turn never reaches the agent: the user gets an actionable message instead of exit-code-1.
     expect(agentCalled).toBe(false);
     expect(events.some((event) => event.kind === "error" && event.message.includes("No Claude account connected"))).toBe(true);
 });
@@ -972,7 +972,7 @@ test("agent.run surfaces a connect-your-account error (not an opaque CLI failure
 /* THE STOPPED-IN-ITS-OPENING-SECONDS CASE, which is what makes this the ordinary path rather than the rebuilt-
  * sandbox curiosity it was written for. A runtime reports its session id in its first frame and writes the
  * session out seconds later, so a turn stopped in between leaves the conversation holding an id nothing was ever
- * saved under — and the next message was refused, telling the user their history was gone (naming two causes,
+ * saved under, and the next message was refused, telling the user their history was gone (naming two causes,
  * neither of which had happened) and asking them to send it again. The record outlives every session, so there
  * is nothing here the user was needed for. */
 test("agent.run reopens a conversation whose session the sandbox never stored, seeded from its own record", async () => {
@@ -1008,7 +1008,7 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
     );
     const events = await runAgentTurn(client, { prompt: "and now?", conversationId: "conv-stopped", sessionId: "gone" });
     expect(events.some((event) => event.kind === "error")).toBe(false);
-    // Fresh session, carrying what the conversation already said — the same handoff a provider switch gets.
+    // Fresh session, carrying what the conversation already said: the same handoff a provider switch gets.
     expect(seen?.sessionId).toBeUndefined();
     expect(seen?.prompt).toContain("User: what is 2+2?");
     expect(seen?.prompt?.endsWith("and now?")).toBe(true);
@@ -1016,7 +1016,7 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
 
 test("agent.run folds a switched conversation's history into the prompt as a role-attributed preamble", async () => {
     let seen: { prompt?: string } | undefined;
-    // The daemon's OWN record of the conversation — the seed for a turn that resumes no session, which is what
+    // The daemon's OWN record of the conversation: the seed for a turn that resumes no session, which is what
     // a provider/account/harness switch leaves behind. The client never sends a transcript up the wire.
     const recorded: RestoredMessage[] = [
         { role: "user", text: "what is 2+2?" },
@@ -1072,11 +1072,11 @@ test("agent.run rejects an attachment path escaping the workspace with an error 
     expect(events).toEqual([{ kind: "error", message: "invalid attachment path: ../escape.png" }, { kind: "done" }]);
 });
 
-/* STOPPING A TURN IS NOT A FAILURE — end to end, because the failure was assembled from three files agreeing
+/* STOPPING A TURN IS NOT A FAILURE: end to end, because the failure was assembled from three files agreeing
  * with each other. Every provider adapter reports the unwind of a hard-cancel as an error frame (from inside
  * one, an abort is indistinguishable from the provider dying), the registry reads any error frame as how the
  * turn ended, and the card draws that as `error` in the Attention lane. So the user pressed Stop and watched
- * their own deliberate press come back accusing them of a crash — after a wait, since the roster went on
+ * their own deliberate press come back accusing them of a crash: after a wait, since the roster went on
  * saying `running` for the whole unwind. The fake agent below is that adapter behaviour, exactly. */
 test("a stopped turn settles as stopped, with no error frame reaching the client, the log, or the card", async () => {
     let started: (() => void) | undefined;
@@ -1097,7 +1097,7 @@ test("a stopped turn settles as stopped, with no error frame reaching the client
         ),
     );
     await client.agent.run({ prompt: "long task", conversationId: "conv1", isolated: true });
-    // The run is DETACHED — the route acks the id and the pump walks the generator chain after it. The
+    // The run is DETACHED: the route acks the id and the pump walks the generator chain after it. The
     // adapter's first line is the barrier that says the chain got as far as registering the turn's abort
     // handle; stopping before that finds nothing to cancel, and the turn would sit here forever.
     await running;
@@ -1131,7 +1131,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     const hash = sha256Hex(proposal);
     disk.set(`${WORKSPACE_ROOT}/${STATE_DIR}/config/environment.Dockerfile`, proposal);
 
-    // A member (bearer passes, owner check refuses as Forbidden) sees the state but can't approve or reject —
+    // A member (bearer passes, owner check refuses as Forbidden) sees the state but can't approve or reject:
     // a verified non-owner is 403, not 401.
     const memberApp = createApp(
         services({
@@ -1165,7 +1165,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     expect((await postJson(ownerApp, "/environment/reject")).status).toBe(200);
     expect((await postJson(ownerApp, "/environment/approve", { hash })).status).toBe(404);
 
-    // A proposal carrying its own FROM is invalid — the daemon owns the base image.
+    // A proposal carrying its own FROM is invalid: the daemon owns the base image.
     disk.set("/work/.intentic/config/environment.Dockerfile", "FROM alpine:latest\n");
     expect((await postJson(ownerApp, "/environment/approve", { hash: sha256Hex("FROM alpine:latest\n") })).status).toBe(400);
 });

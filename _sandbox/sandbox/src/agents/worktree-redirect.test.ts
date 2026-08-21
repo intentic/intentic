@@ -28,7 +28,7 @@ const rewritten = async (
 
 test("a main-root path becomes the same path inside the conversation's worktree", () => {
     expect(inWorktree("/work/intentic/_editor/web/src/main.ts", plan)).toBe("/history/worktrees/abc/intentic/_editor/web/src/main.ts");
-    // The root itself is the worktree root — `ls /work` must list the agent's own tree, not the shared one.
+    // The root itself is the worktree root: `ls /work` must list the agent's own tree, not the shared one.
     expect(inWorktree("/work", plan)).toBe("/history/worktrees/abc");
 });
 
@@ -42,7 +42,7 @@ test("the subtrees that mean the main checkout on both sides survive the redirec
     expect(inWorktree("/work/node_modules/.bin/tsgo", plan)).toBe("/work/node_modules/.bin/tsgo");
     expect(inWorktree("/work/intentic/node_modules/vue/index.js", plan)).toBe("/work/intentic/node_modules/vue/index.js");
     expect(inWorktree("/work/intentic/_editor/web/node_modules/x", plan)).toBe("/work/intentic/_editor/web/node_modules/x");
-    // Build output is mirrored on the same terms, so it carves out on the same terms — a `dist` entry the
+    // Build output is mirrored on the same terms, so it carves out on the same terms: a `dist` entry the
     // worktree only has because the main tree does must not be looked for inside the worktree.
     expect(inWorktree("/work/intentic/_editor/web/dist/index.js", plan)).toBe("/work/intentic/_editor/web/dist/index.js");
 });
@@ -97,9 +97,9 @@ test("a shell command has each of its main-root paths rewritten, and nothing els
 });
 
 /* A heredoc body is a FILE being written through the shell, not a path the command acts on. Rewriting it
- * corrupts the file with a path meaningless outside one conversation — which is exactly what happened to
+ * corrupts the file with a path meaningless outside one conversation, which is exactly what happened to
  * three scripts' comments within an hour of this feature shipping. */
-test("a heredoc body is left alone — its workspace paths are content, not targets", () => {
+test("a heredoc body is left alone: its workspace paths are content, not targets", () => {
     const doc = ["cat > notes.md <<'EOF'", "The daemon serves /work to every agent.", "EOF", "cd /work/intentic"].join("\n");
     const out = redirectCommand(doc, plan);
     // The body keeps the path it names…
@@ -112,7 +112,7 @@ test("heredoc detection covers the forms agents actually write", () => {
     // Unquoted delimiter, indented terminator (`<<-`), a second heredoc later in the same command, and the
     // command word before the body still being rewritten.
     // Heredoc bodies are shell source the rewriter must leave byte-for-byte alone, so they stay spelled out:
-    // path-literals: content — this is the text under test, not a path the test builds.
+    // path-literals: content, this is the text under test, not a path the test builds.
     const unquoted = ["python3 /work/x.py <<EOF", "path = '/work/a'", "EOF"].join("\n");
     expect(redirectCommand(unquoted, plan)).toBe(["python3 /history/worktrees/abc/x.py <<EOF", "path = '/work/a'", "EOF"].join("\n"));
     const indented = ["cat <<-'END'", "\t/work/b", "\tEND", "ls /work/c"].join("\n");

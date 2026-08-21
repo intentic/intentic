@@ -51,10 +51,10 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
             tool(
                 "wait",
                 "Wait until an agent you started needs you. Blocks until the target is blocked on input (a question or " +
-                    "permission), or finishes, whichever comes first — then returns its status and last report. Target a " +
+                    "permission), or finishes, whichever comes first: then returns its status and last report. Target a " +
                     'delegated CLI run or Agent-tool child by its spawning tool call id, or "any" for whichever of this ' +
                     "conversation's children moves first. Use this instead of sleeping or re-reading terminal output in a " +
-                    "loop. On timeout it returns the current state — call it again to keep waiting.",
+                    "loop. On timeout it returns the current state: call it again to keep waiting.",
                 {
                     target: z.string().min(1).describe('The child\'s tool call id, or "any"'),
                     until: z.array(UNTIL).min(1).optional().describe('Which states end the wait; default ["blocked","finished"]'),
@@ -77,7 +77,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                         ...(result.matched !== undefined ? { agent: result.matched } : {}),
                         ...(result.outcome === "unknown-target"
                             ? {
-                                  note: "Nothing to wait for: no child of this conversation is still running — it never started, it has already finished, or it left the roster.",
+                                  note: "Nothing to wait for: no child of this conversation is still running, it never started, it has already finished, or it left the roster.",
                               }
                             : {}),
                     });

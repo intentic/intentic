@@ -3316,7 +3316,7 @@ export const isForticlientCiphertext = (value: string): boolean => /^Enc[X]?\s+[
 
 const notForticlientCiphertext = <T extends z.ZodType<string>>(field: T, label: string): T =>
     field.refine((value) => !isForticlientCiphertext(value), {
-        message: `That looks like a value copied straight out of a FortiClient config — FortiClient encrypts it with a key tied to the machine that exported it, so it can't be used here. Enter the actual ${label} (ask whoever administers the gateway).`,
+        message: `That looks like a value copied straight out of a FortiClient config, FortiClient encrypts it with a key tied to the machine that exported it, so it can't be used here. Enter the actual ${label} (ask whoever administers the gateway).`,
     }) as unknown as T;
 
 export const WireguardVpnConfigSchema = z.object({
@@ -3403,7 +3403,7 @@ export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnCon
  *
  *   IMAGE (`gpu`), rides the environment overlay. Changing it recomposes the Dockerfile, so it costs an
  *     owner-approved rebuild and a container recreate. Only `fragment()` may read these.
- *   ENGINE (everything below it) — /etc/docker/daemon.json, which dockerd reads at start. Changing one
+ *   ENGINE (everything below it): /etc/docker/daemon.json, which dockerd reads at start. Changing one
  *     rewrites the file and restarts dockerd: no rebuild, no new image, but it DOES stop whatever containers
  *     the engine is running, which is why it is disclosed rather than silently applied.
  *
@@ -3619,7 +3619,7 @@ export const EndpointConfigSchema = z.object({
  * `allow`/`deny` are hostname lists (comma- or newline-separated). Empty allow = any host, each behind its
  * card; deny wins over allow. One capability per sandbox (singleton card): a second balance would just be a
  * second opinion about the same owner's wallet. */
-const usdAmount = z.string().regex(/^\d+(\.\d{1,6})?$/, "a USD amount like 0.50 (up to six decimals — USDC's own precision)");
+const usdAmount = z.string().regex(/^\d+(\.\d{1,6})?$/, "a USD amount like 0.50 (up to six decimals: USDC's own precision)");
 export const WalletNetworkSchema = z.enum(["eip155:8453", "eip155:84532"]);
 export type WalletNetwork = z.infer<typeof WalletNetworkSchema>;
 export const WalletConfigSchema = z.object({
@@ -5431,14 +5431,14 @@ export const PortSummarySchema = z.object({
     // processes, published container ports), the previewable set; `system` = the sandbox's own machinery
     // (agent runtimes, translator, dockerd, sshd), listed for transparency but nobody previews it.
     kind: z.enum(["workspace", "system"]),
-    /* WHAT IS ON THIS PORT, IN WORDS — resolved by the daemon (ports/port-identity.ts), because the two facts
+    /* WHAT IS ON THIS PORT, IN WORDS: resolved by the daemon (ports/port-identity.ts), because the two facts
      * that attribute a listener (the panel key → extension index, the workspace root) exist there and nowhere
      * else. `title` is what a person would call it ("Vite dev server", "Sandbox service", "Container port"),
-     * `purpose` is the one sentence a row shows under it, and `origin` says who put it there — which is what
+     * `purpose` is the one sentence a row shows under it, and `origin` says who put it there, which is what
      * the reader is really asking when they ask what a port is: mine, my agent's, or the box's own.
      *
      * All three are required. A listener nothing can explain still gets a name ("Unclaimed port") and a
-     * sentence that says so out loud, because the alternative — a raw argv, or nothing — is what made this
+     * sentence that says so out loud, because the alternative (a raw argv, or nothing) is what made this
      * view unreadable, and the button beside the row publishes the port to the internet. */
     title: z.string(),
     purpose: z.string(),

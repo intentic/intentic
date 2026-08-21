@@ -3,8 +3,8 @@ import { RESUME_NOTES, resumeDisclosure, withResumeNote, withoutResumeNote } fro
 
 /* The resume note is a round trip across the wire: the daemon wraps a prompt to tell the model what interrupted
  * it, and the client unwraps the SAME prompt off an attach head to tell whether it already has that bubble. A
- * mismatch between the two halves fails silently and cosmetically — a paragraph of machine prose rendered as
- * something the user typed — which is exactly the kind of drift that stays broken. */
+ * mismatch between the two halves fails silently and cosmetically: a paragraph of machine prose rendered as
+ * something the user typed, which is exactly the kind of drift that stays broken. */
 test("a resume note round-trips back to the user's own words", () => {
     for (const note of Object.values(RESUME_NOTES)) {
         expect(withoutResumeNote(withResumeNote("ship the parser", note))).toBe("ship the parser");
@@ -39,7 +39,7 @@ test("a re-run discloses as a notice, and the answered case as a note on the mes
         const disclosure = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES[reason]));
         expect(disclosure?.kind).toBe("notice");
     }
-    // The answer is new words the user really did type, so nothing is dropped — the interruption rides them.
+    // The answer is new words the user really did type, so nothing is dropped: the interruption rides them.
     const answered = resumeDisclosure(withResumeNote("option two", RESUME_NOTES.answered));
     expect(answered).toEqual({ kind: "note", note: { title: expect.any(String), text: RESUME_NOTES.answered } });
 });

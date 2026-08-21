@@ -26,7 +26,7 @@ export const agentHandler: CapabilityHandler = {
         const name = probe.agentName ?? id;
         yield {
             kind: "log",
-            message: `Connected to ${name} over ACP (protocol v${probe.protocolVersion}) — it appears as a provider in the chat picker.`,
+            message: `Connected to ${name} over ACP (protocol v${probe.protocolVersion}), it appears as a provider in the chat picker.`,
         };
     },
     status: async (ctx, _id, config) => {

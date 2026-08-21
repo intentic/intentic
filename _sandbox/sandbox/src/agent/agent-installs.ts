@@ -134,7 +134,7 @@ const installScope = (command: string): { image: boolean; project: boolean } => 
 };
 
 const BROWSER_ALREADY_BAKED =
-    "This sandbox already ships Chromium and browser tools — load them with ToolSearch (`mcp__web__browser_navigate`, " +
+    "This sandbox already ships Chromium and browser tools: load them with ToolSearch (`mcp__web__browser_navigate`, " +
     "`mcp__web__browser_take_screenshot`) instead of installing a browser. ";
 
 // The overlay is the only place an image-scoped tool can outlive the container, so both notices below end by
@@ -142,12 +142,12 @@ const BROWSER_ALREADY_BAKED =
 const OVERLAY_DRAFT =
     // Interpolated for real: as a plain string this notice told the agent to write under a literal
     // dollar-brace STATE_DIR spelling, template syntax and all.
-    `write the install step to \`${stateRelPath(".intentic/config/environment.d/")}/<tool>.Dockerfile\` (RUN/ENV lines only, no FROM) — the ` +
+    `write the install step to \`${stateRelPath(".intentic/config/environment.d/")}/<tool>.Dockerfile\` (RUN/ENV lines only, no FROM): the ` +
     "daemon composes those drafts into one proposal for the owner to approve, and the `environment` skill has " +
     "the details.";
 
 const GUIDANCE =
-    "That install writes to the image filesystem, which a container recreate throws away — whatever you install " +
+    "That install writes to the image filesystem, which a container recreate throws away: whatever you install " +
     "now is gone the next time this sandbox restarts, and the next session will hit the same missing tool. If you " +
     `need it only for this task, carry on. If it should persist, ALSO ${OVERLAY_DRAFT} Draft it now while ` +
     "you know why it is needed, then continue the task; drafting does not block you and does not need an answer.";
@@ -168,7 +168,7 @@ const NOT_FOUND = [
 
 const MISSING_GUIDANCE =
     "is not on PATH in this sandbox. Do not silently route around it. If it belongs to a project, run it through " +
-    "that project's package manager (`pnpm exec <tool>`, `npx <tool>`) or install the project's dependencies — " +
+    "that project's package manager (`pnpm exec <tool>`, `npx <tool>`) or install the project's dependencies: " +
     "not globally. If it is a system tool this image should have shipped, install it for this task if you need it " +
     `now, and ALSO ${OVERLAY_DRAFT}`;
 

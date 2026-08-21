@@ -41,7 +41,7 @@ export const parseOciConfig = (config: string, privateKeyPem: string): OciCreden
     const missing = [`user`, `tenancy`, `fingerprint`, `region`].filter((key) => !values.get(key));
     if (missing.length > 0) {
         throw new CloudCredentialError(
-            `The Oracle config snippet is missing ${missing.join(`, `)} — paste the whole block the console shows under Profile → API keys → View configuration file.`,
+            `The Oracle config snippet is missing ${missing.join(`, `)}: paste the whole block the console shows under Profile → API keys → View configuration file.`,
         );
     }
     // Parse the PEM now so a truncated paste (or a passphrase-protected key, which the console never emits)
@@ -50,7 +50,7 @@ export const parseOciConfig = (config: string, privateKeyPem: string): OciCreden
         createPrivateKey(privateKeyPem);
     } catch {
         throw new CloudCredentialError(
-            `The Oracle private key is not a readable PEM — paste the full unencrypted key file the console had you download.`,
+            `The Oracle private key is not a readable PEM: paste the full unencrypted key file the console had you download.`,
         );
     }
     return {

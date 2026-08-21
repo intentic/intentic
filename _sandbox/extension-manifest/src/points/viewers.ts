@@ -10,7 +10,7 @@ export const ViewerContributionSchema = z.object({
     extensions: z
         .array(z.string().regex(/^[a-z0-9]+$/))
         .min(1)
-        .describe('Bare file extensions, no dot — e.g. ["docx", "xlsx"].'),
+        .describe('Bare file extensions, no dot: e.g. ["docx", "xlsx"].'),
     /* `fetch` is how much of the file the host puts in the extension's hands, and it is a real choice:
      *   text, decoded utf8 (`text` prop). For a format that IS text: svg, a subtitle track, a notebook.
      *   blob, the whole file in memory (`blob` prop). For a format that must be parsed end to end before any of
@@ -23,7 +23,7 @@ export const ViewerContributionSchema = z.object({
     fetch: z
         .enum(["text", "blob", "url"])
         .describe(
-            "How much of the file the host hands you. `text` for a format that is text (svg, a subtitle track). `blob` for one that must be parsed end to end before any of it shows (a .docx, a spreadsheet) — bounded by the daemon's raw-read cap. `url` for anything range-read rather than parsed (audio, video): your component gets a streaming URL to point an element at, never the bytes.",
+            "How much of the file the host hands you. `text` for a format that is text (svg, a subtitle track). `blob` for one that must be parsed end to end before any of it shows (a .docx, a spreadsheet), bounded by the daemon's raw-read cap. `url` for anything range-read rather than parsed (audio, video): your component gets a streaming URL to point an element at, never the bytes.",
         ),
 });
 export type ViewerContribution = z.infer<typeof ViewerContributionSchema>;
@@ -31,6 +31,6 @@ export type ViewerContribution = z.infer<typeof ViewerContributionSchema>;
 export const viewersPoint = {
     name: "viewers",
     description:
-        "File formats this extension can render. The host resolves an opened file to your viewer by its extension, fetches the content, and renders your component with it — you keep none of the fetch lifecycle and none of the daemon credentials.",
+        "File formats this extension can render. The host resolves an opened file to your viewer by its extension, fetches the content, and renders your component with it: you keep none of the fetch lifecycle and none of the daemon credentials.",
     schema: z.array(ViewerContributionSchema),
 } as const satisfies ContributionPoint;

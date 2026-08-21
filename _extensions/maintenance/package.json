@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-maintenance",
     "version": "1.0.0",
-    "description": "Maintenance — the chore book as a first-class surface: what routine upkeep each repository is owed, the evidence that decided it, and the turn that does it",
+    "description": "Maintenance, the chore book as a first-class surface: what routine upkeep each repository is owed, the evidence that decided it, and the turn that does it",
     "license": "MIT",
     "private": true,
     "type": "module",

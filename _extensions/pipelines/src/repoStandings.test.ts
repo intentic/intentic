@@ -31,7 +31,7 @@ test("a repository with a broken branch leads, whatever the discovery order was"
         [run("b-green", "success", 90), run("c-broken", "failed", 10)],
     );
     expect(standings.map((standing) => standing.repo.repo)).toEqual(["c-broken", "b-green", "a-quiet"]);
-    // Broken wins on tier, not on recency — b-green's run is the newer one by 80.
+    // Broken wins on tier, not on recency: b-green's run is the newer one by 80.
     expect(standings[0]).toMatchObject({ failing: 1, running: 0, silent: false });
 });
 
@@ -59,7 +59,7 @@ test("inside a tier the newest run leads, and repositories with no runs fall bac
 });
 
 test("failing counts broken branches, not failed runs", () => {
-    // One breakage three runs deep is one thing to fix — the same edge-not-level rule the rail badge runs on.
+    // One breakage three runs deep is one thing to fix: the same edge-not-level rule the rail badge runs on.
     const [only] = repoStandings([repo("one")], [run("one", "failed", 30), run("one", "failed", 20), run("one", "failed", 10)]);
     expect(only).toMatchObject({ failing: 1 });
     const [two] = repoStandings([repo("one")], [run("one", "failed", 30), run("one", "failed", 20, "feat")]);

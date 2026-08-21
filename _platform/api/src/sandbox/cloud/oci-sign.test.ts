@@ -39,7 +39,7 @@ describe(`signedHeaders`, () => {
     const credential = parseOciConfig(snippet, pem);
     const date = new Date(`2026-08-07T12:00:00Z`);
 
-    // Recompose the signing string the way the spec dictates and check the RSA signature actually covers it —
+    // Recompose the signing string the way the spec dictates and check the RSA signature actually covers it:
     // the composition is the part a 401 would never diagnose.
     const verify = (headers: Record<string, string>, expectedSigningString: string) => {
         const signature = /signature="([^"]+)"/.exec(headers[`authorization`] ?? ``)?.[1] ?? ``;

@@ -189,7 +189,7 @@ const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRo
  *, the failure mode where clearing site data "fixed" a sandbox that was only ever starting up.
  *
  * Everything else reads state a boot step builds (registry, git dirs, claude session links), so it waits. */
-// Long-lived streams, exempt from the request timer below. Each is SUPPOSED to stay open — /events for the
+// Long-lived streams, exempt from the request timer below. Each is SUPPOSED to stay open: /events for the
 // life of a tab, an attach for the life of a turn, so timing them would file every healthy connection as the
 // slowest thing the daemon ever did and bury the requests that genuinely stalled. The other event-iterator
 // routes (a capability install, an intentic run) are bounded operations whose duration is worth knowing.
@@ -526,7 +526,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.body(new Uint8Array(bytes), 200, { "Content-Type": contentTypeForPath(target), "Content-Length": String(bytes.byteLength) });
     });
 
-    /* THE ROUTE A <video> TALKS TO ITSELF — /workspace/raw's sibling for timed media, and separate from it
+    /* THE ROUTE A <video> TALKS TO ITSELF: /workspace/raw's sibling for timed media, and separate from it
      * because a media element is not a caller that wants a Blob.
      *
      * /workspace/raw answers one whole file into memory, and its 25 MiB ceiling exists precisely because it
@@ -908,11 +908,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "no proposal to approve" }, 404);
         }
         if (failure === "mismatch") {
-            return c.json({ error: "the proposal changed since it was reviewed — refresh and re-approve" }, 409);
+            return c.json({ error: "the proposal changed since it was reviewed, refresh and re-approve" }, 409);
         }
         if (failure === "invalid") {
             return c.json(
-                { error: "the proposal must contain only RUN/ENV content — no FROM (the daemon owns the base image) and no intentic:runtime lines" },
+                { error: "the proposal must contain only RUN/ENV content, no FROM (the daemon owns the base image) and no intentic:runtime lines" },
                 400,
             );
         }
@@ -1111,7 +1111,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         try {
             return c.json(await migrations.apply(parsed.data));
         } catch (error) {
-            // A stale/consumed token is the caller's staleness, not breakage — 409 so the UI re-uploads.
+            // A stale/consumed token is the caller's staleness, not breakage: 409 so the UI re-uploads.
             if (error instanceof MigrationFormatError) {
                 return c.json({ error: error.message }, 409);
             }
@@ -1150,7 +1150,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.body(source, 200, { "content-type": "text/javascript; charset=utf-8", etag });
     });
 
-    /* Extension backend namespaces — /x/<id>/* proxied verbatim to the backend host (extensions/backend/).
+    /* Extension backend namespaces: /x/<id>/* proxied verbatim to the backend host (extensions/backend/).
      * The request has already been through everything above: the boot gate, CORS, and the bearer middleware
      * with its role floor (an unlisted GET floors at viewer, an unlisted mutation at maintainer, the same
      * defaults every unclassified core route gets). What is forwarded is the request MINUS its credentials:
@@ -1161,7 +1161,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         const target = services.extensionBackend.proxyTarget();
         if (target === undefined) {
             const backend = services.extensionBackend.status();
-            return c.json({ error: `extension backends are ${backend.state}${backend.detail !== undefined ? ` — ${backend.detail}` : ""}` }, 503);
+            return c.json({ error: `extension backends are ${backend.state}${backend.detail !== undefined ? `, ${backend.detail}` : ""}` }, 503);
         }
         const url = new URL(c.req.url);
         const headers = endToEndHeaders(c.req.raw.headers);
@@ -1300,7 +1300,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/system/hosts/enroll", async (c) => {
         const enrolled = await services.hosts.enroll(c.req.header("x-intentic-pair") ?? "");
         if (enrolled === undefined) {
-            return c.json({ error: "pairing expired — click Connect again in your browser for a fresh command." }, 401);
+            return c.json({ error: "pairing expired, click Connect again in your browser for a fresh command." }, 401);
         }
         return c.json(enrolled);
     });

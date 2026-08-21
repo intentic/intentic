@@ -201,7 +201,7 @@ const report = (record: WatcherRecord, outcome: "met" | "timeout"): string => {
     const head =
         outcome === "met"
             ? `The condition you were watching is now met (check #${record.checks}, ${elapsed(record)} after arming).`
-            : `The watch timed out after ${elapsed(record)} without the condition being met — the check never exited 0. Decide whether to re-arm it, investigate the check, or report back.`;
+            : `The watch timed out after ${elapsed(record)} without the condition being met, the check never exited 0. Decide whether to re-arm it, investigate the check, or report back.`;
     const exit = record.last.exitCode === undefined ? "none (check was killed or failed to start)" : String(record.last.exitCode);
     return [
         `[watch ${record.id}] ${head}`,
@@ -245,7 +245,7 @@ const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: "me
                 return;
             }
         } catch (error) {
-            live.logger.warn({ err: error, watch: record.id, conversationId }, "watch: wake turn failed to start — retrying");
+            live.logger.warn({ err: error, watch: record.id, conversationId }, "watch: wake turn failed to start, retrying");
         }
         await new Promise<void>((resolve) => setTimeout(resolve, DELIVER_RETRY_MS).unref());
     }
@@ -284,7 +284,7 @@ const schedule = (live: WatcherRuntime, record: WatcherRecord): void => {
     record.timer = setTimeout(() => {
         record.timer = undefined;
         void tick(live, record).catch((error: unknown) => {
-            live.logger.error({ err: error, watch: record.id }, "watch: check crashed — watch dropped");
+            live.logger.error({ err: error, watch: record.id }, "watch: check crashed, watch dropped");
             discard(record);
         });
     }, wait);
@@ -315,7 +315,7 @@ export const armWatcher = async (spec: WatcherSpec): Promise<ArmOutcome> => {
         return { kind: "refused", reason: "Watching is not available in this runtime." };
     }
     if (listWatchers(spec.conversationId).length >= MAX_PER_CONVERSATION) {
-        return { kind: "refused", reason: `This conversation already has ${MAX_PER_CONVERSATION} armed watches — stop one first.` };
+        return { kind: "refused", reason: `This conversation already has ${MAX_PER_CONVERSATION} armed watches, stop one first.` };
     }
     const firstCheck = await live.runCheck(spec.command, { cwd: spec.cwd, env: spec.env });
     if (firstCheck.exitCode === 0) {

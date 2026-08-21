@@ -136,7 +136,7 @@ export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText
         await new Promise<void>((resolve) => server.close(() => resolve()));
     }
     if (text === undefined) {
-        throw new Error("Could not read Claude Code's system prompt — the CLI produced no request to capture it from.");
+        throw new Error("Could not read Claude Code's system prompt: the CLI produced no request to capture it from.");
     }
     cached = { text, version };
     return cached;

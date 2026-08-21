@@ -119,7 +119,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
         const { extensionId } = parsed.data;
         const existing = await prisma.donation.findUnique({ where: { userId_extensionId_month: { userId: ownerId, extensionId, month } } });
         if (existing !== null) {
-            return c.json({ donated: 0, message: `already supported this month — nothing charged` });
+            return c.json({ donated: 0, message: `already supported this month, nothing charged` });
         }
         const amount = config.pool.donationCredits;
         const spend = await spendCredits(prisma, config, ownerId, amount, at);
@@ -142,7 +142,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
             // Two installs racing the same month: the unique key let exactly one row in; this loser's spend
             // goes back and the answer is the same "already supported" the reinstall path gives.
             await refundCredits(prisma, ownerId, amount, at);
-            return c.json({ donated: 0, message: `already supported this month — nothing charged` });
+            return c.json({ donated: 0, message: `already supported this month, nothing charged` });
         }
         return c.json({ donated: amount, remaining: spend.remaining });
     });
@@ -202,7 +202,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
             return c.json({ error: `A want is one plain line describing the capability, ${WANT_MIN}–${WANT_MAX} characters.` }, 400);
         }
         if (filed.kind === `rate_limited`) {
-            return c.json({ error: `That's ${WANTS_PER_DAY} wants filed today — the daily bound. The list resets at UTC midnight.` }, 429);
+            return c.json({ error: `That's ${WANTS_PER_DAY} wants filed today, the daily bound. The list resets at UTC midnight.` }, 429);
         }
         return c.json({ recorded: true });
     });
@@ -246,7 +246,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
                 {
                     error: {
                         type: `service_unavailable`,
-                        message: `${run.service.name} did not answer — nothing was charged. Please try again shortly.`,
+                        message: `${run.service.name} did not answer, nothing was charged. Please try again shortly.`,
                     },
                 },
                 502,
@@ -314,7 +314,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
             now,
         );
         if (!verified) {
-            return c.json({ error: `bad signature — only calls forwarded by the platform are served` }, 401);
+            return c.json({ error: `bad signature, only calls forwarded by the platform are served` }, 401);
         }
         const answer = demoRespond(parseDemoRequest(body));
         if (answer.kind === `answer`) {

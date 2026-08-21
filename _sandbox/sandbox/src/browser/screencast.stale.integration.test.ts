@@ -7,22 +7,22 @@ import { startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type ScreencastFrame } from "
 /* THE CLICK THAT LOOKED LIKE IT DID NOTHING.
  *
  * Taking the sharp still re-rasters the page, so the frames that arrive just after one are usually the camera's
- * own shake and are dropped — see CAPTURE_ECHO_MS. The trouble is that this window is also precisely where the
+ * own shake and are dropped: see CAPTURE_ECHO_MS. The trouble is that this window is also precisely where the
  * page's answer to a click lands, because the click is what ended the quiet that armed the capture. Dropping it
  * and scheduling nothing left the viewer looking at the screen they had already left: the button they pressed
  * still sitting there, the page long since moved on, and no frame ever coming to say so.
  *
  * The scenario is staged rather than raced: settle the view, take a capture, and click while the echo window is
  * still open. Real Chromium, because the whole question is what Chromium does to the page when it is
- * photographed — a fake session would happily prove we suppressed the frames we meant to suppress. */
+ * photographed: a fake session would happily prove we suppressed the frames we meant to suppress. */
 
-/* HEADED, ON THE VIRTUAL DISPLAY — which is not a detail here, it is the whole experiment.
+/* HEADED, ON THE VIRTUAL DISPLAY, which is not a detail here, it is the whole experiment.
  *
  * Both surfaces run Chromium headed against Xvfb, because a headless shell is fingerprinted and turned away by
  * the sign-in pages people are taken to these windows to rescue. Headless is also where photographing the page
  * barely disturbs it: the re-raster this test is about is far quieter there, so the same code that strands a
  * real viewer forever sails through a headless version of this file. A first draft of this test did exactly
- * that — passed, identically, against the broken code it was written to pin. */
+ * that: passed, identically, against the broken code it was written to pin. */
 const launch = async (): Promise<Browser | undefined> => {
     let playwright: typeof import("playwright");
     try {
@@ -65,7 +65,7 @@ const TWO_SCREENS = `<body style="margin:0;background:#fff">
 /* What the viewer's newest frame is a picture OF, as one number: black (the second screen) or white (the first).
  *
  * The page doing the decoding lives in a DIFFERENT context, and that is load-bearing rather than tidy. A
- * screencast follows the newest page in its own context and rebinds when one closes — so a reader opened next
+ * screencast follows the newest page in its own context and rebinds when one closes, so a reader opened next
  * to the page under test moves the stream onto itself and then, on closing, rebinds and clears the suppression
  * state on the way back. Checking the picture that way REPAIRS the freeze being checked for: the second draft
  * of this test passed against the broken code for that reason alone, having measured its own side effect. */
@@ -85,8 +85,8 @@ const centreOf = async (reader: Page, frame: ScreencastFrame): Promise<number> =
 /* Swept rather than staged at one offset. The suppression window is a few hundred milliseconds wide and moves
  * with the debounce, so a single hand-picked delay proves only that one delay: it is exactly how the first
  * attempt at this fix passed its own test while leaving the hole a click could still fall into. Each offset
- * lands the press somewhere different relative to the capture — before it, inside it, inside the echo behind
- * it — and every one of them has to end with the viewer looking at the screen the page is actually on. */
+ * lands the press somewhere different relative to the capture: before it, inside it, inside the echo behind
+ * it, and every one of them has to end with the viewer looking at the screen the page is actually on. */
 test.each([0, 120, 260, 420, 560, 700])("a click %ims after the page settles still reaches the viewer", { timeout: 120_000 }, async (offset) => {
     const browser = await launch();
     if (browser === undefined) {
@@ -96,13 +96,13 @@ test.each([0, 120, 260, 420, 560, 700])("a click %ims after the page settles sti
         const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
         const page = await context.newPage();
         await page.goto(`data:text/html,${encodeURIComponent(TWO_SCREENS)}`);
-        // Somewhere to decode frames that the screencast will never follow — see centreOf.
+        // Somewhere to decode frames that the screencast will never follow: see centreOf.
         const reader = await (await browser.newContext()).newPage();
 
         const frames: ScreencastFrame[] = [];
         // Timed from the sharp frame itself, not from when this test got round to noticing it. The window
         // being probed is a couple of hundred milliseconds wide, and decoding a picture to check it costs
-        // about that much — an earlier draft did its "before" assertion first and pushed every offset
+        // about that much: an earlier draft did its "before" assertion first and pushed every offset
         // clean past the window it was aiming at, which is why every one of them passed against the bug.
         let sharpAt = 0;
         const screencast = await startScreencast(context, (frame) => {
@@ -121,7 +121,7 @@ test.each([0, 120, 260, 420, 560, 700])("a click %ims after the page settles sti
             /* Converge, don't race: a press landing outside any window is forwarded at once, one landing
              * inside waits for the next capture to notice. Both are correct; being wrong FOREVER is not,
              * and that is what a bounded wait for the right picture distinguishes. The bound is generous for
-             * the same measured reason as the settle above — the capture that has to notice takes seconds, not
+             * the same measured reason as the settle above: the capture that has to notice takes seconds, not
              * milliseconds, on a box running the whole monorepo's suites. */
             let centre = 255;
             for (let attempt = 0; attempt < 400 && centre > 64; attempt += 1) {

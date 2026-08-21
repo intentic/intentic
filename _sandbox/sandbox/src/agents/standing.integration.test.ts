@@ -49,7 +49,7 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 
-// One conflict report, shaped like the one a refused land records. What it SAYS never matters here — only
+// One conflict report, shaped like the one a refused land records. What it SAYS never matters here: only
 // whether the standing lets it speak.
 const report = [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" as const }], clean: 0 }];
 
@@ -61,7 +61,7 @@ const standingOf = async (worktrees: AgentWorktrees, entry: IsolatedAgent): Prom
 
 test("an agent with nothing on its branch is idle; one whose work landed reads landed", async () => {
     const { worktrees, conversation } = await setup();
-    // A turn that produced nothing — answered a question, read some files. The most archivable card there is.
+    // A turn that produced nothing: answered a question, read some files. The most archivable card there is.
     expect(await standingOf(worktrees, isolatedAgent(conversation.repos))).toBe("idle");
 
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
@@ -83,12 +83,12 @@ test("work held on the branch reads ready, and a refused land makes the same del
 });
 
 /* THE REGRESSION. A conflict verdict used to be written onto the entry and read back forever, so an agent
- * whose work reached the main tree by a road the daemon never drove — a user merging the branch by hand, an
- * agent told to commit onto the main line, a sibling agent's land absorbing the same hunks — kept its card on
+ * whose work reached the main tree by a road the daemon never drove: a user merging the branch by hand, an
+ * agent told to commit onto the main line, a sibling agent's land absorbing the same hunks: kept its card on
  * the last refusal for good. Nothing could clear it: the review panel showed no files (it computes its side
  * fresh), so there was no delta left to land and no conflict left to resolve.
  *
- * Derived, the case cannot arise. `conflict` has a premise — an outstanding delta — and merging the branch is
+ * Derived, the case cannot arise. `conflict` has a premise: an outstanding delta, and merging the branch is
  * precisely what removes it, whatever the stored report still says. */
 test("a conflict report cannot outlive its delta: work merged into main by hand reads landed", async () => {
     const { work, worktrees, conversation } = await setup();
@@ -121,7 +121,7 @@ test("a standing is re-derived when either the branch or the main tree moves", a
     expect(await standings.refresh([entry])).toBe(true);
     expect(standings.of("c1")).toBe("ready");
 
-    // And main moving is the other half — the sha the anchor is measured against.
+    // And main moving is the other half: the sha the anchor is measured against.
     await sh(work, "merge", "--ff-only", "agent/c1");
     expect(await standings.refresh([entry])).toBe(true);
     expect(standings.of("c1")).toBe("landed");
@@ -130,11 +130,11 @@ test("a standing is re-derived when either the branch or the main tree moves", a
     expect(await standings.refresh([entry])).toBe(false);
 });
 
-/* THE SHAS ARE NOT THE WHOLE QUESTION — and a land is the case that proves it.
+/* THE SHAS ARE NOT THE WHOLE QUESTION, and a land is the case that proves it.
  *
  * Landing applies a patch to the main WORKING TREE: main's HEAD does not move, and the branch tip does not
  * either (the provenance commit already happened when the turn ended). The only thing that changes is the
- * entry's `landedTip` — which is the very rung `anchorOf` measures the outstanding delta from. A cache keyed on
+ * entry's `landedTip`, which is the very rung `anchorOf` measures the outstanding delta from. A cache keyed on
  * the two shas alone therefore serves the pre-land answer back, and the board keeps offering "Land now" for
  * work that is already sitting in the user's workspace, until something unrelated moves a sha.
  */
@@ -177,12 +177,12 @@ test("a refused land arms the conflict against the same shas", async () => {
     expect(standings.of("c1")).toBe("conflict");
 });
 
-/* COMMITS ARE NOT CONTENT — the shape that had a finished card offering "Land now" over a workspace holding
+/* COMMITS ARE NOT CONTENT: the shape that had a finished card offering "Land now" over a workspace holding
  * every byte of the work.
  *
  * The user commits what the agent landed, so the next turn rebases the branch onto that commit. The agent's own
  * work commit is dropped (it is upstream now), but commits are dropped ONE BY ONE and only when each is empty on
- * its own — so a pair that cancels out (a generated file written one way and then back) survives the replay. The
+ * its own, so a pair that cancels out (a generated file written one way and then back) survives the replay. The
  * branch ends up two commits ahead of a main tree that already has everything, and a standing read off the shas
  * called that outstanding for good: the button applied an empty patch, and the review panel beside it listed
  * nothing to explain the offer. */
@@ -209,7 +209,7 @@ test("a branch ahead by commits that cancel out is landed, not ready", async () 
     await syncConversation(worktrees, "c1", conversation.repos, "Creator pool");
     expect(await sh(conversation.cwd, "rev-parse", "HEAD^^")).toBe(await sh(work, "rev-parse", "HEAD"));
 
-    // Two commits ahead of a main tree holding every byte of it. Nothing to land, so nothing is offered — and
+    // Two commits ahead of a main tree holding every byte of it. Nothing to land, so nothing is offered, and
     // the entry still carries the landedTip that rebase orphaned, which is the anchor this used to be read from.
     const rebased = isolatedAgent(landed.repos);
     expect(await standingOf(worktrees, rebased)).toBe("landed");
@@ -231,7 +231,7 @@ test("forget drops an agent's standing, and an unprobed one reads idle", async (
     expect(standings.of("c1")).toBe("ready");
 
     standings.forget(["c1"]);
-    // The resting answer — and the one that puts a card in the same lane `landed` would, so a discarded agent
+    // The resting answer, and the one that puts a card in the same lane `landed` would, so a discarded agent
     // never flashes through Attention on its way off the board.
     expect(standings.of("c1")).toBe("idle");
 });

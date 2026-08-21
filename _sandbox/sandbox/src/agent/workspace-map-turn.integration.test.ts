@@ -12,7 +12,7 @@ import { planTurn, type TurnContext } from "./turn-plan.js";
 import { preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 
-/* WHO ACTUALLY RECEIVES THE PROJECT MAP — the gates, asserted through a real plan rather than by reading them.
+/* WHO ACTUALLY RECEIVES THE PROJECT MAP: the gates, asserted through a real plan rather than by reading them.
  *
  * The generator has its own suite (workspace-map.integration.test.ts); this file is about the four decisions
  * around it that live in turn-plan, and each one is a way the feature fails silently rather than loudly:
@@ -21,7 +21,7 @@ import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
  *   nothing in the transcript would look wrong.
  *
  *   ONCE PER CONVERSATION. The map is stable and already above the follow-up in the transcript, so re-sending it
- *   is the exact repetition the dependency notice had to be walked back from — invisible, and paid every turn.
+ *   is the exact repetition the dependency notice had to be walked back from: invisible, and paid every turn.
  *
  *   EVERY RUNTIME, not just the Claude Code loop. It is placed in honoured() for the reason the worktree note
  *   and the dependency notice are: a fact about the filesystem is as true of a Codex turn, and the harness arm
@@ -53,8 +53,8 @@ const projectAt = async (prefix: string, marker: string): Promise<string> => {
     return root;
 };
 
-// The message the model actually receives is built from the CONTEXT's prompt, not the turn's — the route has
-// already folded attachments into it by the time a plan is made — so the tests below read it back from here.
+// The message the model actually receives is built from the CONTEXT's prompt, not the turn's: the route has
+// already folded attachments into it by the time a plan is made, so the tests below read it back from here.
 const contextIn = (root: string, localCwd = root, prompt = "do the thing"): TurnContext => ({
     base: { prompt, cwd: root, signal: new AbortController().signal },
     attachmentPaths: [],
@@ -120,7 +120,7 @@ test("a follow-up in the same conversation is not charged for the map again", as
         root,
         { workspaceMap: true },
         {
-            // The registry counts every turn that ran, however it ended — a non-zero count is a conversation already
+            // The registry counts every turn that ran, however it ended: a non-zero count is a conversation already
             // carrying the map in its own transcript.
             agents: unstubbed<Services["agents"]>("agents", { entry: () => ({ turns: 3 }) as ReturnType<Services["agents"]["entry"]> }),
         },
@@ -131,7 +131,7 @@ test("a follow-up in the same conversation is not charged for the map again", as
     expect(prompt).toBe("and now this");
 });
 
-test("a native Codex turn gets the same map — it is a fact about the filesystem, not about one loop", async () => {
+test("a native Codex turn gets the same map: it is a fact about the filesystem, not about one loop", async () => {
     const root = await projectAt("wsmap-codex-", "shared");
     const services = servicesIn(
         root,
@@ -153,7 +153,7 @@ test("a native Codex turn gets the same map — it is a fact about the filesyste
 /* THE STARTING POSITION, and the one case where getting it wrong is invisible.
  *
  * An isolated conversation edits a worktree, and the daemon reaches that worktree at `localCwd` while the shared
- * checkout still sits at the workspace root. A map built from the root would name the root's areas — real
+ * checkout still sits at the workspace root. A map built from the root would name the root's areas: real
  * directories, plausibly described, and not the ones this turn can write to. The two trees are given different
  * area descriptions here precisely so that a map of the wrong one cannot pass. */
 test("an isolated turn is mapped against its own tree, not the shared checkout", async () => {
@@ -166,7 +166,7 @@ test("an isolated turn is mapped against its own tree, not the shared checkout",
     expect(prompt).not.toContain("The shared billing area");
 });
 
-/* THE NOTE IS PROTOCOL, NOT SOMETHING THE USER SAID — the half a new preamble is most likely to forget.
+/* THE NOTE IS PROTOCOL, NOT SOMETHING THE USER SAID: the half a new preamble is most likely to forget.
  *
  * The provider stores the combined prompt verbatim, so a note missing from turn-preamble.ts's registry is
  * invisible three ways at once: the message flattens wrong, a reopened tab redraws the map as the user's own

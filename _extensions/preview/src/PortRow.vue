@@ -1,5 +1,5 @@
 <!-- ONE PORT, EXPLAINED. The row is three answers stacked in the order a reader asks them: which port, what is
-     it, and where did it come from — with the evidence behind those answers (the command line, the directory,
+     it, and where did it come from: with the evidence behind those answers (the command line, the directory,
      the pid) one click down rather than in their face.
 
      It carries the raw argv at all, because somebody debugging a port genuinely needs it; it just stops being
@@ -19,7 +19,7 @@ import SharePreview from "./SharePreview.vue";
 const { entry, muted = false, busy = false } = defineProps<{ entry: PortSummary; muted?: boolean; busy?: boolean }>();
 const emit = defineEmits<{ preview: []; stop: []; terminal: [session: string] }>();
 
-/* WHOSE IS IT, as a glyph — the fastest form of the answer, and the one that survives a reader skimming the
+/* WHOSE IS IT, as a glyph: the fastest form of the answer, and the one that survives a reader skimming the
  * list instead of reading it. The vocabulary is the app's own: an agent is sparkles wherever it appears, a
  * terminal is a terminal. */
 const ORIGIN_ICONS = {
@@ -43,9 +43,9 @@ const openTerminal = (): void => {
 // The facts the headline no longer shows, in the order somebody debugging asks for them. Always four rows, so
 // an absent one reads as "we looked and there was nothing" rather than as a row that quietly went missing.
 const details = computed<string[][]>(() => [
-    [`Command`, entry.command ?? `not readable — the process cleared its own argv`],
+    [`Command`, entry.command ?? `not readable: the process cleared its own argv`],
     [`Folder`, entry.cwd ?? `not readable`],
-    [`Terminal`, entry.session ?? `none — nothing here can show its output or stop it`],
+    [`Terminal`, entry.session ?? `none: nothing here can show its output or stop it`],
     [`Address`, `${entry.host}:${entry.port}${entry.pid === undefined ? `` : `  ·  process ${entry.pid}`}`],
 ]);
 </script>
@@ -65,7 +65,7 @@ const details = computed<string[][]>(() => [
         </template>
 
         <!-- What it is for, and the terminal it lives in when there is one. The terminal is a link because
-             reaching it is the point — a port you can see and not reach is a port you can only wonder about.
+             reaching it is the point: a port you can see and not reach is a port you can only wonder about.
              The sentence WRAPS instead of truncating: this pane is regularly dragged to half a window, and half
              an explanation is the failure the whole row exists to fix. -->
         <template #description>
@@ -75,7 +75,7 @@ const details = computed<string[][]>(() => [
                     v-if="entry.session"
                     type="button"
                     :class="ui.linkButton(`shrink-0 gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
-                    v-tooltip.bottom="`Open ${entry.session} — the terminal this is running in`"
+                    v-tooltip.bottom="`Open ${entry.session}: the terminal this is running in`"
                     @click="openTerminal"
                 >
                     <Icon name="desktop" class="shrink-0" />
@@ -110,7 +110,7 @@ const details = computed<string[][]>(() => [
             >
                 <Icon name="external-link" />
             </a>
-            <!-- A forwarded port is public — offer the one-click shareable link right where it's exposed. -->
+            <!-- A forwarded port is public: offer the one-click shareable link right where it's exposed. -->
             <SharePreview v-if="entry.previewUrl" :url="entry.previewUrl" />
             <Button v-if="entry.forwarded" label="Stop" size="small" severity="secondary" :disabled="busy" @click="emit(`stop`)">
                 <template #icon><Icon name="stop" /></template>

@@ -7,7 +7,7 @@ import { expect, test, vi } from "vitest";
  * run on: present on a developer's box, absent in the CI container, and the assertions below are about the
  * CREDENTIAL logic either way. Stubbed present so the unit tests one thing.
  *
- * Spread over the real module rather than replaced wholesale — `resolveOnPath` is reached from elsewhere in
+ * Spread over the real module rather than replaced wholesale: `resolveOnPath` is reached from elsewhere in
  * this graph, and a factory naming only `onPath` would leave that one undefined. */
 vi.mock("../platform/on-path.js", async (importOriginal) => ({
     ...(await importOriginal<typeof import("../platform/on-path.js")>()),
@@ -24,14 +24,14 @@ test("every provider × harness pair resolves to an adapter for its declared run
         for (const harness of HARNESSES) {
             const adapter = adapterFor(provider.value, harness.value);
             expect(adapter, `${provider.value}/${harness.value}`).toBeDefined();
-            // Not merely "an adapter" — the one the contract says serves this pair. A table that resolved every
+            // Not merely "an adapter": the one the contract says serves this pair. A table that resolved every
             // pair to the same arm would pass a mere existence check and route every turn to Claude.
             expect(adapter.runtime, `${provider.value}/${harness.value}`).toBe(capabilitiesOf(provider.value, harness.value).runtime);
         }
     }
 });
 
-// An ACP provider is an installed capability id, not a member of PROVIDERS — covered separately because it is
+// An ACP provider is an installed capability id, not a member of PROVIDERS: covered separately because it is
 // the one arm whose provider ids are open-ended.
 test("an installed agent capability's id resolves to the ACP adapter", () => {
     expect(adapterFor("some-installed-agent", "native").runtime).toBe("acp");
@@ -43,8 +43,8 @@ test("each runtime is claimed exactly once", () => {
 });
 
 /* WHICH STORE EACH RUNTIME IS ASKED ABOUT A RESUME. The answer decides whether a turn continues a conversation
- * or opens a blank one, so an arm wired to the wrong store — or to the right one with its arguments the wrong
- * way round, which is why the calls are recorded rather than counted — loses a conversation its context without
+ * or opens a blank one, so an arm wired to the wrong store, or to the right one with its arguments the wrong
+ * way round, which is why the calls are recorded rather than counted: loses a conversation its context without
  * anything failing. ACP is the deliberate exception: its sessions live inside the agent's own process, where the
  * daemon cannot see them, so it answers yes and lets the agent itself say otherwise at resume time. */
 test("each runtime is asked about a resume by its own session store", async () => {
@@ -76,13 +76,13 @@ test("each runtime is asked about a resume by its own session store", async () =
     // runtimes sharing one warm `opencode serve`, so they share its session store too. Their split exists for
     // health and credentials (adapter-registry.ts), which is not a reason to resume against different stores.
     expect(asked.toSorted()).toEqual(["claude:/work:s-1", "codex:s-1", "opencode:s-1:/work", "opencode:s-1:/work"]);
-    // Pi's store is the filesystem itself — its session id is a session-file path (pi/pi-agent.ts), and a
+    // Pi's store is the filesystem itself: its session id is a session-file path (pi/pi-agent.ts), and a
     // path that does not exist is a resume that cannot happen.
     expect(held).toEqual({ "claude-code": false, codex: false, opencode: false, "opencode-gemini": false, acp: true, pi: false });
 });
 
 /* Health is a fact about the daemon's configuration, so it is probed against a stubbed one. What matters here
- * is the THREE-STATE distinction: a probe that fails must answer "unknown", never "unavailable" — the latter
+ * is the THREE-STATE distinction: a probe that fails must answer "unknown", never "unavailable", the latter
  * greys a provider out, and doing that because an account listing blipped is worse than saying nothing. */
 const services = (overrides: Record<string, unknown>) =>
     ({
@@ -113,7 +113,7 @@ test("a configured credential reports ready", async () => {
     expect((await healthOf("codex", { config: { translator: { url: "" }, anthropicApiKey: "", openaiApiKey: "sk-x" } })).state).toBe("ready");
     expect((await healthOf("opencode", { openCode: { connected: async () => true } })).state).toBe("ready");
     expect((await healthOf("acp", { capabilities: { list: async () => [{ kind: "agent", id: "a" }] } })).state).toBe("ready");
-    // Pi needs ITS reserved capability id — an unrelated agent capability is the ACP arm's answer, not Pi's.
+    // Pi needs ITS reserved capability id: an unrelated agent capability is the ACP arm's answer, not Pi's.
     expect((await healthOf("pi", { capabilities: { list: async () => [{ kind: "agent", id: "a" }] } })).state).toBe("unavailable");
     expect((await healthOf("pi", { capabilities: { list: async () => [{ kind: "agent", id: "pi", config: { command: "pi" } }] } })).state).toBe(
         "ready",

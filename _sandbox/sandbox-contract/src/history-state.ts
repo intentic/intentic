@@ -95,7 +95,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     {
         path: "ssh-hosts/",
         portability: "secret",
-        note: "Re-add each ssh host on the Capabilities view — its key does not travel.",
+        note: "Re-add each ssh host on the Capabilities view, its key does not travel.",
     },
     // The cli-proxy's config, which holds the routed subscriptions' provider tokens.
     {
@@ -108,7 +108,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
 
     /* Signs every browser session cookie. Carrying it would let a bundle's holder mint sessions against the
      * target, an export becomes a credential, and the target minting its own costs exactly one sign-in. */
-    { path: "session-secret", portability: "identity", note: "Sign in again — the target signs its own sessions." },
+    { path: "session-secret", portability: "identity", note: "Sign in again, the target signs its own sessions." },
     {
         path: "browser-access-disabled",
         portability: "identity",
@@ -117,7 +117,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     {
         path: "push.json",
         portability: "identity",
-        note: "Re-enable notifications in the browsers you use — a push subscription is bound to the sandbox that minted it.",
+        note: "Re-enable notifications in the browsers you use, a push subscription is bound to the sandbox that minted it.",
     },
     { path: "sync-enrollments.json", portability: "identity", note: "Re-pair desktop sync from the Sync tab." },
     { path: "sync-pair-consumed.json", portability: "identity" },

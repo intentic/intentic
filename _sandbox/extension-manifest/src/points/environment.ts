@@ -11,7 +11,7 @@ export const EnvironmentContributionSchema = z.object({
         .min(1)
         .refine((value) => !value.split("/").includes(".."), { message: "fragment must stay inside the checkout" })
         .describe(
-            "Checkout-relative path to a file holding ONLY RUN and ENV instructions. FROM and privileged directives are rejected — those stay daemon-owned.",
+            "Checkout-relative path to a file holding ONLY RUN and ENV instructions. FROM and privileged directives are rejected: those stay daemon-owned.",
         ),
 });
 export type EnvironmentContribution = z.infer<typeof EnvironmentContributionSchema>;
@@ -19,6 +19,6 @@ export type EnvironmentContribution = z.infer<typeof EnvironmentContributionSche
 export const environmentPoint = {
     name: "environment",
     description:
-        "A Dockerfile fragment baked into the sandbox image so your tools are actually installed at runtime — a whisper binary, a psql client. The owner approves the composed overlay and rebuilds out of band, so this does not take effect immediately.",
+        "A Dockerfile fragment baked into the sandbox image so your tools are actually installed at runtime: a whisper binary, a psql client. The owner approves the composed overlay and rebuilds out of band, so this does not take effect immediately.",
     schema: EnvironmentContributionSchema,
 } as const satisfies ContributionPoint;

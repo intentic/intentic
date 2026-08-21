@@ -10,12 +10,12 @@ import { createCliProxyClient } from "./translator.js";
  * `accounts` is both the Agent tab's connection list and the routed turn's credential gate, and it used to answer
  * a proxy it couldn't reach with four empty arrays. So during the proxy's 15s boot warm-up, and on every rung of
  * its restart ladder up to a five-minute ceiling, a sandbox holding connected Google subscriptions told its owner
- * they had never signed in — and told their turns there was nothing to run on. The tokens were on disk the whole
+ * they had never signed in, and told their turns there was nothing to run on. The tokens were on disk the whole
  * time; that is where the answer comes from now when the proxy is silent.
  *
  * Here rather than in translator.test.ts because these two need a REAL auth-dir: the behaviour under test is a
  * directory read, and the one thing worth pinning about it is what it does with the files a live sandbox actually
- * accumulates — a credential, another provider's credential, a half-written one, and something that isn't one. */
+ * accumulates: a credential, another provider's credential, a half-written one, and something that isn't one. */
 
 const memoryStore = () => {
     const snapshots: Record<string, AccountUsage> = {};
@@ -30,7 +30,7 @@ const memoryStore = () => {
     };
 };
 
-// Every client here is pointed at a port nothing is listening on, with fetch rejecting — the situation itself.
+// Every client here is pointed at a port nothing is listening on, with fetch rejecting: the situation itself.
 const clientOver = (authDir: string) => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fetch failed")));
     return createCliProxyClient({
@@ -86,7 +86,7 @@ test("refuses to report a disconnect the unreachable proxy never performed", asy
 
     /* The proxy holds the credential in memory as well as on disk, so deleting the file behind its back would
      * leave a live account serving turns off a token the user believes they just revoked. Now that the row is
-     * visible while the proxy is down, this is reachable — and a swallowed DELETE would report success and change
+     * visible while the proxy is down, this is reachable, and a swallowed DELETE would report success and change
      * nothing. */
     await expect(clientOver(authDir).disconnect("gemini", "antigravity-user.json")).rejects.toThrow(/starting up/);
 });

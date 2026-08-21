@@ -143,7 +143,7 @@ export const runOneShot = async (params: {
                     // reader to an account in perfect health. The counts the chat's own frame carries are left
                     // out on purpose: nobody is watching a title pass, and a helper's job here is to fail fast.
                     const vendor = params.credentials.allowance?.vendor ?? `Claude`;
-                    throw new Error(`${vendor} usage limit reached — the allowance is exhausted. Try again once it resets.`);
+                    throw new Error(`${vendor} usage limit reached: the allowance is exhausted. Try again once it resets.`);
                 }
                 if (message.retry_delay_ms > MAX_RETRY_WAIT_MS) {
                     throw new Error(`the model did not answer (retry deferred ${Math.round(message.retry_delay_ms / 1000)}s)`);

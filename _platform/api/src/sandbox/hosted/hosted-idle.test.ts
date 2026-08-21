@@ -8,7 +8,7 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 const config = (over: Record<string, unknown> = {}): Config =>
     ({
         webOrigin: `https://app.test`,
-        // Unconfigured mail logs the link instead of sending — so these tests exercise the real send path's
+        // Unconfigured mail logs the link instead of sending, so these tests exercise the real send path's
         // ordering without a network stub standing in for Resend.
         email: { apiKey: ``, from: `` },
         zrok: { apiEndpoint: `https://zrok2.sbx.test`, adminToken: `hub-admin` },
@@ -91,7 +91,7 @@ describe(`collecting the machines nobody came back to`, () => {
     });
 
     /* THE FALSE POSITIVE THIS SWEEP EXISTS TO AVOID. `lastSeenAt` is the daemon's BOOT announce, so a machine
-     * that has been up for a month — a long-lived dev server, a job nobody restarted — looks untouched while
+     * that has been up for a month (a long-lived dev server, a job nobody restarted) looks untouched while
      * being exactly the opposite. Fly is asked before anything is destroyed. */
     it(`spares a machine that is actually running, however stale its last announce`, async () => {
         const calls = stubFly(`started`);
@@ -117,7 +117,7 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(calls).toHaveLength(0);
     });
 
-    // Either day at zero switches the whole thing off — the setting a platform that collects nothing uses.
+    // Either day at zero switches the whole thing off: the setting a platform that collects nothing uses.
     it(`does nothing when the sweep is disabled`, async () => {
         const prisma = prismaWith([machine()]);
         expect(await reapIdleHosted(prisma, config({ idleDays: 0 }), logger)).toEqual({ warned: 0, destroyed: 0 });

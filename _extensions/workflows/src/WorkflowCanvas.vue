@@ -5,12 +5,12 @@ import { computed } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 import { workflowDag } from "./workflowDag";
 
-/* THE EDITABLE CANVAS — the designer's whole working surface, and deliberately the only place in the
+/* THE EDITABLE CANVAS: the designer's whole working surface, and deliberately the only place in the
  * extension that knows the graph can be changed at all.
  *
  * It is a thin shell over the kit's DagEditor: the derivation is `workflowDag` (shared with the run view, so
  * the two can never draw one workflow two ways) and the card is `WorkflowNodeCard` (likewise). What is left
- * here is the sizing and the vocabulary — turning "a node was connected" into "a step now waits for another".
+ * here is the sizing and the vocabulary: turning "a node was connected" into "a step now waits for another".
  *
  * The mutations themselves live in `workflowEdit.ts`, not here. This component reports gestures; it does not
  * decide what they mean to a workflow.

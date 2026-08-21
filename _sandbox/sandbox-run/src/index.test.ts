@@ -42,7 +42,7 @@ test("the local shape carries the full posture: init, alias, all three volumes, 
     ]);
 });
 
-test("the hosted-provider shape drops init/alias and adds ports, labels, dns — same posture, same volumes", () => {
+test("the hosted-provider shape drops init/alias and adds ports, labels, dns: same posture, same volumes", () => {
     const argv = sandboxRunArgv({
         names,
         image: "img:2",
@@ -55,7 +55,7 @@ test("the hosted-provider shape drops init/alias and adds ports, labels, dns —
     });
     expect(argv).not.toContain("--init");
     expect(argv).not.toContain("--network-alias");
-    // /history rides every shape — the hosted flavor once skipped it, and each update wiped the fleet,
+    // /history rides every shape: the hosted flavor once skipped it, and each update wiped the fleet,
     // the transcripts and every repo's real git dir while "your files are kept" stayed technically true.
     expect(argv.join(" ")).toContain("intentic-history-abc-123:/history");
     expect(argv.join(" ")).toContain("--label intentic.type=workspace");
@@ -97,7 +97,7 @@ test("parseNulEnv keeps multi-line values whole and values containing '='", () =
     ]);
 });
 
-test("replayableEnv allowlists, drops empties, and orders canonically — image identity is never replayed", () => {
+test("replayableEnv allowlists, drops empties, and orders canonically: image identity is never replayed", () => {
     const replayed = replayableEnv([
         ["SANDBOX_IMAGE", "old:tag"],
         ["PATH", "/usr/bin"],
@@ -120,7 +120,7 @@ test("runtime directives: allowlisted tokens pass, anything else stops the recre
 
 /* Every optional directive must be allowlisted, or the preflight would clear an ask the run then refuses. The
  * `=` spelling is load-bearing rather than style: directive lines split on whitespace, so `--gpus all` would
- * arrive as two tokens and the allowlist would have to accept a bare `all` — next to every flag on it. */
+ * arrive as two tokens and the allowlist would have to accept a bare `all`: next to every flag on it. */
 test("every optional directive is allowlisted, and only in its single-token spelling", () => {
     for (const entry of OPTIONAL_DIRECTIVES) {
         expect(runtimeDirectivesOf(`# intentic:runtime ${entry.token}`)).toEqual([entry.token]);
@@ -130,7 +130,7 @@ test("every optional directive is allowlisted, and only in its single-token spel
 });
 
 /* The trade the whole table exists for: a host's refusal costs the EXTRA, not the sandbox. The flag comes off,
- * the container still starts, and the env stamp carries the reason inward — without which the daemon cannot
+ * the container still starts, and the env stamp carries the reason inward: without which the daemon cannot
  * tell "not rebuilt yet" from "this machine cannot", the same absent hardware from inside, and would offer a
  * rebuild that can never work. Driven off the table so a second row is covered the day it is added. */
 test("a host that cannot honour an optional directive loses the flag, not the sandbox", () => {
@@ -141,7 +141,7 @@ test("a host that cannot honour an optional directive loses the flag, not the sa
 
         const dropped = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: ["--privileged", entry.token], unsupported: [entry.token] });
         expect(dropped).not.toContain(entry.token);
-        // The rest of the posture is untouched — only the optional directive comes off.
+        // The rest of the posture is untouched: only the optional directive comes off.
         expect(dropped).toContain("--privileged");
         expect(dropped.join(" ")).toContain(`${entry.env}=unsupported`);
 
@@ -150,14 +150,14 @@ test("a host that cannot honour an optional directive loses the flag, not the sa
     }
 });
 
-// A directive NOT in the table is all-or-nothing — naming it unsupported must not quietly strip a privilege
+// A directive NOT in the table is all-or-nothing: naming it unsupported must not quietly strip a privilege
 // the capability that asked for it cannot work without. Those failures belong at the launch, loudly.
 test("only table directives can be dropped; the rest ride whatever the caller claims", () => {
     const argv = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: ["--privileged"], unsupported: ["--privileged"] });
     expect(argv).toContain("--privileged");
 });
 
-// Replaying a stamp from the old container would pin a sandbox to the answer its FIRST host gave — a machine
+// Replaying a stamp from the old container would pin a sandbox to the answer its FIRST host gave: a machine
 // that grows a GPU (or moves to one) could never report otherwise.
 test("the optional-directive stamps are runner-set, never replayed", () => {
     for (const entry of OPTIONAL_DIRECTIVES) {
@@ -170,11 +170,11 @@ test("the health gate is one definition: daemon port, bounded patience", () => {
     expect(HEALTH.attempts * HEALTH.intervalSeconds).toBe(30);
 });
 
-test("the loopback port is derived from the id alone — the browser computes the same one without being told", () => {
+test("the loopback port is derived from the id alone: the browser computes the same one without being told", () => {
     // Stable across calls (a recreate must land on the port the browser is already probing) and inside the
     // quiet band: above what dev servers claim, below Linux's ephemeral floor.
     expect(localDaemonPort("0f310c3c4db4")).toBe(localDaemonPort("0f310c3c4db4"));
-    // HTTPS on a public name that resolves to loopback — the only shape Safari will accept. Same port either
+    // HTTPS on a public name that resolves to loopback: the only shape Safari will accept. Same port either
     // way: one published mapping, and what the daemon serves on it decides which of the two answers.
     expect(localDaemonUrl("0f310c3c4db4", "intentic.dev")).toBe(`https://local-0f310c3c4db4.intentic.dev:${localDaemonPort("0f310c3c4db4")}`);
     expect(localDaemonUrlInsecure("0f310c3c4db4")).toBe(`http://127.0.0.1:${localDaemonPort("0f310c3c4db4")}`);
@@ -188,7 +188,7 @@ test("the loopback port is derived from the id alone — the browser computes th
     expect(localDaemonPort("000000000000")).not.toBe(localDaemonPort("000001000000"));
 });
 
-test("a sandbox with an id publishes the loopback shortcut on 127.0.0.1 — never on every interface", () => {
+test("a sandbox with an id publishes the loopback shortcut on 127.0.0.1: never on every interface", () => {
     const argv = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", sandboxId: "0f310c3c4db4" });
     // The LOOPBACK listener (8788), not the tunnel origin (8787): the connector dials 8787 in plain HTTP over
     // the container network, so that port can never carry the TLS the browser needs.
@@ -199,10 +199,10 @@ test("a sandbox with an id publishes the loopback shortcut on 127.0.0.1 — neve
 test("the publish is the one part of the run that may be dropped: no id, or a port docker already refused", () => {
     // A bare dev run has no connect token, so no id, so nothing to publish.
     expect(sandboxRunArgv({ names, image: "i", baseImage: "i" }).join(" ")).not.toContain("-p ");
-    // The retry every flow makes when docker answered "port is already allocated" — same sandbox, no shortcut.
+    // The retry every flow makes when docker answered "port is already allocated": same sandbox, no shortcut.
     const retry = sandboxRunArgv({ names, image: "i", baseImage: "i", sandboxId: "0f310c3c4db4", localPublish: false });
     expect(retry.join(" ")).not.toContain("-p ");
-    // Hosted-provider ports are unaffected by the retry — they are the sandbox's real ingress, not a shortcut.
+    // Hosted-provider ports are unaffected by the retry: they are the sandbox's real ingress, not a shortcut.
     const hosted = sandboxRunArgv({
         names,
         image: "i",
@@ -215,7 +215,7 @@ test("the publish is the one part of the run that may be dropped: no id, or a po
 });
 
 /* The channel and the rollback target: both runner-set per run, both deliberately outside the replay
- * allowlist. That last part is what this test is really pinning — replaying them from the OLD container would
+ * allowlist. That last part is what this test is really pinning: replaying them from the OLD container would
  * make the channel unchangeable and freeze the rollback target at whatever it was when the sandbox was first
  * created, which is the opposite of what either is for. */
 test("channel and previousImage ride as container env, and only when the runner set them", () => {
@@ -234,7 +234,7 @@ test("channel and previousImage ride as container env, and only when the runner 
     expect(swapped.join(" ")).toContain("SANDBOX_PREVIOUS_IMAGE=registry.example/sandbox:1.4.2");
 });
 
-// Replaying an old container's env must not carry either one back in — the runner decides both per run.
+// Replaying an old container's env must not carry either one back in: the runner decides both per run.
 test("neither name survives the replay allowlist", () => {
     const replayed = replayableEnv([
         ["SANDBOX_CHANNEL", "canary"],

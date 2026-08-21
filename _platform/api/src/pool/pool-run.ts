@@ -130,7 +130,7 @@ export const runMeteredService = async (
             data: { userId: input.ownerId, serviceId: service.id, credits: service.creditsPerRun, status: `refunded` },
         });
         await refundCredits(prisma, input.ownerId, service.creditsPerRun, at);
-        deps.warn?.(`pool: service did not serve — run refunded`, service.slug);
+        deps.warn?.(`pool: service did not serve, run refunded`, service.slug);
         return { kind: `failed`, service };
     }
     if (forward.kind === `answered`) {
@@ -157,7 +157,7 @@ export const runMeteredService = async (
                 });
                 if (!served) {
                     await refundCredits(prisma, input.ownerId, service.creditsPerRun, at);
-                    deps.warn?.(`pool: service stream ended without a result — run refunded`, service.slug);
+                    deps.warn?.(`pool: service stream ended without a result, run refunded`, service.slug);
                 }
             } catch {
                 deps.warn?.(`pool: failed to record a streamed run`, service.slug);

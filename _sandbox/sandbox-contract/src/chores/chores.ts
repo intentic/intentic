@@ -237,7 +237,7 @@ const security: Chore = {
                 .toSorted((left, right) => left.name.localeCompare(right.name))
                 .map(
                     (advisory) =>
-                        `${advisory.severity} · ${advisory.name} — ${advisory.title}${advisory.patched === undefined ? ` (no patch yet)` : ``}`,
+                        `${advisory.severity} · ${advisory.name}, ${advisory.title}${advisory.patched === undefined ? ` (no patch yet)` : ``}`,
                 ),
             // Identities, not counts: every advisory that appears or is fixed is genuinely news, and there is no
             // ordinary drift here to absorb.
@@ -248,13 +248,13 @@ const security: Chore = {
             // would be reading a different tree by then.
             why:
                 `pnpm audit reports ${plural(blocking.length, `high or critical advisory`, `high or critical advisories`)} against ` +
-                `${repoLabel(context.repo)} — ${production.length} reaching a production dependency path, ${patchable.length} with a published patched range: ` +
+                `${repoLabel(context.repo)}, ${production.length} reaching a production dependency path, ${patchable.length} with a published patched range: ` +
                 `${blocking.map((advisory) => `${advisory.name} (${advisory.severity}${advisory.dev ? `, dev-only` : ``}${advisory.patched === undefined ? `, no patch` : `, fixed in ${advisory.patched}`})`).join(`; `)}.`,
         };
     },
     diagnosis: `An advisory with a published fix is a version bump someone has to actually make; one without is a risk to decide about.`,
     goal:
-        `For each advisory, establish whether this workspace reaches the vulnerable code path at all — a transitive dependency of a ` +
+        `For each advisory, establish whether this workspace reaches the vulnerable code path at all: a transitive dependency of a ` +
         `build-time tool is a different problem from one in a running service. Where the fix is a version bump the lockfile can absorb, ` +
         `make it. Where it needs a real upgrade or has no patch published, leave it and say what it would take. Never rewrite ` +
         `application code to route around a CVE.`,
@@ -307,7 +307,7 @@ const dependencies: Chore = {
     },
     diagnosis: `Version drift is cheap to fix continuously and expensive to fix in one go, because the majors start depending on each other.`,
     goal:
-        `Take the patch and minor upgrades in one pass — those are what the lockfile can absorb without argument. Then take the majors ` +
+        `Take the patch and minor upgrades in one pass: those are what the lockfile can absorb without argument. Then take the majors ` +
         `ONE AT A TIME, reading each one's changelog for breaking changes before you touch anything, and stop at the first one that ` +
         `needs more than a mechanical fix: leave it, and say what it would take. Do not batch majors; a failing test after eight of them ` +
         `is a bisect nobody wanted.`,
@@ -367,7 +367,7 @@ const deadCode: Chore = {
     },
     diagnosis: `Code nothing reaches still has to be read, type-checked and kept compiling by everyone who works nearby.`,
     goal:
-        `Re-run knip yourself first — this measurement is hours old and the tree has moved. Then check each finding against how the ` +
+        `Re-run knip yourself first: this measurement is hours old and the tree has moved. Then check each finding against how the ` +
         `file is actually used: knip is confidently wrong about anything reachable from OUTSIDE the repository, which means a package's ` +
         `public entry points, files a bundler or framework loads by convention, and types consumed only by a downstream package. Delete ` +
         `what is genuinely unreachable. Leave the false positives and list them in one line each, so the next run's reader knows they ` +
@@ -386,7 +386,7 @@ const duplication: Chore = {
     id: `duplication`,
     title: `Find duplication worth collapsing`,
     icon: `clone`,
-    description: `Copy-paste that has grown past a fifth of a percent of the tree. Reports only — extracting is a design call.`,
+    description: `Copy-paste that has grown past a fifth of a percent of the tree. Reports only, extracting is a design call.`,
     kind: `drifting`,
     criterion: `jscpd reports more than 5% of the scanned tree duplicated.`,
     stance: `report`,
@@ -421,11 +421,11 @@ const duplication: Chore = {
                 `the largest are ${top.map((clone) => `${clone.first} ↔ ${clone.second} (${clone.lines} lines)`).join(`; `)}.`,
         };
     },
-    diagnosis: `Duplication only costs anything when the copies have to change together — and only some of it does.`,
+    diagnosis: `Duplication only costs anything when the copies have to change together, and only some of it does.`,
     goal:
         `Report the clones where the copies genuinely have to change together. For each: cite both file:line ranges, say what the shared ` +
         `concept actually is, and name where the extraction would live. Then say explicitly which of the reported clones you are NOT ` +
-        `recommending against — generated files, deliberately repetitive tests, and lookalikes owned by different subsystems — so the ` +
+        `recommending against: generated files, deliberately repetitive tests, and lookalikes owned by different subsystems, so the ` +
         `next reader knows the list was triaged rather than truncated.`,
     done: `Done when every clone in the report has either a named extraction or a one-line reason it should stay.`,
 };
@@ -440,7 +440,7 @@ const documentation: Chore = {
     id: `documentation-refresh`,
     title: `Document what nothing explains`,
     icon: `file-edit`,
-    description: `Packages in this repository with no README — new ones first.`,
+    description: `Packages in this repository with no README, new ones first.`,
     kind: `drifting`,
     criterion: `A workspace package has no README.`,
     applies: (signals) => (signals.packages.length > 0 ? undefined : `not a workspace`),
@@ -464,7 +464,7 @@ const documentation: Chore = {
     },
     diagnosis: `A package nobody can read the shape of gets worked in by guesswork, and the guesses accumulate.`,
     goal:
-        `Follow this workspace's own documentation conventions — read them first, they are not optional and they are not generic. For ` +
+        `Follow this workspace's own documentation conventions: read them first, they are not optional and they are not generic. For ` +
         `each undocumented package, read the package before you write a word about it, and produce the document its conventions call ` +
         `for: what the package is FOR, how it fits the system, and which files matter. Explain at the module level. Never describe code ` +
         `line by line, and never document a package you did not read.`,
@@ -496,7 +496,7 @@ const complexity: Chore = {
     id: `complexity`,
     title: `Simplify what everything waits on`,
     icon: `wave-pulse`,
-    description: `Files that both churn and carry the repository — where edits are slow and ripple outward.`,
+    description: `Files that both churn and carry the repository, where edits are slow and ripple outward.`,
     kind: `accruing`,
     criterion: `A file in the hotspot ranking is also a key module, or its branching is three times the median of that ranking.`,
     stance: `act`,
@@ -520,7 +520,7 @@ const complexity: Chore = {
             keyModules.has(path) ? `churns and the rest of the repository imports it` : `${branches} branch points against a median of ${middle}`;
         return {
             headline: `${plural(found.length, `file`)} where every edit is slow and ripples outward`,
-            detail: found.map((hotspot) => `${hotspot.path} — ${hotspot.commits} commits, ${reason(hotspot.path, hotspot.complexity)}`),
+            detail: found.map((hotspot) => `${hotspot.path}, ${hotspot.commits} commits, ${reason(hotspot.path, hotspot.complexity)}`),
             digest: digestOf(...found.map((hotspot) => hotspot.path).toSorted()),
             severity: `info`,
             why:
@@ -530,10 +530,10 @@ const complexity: Chore = {
     },
     diagnosis: `A file that changes constantly and branches heavily makes every edit near it slow and easy to get wrong.`,
     goal:
-        `Take ONE file — the worst of them — and no more. Read it first. If the rest of the repository imports it, separate the stable ` +
+        `Take ONE file: the worst of them, and no more. Read it first. If the rest of the repository imports it, separate the stable ` +
         `contract from the churn: a narrow surface for importers, the volatile implementation private behind it. If it is simply ` +
-        `tangled, flatten it where it stands — edge cases as early returns, compound conditions behind named predicates, long chains as ` +
-        `lookups — and extract a unit only if a cohesive one falls out. Behaviour stays identical, and no re-export shims are left behind.`,
+        `tangled, flatten it where it stands: edge cases as early returns, compound conditions behind named predicates, long chains as ` +
+        `lookups, and extract a unit only if a cohesive one falls out. Behaviour stays identical, and no re-export shims are left behind.`,
     done: `Done when \`iq hotspots\` reports materially fewer branch points for that file, the repository's checks pass, and no importer changed meaning.`,
 };
 
@@ -591,14 +591,14 @@ const runtime: Chore = {
             digest: digestOf(`node:${major}`, past ? `eol` : `approaching`),
             severity: past ? `warning` : `info`,
             why:
-                `This sandbox runs ${context.node}, and Node ${major} ${past ? `reached end of life on ${eol}` : `reaches end of life on ${eol}`} — ` +
+                `This sandbox runs ${context.node}, and Node ${major} ${past ? `reached end of life on ${eol}` : `reaches end of life on ${eol}`}, ` +
                 `${plural(pinned.length, `package`)} in ${repoLabel(context.repo)} pin a node engine range.`,
         };
     },
     diagnosis: `An unsupported runtime stops receiving security patches, so every advisory against it stays open permanently.`,
     goal:
         `Establish what actually pins this runtime: the image's own base, the workspace's useNodeVersion, and each package's engines ` +
-        `range. Propose the smallest move to a supported LTS — which of those pins have to change, in what order, and what is likely to ` +
+        `range. Propose the smallest move to a supported LTS, which of those pins have to change, in what order, and what is likely to ` +
         `break at that boundary. Make the pin changes that are mechanical; do NOT attempt the image rebuild itself.`,
     done: `Done when the pins name a supported release, the repository's type-check and tests pass on it, and anything needing a rebuild is named as such.`,
 };
@@ -622,7 +622,7 @@ const libraries: Chore = {
     id: `library-overlap`,
     title: `Settle on one library per job`,
     icon: `box`,
-    description: `Two dependencies solving the same problem — both shipped, both maintained, one picked at random.`,
+    description: `Two dependencies solving the same problem, both shipped, both maintained, one picked at random.`,
     kind: `drifting`,
     criterion: `Two or more installed dependencies do the same job.`,
     applies: (signals) => (signals.packages.length > 0 ? undefined : `not a workspace`),
@@ -762,7 +762,7 @@ const bundleWeight: Chore = {
             severity: `info`,
             why:
                 `The build output in ${dir}/ of ${repoLabel(context.repo)} is ${bytesLabel(totalGzip)} gzipped across ` +
-                `${plural(assets.length, `asset`)}, and ${largest.path} alone is ${bytesLabel(largest.gzip)} of it — ${Math.round(share)}%. ` +
+                `${plural(assets.length, `asset`)}, and ${largest.path} alone is ${bytesLabel(largest.gzip)} of it: ${Math.round(share)}%. ` +
                 `The next largest are ${ranked
                     .slice(1, 4)
                     .map((asset) => `${asset.path} (${bytesLabel(asset.gzip)})`)
@@ -772,7 +772,7 @@ const bundleWeight: Chore = {
     },
     diagnosis: `Everything in the first chunk is downloaded and parsed before anything renders, whether or not the visitor needed it.`,
     goal:
-        `Find out what is actually IN the dominant chunk before proposing anything — the repository's own bundler can report this, and a ` +
+        `Find out what is actually IN the dominant chunk before proposing anything: the repository's own bundler can report this, and a ` +
         `recommendation made without it is guesswork. Then report the split worth making: which routes or features could load on demand, ` +
         `which dependencies are pulled in wholesale for one function, and which are only used behind an interaction nobody has yet had. ` +
         `Name the boundary for each and estimate what it saves. Where the chunk is genuinely all first-paint code, say so and close it.`,
@@ -842,8 +842,8 @@ const frameworkIdiom: Chore = {
     diagnosis: `A retired idiom keeps working until the major release that drops it, and then it is an emergency inside somebody else's upgrade.`,
     goal:
         `Take ONE idiom, the one with the most files, and no more. Convert the files where the conversion is mechanical and the behaviour ` +
-        `is provably identical. Stop at the first file that needs a design decision — a class component with genuine error-boundary ` +
-        `semantics, an NgModule that something outside the repository imports — leave it, and say what it would take. Do not convert an ` +
+        `is provably identical. Stop at the first file that needs a design decision: a class component with genuine error-boundary ` +
+        `semantics, an NgModule that something outside the repository imports: leave it, and say what it would take. Do not convert an ` +
         `idiom the repository has deliberately kept: if the newest code uses it too, that is a choice, and reporting it as one is the ` +
         `useful answer.`,
     done: `Done when a re-scan reports fewer files on that idiom, the repository's type-check and tests pass, and every file you skipped has a one-line reason.`,
@@ -868,7 +868,7 @@ const componentOverlap: Chore = {
     id: `component-overlap`,
     title: `Settle on one component per job`,
     icon: `copy`,
-    description: `Components built twice — the same name in two places, or the same logic under two names.`,
+    description: `Components built twice, the same name in two places, or the same logic under two names.`,
     kind: `drifting`,
     criterion: `Two component files reduce to the same name, or a duplicated block spans two components.`,
     applies: needsFramework,
@@ -932,12 +932,12 @@ const componentOverlap: Chore = {
                 `${pairs.length === 0 ? `` : `The clones: ${pairs.map((clone) => `${normalizePath(clone.first)} ↔ ${normalizePath(clone.second)}, ${clone.lines} lines`).join(`; `)}.`}`,
         };
     },
-    diagnosis: `A component built twice is maintained once — whichever copy the next person happens to open is the one that gets the fix.`,
+    diagnosis: `A component built twice is maintained once, whichever copy the next person happens to open is the one that gets the fix.`,
     goal:
         `Read every file in each group before saying anything about it; a shared name is a reason to look, not a finding on its own. For ` +
         `each group, say whether these genuinely do the same job, and if they do, name the one to keep and count the call sites that would ` +
-        `have to move. Where the answer is that the same LOGIC is duplicated rather than the whole component — the same fetch and loading ` +
-        `state, the same form validation, the same list virtualization written twice — say so, and name the hook or composable it should ` +
+        `have to move. Where the answer is that the same LOGIC is duplicated rather than the whole component: the same fetch and loading ` +
+        `state, the same form validation, the same list virtualization written twice: say so, and name the hook or composable it should ` +
         `become and where it would live. Where two components share a name and nothing else, say that too and close it: a false family is ` +
         `worth one line, and the next reader needs to know it was considered.`,
     done: `Done when every group has either a component to keep with a call-site count, a shared unit to extract with a home, or a reason it is fine.`,
@@ -991,12 +991,12 @@ const tailwindBypass: Chore = {
                     .join(`, `)}.`,
         };
     },
-    diagnosis: `Every inline colour is a place the theme cannot reach — a palette change lands everywhere except the files that opted out of it.`,
+    diagnosis: `Every inline colour is a place the theme cannot reach, a palette change lands everywhere except the files that opted out of it.`,
     goal:
-        `Read the theme first — the Tailwind config, or the CSS that defines the tokens — so you know what the scale actually offers. Then ` +
+        `Read the theme first: the Tailwind config, or the CSS that defines the tokens, so you know what the scale actually offers. Then ` +
         `replace the values that have a token: an exact palette match, a spacing step, a type size. Where a value is CLOSE to a token but ` +
         `not equal, do not round it silently; that is a visual change wearing a refactor's clothes. List those separately with both values ` +
-        `and let the owner decide. Where a value has no token and should — a brand colour used in nine places — say that the theme is ` +
+        `and let the owner decide. Where a value has no token and should: a brand colour used in nine places, say that the theme is ` +
         `missing an entry rather than editing nine files.`,
     done: `Done when a re-scan reports fewer hard-coded values, nothing renders differently, and every value you left has a one-line reason.`,
 };
@@ -1055,7 +1055,7 @@ const survey = ({ id, title, icon, description, diagnosis, goal, done, cadenceDa
         detail: [`Cadence · every ${cadenceDays} days`],
         digest: digestOf(id, `period:${Math.floor(context.nowMs / (cadenceDays * DAY_MS))}`),
         severity: `info`,
-        why: `This is a periodic review of ${repoLabel(context.repo)}, run every ${cadenceDays} days; nothing measured it — it is due because it has been that long.`,
+        why: `This is a periodic review of ${repoLabel(context.repo)}, run every ${cadenceDays} days; nothing measured it, it is due because it has been that long.`,
     }),
     diagnosis,
     goal,
@@ -1071,11 +1071,11 @@ const patterns = survey({
     id: `standardize-patterns`,
     title: `Standardize the cross-cutting patterns`,
     icon: `sitemap`,
-    description: `Error handling, validation, logging, configuration, retries, pagination — the things every file does slightly differently.`,
+    description: `Error handling, validation, logging, configuration, retries, pagination, the things every file does slightly differently.`,
     diagnosis: `Cross-cutting concerns drift one file at a time, and the cost only shows up when someone has to work across several of them.`,
     goal:
-        `Pick the cross-cutting concerns this repository actually has — error handling, input validation, logging, configuration, retries, ` +
-        `pagination, serialization — and for each, survey how it is done. Name the dominant pattern, the outliers, and which of the ` +
+        `Pick the cross-cutting concerns this repository actually has: error handling, input validation, logging, configuration, retries, ` +
+        `pagination, serialization, and for each, survey how it is done. Name the dominant pattern, the outliers, and which of the ` +
         `outliers are deliberate. Recommend ONE convention per concern with a file to point at as the reference implementation, and ` +
         `estimate the size of the conversion. Do not convert anything.`,
     done: `Done when each concern has a named convention, a reference file, and a count of the sites that diverge from it.`,
@@ -1093,7 +1093,7 @@ const deprecated = survey({
     diagnosis: `A deprecated API works right up until the upgrade that removes it, and then it is an emergency during someone else's migration.`,
     goal:
         `Survey what this repository uses that its own dependencies have deprecated: read the framework and runtime versions in use, check ` +
-        `their deprecation notices, and search for the call sites. Include the repository's OWN deprecations — anything its code marks ` +
+        `their deprecation notices, and search for the call sites. Include the repository's OWN deprecations: anything its code marks ` +
         `as deprecated and still calls. Rank by when each one actually breaks, not by how many call sites it has, and name the ` +
         `replacement for each. Change nothing.`,
     done: `Done when every deprecation has call sites cited, a replacement named, and the release it is expected to break in.`,
@@ -1114,12 +1114,12 @@ const documentationDrift = survey({
     id: `documentation-drift`,
     title: `Re-read the documentation against the code`,
     icon: `file`,
-    description: `Whether what the documents claim is still what the code does — the drift no tool can measure.`,
+    description: `Whether what the documents claim is still what the code does, the drift no tool can measure.`,
     diagnosis: `Documentation is trusted in proportion to how recently it was true, and a document that is quietly wrong is worse than a missing one.`,
     goal:
         `Read this repository's architecture documents against the code they describe. Report every claim that is no longer true, citing the ` +
-        `document line and the file that contradicts it. Prioritise the claims someone would ACT on — where a subsystem lives, what owns ` +
-        `what, which file to change — over prose that has merely aged. Do not rewrite the documents; produce the list of what is wrong.`,
+        `document line and the file that contradicts it. Prioritise the claims someone would ACT on, where a subsystem lives, what owns ` +
+        `what, which file to change: over prose that has merely aged. Do not rewrite the documents; produce the list of what is wrong.`,
     done: `Done when every architecture document has been read and every false claim is listed with both sides cited.`,
     cadenceDays: 90,
     applies: (signals) => (signals.shape.docs.length > 0 ? undefined : `no architecture documents`),
@@ -1141,7 +1141,7 @@ const pipelines = survey({
         `Read this repository's pipeline definitions and report what it pays for repeatedly: dependency installs with no cache key, ` +
         `build outputs recomputed between jobs, steps that are serial for no reason, and matrix legs that duplicate each other's work. ` +
         `For each, name the file and step, say roughly what it costs per run, and give the change that would fix it. Where a step is slow ` +
-        `because it genuinely has to be, say so — a pipeline that is honestly expensive is not a finding.`,
+        `because it genuinely has to be, say so: a pipeline that is honestly expensive is not a finding.`,
     done: `Done when every finding names a file, a step, and a concrete change, and anything deliberately slow is called out as such.`,
     cadenceDays: 90,
     applies: (signals) => (signals.shape.ci.length > 0 ? undefined : `no CI pipeline`),
@@ -1151,13 +1151,13 @@ const images = survey({
     id: `docker-image`,
     title: `Slim the container image`,
     icon: `box`,
-    description: `Layer order, build context and final size — what ships in the image that did not need to.`,
+    description: `Layer order, build context and final size, what ships in the image that did not need to.`,
     diagnosis: `Image size is paid on every pull and every cold start, and layer order decides how much of a build is cache hits.`,
     goal:
         `Read this repository's Dockerfiles and report what makes the image larger or the build slower than it needs to be: layers ordered ` +
         `so that a source edit invalidates the dependency install, build-time toolchains left in the final stage, a build context that ships ` +
         `the whole repository, and package caches never cleaned. For each, cite the file and line, and name the change. Do not rewrite the ` +
-        `Dockerfiles — an image that fails to build is a much worse problem than one that is larger than ideal.`,
+        `Dockerfiles: an image that fails to build is a much worse problem than one that is larger than ideal.`,
     done: `Done when every finding cites a Dockerfile line and names the change, with the ones that would need a base-image swap called out separately.`,
     cadenceDays: 90,
     applies: (signals) => (signals.shape.dockerfiles.length > 0 ? undefined : `no Dockerfile`),
@@ -1191,10 +1191,10 @@ export interface ChoreKindSpec {
 }
 
 export const CHORE_KINDS: readonly ChoreKindSpec[] = [
-    { kind: `carrying`, label: `Carrying`, caption: `a risk this repository is running today — someone else decides when it becomes urgent` },
+    { kind: `carrying`, label: `Carrying`, caption: `a risk this repository is running today, someone else decides when it becomes urgent` },
     { kind: `accruing`, label: `Accruing`, caption: `cheap now, expensive later, and always getting later` },
     { kind: `drifting`, label: `Drifting`, caption: `the shape of the thing is diverging from the idea of it` },
-    { kind: `surveying`, label: `Surveying`, caption: `periodic reads with nothing measuring them — due because it has been that long` },
+    { kind: `surveying`, label: `Surveying`, caption: `periodic reads with nothing measuring them, due because it has been that long` },
 ];
 
 // Declaration order, which decides nothing but the order WITHIN a kind, the sort below is stable, so the two

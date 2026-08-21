@@ -4,7 +4,7 @@ import type { JournalEntry } from "./turn-journal.js";
 import { commandsOf, resetCommands } from "./agent-commands.js";
 import { startTurnRun, type TurnFn, turnRunOf } from "./turn-runs.js";
 
-// A hand-cranked turn: the test pushes events (or a failure) and the run's pump consumes them as they land —
+// A hand-cranked turn: the test pushes events (or a failure) and the run's pump consumes them as they land:
 // the same push/pull shape SteeringQueue uses, so live-follow interleavings are exercised for real.
 const crankedTurn = (): { turnFn: TurnFn; push: (event: AgentEvent) => void; fail: (error: Error) => void; close: () => void } => {
     const buffer: (AgentEvent | Error | typeof CLOSE)[] = [];
@@ -81,7 +81,7 @@ describe(`turn runs`, () => {
         expect(await collect(`c-replay`, 2)).toEqual([{ seq: 3, event: { kind: `delta`, text: `c` } }]);
     });
 
-    it(`serves several concurrent followers — each gets every frame`, async () => {
+    it(`serves several concurrent followers: each gets every frame`, async () => {
         const { turnFn, push, close } = crankedTurn();
         startTurnRun(turnFn, turn(`c-multi`));
 
@@ -143,7 +143,7 @@ describe(`turn runs`, () => {
         expect((await collect(`c-abort`)).map((frame) => frame.event)).toEqual([{ kind: `done` }]);
     });
 
-    it(`drops a finished run after retention — attach then finds nothing`, async () => {
+    it(`drops a finished run after retention: attach then finds nothing`, async () => {
         vi.useFakeTimers();
         try {
             const { turnFn, close } = crankedTurn();
@@ -182,15 +182,15 @@ describe(`turn runs`, () => {
         expect(invoked).toBe(true);
     });
 
-    /* THE JOURNAL — one entry per in-flight turn, so a daemon death leaves behind exactly what to re-run.
+    /* THE JOURNAL: one entry per in-flight turn, so a daemon death leaves behind exactly what to re-run.
      *
      * The fake makes every write SLOW and records completion order, which is the whole point of these two. None
-     * of the writes may block the caller (the route acks the run id synchronously), so they all run detached —
+     * of the writes may block the caller (the route acks the run id synchronously), so they all run detached:
      * but they must not overtake each other either. A clear that beat the opening write would unlink a file that
      * does not exist yet; a clear that beat the session-frame update would be followed by that update
      * re-creating the entry. Either way a journal entry outlives its turn, and the next boot resumes a turn that
      * already finished. */
-    // A write costs more than an unlink, here as on a real disk — which is exactly what makes the ordering bug
+    // A write costs more than an unlink, here as on a real disk, which is exactly what makes the ordering bug
     // reachable rather than theoretical: fired independently, the clear WINS, and then a write lands after it.
     const fakeJournal = (writeMs = 20, clearMs = 1) => {
         const calls: string[] = [];
@@ -216,7 +216,7 @@ describe(`turn runs`, () => {
         const { calls, journal } = fakeJournal();
         startTurnRun(turnFn, turn(`c-journal`), { journal });
 
-        // The turn settles well inside a single write's duration — the window where an unserialized clear wins.
+        // The turn settles well inside a single write's duration: the window where an unserialized clear wins.
         push({ kind: `session`, sessionId: `sess-7` });
         push({ kind: `done` });
         close();
@@ -228,7 +228,7 @@ describe(`turn runs`, () => {
         expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]);
     });
 
-    it(`clears the entry for a FAILED turn too — only a turn nobody saw the end of deserves resuming`, async () => {
+    it(`clears the entry for a FAILED turn too: only a turn nobody saw the end of deserves resuming`, async () => {
         const { turnFn, fail } = crankedTurn();
         const { calls, journal } = fakeJournal();
         startTurnRun(turnFn, turn(`c-journal-fail`), { journal });
@@ -238,7 +238,7 @@ describe(`turn runs`, () => {
         await vi.waitFor(() => expect(calls).toEqual([`record`, `clear:c-journal-fail`]));
     });
 
-    /* THE PARKED CARDS ride the journal entry while they are up — they are what a boot restores when the daemon
+    /* THE PARKED CARDS ride the journal entry while they are up: they are what a boot restores when the daemon
      * dies under a park (turn-resume.ts), and their content exists nowhere else once the frame log dies with
      * the process. Every rewrite carries the whole live state (session AND cards), so neither update can erase
      * the other's half. */
@@ -310,7 +310,7 @@ describe(`turn runs`, () => {
         await followed;
 
         expect(commandsOf(`kimi`)).toEqual([{ name: `deploy`, description: `Ship it` }]);
-        // Keyed by provider — a turn on one never answers for another. An absent `agent` means claude.
+        // Keyed by provider: a turn on one never answers for another. An absent `agent` means claude.
         expect(commandsOf(`claude`)).toEqual([]);
     });
 });

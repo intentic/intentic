@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { linkifyNoteRefs, noteTitle, parseNote, projectLabel, resolveNoteLink, wikiLinkParts } from "./memoryNote";
 
 /* The note model the whole view is titled, grouped and navigated by. Everything here runs against real shapes
- * the agent writes — the frontmatter template it uses, the slugs it names files and projects with, and the two
+ * the agent writes: the frontmatter template it uses, the slugs it names files and projects with, and the two
  * link syntaxes it cross-references its own notes in. */
 
 describe(`parseNote`, () => {
@@ -33,7 +33,7 @@ describe(`parseNote`, () => {
         expect(parseNote(NOTE).type).toBe(`project`);
     });
 
-    it(`treats a note with no frontmatter as all body — MEMORY.md is exactly that`, () => {
+    it(`treats a note with no frontmatter as all body: MEMORY.md is exactly that`, () => {
         const index = `- [A note](a-note.md) — what it says\n`;
         expect(parseNote(index)).toEqual({ description: undefined, type: undefined, body: index });
     });
@@ -89,7 +89,7 @@ describe(`resolveNoteLink`, () => {
         expect(resolveNoteLink(`people/radarsu.md`, `../MEMORY.md`)).toBe(`MEMORY.md`);
     });
 
-    it(`reads an absolute href as project-relative — a note has no filesystem above its memory dir`, () => {
+    it(`reads an absolute href as project-relative: a note has no filesystem above its memory dir`, () => {
         expect(resolveNoteLink(`people/radarsu.md`, `/MEMORY.md`)).toBe(`MEMORY.md`);
     });
 
@@ -171,13 +171,13 @@ describe(`linkifyNoteRefs`, () => {
         expect(anchor?.dataset[`note`]).toBe(`people/preferences.md`);
     });
 
-    it(`leaves bracket text inside code alone — there it is literal, not a reference`, () => {
+    it(`leaves bracket text inside code alone: there it is literal, not a reference`, () => {
         const fragment = decorated(`<p><code>[[not-a-link]]</code> and <a href="x.md">[[nor this]]</a></p>`);
         expect(fragment.querySelector(`code`)?.textContent).toBe(`[[not-a-link]]`);
         expect(fragment.querySelectorAll(`a`)).toHaveLength(1);
     });
 
-    // The label is whatever sat between the brackets, and it is written as a TEXT node — so a note whose link
+    // The label is whatever sat between the brackets, and it is written as a TEXT node, so a note whose link
     // label reads like markup renders that markup as the characters it is, not as an element.
     it(`writes link text as text, never as markup`, () => {
         const anchor = decorated(`<p>[[x|&lt;img src=x onerror=alert(1)&gt;]]</p>`).querySelector(`a`);

@@ -35,7 +35,7 @@ export const openSlackConnection = async (appToken: string, botToken: string): P
     });
     const selfUserId = identity.user_id;
     if (selfUserId === undefined) {
-        throw new FatalSlackError("Slack accepted the bot token but returned no bot user — reinstall the app to your workspace");
+        throw new FatalSlackError("Slack accepted the bot token but returned no bot user: reinstall the app to your workspace");
     }
     const socket = new SocketModeClient({ appToken });
     // start() resolves on the `connected` frame and rejects on a refused handshake. Past that point the client
@@ -67,10 +67,10 @@ const authFailure = (error: unknown, field: string, prefix: string): Error => {
     const message = error instanceof Error ? error.message : String(error);
     const code = FATAL_CODES.find((candidate) => message.includes(candidate));
     if (code !== undefined) {
-        return new FatalSlackError(`Slack rejected the ${field} (${code}) — paste a fresh ${prefix} token on the Slack capability`);
+        return new FatalSlackError(`Slack rejected the ${field} (${code}): paste a fresh ${prefix} token on the Slack capability`);
     }
     if (message.includes("missing_scope")) {
-        return new FatalSlackError(`The Slack app is missing a required scope — reinstall it with the scopes the capability card lists (${message})`);
+        return new FatalSlackError(`The Slack app is missing a required scope: reinstall it with the scopes the capability card lists (${message})`);
     }
     return error instanceof Error ? error : new Error(message);
 };

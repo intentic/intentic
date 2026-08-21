@@ -5,7 +5,7 @@ import { addStep, connectSteps, disconnectSteps, removeStep, toggleHandoff, upda
 /* THE GRAPH EDITS, and one property above all the individual cases: NO EDIT MAY LEAVE THE WORKFLOW FAULTY.
  *
  * `workflowFaults` is the same function the save route refuses with and the designer shows under the canvas,
- * so asserting it stays empty after every mutation is the strongest thing these tests can say — it holds for
+ * so asserting it stays empty after every mutation is the strongest thing these tests can say: it holds for
  * edits nobody thought to write a case for, which is exactly the class of bug a canvas produces (you can draw
  * a cycle in one gesture, and delete a step three others depend on in another).
  */
@@ -43,7 +43,7 @@ test("a new step is chained onto the one it came from, and starts the run when i
     expect(stepOf(second.workflow, second.stepId).needs).toEqual([first.stepId]);
 });
 
-test("a new step is runnable on its defaults alone — the whole premise of hiding the advanced fields", () => {
+test("a new step is runnable on its defaults alone: the whole premise of hiding the advanced fields", () => {
     const { workflow } = chain(1);
     // Parses AND has no faults: a user who filled in only the two prose fields can press Run.
     expect(WorkflowSchema.safeParse(workflow).success).toBe(true);
@@ -62,7 +62,7 @@ test("connecting backwards is refused rather than allowed to close a cycle", () 
     expect(connectSteps(workflow, b, b)).toBe(workflow);
 });
 
-test("a fan-in is allowed — two branches meeting is not a cycle", () => {
+test("a fan-in is allowed: two branches meeting is not a cycle", () => {
     let { workflow, ids } = chain(1);
     const root = ids[0] ?? ``;
     const left = addStep(workflow, root);
@@ -83,7 +83,7 @@ test("removing a step takes its edges with it rather than leaving its dependents
 
     const without = removeStep(workflow, b);
     expect(without.steps.map((step) => step.id)).toEqual([a, c]);
-    // `c` used to need `b`. A dangling need is a fault the save route refuses with — the delete must not create one.
+    // `c` used to need `b`. A dangling need is a fault the save route refuses with: the delete must not create one.
     expect(stepOf(without, c).needs).toEqual([]);
     expect(workflowFaults(without)).toEqual([]);
 });
@@ -94,7 +94,7 @@ test("a step that loses its only predecessor stops claiming to continue a sessio
     const continued = toggleHandoff(workflow, b);
     expect(stepOf(continued, b).handoff).toBe(`continue`);
 
-    // Disconnecting leaves it a root, where "continue" has nothing to continue — demoted, not left faulty.
+    // Disconnecting leaves it a root, where "continue" has nothing to continue: demoted, not left faulty.
     const orphaned = disconnectSteps(continued, a, b);
     expect(stepOf(orphaned, b).handoff).toBe(`fresh`);
     expect(workflowFaults(orphaned)).toEqual([]);
@@ -110,7 +110,7 @@ test("a step that gains a second predecessor stops claiming to continue a sessio
     const other = addStep(workflow, undefined);
     workflow = updateStep(other.workflow, other.stepId, { goal: `g`, prompt: `p` });
 
-    // Two upstream sessions cannot both be continued into one, so the handoff gives way — the user's gesture
+    // Two upstream sessions cannot both be continued into one, so the handoff gives way: the user's gesture
     // was about the dependency.
     const merged = connectSteps(workflow, other.stepId, b);
     expect(stepOf(merged, b).needs).toHaveLength(2);
@@ -124,7 +124,7 @@ test("toggling the handoff does nothing on a step with no single predecessor", (
     expect(stepOf(toggleHandoff(workflow, root), root).handoff).toBe(`fresh`);
 });
 
-test("every edit leaves the graph runnable — the property the individual cases are examples of", () => {
+test("every edit leaves the graph runnable: the property the individual cases are examples of", () => {
     const { workflow, ids } = chain(4);
     const [a, b, c, d] = ids as [string, string, string, string];
     const edits: readonly ((current: Workflow) => Workflow)[] = [
@@ -144,7 +144,7 @@ test("every edit leaves the graph runnable — the property the individual cases
     }
 });
 
-test("no edit mutates the workflow it was handed — Cancel has to actually cancel", () => {
+test("no edit mutates the workflow it was handed: Cancel has to actually cancel", () => {
     const { workflow, ids } = chain(2);
     const before = JSON.stringify(workflow);
     const [a, b] = ids as [string, string];

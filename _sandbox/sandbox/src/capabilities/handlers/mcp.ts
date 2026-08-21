@@ -30,7 +30,7 @@ export const mcpHandler: CapabilityHandler = {
     rename: {},
     apply: async function* (_ctx, _id, config) {
         const { url } = config as McpConfig;
-        yield { kind: "log", message: `Registered MCP server ${url} — the agent can call it next turn.` };
+        yield { kind: "log", message: `Registered MCP server ${url}, the agent can call it next turn.` };
     },
     status: async (_ctx, _id, config) => {
         const { url, token } = config as McpConfig;

@@ -16,7 +16,7 @@ import { spokenLinesOf } from "../sessions/transcript-search.js";
 import { clientFor, codexConnectedProxy, collect, errorCode, fakeHistory, fakeProcesses, runAgentTurn, services, withTranslator } from "../route-testing.js";
 
 /* The agents routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
+ * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
  * one file that two agents working on unrelated features collided in every time. The fakes and the client
  * are shared (route-testing.ts); what lives here is what these routes do. */
 
@@ -98,7 +98,7 @@ test("a thrown workspace turn settles its surfaced card as an error", async () =
     const client = clientFor(
         createApp(
             services({
-                // The adapter dies on the first pull, before any frame — a provider outage, a missing binary.
+                // The adapter dies on the first pull, before any frame: a provider outage, a missing binary.
                 agent: async function* () {
                     yield await Promise.reject(new Error("adapter crashed"));
                 },
@@ -148,7 +148,7 @@ test("an isolated turn that dies on a provider gate still releases the conversat
     );
     const first = await runAgentTurn(client, { prompt: "hi", conversationId: "conv1", isolated: true });
     expect(first.some((event) => event.kind === "error" && event.message.includes("No Claude account"))).toBe(true);
-    // The gate exit must not leave the agent stuck "running" — the retry hits the same gate, NOT agent-busy.
+    // The gate exit must not leave the agent stuck "running": the retry hits the same gate, NOT agent-busy.
     const second = await runAgentTurn(client, { prompt: "hi", conversationId: "conv1", isolated: true });
     expect(second.some((event) => event.kind === "error" && event.code === "agent-busy")).toBe(false);
     const { agents } = await client.agents.list();
@@ -165,7 +165,7 @@ test("a turn's title seeds a fresh entry and agents.rename overwrites it", async
             }),
         ),
     );
-    // A renamed draft's first turn carries the user-chosen title — it wins over the prompt derivation.
+    // A renamed draft's first turn carries the user-chosen title: it wins over the prompt derivation.
     await runAgentTurn(client, { prompt: "fix the login bug", title: "My agent", conversationId: "conv1", isolated: true });
     expect((await client.agents.list()).agents[0]?.title).toBe("My agent");
     const renamed = await client.agents.rename({ id: "conv1", title: "  Login fix  " });
@@ -175,11 +175,11 @@ test("a turn's title seeds a fresh entry and agents.rename overwrites it", async
 });
 
 /* The fleet filter. Matches the title (which IS the sanitized first prompt) or any later line of the
- * conversation, and — the part the board depends on and no session-level search can give it — it answers over
+ * conversation, and (the part the board depends on and no session-level search can give it) it answers over
  * the ARCHIVE too. A board whose filter stopped at the live roster would report "no matches" for an agent
  * sitting one click away behind the archive button. */
 test("agents.search matches titles and later lines, across the archive", async () => {
-    // Every store read the fleet makes, with the dir it scoped to — an isolated turn's session is filed under
+    // Every store read the fleet makes, with the dir it scoped to: an isolated turn's session is filed under
     // the workspace ROOT (its namespace makes the worktree /work), so a read scoped to the worktree path finds
     // nothing and the card redraws as a conversation that never happened.
     const scopedTo: string[] = [];
@@ -221,35 +221,35 @@ test("agents.search matches titles and later lines, across the archive", async (
     expect(scopedTo).toEqual(["/work"]);
     // An id the registry has never heard of is a 404 ON THE WIRE, not merely a rejected call: the browser reads
     // that exact status as "this conversation has no entry any more" and stops a tab claiming a fleet card
-    // nothing on the board can render (see useChat's replayStoredSession). Anything else — a 500, an
-    // unreachable daemon — must stay a retryable read, so the status is the contract, not the message.
+    // nothing on the board can render (see useChat's replayStoredSession). Anything else: a 500, an
+    // unreachable daemon: must stay a retryable read, so the status is the contract, not the message.
     await expect(client.agents.transcript({ id: "nope" })).rejects.toThrow();
     expect((await app.request("/agents/nope/transcript")).status).toBe(404);
 
     // A second turn on the same conversation: its words are in no title, and the transcript store behind this
-    // fake never sees them — the routed-prompt index is what keeps them searchable.
+    // fake never sees them: the routed-prompt index is what keeps them searchable.
     await runAgentTurn(client, { prompt: "also tidy the changelog", conversationId: "conv2", isolated: true });
 
     // Under two characters the contract refuses: below that everything matches and the scan is pure cost.
     expect(await errorCode(client.agents.search({ query: "a" }))).toBe("BAD_REQUEST");
 
-    // A title hit needs no transcript, so it reports no snippet — the card already shows what it matched on.
+    // A title hit needs no transcript, so it reports no snippet: the card already shows what it matched on.
     expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2 });
     // The title is the first prompt, so a hit there needs no transcript either.
     expect(await client.agents.search({ query: "readme" })).toEqual({ matches: [{ id: "conv2" }], scanned: 2 });
-    // …and a hit in a LATER line reports it, with the side of the chat that said it — the whole reason a
+    // …and a hit in a LATER line reports it, with the side of the chat that said it: the whole reason a
     // filtered card is believable.
     expect(await client.agents.search({ query: "changelog" })).toMatchObject({
         matches: [{ id: "conv2", snippet: { text: "also tidy the changelog", speaker: "user" } }],
     });
-    // The agent's own reply is matchable too, and says whose words they were — read out of the transcript
+    // The agent's own reply is matchable too, and says whose words they were: read out of the transcript
     // rather than out of the routed-prompt index, which only ever holds what the user sent.
     expect(await client.agents.search({ query: "lanedrop" })).toMatchObject({
         matches: [{ id: "conv1", snippet: { text: "landAgent lives in laneDrop.ts", speaker: "agent" } }],
     });
 
     /* THE FIELD'S Aa SWITCH, on the wire. Every assertion above ran with it off, where the letters do not
-     * matter; with it on the query stands exactly as typed — over the transcript and over the title alike,
+     * matter; with it on the query stands exactly as typed: over the transcript and over the title alike,
      * since a title hit and a prompt hit are one rule. */
     expect(await client.agents.search({ query: "landAgent", caseSensitive: "true" })).toMatchObject({
         matches: [{ id: "conv1", snippet: { text: "landAgent lives in laneDrop.ts", speaker: "agent" } }],
@@ -340,13 +340,13 @@ test("a mid-write land is refused, and the same land with `force` goes through",
     await client.agent.run({ prompt: "a long edit", conversationId: "conv1", isolated: true });
     // Parked on the gate with nothing raised: the agent is writing, which is the one state that refuses.
     expect(await errorCode(client.agents.land({ id: "conv1" }))).toBe("CONFLICT");
-    // The user's deliberate override — the press behind the warning modal.
+    // The user's deliberate override: the press behind the warning modal.
     expect(await client.agents.land({ id: "conv1", force: true })).toMatchObject({ landed: false });
     release?.();
     await collect(await client.agent.attach({ conversationId: "conv1" }));
 });
 
-test("a turn parked on a question lands without a force — it is waiting for the user, not writing", async () => {
+test("a turn parked on a question lands without a force: it is waiting for the user, not writing", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));
     const client = clientFor(
@@ -365,10 +365,10 @@ test("a turn parked on a question lands without a force — it is waiting for th
         ),
     );
     await client.agent.run({ prompt: "ask me something", conversationId: "conv1", isolated: true });
-    /* The park has to have been observed before the guard is asked — the frame travels the relay to get there,
+    /* The park has to have been observed before the guard is asked: the frame travels the relay to get there,
      * behind the turn's own worktree setup. That is real machine work: ~0.4s idle, and several times that on a
      * runner carrying the rest of the suite beside it. Budgeted explicitly for the same reason the integration
-     * suite has its own testTimeout (see _tools/testing/vitest.ts) — waitFor's 1s default is a hang detector,
+     * suite has its own testTimeout (see _tools/testing/vitest.ts): waitFor's 1s default is a hang detector,
      * and held to it this poll went green on an idle box and red under load, taking the four tests after it
      * down with it: a wait that expires here skips the release below, and the gated turn it leaves parked
      * holds conv1's slot in the run map for the rest of the file. */
@@ -403,7 +403,7 @@ test("a forced land leaves the running turn's bookkeeping to the turn", async ()
     expect((await client.agents.list()).agents[0]?.status).toBe("running");
     release?.();
     await collect(await client.agent.attach({ conversationId: "conv1" }));
-    // And the turn's own ending still lands — usage flushed, mutex released, status settled.
+    // And the turn's own ending still lands: usage flushed, mutex released, status settled.
     const { agents } = await client.agents.list();
     expect(agents[0]).toMatchObject({ id: "conv1", costUsd: 0.25 });
     expect(agents[0]?.status).not.toBe("running");
@@ -411,12 +411,12 @@ test("a forced land leaves the running turn's bookkeeping to the turn", async ()
 
 /* WHAT A NAMED ARCHIVE DOES NOT DO FIRST.
  *
- * The standing probe answers "which agents would the board call finished right now" — a question only the bulk
+ * The standing probe answers "which agents would the board call finished right now": a question only the bulk
  * press has to ask, since it is the one deciding what qualifies. A named archive has already been decided, by
  * the user, about a card in front of them.
  *
  * Asking anyway made one click cost a probe over the whole live roster. That is nearly free while the verdicts
- * still hold — and a git pass per agent the moment anything moves the main line, which is why archiving one
+ * still hold, and a git pass per agent the moment anything moves the main line, which is why archiving one
  * card on a board carrying a thousand sessions was fast most of the time and interminable the rest of it. */
 test("archiving a named agent asks nothing of the rest of the fleet; clearing the lane still does", async () => {
     const daemon = services();
@@ -424,7 +424,7 @@ test("archiving a named agent asks nothing of the rest of the fleet; clearing th
     const client = clientFor(createApp(daemon));
     await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
     await runAgentTurn(client, { prompt: "and this", conversationId: "conv2", isolated: true });
-    // The roster read is self-healing and probes on purpose (agents.routes list) — this test is about the press.
+    // The roster read is self-healing and probes on purpose (agents.routes list): this test is about the press.
     probe.mockClear();
 
     await client.agents.archive({ ids: ["conv1"] });
@@ -440,7 +440,7 @@ test("archiving a named agent asks nothing of the rest of the fleet; clearing th
 });
 
 /* SPEAKING AS THE AGENT, end to end: the placed row lands in the record marked for human readers, the provider
- * session is retired rewind-style, and the NEXT turn — resuming nothing — is seeded from the record, where the
+ * session is retired rewind-style, and the NEXT turn (resuming nothing) is seeded from the record, where the
  * planted line reaches the model as its own prior words with the mark nowhere in sight. That last assertion is
  * the feature's whole contract; the transcript looking right is merely its visible half. */
 test("agents.place appends the user's words as the agent's, retires the session, and the next turn reads them as its own", async () => {
@@ -473,13 +473,13 @@ test("agents.place appends the user's words as the agent's, retires the session,
 
     expect(await client.agents.place({ id: "conv1", text: "I checked the tests and they pass." })).toEqual({ ok: true });
 
-    // The record's newest row is the placed line, marked — the transcript route serves it to every reopening tab.
+    // The record's newest row is the placed line, marked: the transcript route serves it to every reopening tab.
     expect((await client.agents.transcript({ id: "conv1" })).messages.at(-1)).toEqual({
         role: "assistant",
         text: "I checked the tests and they pass.",
         placed: true,
     });
-    // The session pointer is gone (only the pointer — the record above is what the conversation reads back as).
+    // The session pointer is gone (only the pointer: the record above is what the conversation reads back as).
     expect((await client.agents.list()).agents[0]).not.toHaveProperty("sessionId");
 
     await runAgentTurn(client, { prompt: "carry on", conversationId: "conv1", isolated: true });
@@ -495,7 +495,7 @@ test("agents.place appends the user's words as the agent's, retires the session,
     expect(await errorCode(client.agents.place({ id: "ghost", text: "boo" }))).toBe("NOT_FOUND");
 });
 
-/* SPEAKING AS THE AGENT IN A CHANNEL CONVERSATION — the placed line has a second audience. A conversation woken
+/* SPEAKING AS THE AGENT IN A CHANNEL CONVERSATION: the placed line has a second audience. A conversation woken
  * by an outside message (origin.channelId) is a thread somebody is watching from Discord/Slack/Telegram, so the
  * daemon carries the line out through the provider's gateway (its loopback /deliver door) BEFORE appending, and
  * a delivery that cannot happen refuses the whole place: the record never holds a sentence the channel did not
@@ -562,19 +562,19 @@ test("agents.place in a channel conversation delivers the line to the provider's
             isolated: true,
             origin: { automationId: "auto", provider: "discord", channelId: "123" },
         });
-        expect(await client.agents.place({ id: "conv1", text: "On it — checking now." })).toEqual({ ok: true });
+        expect(await client.agents.place({ id: "conv1", text: "On it. checking now." })).toEqual({ ok: true });
         // The channel got the exact line, addressed by the origin's own channel id…
-        expect(gateway.deliveries).toEqual([{ path: "/deliver", body: { channelId: "123", text: "On it — checking now." } }]);
+        expect(gateway.deliveries).toEqual([{ path: "/deliver", body: { channelId: "123", text: "On it. checking now." } }]);
         // …the record holds it marked, exactly as an ordinary place would…
         expect((await client.agents.transcript({ id: "conv1" })).messages.at(-1)).toEqual({
             role: "assistant",
-            text: "On it — checking now.",
+            text: "On it. checking now.",
             placed: true,
         });
         // …and the activity feed shows the channel was told, the same row an agent's own send leaves.
         await vi.waitFor(() =>
             expect(activity.filter((event) => (event as { type?: string }).type === "message.send")).toMatchObject([
-                { provider: "discord", direction: "out", channelId: "123", content: "On it — checking now.", conversationId: "conv1" },
+                { provider: "discord", direction: "out", channelId: "123", content: "On it. checking now.", conversationId: "conv1" },
             ]),
         );
     } finally {
@@ -616,7 +616,7 @@ test("agents.place surfaces the gateway's own refusal sentence", async () => {
     }
 });
 
-// A webchat (or webhook) origin has no gateway extension — there is nothing to carry the line, and that is the
+// A webchat (or webhook) origin has no gateway extension: there is nothing to carry the line, and that is the
 // ordinary place, not a failure: the visitor transport only exists while a turn streams (webchat.routes.ts).
 test("agents.place in a webchat conversation places into the record alone", async () => {
     const { client, records } = channelPlaceHarness({});
@@ -631,7 +631,7 @@ test("agents.place in a webchat conversation places into the record alone", asyn
 });
 
 // The illusion can only be established between turns: a running turn holds the very session placing exists to
-// retire, and the lease place takes is the turn's own mutex — same refusal shape as land/discard.
+// retire, and the lease place takes is the turn's own mutex: same refusal shape as land/discard.
 test("agents.place is refused while the agent's turn is running", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));

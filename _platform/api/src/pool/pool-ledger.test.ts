@@ -36,7 +36,7 @@ const closedMonth = {
     creatorShare: 0.9,
     serviceShare: 0.9,
     statements: [
-        // Paid, in flight, owed-but-carried, never claimed, and expired — one of each, so every public total
+        // Paid, in flight, owed-but-carried, never claimed, and expired: one of each, so every public total
         // has something behind it.
         { publisher: `paid-co`, amountCents: 2000, credits: 300, expiredAt: null, payout: { status: `paid` } },
         { publisher: `sending`, amountCents: 900, credits: 120, expiredAt: null, payout: { status: `pending` } },
@@ -74,7 +74,7 @@ describe(`the public ledger`, () => {
         expect(closed).toMatchObject({
             month: `2026-07`,
             state: `closed`,
-            // What actually moved at Stripe, and what Stripe took — not members × price.
+            // What actually moved at Stripe, and what Stripe took, not members × price.
             grossCents: 5940,
             feeCents: 202,
             poolCents: 5400,

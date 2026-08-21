@@ -5,11 +5,11 @@ import { resolveRequest } from "../agent/agent-requests.js";
 import { type AskDeps, type AskedCapability, type AskInstance, createCapabilityGate } from "./capability-offer.js";
 
 /* The setup gate, driven end to end with a fake catalog and a fake live turn: what these prove is the ONE
- * property the module exists for — nothing is watched for until a real reply accepted the card, and every
+ * property the module exists for: nothing is watched for until a real reply accepted the card, and every
  * other ending (skip, expiry, a dead caller, an unknown card, an already-connected card) answers with a
  * sentence the agent can act on, without nagging the owner twice. */
 
-// A cli card with a pinned provider discriminator (the shape most connectors take) — what the join matches
+// A cli card with a pinned provider discriminator (the shape most connectors take): what the join matches
 // instances against.
 const NOTION: CapabilityCatalogEntry = {
     id: "notion",
@@ -24,7 +24,7 @@ interface Fake {
     readonly deps: AskDeps;
     readonly frames: AgentEvent[];
     readonly observed: AgentEvent[];
-    // The live manifest the fake serves — tests mutate it to simulate the owner connecting something.
+    // The live manifest the fake serves: tests mutate it to simulate the owner connecting something.
     readonly manifest: AskInstance[];
     // id → probed state; instances absent here probe as pending.
     readonly states: Map<string, "active" | "pending" | "error" | "inactive">;
@@ -57,7 +57,7 @@ const asked = (over: Partial<AskedCapability> = {}): AskedCapability => ({
     ...over,
 });
 
-// The card's requestId exists only inside the frame the gate pushed — wait for it, then answer as the route
+// The card's requestId exists only inside the frame the gate pushed: wait for it, then answer as the route
 // handler would (resolveRequest is the same registry POST /agent/reply resolves).
 const answerCard = async (frames: AgentEvent[], connect: boolean): Promise<void> => {
     while (frames.length === 0) {
@@ -75,7 +75,7 @@ it("a yes parks the call on the setup, and the connection coming live answers it
     const gate = createCapabilityGate(deps);
     const pending = gate.ask(asked());
     await answerCard(frames, true);
-    // The owner connects it while the agent waits — the watcher sees the manifest move.
+    // The owner connects it while the agent waits: the watcher sees the manifest move.
     manifest.push({ id: "notion", kind: "cli", config: { provider: "notion" } });
     states.set("notion", "active");
     const answer = await pending;
@@ -98,7 +98,7 @@ it("a skip connects nothing, tells the agent to continue without it, and is reme
     const answer = await pending;
     expect(answer.status).toBe(403);
     expect(JSON.parse(answer.body)).toMatchObject({ error: { type: "declined" } });
-    // No outcome frame — nothing was set up; the resolved frame already says how it ended.
+    // No outcome frame: nothing was set up; the resolved frame already says how it ended.
     expect(frames.map((frame) => frame.kind)).toEqual(["capability_offer", "resolved"]);
     // The repeat ask is answered without a second card: "don't nag" is plumbing, not etiquette.
     const repeat = await gate.ask(asked());
@@ -132,7 +132,7 @@ it("an ask nobody answers expires without connecting, and may be asked again lat
     // The abort stand-in is nobody's decision: the resolved frame carries no reply, so the card freezes
     // cancelled rather than replaying as a skip somebody chose.
     expect((frames[1] as { reply?: unknown }).reply).toBeUndefined();
-    // An expiry is not a no — the next ask (the owner showed up) raises a fresh card.
+    // An expiry is not a no: the next ask (the owner showed up) raises a fresh card.
     const again = gate.ask(asked());
     while (frames.filter((frame) => frame.kind === "capability_offer").length < 2) {
         await new Promise((resolve) => setTimeout(resolve, 1));
@@ -194,7 +194,7 @@ it("an already-connected card is an answer, not a card", async () => {
     expect(frames).toEqual([]);
 });
 
-it("an instance that exists but is not live still raises the card — finishing its setup is the ask", async () => {
+it("an instance that exists but is not live still raises the card: finishing its setup is the ask", async () => {
     const { deps, frames, manifest, states } = fake();
     manifest.push({ id: "notion", kind: "cli", config: { provider: "notion" } });
     states.set("notion", "error");

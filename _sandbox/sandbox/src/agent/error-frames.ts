@@ -10,7 +10,7 @@ type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
 export const trialUnavailableFrame = (): ErrorEvent => ({
     kind: "error",
     code: "trial-unavailable",
-    message: "Free trial temporarily unavailable — failed messages aren’t counted. Retry shortly or connect Google in Sandbox ▸ Agent.",
+    message: "Free trial temporarily unavailable, failed messages aren't counted. Retry shortly or connect Google in Sandbox ▸ Agent.",
 });
 
 const trialExhaustedFrame = (message?: string): ErrorEvent => ({
@@ -33,7 +33,7 @@ const apiErrorMessage = (message: SDKAssistantMessage): string => {
 };
 
 /* THE PROXY'S OWN ANSWER ABOUT WHEN TO COME BACK, when it survives the trip. CLIProxyAPI refuses a fleet-wide
- * cooldown with a JSON body — {"error":{"code":"model_cooldown","message":"All credentials for model X are
+ * cooldown with a JSON body: {"error":{"code":"model_cooldown","message":"All credentials for model X are
  * cooling down","reset_seconds":N}}, and the harness prints that body as the API error's text. `reset_seconds`
  * is the one number separating a credential cooling for a minute from a weekly wall days out, and it is read off
  * the proxy's own scheduler rather than inferred from a snapshot up to five minutes stale, so it wins over the
@@ -73,14 +73,14 @@ const proxyCooldownReset = (explained: string, now: number = Date.now()): number
  * turns a wrong promise into a useful one: if it keeps happening, the request is being refused, not the quota. */
 const limitSentence = (vendor: string, limit: TurnLimit | undefined): string => {
     if (limit === undefined) {
-        return `${vendor} usage limit reached — this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.`;
+        return `${vendor} usage limit reached: this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.`;
     }
     const allowance = limit.pool === undefined ? `allowance` : `${limit.pool} allowance`;
     if (limit.withHeadroom > 0) {
         const total = limit.withHeadroom + limit.spent;
         return (
             `${vendor} refused this turn, but ${limit.withHeadroom} of ${total} connected accounts still ` +
-            `${limit.withHeadroom === 1 ? `has` : `have`} headroom${limit.pool === undefined ? `` : ` for ${limit.pool}`} — so this is ` +
+            `${limit.withHeadroom === 1 ? `has` : `have`} headroom${limit.pool === undefined ? `` : ` for ${limit.pool}`}, so this is ` +
             `not a spent allowance and no reset will fix it. Send again; if it keeps refusing, the request is ` +
             `being turned away rather than the quota, and another model or harness will get through.`
         );
@@ -88,10 +88,10 @@ const limitSentence = (vendor: string, limit: TurnLimit | undefined): string => 
     // Nothing measured either way: the pool was never polled, or the provider has renamed the bucket it is
     // reported under. Say a limit was hit and claim nothing about a fleet we cannot see.
     if (limit.spent === 0) {
-        return `${vendor} usage limit reached — the ${allowance} is exhausted, not a provider outage. Send again once it resets to carry on from here.`;
+        return `${vendor} usage limit reached: the ${allowance} is exhausted, not a provider outage. Send again once it resets to carry on from here.`;
     }
     const accounts = limit.spent === 1 ? `the connected account` : `all ${limit.spent} connected accounts`;
-    return `${vendor} usage limit reached — the ${allowance} is spent on ${accounts}, not a provider outage. Send again once it resets to carry on from here.`;
+    return `${vendor} usage limit reached: the ${allowance} is spent on ${accounts}, not a provider outage. Send again once it resets to carry on from here.`;
 };
 
 // One frame for both ways a spent subscription allowance reaches us: an assistant refusal after the harness

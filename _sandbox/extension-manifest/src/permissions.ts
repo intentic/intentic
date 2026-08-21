@@ -15,7 +15,7 @@ interface CompiledRoute {
 const compile = (entry: string): CompiledRoute => {
     const spaceIndex = entry.indexOf(" ");
     if (spaceIndex < 0) {
-        throw new Error(`invalid sandbox permission "${entry}" — expected "<METHOD> <path-glob>", e.g. "GET /panels"`);
+        throw new Error(`invalid sandbox permission "${entry}": expected "<METHOD> <path-glob>", e.g. "GET /panels"`);
     }
     const method = entry.slice(0, spaceIndex).trim().toUpperCase();
     const glob = entry.slice(spaceIndex + 1).trim();

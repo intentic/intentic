@@ -145,7 +145,7 @@ export function useRuns() {
                 headers: { "content-type": `application/json` },
                 body: JSON.stringify({
                     prompt: `${verdict.prompt}\n\n${reportingClause(runId)}`,
-                    title: `${verdict.chore.title} — ${verdict.repo}`.slice(0, 80),
+                    title: `${verdict.chore.title}, ${verdict.repo}`.slice(0, 80),
                     conversationId: manifest.conversationId,
                     isolated: true,
                     /* A chore is started by a row rather than by a person at a composer, so the daemon answers

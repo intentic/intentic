@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { decodeQuotedPrintable, extractCodes, extractLinks, imapSince, mailboxOf, matchesSite, parseSearch, siteToken } from "./email-codes.js";
 
-/* The pure half of the narrow mailbox key — everything between the curl transport and the tool's answer. Held
+/* The pure half of the narrow mailbox key: everything between the curl transport and the tool's answer. Held
  * because each rule here decides what the MODEL gets to see: a parser that over-reads hands it somebody's
  * newsletter, an extractor that under-reads loses the six digits this entire tool exists to fetch. */
 
@@ -19,7 +19,7 @@ test("a mail matches on sender or subject, never on body", () => {
     // The common real shape: the sender's domain is a sibling of the site's, not the site itself.
     expect(matchesSite("Reddit <noreply@redditmail.com>", "Verify your email", "reddit")).toBe(true);
     expect(matchesSite("noreply@example.com", "Your Reddit verification code", "reddit")).toBe(true);
-    // A digest ABOUT the site is not a mail FROM it — body mentions must not count, so there is no body param.
+    // A digest ABOUT the site is not a mail FROM it: body mentions must not count, so there is no body param.
     expect(matchesSite("digest@newsletter.com", "This week online", "reddit")).toBe(false);
 });
 
@@ -33,7 +33,7 @@ test("parseSearch reads UIDs off the SEARCH response and nothing else", () => {
 });
 
 test("quoted-printable soft breaks are undone before extraction", () => {
-    // A URL split across lines is the failure this decoder exists for — half a link is no link.
+    // A URL split across lines is the failure this decoder exists for: half a link is no link.
     expect(decodeQuotedPrintable("https://a.com/verify?t=3Dab=\r\ncd")).toBe("https://a.com/verify?t=abcd");
     // Text that was never QP survives: a bare "=" before non-hex stays as typed.
     expect(decodeQuotedPrintable("2+2=4 and a=b")).toBe("2+2=4 and a=b");
@@ -67,7 +67,7 @@ test("links keep the confirmation, drop the tracking noise", () => {
 });
 
 test("a confirmation-shaped link on a foreign relay host still counts", () => {
-    // Real verification links often live on a click-tracking domain — the WORDS in the path are the tell.
+    // Real verification links often live on a click-tracking domain: the WORDS in the path are the tell.
     expect(extractLinks("https://click.mailer.net/ls/verify?u=9", "reddit")).toEqual(["https://click.mailer.net/ls/verify?u=9"]);
 });
 

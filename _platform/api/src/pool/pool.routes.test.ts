@@ -107,7 +107,7 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                 stored.donations.push(data);
                 return data;
             }),
-            // The ledger reads ONE month of donations now — the open one — because every earlier month is
+            // The ledger reads ONE month of donations now: the open one, because every earlier month is
             // served from its frozen record rather than recomputed.
             findMany: vi.fn(async ({ where }: { where: { month: string } }) => stored.donations.filter((row) => row.month === where.month)),
         },
@@ -144,8 +144,8 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                 return { count: hits.length };
             }),
         },
-        // The ledger's closed-month half. These suites exercise the OPEN month — the frozen record has its own
-        // suite (pool-close.test.ts) — so a platform with nothing closed yet is exactly the right fixture.
+        // The ledger's closed-month half. These suites exercise the OPEN month: the frozen record has its own
+        // suite (pool-close.test.ts), so a platform with nothing closed yet is exactly the right fixture.
         poolMonth: { findMany: vi.fn(async () => []) },
         publisherClaim: { findMany: vi.fn(async () => []) },
         service: {
@@ -232,7 +232,7 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                         };
                     }),
             ),
-            // The grouped lifetime counts behind creator-services.ts countsOf — which the public catalog reads.
+            // The grouped lifetime counts behind creator-services.ts countsOf, which the public catalog reads.
             groupBy: vi.fn(async ({ where }: { where: { serviceId: { in: string[] } } }) => {
                 const tally = new Map<string, number>();
                 for (const run of stored.serviceRuns.filter((run) => where.serviceId.in.includes(run.serviceId))) {
@@ -334,7 +334,7 @@ describe(`the creator pool`, () => {
         const comped = configWith({ compEmails: ` Dev@Example.com , other@example.com` });
         const { prisma } = fakePrisma({ users: [{ id: `user-1`, email: `dev@example.com` }] });
         expect(await (await call(comped, prisma, `/pool/status`)).json()).toEqual({ premium: true });
-        // Off the list, back to the paid rule — nothing was ever written down.
+        // Off the list, back to the paid rule: nothing was ever written down.
         expect(await (await call(baseConfig, prisma, `/pool/status`)).json()).toEqual({ premium: false });
     });
 
@@ -344,7 +344,7 @@ describe(`the creator pool`, () => {
             memberships: [{ userId: `user-1`, stripeCustomerId: `cus_1`, stripeSubscriptionId: `sub_1`, status: `active`, currentPeriodEnd: NOW }],
             donations: [{ userId: `user-1`, extensionId: `acme.research`, month, credits: 50 }],
         });
-        // No connect token, no session — the transparency read is public by design.
+        // No connect token, no session: the transparency read is public by design.
         const response = await createApp(baseConfig, prisma, logger).app.request(`/pool/transparency`);
         expect(response.status).toBe(200);
         const body = (await response.json()) as {
@@ -364,9 +364,9 @@ describe(`the creator pool`, () => {
         expect(body.donationCredits).toBe(50);
         const current = body.months.find((entry) => entry.month === month);
         // Ceiling: 1 member × ($20 − $5 infrastructure) × 90% = 1350¢. Earned: 50 credits × (1500¢/3000) ×
-        // 90% = 22¢ — the ledger states both, so nobody can read the ceiling as a promise.
+        // 90% = 22¢: the ledger states both, so nobody can read the ceiling as a promise.
         expect(current).toMatchObject({ state: `open`, poolCents: 1350, earnedCents: 22 });
-        // The month in progress cannot know what it took, so its revenue is named as the estimate it is —
+        // The month in progress cannot know what it took, so its revenue is named as the estimate it is:
         // and what infrastructure took out of it is estimated on the same basis and published beside it.
         expect(current?.estimatedGrossCents).toBe(2000);
         expect(current?.estimatedInfraCents).toBe(500);
@@ -457,8 +457,8 @@ describe(`metered service runs`, () => {
             credits?: { remaining: number };
         };
         expect(body.member).toBe(true);
-        // `status` is flattened to `probation` on the way out — the catalog's readers need "is this new",
-        // never the lifecycle vocabulary — and the provider's worked example rides along for the agent.
+        // `status` is flattened to `probation` on the way out: the catalog's readers need "is this new",
+        // never the lifecycle vocabulary, and the provider's worked example rides along for the agent.
         expect(body.services).toEqual([
             {
                 slug: `acme-research`,
@@ -513,14 +513,14 @@ describe(`metered service runs`, () => {
         expect(stored.serviceRuns).toMatchObject([{ userId: `user-1`, serviceId: `svc_1`, credits: 40, status: `ok` }]);
     });
 
-    it(`refunds a stream that dies before its result — on the open stream, via the trailer`, async () => {
+    it(`refunds a stream that dies before its result: on the open stream, via the trailer`, async () => {
         const { prisma, stored } = fakePrisma({ services: [RESEARCH], memberships: [MEMBER] });
         const fetchFn = vi.fn(
             async () => new Response(`{"event":"status","text":"digging"}\n`, { status: 200, headers: { "content-type": `application/x-ndjson` } }),
         );
         const response = await run(prisma, fetchFn as unknown as typeof fetch);
         // The status line already crossed the wire before the stream died, so the refusal cannot be an HTTP
-        // status — the refund is the trailer's word, and the ledger agrees.
+        // status: the refund is the trailer's word, and the ledger agrees.
         expect(response.status).toBe(200);
         const lines = (await response.text())
             .trim()
@@ -534,7 +534,7 @@ describe(`metered service runs`, () => {
         expect(stored.serviceRuns).toMatchObject([{ status: `refunded` }]);
     });
 
-    it(`refunds a 2xx that is not the event format — a misbehaving provider did not serve`, async () => {
+    it(`refunds a 2xx that is not the event format: a misbehaving provider did not serve`, async () => {
         const { prisma, stored } = fakePrisma({ services: [RESEARCH], memberships: [MEMBER] });
         const fetchFn = vi.fn(async () => new Response(`{"answer":42}`, { status: 200, headers: { "content-type": `application/json` } }));
         const response = await run(prisma, fetchFn as unknown as typeof fetch);
@@ -597,13 +597,13 @@ describe(`metered service runs`, () => {
         expect(body.error.type).toBe(`insufficient_credits`);
         expect(body.credits.resetsAt).toBe(`2026-08-11T00:00:00.000Z`);
         expect(fetchFn).not.toHaveBeenCalled();
-        // The refused attempt's increment was refunded — the member still holds their real remainder.
+        // The refused attempt's increment was refunded: the member still holds their real remainder.
         expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(80);
     });
 
     /* The demo service, seeded. No fetch is injected on purpose: the route dispatches a demo forward into
-     * its own app (its upstream IS this app), and these suites prove that production path — spend → sign →
-     * verify → answer → relay with the meter on it — with no seam standing in for any of it. */
+     * its own app (its upstream IS this app), and these suites prove that production path: spend → sign →
+     * verify → answer → relay with the meter on it: with no seam standing in for any of it. */
     const demoSetup = async () => {
         const demoConfig = configWith({ demoService: true });
         const { prisma, stored } = fakePrisma({ memberships: [MEMBER] });
@@ -661,7 +661,7 @@ describe(`metered service runs`, () => {
         expect(unsigned.status).toBe(401);
     });
 
-    /* The demo's scenarios — every way a metered run can settle, reproducible on demand (pool-demo.ts). Each
+    /* The demo's scenarios: every way a metered run can settle, reproducible on demand (pool-demo.ts). Each
      * one exists so the spend card's every look (paid refusal, refunded failure, refunded broken stream, the
      * long run) can be produced deliberately instead of waiting for a provider to fail interestingly. */
     it(`demo "refuse" is a provider 4xx: a complete answer, paid for, relayed verbatim`, async () => {
@@ -726,7 +726,7 @@ describe(`metered service runs`, () => {
         };
         expect(body.serviceShare).toBe(0.9);
         const current = body.months.find((entry) => entry.month === month);
-        /* One member's $20, less the $5 of infrastructure, is a $15 pool — so credit value = 1500¢/3000 = ½¢
+        /* One member's $20, less the $5 of infrastructure, is a $15 pool, so credit value = 1500¢/3000 = ½¢
          * and the ceiling is 90% of 1500¢. Service: 40 ok credits × ½¢ × 90% = 18¢ (the refunded run earns
          * nothing). Donation: 50 credits × ½¢ × 90% = 22.5 → 22¢. Both on the same ledger, side by side. */
         expect(current?.services).toEqual([{ slug: `acme-research`, publisher: `acme`, runs: 1, credits: 40, earningsCents: 18 }]);
@@ -743,7 +743,7 @@ describe(`the public catalog`, () => {
         expect((await createApp(configWith({ stripeSecretKey: `` }), prisma, logger).app.request(`/pool/catalog`)).status).toBe(404);
     });
 
-    it(`answers anyone — no token — with the live listings and their public run numbers`, async () => {
+    it(`answers anyone (no token) with the live listings and their public run numbers`, async () => {
         const { prisma } = fakePrisma({
             services: [
                 RESEARCH,
@@ -759,7 +759,7 @@ describe(`the public catalog`, () => {
         // No x-intentic-connect header at all: the whole point of this surface is that it needs nothing.
         const response = await createApp(baseConfig, prisma, logger).app.request(`/pool/catalog`);
         expect(response.status).toBe(200);
-        // Cross-origin like the transparency ledger — the site reads it from a different host.
+        // Cross-origin like the transparency ledger: the site reads it from a different host.
         expect(response.headers.get(`access-control-allow-origin`)).toBe(`*`);
         const body = (await response.json()) as { services: Record<string, unknown>[] };
         // Drafts are invisible, probation is one boolean, and the refunded run is on the public record. What
@@ -807,7 +807,7 @@ describe(`the wanted list`, () => {
         ]);
     });
 
-    it(`bounds the text and the day — a sixth want is refused, charging nothing either way`, async () => {
+    it(`bounds the text and the day: a sixth want is refused, charging nothing either way`, async () => {
         const seed = Array.from({ length: 5 }, (_, index) => ({
             userId: `user-1`,
             text: `ask ${index} long enough`,
@@ -822,7 +822,7 @@ describe(`the wanted list`, () => {
         expect(stored.creditSpends.size).toBe(0);
     });
 
-    it(`publishes the aggregate on the catalog — distinct owners, one row per normalized ask, newest last word`, async () => {
+    it(`publishes the aggregate on the catalog: distinct owners, one row per normalized ask, newest last word`, async () => {
         const at = (offsetDays: number) => new Date(NOW.getTime() + offsetDays * 86_400_000);
         const { prisma } = fakePrisma({
             serviceWants: [

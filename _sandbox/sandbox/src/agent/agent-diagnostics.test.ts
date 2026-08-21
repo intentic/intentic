@@ -13,12 +13,12 @@ const PLAN: IsolationPlan = {
 };
 // A turn that got its namespace, which is the ordinary case wherever the container can build one.
 const ANCHORED: TurnPlacement = { plan: PLAN, anchor: { pid: 4321, cwd: WORKSPACE_ROOT, plan: PLAN, dispose: () => {} } };
-// A turn that is isolated but unenforced — no CAP_SYS_ADMIN, so the worktree stands on its own paths.
+// A turn that is isolated but unenforced: no CAP_SYS_ADMIN, so the worktree stands on its own paths.
 const UNANCHORED: TurnPlacement = { plan: PLAN };
 
 const RESOLVABLE: ModulesProbe = async () => ({ kind: "installed", missing: [] });
 const MISSING: ModulesProbe = async () => ({ kind: "absent" });
-// A tree that exists and is behind — the state an agent leaves when it adds a dependency and does not install it.
+// A tree that exists and is behind: the state an agent leaves when it adds a dependency and does not install it.
 const stale =
     (...missing: string[]): ModulesProbe =>
     async () => ({ kind: "installed", missing });
@@ -31,7 +31,7 @@ const fire = async (hooks: ReturnType<typeof editDiagnosticsHooks>, toolInput: u
     return matcher!.hooks[0]!(input, "t1", { signal: new AbortController().signal });
 };
 
-// Drive the PostToolUse hook directly with a fake lsp runner — no binary, no filesystem. Dependencies are
+// Drive the PostToolUse hook directly with a fake lsp runner: no binary, no filesystem. Dependencies are
 // present unless a test says otherwise, which is the case every pre-existing assertion assumes.
 const runHook = async (diag: DiagRunner, toolInput: unknown, modules: ModulesProbe = RESOLVABLE) =>
     fire(editDiagnosticsHooks(undefined, diag, modules), toolInput);
@@ -70,7 +70,7 @@ test("non-TypeScript files are never checked", async () => {
     expect(ran).toBe(false);
 });
 
-// undefined is "there is no answer to be had" — no tsconfig above the file, so no project to check — and
+// undefined is "there is no answer to be had": no tsconfig above the file, so no project to check, and
 // must read the same as clean to the model rather than inventing a verdict.
 test("an unanswerable check stays silent", async () => {
     const result = await runHook(async () => undefined, { file_path: `${WORKSPACE_ROOT}/src/app.ts` });
@@ -82,8 +82,8 @@ test("a tool input without a file path stays silent", async () => {
     expect(result).toEqual({});
 });
 
-// Without node_modules the compiler can't resolve ANY import — not even node: builtins, whose types ship in
-// @types/node — so it reports errors on lines the edit never touched. Confident wrong feedback is worse than
+// Without node_modules the compiler can't resolve ANY import, not even node: builtins, whose types ship in
+// @types/node, so it reports errors on lines the edit never touched. Confident wrong feedback is worse than
 // none: an agent transcript shows a turn spent reasoning its way to "every diagnostic was a false positive".
 test("with no resolvable node_modules the type-check never runs", async () => {
     let ran = false;
@@ -103,7 +103,7 @@ test("with no resolvable node_modules the type-check never runs", async () => {
 
 /* The checker refusing IS the fix for the worst failure in the logs: a worktree project whose config chain the
  * checker cannot load fell back to ES5 defaults and reported Map, Promise and `node:` imports as broken on
- * every edit — thousands of confident, wrong errors injected into turns. The refusal must surface as the same
+ * every edit: thousands of confident, wrong errors injected into turns. The refusal must surface as the same
  * once-per-turn unavailability sentence, never as diagnostics. */
 test("a checker refusal is told once as unavailability, not injected as errors", async () => {
     const hooks = editDiagnosticsHooks(undefined, async () => ({ kind: "unavailable" }), RESOLVABLE);
@@ -129,7 +129,7 @@ const contextOf = (result: HookJSONOutput): string =>
     (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext ?? "";
 
 /* A PARTIALLY installed tree is the case the old boolean gate could not see: node_modules exists, so it opened,
- * and the one package the agent just added is still missing. The diagnostics are real and must survive — only
+ * and the one package the agent just added is still missing. The diagnostics are real and must survive: only
  * the reading of the unresolved-import ones is wrong without this sentence. */
 test("a tree missing one package still type-checks, with the cause named alongside the errors", async () => {
     let ran = false;
@@ -149,7 +149,7 @@ test("a tree missing one package still type-checks, with the cause named alongsi
     expect(context).toContain("do not run an install");
 });
 
-test("a drifted tree is worth saying even when the edit itself type-checks clean — the next test will fail too", async () => {
+test("a drifted tree is worth saying even when the edit itself type-checks clean: the next test will fail too", async () => {
     const result = await runHook(checked(), { file_path: `${WORKSPACE_ROOT}/src/app.ts` }, stale("vue", "zod"));
     expect(contextOf(result)).toContain("2 dependencies that are not installed (vue, zod)");
 });
@@ -165,7 +165,7 @@ test("the drift sentence is told once per package, and again when the set of mis
     expect(contextOf(await fire(hooks, { file_path: "/work/src/c.ts" }))).toContain("(vue, zod)");
 });
 
-test("a fully installed tree says nothing extra — the diagnostics stand on their own", async () => {
+test("a fully installed tree says nothing extra: the diagnostics stand on their own", async () => {
     expect(contextOf(await runHook(withErrors, { file_path: "/work/src/app.ts" }))).not.toContain("not installed");
 });
 
@@ -182,8 +182,8 @@ const asked = (): { requests: DiagRequest[]; diag: DiagRunner } => {
     };
 };
 
-/* An anchored turn's dependencies exist ONLY inside its namespace — the worktree's node_modules are empty mount
- * points with the installed tree bound in over them — so a check that translates the path and runs out here is
+/* An anchored turn's dependencies exist ONLY inside its namespace: the worktree's node_modules are empty mount
+ * points with the installed tree bound in over them, so a check that translates the path and runs out here is
  * not a weaker answer, it is a different tree with nothing installed in it. Ask in the agent's own names, and
  * enter the compiler where those names are true. */
 test("an anchored turn is checked in its own names, by a compiler entered into its namespace", async () => {
@@ -221,7 +221,7 @@ test("an anchored report is already in the agent's names and is left alone", asy
     expect(requests[0]?.named("/work/src/app.ts")).toBe("/work/src/app.ts");
 });
 
-/* Agents edit in bursts, and six edits to one file re-check the same program and produce the same list — one
+/* Agents edit in bursts, and six edits to one file re-check the same program and produce the same list: one
  * report went out verbatim 2,923 times across the transcripts. Saying it again teaches nothing. */
 test("a report identical to this file's last one is not sent twice", async () => {
     const hooks = editDiagnosticsHooks(undefined, withErrors, RESOLVABLE);

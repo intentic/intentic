@@ -28,7 +28,7 @@ const baseConfig = configSchema.parse({
 
 const configWith = (trial: Partial<Config["trial"]>): Config => ({ ...baseConfig, trial: { ...baseConfig.trial, ...trial } });
 
-// The digest the routes look a connect token up by — the same one /sandbox/announce uses.
+// The digest the routes look a connect token up by: the same one /sandbox/announce uses.
 const digestOf = (token: string) => createHash(`sha256`).update(token).digest(`hex`);
 
 interface Counters {
@@ -126,7 +126,7 @@ describe("the free trial", () => {
         expect(body.error.type).toBe(`trial_exhausted`);
         // The wall is not the whole message: the free Google sign-in is the next rung and the copy says so.
         expect(body.error.message).toContain(`Google`);
-        // Nothing was sent upstream — a refused turn must not spend the pool as well as the allowance.
+        // Nothing was sent upstream: a refused turn must not spend the pool as well as the allowance.
         expect(fetchFn).not.toHaveBeenCalled();
         vi.unstubAllGlobals();
     });
@@ -154,7 +154,7 @@ describe("the free trial", () => {
 
         expect(response.status).toBe(200);
         expect(await response.text()).toBe(`{"choices":[1]}`);
-        // The SECOND key on the SAME model — a refused key is what failover is for, and reaching for the next
+        // The SECOND key on the SAME model: a refused key is what failover is for, and reaching for the next
         // model instead would spend the ladder on a problem the ladder is not about.
         expect(chatPosts(fetchFn)).toHaveLength(2);
         expect(chatPosts(fetchFn).every(([, init]) => JSON.parse(String((init as RequestInit).body)).model === `gemini-flash-latest`)).toBe(true);
@@ -169,7 +169,7 @@ describe("the free trial", () => {
         const response = await chat(baseConfig, prisma);
 
         expect(response.status).toBe(502);
-        // Every rung of the ladder against every key — two models, two keys — before anyone is told no. The user
+        // Every rung of the ladder against every key (two models, two keys) before anyone is told no. The user
         // is not billed for a turn nobody served, and not billed once per rung either.
         expect(chatPosts(fetchFn)).toHaveLength(4);
         expect(spent()).toBe(0);
@@ -207,7 +207,7 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
-    it("refunds — and does not repeat Google's billing advice — when the whole pool is rate-limited", async () => {
+    it("refunds, and does not repeat Google's billing advice, when the whole pool is rate-limited", async () => {
         const { prisma, spent } = fakePrisma();
         const fetchFn = vi.fn(async () => new Response(`{"error":{"message":"check your plan and billing details"}}`, { status: 429 }));
         vi.stubGlobal(`fetch`, fetchFn);
@@ -242,7 +242,7 @@ describe("the free trial", () => {
     /* THE CATALOG IS A CONSTANT, and this is the test that says so in every direction at once.
      *
      * A fresh Google key lists ~54 models. Many of them declare `generateContent` and still cannot serve an
-     * agent turn — deep-research wants another API, gemma has no tool calling, lyria writes music — so the old
+     * agent turn: deep-research wants another API, gemma has no tool calling, lyria writes music, so the old
      * capability filter passed them through and the id-derived ordering put them FIRST, which is the model a
      * fresh conversation sends its opening message to. Publishing one synthetic id is what makes that
      * unreachable: there is nothing to rank and nothing to get wrong. */
@@ -266,7 +266,7 @@ describe("the free trial", () => {
     /* The other half of the same guarantee, and the one that produced the error people reported. The sandbox's
      * translator writes its routing table from this catalog at boot; the picker re-reads it every minute. A
      * catalog that MOVES between those two reads offers a row the translator will refuse with "unknown provider
-     * for model". A constant cannot move — including when the upstream has gone dark entirely, which used to be
+     * for model". A constant cannot move: including when the upstream has gone dark entirely, which used to be
      * its own separate rung of fallback logic. */
     it("publishes the same one model when the upstream cannot be read at all", async () => {
         const { prisma } = fakePrisma();
@@ -287,7 +287,7 @@ describe("the free trial", () => {
     });
 
     /* WHAT THE PUBLISHED ID IS NOT: the thing sent upstream. The caller addresses `auto`, and the model actually
-     * asked to answer is the ladder's first healthy rung — which is the whole trick, since Google has never
+     * asked to answer is the ladder's first healthy rung, which is the whole trick, since Google has never
      * heard of `auto` and would refuse it. */
     it("sends a real model upstream, never the id the caller asked for", async () => {
         const { prisma } = fakePrisma();
@@ -305,7 +305,7 @@ describe("the free trial", () => {
     });
 
     /* THE REASON THE LADDER EXISTS. Google meters each model separately, so a Flash quota window that has closed
-     * says nothing about Lite — and on a shared pool Flash closes often. The user's message must survive that,
+     * says nothing about Lite, and on a shared pool Flash closes often. The user's message must survive that,
      * which means the second rung is tried before anyone is told no. */
     it("falls to the next model when the first is out of quota on every key", async () => {
         const { prisma, spent } = fakePrisma();
@@ -333,15 +333,15 @@ describe("the free trial", () => {
         const response = await chat(baseConfig, prisma);
 
         expect(response.status).toBe(200);
-        // Both keys tried on the exhausted model, then the next rung — not a key sidelined for a model's quota.
+        // Both keys tried on the exhausted model, then the next rung, not a key sidelined for a model's quota.
         expect(asked).toEqual([`gemini-flash-latest`, `gemini-flash-latest`, `gemini-flash-lite-latest`]);
         expect(response.headers.get(`x-intentic-trial-model`)).toBe(`gemini-flash-lite-latest`);
-        // The user got their message, so it is theirs to pay for — once, not once per rung tried.
+        // The user got their message, so it is theirs to pay for: once, not once per rung tried.
         expect(spent()).toBe(1);
         vi.unstubAllGlobals();
     });
 
-    /* DISCOVERY IS A VETO, NOT A SOURCE — the half of the bargain that keeps the curated ladder honest.
+    /* DISCOVERY IS A VETO, NOT A SOURCE: the half of the bargain that keeps the curated ladder honest.
      *
      * It may only REMOVE rungs we named, never add ones we did not: a model the upstream has retired stops being
      * spent on without a release, while a family we have never vetted cannot reach a user by turning up in a
@@ -352,13 +352,13 @@ describe("the free trial", () => {
         const fetchFn = upstream([`gemini-flash-lite-latest`, `deep-research-max-preview-01`]);
         vi.stubGlobal(`fetch`, fetchFn);
 
-        // ONE app across both messages, because the ladder's cache belongs to the route instance — a fresh
+        // ONE app across both messages, because the ladder's cache belongs to the route instance: a fresh
         // `createApp` per request would be two cold starts and would never exercise the veto at all.
         const app = createApp(baseConfig, prisma, logger).app;
         const headers = { authorization: `Bearer tok`, "content-type": `application/json` };
         const send = () => app.request(`/trial/v1/chat/completions`, { method: `POST`, headers, body: `{"model":"auto"}` });
 
-        // The first message answers from the ladder as written and starts the capability read behind itself —
+        // The first message answers from the ladder as written and starts the capability read behind itself:
         // the read is deliberately never on a user's critical path (trial-ladder.ts), so the veto lands next.
         await send();
         await vi.waitFor(() => expect(fetchFn.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method !== `POST`)).toBe(true));
@@ -366,7 +366,7 @@ describe("the free trial", () => {
         const response = await send();
 
         expect(response.status).toBe(200);
-        // The surviving rung, and NOT the chat-capable model we never chose — an id we did not vet is not a
+        // The surviving rung, and NOT the chat-capable model we never chose: an id we did not vet is not a
         // candidate however loudly the upstream declares it can generate.
         expect(
             chatPosts(fetchFn)
@@ -376,7 +376,7 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
-    // The operator's list replaces the curated ladder wholesale — it is how a platform pointed at a non-Google
+    // The operator's list replaces the curated ladder wholesale: it is how a platform pointed at a non-Google
     // upstream names ids we have never heard of, so it cannot be filtered against Google's own vocabulary.
     it("routes to the operator's models when TRIAL_MODELS names some", async () => {
         const { prisma } = fakePrisma();
@@ -395,7 +395,7 @@ describe("the free trial", () => {
     });
 
     /* The line an operator was handed to paste, pasted whole. It reached a deployment exactly like this and the
-     * picker offered its trailing note as the model — so what is pinned is that the note is not a model id, and
+     * picker offered its trailing note as the model, so what is pinned is that the note is not a model id, and
      * that a setting which is nothing but a comment means what a blank one means. */
     it("reads a pasted `#` note as the blank setting it annotates, not as a model", async () => {
         const { prisma } = fakePrisma();
@@ -407,7 +407,7 @@ describe("the free trial", () => {
 
         expect(response.status).toBe(200);
         const sent = fetchFn.mock.calls.find(([, init]) => init?.method === `POST`)?.[1];
-        // The curated ladder, not the comment — which no upstream would have answered for.
+        // The curated ladder, not the comment, which no upstream would have answered for.
         expect(JSON.parse(String(sent?.body))).toEqual({ model: `gemini-flash-latest` });
         vi.unstubAllGlobals();
     });
@@ -496,7 +496,7 @@ describe("the free-trial key pool", () => {
     /* A QUOTA IS ABOUT A MODEL, NOT A KEY, and reading it as a key fact is what would break the ladder.
      *
      * Google meters each model separately per project. If a 429 on Flash sidelined the whole key, the fallback
-     * rung would have no credential left to try — and since every key in a shared pool runs out of Flash at
+     * rung would have no credential left to try, and since every key in a shared pool runs out of Flash at
      * about the same time, the pool would go dark at exactly the moment the ladder existed to save it. */
     it("keeps a key usable for another model after one model's quota refuses it", async () => {
         const attempts: { key: string; model: string }[] = [];

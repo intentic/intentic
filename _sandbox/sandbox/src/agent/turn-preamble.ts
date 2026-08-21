@@ -33,7 +33,7 @@ const LITERAL_SLASH_NOTE_HEADER = "## Reading the message below";
 
 export const LITERAL_SLASH_NOTE =
     `${LITERAL_SLASH_NOTE_HEADER}\n\n` +
-    "It opens with `/` but names no slash command available here — the leading token is the user's own words " +
+    "It opens with `/` but names no slash command available here: the leading token is the user's own words " +
     "(a route, a path, a filename). Read the whole message as ordinary prose.";
 
 /* WHERE A CWD-ISOLATED RUNTIME'S TREE IS, told in words because there is no seam to enforce it.
@@ -53,7 +53,7 @@ const WORKTREE_NOTE_HEADER = "## Where this turn's files live";
 
 export const worktreeNote = (worktree: string, root: string): string =>
     `${WORKTREE_NOTE_HEADER}\n\n` +
-    `This conversation works on its own git branch, checked out at \`${worktree}\` — and this runtime reaches ` +
+    `This conversation works on its own git branch, checked out at \`${worktree}\`, and this runtime reaches ` +
     `it by working directory alone, so \`${root}\` is still the SHARED checkout every other agent is editing. ` +
     `Use relative paths, or absolute paths under \`${worktree}\`. An absolute \`${root}/…\` path (from a memory, ` +
     `an AGENTS.md, or an earlier turn) writes outside your branch, where the work is neither reviewed nor landed.`;

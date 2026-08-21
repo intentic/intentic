@@ -49,7 +49,7 @@ describe(`the pool math`, () => {
         expect(report.paidCents).toBe(32);
     });
 
-    it(`pays nothing for credits nobody spent — the pool is a ceiling, not a promise`, () => {
+    it(`pays nothing for credits nobody spent: the pool is a ceiling, not a promise`, () => {
         const report = computeMonth(`2026-08`, 2, config, [], []);
         expect(report.poolCents).toBe(2700);
         expect(report.paidCents).toBe(0);
@@ -57,12 +57,12 @@ describe(`the pool math`, () => {
     });
 
     /* The sybil property the donation model was chosen for: a creator farming their own listing with a
-     * bought membership can reclaim at most creatorShare of the credits that membership can ever spend —
+     * bought membership can reclaim at most creatorShare of the credits that membership can ever spend:
      * strictly less than the $20 it cost, whatever they do. */
     it(`makes farming loss-making by arithmetic`, () => {
         const wholeAllowance = 30 * config.pool.dailyCredits;
         const report = computeMonth(`2026-08`, 1, config, [{ extensionId: `evil.farm`, donors: 1, credits: wholeAllowance }], []);
-        /* The whole month's credits donated to yourself earn exactly the 90% ceiling — 1350¢ back on the 2000¢
+        /* The whole month's credits donated to yourself earn exactly the 90% ceiling: 1350¢ back on the 2000¢
          * paid, the gap now being the infrastructure as well as the share. Still loss-making, and what
          * actually makes self-dealing laborious is not this gap but the per-month donation dedupe, which caps
          * one membership at one donation per listing and so forces a farmer to publish a listing for every

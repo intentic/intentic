@@ -82,7 +82,7 @@ const fetchArcTask = async (id: string): Promise<ArcTask> => {
     }
     const response = await fetch(`${ARC_BASE}/${id}.json`);
     if (!response.ok) {
-        throw new Error(`ARC task ${id}: ${response.status} ${response.statusText} — check the id against ${ARC_BASE}`);
+        throw new Error(`ARC task ${id}: ${response.status} ${response.statusText}, check the id against ${ARC_BASE}`);
     }
     const task = (await response.json()) as ArcTask;
     await mkdir(ARC_CACHE, { recursive: true });
@@ -95,7 +95,7 @@ const sameGrid = (a: unknown, b: number[][]): boolean =>
     a.length === b.length &&
     a.every((row, y) => Array.isArray(row) && row.length === b[y]!.length && row.every((cell, x) => cell === b[y]![x]));
 
-// How much of the grid is right, for partial credit — 0 when the shape itself is wrong, since a differently
+// How much of the grid is right, for partial credit: 0 when the shape itself is wrong, since a differently
 // shaped grid has no cell-wise correspondence to score against.
 const gridScore = (a: unknown, b: number[][]): number => {
     if (!Array.isArray(a) || a.length !== b.length || a.some((row, y) => !Array.isArray(row) || row.length !== b[y]!.length)) {
@@ -108,7 +108,7 @@ const gridScore = (a: unknown, b: number[][]): number => {
 
 const arcTask = (id: string): BenchTask => ({
     id: `arc:${id}`,
-    title: `ARC-AGI-2 ${id} — infer the transformation, verify it against the training pairs, apply it`,
+    title: `ARC-AGI-2 ${id}, infer the transformation, verify it against the training pairs, apply it`,
     prepare: async (dir) => {
         const task = await fetchArcTask(id);
         const expected = task.test[0]?.output;
@@ -123,7 +123,7 @@ const arcTask = (id: string): BenchTask => ({
                 "`task.json` in this directory is an ARC-AGI puzzle: a `train` list of input/output grid pairs that all share ONE transformation rule, and a `test` list holding a single input grid.",
                 "A grid is a list of rows; each cell is an integer 0-9 naming a colour.",
                 "Work out the rule from the training pairs, then apply it to the test input.",
-                "Your rule must reproduce EVERY training pair exactly — check that it does before you answer, rather than assuming it.",
+                "Your rule must reproduce EVERY training pair exactly: check that it does before you answer, rather than assuming it.",
                 'Write your predicted output grid to `answer.json` in this directory, as JSON: {"output": [[...], [...]]}.',
                 "Answer from the task file alone. Do not search the internet, and do not ask the user anything.",
             ].join("\n\n"),
@@ -287,7 +287,7 @@ const depsTask: BenchTask = {
         return {
             prompt: [
                 `\`daemon/\` in this workspace is a TypeScript codebase. Starting at \`daemon/${DEPS_ENTRY}\`, follow its imports transitively and count how many DISTINCT files are reachable.`,
-                "Count by exactly these rules, which are not negotiable — the answer is checked against them:",
+                "Count by exactly these rules, which are not negotiable: the answer is checked against them:",
                 [
                     "- Follow only RELATIVE specifiers: those starting with `./` or `../`. Ignore package imports like `@intentic/sandbox-contract` and `node:fs`.",
                     '- A specifier counts when it appears in a `from "…"` clause or an `import("…")` call, including `import type`.',
@@ -374,7 +374,7 @@ const plantDefects = async (workspace: string): Promise<PlantedDefect[]> => {
         const before = await readFile(path, "utf8");
         if (!before.includes(defect.find)) {
             throw new Error(
-                `defects task: anchor no longer present in ${defect.file}. The source changed under the benchmark — re-anchor this defect:\n  ${defect.find}`,
+                `defects task: anchor no longer present in ${defect.file}. The source changed under the benchmark, re-anchor this defect:\n  ${defect.find}`,
             );
         }
         const after = before.replace(defect.find, defect.replace);
@@ -409,10 +409,10 @@ const defectsTask: BenchTask = {
         const scopeFiles = (await walkFiles(join(workspace, DEFECT_SCOPE), isCountedFile)).length;
         return {
             prompt: [
-                `\`daemon/${DEFECT_SCOPE}/\` in this workspace is a subsystem of a TypeScript daemon — ${scopeFiles} source files — into which exactly ${DEFECTS.length} defects have been deliberately introduced. Every defect is in that directory; the rest of \`daemon/\` is untouched and you do not need to read it.`,
-                "Each one is syntactically valid code that is semantically WRONG: it contradicts a comment beside it, the name of the thing it is in, or the evident purpose of the function. None of them is a typo, and none can be found by searching for a pattern — you have to read code and judge whether it does what it is meant to do.",
+                `\`daemon/${DEFECT_SCOPE}/\` in this workspace is a subsystem of a TypeScript daemon: ${scopeFiles} source files, into which exactly ${DEFECTS.length} defects have been deliberately introduced. Every defect is in that directory; the rest of \`daemon/\` is untouched and you do not need to read it.`,
+                "Each one is syntactically valid code that is semantically WRONG: it contradicts a comment beside it, the name of the thing it is in, or the evident purpose of the function. None of them is a typo, and none can be found by searching for a pattern, you have to read code and judge whether it does what it is meant to do.",
                 `Find all ${DEFECTS.length}. Report each as the workspace-relative file path and the 1-based line number of the offending line.`,
-                `Write your answer to \`answer.json\` in the workspace root, as JSON: {"defects": [{"file": "daemon/src/…", "line": 42}, …]}. Report exactly ${DEFECTS.length} — a list padded with guesses scores worse than a short one.`,
+                `Write your answer to \`answer.json\` in the workspace root, as JSON: {"defects": [{"file": "daemon/src/…", "line": 42}, …]}. Report exactly ${DEFECTS.length}, a list padded with guesses scores worse than a short one.`,
                 "Do not ask the user anything.",
             ].join("\n\n"),
             grade: async () => {
@@ -454,7 +454,7 @@ const sweepTask: BenchTask = {
         return {
             prompt: [
                 `The \`daemon/\` directory in this workspace is a TypeScript codebase. Count how many times the identifier \`${SWEEP_WORD}\` appears in its CODE.`,
-                "Count by exactly these rules, which are not negotiable — the answer is checked against them:",
+                "Count by exactly these rules, which are not negotiable: the answer is checked against them:",
                 [
                     "- Only `.ts` files under `daemon/` (there are no other file types there).",
                     "- Whole-word, case-sensitive matches only: `sessionIds` or `mySessionId` do NOT count.",
@@ -503,5 +503,5 @@ export const taskFor = (spec: string): BenchTask => {
     if (spec.startsWith("arc:")) {
         return arcTask(spec.slice("arc:".length));
     }
-    throw new Error(`unknown task "${spec}" — expected: sweep, deps, defects, arc, or arc:<task-id>`);
+    throw new Error(`unknown task "${spec}", expected: sweep, deps, defects, arc, or arc:<task-id>`);
 };

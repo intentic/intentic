@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { fileAgentsStore, type PersistedAgent } from "./agents-store.js";
 
-// The store guards the fleet's ONLY record — these tests are about the ways a bad file used to become an
+// The store guards the fleet's ONLY record: these tests are about the ways a bad file used to become an
 // erased one: load answering `[]` with the file still in the write path, and a torn write leaving a prefix.
 
 const entry = (id: string): PersistedAgent => ({
@@ -35,7 +35,7 @@ describe("fileAgentsStore", () => {
         expect(await store.load()).toEqual([]);
     });
 
-    it("saves atomically — no partial file is ever the file", async () => {
+    it("saves atomically: no partial file is ever the file", async () => {
         const root = await dir();
         const path = join(root, "agents.json");
         const store = fileAgentsStore(path);
@@ -53,7 +53,7 @@ describe("fileAgentsStore", () => {
         await writeFile(path, torn);
         const store = fileAgentsStore(path);
         expect(await store.load()).toEqual([]);
-        // The bytes survive out of the write path — a later save must not destroy the only copy.
+        // The bytes survive out of the write path: a later save must not destroy the only copy.
         expect(await readFile(`${path}.corrupt`, "utf8")).toBe(torn);
         await store.save([entry("c2")]);
         expect(await readFile(`${path}.corrupt`, "utf8")).toBe(torn);

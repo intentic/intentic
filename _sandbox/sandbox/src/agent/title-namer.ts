@@ -45,9 +45,9 @@ const namePrompt = (prompt: string): string =>
     [
         `Name this coding-agent session for a fleet board that lists dozens of them at once.`,
         ``,
-        `Shape: <subject> · <action> — five words in total at the absolute most.`,
+        `Shape: <subject> · <action>, five words in total at the absolute most.`,
         `  subject  1-4 words naming the FEATURE, surface, file or system the work touches, in this project's`,
-        `           own vocabulary — route names, package names, component names, the user's own terms for`,
+        `           own vocabulary: route names, package names, component names, the user's own terms for`,
         `           things. This is the only part read while scanning, so name the most specific thing you can.`,
         `  action   exactly one word for what is being done to it: fix, remove, redesign, audit, rewrite,`,
         `           benchmark, logging.`,
@@ -69,7 +69,7 @@ const namePrompt = (prompt: string): string =>
         `Opening user message:`,
         excerpt(prompt),
         ``,
-        `Reply with the name only — no quotes, no trailing period, no explanation.`,
+        `Reply with the name only: no quotes, no trailing period, no explanation.`,
     ].join(`\n`);
 
 // Wrappers a model reaches for even when told not to, same instinct as cleanCommitSubject: the name is right

@@ -31,7 +31,7 @@ describe(`resolveSource`, () => {
         });
     });
 
-    // An unclonable source is a row we still show — undefined here becomes "not installable", not a dropped entry.
+    // An unclonable source is a row we still show: undefined here becomes "not installable", not a dropped entry.
     it(`gives up on shapes it cannot clone rather than throwing`, () => {
         expect(resolveSource({ source: `npm`, package: `@acme/incidents` }, REGISTRY, undefined)).toBeUndefined();
         expect(resolveSource({ source: `github` }, REGISTRY, undefined)).toBeUndefined();

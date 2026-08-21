@@ -20,7 +20,7 @@ export const runLogin = async (): Promise<number> => {
         }
         await createDaemonClient(url, token).listSessions();
         const path = writeConfig({ url, token, ...(agent !== "" ? { agent } : {}) });
-        console.log(`\nConnected. Credentials saved to ${path} — your editor can now use the intentic agent.`);
+        console.log(`\nConnected. Credentials saved to ${path}: your editor can now use the intentic agent.`);
         return 0;
     } catch (error) {
         console.error(`\nLogin failed: ${error instanceof Error ? error.message : "unknown error"}`);

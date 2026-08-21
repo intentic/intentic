@@ -54,12 +54,12 @@ export const ListenerContributionSchema = z.object({
                 .describe(
                     "Only for a source whose message events distinguish being addressed. Absent ⇒ the editor offers no mention-only filter, rather than inventing semantics you did not promise.",
                 ),
-            channel: TriggerFieldContributionSchema.describe("The primary narrowing filter — a channel, a room, a repo."),
+            channel: TriggerFieldContributionSchema.describe("The primary narrowing filter, a channel, a room, a repo."),
             // A SECOND narrowing axis, for a source whose events carry one, a pipeline's git ref, so a trigger can
             // say "the branch that ships" rather than "every agent's every failure". Absent ⇒ the editor offers
             // only the channel filter.
             branchField: TriggerFieldContributionSchema.optional().describe(
-                'A second narrowing axis, for a source whose events carry one — a pipeline\'s git ref, so a trigger can say "the branch that ships" rather than "every agent\'s every failure".',
+                'A second narrowing axis, for a source whose events carry one: a pipeline\'s git ref, so a trigger can say "the branch that ships" rather than "every agent\'s every failure".',
             ),
             // The provider owns the payload vocabulary, so it also owns the first prompt that explains that payload.
             starterPrompt: z
@@ -76,6 +76,6 @@ export type ListenerContribution = z.infer<typeof ListenerContributionSchema>;
 export const listenerPoint = {
     name: "listener",
     description:
-        "A realtime event source this extension supplies, so automations can trigger on it. One declaration feeds both halves: the daemon accepts these event types and serves this provider's control surface, and the automation editor derives its source picker, filters and starter prompt from it — so a newly installed listener is configurable without a matching app release.",
+        "A realtime event source this extension supplies, so automations can trigger on it. One declaration feeds both halves: the daemon accepts these event types and serves this provider's control surface, and the automation editor derives its source picker, filters and starter prompt from it, so a newly installed listener is configurable without a matching app release.",
     schema: ListenerContributionSchema,
 } as const satisfies ContributionPoint;

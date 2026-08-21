@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-memory",
     "version": "1.0.0",
-    "description": "Memory — the agent's persistent memory notes, reviewable and editable, as a first-party intentic extension",
+    "description": "Memory, the agent's persistent memory notes, reviewable and editable, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

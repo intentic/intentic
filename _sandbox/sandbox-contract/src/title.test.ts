@@ -7,13 +7,13 @@ import { deriveTitle } from "./title.js";
  * politeness, or stopped mid-syllable. */
 
 test("spends the budget on the ask rather than on the politeness in front of it", () => {
-    // `Can you please fix the auth…` is what the naive cut produced — three of its five words are ceremony.
+    // `Can you please fix the auth…` is what the naive cut produced: three of its five words are ceremony.
     expect(deriveTitle("Can you please fix the auth tests?")).toBe("Fix the auth tests?");
     expect(deriveTitle("Hey, can you please look at the flaky test")).toBe("Look at the flaky test");
 });
 
 test("keeps a greeting whole when peeling it off would leave a fragment", () => {
-    // `Hi there` is not a conversation about `there`, and `So what?` is not one about `what?` — a one-word
+    // `Hi there` is not a conversation about `there`, and `So what?` is not one about `what?`: a one-word
     // remnant means the opener was carrying the sentence, so the line stands as the user wrote it.
     expect(deriveTitle("Hi there")).toBe("Hi there");
     expect(deriveTitle("So what?")).toBe("So what?");
@@ -35,7 +35,7 @@ test("titles a pasted stack trace after the sentence the user wrote around it", 
 
 test("skips a greeting line and takes the ask from the line below it", () => {
     // A line that unwinds to nothing was throat-clearing; the ask is further down. The naive rule stopped at
-    // the greeting and named every such conversation `Hey, quick one —`.
+    // the greeting and named every such conversation `Hey, quick one -`.
     expect(deriveTitle("Hey, quick one —\n\nWhy does the tab title truncate mid-word?")).toBe("Why does the tab title truncate mid-word?");
 });
 
@@ -61,7 +61,7 @@ test("cuts on a word boundary instead of mid-syllable", () => {
 
 test("keeps a cut it cannot put on a word boundary inside the budget anyway", () => {
     /* The sibling of the case above: a long unbroken token straddling the cut leaves no space late enough to
-     * back off to, so the length clamp alone ends the title — and it used to end it one character OVER. That
+     * back off to, so the length clamp alone ends the title, and it used to end it one character OVER. That
      * character is not a cosmetic overflow, it is a 400 on the turn carrying the name, and it wedged the
      * conversation for good: the browser stores the derived title before it sends, so every retry re-sent the
      * same rejected one. */
@@ -72,7 +72,7 @@ test("keeps a cut it cannot put on a word boundary inside the budget anyway", ()
     // Asserted THROUGH the contract rather than against a repeated literal: the clamp and the cap drifting
     // apart is the entire bug, and a second copy of the number is how they drift.
     expect(AgentTurnSchema.safeParse({ prompt, title }).success).toBe(true);
-    // Not a property of that one sentence — any token wide enough to swallow the window does it.
+    // Not a property of that one sentence: any token wide enough to swallow the window does it.
     const wide = `Investigate ${"X".repeat(120)} please`;
     expect(AgentTurnSchema.safeParse({ prompt: wide, title: deriveTitle(wide) }).success).toBe(true);
 });
@@ -111,7 +111,7 @@ test("names a prompt that is nothing but a paste after what was pasted", () => {
 });
 
 test("never returns empty for a prompt that has any content at all", () => {
-    // A greeting with no ask behind it, and a prompt with no letters in it — both still have to name a tab.
+    // A greeting with no ask behind it, and a prompt with no letters in it: both still have to name a tab.
     expect(deriveTitle("Hey!")).toBe("Hey!");
     expect(deriveTitle("!!!")).toBe("!!!");
 });
@@ -121,7 +121,7 @@ test("reads past quoted material to the user's own words", () => {
 });
 
 test("skips past-work narration to the instruction behind it", () => {
-    // `We have recently added…` is the scene, not the ask — titling from it names every such conversation
+    // `We have recently added…` is the scene, not the ask: titling from it names every such conversation
     // after last week's work. The instruction further in is what the conversation is about.
     expect(deriveTitle("We have recently added iq map and iq deps commands. Now let's also add a health contract for the daemon.")).toBe(
         "Add a health contract for the daemon",
@@ -134,13 +134,13 @@ test("skips narration to an outright question", () => {
 });
 
 test("keeps narration when nothing behind it is unmistakably the ask", () => {
-    // A hazy follow-up is not worth skipping for — better a title about last week's work than one about `it`.
+    // A hazy follow-up is not worth skipping for: better a title about last week's work than one about `it`.
     expect(deriveTitle("We migrated the board to SSE last week. It feels slower since.")).toBe("We migrated the board to SSE last week");
 });
 
 test("keeps a declarative problem report even when advice follows it", () => {
     // Only NARRATION is skippable. A problem statement is the ask, and the imperative behind it is merely a
-    // pointer — `Check the broadcast path` names a step, not the conversation.
+    // pointer: `Check the broadcast path` names a step, not the conversation.
     expect(deriveTitle("The fleet board flickers when agents land. Check the broadcast path.")).toBe("The fleet board flickers when agents land");
 });
 

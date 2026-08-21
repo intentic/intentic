@@ -39,7 +39,7 @@ describe(`zrok`, () => {
         const headers = calls[0]?.headers as Record<string, string> | undefined;
         expect(headers?.[`x-token`]).toBe(`admin-token`);
         // The hub declares its OWN media type on every operation and answers `application/json` with a 500 that
-        // reads like a server fault — the header is load-bearing, so it is asserted rather than assumed.
+        // reads like a server fault: the header is load-bearing, so it is asserted rather than assumed.
         expect(headers?.[`content-type`]).toBe(`application/zrok.v1+json`);
         expect(headers?.[`accept`]).toBe(`application/zrok.v1+json`);
     });

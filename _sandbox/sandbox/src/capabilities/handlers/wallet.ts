@@ -48,7 +48,7 @@ export const walletHandler: CapabilityHandler = {
         if (answer.status !== 200) {
             yield {
                 kind: "log",
-                message: `The platform could not provide a wallet yet (${answer.body.slice(0, 200)}). The card stays pending — edit or re-add it to retry.`,
+                message: `The platform could not provide a wallet yet (${answer.body.slice(0, 200)}). The card stays pending, edit or re-add it to retry.`,
             };
             return;
         }
@@ -60,7 +60,7 @@ export const walletHandler: CapabilityHandler = {
             address = undefined;
         }
         if (address === undefined) {
-            yield { kind: "log", message: "The platform's wallet answer was unreadable. The card stays pending — re-add it to retry." };
+            yield { kind: "log", message: "The platform's wallet answer was unreadable. The card stays pending, re-add it to retry." };
             return;
         }
         if (wallet.address !== address) {
@@ -69,13 +69,13 @@ export const walletHandler: CapabilityHandler = {
         yield { kind: "log", message: `Wallet ready: ${address} on ${network?.label ?? wallet.network}.` };
         yield {
             kind: "log",
-            message: `Fund it by sending USDC (on ${network?.label ?? wallet.network} — the network matters) to that address. The agent pays with \`wallet fetch\`, under the card's caps; every payment above the auto-approve band asks in chat first.`,
+            message: `Fund it by sending USDC (on ${network?.label ?? wallet.network}, the network matters) to that address. The agent pays with \`wallet fetch\`, under the card's caps; every payment above the auto-approve band asks in chat first.`,
         };
     },
     status: async (_ctx, _id, config) => {
         const wallet = config as WalletConfig;
         if (wallet.address === undefined || wallet.address === "") {
-            return { state: "pending", detail: "waiting for the platform's wallet — edit or re-add the card to retry" };
+            return { state: "pending", detail: "waiting for the platform's wallet, edit or re-add the card to retry" };
         }
         const network = usdcNetworkOf(wallet.network);
         if (network === undefined) {

@@ -169,7 +169,7 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
         const cards = await deps.cards();
         const entry = cards.find((candidate) => candidate.id === asked.card);
         if (entry === undefined) {
-            return refusal(404, "unknown_capability", `No capability card is named "${asked.card}" — \`capabilities list\` names what exists.`);
+            return refusal(404, "unknown_capability", `No capability card is named "${asked.card}": \`capabilities list\` names what exists.`);
         }
         /* Already connected ⇒ no card: the answer the agent actually wants ("use it") beats a question the
          * owner can only shrug at. Asking reflexively is therefore safe. An instance that exists but is not
@@ -181,14 +181,14 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
             return answer(200, {
                 connected: true,
                 id: active.instance.id,
-                message: `${entry.name} is already connected as "${active.instance.id}" — use it.`,
+                message: `${entry.name} is already connected as "${active.instance.id}", use it.`,
             });
         }
         switch (stateOf(run.conversationId, entry.id)) {
             case "parked":
-                return refusal(409, "already_asked", `You already asked for ${entry.name} — that card is still up; wait for its answer.`);
+                return refusal(409, "already_asked", `You already asked for ${entry.name}: that card is still up; wait for its answer.`);
             case "declined":
-                return refusal(403, "declined", `The owner already skipped connecting ${entry.name} in this conversation — continue without it.`);
+                return refusal(403, "declined", `The owner already skipped connecting ${entry.name} in this conversation: continue without it.`);
             case undefined:
                 break;
         }
@@ -214,14 +214,14 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
                 return refusal(
                     408,
                     "unanswered",
-                    `The ask went unanswered and expired — nothing was connected. Continue without ${entry.name}; ask again only if the owner shows up.`,
+                    `The ask went unanswered and expired: nothing was connected. Continue without ${entry.name}; ask again only if the owner shows up.`,
                 );
             }
             remember(run.conversationId, entry.id, "declined");
             return refusal(
                 403,
                 "declined",
-                `The owner skipped connecting ${entry.name} — continue without it, and say plainly what it would have enabled. Don't ask for it again in this conversation.`,
+                `The owner skipped connecting ${entry.name}: continue without it, and say plainly what it would have enabled. Don't ask for it again in this conversation.`,
             );
         }
         /* The owner said yes and is setting it up, hold the call and watch for the connection. The card's
@@ -239,13 +239,13 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
             return refusal(
                 408,
                 "unfinished",
-                `The owner accepted, but the setup didn't finish while you waited. Continue what you can without ${entry.name}; it may come live later — check with \`capabilities list\` before asking again.`,
+                `The owner accepted, but the setup didn't finish while you waited. Continue what you can without ${entry.name}; it may come live later: check with \`capabilities list\` before asking again.`,
             );
         }
         return answer(200, {
             connected: true,
             id: connected.id,
-            message: `${entry.name} is connected as "${connected.id}" — its skill and tools are available from your next tool call. Continue the task with it.`,
+            message: `${entry.name} is connected as "${connected.id}", its skill and tools are available from your next tool call. Continue the task with it.`,
         });
     };
 

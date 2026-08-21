@@ -18,8 +18,8 @@ import {
 } from "./creator-claim.js";
 import { creatorRoutes } from "./creator.orpc.js";
 
-/* WHAT A CREATOR WOULD CALL THEFT IF IT DRIFTED. Phase one owns exactly two promises — a publisher name is
- * yours only if you proved it, and money only moves somewhere you connected — so what is pinned here is the
+/* WHAT A CREATOR WOULD CALL THEFT IF IT DRIFTED. Phase one owns exactly two promises: a publisher name is
+ * yours only if you proved it, and money only moves somewhere you connected, so what is pinned here is the
  * refusals, not the happy path alone: an unproved claim failing, another account's name staying theirs, a
  * token that cannot verify a different user's claim, and payout readiness never being invented locally. */
 
@@ -36,7 +36,7 @@ const baseConfig = {
     },
 } as unknown as Config;
 
-// A pool that is off: no key, no price — the self-hosted default.
+// A pool that is off: no key, no price, the self-hosted default.
 const poolOffConfig = { ...baseConfig, pool: { ...baseConfig.pool, stripeSecretKey: ``, stripePriceId: `` } } as Config;
 
 // Each test overrides just the calls its route makes; the two the status read always performs default to empty
@@ -71,7 +71,7 @@ const expectOrpcCode = async (promise: Promise<unknown>, code: string) => {
     expect((error as ORPCError<string, unknown>).code).toBe(code);
 };
 
-// A fetch that serves one repo's claim file and 404s everything else — the shape a real claim has, where the
+// A fetch that serves one repo's claim file and 404s everything else: the shape a real claim has, where the
 // misses outnumber the hit.
 const servingFetch = (served: Record<string, string>): typeof fetch =>
     vi.fn(async (input: RequestInfo | URL) => {
@@ -130,7 +130,7 @@ describe(`publisher claims`, () => {
     });
 
     /* THE REFUSAL HAS TO SAY WHAT WAS READ. The old one said only that nothing carrying the token was readable,
-     * which from the creator's chair is indistinguishable from the platform never having looked — and it sent
+     * which from the creator's chair is indistinguishable from the platform never having looked, and it sent
      * someone whose file was there-but-wrong to push the same wrong file again. */
     it(`explains a failed claim in terms of what each repository actually said`, () => {
         expect(claimFailureReason(`acme`, { attempts: [] })).toContain(`lists no GitHub-backed extension under acme`);
@@ -173,10 +173,10 @@ describe(`publisher claims`, () => {
 
         expect(await registry.reposOf(`acme`)).toEqual([`acme/one`, `acme/two`]);
         expect(await registry.reposOf(`other`)).toEqual([`other/one`]);
-        // Second read inside the window is served from cache — a claim screen must not re-fetch per visit.
+        // Second read inside the window is served from cache: a claim screen must not re-fetch per visit.
         expect(fetchFn).toHaveBeenCalledTimes(1);
 
-        /* THE SAME FILE READ BACKWARDS — repositories a creator already has, to the names they back. This is
+        /* THE SAME FILE READ BACKWARDS: repositories a creator already has, to the names they back. This is
          * what lets the screen offer a name instead of asking for one, and it must survive the two things real
          * remotes do: differ in case from the listing, and appear under a publisher more than once. */
         expect(await registry.publishersOf([`ACME/One`, `acme/two`, `nobody/thing`])).toEqual([
@@ -347,8 +347,8 @@ describe(`payout connection`, () => {
     });
 
     it(`passes a Stripe refusal on in words, rather than letting it become a bare 500`, async () => {
-        // The two things that really stop this route — Connect not enabled on the platform's account, an
-        // account that cannot be onboarded — are both fixed by someone READING the reason. A raw throw
+        // The two things that really stop this route: Connect not enabled on the platform's account, an
+        // account that cannot be onboarded: are both fixed by someone READING the reason. A raw throw
         // serializes as "Internal server error" on the one card whose job is saying what to do next.
         const createAccount = vi.fn(async () => Promise.reject(new Error(`Stripe refused: sign up for Connect to create accounts.`)));
         const prisma = fakePrisma({ payoutAccount: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() } });
@@ -462,7 +462,7 @@ describe(`payout connection`, () => {
             },
         ]);
         const prisma = fakePrisma({
-            // Claimed in August, for a month that closed before the claim existed — statements are never bound
+            // Claimed in August, for a month that closed before the claim existed: statements are never bound
             // to a user, so this simply works.
             publisherClaim: {
                 findMany: vi.fn().mockResolvedValue([{ publisher: `acme`, repo: `acme/one`, createdAt: new Date(`2026-08-09T00:00:00Z`) }]),
@@ -490,7 +490,7 @@ describe(`payout connection`, () => {
     });
 });
 
-/* THE DOMAIN LANE — the same proof served from the name itself, for a business with a service to sell and no
+/* THE DOMAIN LANE: the same proof served from the name itself, for a business with a service to sell and no
  * extension in the registry. What is pinned: the dot picks the lane, the well-known read is the whole check,
  * a private-resolving name is never fetched, and the refusal names the URL that was read. */
 describe(`domain claims`, () => {

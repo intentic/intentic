@@ -34,7 +34,7 @@ export const pluginHandler: CapabilityHandler = {
         }
         yield { kind: "log", message: `Cloning ${url}${ref !== undefined ? ` @ ${ref}` : ""}…` };
         await checkoutInto(ctx, session, pluginsRoot(ctx.workspace.root), id, { url, ref, token });
-        yield { kind: "log", message: "Plugin installed — the agent loads its skills, agents and hooks next turn." };
+        yield { kind: "log", message: "Plugin installed, the agent loads its skills, agents and hooks next turn." };
     },
     // The short HEAD sha is the version identity, the daemon never parses plugin internals (plugin.json is
     // optional anyway). A missing/broken checkout probes as inactive; re-adding repairs it.

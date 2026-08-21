@@ -1,4 +1,4 @@
-/* Type-checks this package's TESTS along with its source — the build config excludes *.test.ts to keep test
+/* Type-checks this package's TESTS along with its source: the build config excludes *.test.ts to keep test
  * code out of dist, and that exclusion would otherwise take the tests out of every type check the repo runs.
  * Run by `pnpm typecheck` and CI; noEmit, so it never writes anything. */
 {

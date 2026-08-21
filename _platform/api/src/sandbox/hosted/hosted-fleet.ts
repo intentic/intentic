@@ -106,4 +106,4 @@ export const renderHostedFleet = (entries: HostedFleetEntry[]): string => {
  * database, it starts nothing, changes nothing, and is safe to point at production, which is the whole
  * reason it exists rather than a set of remembered curl commands. */
 export const printHostedFleet = async (prisma: PrismaClient, config: Config): Promise<string> =>
-    hostedEnabled(config) ? renderHostedFleet(await hostedFleet(prisma, config)) : `The hosted lane is off — no Fly credential configured.`;
+    hostedEnabled(config) ? renderHostedFleet(await hostedFleet(prisma, config)) : `The hosted lane is off, no Fly credential configured.`;

@@ -34,7 +34,7 @@ export const landingPaths = async (
                  * leaves the work held. Deliberate: the alternative is a git failure quietly widening a rule
                  * that exists to hold things back, and of the two ways to be wrong here, holding work the owner
                  * then releases by hand is the one they can undo. */
-                services.logger.warn({ err: error, repo, agent: agent.id }, "landing paths: repo unreadable — treating as no match");
+                services.logger.warn({ err: error, repo, agent: agent.id }, "landing paths: repo unreadable, treating as no match");
                 return [];
             }
         }),

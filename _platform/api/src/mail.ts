@@ -62,11 +62,11 @@ const resolvesOnlyHere = (link: string): boolean => {
 
 export const sendMail = async (config: Config, logger: Logger, mail: Mail): Promise<MailDelivery> => {
     if (config.email.apiKey === `` || config.email.from === ``) {
-        logger.warn({ to: mail.to, link: mail.link }, `email unconfigured — logging link instead of sending`);
+        logger.warn({ to: mail.to, link: mail.link }, `email unconfigured, logging link instead of sending`);
         return `unconfigured`;
     }
     if (resolvesOnlyHere(mail.link)) {
-        logger.warn({ to: mail.to, link: mail.link }, `link resolves only on this machine — not emailing it`);
+        logger.warn({ to: mail.to, link: mail.link }, `link resolves only on this machine, not emailing it`);
         return `local-link`;
     }
     const response = await fetch(`https://api.resend.com/emails`, {

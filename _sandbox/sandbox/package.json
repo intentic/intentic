@@ -1,7 +1,7 @@
 {
     "name": "@intentic/sandbox",
     "version": "0.0.0",
-    "description": "Remote AI-agent dev workspace daemon — runs inside a per-project sandbox container on the customer's host",
+    "description": "Remote AI-agent dev workspace daemon, runs inside a per-project sandbox container on the customer's host",
     "license": "MIT",
     "private": true,
     "type": "module",

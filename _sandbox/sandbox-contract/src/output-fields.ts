@@ -92,7 +92,7 @@ export const fieldsValidator = (fields: readonly OutputField[]): z.ZodType =>
 export const fieldsExample = (fields: readonly OutputField[]): Record<string, unknown> =>
     Object.fromEntries(
         fields.map((field) => {
-            const hint = `${field.description}${field.required ? "" : " (optional — omit if it does not apply)"}`;
+            const hint = `${field.description}${field.required ? "" : " (optional, omit if it does not apply)"}`;
             if (field.type === "number") {
                 return [field.name, 0];
             }
@@ -108,4 +108,4 @@ export const fieldsExample = (fields: readonly OutputField[]): Record<string, un
 
 // One line per field, for surfaces with no room to render an example: "risk (string, required), how likely …".
 export const describeFields = (fields: readonly OutputField[]): string =>
-    fields.map((field) => `- \`${field.name}\` (${field.type}${field.required ? ", required" : ", optional"}) — ${field.description}`).join(`\n`);
+    fields.map((field) => `- \`${field.name}\` (${field.type}${field.required ? ", required" : ", optional"}), ${field.description}`).join(`\n`);

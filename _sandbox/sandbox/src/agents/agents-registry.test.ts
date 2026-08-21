@@ -9,7 +9,7 @@ import type { LandedPresence, LandedPresences } from "./landed-presence.js";
 import type { LandStanding, LandStandings } from "./standing.js";
 
 // The derived half of a card's status, dialled by hand. Deriving it for real needs a git repo per case and is
-// standing.integration.test.ts's whole subject; what belongs HERE is the projection — which of the two halves wins, and
+// standing.integration.test.ts's whole subject; what belongs HERE is the projection, which of the two halves wins, and
 // what each surface reads off the result.
 const standings = (): LandStandings & { set: (id: string, standing: LandStanding) => void } => {
     const verdicts = new Map<string, LandStanding>();
@@ -25,7 +25,7 @@ const standings = (): LandStandings & { set: (id: string, standing: LandStanding
     };
 };
 
-// The card's other derived half — how much of what an agent landed is still in the tree — dialled the same way
+// The card's other derived half (how much of what an agent landed is still in the tree) dialled the same way
 // and for the same reason: deriving it needs a git repo per case (landed-presence.integration.test.ts).
 const presences = (): LandedPresences & { set: (id: string, presence: LandedPresence) => void } => {
     const readings = new Map<string, LandedPresence>();
@@ -75,7 +75,7 @@ describe("agents registry", () => {
     });
 
     /* The rewind lease and the turn mutex are the SAME mutex, and these are the two directions that matter.
-     * Both would pass against a naive "check, then act" too — what they pin is that the two operations see each
+     * Both would pass against a naive "check, then act" too: what they pin is that the two operations see each
      * other at all, so a later refactor that gives either one its own flag fails here rather than in a
      * half-restored workspace. */
     it("refuses a turn while a rewind holds the conversation, and readmits it after", async () => {
@@ -100,7 +100,7 @@ describe("agents registry", () => {
         await registry.begin(turn(), 1_000);
 
         expect(await registry.withRewindLease("c1", async () => "restored")).toBeUndefined();
-        // A different conversation is unaffected — the mutex is per conversation, not global.
+        // A different conversation is unaffected: the mutex is per conversation, not global.
         expect(await registry.withRewindLease("c2", async () => "restored")).toBe("restored");
 
         await registry.finish("c1", 2_000);
@@ -188,14 +188,14 @@ describe("agents registry", () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
-        // Set mid-turn on purpose — the value is read at turn COMPLETION, so this is "hold THIS turn's work".
+        // Set mid-turn on purpose: the value is read at turn COMPLETION, so this is "hold THIS turn's work".
         expect((await registry.setAutoLand("c1", false))?.autoLand).toBe(false);
         await registry.finish("c1", 2_000);
         // The override is a standing choice about the conversation: the next turn's entry rebuild keeps it.
         await registry.begin(turn({ prompt: "keep going" }), 3_000);
         expect(registry.get("c1")?.autoLand).toBe(false);
         await registry.finish("c1", 4_000);
-        // null strips the key back to "inherit the sandbox setting" — absent, not stored-false.
+        // null strips the key back to "inherit the sandbox setting": absent, not stored-false.
         expect((await registry.setAutoLand("c1", null))?.autoLand).toBeUndefined();
         expect(registry.entry("c1")?.autoLand).toBeUndefined();
         expect(await registry.setAutoLand("nope", true)).toBeUndefined();
@@ -215,7 +215,7 @@ describe("agents registry", () => {
         await registry.begin(turn({ prompt: "keep going" }), 3_000);
         expect(registry.get("c1")?.resumeAfterOutage).toBe(true);
         await registry.finish("c1", 4_000);
-        // false is a REAL answer, not an absent one — "stop resuming this chat" must not read as "go back to
+        // false is a REAL answer, not an absent one: "stop resuming this chat" must not read as "go back to
         // whatever the sandbox default says", which may well be resume.
         expect((await registry.setResumeAfterOutage("c1", false))?.resumeAfterOutage).toBe(false);
         // …and null is the only thing that hands the conversation back to the default.
@@ -282,8 +282,8 @@ describe("agents registry", () => {
         unsubscribe();
     });
 
-    /* THE CHILDREN A TURN STARTS, on the board. The counts are not held here — summaryOf reads them off the
-     * subagent registry — so what is pinned is the PUBLISH: nothing else announces a child, and a parent that
+    /* THE CHILDREN A TURN STARTS, on the board. The counts are not held here: summaryOf reads them off the
+     * subagent registry, so what is pinned is the PUBLISH: nothing else announces a child, and a parent that
      * delegates and then waits on its children emits no frames of its own for the fleet to ride on. Driven
      * through the real registry rather than a stub, because the projection is the seam under test.
      *
@@ -317,11 +317,11 @@ describe("agents registry", () => {
         expect(frames).toEqual([undefined, { running: 1, total: 1 }]);
 
         registry.observe("c1", frame({ subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } }));
-        // Still on the card, and no longer working — which is the whole of what the chip says.
+        // Still on the card, and no longer working, which is the whole of what the chip says.
         expect(frames).toEqual([undefined, { running: 1, total: 1 }, { running: 0, total: 1 }]);
         unsubscribe();
 
-        /* AND IT OUTLIVES THE TURN. resetSubagents() is the five-minute sweep and a daemon restart at once —
+        /* AND IT OUTLIVES THE TURN. resetSubagents() is the five-minute sweep and a daemon restart at once:
          * everything the live registry knew, gone. What the agent DID is on its entry, so the card still says
          * it delegated; only the live half falls to zero. */
         const store = memoryStore();
@@ -359,7 +359,7 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.updatedAt).toBe(2_000); // reading is not activity
         expect(frames.at(-1)).toBe(3_000); // every connected surface clears its badge
         expect(store.saved().find((entry) => entry.id === "c1")?.seenAt).toBe(3_000);
-        // The marker outlives the next turn's entry rebuild — it is what tells "New" from "Updated".
+        // The marker outlives the next turn's entry rebuild: it is what tells "New" from "Updated".
         await registry.begin(turn(), 4_000);
         await registry.finish("c1", 5_000);
         expect(registry.get("c1")?.seenAt).toBe(3_000);
@@ -367,7 +367,7 @@ describe("agents registry", () => {
         unsubscribe();
     });
 
-    it("markAllSeen stamps the whole fleet — the board's one escape hatch", async () => {
+    it("markAllSeen stamps the whole fleet: the board's one escape hatch", async () => {
         const store = memoryStore();
         const registry = createAgentsRegistry(store, standings(), presences());
         await registry.init();
@@ -425,16 +425,16 @@ describe("agents registry", () => {
         await registry.init();
         await registry.begin(turn({ prompt: "we have recently added the fleet board" }), 1_000);
 
-        // The quick model has written a name for the opening prompt — it beats the rule that only cut one…
+        // The quick model has written a name for the opening prompt: it beats the rule that only cut one…
         expect((await registry.setTitle("c1", "Fleet board broadcast · wire", "model"))?.title).toBe("Fleet board broadcast · wire");
         // …once. A second model name is a sideways move, so the first one stands.
         await registry.setTitle("c1", "A second reading", "model");
         expect(registry.get("c1")?.title).toBe("Fleet board broadcast · wire");
 
-        // A plan heading is the agent's own name for the job: it replaces a model name —
+        // A plan heading is the agent's own name for the job: it replaces a model name:
         registry.observe("c1", { kind: "plan", requestId: "r1", text: "# Fix the fleet broadcast fan-out" });
         expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
-        // — and is never replaced by one.
+        //, and is never replaced by one.
         await registry.setTitle("c1", "A late reading", "model");
         expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
     });
@@ -448,7 +448,7 @@ describe("agents registry", () => {
         "Failed to authenticate. API Error: 401 OAuth access token has been revoked",
     ];
 
-    it.each(FAILURE_SENTENCES)("refuses %s as any automatic title — it names the failure, not the work", async (sentence) => {
+    it.each(FAILURE_SENTENCES)("refuses %s as any automatic title: it names the failure, not the work", async (sentence) => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
@@ -492,11 +492,11 @@ describe("agents registry", () => {
         registry.observe("c1", { kind: "plan", requestId: "r1", text: "# Fix the login submit handler" });
         expect(registry.get("c1")?.title).toBe("Login bug");
 
-        // A rename is not a ranked promotion — renaming twice must not read as a rejected sideways move.
+        // A rename is not a ranked promotion: renaming twice must not read as a rejected sideways move.
         expect((await registry.setTitle("c1", "Login bug (round two)", "user"))?.title).toBe("Login bug (round two)");
     });
 
-    it("a card parks the agent until its own release — the frames trailing it do not", async () => {
+    it("a card parks the agent until its own release: the frames trailing it do not", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
@@ -531,7 +531,7 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.attention.permission).toBe(false);
     });
 
-    it("stopping a parked turn takes its card off the board — the release may never arrive", async () => {
+    it("stopping a parked turn takes its card off the board: the release may never arrive", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
@@ -542,8 +542,8 @@ describe("agents registry", () => {
     });
 
     /* THE WINDOW A STOP OPENS, which is the whole reason `stopping` exists. /agent/stop aborts the provider and
-     * then waits for the generator to unwind — worktree and registry cleanup, seconds of it on a turn holding a
-     * long tool call — and every surface watching this agent reads the roster in the meantime. Publishing
+     * then waits for the generator to unwind: worktree and registry cleanup, seconds of it on a turn holding a
+     * long tool call, and every surface watching this agent reads the roster in the meantime. Publishing
      * `running` across that window is what kept a spinner turning on a turn the user had already killed. */
     it("publishes the stop the instant it lands, ahead of the unwind", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
@@ -560,7 +560,7 @@ describe("agents registry", () => {
         unsubscribe();
     });
 
-    // Where it comes to rest. NOT `error` (the abort's own unwind is not a failure — see agent.routes' frame
+    // Where it comes to rest. NOT `error` (the abort's own unwind is not a failure: see agent.routes' frame
     // loop) and NOT `interrupted`, which is the daemon dying and is a candidate for the boot resume pass: a
     // turn a person chose to end must never come back on its own.
     it("settles a stopped turn as stopped, on the entry the next boot reads", async () => {
@@ -582,11 +582,11 @@ describe("agents registry", () => {
     /* A DISMISSED CARD IS THE OTHER ENDING THE USER CHOOSES, and it does not come to rest where a Stop does.
      * Stopping reaches in to halt work the user still wanted, so its card waits to be picked up; waving a
      * question away says they are done with this one, so nothing is owed and the card settles with the
-     * finished ones — whatever the turn wrote stays on its branch for a later message.
+     * finished ones: whatever the turn wrote stays on its branch for a later message.
      *
      * The card also has to move ONCE. Releasing the question leaves a live turn with nothing parked on it,
      * which reads as a working agent, so a publish here would file the agent under Active for the blink
-     * before the unwind lands — the two-step the browser used to do, only faster. */
+     * before the unwind lands: the two-step the browser used to do, only faster. */
     it("settles a dismissed turn where a clean one ends, and holds its place until it gets there", async () => {
         const store = memoryStore();
         const registry = createAgentsRegistry(store, standings(), presences());
@@ -608,7 +608,7 @@ describe("agents registry", () => {
     });
 
     // The abort settles every waiter, so a card raised by a frame still in flight behind the stop would ask a
-    // question whose answer has nowhere to go — and would drag the card back into Attention on its way out.
+    // question whose answer has nowhere to go, and would drag the card back into Attention on its way out.
     it("drops the cards a stopping turn was parked on, and refuses to raise new ones", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
@@ -651,9 +651,9 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.status).toBe("error");
     });
 
-    /* THE DAEMON DYING UNDER A PARKED TURN — a container rebuild (`docker rm -f`, so not even a SIGTERM), a
+    /* THE DAEMON DYING UNDER A PARKED TURN: a container rebuild (`docker rm -f`, so not even a SIGTERM), a
      * crash, an OOM kill. The next boot is a fresh registry over the same store, and everything that said the
-     * agent was mid-task — running, the question's park, the attention flag it raised — was runtime state that
+     * agent was mid-task (running, the question's park, the attention flag it raised) was runtime state that
      * died with the process. So the entry's own status is the ONLY thing left to say so, and `begin` having
      * written the resting `idle` there is what filed a turn holding an unanswered question under Finished. */
     it("a turn the daemon died under comes back interrupted, not idle", async () => {
@@ -664,7 +664,7 @@ describe("agents registry", () => {
         first.observe("c1", { kind: "question", requestId: "q1", questions: [] });
         expect(first.get("c1")?.status).toBe("awaiting");
 
-        // No finish() — the process is gone. Whatever is on disk at this instant is what the user comes back to.
+        // No finish(): the process is gone. Whatever is on disk at this instant is what the user comes back to.
         const rebooted = createAgentsRegistry(store, standings(), presences());
         await rebooted.init();
         expect(rebooted.get("c1")?.status).toBe("interrupted");
@@ -672,7 +672,7 @@ describe("agents registry", () => {
     });
 
     // The same entry once the turn DOES report back: `interrupted` is a placeholder that every ordinary ending
-    // overwrites, so a restart after this one reads the clean ending rather than the interruption — and from
+    // overwrites, so a restart after this one reads the clean ending rather than the interruption, and from
     // there the card's status is the branch's, re-derived on the fresh daemon's first probe.
     it("finishing overwrites the interrupted placeholder, and it does not survive the next boot", async () => {
         const store = memoryStore();
@@ -697,21 +697,21 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.status).toBe("error");
     });
 
-    /* A failure the daemon has already armed a resume for is not how the turn ENDED — it is coming back
+    /* A failure the daemon has already armed a resume for is not how the turn ENDED: it is coming back
      * (turn-resume.ts). Painting the card red for it turned every provider blip into a board full of agents that
      * look like they need attention while the daemon is quietly fixing them, which is the single most effective
      * way to make a user switch the automation off.
      *
      * Nor is it `idle`, which is what the fix originally left behind and what this case now pins: `idle` reads
      * as the resting state of a turn that finished, so for the seconds between the 401 and the re-minted token
-     * the board filed the card under Finished and then pulled it back into Active — the fleet contradicting
+     * the board filed the card under Finished and then pulled it back into Active: the fleet contradicting
      * itself about work that never stopped. */
     it("a failure with a scheduled resume publishes the card as still coming back", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
-        // Still the running turn's own state while it unwinds — the frame arrives mid-stream.
+        // Still the running turn's own state while it unwinds: the frame arrives mid-stream.
         expect(registry.get("c1")?.status).toBe("running");
         await registry.finish("c1", 2_000);
         expect(registry.get("c1")?.status).toBe("resuming");
@@ -736,7 +736,7 @@ describe("agents registry", () => {
 
     /* The way INTO `resuming` that no frame announces: a restored card's answer ends its placeholder turn and
      * the real resumed turn begins seconds later (turn-resume.ts). markResuming before the finish is what keeps
-     * the card out of Finished for that blink — the same hold the error-frame path gets from its own flag. */
+     * the card out of Finished for that blink: the same hold the error-frame path gets from its own flag. */
     it("markResuming holds the card through the settle that precedes its resumed turn", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
@@ -750,8 +750,8 @@ describe("agents registry", () => {
     });
 
     /* The other ending, and the one that must not leave a spinner turning forever: the credential is genuinely
-     * dead, so nothing re-runs. The wait closes into the failure it was holding open — Attention, where a person
-     * is asked to reconnect the account — and not back into the clean `idle` the killed turn left on the entry. */
+     * dead, so nothing re-runs. The wait closes into the failure it was holding open: Attention, where a person
+     * is asked to reconnect the account, and not back into the clean `idle` the killed turn left on the entry. */
     it("an abandoned resume settles the card into the failure it was holding open", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
@@ -764,12 +764,12 @@ describe("agents registry", () => {
         // scheduler kept trying; "error" alone, at the end of that, is the least it could tell the reader.
         expect(registry.get("c1")?.failure).toBe("The Claude sign-in this turn ran on could not be renewed.");
         // Idempotent, because the scheduler's passes are: a second call has no wait left to close, which is
-        // still the wait being over — so it answers true and the caller stops carrying the entry.
+        // still the wait being over, so it answers true and the caller stops carrying the entry.
         expect(await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(true);
         expect(registry.get("c1")?.status).toBe("error");
     });
 
-    /* THE ABANDON THAT ARRIVES A SECOND TOO EARLY — the race that left the spinning cards this contract exists
+    /* THE ABANDON THAT ARRIVES A SECOND TOO EARLY: the race that left the spinning cards this contract exists
      * for. The scheduler's pass can land between the refusal being recorded and the failed turn finishing its
      * unwind, and anything written in that window is overwritten by the finish that follows. Saying so is the
      * whole job: the caller keeps its pending entry and comes back, where dropping it silently meant the card
@@ -790,7 +790,7 @@ describe("agents registry", () => {
 
     /* WHY, NOT JUST THAT. The condition this exists for is a session refused on its first request: it writes no
      * report, takes no screenshot and never reaches the app, so the provider's own sentence is the only account
-     * of it there will ever be — and it used to live nowhere but the transcript of a conversation nobody opens.
+     * of it there will ever be, and it used to live nowhere but the transcript of a conversation nobody opens.
      * An unattended fan-out is exactly the case: ten sessions, ten identical deaths, ten transcripts. */
     it("keeps the sentence a failed turn died on, so the card can say why", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
@@ -862,7 +862,7 @@ describe("agents registry", () => {
      * yields, because it is the one that means the entry has nothing left to say.
      *
      * The precedence matters in both directions. A branch that happens to hold outstanding work must not
-     * relabel an errored turn as "ready to land" — the failure is the thing the user has to see. And a turn
+     * relabel an errored turn as "ready to land": the failure is the thing the user has to see. And a turn
      * that ended cleanly must not keep ANY land verdict of its own: that is the cache that outlived its subject
      * (see standing.ts), and the only cure is that there is nowhere left to write one. */
     it("projects the land standing under a clean ending, and never over an error or an interruption", async () => {
@@ -876,7 +876,7 @@ describe("agents registry", () => {
 
         land.set("c1", "conflict");
         expect(registry.get("c1")?.status).toBe("conflict");
-        // The Attention flag reads the DERIVED verdict too — deriving it from a stored status was the original
+        // The Attention flag reads the DERIVED verdict too: deriving it from a stored status was the original
         // bug in miniature, a faithful projection over a stale input.
         expect(registry.get("c1")?.attention.conflict).toBe(true);
         // …and nothing about it reached the disk. The land verdict has no persisted home any more.
@@ -913,7 +913,7 @@ describe("agents registry", () => {
 
     /* A RELEASE NOTE IS NOT A TITLE, which is what this pins. The note and its breaking sibling used to be
      * scrubbed through the title's cleaner, so every sentence longer than a card's 80 characters reached the
-     * published Release — and the changelog page, and the update card — cut mid-word: four of the first five
+     * published Release, and the changelog page, and the update card, cut mid-word: four of the first five
      * entries ended like "…versus addin". The subject is still one bounded line; the sentences written for users
      * are not bounded by a card's width, only by a ceiling a page of prose cannot pass. */
     it("setLandedSubject keeps the release note and the breaking warning whole, and still bounds the subject", async () => {
@@ -938,7 +938,7 @@ describe("agents registry", () => {
 
     /* THE SENTENCE GOES OUT ON THE FRAME THAT IS ALREADY LEAVING, which is the whole delivery of this feature.
      *
-     * It is written by a model several seconds after the work lands — reliably while the user is walking over to
+     * It is written by a model several seconds after the work lands: reliably while the user is walking over to
      * the Changes panel and clicking the chip that is waiting for it. Until this broadcast the only copy that
      * reached the panel rode the review, a workspace-wide rescan that refreshes when something asks it to, so a
      * message that existed sat unread in the daemon and the box stayed empty with nothing to say why. */
@@ -955,7 +955,7 @@ describe("agents registry", () => {
         expect(frames.at(-1)).toEqual({ subject: "fix: cascading markers", note: "Markers stop cascading." });
         expect(registry.get("c1")?.landedMessage).toEqual({ subject: "fix: cascading markers", note: "Markers stop cascading." });
 
-        // A second land describes the whole claim afresh, notes included — so the card carries the new sentence
+        // A second land describes the whole claim afresh, notes included, so the card carries the new sentence
         // and not a word of the old one's trailers.
         await registry.setLandedSubject("c1", { subject: "fix: cascading markers and their counts" });
         expect(frames.at(-1)).toEqual({ subject: "fix: cascading markers and their counts" });
@@ -963,7 +963,7 @@ describe("agents registry", () => {
     });
 
     // A card that says "Resolve conflict" but cannot say WHAT blocked is the dead end this report exists to
-    // prevent, so it has to outlive the land that produced it — and has to disappear the moment a later land
+    // prevent, so it has to outlive the land that produced it, and has to disappear the moment a later land
     // succeeds, or the review keeps offering a resolution for something already resolved. (It is EVIDENCE, not
     // state: standing.ts reads it to explain an outstanding delta and never to invent one, so a report whose
     // delta is gone stops being rendered whether or not anything got round to clearing it.)
@@ -997,7 +997,7 @@ describe("agents registry", () => {
     /* THE DEAD END THIS PREVENTS, which shipped and stranded a session for an afternoon.
      *
      * A `measure` land settles an ended turn's books and never touches the main tree, so it reaches no
-     * conflict gate and reports nothing. Read as a verdict, that "nothing" deleted the last real refusal — and
+     * conflict gate and reports nothing. Read as a verdict, that "nothing" deleted the last real refusal, and
      * every surface that explains a conflict hangs off the stored report: the standing that reddens the card,
      * the review's re-derived report, and "Have the agent resolve it", which refused with "Nothing left for
      * the agent to rebase" while a land pressed one second later still said "Landing hit a conflict".
@@ -1044,7 +1044,7 @@ describe("agents registry", () => {
         expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toBeUndefined();
     });
 
-    it("counts turns and tool uses — live during the turn, folded at finish, never inflated by manual lands", async () => {
+    it("counts turns and tool uses: live during the turn, folded at finish, never inflated by manual lands", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
@@ -1055,7 +1055,7 @@ describe("agents registry", () => {
         await registry.finish("c1", 2_000);
         expect(registry.get("c1")?.turns).toBe(1);
         expect(registry.get("c1")?.toolUses).toBe(2);
-        // A manual land finishes OUTSIDE any turn — must not count as a turn.
+        // A manual land finishes OUTSIDE any turn: must not count as a turn.
         await registry.finish("c1", 3_000);
         expect(registry.get("c1")?.turns).toBe(1);
         await registry.begin(turn({ prompt: "again" }), 4_000);
@@ -1065,12 +1065,12 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.toolUses).toBe(3);
     });
 
-    it("liveSessionIds reports the in-flight turns' sdk sessions — the terminals list's 'still working' signal", async () => {
+    it("liveSessionIds reports the in-flight turns' sdk sessions, the terminals list's 'still working' signal", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         expect(registry.liveSessionIds()).toEqual([]);
         await registry.begin(turn(), 1_000);
-        // The id arrives on the turn's FIRST frame, before any Bash — so the agent-* session it will run
+        // The id arrives on the turn's FIRST frame, before any Bash, so the agent-* session it will run
         // commands in reads as running from the start, not only while a command happens to be in flight.
         registry.observe("c1", { kind: "session", sessionId: "3f2a9b1c-0000-4000-8000-000000000000" });
         expect(registry.liveSessionIds()).toEqual(["3f2a9b1c-0000-4000-8000-000000000000"]);
@@ -1110,7 +1110,7 @@ describe("agents registry", () => {
         expect(frames).toEqual([0]);
         await registry.begin(turn(), 1_000);
         expect(frames.at(-1)).toBe(1);
-        // delta frames are not card-visible — no broadcast.
+        // delta frames are not card-visible: no broadcast.
         const count = frames.length;
         registry.observe("c1", { kind: "delta", text: "..." });
         expect(frames.length).toBe(count);
@@ -1128,7 +1128,7 @@ describe("agents registry", () => {
         expect(registry.list()).toEqual([]);
         expect(registry.listArchived().map((agent) => agent.id)).toEqual(["c1"]);
         expect(registry.get("c1")?.archivedAt).toBe(5_000);
-        // Still fully addressable — cost, title and attribution all keep answering for an archived agent.
+        // Still fully addressable: cost, title and attribution all keep answering for an archived agent.
         expect(registry.entry("c1")?.title).toBe("Fix the login bug");
         expect(registry.ids()).toEqual(["c1"]);
 
@@ -1152,12 +1152,12 @@ describe("agents registry", () => {
     });
 
     // Every write path REPLACES `entries` rather than mutating it, so two overlapping persists would each
-    // serialize the array they captured — and whichever wrote last would put back a snapshot missing the
+    // serialize the array they captured, and whichever wrote last would put back a snapshot missing the
     // other's change. Archiving several agents at once (or one while another finishes) is exactly that shape,
     // and the loss is invisible until the daemon restarts onto the older file.
     it("concurrent writes all survive the round-trip to disk", async () => {
         // Yields between capture and serialize, which is where the lost update happened. `delays` is loaded
-        // only for the concurrent block below, so those three writes FINISH IN REVERSE — the case that
+        // only for the concurrent block below, so those three writes FINISH IN REVERSE: the case that
         // actually loses data, since the slowest write holds the oldest snapshot and lands on top of the rest.
         let data: PersistedAgent[] = [];
         const delays: number[] = [];
@@ -1232,7 +1232,7 @@ describe("agents registry", () => {
             adjudicated: true,
         });
 
-        // A mark computed against shas the entry does not carry — a stale scan racing a newer land — is a no-op.
+        // A mark computed against shas the entry does not carry (a stale scan racing a newer land) is a no-op.
         await registry.markLandingAbsorbed("c1", "root", "h0", "t1", 4);
         expect(registry.entry("c1")?.repos[0]?.absorbed).toBeUndefined();
 
@@ -1245,13 +1245,13 @@ describe("agents registry", () => {
         await registry.markLandingAbsorbed("gone", "root", "h1", "t1", 1);
         await registry.markLandingAbsorbed("c1", "nested", "h1", "t1", 1);
 
-        // Persisted — the whole point: a restart starts already knowing (origins.integration.test.ts proves
+        // Persisted, the whole point: a restart starts already knowing (origins.integration.test.ts proves
         // what that saves; this proves the fact survives the trip through the store).
         const restarted = createAgentsRegistry(store, standings(), presences());
         await restarted.init();
         expect(restarted.entry("c1")?.repos[0]?.absorbed).toBe(4);
 
-        // The next land writes a fresh row, which clears the mark for free — recordLanded carries the rows the
+        // The next land writes a fresh row, which clears the mark for free: recordLanded carries the rows the
         // land built, and a landing that just happened is by definition not absorbed.
         await registry.recordLanded("c1", {
             landed: true,

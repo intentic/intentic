@@ -222,7 +222,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
                     const today = await tx.walletPayment.findMany({ where: { walletId: wallet.id, day }, select: { amountUsd: true } });
                     const spent = today.reduce((total, row) => total + usdToAtomic(row.amountUsd), 0n);
                     if (spent + value > cap) {
-                        throw new Error(`$${amountUsd} would pass this wallet's $${wallet.dailyCapUsd} daily cap — $${atomicToUsd(spent)} is already spent today`);
+                        throw new Error(`$${amountUsd} would pass this wallet's $${wallet.dailyCapUsd} daily cap: $${atomicToUsd(spent)} is already spent today`);
                     }
                     return tx.walletPayment.create({
                         data: { walletId: wallet.id, userId: ownerId, day, amountUsd, host, payTo: authorization.to },

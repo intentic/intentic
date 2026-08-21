@@ -56,7 +56,7 @@ const inWords = (reopensAt: number, now: number): string => {
 
 const spentSentence = (subject: string, pool: string | undefined, reopensAt: number | undefined, now: number): string => {
     const allowance = pool === undefined ? `allowance` : `${pool} allowance`;
-    const renews = reopensAt === undefined ? `` : ` — renews ${inWords(reopensAt, now)}`;
+    const renews = reopensAt === undefined ? `` : `, renews ${inWords(reopensAt, now)}`;
     return `${subject} out of ${allowance}${renews}.`;
 };
 

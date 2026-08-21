@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { type AgentCapabilities, capabilitiesOf, limitationsOf } from "./agent-catalog.js";
 
-/* THE CAPABILITY LEDGER — which claims in the record are backed by machinery, and which by prose.
+/* THE CAPABILITY LEDGER, which claims in the record are backed by machinery, and which by prose.
  *
  * agent-catalog.test.ts asks two other questions: does every provider/harness pair HAVE a row, and does every
  * axis a record can lack have words for it. A row can pass both and still be a lie. The ability is declared,
- * the sentence renders in the picker's footer, and nothing anywhere behaves differently — so the day the
+ * the sentence renders in the picker's footer, and nothing anywhere behaves differently, so the day the
  * runtime gains the ability (or loses it), the declaration keeps its old value and the footer keeps telling the
  * user something that stopped being true. Over-promising is the direction that hurts: told a runtime can be
  * steered, someone types a mid-turn correction into a queue that does not exist.
  *
- * The record's header already states the rule — "a capability is listed here only if something READS it". This
+ * The record's header already states the rule: "a capability is listed here only if something READS it". This
  * is the rule with teeth. Every field is ENFORCED (a seam opens or closes on it, and the entry cites where) or
  * DESCRIPTIVE (it gates nothing; its whole job is that one sentence). `Record<keyof AgentCapabilities, …>`
  * makes the split exhaustive at COMPILE time: a field added to the interface without an entry here does not
@@ -19,7 +19,7 @@ import { type AgentCapabilities, capabilitiesOf, limitationsOf } from "./agent-c
  *
  * WHAT THIS DOES NOT DO, deliberately: prove an ENFORCED gate exists. Those gates live in the daemon and the
  * web, which sit ABOVE this package and must not be imported back into it. So an enforced entry's citation is a
- * comment a reader checks, and the honest reading is "someone verified this once" — not "CI verifies it". The
+ * comment a reader checks, and the honest reading is "someone verified this once", not "CI verifies it". The
  * descriptive half IS machine-checked below, because it can be: those claims reach the user through
  * `limitationsOf`, which is right here.
  *
@@ -31,7 +31,7 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     // adapter-registry.ts maps runtime → the adapter that serves the turn; getting it wrong runs the turn on
     // the wrong loop entirely. Also keys the daemon's per-runtime health probes (useSandboxVersion.ts).
     runtime: "enforced",
-    // conversation.ts's `steerable` — the composer offers mid-turn injection only where there is a queue.
+    // conversation.ts's `steerable`: the composer offers mid-turn injection only where there is a queue.
     steering: "enforced",
     // turn-plan.ts forwards `permissionMode` only under "modes" (bar plan); modesFor/clampMode build the
     // composer's mode list from it, so a plan-only runtime is offered two postures rather than four names.
@@ -47,23 +47,23 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     // turn-plan.ts tells a "cwd" turn where its worktree is, because an absolute /work path still reaches the
     // shared checkout there. Under "namespace" the mount does it and the note would be noise.
     isolation: "enforced",
-    /* system-prompt.ts composes a turn's standing instructions AGAINST this value — a replacement where one may
+    /* system-prompt.ts composes a turn's standing instructions AGAINST this value: a replacement where one may
      * be sent, an addition where only that is possible, and the user-message door for the persona note where
-     * there is no system seam at all — and each adapter reads the field the composition set (codex-agent.ts's
+     * there is no system seam at all, and each adapter reads the field the composition set (codex-agent.ts's
      * two config keys, grok-agent.ts's per-message `system`). It is also the one axis whose absence was the bug
      * that produced it: before the field existed, every runtime was composed for as though it were the Claude
      * Code loop, and five of the six silently dropped the owner's prompt. */
     instructions: "enforced",
     // turn-plan.ts (honoured) plans the JS backend only where "js" is declared, so a runtime without it is
-    // handed no `jsExecution` and mounts no Code tool — the same drop-what-you-can't-honour rule as `effort`.
+    // handed no `jsExecution` and mounts no Code tool: the same drop-what-you-can't-honour rule as `effort`.
     execution: "enforced",
 
-    /* DESCRIPTIVE — true of the runtime, and nothing consults them. Each describes behaviour that is emergent
+    /* DESCRIPTIVE: true of the runtime, and nothing consults them. Each describes behaviour that is emergent
      * rather than gated: an agent that never emits `question` frames simply never asks, one that publishes no
      * commands leaves the `/` popover empty. Nothing has to switch off, which is why nothing does. That also
      * means the declaration and the behaviour are two independent facts, and only the reader below keeps them
      * from disagreeing in the one place a user can see. Wiring one up (hiding the terminal tab, skipping
-     * auto-resume) moves it to ENFORCED — in the change that wires it. */
+     * auto-resume) moves it to ENFORCED: in the change that wires it. */
     questions: "descriptive",
     commands: "descriptive",
     terminals: "descriptive",
@@ -86,7 +86,7 @@ it("classifies exactly the fields a live record carries", () => {
 /* A DESCRIPTIVE field earns its place by reaching the user, since by definition it does nothing else. Checked
  * per field rather than by counting sentences: an aggregate is satisfied by one axis contributing two lines
  * while another contributes none, which is exactly the case worth catching. Anything that survives here without
- * a sentence is decoration, and the fix is to delete the field or wire it up — not to add an exemption. */
+ * a sentence is decoration, and the fix is to delete the field or wire it up, not to add an exemption. */
 describe("a descriptive claim reaches the user", () => {
     it("has something to disclose against: the ceiling discloses nothing", () => {
         expect(limitationsOf(CEILING)).toEqual([]);
@@ -102,9 +102,9 @@ describe("a descriptive claim reaches the user", () => {
 });
 
 /* The ledger is a split, not a label: a set that swallowed everything would typecheck and prove nothing. Both
- * sides being occupied is what makes reading an entry informative — and if the descriptive side ever empties
+ * sides being occupied is what makes reading an entry informative, and if the descriptive side ever empties
  * because every axis got wired up, that is a real event, and deleting this file is the right response to it. */
-it("is a real split — neither side is empty", () => {
+it("is a real split: neither side is empty", () => {
     expect(fieldsWhere("enforced").length).toBeGreaterThan(0);
     expect(fieldsWhere("descriptive").length).toBeGreaterThan(0);
 });

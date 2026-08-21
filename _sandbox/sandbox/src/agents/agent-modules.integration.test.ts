@@ -6,13 +6,13 @@ import { agentRepoModules } from "./agent-changes.js";
 import type { IsolatedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
-/* WHICH TREE NAMES AN AGENT'S PACKAGES — the whole subject here, because getting it wrong is invisible until
+/* WHICH TREE NAMES AN AGENT'S PACKAGES: the whole subject here, because getting it wrong is invisible until
  * the moment it matters most. The review groups an agent's changed files under the package each one lives in;
  * an agent writes in a worktree; and a package it has just CREATED exists only there. Answering from /work then
- * leaves every file of that package — which is all of its files — in the unnamed "loose in this repo" bucket.
+ * leaves every file of that package, which is all of its files: in the unnamed "loose in this repo" bucket.
  *
  * Real directories rather than a mocked fs: the thing under test is a filesystem walk, so a fake fs would only
- * be testing the fake. No git, though — the seam is `attached`, and these tests own both sides of it. */
+ * be testing the fake. No git, though: the seam is `attached`, and these tests own both sides of it. */
 
 const tempDirs: string[] = [];
 afterEach(async () => {
@@ -56,7 +56,7 @@ test("names the packages of the agent's own checkout, including one the main tre
     expect(names(await agentRepoModules(worktrees, ENTRY, "root"))).toEqual(["@shop/auth", "@shop/billing"]);
 });
 
-/* A RETIRED checkout has no worktree left to read, so the main repo answers — the same per-repo seam the file
+/* A RETIRED checkout has no worktree left to read, so the main repo answers: the same per-repo seam the file
  * diff beside it uses. By then the agent's work has normally landed, which is what makes that the right
  * fallback rather than merely the only cheap one. */
 test("falls back to the main tree once the checkout is gone", async () => {

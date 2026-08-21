@@ -6,16 +6,16 @@ description: Read, post, react and search in the connected Slack workspace via t
 # Slack (connected)
 
 Authenticated with a bot token in `$SLACK_BOT_TOKEN`. Talk to Slack's Web API with `curl`.
-Base URL: `https://slack.com/api` — Auth header: `-H "Authorization: Bearer $SLACK_BOT_TOKEN"`.
+Base URL: `https://slack.com/api`, Auth header: `-H "Authorization: Bearer $SLACK_BOT_TOKEN"`.
 
-Slack always answers HTTP 200; the real result is `.ok` in the body. Check it — `| jq '.ok, .error'` on
+Slack always answers HTTP 200; the real result is `.ok` in the body. Check it: `| jq '.ok, .error'` on
 anything that looks wrong. IDs (`C…` channel, `U…` user, `T…` team) come from the list commands below; a
 message is addressed by its channel plus its `ts`.
 
 ## Setup (do this when the app isn't installed yet)
 
-Slack apps are created from a **manifest**. Give the user this one — it declares exactly the scopes and events
-this integration needs — and walk them through the five steps on the capability card:
+Slack apps are created from a **manifest**. Give the user this one: it declares exactly the scopes and events
+this integration needs: and walk them through the five steps on the capability card:
 
 ```yaml
 display_information:
@@ -81,7 +81,7 @@ Confirm it landed: `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" https://
 
 ## Writing for Slack
 
-Slack is **not** markdown — it is `mrkdwn`. `*bold*` (single asterisks), `_italic_`, `~strike~`, `` `code` ``,
+Slack is **not** markdown: it is `mrkdwn`. `*bold*` (single asterisks), `_italic_`, `~strike~`, `` `code` ``,
 ```` ```block``` ````, `> quote`. Links are `<https://url|label>`, a person is `<@U123>`, a channel is
 `<#C123>`. Headings, tables and `[label](url)` do not render. Keep replies short and thread them.
 

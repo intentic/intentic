@@ -30,12 +30,12 @@ export const bundleProblem = (source: string): string | undefined => {
     const specifiers = bundleSpecifiers(source);
     const relative = specifiers.filter((specifier) => specifier.startsWith(".") || specifier.startsWith("/"));
     if (relative.length > 0) {
-        return `imports a second file (${relative.join(", ")}) — a bundle is imported from a blob URL, so nothing relative to it can resolve`;
+        return `imports a second file (${relative.join(", ")}): a bundle is imported from a blob URL, so nothing relative to it can resolve`;
     }
     const published = new Set<string>(HOST_PUBLISHED_SPECIFIERS);
     const unpublished = specifiers.filter((specifier) => !published.has(specifier));
     if (unpublished.length > 0) {
-        return `imports ${unpublished.join(", ")}, which the host does not publish — bundle it in, or use one of: ${HOST_PUBLISHED_SPECIFIERS.join(", ")}`;
+        return `imports ${unpublished.join(", ")}, which the host does not publish, bundle it in, or use one of: ${HOST_PUBLISHED_SPECIFIERS.join(", ")}`;
     }
     return undefined;
 };

@@ -27,7 +27,7 @@ export const INVENTORY_SERVICES: readonly InventoryServiceDescriptor[] = [
         service: "signoz",
         label: "SigNoz",
         icon: "wave-pulse",
-        description: "Observability — traces, logs and metrics.",
+        description: "Observability, traces, logs and metrics.",
         fields: [{ key: "domain", label: "Domain", kind: "text" }],
     },
     {
@@ -99,9 +99,9 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     // Distinct from Servers on purpose: a server is something the sandbox DIALS, a computer of yours is
     // something that dials the sandbox, and the difference the user feels is that one of them is the machine
     // they are sitting at.
-    { id: "machines", label: "Your computers", hint: "Let the agent work on your own computer — run commands, handle files, see the screen." },
+    { id: "machines", label: "Your computers", hint: "Let the agent work on your own computer, run commands, handle files, see the screen." },
     { id: "servers", label: "Servers", hint: "Give the agent remote machines over SSH and private networks over VPN." },
-    { id: "deploy", label: "Deploy & infra", hint: "Drive your container deployments — stacks, services and releases." },
+    { id: "deploy", label: "Deploy & infra", hint: "Drive your container deployments, stacks, services and releases." },
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
 ];
 
@@ -144,7 +144,7 @@ export interface CapabilityCatalogEntry {
     // An @intentic/ui IconName rendered when no simple-icons `logo` fits the brand (before the per-kind
     // fallback). undefined → the generic per-kind icon.
     readonly icon?: string | undefined;
-    // ONE LINE — 60 characters or fewer. Three or four tiles sit across the grid and a row is as tall as its
+    // ONE LINE: 60 characters or fewer. Three or four tiles sit across the grid and a row is as tall as its
     // tallest one, so a second clause here costs height on the cards beside it too. The grid clamps it at two
     // lines regardless. Anything longer belongs in `hint`.
     readonly description: string;
@@ -212,7 +212,7 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
             { value: "off", label: "Blocked" },
             { value: "on", label: "Allowed" },
         ],
-        hint: "Start, stop, restart and update the Intentic sandboxes running on this machine — narrower than Run commands, and enough to delegate the machine's sandbox fleet to this one.",
+        hint: "Start, stop, restart and update the Intentic sandboxes running on this machine, narrower than Run commands, and enough to delegate the machine's sandbox fleet to this one.",
     },
     {
         key: "sandboxRemove",
@@ -241,7 +241,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         category: "platform",
         description: "Self-host and deploy your own apps.",
         fields: [],
-        hint: "One-time setup — then provision hosts, services and apps.",
+        hint: "One-time setup, then provision hosts, services and apps.",
     },
     {
         id: "monorepo",
@@ -269,7 +269,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "docker",
         category: "platform",
         logo: "docker",
-        description: "Run containers — its own Engine + Compose.",
+        description: "Run containers, its own Engine + Compose.",
         singleton: true,
         /* The engine itself takes no configuring; these are the things a user chooses about it, in the two
          * families DockerConfigSchema defines, and the `rebuild` chip is what tells them apart on sight,
@@ -284,14 +284,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 boolean: true,
                 default: "off",
                 rebuild: true,
-                hint: "Passes the host's NVIDIA GPUs into the engine, for CUDA images and GPU compose stacks. Needs an NVIDIA GPU and nvidia-container-toolkit on the host — checked at rebuild, and the sandbox still starts without GPUs if it can't.",
+                hint: "Passes the host's NVIDIA GPUs into the engine, for CUDA images and GPU compose stacks. Needs an NVIDIA GPU and nvidia-container-toolkit on the host, checked at rebuild, and the sandbox still starts without GPUs if it can't.",
             },
             {
                 key: "registryMirror",
                 label: "Registry mirror",
                 optional: true,
                 placeholder: "https://registry.example.internal",
-                hint: "A pull-through cache for Docker Hub — worth setting on a slow, metered or air-gapped link, since this engine starts with an empty image store.",
+                hint: "A pull-through cache for Docker Hub, worth setting on a slow, metered or air-gapped link, since this engine starts with an empty image store.",
             },
             {
                 key: "insecureRegistries",
@@ -305,10 +305,10 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Container address pool",
                 optional: true,
                 placeholder: "10.201.0.0/16",
-                hint: "The subnet this engine carves container networks from. Change it when Docker's default (172.17.0.0/16) collides with your VPN or LAN — the symptom is internal hosts going unreachable while everything else works.",
+                hint: "The subnet this engine carves container networks from. Change it when Docker's default (172.17.0.0/16) collides with your VPN or LAN, the symptom is internal hosts going unreachable while everything else works.",
             },
         ],
-        hint: "One-time rebuild required — the sandbox restarts privileged with its own isolated Docker Engine (your machine's Docker is never shared).",
+        hint: "One-time rebuild required, the sandbox restarts privileged with its own isolated Docker Engine (your machine's Docker is never shared).",
     },
     {
         id: "ssh",
@@ -458,7 +458,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Routed networks",
                 default: "0.0.0.0/0",
                 placeholder: "10.0.0.0/8,192.168.0.0/16",
-                hint: "Which networks go through the tunnel. 0.0.0.0/0 sends everything, including this sandbox's own internet access — if the gateway doesn't route the internet, list only the networks behind it.",
+                hint: "Which networks go through the tunnel. 0.0.0.0/0 sends everything, including this sandbox's own internet access, if the gateway doesn't route the internet, list only the networks behind it.",
                 when: "provider == 'ipsec'",
             },
 
@@ -479,7 +479,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 "WireGuard: paste the full `.conf` (`[Interface]` + `[Peer]`) from your provider or server.",
                 "FortiGate SSL-VPN: use the gateway host and port your FortiClient connection uses (e.g. `vpn.example.com:10443` → host + `10443`).",
                 "IPsec: the pre-shared key, plus your XAuth username and password if the gateway asks for them.",
-                "IPsec routed networks: keep `0.0.0.0/0` only if the gateway also carries your internet — otherwise list the networks behind it, or the sandbox loses everything the gateway doesn't route.",
+                "IPsec routed networks: keep `0.0.0.0/0` only if the gateway also carries your internet, otherwise list the networks behind it, or the sandbox loses everything the gateway doesn't route.",
                 "Have a FortiClient config file? Use `Import from FortiClient` above to fill this in from it.",
                 "If the gateway asks for a 2FA code, connect from the `Status` card and enter the code there.",
             ],
@@ -544,7 +544,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             scopes: "private repos: read access (e.g. GitHub `repo`)",
             steps: [
                 "Point at a git repo with an `intentic-extension.json` at its root (or the subdirectory).",
-                "Pin the exact commit sha you reviewed — branches and tags are not accepted.",
+                "Pin the exact commit sha you reviewed: branches and tags are not accepted.",
                 "Private repo: add a token with read access.",
                 "Reload the app after installing to load its UI; agent contributions load next turn.",
             ],
@@ -578,16 +578,16 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Network",
                 default: "eip155:8453",
                 options: [
-                    { value: "eip155:8453", label: "Base — real USDC" },
-                    { value: "eip155:84532", label: "Base Sepolia — test money" },
+                    { value: "eip155:8453", label: "Base, real USDC" },
+                    { value: "eip155:84532", label: "Base Sepolia, test money" },
                 ],
-                hint: "Start on test money: the whole flow — approval cards, budgets, receipts — works identically with faucet USDC and costs nothing.",
+                hint: "Start on test money: the whole flow, approval cards, budgets, receipts, works identically with faucet USDC and costs nothing.",
             },
             {
                 key: "perPaymentMaxUsd",
                 label: "Most per payment (USD)",
                 default: "1.00",
-                hint: "A hard ceiling. Anything dearer is refused outright — the agent cannot even ask.",
+                hint: "A hard ceiling. Anything dearer is refused outright, the agent cannot even ask.",
             },
             {
                 key: "dailyCapUsd",
@@ -599,7 +599,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "autoApproveUnderUsd",
                 label: "Approve automatically under (USD)",
                 default: "0",
-                hint: "Leave at 0 and every single payment asks you in chat first. Raise it to let small payments through without interrupting you — they still count against the daily cap.",
+                hint: "Leave at 0 and every single payment asks you in chat first. Raise it to let small payments through without interrupting you, they still count against the daily cap.",
             },
             {
                 key: "allow",
@@ -616,7 +616,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 hint: "Refused before any card goes up, whatever the price.",
             },
         ],
-        hint: "Your sandbox gets its own USDC wallet, held by the platform's custody provider — the agent never sees a key and cannot move money without your limits allowing it. Fund it by sending USDC to the address shown on the card after it connects, then the agent can pay any endpoint that charges per call over the x402 protocol. Every payment is receipted with its on-chain transaction.",
+        hint: "Your sandbox gets its own USDC wallet, held by the platform's custody provider, the agent never sees a key and cannot move money without your limits allowing it. Fund it by sending USDC to the address shown on the card after it connects, then the agent can pay any endpoint that charges per call over the x402 protocol. Every payment is receipted with its on-chain transaction.",
     },
     {
         id: "identity",
@@ -624,7 +624,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "identity",
         category: "communication",
         icon: "user",
-        description: "One email — every account grows from it.",
+        description: "One email, every account grows from it.",
         fields: [
             { key: "email", label: "Email address", placeholder: "you@gmail.com" },
             {
@@ -632,14 +632,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Email password",
                 secret: true,
                 optional: true,
-                hint: "Only so the agent can have it re-typed into the provider's own login — most people leave this empty and sign in themselves.",
+                hint: "Only so the agent can have it re-typed into the provider's own login, most people leave this empty and sign in themselves.",
             },
             {
                 key: "mailbox",
                 label: "Code mailbox",
                 optional: true,
                 placeholder: "the IMAP connection's name",
-                hint: "A connected IMAP entry for this address. The agent then asks for “the newest code from this site” and gets exactly that — never the inbox.",
+                hint: "A connected IMAP entry for this address. The agent then asks for 'the newest code from this site' and gets exactly that, never the inbox.",
             },
             {
                 key: "loginUrl",
@@ -653,13 +653,13 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "May open accounts on its own",
                 boolean: true,
                 default: "off",
-                hint: "Lets the agent create new platform accounts through this identity when a task needs one. Automated signup is against many platforms' terms — leave off unless that is a call you have made.",
+                hint: "Lets the agent create new platform accounts through this identity when a task needs one. Automated signup is against many platforms' terms, leave off unless that is a call you have made.",
             },
         ],
-        hint: "The agent signs into (and opens) platform accounts through this identity's browser — you do one login, it does the rest, and calls you in for anything only a person can clear.",
+        hint: "The agent signs into (and opens) platform accounts through this identity's browser, you do one login, it does the rest, and calls you in for anything only a person can clear.",
         guide: {
             steps: [
-                "Name it and give it the email address it IS — a dedicated address beats your personal one.",
+                "Name it and give it the email address it IS: a dedicated address beats your personal one.",
                 "After adding, open `Log in` and sign into the email provider yourself in the live window.",
                 "Optionally connect `IMAP` for the same address and name it under `Code mailbox`, so the agent can fetch verification codes itself.",
                 "Add platform accounts under this identity (or turn on `May open accounts` and let the agent open them as work needs them).",
@@ -677,7 +677,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "endpoint",
         category: "extend",
         icon: "sparkles",
-        description: "Your own models — Ollama, vLLM, a gateway.",
+        description: "Your own models, Ollama, vLLM, a gateway.",
         fields: [
             { key: "baseUrl", label: "API base URL", placeholder: "http://host.docker.internal:11434/v1" },
             {
@@ -692,11 +692,11 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "apiKey", label: "API key", secret: true, optional: true },
             { key: "headers", label: "Extra headers (Name: value per line)", optional: true, multiline: true },
         ],
-        hint: "A server on this machine is reachable at host.docker.internal — the sandbox always resolves it. Models are read from the endpoint itself, so pulling a new one just needs a reload. Most servers are OpenAI-compatible; pick Anthropic only if it serves /v1/messages.",
+        hint: "A server on this machine is reachable at host.docker.internal, the sandbox always resolves it. Models are read from the endpoint itself, so pulling a new one just needs a reload. Most servers are OpenAI-compatible; pick Anthropic only if it serves /v1/messages.",
         guide: {
             steps: [
                 "Start your model server and note the URL its API is on (Ollama: `http://localhost:11434/v1`).",
-                "Running on THIS machine? Use `host.docker.internal` in place of `localhost` — the sandbox is a container.",
+                "Running on THIS machine? Use `host.docker.internal` in place of `localhost`: the sandbox is a container.",
                 "Leave the key empty if the server has no auth; most self-hosted ones don't.",
                 "Its models then appear as their own provider in the chat's model picker.",
             ],
@@ -727,7 +727,7 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
         key: "identity",
         label: "Belongs to identity",
         optional: true,
-        hint: "The identity whose browser this account lives in — shares its email session, so “Continue with” its provider is one click.",
+        hint: "The identity whose browser this account lives in. It shares its email session, so 'Continue with' its provider is one click.",
     },
 ];
 const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };

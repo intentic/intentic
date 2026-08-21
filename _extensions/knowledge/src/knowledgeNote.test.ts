@@ -27,7 +27,7 @@ describe(`linkifyNoteRefs`, () => {
         expect(out.querySelector(`a`)?.textContent).toBe(`Charles`);
     });
 
-    /* A link to a note nobody has written is the knowledge base's to-do list, not an error — so it reads as unfinished
+    /* A link to a note nobody has written is the knowledge base's to-do list, not an error, so it reads as unfinished
      * and, crucially, is not clickable: there is nothing on the other side of it. */
     it(`marks a link to a note nobody has written, and gives it nowhere to go`, () => {
         const anchor = decorate(`<p>See [[Nowhere]].</p>`).querySelector(`a`);
@@ -77,7 +77,7 @@ describe(`linkifyNoteRefs`, () => {
 describe(`toneOfType`, () => {
     it(`gives every kind a colour, the same one every time`, () => {
         expect(toneOfType(`person`)).toBe(toneOfType(`person`));
-        // Any word the owner's vocabulary happens to use gets one — there is no list to fall off.
+        // Any word the owner's vocabulary happens to use gets one: there is no list to fall off.
         expect(toneOfType(`something-nobody-predicted`)).toBeTruthy();
     });
 

@@ -50,7 +50,7 @@ export const linkSshHosts = async (historyRoot: string): Promise<void> => {
     await mkdir(dirname(link), { recursive: true, mode: 0o700 });
     const existing = await lstat(link).catch(() => undefined);
     if (existing !== undefined && !existing.isSymbolicLink()) {
-        throw new Error(`${link} exists and is not a symlink — leaving the local ssh hosts alone`);
+        throw new Error(`${link} exists and is not a symlink: leaving the local ssh hosts alone`);
     }
     if (existing === undefined || (await readlink(link)) !== target) {
         if (existing !== undefined) {

@@ -30,7 +30,7 @@ test("both kinds round-trip, are filed under their own id, and clear independent
 
     expect((await journal.list()).map((entry) => entry.kind).toSorted()).toEqual(["automation", "turn"]);
 
-    // A second turn on the same conversation REPLACES the entry rather than adding one — the filing is by
+    // A second turn on the same conversation REPLACES the entry rather than adding one: the filing is by
     // conversation, which is what makes a failed clear self-healing instead of a leak.
     await journal.recordTurn({ kind: "turn", turn: { conversationId: "c-1", prompt: "again" }, startedAt: 30, attempts: 1 });
     const turns = (await journal.list()).filter((entry) => entry.kind === "turn");
@@ -45,7 +45,7 @@ test("both kinds round-trip, are filed under their own id, and clear independent
     expect(await journal.list()).toEqual([]);
 });
 
-test("clearing what isn't there is a no-op — a turn that settles twice must not throw", async () => {
+test("clearing what isn't there is a no-op: a turn that settles twice must not throw", async () => {
     const journal = fileTurnJournal(journalDir());
     await expect(journal.clearTurn("never-ran")).resolves.toBeUndefined();
     await expect(journal.clearFire("never-fired")).resolves.toBeUndefined();
@@ -67,7 +67,7 @@ test("an unreadable entry is skipped and LEFT, never deleted; a foreign filename
 
     /* Reading is not the moment to destroy a record. A file caught mid-write parses as garbage for an instant,
      * and a lister that unlinked on a failed parse would delete the live entry of a turn that had only just
-     * started — which is exactly the turn the journal exists to protect. */
+     * started, which is exactly the turn the journal exists to protect. */
     const { readdirSync } = await import("node:fs");
     expect(readdirSync(dir).toSorted()).toEqual(["..evil.json", "a-fine.json", "notes.txt", "t-broken.json", "t-wrong-shape.json"]);
 });

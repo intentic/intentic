@@ -61,7 +61,7 @@ const describe = (status: number, path: string): string => {
     switch (status) {
         case 401:
         case 403: {
-            return "the API key was refused — copy it again from Obsidian ▸ Settings ▸ Local REST API";
+            return "the API key was refused: copy it again from Obsidian ▸ Settings ▸ Local REST API";
         }
         case 404: {
             return `the vault has nothing at "${path}"`;

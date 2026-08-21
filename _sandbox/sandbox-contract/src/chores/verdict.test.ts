@@ -20,7 +20,7 @@ const pkg = (over: Partial<ChorePackage> = {}): ChorePackage => ({
     ...over,
 });
 
-// A repository that is a Node workspace with documents, a pipeline, an image and a Tailwind front-end — so every
+// A repository that is a Node workspace with documents, a pipeline, an image and a Tailwind front-end, so every
 // chore APPLIES by default and each applicability test can turn off exactly the one fact it is about.
 const shape = (over: Partial<ChoreShape> = {}): ChoreShape => ({
     docs: [`docs/architecture/repo.md`],
@@ -56,7 +56,7 @@ const auditProbe = (names: readonly string[]): ProbeResult =>
 const report = (over: Partial<ChoresReport> = {}): ChoresReport => ({
     repos: [{ repo: `app`, probes: [], signals: signals() }],
     ledger: [],
-    // Verdicts are about EVIDENCE, never about work in flight — a probe running does not make a chore more or
+    // Verdicts are about EVIDENCE, never about work in flight: a probe running does not make a chore more or
     // less due, it only makes the panel say so. Empty here because no assertion in this file should depend on it.
     running: [],
     node: `v24.18.0`,
@@ -111,7 +111,7 @@ describe(`the ledger debounces; it cannot hide`, () => {
         ...over,
     });
 
-    test(`a run against this exact evidence leaves the chore due but settled — shown, never badged`, () => {
+    test(`a run against this exact evidence leaves the chore due but settled: shown, never badged`, () => {
         const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry()] }, `security-advisories`);
         expect(verdict.state).toBe(`due`);
         expect(verdict.settled).toBe(true);
@@ -134,7 +134,7 @@ describe(`the ledger debounces; it cannot hide`, () => {
     test(`an agent reporting the findings did not hold up clears the chore until the evidence changes`, () => {
         const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ outcome: `clean` })] }, `security-advisories`);
         expect(verdict.state).toBe(`clear`);
-        expect(verdict.headline).toBe(`Checked — the findings did not hold up`);
+        expect(verdict.headline).toBe(`Checked, the findings did not hold up`);
     });
 
     test(`a snooze silences a due chore without hiding it, and lapses on its own`, () => {
@@ -148,8 +148,8 @@ describe(`the ledger debounces; it cannot hide`, () => {
     });
 
     /* A chore with a cadence expires its own settlement, so "we looked and chose not to act" cannot silence it
-     * for good. Security has no cadence on purpose — an advisory does not become interesting again because
-     * ninety days passed, it becomes interesting when the advisory set changes — so its settlement persists. */
+     * for good. Security has no cadence on purpose: an advisory does not become interesting again because
+     * ninety days passed, it becomes interesting when the advisory set changes, so its settlement persists. */
     test(`settlement expires with the chore's cadence, and persists for the chores that have none`, () => {
         const dependencies = choreById(`dependencies-outdated`);
         expect(dependencies?.cadenceMs).toBeGreaterThan(0);
@@ -180,7 +180,7 @@ describe(`a measurement older than the work is not evidence about the work`, () 
     test(`a turn that landed after the measurement steps the chore down from due`, () => {
         const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000 })] }, `security-advisories`);
         expect(verdict.state).toBe(`stale`);
-        // The evidence stays on the row — it is what the reader checks the claim against — and the claim comes off.
+        // The evidence stays on the row: it is what the reader checks the claim against, and the claim comes off.
         expect(verdict.detail).not.toEqual([]);
         expect(verdict.settled).toBe(false);
     });
@@ -194,7 +194,7 @@ describe(`a measurement older than the work is not evidence about the work`, () 
     });
 
     // Re-measuring is the whole cure: the same run, against evidence taken after it, is settled rather than stale.
-    test(`re-measuring after the turn restores the verdict — due, and now genuinely settled`, () => {
+    test(`re-measuring after the turn restores the verdict: due, and now genuinely settled`, () => {
         const remeasured = report({
             repos: [{ repo: `app`, probes: [{ ...auditProbe([`left-pad`]), ranAt: NOW - 60_000 }], signals: signals() }],
             ledger: [ledgerEntry({ ranAt: NOW - 3_600_000 })],
@@ -223,7 +223,7 @@ describe(`a measurement older than the work is not evidence about the work`, () 
     // Every measured row carries when it was taken, so no row can pass off a week-old count as this morning's.
     test(`every measured verdict says when it was measured, and the unmeasurable ones say nothing`, () => {
         expect(verdictFor(withAdvisories, `security-advisories`).measuredAt).toBe(NOW - DAY);
-        // A survey rests on no measurement — it is decided by the calendar, and has nothing to be out of date.
+        // A survey rests on no measurement: it is decided by the calendar, and has nothing to be out of date.
         expect(verdictFor(report(), `standardize-patterns`).measuredAt).toBeUndefined();
         // Nor does a probe that never ran.
         expect(verdictFor(report(), `security-advisories`).measuredAt).toBeUndefined();
@@ -363,7 +363,7 @@ describe(`the prompts`, () => {
     const dueVerdict = () =>
         verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`])], signals: signals() }] }), `security-advisories`);
 
-    /* A prompt that counts without NAMING sends the agent off to re-derive a list we are already holding — slowly,
+    /* A prompt that counts without NAMING sends the agent off to re-derive a list we are already holding: slowly,
      * and against a tree that has moved since. Every measured chore names its artefacts. */
     test(`name the artefacts, not just how many there were`, () => {
         const verdict = dueVerdict();
@@ -420,7 +420,7 @@ describe(`the prompts`, () => {
             expect(verdict.prompt, verdict.chore.id).toBeTypeOf(`string`);
             expect(verdict.digest, verdict.chore.id).not.toBe(``);
         }
-        // Each measured chore's own artefact reaches its own prompt — the regression this whole test exists for.
+        // Each measured chore's own artefact reaches its own prompt: the regression this whole test exists for.
         const promptFor = (chore: string) => due.find((verdict) => verdict.chore.id === chore)?.prompt ?? ``;
         expect(promptFor(`security-advisories`)).toContain(`left-pad`);
         expect(promptFor(`dependencies-outdated`)).toContain(`vue 1.0.0 → 2.0.0`);
@@ -432,7 +432,7 @@ describe(`the prompts`, () => {
     });
 });
 
-/* APPLICABILITY — whether the chore is a QUESTION worth asking of this repository, as opposed to whether the
+/* APPLICABILITY, whether the chore is a QUESTION worth asking of this repository, as opposed to whether the
  * answer is yes. Every case here is one where the previous design showed a row that could never be acted on:
  * an offer to re-read documentation that was never written, to slim an image that does not exist, to tighten a
  * pipeline nobody has. Each of those teaches the reader that this list was not written by someone who looked. */
@@ -468,7 +468,7 @@ describe(`what does not apply here`, () => {
         expect(verdictFor(single, `library-overlap`).state).toBe(`not-applicable`);
     });
 
-    // A survey has no evidence to be absent — "90 days have passed" is true everywhere — so without a gate it
+    // A survey has no evidence to be absent: "90 days have passed" is true everywhere, so without a gate it
     // fires forever in repositories where its subject does not exist. This is the regression that motivated
     // making `applies` a required field on SurveySpec rather than an optional one.
     test(`a tiny repository is not surveyed for cross-cutting patterns it cannot have`, () => {
@@ -498,7 +498,7 @@ describe(`what does not apply here`, () => {
 
     /* THE CAUSES HAVE TO GROUP, and that is a fact about the STRINGS rather than about the gates. The scope strip
      * prints one line per distinct cause with the chores it costs listed beside it, so two gates that both mean
-     * "there is no package.json here" and say it in different words print two lines — and a workspace root, where
+     * "there is no package.json here" and say it in different words print two lines, and a workspace root, where
      * a dozen chores are ruled out by three facts, is back to the paragraph-per-chore wall this phrasing replaced.
      * Bounded rather than enumerated: a new gate may invent a new cause, it may not invent a new sentence. */
     test(`applicability reasons are bare causes, so the ones that mean the same thing group`, () => {
@@ -515,7 +515,7 @@ describe(`what does not apply here`, () => {
     });
 });
 
-/* THE FRONT-END CHORES. Four chores over two probes, tested where they decide something — the share that makes a
+/* THE FRONT-END CHORES. Four chores over two probes, tested where they decide something: the share that makes a
  * bundle a finding, the names that make two components one component, and above all the digests, because three of
  * these four measure things that move every time anyone writes a line of markup. */
 const uiProbe = (scan: Partial<UiScan> = {}): ProbeResult =>
@@ -601,8 +601,8 @@ describe(`idioms the framework has replaced`, () => {
         expect(verdict.detail).toEqual([`3 files · the Options API → <script setup> with the Composition API`]);
     });
 
-    /* A migration in progress is a set that changes on every commit, so digesting the file identities — which is
-     * right for the documentation chore, whose set is packages — would badge continuously through exactly the
+    /* A migration in progress is a set that changes on every commit, so digesting the file identities, which is
+     * right for the documentation chore, whose set is packages: would badge continuously through exactly the
      * period someone is doing the work. The bucketed count moves on real progress and not on daily churn. */
     test(`one more file in a large migration is not news`, () => {
         const before = verdictFor(withProbes([uiProbe({ idioms: [idioms(`vue-options-api`, 40)] })]), `framework-idiom`);
@@ -668,7 +668,7 @@ describe(`components built twice`, () => {
     });
 
     /* Half a measurement would let the row claim it looked for shared logic in a repository where jscpd has never
-     * run — the "measured and found nothing" lie the unavailable state exists to prevent. */
+     * run: the "measured and found nothing" lie the unavailable state exists to prevent. */
     test(`without the clone sweep the chore is unavailable, not clear`, () => {
         expect(verdictFor(withProbes([components(`src/Button.vue`, `src/ui/Button.vue`)]), `component-overlap`).state).toBe(`unavailable`);
     });
@@ -692,7 +692,7 @@ describe(`hard-coded styles`, () => {
         expect(verdict.detail[0]).toBe(`src/Checkout.vue · 11 values`);
     });
 
-    // Tailwind gates this one alone — a Vue repository with no Tailwind has no theme scale to have bypassed, and
+    // Tailwind gates this one alone: a Vue repository with no Tailwind has no theme scale to have bypassed, and
     // a row saying so would be the surface inventing a subject.
     test(`a repository without Tailwind is not asked the question at all`, () => {
         const verdict = verdictFor(
@@ -713,7 +713,7 @@ describe(`hard-coded styles`, () => {
     });
 });
 
-/* THE CRITERION — the rule in words, next to the evidence that met it. A row that reports a number without the
+/* THE CRITERION: the rule in words, next to the evidence that met it. A row that reports a number without the
  * rule behind it is asking to be taken on trust, and the first row that turns out to be wrong costs the whole
  * list its credibility. */
 describe(`every chore says what would make it due`, () => {

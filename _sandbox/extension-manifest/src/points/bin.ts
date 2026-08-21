@@ -7,7 +7,7 @@ import type { ContributionPoint } from "../contribution-point.js";
 export const binPoint = {
     name: "bin",
     description:
-        "A checkout-relative directory of executables the daemon puts on the agent's PATH every turn — how you ship the agent a command-line tool. The files are the approved code themselves: they ride the pinned checkout, and the daemon only adds the directory to PATH.",
+        "A checkout-relative directory of executables the daemon puts on the agent's PATH every turn, how you ship the agent a command-line tool. The files are the approved code themselves: they ride the pinned checkout, and the daemon only adds the directory to PATH.",
     schema: z
         .string()
         .min(1)

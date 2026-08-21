@@ -7,7 +7,7 @@ import type { StripeGateway } from "./pool-stripe.js";
 /* PAYING TWICE IS THE ONLY UNRECOVERABLE FAILURE IN THIS SYSTEM, so most of what is pinned here is the
  * machinery that prevents it: the reservation happening before any money moves, a lost answer being retried
  * under the SAME key rather than replaced by a second payment, and a failure never handing its statements back
- * for some later run to pay again. The rest is what a creator would call a broken promise — being paid before
+ * for some later run to pay again. The rest is what a creator would call a broken promise: being paid before
  * the stated date, being paid for money that expired, or a name nobody claimed being paid to somebody. */
 
 const NOW = new Date(`2026-08-15T09:00:00Z`);
@@ -87,7 +87,7 @@ describe(`the payout run`, () => {
 
         const outcomes = await runPayouts({ prisma, config, gateway, now: () => NOW });
 
-        // Two names, four figures owed, ONE payment — a creator is owed a number, not a bank line per listing.
+        // Two names, four figures owed, ONE payment: a creator is owed a number, not a bank line per listing.
         expect(written.created).toEqual([{ userId: `u1`, amountCents: 12_840, currency: `usd` }]);
         expect(written.claimed).toEqual([{ ids: [`st1`, `st2`], payoutId: `payout_1` }]);
         expect(calls).toEqual([{ amountCents: 12_840, currency: `usd`, destination: `acct_u1`, idempotencyKey: `payout_1` }]);
@@ -130,7 +130,7 @@ describe(`the payout run`, () => {
         // than moving money again.
         expect(calls).toEqual([`payout_earlier`]);
         expect(outcomes).toEqual([{ userId: `u1`, amountCents: 5000, paid: true, resumed: true }]);
-        // Nothing new reserved — a resume is a continuation, not a second payment.
+        // Nothing new reserved: a resume is a continuation, not a second payment.
         expect(written.created).toEqual([]);
     });
 
@@ -172,7 +172,7 @@ describe(`the payout run`, () => {
             due: [
                 // Connected, but Stripe is not accepting transfers for it yet.
                 { id: `st1`, publisher: `notready`, amountCents: 9000 },
-                // Nobody has proved this name — its money waits out its twelve months instead.
+                // Nobody has proved this name: its money waits out its twelve months instead.
                 { id: `st2`, publisher: `unclaimed`, amountCents: 9000 },
             ],
             claims: [{ publisher: `notready`, userId: `u1` }],

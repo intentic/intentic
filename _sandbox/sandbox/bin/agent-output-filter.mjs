@@ -8,7 +8,7 @@
 // Deterministic and exit-code-asymmetric: on success, matching command cleaners + a head/tail cap compress the
 // output; on failure (any non-"0" exit, incl. the wrapper's "running"/143 paths) everything except pure terminal
 // noise (ANSI, \r frames) survives, capped only at a generous tail. When lines are dropped, a footer names the
-// counts and the persistent pane log so the agent can grep the full output — lossy display, lossless storage.
+// counts and the persistent pane log so the agent can grep the full output: lossy display, lossless storage.
 //
 // Fail open: any error emits the raw input unchanged. Copied into the image as /usr/local/bin/agent-output-filter
 // (with ./cleaners.mjs alongside it at /usr/local/bin/cleaners.mjs).
@@ -40,8 +40,8 @@ const RETRIEVAL_MIN_DROPPED = 20;
  * The accounting closes exactly: raw − Σ stage savings = the emitted result. Two of the stages are not
  * cleaners in the registry and are named anyway, because leaving them out is how a "89% saved" figure ends up
  * with an unexplained remainder:
- *   ansi   — terminal escapes and \r redraw frames, stripped before any cleaner sees a line.
- *   footer — the retrieval pointer, which ADDS bytes (a negative saving). It is the price of the trimming
+ *   ansi  : terminal escapes and \r redraw frames, stripped before any cleaner sees a line.
+ *   footer: the retrieval pointer, which ADDS bytes (a negative saving). It is the price of the trimming
  *            being reversible, and it belongs on the same ledger as what it bought.
  */
 export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled = new Set(CLEANERS), cacheStore = undefined, values = []) => {
@@ -59,12 +59,12 @@ export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled
     if (exitCode === "0" && body.trim() === "" && raw.trim() !== "") {
         body = "(no notable output)";
     }
-    // Everything below rewrites the body as a whole, so each step is weighed against the body it was handed —
+    // Everything below rewrites the body as a whole, so each step is weighed against the body it was handed:
     // the same rule the line stages follow.
     //
     // `guard` closes the pipeline: a filter that emits MORE than it was given has not filtered anything, so the
     // raw capture goes back out and the ledger reads zero for that command. It is the last line of defence, not
-    // the first — the footer below already declines to add itself when it would not pay — but it is total, so no
+    // the first: the footer below already declines to add itself when it would not pay, but it is total, so no
     // future cleaner can make a result worse than not running.
     const emitted = (text, id) => {
         stages.push({ id, saved: bodyBytes(lines) - text.length });
@@ -75,7 +75,7 @@ export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled
         return { out: raw, stages };
     };
     // `cache` (success only): if this command's cleaned body is byte-identical to an earlier run this session,
-    // collapse it to the marker (which carries the retrieval handle) and skip the footer — nothing new to show.
+    // collapse it to the marker (which carries the retrieval handle) and skip the footer: nothing new to show.
     if (exitCode === "0" && enabled.has("cache") && cacheStore !== undefined && body !== "" && body !== "(no notable output)") {
         const collapsed = collapseCached(body, command, cacheStore, logPath);
         if (collapsed.cached) {
@@ -87,12 +87,12 @@ export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled
         return emitted(body === "" ? body : `${body}\n`, "footer");
     }
     const kept = body === "(no notable output)" ? 0 : lines.length;
-    /* Point at the reversible retrieval command (lossy display, lossless storage) — a ready-to-run handle like
+    /* Point at the reversible retrieval command (lossy display, lossless storage): a ready-to-run handle like
      * iq's `--after <cursor>` continuation. `retrieve-output` greps the full pane log, budget-capped.
      *
      * Gated on the trim being big enough that retrieval is a plausible thing to want. The handle is ~100 of the
      * footer's ~124 bytes, and it rode every trim however small: over one ledger window 551 pointers cost 17k
-     * tokens — 15.7% of everything the cleaners saved on those same commands — while 289 of them explained a
+     * tokens: 15.7% of everything the cleaners saved on those same commands, while 289 of them explained a
      * trim of under 300 bytes, and across 10,446 agent commands `retrieve-output` was invoked exactly zero
      * times. Nobody retrieves three elided lines of pnpm progress.
      *
@@ -119,7 +119,7 @@ const main = async () => {
     // was cleaned and there is nothing to attribute.
     let stages = [];
     /* Loaded before the pipeline and OUTSIDE it, because the last line of this function masks with them
-     * whatever happened above — a held-out command, a filter that threw. Own try: an unreadable vault is a
+     * whatever happened above, a held-out command, a filter that threw. Own try: an unreadable vault is a
      * reason to fall back on the name patterns, never a reason to fail a Bash command. */
     let values = [];
     try {
@@ -135,7 +135,7 @@ const main = async () => {
         const holdout = Number(process.env["INTENTIC_OUTPUT_HOLDOUT"] ?? "0");
         const heldOut = holdout > 0 && Math.random() < holdout;
         // The `cache` store is per-session, keyed from the pane-log path; only opened when cleaning runs and a
-        // stable session key exists (held-out commands never touch it — the control must stay uncontaminated).
+        // stable session key exists (held-out commands never touch it: the control must stay uncontaminated).
         let cacheStore;
         if (!heldOut && enabled.has("cache") && terminalsDir !== undefined && terminalsDir !== "") {
             const sessionKey = sessionKeyFromLog(logPath);
@@ -151,7 +151,7 @@ const main = async () => {
         // Token-savings telemetry, one NDJSON line per command under historyRoot/logs (same prune policy as the
         // terminal logs). `cleaners`/`matched`/`heldOut` attribute the saving to the active config for A/B, and
         // `stageBytes` says what each mechanism was worth on this command (bytes removed; negative = added).
-        // Best-effort — stats must never break the tool result.
+        // Best-effort: stats must never break the tool result.
         if (terminalsDir !== undefined && terminalsDir !== "") {
             const matched = matchedCleaners(command, enabled);
             const stat = {
@@ -172,13 +172,13 @@ const main = async () => {
         out = raw;
     }
     /* THE FLOOR, outside every branch above. The holdout emits `raw` by design and the catch emits it on
-     * failure, and both of those used to hand a credential straight to the model — the one cleaner whose
+     * failure, and both of those used to hand a credential straight to the model: the one cleaner whose
      * absence is not a measurement artifact or a degraded result but a leak. Guarded and idempotent: if this
      * throws too, the command still answers. */
     try {
         out = redactText(out, values);
     } catch {
-        // Keep `out` as it stands — a tool result must always come back.
+        // Keep `out` as it stands: a tool result must always come back.
     }
     process.stdout.write(out);
 };

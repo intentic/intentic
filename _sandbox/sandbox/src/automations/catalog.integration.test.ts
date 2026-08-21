@@ -58,7 +58,7 @@ test("serves the daemon's own sources with no extension installed at all", async
     const catalog = await automationCatalog(services(mkdtempSync(join(tmpdir(), "catalog-work-")), ""));
 
     expect(catalog.sources.map((source) => source.provider)).toEqual(CORE_TRIGGER_SOURCES.map((source) => source.provider));
-    // The chore book's scheduled forms are generated, so the count is not asserted — that they arrive at all is.
+    // The chore book's scheduled forms are generated, so the count is not asserted: that they arrive at all is.
     expect(catalog.templates.some((template) => template.id === "front-desk")).toBe(true);
     expect(catalog.templates.some((template) => template.id === "fix-failing-ci")).toBe(true);
 });
@@ -171,7 +171,7 @@ test("an extension cannot shadow one of the daemon's own sources", async () => {
     expect(catalog.sources.find((source) => source.provider === "ci")?.label).toBe("CI/CD");
 });
 
-/* THROUGH THE REAL ROUTER, once — the merge above is a function, and a function nobody can reach is a function
+/* THROUGH THE REAL ROUTER, once: the merge above is a function, and a function nobody can reach is a function
  * that does not exist. This also pins the other half of the promise: the picker and `upsert` read ONE list, so
  * a provider the catalogue does not carry is refused rather than stored to fail at fire time. */
 test("the catalogue is served, and upsert refuses a provider it does not carry", async () => {

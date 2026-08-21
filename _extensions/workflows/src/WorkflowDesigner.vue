@@ -9,12 +9,12 @@ import { addStep, connectSteps, disconnectSteps, removeStep, toggleHandoff, upda
 import { editableCopy } from "./workflowDraft";
 import { useWorkflows } from "./useWorkflows";
 
-/* THE DESIGNER — a full page whose content is the canvas.
+/* THE DESIGNER: a full page whose content is the canvas.
  *
  * IT WAS A DIALOG, AND THAT WAS THE WHOLE PROBLEM. A graph needs horizontal room; a modal is the one container
  * that categorically cannot give it any. Inside 72rem the canvas was a letterbox that showed one node while the
  * second sat off-screen, and the form beside it was a scrolling column of nine questions. The page it is now
- * uses `Page width="full"` — the width tier whose own comment reads "canvas surfaces that need every pixel" —
+ * uses `Page width="full"`: the width tier whose own comment reads "canvas surfaces that need every pixel":
  * and reserves everything below the header for the graph.
  *
  * IT IS A MODE OF THE WORKFLOWS VIEW, NOT A ROUTE OF ITS OWN. An extension's route space is the QUERY (see
@@ -30,7 +30,7 @@ import { useWorkflows } from "./useWorkflows";
  *
  * THE SPLIT IS THE READER'S TO SET. Canvas and inspector want opposite things and both are right: reading the
  * shape of a nine-step graph wants the width, writing a step's prompt wants the column. A fixed 20rem answered
- * neither — the prompt, which is the one real paragraph in this extension, was being written three words to a
+ * neither: the prompt, which is the one real paragraph in this extension, was being written three words to a
  * line. So the seam is draggable, double-click puts it back, and the width is remembered.
  */
 
@@ -38,7 +38,7 @@ const { initial, creating } = defineProps<{ initial: Workflow; creating: boolean
 const emit = defineEmits<{ close: []; saved: [id: string] }>();
 
 const { save } = useWorkflows();
-// `editableCopy`, not structuredClone — `initial` is a reactive proxy here. See workflowDraft.ts.
+// `editableCopy`, not structuredClone: `initial` is a reactive proxy here. See workflowDraft.ts.
 const draft = ref<Workflow>(editableCopy(initial));
 const selectedId = ref<string | undefined>(initial.steps[0]?.id);
 // The edge the reader last clicked, as its endpoints. Drives the little edge card over the canvas.
@@ -48,7 +48,7 @@ const settingsAnchor = ref<HTMLElement>();
 const settings = ref<InstanceType<typeof Popover>>();
 const gatePanel = ref<InstanceType<typeof Popover>>();
 
-// Re-opening on a different workflow must not keep the last one's draft — a designer that silently edits the
+// Re-opening on a different workflow must not keep the last one's draft: a designer that silently edits the
 // wrong workflow is the one mistake here that is invisible until it is saved.
 watch(
     () => initial,
@@ -102,7 +102,7 @@ const flipHandoff = (): void => {
 };
 
 /* THE PROMPT IS NO LONGER A CONDITION OF SAVING, and that is the point of the whole change rather than a
- * loosened rule. A step with no prompt is not an unfinished step — it is one that does whatever the run was
+ * loosened rule. A step with no prompt is not an unfinished step: it is one that does whatever the run was
  * asked to do, which is the ordinary case for a design kept as a SHAPE. Requiring one here forced every author
  * to write a paraphrase of the request into every node before the graph would save, which is exactly the
  * wrapper the default removes. What remains is what genuinely cannot be inferred: a name, and a runnable graph.
@@ -138,7 +138,7 @@ const commit = async (): Promise<void> => {
     failure.value = undefined;
     try {
         /* Saved as authored. An unstated goal used to be back-filled with the step's TITLE here, because the
-         * contract demanded one — an invented bar dressed up as an honest one, since "Claude's attempt" is a
+         * contract demanded one: an invented bar dressed up as an honest one, since "Claude's attempt" is a
          * label and not a description of done. It is absent now, and absent has a real meaning: the step is
          * measured against what the run was asked to do. The inspector already stores a cleared box as absent
          * rather than as ``, so there is nothing left to normalize on the way out. */
@@ -163,7 +163,7 @@ const commit = async (): Promise<void> => {
                 @input="patch({ name: ($event.target as HTMLInputElement).value })"
             />
             <!-- The discoverable way to add a step. The `+` on a node's handle is faster once you know it is
-                 there, and dragging off a handle is faster still — but neither is visible until you hover a
+                 there, and dragging off a handle is faster still, but neither is visible until you hover a
                  node, and an editor whose primary action only appears on hover has no primary action. -->
             <Button label="Add step" size="small" severity="secondary" @click="onAdd(selectedId ?? draft.steps.at(-1)?.id)">
                 <template #icon><Icon name="plus" /></template>
@@ -173,7 +173,7 @@ const commit = async (): Promise<void> => {
                     <template #icon><Icon name="sliders-h" /></template>
                 </Button>
             </span>
-            <!-- The gate sits beside Run settings because it is the same kind of thing — a property of the
+            <!-- The gate sits beside Run settings because it is the same kind of thing: a property of the
                  whole design, not of any step. The icon takes the link tint when one is declared, which is the
                  header's whole statement of "a pipeline can call this". -->
             <Button label="CI gate" size="small" severity="secondary" :text="true" @click="gatePanel?.toggle($event)">
@@ -223,7 +223,7 @@ const commit = async (): Promise<void> => {
                         type="button"
                         v-tooltip.top="
                             pickedStep.needs.length === 1
-                                ? `A new session knows only what the step before it declared — the only honest way to review work. Carrying on keeps the agent, its thread and its working tree.`
+                                ? `A new session knows only what the step before it declared: the only honest way to review work. Carrying on keeps the agent, its thread and its working tree.`
                                 : `Only a step with exactly one predecessor can carry a session on.`
                         "
                         class="cursor-pointer rounded-full border px-2 py-0.5 text-2xs disabled:cursor-default disabled:opacity-40"

@@ -66,7 +66,7 @@ export const checkListingRules = (config: Config, input: ListingInput): readonly
         problems.push(`The slug must be lowercase letters, digits and dashes, starting with a letter or digit, up to 64 characters.`);
     }
     if (reserved(input.slug)) {
-        problems.push(`The slug may not contain ${RESERVED_WORDS.join(`, `)} — those words are reserved for the platform's own listings.`);
+        problems.push(`The slug may not contain ${RESERVED_WORDS.join(`, `)}: those words are reserved for the platform's own listings.`);
     }
     if (input.name.trim().length < NAME_MIN || input.name.length > NAME_MAX) {
         problems.push(`The name must be between ${NAME_MIN} and ${NAME_MAX} characters.`);
@@ -76,7 +76,7 @@ export const checkListingRules = (config: Config, input: ListingInput): readonly
     }
     if (input.description.trim().length < DESCRIPTION_MIN || input.description.length > DESCRIPTION_MAX) {
         problems.push(
-            `The description must be between ${DESCRIPTION_MIN} and ${DESCRIPTION_MAX} characters — it is the only prose a member reads before paying.`,
+            `The description must be between ${DESCRIPTION_MIN} and ${DESCRIPTION_MAX} characters: it is the only prose a member reads before paying.`,
         );
     }
     if (reserved(input.description)) {
@@ -91,7 +91,7 @@ export const checkListingRules = (config: Config, input: ListingInput): readonly
         try {
             JSON.parse(input.sampleRequest);
         } catch {
-            problems.push(`The sample request must be valid JSON — it is the body the conformance probe sends.`);
+            problems.push(`The sample request must be valid JSON: it is the body the conformance probe sends.`);
         }
     }
     const urlProblem = checkUpstreamShape(input.upstreamUrl);
@@ -131,11 +131,11 @@ const checkUpstreamShape = (raw: string): string | undefined => {
         return `The endpoint must be an absolute URL.`;
     }
     if (url.protocol !== `https:`) {
-        return `The endpoint must be https — a forwarded call carries a signature and a member's request.`;
+        return `The endpoint must be https: a forwarded call carries a signature and a member's request.`;
     }
     const host = url.hostname.toLowerCase();
     if (host === `localhost` || host.endsWith(`.local`) || host.endsWith(`.internal`) || (isIP(host) !== 0 && isPrivateAddress(host))) {
-        return `The endpoint must be a public host — the platform calls it from its own network, not from yours.`;
+        return `The endpoint must be a public host: the platform calls it from its own network, not from yours.`;
     }
     return undefined;
 };
@@ -206,7 +206,7 @@ const expectRefusal = async (
         // Drain rather than leave a socket half-read; the body is never inspected.
         await response.text().catch(() => ``);
         return response.status >= 200 && response.status < 300
-            ? { passed: false, detail: `answered ${response.status} — the call should have been refused` }
+            ? { passed: false, detail: `answered ${response.status}, the call should have been refused` }
             : { passed: true, detail: `refused with ${response.status}` };
     } catch {
         return { passed: true, detail: `refused the connection` };
@@ -235,13 +235,13 @@ export const probeService = async (
     const serves = await (async (): Promise<ProbeCheck> => {
         const outcome = await forwardToService(upstreamUrl, secret, sampleRequest, fetchFn, now);
         if (outcome.kind === `failed`) {
-            return { name: `serves`, passed: false, detail: `did not answer — a 5xx, a timeout, or a dead socket` };
+            return { name: `serves`, passed: false, detail: `did not answer, a 5xx, a timeout, or a dead socket` };
         }
         if (outcome.kind === `answered`) {
             return {
                 name: `serves`,
                 passed: false,
-                detail: `answered ${outcome.status} to its own sample request — the probe body must be one the service serves`,
+                detail: `answered ${outcome.status} to its own sample request, the probe body must be one the service serves`,
             };
         }
         // Drain the stream; its RETURN value is the verdict, true iff a `result` arrived.
@@ -335,7 +335,7 @@ export const publishGates = async (
     const freshUntil = listing.probedAt === null ? 0 : listing.probedAt.getTime() + config.pool.probeFreshMinutes * 60_000;
     if (freshUntil < now.getTime()) {
         problems.push(
-            `Run the conformance probe first — a passing probe is good for ${config.pool.probeFreshMinutes} minutes, because its whole claim is that the endpoint works right now.`,
+            `Run the conformance probe first: a passing probe is good for ${config.pool.probeFreshMinutes} minutes, because its whole claim is that the endpoint works right now.`,
         );
     }
     if (problems.length > 0) {

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/sandbox-contract",
     "version": "0.0.0",
-    "description": "oRPC wire contract for the intentic sandbox daemon — shared by the daemon and its browser client",
+    "description": "oRPC wire contract for the intentic sandbox daemon, shared by the daemon and its browser client",
     "license": "MIT",
     "type": "module",
     "repository": {

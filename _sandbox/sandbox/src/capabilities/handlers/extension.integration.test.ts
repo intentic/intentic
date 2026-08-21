@@ -107,7 +107,7 @@ test("a premium install donates to the manifest-derived identity, then proceeds 
     const { ctx, root, donatedTo } = tempCtx(true);
     const remote = await fixtureRepo(MANIFEST, true);
     await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha, tier: "premium" }));
-    // publisher.name from the checkout's own manifest — never the capability entry id the form chose.
+    // publisher.name from the checkout's own manifest: never the capability entry id the form chose.
     expect(donatedTo).toEqual(["acme.demo"]);
     expect(await readWorkspaceFile(join(extensionDir(root, "demo"), "dist", "extension.js"))).toContain("activate");
 });
@@ -126,7 +126,7 @@ test("a checkout without a manifest is rejected before it goes live, leaving no 
     expect(await readdir(extensionsRoot(root))).toEqual([]);
 });
 
-test("a manifest naming a missing entry bundle is rejected — prebuilt dist is mandatory", async () => {
+test("a manifest naming a missing entry bundle is rejected: prebuilt dist is mandatory", async () => {
     const { ctx } = tempCtx();
     const remote = await fixtureRepo(MANIFEST, false);
     await expect(drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha }))).rejects.toThrow(/prebuilt bundle/);
@@ -142,7 +142,7 @@ test("remove stops the manifest's declared processes, then deletes the checkout"
     expect(await extensionHandler.status(ctx, "demo", config)).toEqual({ state: "inactive" });
 });
 
-// A second commit on the fixture "remote" — what an author publishing an update looks like to the handler.
+// A second commit on the fixture "remote": what an author publishing an update looks like to the handler.
 const publishUpdate = async (url: string, manifest: object): Promise<string> => {
     await writeWorkspaceFile(join(url, "intentic-extension.json"), JSON.stringify(manifest));
     await git(url, "add", "-A");
@@ -156,13 +156,13 @@ test("an update quiesces the outgoing checkout's processes and keeps it one vers
     const v1 = { url: remote.url, ref: remote.sha };
     await drain(extensionHandler.apply(ctx, "demo", v1));
     stored.set("demo", { id: "demo", kind: "extension", config: v1 });
-    // A first install quiesced nothing — there was nothing running to stop.
+    // A first install quiesced nothing: there was nothing running to stop.
     expect(stopped).toEqual([]);
 
     const sha2 = await publishUpdate(remote.url, { ...MANIFEST, version: "1.1.0" });
     await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: sha2 }));
 
-    // The OLD manifest's declared process was stopped at the swap — the post-apply seam restarts on new code.
+    // The OLD manifest's declared process was stopped at the swap: the post-apply seam restarts on new code.
     expect(stopped).toEqual(["ext-demo-worker"]);
     // The live checkout is the update; the outgoing version is kept one back, revert's whole subject.
     expect(JSON.parse((await readWorkspaceFile(join(extensionDir(root, "demo"), "intentic-extension.json")))!).version).toBe("1.1.0");
@@ -181,7 +181,7 @@ test("remove deletes the kept-previous checkout along with the live one", async 
     expect(await readdir(extensionsRoot(root))).toEqual([]);
 });
 
-test("a broken update never replaces the working install — the old version stays live, still running", async () => {
+test("a broken update never replaces the working install: the old version stays live, still running", async () => {
     const { ctx, root, stopped, stored } = tempCtx();
     const remote = await fixtureRepo(MANIFEST, true);
     await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha }));

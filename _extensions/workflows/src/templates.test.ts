@@ -15,17 +15,17 @@ test("every template parses as a workflow and has no faults", () => {
     }
 });
 
-test("template ids are unique — the gallery hides one already saved under its id", () => {
+test("template ids are unique: the gallery hides one already saved under its id", () => {
     const ids = WORKFLOW_TEMPLATES.map((template) => template.workflow.id);
     expect(new Set(ids).size).toBe(ids.length);
 });
 
 /* THE RACING CARDS, which the shape assertions below are about. The release-gate card is a different
- * proposition — a one-step design whose pitch is the webhook, not the graph — so holding it to "must fan out,
+ * proposition: a one-step design whose pitch is the webhook, not the graph, so holding it to "must fan out,
  * must fan in, must race two models" would be asserting a shape it exists to not have. */
 const RACING = WORKFLOW_TEMPLATES.filter(({ workflow }) => workflow.id.startsWith(`two-models`));
 
-/* THE GALLERY IS TWO CARDS OF THE SAME SHAPE, and every one of them has to keep it — that is what this asserts.
+/* THE GALLERY IS TWO CARDS OF THE SAME SHAPE, and every one of them has to keep it: that is what this asserts.
  * Five templates that were all straight chains would have looked like a full gallery and taught nothing; a
  * template that quietly loses its fan-in is the same failure, and the second card is no excuse for it. Nothing
  * else in the build would notice.
@@ -61,8 +61,8 @@ test("the template teaches every shape", () => {
 
 /* Candidate authors carry no completion paperwork, in either template, and are named after nothing.
  *
- * A declared output is a COMPLETION GATE — the step fails unless it writes a valid document, so an attempt that
- * built the thing and described it imperfectly takes the rest of the graph down with it — and it drags the whole
+ * A declared output is a COMPLETION GATE: the step fails unless it writes a valid document, so an attempt that
+ * built the thing and described it imperfectly takes the rest of the graph down with it, and it drags the whole
  * output contract into a prompt that is meant to be the user's own sentence. The neutral titles are the other
  * half: every downstream step is handed its predecessors under `### From "<title>"`, so "Claude's attempt" leaks
  * the authorship the comparison exists to hold blind.
@@ -78,7 +78,7 @@ test("the attempts are unburdened and anonymous in every template", () => {
     }
 });
 
-/* THE CARD PEOPLE CLICK FIRST SHIPS NO SCAFFOLDING AT ALL — the assertion that was deleted once already, and
+/* THE CARD PEOPLE CLICK FIRST SHIPS NO SCAFFOLDING AT ALL: the assertion that was deleted once already, and
  * with it the default grew a fourth session, a six-field rubric and a judge.
  *
  * Both of those controls are real and both are demonstrated on the second card. Neither belongs in the thing a
@@ -117,14 +117,14 @@ test("the scored template separates blind evaluation from checked synthesis", ()
     expect(synthesis?.needs).toEqual(expect.arrayContaining([`attempt-a`, `attempt-b`, `evaluate`]));
 });
 
-/* THE ROOTS ARE HANDED THE USER'S SENTENCE AND NOTHING ELSE — the property the whole default rests on, and the
+/* THE ROOTS ARE HANDED THE USER'S SENTENCE AND NOTHING ELSE: the property the whole default rests on, and the
  * one that silently rots. Every step that starts the run must declare no prompt and no goal, so what reaches
  * the model is the request verbatim (workflow-brief). Writing "build what the request above asks for" into one
  * of them would look like helpful prefill and would be the wrapper, retyped by hand.
  */
 test("the steps that start a run add nothing to what the user typed", () => {
     // Scoped to the racing cards: their roots are handed a PERSON'S request, which is the task already. The
-    // gate card's root is handed whatever a pipeline interpolated — a sha, a URL — and needs its prompt to
+    // gate card's root is handed whatever a pipeline interpolated: a sha, a URL, and needs its prompt to
     // turn that context into a job.
     for (const { workflow } of RACING) {
         for (const root of workflow.steps.filter((step) => step.needs.length === 0)) {
@@ -149,12 +149,12 @@ const racingPairs = (steps: readonly WorkflowStep[]): [WorkflowStep, WorkflowSte
 /* THE PROPERTY THE TEMPLATE'S WHOLE POINT RESTS ON: racing attempts differ ONLY by model.
  *
  * A comparison measures whatever differs between its arms. Let one arm's prompt drift by a sentence and the run
- * quietly stops being about the models and starts being about the prompt — which is invisible on the graph,
+ * quietly stops being about the models and starts being about the prompt, which is invisible on the graph,
  * invisible in the run view, and only ever noticed by someone who reads both transcripts and wonders why one
  * of them built something else. Asserted rather than trusted to review, because the two step literals sit forty
  * lines apart and editing one of them is exactly how this breaks.
  */
-test("attempts that race each other are given the identical task — only the model differs", () => {
+test("attempts that race each other are given the identical task: only the model differs", () => {
     const pairs = WORKFLOW_TEMPLATES.flatMap(({ workflow }) => racingPairs(workflow.steps).map((pair) => ({ id: workflow.id, pair })));
     // Vacuously true is the one way this test could pass while the gallery lost the shape it is here for.
     expect(pairs.length, `no template runs two models against one brief`).toBeGreaterThan(0);
@@ -167,7 +167,7 @@ test("attempts that race each other are given the identical task — only the mo
 
 /* THE GATE CARD IS THE SMALLEST WIRING THAT ANSWERS A PIPELINE, and staying smallest is its job: one step,
  * a gate already pointed at it, and a verdict field the machinery can validate. A second step or a dropped
- * gate would not be a variation — it would be the recipe no longer demonstrating the thing it teaches
+ * gate would not be a variation: it would be the recipe no longer demonstrating the thing it teaches
  * (gate.routes.ts calls a one-step workflow naming its only step the intended small case). */
 test("the release-gate template ships wired: one step, gate on its required verdict", () => {
     const gated = WORKFLOW_TEMPLATES.find(({ workflow }) => workflow.id === `release-gate`)?.workflow;

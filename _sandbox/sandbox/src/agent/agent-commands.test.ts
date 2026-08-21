@@ -13,7 +13,7 @@ const publish = (): void => {
     ]);
 };
 
-test("a published name runs as a command — with arguments, and with a colon in the name", () => {
+test("a published name runs as a command: with arguments, and with a colon in the name", () => {
     publish();
     expect(isUnknownSlashCommand("claude", "/compact")).toBe(false);
     expect(isUnknownSlashCommand("claude", "/review 4821 please")).toBe(false);
@@ -41,7 +41,7 @@ test("a message that does not open with a slash is never touched", () => {
     expect(isUnknownSlashCommand("claude", "")).toBe(false);
 });
 
-// The CLI's own parse is at least this forgiving, so the guard has to be too — reading " /workspace …" as
+// The CLI's own parse is at least this forgiving, so the guard has to be too: reading " /workspace …" as
 // prose while the CLI still claims it is exactly the case that loses the message.
 test("leading whitespace does not hide the slash", () => {
     publish();
@@ -49,7 +49,7 @@ test("leading whitespace does not hide the slash", () => {
 });
 
 /* An empty list means "no turn has run since this daemon started", never "this provider has no commands".
- * Guessing there would rewrite a real /compact into prose, so the guard stands down and lets the CLI answer —
+ * Guessing there would rewrite a real /compact into prose, so the guard stands down and lets the CLI answer:
  * agent.ts turns that answer into the unknown-command frame the client recovers from. */
 test("an unlearned command list stands the guard down rather than guessing", () => {
     expect(isUnknownSlashCommand("claude", "/workspace view forgets the tree")).toBe(false);
@@ -63,7 +63,7 @@ test("local command output is unwrapped from the tag the transcript stores it un
     expect(localCommandText("Session: 12k tokens")).toBe("Session: 12k tokens");
 });
 
-test("only the unknown-command refusal names a command — every other output is content to show", () => {
+test("only the unknown-command refusal names a command: every other output is content to show", () => {
     expect(unknownCommandName("Unknown command: /workspace")).toBe("workspace");
     expect(unknownCommandName("Unknown command: compact")).toBe("compact");
     expect(unknownCommandName("Session: 12k tokens")).toBeUndefined();

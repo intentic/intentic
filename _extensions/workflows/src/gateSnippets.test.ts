@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 import { curlLine, GATE_WAIT_S, gatePath, githubStep } from "./gateSnippets";
 
-/* The snippets are the one part of this feature that runs somewhere we cannot see — inside a stranger's
- * pipeline, pasted once and read never — so what they must get right is asserted rather than eyeballed. */
+/* The snippets are the one part of this feature that runs somewhere we cannot see: inside a stranger's
+ * pipeline, pasted once and read never, so what they must get right is asserted rather than eyeballed. */
 
 test("the path names the gate route and carries the token as its query", () => {
     expect(gatePath(`wf-1`, `tok_abc`)).toBe(`/workflows/wf-1/gate?token=tok_abc`);

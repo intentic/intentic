@@ -114,7 +114,7 @@ const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>
          * of this and worth naming here, it is the answer for a zone full of test runs. */
         if (codes.includes(81045)) {
             throw new CloudflareApiError(
-                `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota). Delete records you no longer need in the Cloudflare dashboard — sandbox-*/ssh-* entries whose sandbox is gone are the usual culprit and the daily reaper removes them once their tunnels disconnect — or move the zone to a plan with a higher limit.`,
+                `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota). Delete records you no longer need in the Cloudflare dashboard: sandbox-*/ssh-* entries whose sandbox is gone are the usual culprit and the daily reaper removes them once their tunnels disconnect, or move the zone to a plan with a higher limit.`,
                 codes,
             );
         }
@@ -362,7 +362,7 @@ export const ensurePreviewRoutes = async (args: {
     );
     const tunnel = tunnels[0];
     if (tunnel === undefined) {
-        throw new Error(`the sandbox tunnel "${sandboxSubdomain(id)}" was not found — re-run setup`);
+        throw new Error(`the sandbox tunnel "${sandboxSubdomain(id)}" was not found: re-run setup`);
     }
     const configPath = `/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnel.id)}/configurations`;
     const { config } = await cfCall(args.apiToken, configPath, tunnelConfigSchema);
@@ -470,7 +470,7 @@ const listTunnels = async (apiToken: string, accountId: string): Promise<z.infer
     } while (pageCount === PER_PAGE && page <= MAX_TUNNEL_PAGES);
     if (pageCount === PER_PAGE) {
         throw new Error(
-            `Cloudflare GET /cfd_tunnel still returned full pages at page ${MAX_TUNNEL_PAGES} — refusing to sweep further (the API may be ignoring the page param).`,
+            `Cloudflare GET /cfd_tunnel still returned full pages at page ${MAX_TUNNEL_PAGES}: refusing to sweep further (the API may be ignoring the page param).`,
         );
     }
     return tunnels;

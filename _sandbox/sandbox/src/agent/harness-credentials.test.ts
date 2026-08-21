@@ -23,7 +23,7 @@ test("a routed endpoint collapses every model tier onto the endpoint's own model
     expect(env["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
 });
 
-test("a native Claude turn keeps the real alias table — sonnet and opus are different models there", () => {
+test("a native Claude turn keeps the real alias table: sonnet and opus are different models there", () => {
     const env = harnessEnv({ oauthToken: "sk-oauth", model: "claude-opus-5" });
     expect(env["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("sk-oauth");
     expect(env["ANTHROPIC_BASE_URL"]).toBeUndefined();
@@ -47,9 +47,9 @@ test("a free-trial turn uses the platform's bounded key walk instead of the long
     expect(env["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
 });
 
-test("a free-trial turn resolves from constants — the synthetic model id, no catalog fetch, bounded policy", async () => {
+test("a free-trial turn resolves from constants: the synthetic model id, no catalog fetch, bounded policy", async () => {
     // `endpointModels` deliberately unstubbed: the trial's model is a known constant, so a resolution that
-    // reaches for a catalog would throw here — which is the regression this pins. The fetch used to refuse
+    // reaches for a catalog would throw here, which is the regression this pins. The fetch used to refuse
     // turns whenever the platform blipped, as "its model catalog could not be read".
     const sandbox = services({ config: withTranslator });
     await sandbox.capabilities.upsert({
@@ -66,7 +66,7 @@ test("a free-trial turn resolves from constants — the synthetic model id, no c
 
 test("a trial turn on a cold availability cache re-probes once instead of refusing on an unanswered question", async () => {
     // Boot fires the availability probe without awaiting it, so a turn can arrive first. The capability layer
-    // then hides the trial (available() false) — the resolver must ask the platform on the turn's own clock
+    // then hides the trial (available() false): the resolver must ask the platform on the turn's own clock
     // rather than turn the user away with "no longer available".
     let probed = 0;
     const store = memoryCapabilitiesStore();
@@ -97,11 +97,11 @@ test("a trial turn on a cold availability cache re-probes once instead of refusi
 test("a HELPER is told the opposite, so a rung that will not answer is stepped over rather than waited out", () => {
     // The regression this pins: a one-shot inherited the turn's watchdog and therefore its three hundred
     // attempts, so the commit-message draft ground through a refusing rung for the better part of a minute
-    // instead of failing over to the next model in the chain — the one thing the chain exists to do.
+    // instead of failing over to the next model in the chain: the one thing the chain exists to do.
     for (const credentials of [{ oauthToken: "sk-oauth" }, { baseUrl: "http://127.0.0.1:8788", authToken: "local" }, {}]) {
         expect(harnessEnv({ ...credentials, helper: true })["CLAUDE_CODE_RETRY_WATCHDOG"]).toBeUndefined();
     }
-    // Everything else about a helper's environment is a turn's — only the patience differs.
+    // Everything else about a helper's environment is a turn's: only the patience differs.
     expect(harnessEnv({ oauthToken: "sk-oauth", helper: true })["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("sk-oauth");
     expect(harnessEnv({ helper: true })["IS_SANDBOX"]).toBe("1");
 });
@@ -113,7 +113,7 @@ test("a custom endpoint with no resolved model pins nothing rather than an empty
     expect(env["CLAUDE_CODE_SUBAGENT_MODEL"]).toBeUndefined();
 });
 
-/* WHICH ACCOUNT AN UNNAMED TURN LANDS ON — every unattended run in the sandbox, since only a composer names one.
+/* WHICH ACCOUNT AN UNNAMED TURN LANDS ON: every unattended run in the sandbox, since only a composer names one.
  *
  * The pick is by headroom, and headroom alone is exactly what an entitlement refusal defeats: an account the
  * organization has switched Claude Code off for is turned away before it spends a token, so its meter stays the
@@ -131,7 +131,7 @@ const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string,
             ],
         },
         claudeSeats: { read: async () => seats, refuse: async () => {}, clear: async () => {} },
-        // The refused account looks untouched precisely BECAUSE it is refused — nothing it was handed ever ran.
+        // The refused account looks untouched precisely BECAUSE it is refused: nothing it was handed ever ran.
         accountUsage: {
             read: async () => ({
                 refused: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 3 }] },
@@ -153,7 +153,7 @@ test("an unnamed turn skips the account whose organization has refused it", asyn
 
 /* AND KEEPS SKIPPING IT once the refusal store has moved on, which is the case that costs real turns. That store
  * keeps ONE refusal per provider, so the next spent allowance on any Claude account overwrites the entitlement
- * one — and the seat is still off. The durable record is what benches the account; the refusal above is only the
+ * one, and the seat is still off. The durable record is what benches the account; the refusal above is only the
  * hint that ranks it. */
 test("a benched seat stays benched after the provider's last refusal is some other account's", async () => {
     const seats = { refused: { at: Date.now(), reason: "organization has disabled Claude Code" } };
@@ -172,7 +172,7 @@ test("a sandbox whose every seat is refused still resolves a credential", async 
     expect(result.ok && result.credentials.account).toBe("refused");
 });
 
-test("a spent allowance does not bench an account — the meters already describe that", async () => {
+test("a spent allowance does not bench an account: the meters already describe that", async () => {
     // A `limit` refusal is the one kind a later reading CAN contradict, and the windows above already rank the
     // two accounts. Benching on it as well would retire an account for a window that has since reopened.
     const result = await resolved({ at: Date.now(), kind: "limit", message: "usage limit reached", account: "refused" });
@@ -180,7 +180,7 @@ test("a spent allowance does not bench an account — the meters already describ
 });
 
 test("a named account is still the account that runs, refused or not", async () => {
-    // The composer's own pick, which is a person choosing with the refusal on screen beside it — this gate is
+    // The composer's own pick, which is a person choosing with the refusal on screen beside it: this gate is
     // for the callers that name nobody.
     const result = await resolved(
         { at: Date.now(), kind: "entitlement", message: "organization has disabled Claude Code", account: "refused" },

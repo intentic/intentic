@@ -40,7 +40,7 @@ const call = async (args: { endpoint: string; token: string; method: string; pat
         signal: AbortSignal.timeout(30_000),
     });
     if (response.status === 401) {
-        throw new ZrokError(`the zrok hub rejected the platform's token (HTTP 401) — check ZROK_ADMIN_TOKEN / ZROK_API_ENDPOINT`);
+        throw new ZrokError(`the zrok hub rejected the platform's token (HTTP 401): check ZROK_ADMIN_TOKEN / ZROK_API_ENDPOINT`);
     }
     if (!response.ok) {
         const detail = (await response.text().catch(() => ``)).slice(0, 300);
@@ -114,7 +114,7 @@ export const publicNamespaceToken = async (config: { apiEndpoint: string; adminT
     );
     const open = namespaces.find((namespace) => namespace.name === `public`) ?? namespaces[0];
     if (open === undefined) {
-        throw new ZrokError(`the zrok hub reports no namespaces — its bootstrap did not complete`);
+        throw new ZrokError(`the zrok hub reports no namespaces: its bootstrap did not complete`);
     }
     return open.namespaceToken;
 };

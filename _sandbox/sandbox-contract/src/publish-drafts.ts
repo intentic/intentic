@@ -47,7 +47,7 @@ export const publishTurnPrompt = (drafts: readonly { readonly id: string; readon
         ``,
         `Take them ONE AT A TIME, and for each:`,
         `1. Read the file. Set "status":"posting" BEFORE you act, so a turn that dies here cannot double-post.`,
-        `2. Post exactly its "content" — with its "title", "target" and "media" — using that platform's skill.`,
+        `2. Post exactly its "content": with its "title", "target" and "media", using that platform's skill.`,
         `   A "target" that is a URL means this draft is a REPLY to whatever is at it: open that exact URL and`,
         `   reply where it lands. On reddit a comment permalink (.../comments/<post>/<slug>/<comment>/) has to`,
         `   nest under that comment rather than becoming a new top-level comment on the thread.`,
@@ -55,5 +55,5 @@ export const publishTurnPrompt = (drafts: readonly { readonly id: string; readon
         `   If it failed, set "status":"failed" plus an "error" saying what went wrong in plain words the owner`,
         `   can act on, then move to the next draft instead of retrying in a loop.`,
         ``,
-        `Never rewrite the content — the owner approved these exact words. Never touch a draft not listed above.`,
+        `Never rewrite the content: the owner approved these exact words. Never touch a draft not listed above.`,
     ].join(`\n`);

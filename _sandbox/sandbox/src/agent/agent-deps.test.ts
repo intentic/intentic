@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { syncHookOutput } from "../testing.js";
 import { dependencyDirForCommand, depsNoticeHooks } from "./agent-deps.js";
 
-// A tree that is genuinely missing `vue` and nothing else — the only thing that decides whether this hook has
+// A tree that is genuinely missing `vue` and nothing else: the only thing that decides whether this hook has
 // anything to say. `walks` counts how often it is asked, because not re-asking is half the design.
 const treeMissing = (names: string[], walks: { count: number } = { count: 0 }) => {
     const probe = async () => {
@@ -40,14 +40,14 @@ test.each([
 });
 
 /* THE PROPERTY THE WHOLE HOOK RESTS ON. A name lifted out of a failure is a claim, and excusing one the tree can
- * answer for would teach a model to distrust every unresolved import it ever sees — the same failure this exists
+ * answer for would teach a model to distrust every unresolved import it ever sees: the same failure this exists
  * to prevent, arrived at from the other side. */
 test("a mistyped import stays the agent's own problem, because the tree has that package", async () => {
     const { probe } = treeMissing(["left-pad"]);
     expect(await fire(depsNoticeHooks(probe, true), `Error: Cannot find module 'vuee'`)).toEqual({});
 });
 
-test("an unresolved relative path is never excused — it cannot be a declared dependency", async () => {
+test("an unresolved relative path is never excused: it cannot be a declared dependency", async () => {
     const { probe } = treeMissing(["vue"]);
     expect(await fire(depsNoticeHooks(probe, true), `Error: Cannot find module './helpres.js'`)).toEqual({});
 });

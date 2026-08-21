@@ -12,14 +12,14 @@ import type { WakeFn } from "./scheduler.js";
 
 // The per-chore queues, the scheduler's overlap guard and the workspace-wide turn chain are all process-wide
 // because there is one daemon. Each case takes a fresh module so one test's unfinished pump cannot leak into
-// another — a queue still draining under a shared chore id would otherwise swallow the next test's event and
+// another: a queue still draining under a shared chore id would otherwise swallow the next test's event and
 // fire it with the previous test's wake.
 const freshDispatch = async (): Promise<typeof import("./workspace-events.js")> => {
     vi.resetModules();
     return import("./workspace-events.js");
 };
 
-// Same shape as scheduler.test's fake — the dispatcher reaches only automations/approvals/activity/workspace/logger.
+// Same shape as scheduler.test's fake: the dispatcher reaches only automations/approvals/activity/workspace/logger.
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
@@ -38,7 +38,7 @@ const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]):
         yield* events;
     };
 
-// A wake that parks until the test releases it — how overlap is observed without racing on timers.
+// A wake that parks until the test releases it: how overlap is observed without racing on timers.
 const blockingWake = (prompts: string[]): { wake: WakeFn; release: () => void } => {
     let unblock = (): void => {};
     const gate = new Promise<void>((resolve) => {
@@ -101,7 +101,7 @@ test("disabled chores, other events and other repos never fire", async () => {
     expect(await dispatchWorkspaceEvent(services, inApi, fakeWake(prompts))).toEqual(["api-only"]);
 });
 
-test("a burst QUEUES instead of dropping — every distinct agent gets reviewed, one turn at a time", async () => {
+test("a burst QUEUES instead of dropping: every distinct agent gets reviewed, one turn at a time", async () => {
     const { dispatchWorkspaceEvent } = await freshDispatch();
     const services = fakeServices(mkdtempSync(join(tmpdir(), "chore-")));
     await services.automations.upsert(chore("review"));
@@ -147,7 +147,7 @@ test("two different chores on one event do not run their turns at the same time"
     const prompts: string[] = [];
     const { wake, release } = blockingWake(prompts);
 
-    // Both match, so both queue — but a chore turn runs on the shared /work tree, so only one may be running.
+    // Both match, so both queue, but a chore turn runs on the shared /work tree, so only one may be running.
     expect(await dispatchWorkspaceEvent(services, event("a1"), wake)).toEqual(["review", "docs"]);
     await vi.waitFor(() => expect(prompts).toHaveLength(1));
 

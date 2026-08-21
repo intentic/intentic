@@ -9,17 +9,17 @@ import { usePublic } from "./usePublic";
  *
  * The outbox has no auth in front of it, so the burden this screen carries is that nothing about what is
  * exposed can be a surprise. Three things follow from that. Files the guards REFUSE are listed as loudly as the
- * ones that are served, with the reason — the serve path deliberately tells a stranger nothing (every miss is
+ * ones that are served, with the reason: the serve path deliberately tells a stranger nothing (every miss is
  * the same 404), which only works if the owner has somewhere that tells them everything. The empty state
  * explains the whole convention rather than showing an empty box, because "there is nothing here" and "this is
  * how publishing works" are the same sentence when the directory's existence IS the switch. And nothing here
  * says "shareable" without also saying public, in words, next to the link.
  *
- * Mounted as a tab on the sandbox hub (surface: "sandbox") beside Ports, so it renders a BODY — the hub owns
+ * Mounted as a tab on the sandbox hub (surface: "sandbox") beside Ports, so it renders a BODY, the hub owns
  * the Page and the header above the tab strip. */
 
 const { files, url, servedCount, error, isLoading, unpublish } = usePublic();
-// Drawn only once the wait has earned it — see useLoadingReveal.
+// Drawn only once the wait has earned it: see useLoadingReveal.
 const outline = useLoadingReveal(
     isLoading,
     computed(() => `public-files`),
@@ -71,7 +71,7 @@ const size = (bytes: number): string => {
                 <InfoHint label="Public files">
                     <span class="block text-sm font-medium text-content">Your public folder</span>
                     <span class="mt-1 block text-xs text-muted">
-                        Anything inside <b>public/</b> in your workspace is served on the internet at the address below — no sign-in, no running
+                        Anything inside <b>public/</b> in your workspace is served on the internet at the address below: no sign-in, no running
                         server. Drop a file in and it has a link; delete it and the link stops working. The folder disappears when the last file
                         leaves, so an empty workspace publishes nothing.
                     </span>
@@ -92,7 +92,7 @@ const size = (bytes: number): string => {
 
             <!-- The list already knows not to say "nothing is published" before it has looked; what it did
                  instead was leave the space empty, which says the same thing more quietly. The file rows that
-                 are coming stand in — an icon, the path, and its size on the line below. -->
+                 are coming stand in: an icon, the path, and its size on the line below. -->
             <div v-if="isLoading && outline" class="rounded-lg border border-line bg-card" role="status" aria-busy="true">
                 <span class="sr-only">Reading your published files…</span>
                 <div class="flex flex-col divide-y divide-line" aria-hidden="true">
@@ -114,7 +114,7 @@ const size = (bytes: number): string => {
                 <Icon name="globe" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">Nothing is published.</p>
                 <p class="text-2xs text-subtle">
-                    Create a <span class="font-mono">public/</span> folder in your workspace and put a file in it — or ask the agent to publish
+                    Create a <span class="font-mono">public/</span> folder in your workspace and put a file in it, or ask the agent to publish
                     something for you.
                 </p>
             </div>
@@ -127,7 +127,7 @@ const size = (bytes: number): string => {
                             <p class="truncate font-mono text-xs text-content" :title="file.path">{{ file.path }}</p>
                             <!-- A refused file is the one row that must explain itself: it is in the folder, so
                                  the owner believes it is published, and only this line says otherwise. -->
-                            <p v-if="file.blocked" class="truncate text-2xs text-danger">Not served — {{ file.blocked }}</p>
+                            <p v-if="file.blocked" class="truncate text-2xs text-danger">Not served: {{ file.blocked }}</p>
                             <p v-else class="text-2xs text-subtle">{{ size(file.size) }}</p>
                         </div>
                         <StatusBadge v-if="file.blocked" variant="danger" label="blocked" size="xs" />

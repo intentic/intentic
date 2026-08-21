@@ -137,7 +137,7 @@ export const reportingClause = (runId: string): string =>
         `When you are finished, write your conclusion to ${resultPath(runId)} as JSON:`,
         `{"outcome": "acted" | "reported" | "clean", "summary": "<one or two sentences>"}`,
         `Use "acted" if you changed something, "reported" if you are handing back findings without changing anything, and "clean" if you ` +
-            `checked and the findings did not hold up — a tool was wrong, or the situation is deliberate. "clean" is a good outcome and the ` +
+            `checked and the findings did not hold up: a tool was wrong, or the situation is deliberate. "clean" is a good outcome and the ` +
             `most useful one you can give when it is true: it is what stops this chore being raised again over the same evidence.`,
         `Write that file even if you conclude there was nothing to do.`,
     ].join(`\n\n`);

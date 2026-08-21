@@ -1,22 +1,22 @@
 ---
 name: provide
-description: Turn the owner's existing API, model, or dataset into a paid service on the platform's services catalog — build the thin wrapper endpoint, self-test it against the admission probe's three checks, and hand the owner the exact values the listing form needs. Use when the owner wants to sell, list, or offer something they already run as a metered service agents can pay for.
+description: Turn the owner's existing API, model, or dataset into a paid service on the platform's services catalog, build the thin wrapper endpoint, self-test it against the admission probe's three checks, and hand the owner the exact values the listing form needs. Use when the owner wants to sell, list, or offer something they already run as a metered service agents can pay for.
 ---
 
 # Offer a paid service
 
 The platform's services catalog (the one `services list` reads) is open admission: anyone who proves a
 publisher name and connects payouts can list an endpoint, and it goes live the second it passes the
-published gates — no human review. A service is **not** an extension: no manifest, no bundle, no repo. It
+published gates, no human review. A service is **not** an extension: no manifest, no bundle, no repo. It
 is ONE public https endpoint that (1) verifies the platform's signature on every call and (2) answers an
-NDJSON stream — `status` lines while it works, exactly one `result` that ends the run.
+NDJSON stream: `status` lines while it works, exactly one `result` that ends the run.
 
 The owner usually already runs the thing worth selling. Your job is the thin wrapper around it, the
 self-test, and a clean hand-off; the listing itself is filed by the owner in **Settings → Services**
-(prerequisites: a claimed publisher name and payouts, both under Settings too — the agent cannot and must
+(prerequisites: a claimed publisher name and payouts, both under Settings too, the agent cannot and must
 not do those steps). A publisher name is proved from a registry-listed repository OR by claiming a
 **domain**: the claim screen hands the owner one line to serve at `https://<domain>/.well-known/intentic-claim`,
-which is the natural lane for a business with no extension — note that a domain publisher's endpoints must
+which is the natural lane for a business with no extension: note that a domain publisher's endpoints must
 then live on that domain or its subdomains.
 
 ## 1. Build the wrapper
@@ -25,7 +25,7 @@ Write a small standalone service (own repo or a directory in theirs) that fronts
 API. The whole contract, verbatim:
 
 **Verify every POST.** The platform sends `x-intentic-timestamp` and
-`x-intentic-signature = HMAC-SHA256(secret, "{timestamp}.{body}")` — the Stripe webhook scheme. Recompute,
+`x-intentic-signature = HMAC-SHA256(secret, "{timestamp}.{body}")`: the Stripe webhook scheme. Recompute,
 compare constant-time, refuse timestamps more than ~5 minutes from now. The signature is the entire auth
 story: an endpoint that serves unsigned calls can be billed by anyone on the internet against the owner's
 own upstream costs, and the admission probe refuses to list it.
@@ -44,7 +44,7 @@ const verify = (body, timestamp, signature, secret) => {
 ```
 
 **Answer NDJSON.** Content-type `application/x-ndjson`, one JSON object per line:
-`{"event":"status","text":"…"}` as often as progress deserves (each replaces the last on the buyer's card —
+`{"event":"status","text":"…"}` as often as progress deserves (each replaces the last on the buyer's card:
 a spinner label, not a log), then exactly one `{"event":"result","data":<the answer>}`. The whole run must
 finish inside five minutes and two megabytes; a stream that ends without its `result` is refunded, which
 means the owner served for free.
@@ -54,7 +54,7 @@ answer a complete 4xx JSON body (the buyer pays for it; "your query was malforme
 API fell over → answer a 5xx (the platform refunds; nobody pays).
 
 Do the work by calling the owner's existing endpoint server-side with their own credential, from an
-environment variable — the wrapper is the only thing that ever holds it, and the platform never sees it.
+environment variable: the wrapper is the only thing that ever holds it, and the platform never sees it.
 
 Two working references you can read whole: intentic's example provider (a complete dependency-free file at
 `_platform/example-provider/src/provider.ts` in the intentic repo, github.com/intentic) and the contract's
@@ -92,16 +92,16 @@ console.log("rejectsReplay:", replay.status < 200 || replay.status >= 300 ? "PAS
 All three must PASS. The real probe runs check 1 through the platform's actual forwarding code, so also
 eyeball that every stream line is a single JSON object with a trailing newline.
 
-## 3. Deploy — the owner's infrastructure, not the sandbox
+## 3. Deploy: the owner's infrastructure, not the sandbox
 
 The listing rules require a **public https host**: no localhost, no private ranges, no `.local`/`.internal`
-names — the platform calls it from its own network. The owner already hosts their real service, so the
-wrapper deploys the same way (any PaaS, a reverse-proxy route on the existing box, an edge runtime — the
+names: the platform calls it from its own network. The owner already hosts their real service, so the
+wrapper deploys the same way (any PaaS, a reverse-proxy route on the existing box, an edge runtime: the
 reference file is a plain fetch handler on purpose). If this sandbox has the owner's deploy machinery
-connected, offer to ship it there; never serve a paid endpoint from the sandbox itself — its uptime is a
+connected, offer to ship it there; never serve a paid endpoint from the sandbox itself: its uptime is a
 laptop's, and repeated failed canaries suspend the listing.
 
-The signing secret is minted by the platform when the owner drafts the listing and shown **once** — plan
+The signing secret is minted by the platform when the owner drafts the listing and shown **once**: plan
 for it to arrive as an environment variable after the draft step, then redeploy and re-run the self-test
 with the real value.
 
@@ -110,9 +110,9 @@ with the real value.
 Prepare and present, ready to paste:
 
 - **slug** (lowercase letters, digits, dashes) and **name** (3–60 chars).
-- **description** (40–400 chars) — the only prose a buyer reads before paying; say what a run does and
+- **description** (40–400 chars): the only prose a buyer reads before paying; say what a run does and
   what comes back.
-- **sample request** — a JSON body the endpoint genuinely serves. It is both the probe's test body and the
+- **sample request**: a JSON body the endpoint genuinely serves. It is both the probe's test body and the
   worked example every agent shapes its requests after, so make it the service's best self-documentation.
 - **price** in credits. The screen states the platform's current band and the probation ceiling (defaults:
   1–200, capped at 25 while new); quote the screen, not this file.
@@ -121,8 +121,8 @@ And say what happens next, so nothing surprises the owner: publish puts the list
 (a `new` badge, the tighter price cap) until it has served enough runs at a low refund rate (defaults: 50
 runs, under 20% refunded); a canary re-probes it and consecutive failures suspend it; the price may move
 once per day; swapping the endpoint URL later drops the listing back to draft for a fresh probe. Refunded
-runs are free for the buyer and unpaid for the owner — the wrapper's honest 5xx on upstream failure is what
+runs are free for the buyer and unpaid for the owner: the wrapper's honest 5xx on upstream failure is what
 keeps the refund rate meaning something.
 
-If the catalog might already serve the need, check `services list` first — a second listing of the same
+If the catalog might already serve the need, check `services list` first: a second listing of the same
 thing competes on description and price, which is fine, but say so.

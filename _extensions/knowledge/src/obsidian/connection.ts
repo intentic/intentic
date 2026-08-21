@@ -11,7 +11,7 @@
  * "this one has no API key", is the only one they can act on. */
 
 // The leaf module, not the barrel: the barrel is the whole wire contract, and importing it here put every oRPC
-// route and the zod that types them into a CLI that needs one naming rule — 29 kB of `kb` next to 376 kB of
+// route and the zod that types them into a CLI that needs one naming rule: 29 kB of `kb` next to 376 kB of
 // this. Same reason ./tunnel-ids and ./session-names are their own entry points.
 import { envSuffix } from "@intentic/sandbox-contract/capability-env";
 
@@ -53,7 +53,7 @@ const connectionOf = (name: string, fields: { url: string; apiKey: string; write
         url === ""
             ? "no Local REST API URL on the card"
             : fields.apiKey === ""
-              ? "no API key on the card — copy it from Obsidian ▸ Settings ▸ Local REST API"
+              ? "no API key on the card: copy it from Obsidian ▸ Settings ▸ Local REST API"
               : undefined;
     return {
         name,
@@ -93,7 +93,7 @@ export const selectVault = (
     wanted: string | undefined,
 ): { readonly vault: VaultConnection } | { readonly error: string } => {
     if (connections.length === 0) {
-        return { error: `no Obsidian vault is connected — add the Obsidian card in Capabilities.` };
+        return { error: `no Obsidian vault is connected, add the Obsidian card in Capabilities.` };
     }
     if (wanted === undefined) {
         const [only] = connections;
@@ -104,6 +104,6 @@ export const selectVault = (
     const suffix = envSuffix(wanted);
     const match = connections.find((connection) => envSuffix(connection.name) === suffix);
     return match === undefined
-        ? { error: `no connected vault named "${wanted}" — have: ${connections.map((connection) => connection.name).join(", ")}` }
+        ? { error: `no connected vault named "${wanted}", have: ${connections.map((connection) => connection.name).join(", ")}` }
         : { vault: match };
 };

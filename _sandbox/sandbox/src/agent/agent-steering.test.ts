@@ -29,7 +29,7 @@ test("push after close reports undelivered and does not count as delivered", () 
 test("a consumer parked on an empty queue wakes on push", async () => {
     const queue = new SteeringQueue();
     const drained = drain(queue);
-    // The consumer is awaiting before anything is pushed — the wake path, not the buffered path.
+    // The consumer is awaiting before anything is pushed: the wake path, not the buffered path.
     await new Promise((resolve) => setImmediate(resolve));
     queue.push("woken");
     queue.close();

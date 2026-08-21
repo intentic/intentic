@@ -22,7 +22,7 @@ import {
 } from "../route-testing.js";
 
 /* The capabilities routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
+ * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
  * one file that two agents working on unrelated features collided in every time. The fakes and the client
  * are shared (route-testing.ts); what lives here is what these routes do. */
 
@@ -32,9 +32,9 @@ test("capabilities.list reports each capability with its status; devops can't be
     const client = clientFor(
         createApp(services({ workspace: tempWorkspace([]), capabilities: memoryCapabilitiesStore([{ id: "devops", kind: "devops", config: {} }]) })),
     );
-    // devops status is derived from the repos on disk — absent under test, so it reads inactive.
+    // devops status is derived from the repos on disk: absent under test, so it reads inactive.
     expect(await client.capabilities.list()).toEqual({
-        // `secrets` names the credential keys an edit form must not treat as empty — devops holds none.
+        // `secrets` names the credential keys an edit form must not treat as empty: devops holds none.
         capabilities: [{ id: "devops", kind: "devops", status: { state: "inactive" }, config: {}, secrets: [] }],
         recommendations: [],
     });
@@ -66,7 +66,7 @@ test("capabilities.dismiss takes a recommendation off the catalog and records wh
     expect(await client.capabilities.dismiss({ card: "docker" })).toEqual({ ok: true });
     expect(await dismissals.list()).toEqual([{ card: "docker", evidence: "app/docker-compose.yml" }]);
     expect((await client.capabilities.list()).recommendations).toEqual([]);
-    // Nothing is being suggested for a card nobody was offered — there is no claim to record a "no" against.
+    // Nothing is being suggested for a card nobody was offered: there is no claim to record a "no" against.
     expect(await errorCode(client.capabilities.dismiss({ card: "github" }))).toBe("NOT_FOUND");
 });
 
@@ -100,7 +100,7 @@ test("capabilities.rename carries the browser profile and repoints everything th
     // The account still lives in that identity's browser, and the persona still speaks through both.
     expect(capabilities.find((capability) => capability.id === "reddit")?.config["identity"]).toBe("ada");
     expect((await personas.get("front"))?.capabilities).toEqual(["ada", "reddit"]);
-    // Still signed in, under the new name — profile and marker both followed.
+    // Still signed in, under the new name: profile and marker both followed.
     expect(hasSession(workspace.root, "ada")).toBe(true);
     expect(hasSession(workspace.root, "me")).toBe(false);
     expect(existsSync(sessionDir(workspace.root, "ada"))).toBe(true);
@@ -121,7 +121,7 @@ test("capabilities.rename refuses a name already in use, an unknown connection, 
     );
     expect(await errorCode(client.capabilities.rename({ id: "notes", to: "tasks" }))).toBe("CONFLICT");
     expect(await errorCode(client.capabilities.rename({ id: "ghost", to: "spirit" }))).toBe("NOT_FOUND");
-    // The engine is part of the sandbox rather than a connection somebody named — its handler says so.
+    // The engine is part of the sandbox rather than a connection somebody named: its handler says so.
     expect(await errorCode(client.capabilities.rename({ id: "docker", to: "containers" }))).toBe("CONFLICT");
     // A name the add form would refuse never reaches a handler: the wire schema is the same rule.
     expect(await errorCode(client.capabilities.rename({ id: "notes", to: "-nope" }))).toBe("BAD_REQUEST");
@@ -138,13 +138,13 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
             disk.delete(path);
         },
     });
-    // The vpn handler writes ~/.wireguard on the real fs — point HOME at a temp dir like vpn.integration.test.ts.
+    // The vpn handler writes ~/.wireguard on the real fs: point HOME at a temp dir like vpn.integration.test.ts.
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-vpn-home-"));
     const client = clientFor(createApp(services({ files: memoryFiles, capabilities: memoryCapabilitiesStore() })));
 
     const events = await collect(
         // auto-connect on: with no VPN tooling installed yet, the apply must still land in the manifest and say
-        // a rebuild is what installs the client — the pre-rebuild bootstrap this whole flow depends on.
+        // a rebuild is what installs the client: the pre-rebuild bootstrap this whole flow depends on.
         await client.capabilities.add({
             id: "office",
             kind: "vpn",
@@ -161,12 +161,12 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
     expect(disk.get("/work/.intentic/local/environment.approved.Dockerfile")).toBeUndefined();
 });
 
-/* CHANGING A CONNECTION WITHOUT RE-TYPING WHAT IT IS SIGNED IN WITH — the whole point of the marker.
+/* CHANGING A CONNECTION WITHOUT RE-TYPING WHAT IT IS SIGNED IN WITH: the whole point of the marker.
  *
  * A tunnel's WireGuard conf is a credential, so it is never sent to the browser; every other answer is. Editing
  * one therefore means posting back a config with a hole where the credential goes, and the two obvious spellings
  * of that hole are both wrong: an empty string is a config that fails to dial, and an absent key fails the
- * schema. VAULTED is the third, and this pins what it costs — the tunnel keeps dialling with the key it had,
+ * schema. VAULTED is the third, and this pins what it costs: the tunnel keeps dialling with the key it had,
  * and the answer that WAS changed is the one that changed.
  *
  * The refusal is half the test. A marker with nothing behind it means the sender believed a credential was
@@ -187,12 +187,12 @@ test("capabilities.add keeps a credential the sender never saw, and refuses to k
     const store = memoryCapabilitiesStore();
     const client = clientFor(createApp(services({ files: memoryFiles, capabilities: store })));
     const conf = "[Interface]\nPrivateKey = REAL\n";
-    // `add` streams, so its refusal arrives on the iteration rather than on the call — both are awaited here.
+    // `add` streams, so its refusal arrives on the iteration rather than on the call: both are awaited here.
     const addFailure = (input: Parameters<typeof client.capabilities.add>[0]): Promise<string | undefined> =>
         errorCode((async () => collect(await client.capabilities.add(input)))());
 
     await collect(await client.capabilities.add({ id: "office", kind: "vpn", config: { provider: "wireguard", config: conf, autoConnect: "on" } }));
-    // What a browser is told it holds: the shape, and the NAMES of the credentials in it — never the values.
+    // What a browser is told it holds: the shape, and the NAMES of the credentials in it, never the values.
     const [listed] = (await client.capabilities.list()).capabilities;
     expect(listed?.config).toEqual({ provider: "wireguard", autoConnect: "on" });
     expect(listed?.secrets).toEqual(["config"]);

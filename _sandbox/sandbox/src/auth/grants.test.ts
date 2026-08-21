@@ -41,7 +41,7 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
 });
 
 /* The sync grant is the narrowest in the table and has to stay that way: it belongs to a token that lives on a
- * laptop, so what it can reach is what a stolen laptop can reach. Three things and nothing else — the port
+ * laptop, so what it can reach is what a stolen laptop can reach. Three things and nothing else: the port
  * listing, the machine's own report, and the SSH byte pipe desktop sync runs on. The pipe is pinned to the GET
  * that opens it: every other shape of that path, and every neighbouring sync route, must stay out of scope. */
 test("the sync grant reaches ports, its own report and the ssh transport, and nothing else", async () => {
@@ -59,7 +59,7 @@ test("the sync grant reaches ports, its own report and the ssh transport, and no
     expect(await sync.authorize("sync", "GET", "/ports")).toBe("ok");
     expect(await sync.authorize("sync", "POST", "/system/sync/report")).toBe("ok");
     expect(await sync.authorize("sync", "GET", "/system/sync/ssh")).toBe("ok");
-    // The enrollment surface itself is never in reach of the credential it hands out — a machine cannot enroll
+    // The enrollment surface itself is never in reach of the credential it hands out: a machine cannot enroll
     // another, nor read who else syncs, nor open the transport by any verb but the one that upgrades.
     expect(await sync.authorize("sync", "POST", "/system/sync/ssh")).toBe("out-of-scope");
     expect(await sync.authorize("sync", "GET", "/system/sync")).toBe("out-of-scope");
@@ -69,11 +69,11 @@ test("the sync grant reaches ports, its own report and the ssh transport, and no
     expect(await sync.authorize("intruder", "GET", "/system/sync/ssh")).toBe("unauthorized");
 });
 
-/* The panel grant is broad on purpose — a panel is an app somebody else wrote — with exactly one route carved
+/* The panel grant is broad on purpose (a panel is an app somebody else wrote) with exactly one route carved
  * out of it. `/capabilities/<id>/connection` returns a capability's config SECRETS INCLUDED and gates only on
  * "no signed-in identity", which the panel token satisfies as surely as the extension token it was written
  * for. Since that token is injected into every panel and connector process in the container, leaving it in
- * reach made a browser account's password and a TOTP seed readable by anything that can read /proc — the two
+ * reach made a browser account's password and a TOTP seed readable by anything that can read /proc: the two
  * credentials the product states the model is never given. Pinned so re-widening has to be deliberate. */
 test("the panel grant reaches the daemon broadly but never the capability connection read", async () => {
     const grants = grantsOf({
@@ -101,7 +101,7 @@ test("the panel grant reaches the daemon broadly but never the capability connec
 
 // The extension grant is the backend half's whole reach into the daemon: resolve the minted token to its
 // manifest-declared permissions.daemon, then the same glob check the UI half's gate runs. Pinned like the
-// agent grant above — an extension backend must never inherit the panel token's everything.
+// agent grant above: an extension backend must never inherit the panel token's everything.
 test("the extension grant reaches exactly the declared daemon routes", async () => {
     const grants = grantsOf({
         panelToken: "panel",
@@ -117,7 +117,7 @@ test("the extension grant reaches exactly the declared daemon routes", async () 
     expect(await extension.authorize("ext-token", "GET", "/workspace/file")).toBe("ok");
     expect(await extension.authorize("ext-token", "GET", "/workspace/file?path=notes.md")).toBe("ok");
     expect(await extension.authorize("ext-token", "POST", "/agents")).toBe("ok");
-    // Undeclared reach is refused as out-of-scope — the readable "this may not go there", not a bare 401.
+    // Undeclared reach is refused as out-of-scope: the readable "this may not go there", not a bare 401.
     expect(await extension.authorize("ext-token", "GET", "/secrets")).toBe("out-of-scope");
     expect(await extension.authorize("ext-token", "DELETE", "/workspace/file")).toBe("out-of-scope");
     // An unknown token is 401 whatever it asked for: there is no scope to speak of until the token resolves.

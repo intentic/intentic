@@ -3,14 +3,14 @@ import { Icon } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { formatDuration, seekTargets, SPEEDS } from "./mediaControls";
 
-/* THE PLAYER — audio and video, one component, streaming.
+/* THE PLAYER: audio and video, one component, streaming.
  *
  * WHY IT DOESN'T USE `controls`. The native control bar is the browser's, not the app's: five different
  * chromes across five browsers, none of them themable, none of them showing what a workspace reader actually
  * wants (what has BUFFERED, which is the only honest read on "is this streaming or is it stalled?"), and no
  * keyboard map worth the name. So the transport below is ours, and the element is a decoder we drive.
  *
- * WHY ONE ELEMENT FOR BOTH. It is always a <video>, even for an .mp3 — a video element plays audio perfectly
+ * WHY ONE ELEMENT FOR BOTH. It is always a <video>, even for an .mp3: a video element plays audio perfectly
  * well, and the alternative is deciding audio-vs-video from the file EXTENSION, which is wrong twice over: an
  * .mp4 is frequently audio-only (the container an AAC recording arrives in), and a .webm may be either. So the
  * element decodes, and the LAYOUT follows `videoWidth > 0` once metadata lands: a picture fills the pane, a
@@ -18,12 +18,12 @@ import { formatDuration, seekTargets, SPEEDS } from "./mediaControls";
  *
  * WHY IT STREAMS. `src` is a /workspace/media URL the host minted (fetch: "url"), and the element range-reads
  * it: first frame paints in a couple of hundred milliseconds whatever the file weighs, a drag to 40:00 fetches
- * the bytes at 40:00, and nothing is ever held in the tab. A blob: URL — the way every other viewer here gets
- * its content — cannot do any of that: it means downloading the file before the first frame, and it means a
+ * the bytes at 40:00, and nothing is ever held in the tab. A blob: URL, the way every other viewer here gets
+ * its content, cannot do any of that: it means downloading the file before the first frame, and it means a
  * 25 MiB ceiling, which is roughly ten seconds of screen recording.
  *
  * NOT EVERY FILE PLAYS, and that is not this component's fault to hide: no browser decodes Matroska or AVI.
- * The element's own `error` is the signal — its verdict, not our guess from the extension — and it resolves to
+ * The element's own `error` is the signal: its verdict, not our guess from the extension, and it resolves to
  * the download the reader wanted anyway. */
 
 const { path, src } = defineProps<{ path: string; src: string }>();
@@ -103,7 +103,7 @@ const setVolume = (value: number): void => {
         return;
     }
     node.volume = Math.min(Math.max(value, 0), 1);
-    // Nudging the volume up off zero is an unmute — the two controls are one intent and should not need two
+    // Nudging the volume up off zero is an unmute: the two controls are one intent and should not need two
     // clicks to undo one.
     node.muted = node.volume === 0;
 };
@@ -216,7 +216,7 @@ const onTimelineDown = (event: PointerEvent): void => {
     if (at === undefined) {
         return;
     }
-    // Captured so the drag survives leaving the bar — the pointer ends up anywhere while scrubbing a 3-hour
+    // Captured so the drag survives leaving the bar: the pointer ends up anywhere while scrubbing a 3-hour
     // file, and losing the gesture at the edge is what makes a scrubber feel cheap.
     timeline.value?.setPointerCapture(event.pointerId);
     scrubTime.value = at;
@@ -327,7 +327,7 @@ onBeforeUnmount(() => {
     document.removeEventListener(`leavepictureinpicture`, syncPip, true);
 });
 
-// A new file in the same pane starts over — otherwise the next clip inherits the last one's position, its
+// A new file in the same pane starts over: otherwise the next clip inherits the last one's position, its
 // error state, and its "this is audio" layout.
 watch(
     () => src,
@@ -351,11 +351,11 @@ watch(
         :class="hasVideo ? `bg-black` : `bg-canvas`"
         tabindex="0"
         role="group"
-        :aria-label="`${filename} — space to play, arrows to seek, F for fullscreen`"
+        :aria-label="`${filename}: space to play, arrows to seek, F for fullscreen`"
         @keydown="onKeyDown"
         @pointermove="wake"
     >
-        <!-- The decoder. Always a <video>: see the header — the layout, not the element, is what adapts. -->
+        <!-- The decoder. Always a <video>: see the header, the layout, not the element, is what adapts. -->
         <video
             ref="media"
             :src="src"
@@ -443,7 +443,7 @@ watch(
                 :aria-valuemin="0"
                 :aria-valuemax="Math.round(duration)"
                 :aria-valuenow="Math.round(displayTime)"
-                :aria-label="`Seek — ${formatDuration(displayTime)} of ${formatDuration(duration)}`"
+                :aria-label="`Seek: ${formatDuration(displayTime)} of ${formatDuration(duration)}`"
                 tabindex="-1"
                 @pointerdown="onTimelineDown"
                 @pointermove="onTimelineMove"
@@ -604,7 +604,7 @@ watch(
 .media-btn:hover {
     background-color: color-mix(in srgb, currentColor 15%, transparent);
 }
-/* The volume slider, themed to match the timeline — a native range input looks like neither light nor dark
+/* The volume slider, themed to match the timeline: a native range input looks like neither light nor dark
    mode, and inherits none of the app's colours. */
 .media-range {
     height: 0.25rem;

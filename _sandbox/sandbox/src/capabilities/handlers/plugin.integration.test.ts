@@ -18,7 +18,7 @@ const exec = promisify(execFile);
 const git = (dir: string, ...args: string[]) => exec("git", ["-C", dir, ...args]);
 
 // A ctx exposing only what pluginHandler touches (files + git.head + the terminal runner + workspace.root),
-// over a fresh temp workspace. The runner is the real one in its no-tmux fallback — the handler's clone/
+// over a fresh temp workspace. The runner is the real one in its no-tmux fallback: the handler's clone/
 // checkout commands run as plain bash against a local fixture repo, offline.
 const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
     const root = mkdtempSync(join(tmpdir(), "plugin-cap-"));

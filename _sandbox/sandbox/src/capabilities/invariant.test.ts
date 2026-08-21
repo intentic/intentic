@@ -26,13 +26,13 @@ test("a properly vaulted manifest reports nothing", async () => {
     await expect(run([{ id: "linear", kind: "mcp", config: { url: "https://a/mcp", token: VAULTED } }])).resolves.toBeUndefined();
 });
 
-test("a credential sitting in the readable manifest is named — the capability and the field", async () => {
+test("a credential sitting in the readable manifest is named: the capability and the field", async () => {
     await expect(run([{ id: "linear", kind: "mcp", config: { url: "https://a/mcp", token: "mcp_live_token" } }])).rejects.toThrow(
         /1 capabilit\(ies\).*linear \(token\)/,
     );
 });
 
-test("the value is never in the message — a diagnostic that prints the token has copied it into the log", async () => {
+test("the value is never in the message: a diagnostic that prints the token has copied it into the log", async () => {
     // Asserted on the caught message rather than through `rejects.toThrow`, which takes a substring to REQUIRE
     // and has no negative form: a test that cannot fail here is worse than no test, since this is the one thing
     // the check must never do.

@@ -102,7 +102,7 @@ const unmeasuredDetail = (needs: readonly ProbeId[], probes: ReadonlyMap<ProbeId
         if (probe.state === `unavailable`) {
             return [`${spec.title} · ${probe.reason ?? `not available in this repository`}`];
         }
-        return [`${spec.title} · failed${probe.reason === undefined ? `` : ` — ${probe.reason}`}`];
+        return [`${spec.title} · failed${probe.reason === undefined ? `` : `, ${probe.reason}`}`];
     });
 
 export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLedgerEntry | undefined): ChoreVerdict => {
@@ -185,7 +185,7 @@ export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLe
             ...base,
             state: `clear`,
             severity: `info`,
-            headline: `Checked — the findings did not hold up`,
+            headline: `Checked, the findings did not hold up`,
             detail: finding.detail,
             digest: finding.digest,
             measuredAt,

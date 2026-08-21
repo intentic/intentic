@@ -115,7 +115,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                     // a rotted install, and closing says so rather than opening a window on nothing.
                     const resolved = browserUrls(contribution.spec, capability.config);
                     if (resolved === undefined) {
-                        ws.close(1008, "this connection has no page to open — re-add it");
+                        ws.close(1008, "this connection has no page to open: re-add it");
                         return;
                     }
                     urls = resolved;
@@ -141,7 +141,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                 try {
                     playwright = await import("playwright");
                 } catch {
-                    ws.send(JSON.stringify({ type: "error", message: "browser not installed — rebuild the sandbox (Environment card) first" }));
+                    ws.send(JSON.stringify({ type: "error", message: "browser not installed, rebuild the sandbox (Environment card) first" }));
                     await cleanup();
                     ws.close(1011, "browser missing");
                     return;

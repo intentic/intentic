@@ -4,7 +4,7 @@ import { CORE_AUTOMATION_TEMPLATES } from "./catalog.js";
 
 /* THE SEAM BETWEEN THE TWO WAYS A CHORE IS CONSUMED. The Maintenance panel offers a turn against a finding you
  * can read first; an automation wakes on a clock with nobody watching. Both come from
- * @intentic/sandbox-contract/chores, and these tests exist to keep it that way — the failure they guard against
+ * @intentic/sandbox-contract/chores, and these tests exist to keep it that way: the failure they guard against
  * is somebody adding a fourth code chore here by hand, after which the panel and the nightly sweep slowly stop
  * agreeing about what the chore is for.
  *
@@ -28,7 +28,7 @@ describe(`code chores come from the book`, () => {
 
     /* Two shelf entries stand apart from the measurement book, and neither is an oversight: they are REFLEXES,
      * not chores. Each fires on a workspace event, has no standing evidence to accumulate, and would be
-     * meaningless as a row in a panel about what a codebase is owed. The split is the point — the book holds
+     * meaningless as a row in a panel about what a codebase is owed. The split is the point: the book holds
      * chores that have a measurement, this file holds triggers. The fix chore's definition lives beside the
      * book in fix-deps.ts so its template metadata and prompt stay one unit; this catalogue only dresses that
      * definition for the shelf. */
@@ -63,7 +63,7 @@ describe(`code chores come from the book`, () => {
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    /* A shelved template makes an automation in ONE CLICK, with no form in between — so everything the created
+    /* A shelved template makes an automation in ONE CLICK, with no form in between, so everything the created
      * row needs has to already be on it. A `create` offer that reached the composer instead would be the
      * suggestion strip quietly turning into a second way to open the form. */
     test(`every shelved template carries a prompt and a trigger the one-click path can save`, () => {

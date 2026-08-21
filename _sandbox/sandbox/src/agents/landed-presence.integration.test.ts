@@ -16,11 +16,11 @@ import { createLandedPresences } from "./landed-presence.js";
 import { landAgent } from "./land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
 
-/* THE DISCARD CASE, end to end and against real git — because it is precisely the case no sha can report.
+/* THE DISCARD CASE, end to end and against real git, because it is precisely the case no sha can report.
  *
  * A land leaves its delta in the main tree as UNCOMMITTED changes. Discard them in the Changes panel and no
  * commit anywhere moves: the branch tip is where it was, main's HEAD is where it was, and the recorded
- * landedTip still says the work went in. So a stub of any of those would prove nothing here — the whole point
+ * landedTip still says the work went in. So a stub of any of those would prove nothing here: the whole point
  * is what the WORKING TREE holds, which only a real one can answer.
  */
 
@@ -62,7 +62,7 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 
-test("landed work still sitting in the tree reads as present — nothing to say", async () => {
+test("landed work still sitting in the tree reads as present, nothing to say", async () => {
     const { worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     await writeFile(join(conversation.cwd, "added.ts"), "new file\n");
@@ -87,7 +87,7 @@ test("discarding the whole land reads as removed from the workspace", async () =
     await discardPaths(work, undefined);
 
     const presences = createLandedPresences(worktrees, logger, createExpiryTracker());
-    // The verdict MOVED, which is what makes the board repaint — the roster read that heals the card.
+    // The verdict MOVED, which is what makes the board repaint: the roster read that heals the card.
     expect(await presences.refresh([entry])).toBe(true);
     expect(presences.of("c1")).toEqual({ landed: 2, present: 0 });
 });
@@ -106,7 +106,7 @@ test("discarding part of a land reads as the fraction that survived", async () =
     expect(presences.of("c1")).toEqual({ landed: 2, present: 1 });
 });
 
-test("committing the landed work is the strongest form of present — and never reported as missing", async () => {
+test("committing the landed work is the strongest form of present, and never reported as missing", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
@@ -119,7 +119,7 @@ test("committing the landed work is the strongest form of present — and never 
     await presences.refresh([entry]);
     expect(presences.of("c1")).toBeUndefined();
 
-    /* And it STAYS silent when the user edits that path again and throws the edit away — the landing is
+    /* And it STAYS silent when the user edits that path again and throws the edit away: the landing is
      * settled, because history holds the agent's lines and a discard can only return the file to them. This is
      * the case that separates this reading from the Changes panel's attribution, where a commit is what ENDS
      * an agent's claim: here it is what makes it permanent. */
@@ -129,12 +129,12 @@ test("committing the landed work is the strongest form of present — and never 
     expect(presences.of("c1")).toBeUndefined();
 });
 
-test("an ABSORBED landing is answered from the entry — fully present, and not one git command", async () => {
+test("an ABSORBED landing is answered from the entry: fully present, and not one git command", async () => {
     const { worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
     // The mark the attribution scan writes once history has taken every landed path (agents/origins.ts via
-    // registry.markLandingAbsorbed) — here stamped directly, because what THIS module owes it is only the
+    // registry.markLandingAbsorbed): here stamped directly, because what THIS module owes it is only the
     // reading: both sides of the fraction, from memory, before any head read.
     const entry = isolatedAgent(landed.repos.map((composed) => Object.assign({}, composed, { absorbed: 3 })));
 
@@ -144,7 +144,7 @@ test("an ABSORBED landing is answered from the entry — fully present, and not 
         return defaultGit(dir, args, env);
     });
     expect(await presences.refresh([entry])).toBe(false);
-    // Absorbed is this reading's strongest "present": nothing missing, so nothing to say — and nothing spent.
+    // Absorbed is this reading's strongest "present": nothing missing, so nothing to say, and nothing spent.
     expect(presences.of("c1")).toBeUndefined();
     expect(calls).toEqual([]);
 });
@@ -159,7 +159,7 @@ test("a cumulative land puts discarded work back; the default span cannot", asyn
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe(`${LINES.join("\n")}\n`);
 
     /* The default span is EMPTY here, and that is the whole problem stated as a test: every sha says this work
-     * landed — because it did — so "Land now" would report success and carry nothing at all. */
+     * landed, because it did, so "Land now" would report success and carry nothing at all. */
     const remainder = await landAgent(worktrees, entry, "check", "outstanding");
     expect(remainder.changed).toBe(false);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe(`${LINES.join("\n")}\n`);
@@ -181,17 +181,17 @@ test("a cumulative land re-applies only what is missing, leaving committed work 
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
     const entry = isolatedAgent(landed.repos);
 
-    // The user keeps half and throws the other half away — the ordinary shape of a partial review.
+    // The user keeps half and throws the other half away: the ordinary shape of a partial review.
     await sh(work, "add", "other.ts");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "keep other.ts");
     await discardPaths(work, ["app.ts"]);
 
     const again = await landAgent(worktrees, entry, "check", "cumulative");
     // No conflict: the committed path un-applies cleanly, so it drops out of the patch rather than refusing it
-    // — the same reverse probe that keeps work which reached main by another road out of a conflict report.
+    //: the same reverse probe that keeps work which reached main by another road out of a conflict report.
     expect(again.conflicts).toBeUndefined();
     expect(again.landed).toBe(true);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe(edited(1));
-    // The kept half is untouched — one commit, not two, and no second copy of its hunk.
+    // The kept half is untouched: one commit, not two, and no second copy of its hunk.
     expect(await sh(work, "status", "--porcelain", "other.ts")).toBe("");
 });

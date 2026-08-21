@@ -199,7 +199,7 @@ export const configSchema = z.object({
     /* THE CREATOR POOL, the optional paid membership whose revenue premium-extension creators share.
      *
      * `stripeSecretKey` + `stripePriceId` are the switch, exactly like trial.keys: both empty (the default,
-     * and the right one for a self-hosted platform) and the pool does not exist — /pool routes 404, the web
+     * and the right one for a self-hosted platform) and the pool does not exist: /pool routes 404, the web
      * app offers no membership, premium extensions cannot be enabled anywhere that points at this platform.
      * Stripe stays the money's source of truth; the platform mirrors just enough (pool/pool-membership.ts)
      * to answer "is this user premium" without a Stripe round-trip on hot paths. */
@@ -332,7 +332,7 @@ export const configSchema = z.object({
     /* THE AGENT WALLET's signer, the platform half of a sandbox spending USDC on x402 endpoints.
      *
      * `custodyUrl` + `custodyKey` are the switch, exactly like pool.stripeSecretKey: both empty (the
-     * default, and the right one for a self-hosted platform) and there is no signer — /wallet routes 404,
+     * default, and the right one for a self-hosted platform) and there is no signer: /wallet routes 404,
      * a sandbox's wallet capability stays pending and says so on its card. The platform never holds key
      * material either way: the credential here authenticates it to a custody provider that holds the
      * member's wallet and signs with it (wallet/wallet-custody.ts). */
@@ -353,7 +353,7 @@ export const configSchema = z.object({
      * push-relay README states that trade in full.
      *
      * `keyP8` is the switch, exactly like trial.keys: empty (the default, and the right one for a platform
-     * that ships no iOS app) and the relay does not exist — /push routes 404, and the web app inside the
+     * that ships no iOS app) and the relay does not exist: /push routes 404, and the web app inside the
      * shell reports notifications unsupported rather than half-working. */
     apns: z
         .object({

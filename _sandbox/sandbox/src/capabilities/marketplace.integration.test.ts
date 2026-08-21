@@ -149,11 +149,11 @@ test("joins the scanner's facts file onto the curated entries and sorts verified
 
     expect(marketplace.plugins.map((entry) => entry.name)).toEqual(["checked", "popular", "evil"]);
     expect(marketplace.plugins[0]).toMatchObject({ trust: "verified", stars: 2 });
-    // A blocked row survives the browse — it is what the UI needs in order to say no with a reason.
+    // A blocked row survives the browse: it is what the UI needs in order to say no with a reason.
     expect(marketplace.plugins[2]).toMatchObject({ trust: "blocked", trustReason: "exfiltrates secrets" });
 });
 
-test("a registry with no generated facts file resolves fine — most registries run no scanner", async () => {
+test("a registry with no generated facts file resolves fine: most registries run no scanner", async () => {
     const { ctx } = tempCtx();
     const url = await fixtureMarketplace(JSON.stringify({ name: "team", plugins: [{ name: "internal", kind: "extension", source: "./internal" }] }));
     const marketplace = await browseMarketplace(ctx, url);

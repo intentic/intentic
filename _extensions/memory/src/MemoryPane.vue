@@ -17,9 +17,9 @@ import { INDEX_NAME, linkifyNoteRefs, noteTitle, parseNote } from "./memoryNote"
 import { useMemoryFile, useMemoryMutations } from "./useMemory";
 
 /* One memory note, read and curated: the agent's own words rendered as prose, the raw file behind a Source
- * toggle, and the two edits an owner ever wants to make — correct a fact, or make the agent forget it.
+ * toggle, and the two edits an owner ever wants to make: correct a fact, or make the agent forget it.
  *
- * The FRAME is <NoteEditor>'s — the action cluster, the confirmation, the error strip, and the one surface the
+ * The FRAME is <NoteEditor>'s: the action cluster, the confirmation, the error strip, and the one surface the
  * file is both read and written on. What is left here is what makes this a MEMORY note: the frontmatter it is
  * described by, the index's special standing, and the sibling references in its prose.
  *
@@ -29,12 +29,12 @@ import { useMemoryFile, useMemoryMutations } from "./useMemory";
 const { project, name, entry } = defineProps<{
     project: string;
     name: string;
-    // The list entry this note came from — its size and mtime are already known, so the header needs no fetch.
+    // The list entry this note came from: its size and mtime are already known, so the header needs no fetch.
     entry: MemoryFileEntry | undefined;
 }>();
 
 const emit = defineEmits<{
-    // A reference inside the prose was clicked — the index's entries, and the notes' links to each other.
+    // A reference inside the prose was clicked: the index's entries, and the notes' links to each other.
     open: [name: string];
     // The note is gone; the view owns the selection, so it decides what to show next.
     forgotten: [];
@@ -42,7 +42,7 @@ const emit = defineEmits<{
 
 /* The in-progress edit, owned by the VIEW rather than this component: a draft has to survive reading another
  * note and coming back, and this pane is re-used (not remounted) as the selection moves. `undefined` means
- * "not editing" — one piece of state for both, so an editor can never be open with nothing in it. */
+ * "not editing": one piece of state for both, so an editor can never be open with nothing in it. */
 const draft = defineModel<string | undefined>(`draft`);
 
 const selection = computed(() => ({ project, name }));
@@ -90,7 +90,7 @@ const edit = (): void => {
     view.value = `source`;
 };
 
-/* References to other notes are links, not text — see linkifyNoteRefs. They carry `data-note` instead of an
+/* References to other notes are links, not text: see linkifyNoteRefs. They carry `data-note` instead of an
  * href (the destination is a selection in this view, not a URL), so one delegated listener on the prose turns
  * a click into a selection. Delegated because the anchors live inside v-html and can hold no component. */
 const decorate = (fragment: DocumentFragment): void => linkifyNoteRefs(fragment, name);
@@ -104,8 +104,8 @@ const onProseClick = (event: MouseEvent): void => {
 </script>
 
 <template>
-    <!-- The stacking rule this header needed — title on its own row until there is width for the control
-         cluster — belongs to the frame now: this pane is the narrowest real instance of it, and so the one that
+    <!-- The stacking rule this header needed: title on its own row until there is width for the control
+         cluster, belongs to the frame now: this pane is the narrowest real instance of it, and so the one that
          found the failure. -->
     <NoteEditor
         v-model:source="source"
@@ -131,7 +131,7 @@ const onProseClick = (event: MouseEvent): void => {
             <StatusBadge v-if="parsed.type" :variant="typeVariant" size="xs" :label="parsed.type" />
         </template>
         <template #description>
-            <span v-if="isIndex">Loaded at the start of every session — every note below it hangs off this.</span>
+            <span v-if="isIndex">Loaded at the start of every session: every note below it hangs off this.</span>
             <span v-else-if="parsed.description">{{ parsed.description }}</span>
         </template>
         <template #meta>
@@ -144,7 +144,7 @@ const onProseClick = (event: MouseEvent): void => {
             </template>
         </template>
 
-        <!-- Two views and nothing else, so they fit the header's row beside the icon buttons — unlike the
+        <!-- Two views and nothing else, so they fit the header's row beside the icon buttons: unlike the
              knowledge pane, which has three and a map to make room for. -->
         <template #actions>
             <SegmentedControl
@@ -157,7 +157,7 @@ const onProseClick = (event: MouseEvent): void => {
             />
         </template>
 
-        <template #confirm>Forget “{{ title }}”? The agent stops recalling it — this can't be undone.</template>
+        <template #confirm>Forget "{{ title }}"? The agent stops recalling it: this can't be undone.</template>
 
         <!-- Delegated click: the note links and the code blocks' copy buttons both live inside v-html. -->
         <Markdown :source="parsed.body" :decorate="decorate" class="px-5 py-4" style="--prose-measure: 74ch" @click="onProseClick" />

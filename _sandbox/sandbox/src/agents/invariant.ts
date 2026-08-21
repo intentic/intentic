@@ -42,7 +42,7 @@ export const checks = ({ agents, live = liveTurnConversations, now = Date.now }:
             const idle = due.filter((run) => !agents.running(run.conversationId)).map((run) => run.conversationId);
             if (idle.length > 0) {
                 fail(
-                    `${idle.length} live turn(s) read as not running on the fleet board — the card shows idle while the turn spends: ${idle.join(", ")}`,
+                    `${idle.length} live turn(s) read as not running on the fleet board, the card shows idle while the turn spends: ${idle.join(", ")}`,
                 );
             }
         },

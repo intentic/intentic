@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { probeService } from "./pool-admission.js";
 import { forwardToService } from "./pool-services.js";
 
-/* THE PROVIDER CONTRACT, PROVED FROM BOTH ENDS AT ONCE: the example provider (_platform/example-provider —
+/* THE PROVIDER CONTRACT, PROVED FROM BOTH ENDS AT ONCE: the example provider (_platform/example-provider:
  * the reference code a third party copies) driven by the REAL admission probe and the REAL metered forward,
- * in one process. If either side drifts — the probe demanding something the reference does not do, or the
- * reference doing something the forward refuses — this suite is where it surfaces, instead of on a
+ * in one process. If either side drifts: the probe demanding something the reference does not do, or the
+ * reference doing something the forward refuses: this suite is where it surfaces, instead of on a
  * provider's first publish attempt. */
 
 const SECRET = `example-secret`;
@@ -14,7 +14,7 @@ const UPSTREAM = `https://svc.example.test/run`;
 const NOW = () => new Date(`2026-08-10T12:00:00Z`);
 
 // The probe checks the endpoint resolves to PUBLIC space before spending a call on it; the handler under
-// test has no DNS, so resolution is faked public — exactly the seam pool-admission's own tests use.
+// test has no DNS, so resolution is faked public: exactly the seam pool-admission's own tests use.
 const publicLookup = (async () => [{ address: `93.184.216.34`, family: 4 }]) as unknown as typeof import("node:dns/promises").lookup;
 
 // The provider as one in-process fetch: what Bun.serve would dispatch to over a socket, without the socket.
@@ -35,7 +35,7 @@ describe(`the example provider against the platform's own gates`, () => {
     });
 
     it(`fails the probe's serves check when the sample request is one it will not serve`, async () => {
-        // The probe sends the LISTING's sample request — a provider publishing a sample their endpoint breaks
+        // The probe sends the LISTING's sample request: a provider publishing a sample their endpoint breaks
         // on learns it here, before a member ever pays for the discovery.
         const verdict = await probeService(UPSTREAM, SECRET, `{"scenario":"broken","paceMs":0}`, providerFetch(), NOW, publicLookup);
         expect(verdict.passed).toBe(false);

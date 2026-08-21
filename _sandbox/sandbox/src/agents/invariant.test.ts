@@ -4,7 +4,7 @@ import { checks } from "./invariant.js";
 
 /* The failure the user sees: a card at rest on the fleet board while the turn behind it spends the owner's
  * allowance. The turn path and the registry each keep their own record of "running", and nothing reconciles
- * them — a begin that did not happen leaves the two describing different worlds. */
+ * them: a begin that did not happen leaves the two describing different worlds. */
 
 const fail = (message: string): never => {
     throw new Error(message);
@@ -19,7 +19,7 @@ const registryOf = (running: Readonly<Record<string, boolean>>): AgentsRegistry 
     }) as unknown as AgentsRegistry;
 
 // `async` on purpose: this check is synchronous today, so a bare `Promise.resolve(check.run(...))` would let its
-// throw escape the helper instead of rejecting — and would silently start passing if the check ever went async.
+// throw escape the helper instead of rejecting, and would silently start passing if the check ever went async.
 const run = async (running: Readonly<Record<string, boolean>>, live: readonly { conversationId: string; startedAt: number }[]): Promise<void> => {
     const [check] = checks({ agents: registryOf(running), live: () => live, now: () => NOW });
     await check?.run({ moment: "sweep", fail });
@@ -39,7 +39,7 @@ test("a live turn the registry has no entry for at all is the louder finding", a
     await expect(run({}, [{ conversationId: "ghost", startedAt: NOW - 60_000 }])).rejects.toThrow(/no entry for.*ghost/);
 });
 
-test("a turn younger than the grace is not yet due — begin may still be a tick away", async () => {
+test("a turn younger than the grace is not yet due: begin may still be a tick away", async () => {
     await expect(run({}, [{ conversationId: "c1", startedAt: NOW - 1_000 }])).resolves.toBeUndefined();
 });
 

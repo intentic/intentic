@@ -53,7 +53,7 @@
 // unrelated update queued behind it. The symptom is a window that stops answering, blamed on whichever
 // component the loop was noticed in, so the fix has to be a box nothing observes rather than a rule to
 // remember. Additive: `sandboxRef` is unchanged, and both are emptied on a switch by the same door.
-// 2.9.0 adds `api.href` — the same app path the host would navigate to, as a browser address. A view that can
+// 2.9.0 adds `api.href`: the same app path the host would navigate to, as a browser address. A view that can
 // only call `navigate` has to draw every destination it offers as a <button>, and a button is not a link: no
 // address under the pointer, nothing in the browser's own right-click menu, nothing to copy, and Ctrl/⌘-click
 // moving the tab the reader is in instead of opening a second one. Six views across three packs had each drawn

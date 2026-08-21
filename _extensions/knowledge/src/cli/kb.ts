@@ -21,7 +21,7 @@ import { linkFields, slugify, wikiLink } from "./note-shape.js";
  * Exit codes follow the workspace's search tool, because the agent already reasons in them: 0 found something,
  * 1 found nothing, 2 could not run. */
 
-const USAGE = `kb — the knowledge base: notes, the things in them, and how they connect.
+const USAGE = `kb, the knowledge base: notes, the things in them, and how they connect.
 
   kb find <words…>            search names, facts and prose        [--type --tag --linked-to --limit]
   kb list                     every note, newest first             [--type --tag --limit]
@@ -223,7 +223,7 @@ const vocabVerb = (run: Run, index: KnowledgeIndex): number => {
         emit(
             run,
             vocabulary,
-            `this knowledge base has adopted no vocabulary yet — write ${VOCABULARY_PATH} with type: ${VOCABULARY_TYPE} to start one.`,
+            `this knowledge base has adopted no vocabulary yet, write ${VOCABULARY_PATH} with type: ${VOCABULARY_TYPE} to start one.`,
         );
         return 1;
     }
@@ -256,7 +256,7 @@ const newVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     const path = flag(run.args, "path") ?? `${type === undefined ? "" : `${type}/`}${slugify(title)}.md`;
     const existing = index.byPath.get(path);
     if (existing !== undefined) {
-        emit(run, { error: "already there", path }, `${path} already exists — kb set, or pick another --path.`);
+        emit(run, { error: "already there", path }, `${path} already exists, kb set, or pick another --path.`);
         return 2;
     }
     const fields = new Map<string, string[]>([
@@ -339,7 +339,7 @@ const main = async (): Promise<number> => {
     // `new` is the one verb that must work on a knowledge base that does not exist yet, so it does not require notes.
     const files = await readNotes(root);
     if (files.length === 0 && args.verb !== "new") {
-        emit(run, { folder: root, notes: 0 }, `no notes yet in ${root} — kb new "Something" --type term starts one.`);
+        emit(run, { folder: root, notes: 0 }, `no notes yet in ${root}, kb new "Something" --type term starts one.`);
         return 1;
     }
     const index = buildIndex(files);

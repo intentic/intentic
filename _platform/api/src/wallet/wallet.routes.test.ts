@@ -6,8 +6,8 @@ import { type Config, configSchema } from "../config.js";
 import type { CustodyGateway } from "./wallet-custody.js";
 import { walletHttpRoutes } from "./wallet.routes.js";
 
-/* THE SIGNER IS THE ONLY REAL FENCE around an agent's spending — the daemon's own checks are UX, and the
- * container they run in is not a trust boundary — so what is pinned here is what a compromised or
+/* THE SIGNER IS THE ONLY REAL FENCE around an agent's spending: the daemon's own checks are UX, and the
+ * container they run in is not a trust boundary, so what is pinned here is what a compromised or
  * prompt-injected sandbox must NOT be able to obtain: a signature over more than the owner's per-payment
  * ceiling, one that passes the day's cap, one that spends somebody else's wallet, one over a token that is
  * not USDC, or one whose validity window is long enough to be worth stealing. Each of those is a request
@@ -56,7 +56,7 @@ interface StoredPayment {
 }
 
 // Enough Prisma for these routes: the sandbox token lookup, the wallet row, and the payment ledger the
-// daily cap is computed from — with $transaction running its callback for real, since the cap check and the
+// daily cap is computed from: with $transaction running its callback for real, since the cap check and the
 // row write happening together is exactly the property under test.
 const fakePrisma = (seed?: { wallets?: StoredWallet[]; payments?: StoredPayment[] }) => {
     const wallets = seed?.wallets ?? [];
@@ -128,7 +128,7 @@ const seededWallet: StoredWallet = {
     dailyCapUsd: `5.00`,
 };
 
-// A well-formed authorization for $0.10, inside every default cap — the baseline each test perturbs.
+// A well-formed authorization for $0.10, inside every default cap: the baseline each test perturbs.
 const signBody = (over: Record<string, unknown> = {}, authOver: Record<string, unknown> = {}) => ({
     network: `eip155:8453`,
     asset: USDC_BASE,
@@ -167,7 +167,7 @@ it("signs exactly the EIP-3009 typed data, in the token's own domain", async () 
     );
     expect(seen[0]).toMatchObject({
         primaryType: `TransferWithAuthorization`,
-        // chainId and verifyingContract come from the PLATFORM's own table, never from the caller — a
+        // chainId and verifyingContract come from the PLATFORM's own table, never from the caller: a
         // challenge cannot redirect a signature onto another chain or another contract.
         domain: { name: `USD Coin`, version: `2`, chainId: 8453, verifyingContract: USDC_BASE },
         message: { from: ADDRESS, to: PAY_TO, value: `100000` },
@@ -208,7 +208,7 @@ it("refuses a token that is not USDC, however well-formed the request is", async
 
 it("refuses when the stated amount and the authorization's value disagree", async () => {
     const { prisma } = fakePrisma({ wallets: [seededWallet] });
-    // Says ten cents, moves ten dollars — the mismatch the caps would otherwise be checked against.
+    // Says ten cents, moves ten dollars: the mismatch the caps would otherwise be checked against.
     const response = await app({ prisma })(`/sign`, signBody({}, { value: `10000000` }));
     expect(response.status).toBe(400);
 });
@@ -254,7 +254,7 @@ it("creates one wallet per account and network, and re-states the caps on a repe
     const first = await request(`/ensure`, { network: `eip155:8453`, policy: { perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` } });
     expect(first.status).toBe(200);
     expect(((await first.json()) as { address: string }).address).toBe(ADDRESS);
-    // A repeat ensure is an EDIT, not a second wallet — the owner would otherwise have to fund a new address.
+    // A repeat ensure is an EDIT, not a second wallet: the owner would otherwise have to fund a new address.
     const second = await request(`/ensure`, { network: `eip155:8453`, policy: { perPaymentMaxUsd: `0.25`, dailyCapUsd: `2.00` } });
     expect(second.status).toBe(200);
     expect(wallets).toHaveLength(1);

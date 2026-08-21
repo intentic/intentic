@@ -41,7 +41,7 @@ const ruleRefusal = (command: string, rules: WatchServerDeps["commandRules"]): s
     for (const commandClass of classifyCommand(command)) {
         const verdict = guard(commandRun, { commandClass, rules });
         if (verdict.effect !== "allow") {
-            return `${verdict.reason} — a watch check runs unattended, so it cannot ask. Run the command through Bash instead, or watch with a narrower read-only check.`;
+            return `${verdict.reason}: a watch check runs unattended, so it cannot ask. Run the command through Bash instead, or watch with a narrower read-only check.`;
         }
     }
     return undefined;
@@ -54,12 +54,12 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
         tools: [
             tool(
                 "start",
-                "Watch an outside condition and get woken when it fires — instead of writing a polling loop. Give a cheap " +
+                "Watch an outside condition and get woken when it fires: instead of writing a polling loop. Give a cheap " +
                     "check command that exits 0 once the condition is met and non-zero while still waiting (e.g. query a CI " +
-                    "run's status and exit 0 only on completion). The check runs once now — a broken command fails to your " +
-                    "face — then the daemon re-runs it on the interval after your turn ends, and when it passes (or the " +
+                    "run's status and exit 0 only on completion). The check runs once now: a broken command fails to your " +
+                    "face: then the daemon re-runs it on the interval after your turn ends, and when it passes (or the " +
                     "timeout hits, whichever first) this conversation is woken exactly once with the check's output. Use for " +
-                    "CI runs, deploys, remote queues — anything outside this sandbox. Do NOT use it for work you started " +
+                    "CI runs, deploys, remote queues: anything outside this sandbox. Do NOT use it for work you started " +
                     "here (background commands, subagents, delegated CLIs): the harness already notifies you about those, " +
                     "and the wait tool covers parking on them mid-turn.",
                 {
@@ -71,7 +71,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                         .string()
                         .min(1)
                         .max(200)
-                        .describe('One line on what is being watched, e.g. "CI run 316 on intentic/intentic" — shown in the wake and to the user.'),
+                        .describe('One line on what is being watched, e.g. "CI run 316 on intentic/intentic": shown in the wake and to the user.'),
                     intervalSeconds: z
                         .number()
                         .min(10)
@@ -112,7 +112,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                     if (outcome.kind === "already-met") {
                         return answer({
                             outcome: "already-met",
-                            note: "The check already exits 0 — the condition holds now. Nothing was armed and no wake is coming; act on the output directly.",
+                            note: "The check already exits 0, the condition holds now. Nothing was armed and no wake is coming; act on the output directly.",
                             firstCheck: outcome.firstCheck,
                         });
                     }
@@ -122,7 +122,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                         intervalSeconds: outcome.intervalSeconds,
                         timeoutSeconds: outcome.timeoutSeconds,
                         firstCheck: outcome.firstCheck,
-                        note: "You can end this turn — the watch runs without you and this conversation is woken when it fires or times out.",
+                        note: "You can end this turn, the watch runs without you and this conversation is woken when it fires or times out.",
                     });
                 },
             ),
@@ -145,7 +145,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                             ? answer({ outcome: "stopped", watchId: args.watchId })
                             : answer({
                                   outcome: "unknown-watch",
-                                  note: "No armed watch of this conversation has that id — it may have fired, timed out, or been stopped already.",
+                                  note: "No armed watch of this conversation has that id, it may have fired, timed out, or been stopped already.",
                               }),
                     );
                 },

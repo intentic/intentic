@@ -23,8 +23,8 @@ test("browser MCP configs live in a private directory, each one written exclusiv
 
 /* THE REGRESSION: a recycled port must not end the turn.
  *
- * Ports are reissued once the port memory has rolled past them — a dozen turns, in a sandbox with twenty
- * accounts — while the config file the earlier turn wrote is still on disk for hours. Named owner+port, the
+ * Ports are reissued once the port memory has rolled past them: a dozen turns, in a sandbox with twenty
+ * accounts, while the config file the earlier turn wrote is still on disk for hours. Named owner+port, the
  * second write hit `wx` and threw EEXIST out of turn planning, killing the turn before the model ran. */
 test("a recycled port writes its own config instead of colliding with the old one", async () => {
     const server = `recycled-${process.hrtime.bigint()}`;
@@ -35,7 +35,7 @@ test("a recycled port writes its own config instead of colliding with the old on
     expect(statSync(second).mode & 0o777).toBe(0o600);
 });
 
-/* Every daemon restart used to leave its config directory behind forever — hundreds of them in a long-lived
+/* Every daemon restart used to leave its config directory behind forever: hundreds of them in a long-lived
  * sandbox. The stale sweep now takes the directories too, without touching the one this process is writing to. */
 test("config directories left by dead daemons are swept, and the live one is kept", async () => {
     if (!(await chromiumInstalled())) {
@@ -84,7 +84,7 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
     expect(spec.env["DISPLAY"]).toBe(":99");
 });
 
-/* The deadline, on both server kinds. Without it a browser tool call is unbounded — and one of these tools
+/* The deadline, on both server kinds. Without it a browser tool call is unbounded, and one of these tools
  * genuinely never returns on its own: `browser_evaluate` awaits an in-page promise, which Playwright does not
  * time out, so a page that never reaches the awaited state ends the turn there. It is a PER-SERVER timeout
  * rather than MCP_TOOL_TIMEOUT because the same process serves tools that must wait for a human. */
@@ -99,7 +99,7 @@ test("every browser server bounds a single tool call", () => {
     }
 });
 
-// The credential-free browser carries no identity at all — that is what lets it exist without a login, and
+// The credential-free browser carries no identity at all: that is what lets it exist without a login, and
 // what lets two turns run one at once.
 test("isolatedBrowserSpec keeps the profile in memory and needs no display", () => {
     const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`, "/tmp/cfg.json") as {
@@ -126,7 +126,7 @@ test("a browser is available with no capabilities and no login at all", async ()
     expect(Object.keys((await browserServersOf([github], tempRoot())).servers)).toEqual(["web"]);
 });
 
-/* A PENDING account's browser mounts too — over the same persisted profile the guided login would write. This
+/* A PENDING account's browser mounts too: over the same persisted profile the guided login would write. This
  * is what lets the agent perform the sign-in (or sign-up) itself and leave the account exactly as connected as
  * a hand login would have; the connected marker gates nothing here any more, only the profile lock does. Needs
  * the virtual display like every persisted-profile server, so guarded like the two-accounts test below. */
@@ -148,7 +148,7 @@ test("a login in progress suppresses that account's server (the profile is locke
     const root = tempRoot();
     await markConnected(root, "reddit");
     expect(acquireProfileLock("reddit")).toBe(true);
-    // The credential-free browser is unaffected — it holds no profile to lock.
+    // The credential-free browser is unaffected: it holds no profile to lock.
     expect(Object.keys((await browserServersOf([reddit], root)).servers)).toEqual(["web"]);
     releaseProfileLock("reddit");
 });
@@ -156,7 +156,7 @@ test("a login in progress suppresses that account's server (the profile is locke
 /* TWO ACCOUNTS OF ONE SITE ARE TWO BROWSERS behind the ONE routed server, in the same turn. Each backend in
  * the router's manifest gets its own --user-data-dir (which is the fix): pointed at one shared directory they
  * would not merely be confusable, they would be unusable, because Chromium takes an exclusive lock on a
- * profile — the first backend to launch would work and the second would fail on its first call.
+ * profile: the first backend to launch would work and the second would fail on its first call.
  *
  * The logged-in path needs the virtual display, which the sandbox image has and a dev host may not; guarded like
  * the Chromium probe above rather than left to throw somewhere it was never going to run. */
@@ -187,11 +187,11 @@ test("accounts of the same site each get their own backend on their own profile,
     };
     expect(dirOf("reddit-work")).toBe(join(root, ".intentic", "local", "browser", "reddit-work"));
     expect(dirOf("reddit-personal")).toBe(join(root, ".intentic", "local", "browser", "reddit-personal"));
-    // Their software security keys are separate too — one account's second factor is not the other's.
+    // Their software security keys are separate too: one account's second factor is not the other's.
     expect(passkeys["reddit-work"]).not.toBe(passkeys["reddit-personal"]);
 });
 
-// An identity and an account born from it are ONE backend — the shared profile — addressable by either id.
+// An identity and an account born from it are ONE backend (the shared profile) addressable by either id.
 test("an identity-born account routes to its identity's browser", async () => {
     if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
         return;
@@ -203,7 +203,7 @@ test("an identity-born account routes to its identity's browser", async () => {
     const { servers, accounts, ports } = await browserServersOf([main, born], root);
     expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts).toEqual({ main: "main", "reddit-main": "main" });
-    // One profile owner, one debugging port — the observer's map is per owner, not per account.
+    // One profile owner, one debugging port: the observer's map is per owner, not per account.
     expect(ports["main"]).toBeDefined();
     expect(ports["reddit-main"]).toBeUndefined();
 });

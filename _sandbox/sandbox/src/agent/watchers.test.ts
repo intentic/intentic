@@ -16,7 +16,7 @@ import {
 const logger = pino({ level: "silent" });
 
 /* The engine under fakes at every seam: the check answers from a script, delivery records what would have
- * become a steer or a wake turn. Fake timers drive the intervals — one advance per expected check, so a test
+ * become a steer or a wake turn. Fake timers drive the intervals: one advance per expected check, so a test
  * that fires early or late fails on the count, not just the outcome. */
 
 interface Harness {
@@ -87,7 +87,7 @@ describe("watchers", () => {
         vi.useRealTimers();
     });
 
-    it("a first check that already passes arms nothing — no wake is owed", async () => {
+    it("a first check that already passes arms nothing: no wake is owed", async () => {
         harness.check = { exitCode: 0, output: "done" };
         const outcome = await armWatcher(specOf());
         expect(outcome).toMatchObject({ kind: "already-met", firstCheck: { exitCode: 0, output: "done" } });
@@ -115,7 +115,7 @@ describe("watchers", () => {
         expect(harness.started).toHaveLength(1);
     });
 
-    it("the deadline wakes too, saying so — a broken check is never silence", async () => {
+    it("the deadline wakes too, saying so: a broken check is never silence", async () => {
         await armWatcher(specOf({ timeoutSeconds: 60 }));
         harness.check = { exitCode: undefined, output: "curl: (6) could not resolve host" };
         // Six 10s intervals reach the 60s deadline; the check there reports the timeout.
@@ -154,7 +154,7 @@ describe("watchers", () => {
         expect(harness.started).toHaveLength(0);
     });
 
-    it("delivery retries until the conversation is free — an unsteerable live turn only delays the wake", async () => {
+    it("delivery retries until the conversation is free: an unsteerable live turn only delays the wake", async () => {
         harness.startAnswer = false;
         await armWatcher(specOf());
         harness.check = { exitCode: 0, output: "done" };
@@ -172,7 +172,7 @@ describe("watchers", () => {
         expect(harness.started[0]).toMatchObject({ agent: "codex", account: "acct-2", model: "gpt-6", isolated: true, unattended: true });
     });
 
-    it("a slow check reschedules from its completion — never overlapping itself", async () => {
+    it("a slow check reschedules from its completion: never overlapping itself", async () => {
         await armWatcher(specOf());
         expect(harness.checks).toHaveLength(1);
         await vi.advanceTimersByTimeAsync(10_000);

@@ -1,26 +1,26 @@
 #!/usr/bin/env node
-// browser-router <manifest.json> — ONE stdio MCP server standing in for every signed-in browser a turn may
+// browser-router <manifest.json>: ONE stdio MCP server standing in for every signed-in browser a turn may
 // drive. The harness used to mount one @playwright/mcp server per connected account, which cost twice: every
 // turn started one process per account before the agent said a word (solved once by a socket mux), and every
-// account pinned its own copy of ~21 tool schemas into the prompt — the schemas multiplied even after the
+// account pinned its own copy of ~21 tool schemas into the prompt: the schemas multiplied even after the
 // processes stopped doing so. This process is the schema fix and the process fix in one shape: the harness
 // spawns it as the single server `browser`, its tools each take an `account` parameter, and the real
 // per-profile @playwright/mcp backend is spawned lazily on the first call that names it.
 //
 // initialize and tools/list are answered locally from a version-keyed schema cache (probed once per
 // @playwright/mcp version from a throwaway isolated server), with `account` injected into every tool's input
-// schema. A tools/call resolves `account` through the manifest — account ids and identity ids alike map to the
-// PROFILE OWNER, because an identity and every account born from it are one browser — strips the parameter,
+// schema. A tools/call resolves `account` through the manifest: account ids and identity ids alike map to the
+// PROFILE OWNER, because an identity and every account born from it are one browser: strips the parameter,
 // and pipes the call to that owner's backend. An id the manifest does not carry is refused with the granted
 // set named: the manifest is built from the persona-filtered capability list, so this refusal IS the
 // enforcement, and it reads as an answer rather than as a tool that mysteriously does not exist.
 //
-// LIFECYCLE: a direct child of the harness, like any stdio MCP server — stdin closing is the turn ending, and
+// LIFECYCLE: a direct child of the harness, like any stdio MCP server, stdin closing is the turn ending, and
 // the backends are children of this process that are killed on the way out. No sockets, no bridges, no idle
 // timers: the process tree is the lifecycle.
 //
 // The wire protocol is stdio MCP verbatim (newline-delimited JSON-RPC). After a backend is up its pipe is
-// nearly transparent; the only messages this process keeps parsing are the ones it must route — client
+// nearly transparent; the only messages this process keeps parsing are the ones it must route: client
 // requests to the right backend, and the rare backend-initiated request back out under a prefixed id so two
 // backends' own ids can never collide on the shared client.
 
@@ -38,7 +38,7 @@ const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 //   owners: { <owner>: { command, args, env } } }
 
 const PROBE_TIMEOUT_MS = 30_000;
-// The id namespace for requests a BACKEND initiates toward the client — prefixed so ids minted independently
+// The id namespace for requests a BACKEND initiates toward the client: prefixed so ids minted independently
 // by two backends stay distinct on the shared wire, and so the client's answer can be routed home.
 const BACKEND_ID_PREFIX = "browser-router:";
 
@@ -85,7 +85,7 @@ const toolSchemas = () => {
             return JSON.parse(readFileSync(manifest.schemaCachePath, "utf8"));
         } catch {
             // First router of this version: derive from a throwaway isolated server. Racing routers both probe
-            // and both write — the rename is atomic and the contents identical, so last-writer-wins is harmless.
+            // and both write: the rename is atomic and the contents identical, so last-writer-wins is harmless.
         }
         const tools = await probeTools();
         try {
@@ -139,14 +139,14 @@ const probeTools = () =>
         send(probe.stdin, { jsonrpc: "2.0", method: "notifications/initialized" });
     });
 
-/* Every tool gains the parameter that says WHOSE browser — required, because a call that names nobody would
+/* Every tool gains the parameter that says WHOSE browser: required, because a call that names nobody would
  * have this process guessing between signed-in profiles, which is the wrong-account mistake the parameter
  * exists to prevent. The granted ids are deliberately NOT enumerated per tool (that would re-multiply the very
  * schemas this process exists to collapse once per account); the skills and the roster tool carry them. */
 const ACCOUNT_PROPERTY = {
     type: "string",
     description:
-        "Which account to act as — a connected account's capability id, or an identity's id for its own browser. " +
+        "Which account to act as: a connected account's capability id, or an identity's id for its own browser. " +
         "The account skills and `mcp__accounts__roster` name the ones this sandbox holds.",
 };
 const withAccountParameter = (tools) =>
@@ -213,7 +213,7 @@ const backendFor = (owner) => {
         }),
     );
     // Replay the handshake this process already answered, so the backend joins the conversation mid-sentence
-    // believing it started it. The client's own initialize params ride along — protocol version included.
+    // believing it started it. The client's own initialize params ride along: protocol version included.
     send(child.stdin, {
         jsonrpc: "2.0",
         id: "router-init",
@@ -252,9 +252,9 @@ const refusal = (id, account) =>
                     type: "text",
                     text:
                         account === undefined
-                            ? `this call names no account — pass \`account\` (granted this turn: ${Object.keys(manifest.accounts).join(", ")})`
-                            : `no account "${account}" this turn can act as — granted: ${Object.keys(manifest.accounts).join(", ")}. ` +
-                              `An account opened this turn lives in its identity's browser — pass the identity's id.`,
+                            ? `this call names no account, pass \`account\` (granted this turn: ${Object.keys(manifest.accounts).join(", ")})`
+                            : `no account "${account}" this turn can act as, granted: ${Object.keys(manifest.accounts).join(", ")}. ` +
+                              `An account opened this turn lives in its identity's browser: pass the identity's id.`,
                 },
             ],
             isError: true,
@@ -345,6 +345,6 @@ process.stdin.on(
     }),
 );
 
-// The turn ending closes stdin — the browsers behind this process have nobody left to drive them.
+// The turn ending closes stdin: the browsers behind this process have nobody left to drive them.
 process.stdin.on("end", () => shutdown(0));
 process.stdin.on("close", () => shutdown(0));

@@ -5,7 +5,7 @@ import type { SheetRows } from "./sheetProtocol";
 import { createSheetWorkerClient } from "./sheetWorkerClient";
 
 /* XLSX preview: transfers a workbook to a dedicated worker, which parses it once and hands back the selected
- * sheet's VALUES. The table below is an ordinary template over those values — a workbook is untrusted, and the
+ * sheet's VALUES. The table below is an ordinary template over those values: a workbook is untrusted, and the
  * shape of that distrust used to be a sanitiser call over markup the file itself produced. Rows of strings and
  * numbers have no markup to sanitise. The host (FileViewer) fetches the file's bytes and passes them as `blob`. */
 

@@ -6,16 +6,16 @@ import { countWord, stripComments, taskFor } from "./agent-tasks.js";
 
 /* The bench's grading is the one part of it that must be right: a scorer that is wrong turns every number the
  * benchmark prints into a confident lie, and unlike the runs themselves it costs nothing to test. Nothing here
- * spawns an agent or touches the network — the ARC task is served from its on-disk cache. */
+ * spawns an agent or touches the network: the ARC task is served from its on-disk cache. */
 
 const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "agent-bench-test-"));
 
-// What the tasks count as a source file, counted independently of the helper the task itself uses — a check
+// What the tasks count as a source file, counted independently of the helper the task itself uses: a check
 // that borrows the implementation's own walk proves the walk agrees with itself and nothing more.
 const sourceFiles = async (dir: string): Promise<string[]> =>
     (await readdir(dir, { recursive: true })).filter((file) => file.endsWith(`.ts`) && !file.endsWith(`.test.ts`));
 
-test("the comment scanner keeps strings and drops comments — the distinction the sweep task is built on", () => {
+test("the comment scanner keeps strings and drops comments: the distinction the sweep task is built on", () => {
     expect(stripComments(`const a = 1; // sessionId here\n`)).toBe(`const a = 1; \n`);
     expect(stripComments(`/* sessionId */ const a = 1;`)).toBe(` const a = 1;`);
     // The two cases a regex gets wrong, and the reason the task is worth setting.
@@ -37,7 +37,7 @@ test("sweep grades an exact integer, derived from the fixture the agent is looki
     const dir = await workspace();
     try {
         const prepared = await taskFor(`sweep`).prepare(dir);
-        // The expected count is not hardcoded anywhere — recompute it the way the task defines it and confirm
+        // The expected count is not hardcoded anywhere: recompute it the way the task defines it and confirm
         // the grader agrees, so the task stays valid as this repo's sources change.
         const detail = (await prepared.grade()).detail;
         const expected = Number(/expected (\d+)/.exec(detail)?.[1]);
@@ -52,7 +52,7 @@ test("sweep grades an exact integer, derived from the fixture the agent is looki
         expect(near.solved).toBe(false);
         expect(near.score).toBeGreaterThan(0.9);
 
-        // A run that never answered scores zero instead of throwing — "didn't answer" is a real outcome.
+        // A run that never answered scores zero instead of throwing: "didn't answer" is a real outcome.
         await rm(join(dir, `answer.json`));
         const missing = await prepared.grade();
         expect(missing).toMatchObject({ solved: false, score: 0 });
@@ -101,7 +101,7 @@ test("arc hides the expected grid from the workspace and grades an exact match",
         await writeFile(join(dir, `answer.json`), JSON.stringify({ output: [[0, 2]] }));
         expect(await prepared.grade()).toMatchObject({ solved: true, score: 1 });
 
-        // Right shape, one wrong cell — half credit, not zero.
+        // Right shape, one wrong cell: half credit, not zero.
         await writeFile(join(dir, `answer.json`), JSON.stringify({ output: [[0, 9]] }));
         expect(await prepared.grade()).toMatchObject({ solved: false, score: 0.5 });
 
@@ -146,14 +146,14 @@ test("defects plants every anchor it grades against, and padding the answer is p
         const planted = Number(/(\d+) planted/.exec((await prepared.grade()).detail)?.[1]);
         expect(planted).toBe(4);
         /* Scoped to one subsystem on purpose. Unscoped, a run read all 235 files of the tree and still had no
-         * answer when the clock ran out — a haystack nobody finishes searching yields timeouts, not a result.
+         * answer when the clock ran out: a haystack nobody finishes searching yields timeouts, not a result.
          *
          * Both halves are stated against the tree the prompt was built from rather than as literals: the count
          * must be TRUE (a prompt that misstates the size of its own haystack is a lie the agent plans against),
          * and the scope must stay a small fraction of the tree. A hardcoded band said the same thing until
          * src/agent/ grew past it, and then failed the run for the subsystem having gained a file. */
         expect(prepared.prompt).toContain(`daemon/src/agent/`);
-        const scoped = Number(/— (\d+) source files —/.exec(prepared.prompt)?.[1]);
+        const scoped = Number(/(\d+) source files/.exec(prepared.prompt)?.[1]);
         expect(scoped).toBe((await sourceFiles(join(dir, `daemon`, `src`, `agent`))).length);
         expect(scoped).toBeLessThan((await sourceFiles(join(dir, `daemon`))).length / 4);
         // The mutations really are in the copy the agent reads.

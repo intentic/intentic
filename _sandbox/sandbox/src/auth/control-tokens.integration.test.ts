@@ -37,7 +37,7 @@ test("list echoes id/label/scope/createdAt only; revoke takes effect immediately
     expect(await store.revoke(id)).toBe(false);
 });
 
-test("editor reaches exactly the agent-conversation surface — one conversation, not the fleet", () => {
+test("editor reaches exactly the agent-conversation surface: one conversation, not the fleet", () => {
     expect(controlScoped("editor", "POST", "/agent")).toBe(true);
     expect(controlScoped("editor", "POST", "/agent/reply")).toBe(true);
     expect(controlScoped("editor", "GET", "/sessions")).toBe(true);
@@ -59,7 +59,7 @@ test("read observes the fleet and mutates nothing", () => {
     expect(controlScoped("read", "GET", "/agents/abc/diff")).toBe(true);
     expect(controlScoped("read", "GET", "/agents/abc/transcript")).toBe(true);
     expect(controlScoped("read", "GET", "/ports")).toBe(true);
-    // Attaching to a running turn is a read that has to be a POST — it carries a replay cursor in its body.
+    // Attaching to a running turn is a read that has to be a POST: it carries a replay cursor in its body.
     expect(controlScoped("read", "POST", "/agent/attach")).toBe(true);
 
     expect(controlScoped("read", "POST", "/agent")).toBe(false);
@@ -101,7 +101,7 @@ test("land adds the irreversible half and still stops short of the owner-only su
     expect(controlScoped("land", "POST", "/environment/approve")).toBe(false);
 });
 
-test("no scope reaches the credentials or the environment — the owner-only floor", () => {
+test("no scope reaches the credentials or the environment: the owner-only floor", () => {
     // The floor every scope shares, asserted over the union so a NEW scope cannot quietly undercut it: adding
     // one to CONTROL_SCOPES puts it in this loop without anybody remembering to.
     const forbidden: readonly (readonly [string, string])[] = [

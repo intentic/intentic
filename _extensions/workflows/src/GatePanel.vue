@@ -4,12 +4,12 @@ import { GATE_DAILY_MAX_DEFAULT, type Workflow, type WorkflowGate } from "@inten
 import { computed } from "vue";
 import GateAccess from "./GateAccess.vue";
 
-/* THE GATE, AS A FORM — the designer's answer to "let my pipeline run this and read a verdict".
+/* THE GATE, AS A FORM: the designer's answer to "let my pipeline run this and read a verdict".
  *
  * The engine has been finished for a while (gate.routes.ts); what was missing was any way to declare one
  * without hand-editing the manifest. The form asks exactly what the schema asks and nothing else: which step
  * decides, which of its declared fields carries the decision, which values ship, and how many runs a day the
- * owner will pay for. The webhook token is deliberately NOT a field here — it is minted on save and kept
+ * owner will pay for. The webhook token is deliberately NOT a field here: it is minted on save and kept
  * across edits (workflows.routes.ts), so the panel only ever shows it, via <GateAccess>.
  *
  * Presence is the switch, so there is no enabled toggle to get out of sync with the token behind it: adding
@@ -19,7 +19,7 @@ const { workflow } = defineProps<{ workflow: Workflow }>();
 const emit = defineEmits<{ patch: [gate: WorkflowGate | undefined] }>();
 
 const gate = computed(() => workflow.gate);
-// Only a step that declares output fields can carry a verdict — a validated field is the one part of a
+// Only a step that declares output fields can carry a verdict: a validated field is the one part of a
 // session's answer that was checked rather than scraped out of prose, and pointing at one is the entire rule.
 const eligible = computed(() => workflow.steps.filter((step) => step.output.kind === `json`));
 
@@ -40,7 +40,7 @@ const add = (): void => {
     if (step === undefined) {
         return;
     }
-    // `pass` prefilled with the one value almost every verdict field means by it — editable, never invented
+    // `pass` prefilled with the one value almost every verdict field means by it: editable, never invented
     // on the wire: what is saved is exactly what this form shows.
     emit(`patch`, { step: step.id, field: fieldsOf(step.id)[0]?.name ?? ``, pass: [`pass`] });
 };
@@ -82,12 +82,12 @@ const setDailyMax = (raw: string): void => {
     <div class="flex w-pop-sm flex-col gap-3 p-1">
         <p class="text-2xs text-subtle">
             A gate gives this workflow a webhook a CI pipeline can call: the pipeline POSTs what it knows, the whole design runs, and the reply is
-            pass, fail or blocked — read off one declared field, never scraped out of prose.
+            pass, fail or blocked: read off one declared field, never scraped out of prose.
         </p>
 
         <template v-if="gate === undefined">
             <p v-if="eligible.length === 0" class="text-2xs text-warning">
-                A gate reads a declared output field, and no step declares one yet. Give the deciding step a data field first — select it on the
+                A gate reads a declared output field, and no step declares one yet. Give the deciding step a data field first: select it on the
                 canvas and add one under Advanced.
             </p>
             <Button v-else label="Add a gate" size="small" severity="secondary" class="self-start" @click="add()">
@@ -127,7 +127,7 @@ const setDailyMax = (raw: string): void => {
                     @change="setPass(($event.target as HTMLInputElement).value)"
                 />
                 <span class="text-2xs text-subtle">
-                    An allowlist, comma-separated. Anything else the field says fails the gate — "mostly-pass" does not ship.
+                    An allowlist, comma-separated. Anything else the field says fails the gate: "mostly-pass" does not ship.
                 </span>
             </label>
             <label class="flex flex-col gap-1">
@@ -146,10 +146,10 @@ const setDailyMax = (raw: string): void => {
             </label>
 
             <GateAccess v-if="gate.token !== undefined" :workflow="workflow" />
-            <p v-else class="text-2xs text-subtle">Saving mints the webhook URL — it appears here and under the gate badge on the workflow's card.</p>
+            <p v-else class="text-2xs text-subtle">Saving mints the webhook URL: it appears here and under the gate badge on the workflow's card.</p>
 
             <button type="button" :class="ui.linkButton(`self-start text-danger`)" @click="emit(`patch`, undefined)">
-                Remove the gate — its URL stops working, and a future gate gets a new one
+                Remove the gate: its URL stops working, and a future gate gets a new one
             </button>
         </template>
     </div>

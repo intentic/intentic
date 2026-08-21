@@ -117,7 +117,7 @@ const renderGroupSkill = async (
         return undefined;
     }
     const roster = [
-        "Accounts on this skill — each backticked id is the `account` value every browser and accounts tool takes:",
+        "Accounts on this skill: each backticked id is the `account` value every browser and accounts tool takes:",
         ...accounts.map((account) => accountSkillLine(account.id, account.config, identities.get(account.config.identity ?? "")?.email)),
     ].join("\n");
     const rendered = source.replaceAll("${tools}", browserToolsNote()).replaceAll("${accounts}", roster).replaceAll("${site}", group.site);

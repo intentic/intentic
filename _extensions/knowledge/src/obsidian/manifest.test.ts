@@ -17,7 +17,7 @@ describe("the Obsidian capability card", () => {
         expect(card?.fields.find((field) => field.key === "apiKey")?.secret).toBe(true);
     });
 
-    it("defaults the write switch to off — reaching a vault and being allowed to edit it are separate grants", () => {
+    it("defaults the write switch to off: reaching a vault and being allowed to edit it are separate grants", () => {
         const write = card?.fields.find((field) => field.key === "write");
         expect(write?.boolean).toBe(true);
         expect(write?.default).toBe("off");

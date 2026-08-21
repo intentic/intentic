@@ -4,11 +4,11 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 /* SVG viewer: the picture by default, with a Source toggle for the markup. An SVG is the one format that is
  * genuinely both, which is why the host fetches it as TEXT (`fetch: "text"`) and this component makes the
- * image out of it — one read serves both halves of the toggle.
+ * image out of it: one read serves both halves of the toggle.
  *
  * The render goes through an <img> with a blob: object URL. Loading SVG as an IMAGE is what keeps any embedded
  * <script>/onload inert, and that is the whole security argument here: a workspace .svg is a file some agent
- * or download put there. NEVER inline the markup with v-html — that is an active context where scripts run,
+ * or download put there. NEVER inline the markup with v-html: that is an active context where scripts run,
  * i.e. stored XSS from a file in the tree. */
 
 const { text } = defineProps<{ text: string }>();

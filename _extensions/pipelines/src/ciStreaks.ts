@@ -127,7 +127,7 @@ export const unseenStreaks = (streaks: readonly FailureStreak[], seenAt: number 
 export const streakTooltip = (streaks: readonly FailureStreak[]): string => {
     const [only] = streaks;
     if (streaks.length === 1 && only !== undefined) {
-        return `${only.repo} ${only.branch} is failing — ${only.runs} run${only.runs === 1 ? `` : `s`} in a row`;
+        return `${only.repo} ${only.branch} is failing, ${only.runs} run${only.runs === 1 ? `` : `s`} in a row`;
     }
     return `${streaks.length} branches are failing`;
 };

@@ -2,13 +2,13 @@ import { describe, expect, test } from "vitest";
 import { ANY_RUN_PREFIX, conversationIdOf, parseManifest, parseResult, reportingClause, resultPath, runIdAt } from "./runs";
 
 describe(`run identity`, () => {
-    // The conversation id is the JOIN to the fleet — `GET /agents` filtered by prefix is how a run finds its
-    // agent — so this is a wire contract, not a naming convention.
+    // The conversation id is the JOIN to the fleet: `GET /agents` filtered by prefix is how a run finds its
+    // agent, so this is a wire contract, not a naming convention.
     test(`a run's conversation id is derived from its run id and carries the fleet prefix`, () => {
         const runId = runIdAt(1_700_000_000_000);
         expect(conversationIdOf(runId).startsWith(ANY_RUN_PREFIX)).toBe(true);
         expect(conversationIdOf(runId)).toContain(runId);
-        // The contract's ConversationIdSchema bounds ids at 64 characters — they land in branch names and paths.
+        // The contract's ConversationIdSchema bounds ids at 64 characters: they land in branch names and paths.
         expect(conversationIdOf(runId).length).toBeLessThanOrEqual(64);
     });
 
@@ -31,7 +31,7 @@ describe(`reading what is on disk`, () => {
         expect(parseManifest(JSON.stringify(manifest))).toEqual(manifest);
     });
 
-    // One bad directory must not blank the whole history — a manifest half-written, or written by a build whose
+    // One bad directory must not blank the whole history: a manifest half-written, or written by a build whose
     // shape has since changed, is skipped rather than thrown on.
     test(`a manifest missing its identity is skipped, and a partial one defaults`, () => {
         expect(parseManifest(`{"createdAt":5}`)).toBeUndefined();
@@ -46,7 +46,7 @@ describe(`reading what is on disk`, () => {
         });
     });
 
-    /* A result the agent never wrote reads as undefined rather than as an outcome — the panel shows the fleet's
+    /* A result the agent never wrote reads as undefined rather than as an outcome: the panel shows the fleet's
      * live status for those instead of inventing one. An outcome outside the three we know is treated the same
      * way: guessing which of ours the agent meant would be putting words in its mouth. */
     test(`an absent, malformed or improvised outcome is no result at all`, () => {
@@ -69,7 +69,7 @@ describe(`what we ask the agent to write back`, () => {
     });
 
     /* `clean` is the outcome that makes the ledger a debounce rather than a nag, and a model that reads it as an
-     * admission of having done nothing useful will avoid it and report `reported` instead — after which the chore
+     * admission of having done nothing useful will avoid it and report `reported` instead: after which the chore
      * never goes quiet. Saying it is a good outcome is load-bearing, not politeness. */
     test(`spells out all three outcomes and says that "clean" is a good one`, () => {
         for (const outcome of [`acted`, `reported`, `clean`]) {

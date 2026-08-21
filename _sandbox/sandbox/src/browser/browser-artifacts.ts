@@ -107,7 +107,7 @@ export const browserArtifactHooks = (outputDir: string): Partial<Record<HookEven
                             updatedInput: { ...toolInput, filename: target },
                             // The tool answers with a path relative to the agent's cwd, which is now a climb
                             // out of the repo and back down, useless to Read. Say where the file actually is.
-                            additionalContext: `Screenshot saved to ${target} — Read it from that absolute path.`,
+                            additionalContext: `Screenshot saved to ${target}, Read it from that absolute path.`,
                         },
                     };
                 },

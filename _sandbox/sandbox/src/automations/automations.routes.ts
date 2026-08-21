@@ -57,7 +57,7 @@ export const createAutomationsRoutes = (services: Services) => {
                 const events = triggerSourceEvents(await automationCatalog(services)).get(provider);
                 if (events === undefined) {
                     throw new ORPCError("BAD_REQUEST", {
-                        message: `unknown listener provider "${provider}" — install the extension that declares it`,
+                        message: `unknown listener provider "${provider}", install the extension that declares it`,
                     });
                 }
                 if (eventType !== undefined && events.size > 0 && !events.has(eventType)) {
@@ -65,7 +65,7 @@ export const createAutomationsRoutes = (services: Services) => {
                 }
             }
             // Event: keep the round-tripped token (the enabled toggle re-posts the trigger) or mint the
-            // webhook's auth token — /automations/{id}/fire compares against it. Listener triggers need no
+            // webhook's auth token: /automations/{id}/fire compares against it. Listener triggers need no
             // provisioning: the listeners reconcile tick picks them up within its interval.
             const automation =
                 input.trigger.kind === "event" && input.trigger.token === undefined
@@ -82,7 +82,7 @@ export const createAutomationsRoutes = (services: Services) => {
                 await ensureFrontDeskPersona(services.personas).catch((error: unknown) =>
                     services.logger.warn(
                         { err: error, automation: automation.id },
-                        "front desk persona not created — the wake it names will be denied everything",
+                        "front desk persona not created: the wake it names will be denied everything",
                     ),
                 );
             }
@@ -114,7 +114,7 @@ export const createAutomationsRoutes = (services: Services) => {
             }
             if (automation.trigger.kind === "listener") {
                 throw new ORPCError("BAD_REQUEST", {
-                    message: `A ${automation.trigger.provider} automation can only be fired by a real message — send one to test it.`,
+                    message: `A ${automation.trigger.provider} automation can only be fired by a real message, send one to test it.`,
                 });
             }
             void fireAutomation(services, automation, streamAgent, { cleared: "approval" }).catch((error: unknown) =>

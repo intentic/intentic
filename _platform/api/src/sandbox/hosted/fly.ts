@@ -53,7 +53,7 @@ const call = async (token: string, method: string, path: string, body?: unknown)
         return text === `` ? undefined : (JSON.parse(text) as unknown);
     }
     if (response.status === 401 || response.status === 403) {
-        throw new FlyError(`Fly rejected the platform's API token (HTTP ${response.status}) — check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`);
+        throw new FlyError(`Fly rejected the platform's API token (HTTP ${response.status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`);
     }
     const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
     if (failure.success) {
@@ -80,7 +80,7 @@ export const deleteApp = async (token: string, name: string): Promise<void> => {
         return;
     }
     if (response.status === 401 || response.status === 403) {
-        throw new FlyError(`Fly rejected the platform's API token (HTTP ${response.status}) — check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`);
+        throw new FlyError(`Fly rejected the platform's API token (HTTP ${response.status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`);
     }
     const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
     throw new FlyError(

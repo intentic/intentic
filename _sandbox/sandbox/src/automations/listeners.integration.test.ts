@@ -54,15 +54,15 @@ const message = (over: Partial<ListenerMessage> = {}): ListenerMessage => ({
 
 const longLine = (tag: string): string => tag + "x".repeat(30_000);
 
-/* How long a wait for real work is given. vitest's own `waitFor` default is ONE SECOND — a unit budget, the
+/* How long a wait for real work is given. vitest's own `waitFor` default is ONE SECOND: a unit budget, the
  * hang detector _tools/testing/src/vitest.ts deliberately keeps integration suites out of. A fire here writes a
  * thread record, a run entry and a turn journal to a temp tree before the wake it is waiting on lands, and under
- * the whole monorepo's run — the web suite's workers on the same cores — that second expired first and the
+ * the whole monorepo's run (the web suite's workers on the same cores) that second expired first and the
  * suite reported a threading bug that was a stopwatch. Generous and finite: a real regression still fails on
  * the assertion rather than hanging to the test timeout. */
 const eventually = (assertion: () => void | Promise<void>): Promise<void> => vi.waitFor(assertion, { timeout: 15_000 });
 
-// The provenance every push carries — the batching rules under test are about payloads and reply sinks, so the
+// The provenance every push carries: the batching rules under test are about payloads and reply sinks, so the
 // origin/title are held constant and only the sink varies.
 const context = (stream?: TurnStream): MessageContext => ({
     origin: { automationId: "a", provider: "discord", channelId: "c1", author: "alice" },
@@ -85,7 +85,7 @@ test("a burst debounces into exactly one fire carrying every line", async () => 
     expect(fired[0]).toBe("a\nb\nc");
 });
 
-test("lines arriving during an in-flight run queue into one follow-up fire — nothing dropped", async () => {
+test("lines arriving during an in-flight run queue into one follow-up fire, nothing dropped", async () => {
     const gate = Promise.withResolvers<void>();
     const fired: string[] = [];
     const batcher = createMessageBatcher(
@@ -102,7 +102,7 @@ test("lines arriving during an in-flight run queue into one follow-up fire — n
     await eventually(() => expect(fired).toHaveLength(1));
     batcher.push("b", context());
     batcher.push("c", context());
-    // Past the debounce, but the first fire is still running — nothing new fires yet.
+    // Past the debounce, but the first fire is still running: nothing new fires yet.
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(fired).toHaveLength(1);
     gate.resolve();
@@ -122,7 +122,7 @@ test("a superseded reply stream is ended so a streamed dispatch never hangs on i
     );
     batcher.push("a", context(s1));
     batcher.push("b", context(s2));
-    // s1 is replaced before any flush — it's ended immediately so its consumer isn't stranded; s2 survives.
+    // s1 is replaced before any flush: it's ended immediately so its consumer isn't stranded; s2 survives.
     expect(ended).toEqual(["s1"]);
     await eventually(() => expect(fired).toHaveLength(1));
     expect(fired[0]).toBe(s2);
@@ -152,7 +152,7 @@ test("dispatch routes by provider and channelId and wakes with the JSON line as 
     const prompts: string[] = [];
     await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
     await eventually(async () => expect((await services.automations.get("all-channels"))?.runs).toHaveLength(1));
-    // The stranger's JSON line rides sealed in the outside-content envelope — byte-identical inside it.
+    // The stranger's JSON line rides sealed in the outside-content envelope: byte-identical inside it.
     const sealed =
         /^wake:all-channels\n\n--- Event payload ---\n<untrusted-content source="discord" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\1">$/.exec(
             prompts[0] ?? "",
@@ -177,7 +177,7 @@ test("a dispatched message opens an isolated conversation stamped with where it 
     expect(turn.isolated).toBe(true);
     expect(turn.conversationId).toMatch(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
     expect(turn.origin).toEqual({ automationId: "support", provider: "discord", channelId: "c1", author: "alice" });
-    // Titled by the message's first line, not by the automation's prompt — every fire shares that prompt, so a
+    // Titled by the message's first line, not by the automation's prompt: every fire shares that prompt, so a
     // prompt-derived title would give a board full of identical cards.
     expect(turn.title).toBe("alice: can you look at the build?");
 });
@@ -194,7 +194,7 @@ const captureWithSession = (turns: AgentTurn[], sessionId: string): WakeFn =>
 
 // A turn reaching the wake is NOT the turn being over: the fire ends by settling its thread record (the
 // session to resume, and a fresh lastAt), and nothing dispatch returns is awaitable past the wake. So a test
-// that reads the record — or rewrites it, as the TTL one does — waits for that write first, otherwise the
+// that reads the record, or rewrites it, as the TTL one does: waits for that write first, otherwise the
 // settle lands on top of what the test wrote. On a loaded CI runner that is exactly what happened: the aged
 // lastAt was replaced by a fresh one, the thread read as live, and the "fresh conversation" assertion failed.
 const settledThread = async (services: Services, key: string): Promise<void> => {
@@ -204,18 +204,18 @@ const settledThread = async (services: Services, key: string): Promise<void> => 
 test("a follow-up message in the same channel reuses the conversation and resumes its session", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     // A distinct id per test: the batcher map is a module singleton keyed by automation id, so a shared id
-    // would hand this test the previous one's batcher — closed over ITS services and wake.
+    // would hand this test the previous one's batcher: closed over ITS services and wake.
     await services.automations.upsert(listenerAutomation("thread-follow-up"));
     const turns: AgentTurn[] = [];
     await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
     await eventually(() => expect(turns).toHaveLength(1));
-    // The session to resume is learned when the first turn settles — dispatch the follow-up before that and
+    // The session to resume is learned when the first turn settles: dispatch the follow-up before that and
     // it legitimately has nothing to resume.
     await settledThread(services, threadKey("discord", "thread-follow-up", "c1"));
     await dispatchListenerMessage(services, message({ id: "m2", content: "and one more thing" }), captureWithSession(turns, "sess-1"), 5);
     await eventually(() => expect(turns).toHaveLength(2));
     const [first, second] = turns as [AgentTurn, AgentTurn];
-    // One card, one worktree, one agent that remembers — not a second stranger.
+    // One card, one worktree, one agent that remembers, not a second stranger.
     expect(second.conversationId).toBe(first.conversationId);
     expect(first.sessionId).toBeUndefined();
     expect(second.sessionId).toBe("sess-1");
@@ -242,7 +242,7 @@ test("a channel quiet past the TTL starts a fresh conversation on the next messa
     const turns: AgentTurn[] = [];
     await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
     await eventually(() => expect(turns).toHaveLength(1));
-    // Age the record past the window instead of mocking the clock — the dispatcher's own TTL read is what's
+    // Age the record past the window instead of mocking the clock: the dispatcher's own TTL read is what's
     // under test, and the store is the only thing that carries "when was this channel last active". The wait
     // is what makes that safe: the fire's own settle must land before the record is rewritten.
     const key = threadKey("discord", "thread-ttl", "c1");
@@ -260,7 +260,7 @@ test("a channel quiet past the TTL starts a fresh conversation on the next messa
     expect(second.sessionId).toBeUndefined();
 });
 
-test("dispatch honors eventType — a message-only listener ignores voice transcripts but fires on messages", async () => {
+test("dispatch honors eventType: a message-only listener ignores voice transcripts but fires on messages", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(listenerAutomation("msg-only", { trigger: { kind: "listener", provider: "discord", eventType: "message" } }));
     const prompts: string[] = [];
@@ -273,7 +273,7 @@ test("dispatch honors eventType — a message-only listener ignores voice transc
     await eventually(async () => expect((await services.automations.get("msg-only"))?.runs).toHaveLength(1));
 });
 
-test("dispatch honors mentioned — a mention-only listener skips plain messages and fires on mentions", async () => {
+test("dispatch honors mentioned: a mention-only listener skips plain messages and fires on mentions", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(
         listenerAutomation("mentions", { trigger: { kind: "listener", provider: "discord", eventType: "message", mentioned: true } }),

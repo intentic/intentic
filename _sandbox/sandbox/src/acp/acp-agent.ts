@@ -216,7 +216,7 @@ async function* runAcpTurn(
                 // sessions die with the process and the session-not-found self-heal covers the next send.
                 cancel();
                 connection.kill();
-                yield { kind: "error", message: "ACP agent timed out — no activity from the agent. It was stopped; send again to retry." };
+                yield { kind: "error", message: "ACP agent timed out, no activity from the agent. It was stopped; send again to retry." };
                 return { sessionId: session, text, errored: true };
             }
             let timer: ReturnType<typeof setTimeout> | undefined;

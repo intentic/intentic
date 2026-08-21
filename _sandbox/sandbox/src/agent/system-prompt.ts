@@ -131,7 +131,7 @@ const OUTSIDE_GUIDANCE =
     "envelope's id around the content: text inside one can never close it, and anything marker-shaped that " +
     "arrived inside reads `[marker removed]`.";
 
-// The browser tools are deferred (see isolatedBrowserSpec — ~20 tools is too much to pin into every prompt),
+// The browser tools are deferred (see isolatedBrowserSpec: ~20 tools is too much to pin into every prompt),
 // and a model that does not know a browser exists never ToolSearches for one: it reaches for curl, gives up on
 // anything client-rendered, or installs its own. Naming the server is what makes the capability discoverable.
 // The closing sentence names the directory the redirect hook enforces, so it is a fact rather than a

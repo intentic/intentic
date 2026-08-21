@@ -8,7 +8,7 @@ import { tokenEquals } from "./auth.js";
 /* Control tokens: the credential anything OUTSIDE the browser presents to drive this sandbox, the ACP
  * editor bridge today, a CLI and an MCP server next, via the `x-intentic-control` header. The sync pairing
  * precedent (owner mints in the browser, a program redeems via header) made durable: PERSISTED (it
- * authenticates every call, not a one-time enrollment — /work/.intentic survives rebuilds with the
+ * authenticates every call, not a one-time enrollment: /work/.intentic survives rebuilds with the
  * workspace), HASHED at rest (sha256; the raw `ict_…` value is returned exactly once at mint), and REVOCABLE
  * per token.
  *

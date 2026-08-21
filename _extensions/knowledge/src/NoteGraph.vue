@@ -4,15 +4,15 @@ import { computed, ref, toRef } from "vue";
 import { toneOfType } from "./knowledgeNote";
 import { useGraph } from "./useKnowledge";
 
-/* THE MAP AROUND ONE NOTE — everything within a couple of steps of it, and what each connection is called.
+/* THE MAP AROUND ONE NOTE: everything within a couple of steps of it, and what each connection is called.
  *
  * This is the picture a folder of files cannot give you: which people touch which projects, what a decision was
  * about, what supersedes what. It is drawn around the OPEN NOTE rather than over everything, because a picture
- * of a whole knowledge base past fifty notes is a hairball — pretty, and unable to answer a question. The
+ * of a whole knowledge base past fifty notes is a hairball: pretty, and unable to answer a question. The
  * neighbourhood answers the question you actually have, which is "what is this connected to".
  *
- * Laid out left-to-right by the same dagre renderer the pipeline graphs use. A knowledge graph is not a DAG —
- * relationships go both ways and around in circles — and the layout handles that by choosing an order to draw
+ * Laid out left-to-right by the same dagre renderer the pipeline graphs use. A knowledge graph is not a DAG:
+ * relationships go both ways and around in circles, and the layout handles that by choosing an order to draw
  * the cycle in, which is fine here: the reader is being shown WHAT is connected, and the arrow on each edge
  * carries the direction the layout gave up. `magnify` is off and the zoom floor is low, because a hub section
  * is a wide short band and a five-note map blown up to fill it reads as five billboards. */
@@ -46,7 +46,7 @@ const nodes = computed<DagNode<Card>[]>(
         })) ?? [],
 );
 
-// A relationship's name rides its edge, since the name is most of what an edge means here — "works_on" and
+// A relationship's name rides its edge, since the name is most of what an edge means here: "works_on" and
 // "supersedes" between the same two notes are entirely different facts.
 const edges = computed<DagEdge[]>(
     () =>
@@ -69,7 +69,7 @@ const openSelected = (): void => {
 
 <template>
     <!-- A DEFINITE HEIGHT, not a grown one. The canvas measures its parent to lay the graph out, so a box sized
-         by its contents measures as zero and renders nothing at all — no error, no empty state, just a blank
+         by its contents measures as zero and renders nothing at all: no error, no empty state, just a blank
          rectangle. It sits inside a scrolling panel body, which cannot give it one, so the height is stated
          here: enough for three ranks of cards, and bounded by the viewport so a short window still shows the
          note's own frame around it. -->
@@ -80,13 +80,13 @@ const openSelected = (): void => {
             <Icon name="sitemap" class="text-base text-subtle" />
             <p class="text-sm text-muted">Nothing links to this note yet.</p>
             <p class="max-w-sm text-xs text-subtle">
-                Mention another note as <code>[[its name]]</code> in the text, or name the relationship in the header — <code>works_on:</code>,
-                <code>about:</code> — and it appears here.
+                Mention another note as <code>[[its name]]</code> in the text, or name the relationship in the header: <code>works_on:</code>,
+                <code>about:</code>, and it appears here.
             </p>
         </div>
 
         <!-- TOP-TO-BOTTOM, because of the shape of the box rather than the shape of the graph: this pane is a
-             narrow column beside a list, and a left-to-right layout wants width it does not have — six notes
+             narrow column beside a list, and a left-to-right layout wants width it does not have: six notes
              laid out sideways fit only by shrinking to where the labels stop resolving.
 
              `readable-zoom` is the other half of that. A fit nobody can read is not a fit: below this the

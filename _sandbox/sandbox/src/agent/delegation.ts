@@ -37,7 +37,7 @@ export const delegationNote = (targets: DelegationTargets): string | undefined =
     }
     const codex =
         targets.codexHome !== undefined
-            ? "\n- Codex (OpenAI) — pre-authenticated via CODEX_HOME in your env:\n" +
+            ? "\n- Codex (OpenAI): pre-authenticated via CODEX_HOME in your env:\n" +
               "  `codex exec --sandbox danger-full-access --dangerously-bypass-hook-trust --skip-git-repo-check --cd <dir> '<task>'`\n" +
               "  Keep the hook-trust flag: it enables this sandbox's own status hooks, which is what makes the wait tool see the run. " +
               "It prints its thread id; continue that thread with " +
@@ -56,9 +56,9 @@ export const delegationNote = (targets: DelegationTargets): string | undefined =
     return (
         `${DELEGATION_NOTE_HEADER}\n\n` +
         "The user's connected agent accounts are runnable from your shell. Delegates see none of this " +
-        "conversation — give them a self-contained prompt with every path, requirement, and constraint. " +
+        "conversation: give them a self-contained prompt with every path, requirement, and constraint. " +
         "Run one with `run_in_background: true` (or let a long run detach into your tmux session), then call the " +
-        "`wait` tool with the Bash call's id — it returns when the delegate needs input or finishes, with its " +
+        "`wait` tool with the Bash call's id: it returns when the delegate needs input or finishes, with its " +
         "report; don't sleep or re-read its terminal in a loop." +
         codex +
         grok

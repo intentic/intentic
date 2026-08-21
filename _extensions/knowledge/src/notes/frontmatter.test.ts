@@ -28,7 +28,7 @@ body`),
         expect(parseFrontmatter(`---\ntype: person\n---\n${body}`).body).toBe(body);
     });
 
-    it(`treats a file with no header as all body — the common case for a note somebody just started`, () => {
+    it(`treats a file with no header as all body: the common case for a note somebody just started`, () => {
         const parsed = parseFrontmatter(`Just a thought.`);
         expect(parsed.present).toBe(false);
         expect(parsed.body).toBe(`Just a thought.`);
@@ -53,7 +53,7 @@ country: NO
         expect(fields(`---\naliases: ["Lovelace, Ada", Ada]\n---\n`)).toEqual({ aliases: [`Lovelace, Ada`, `Ada`] });
     });
 
-    it(`keeps a # inside a value — tags are written with one, and this is not a comment introducer`, () => {
+    it(`keeps a # inside a value: tags are written with one, and this is not a comment introducer`, () => {
         expect(fields(`---\ntags: [#colleague]\nnote: red # not a comment\n---\n`)).toEqual({ tags: [`#colleague`], note: [`red # not a comment`] });
     });
 

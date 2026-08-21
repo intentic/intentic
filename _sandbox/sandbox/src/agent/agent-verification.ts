@@ -233,8 +233,8 @@ const nudgeText = (verdict: VerificationVerdict, commands: readonly string[]): s
     const fileList = [...paths, ...(remaining > 0 ? [`- ... and ${remaining} more`] : [])].join("\n");
     const instruction =
         commands.length > 0
-            ? `Run the check that covers it — ${commands.map((command) => `\`${command}\``).join(" or ")} — or a targeted subset of it (a single test file is fine and is often the better answer).`
-            : `This workspace defines no test/lint/typecheck script, so run whatever actually exercises the change — the package's own test binary, a targeted type-check, or a short throwaway script — and say which you chose.`;
+            ? `Run the check that covers it: ${commands.map((command) => `\`${command}\``).join(" or ")}, or a targeted subset of it (a single test file is fine and is often the better answer).`
+            : `This workspace defines no test/lint/typecheck script, so run whatever actually exercises the change, the package's own test binary, a targeted type-check, or a short throwaway script, and say which you chose.`;
     const failedNote =
         verdict.failed === undefined
             ? ""
@@ -244,7 +244,7 @@ const nudgeText = (verdict: VerificationVerdict, commands: readonly string[]): s
         fileList,
         "",
         instruction,
-        `Then state plainly what passed and what it covered — do not report a targeted check as the suite being green.${failedNote}`,
+        `Then state plainly what passed and what it covered: do not report a targeted check as the suite being green.${failedNote}`,
     ].join("\n");
 };
 

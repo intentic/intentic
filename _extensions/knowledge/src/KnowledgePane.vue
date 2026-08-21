@@ -17,11 +17,11 @@ import { linkifyNoteRefs, toneOfType } from "./knowledgeNote";
 import NoteGraph from "./NoteGraph.vue";
 import { useNote, useNoteMutations } from "./useKnowledge";
 
-/* ONE KNOWLEDGE NOTE — what it is, what it says, and what it is connected to.
+/* ONE KNOWLEDGE NOTE: what it is, what it says, and what it is connected to.
  *
  * The FRAME is <NoteEditor>'s: the action cluster, the delete confirmation, the error strip, and the one
  * surface the markdown is both read and written on. What is left here is what makes this a KNOWLEDGE note
- * rather than any other — the three views, the header's facts, and the connections bar.
+ * rather than any other: the three views, the header's facts, and the connections bar.
  *
  * THREE VIEWS OF THE SAME THING, because a knowledge note genuinely has three: the prose you read, the map of
  * what it connects to, and the file underneath. They are one control rather than three panels stacked down the
@@ -29,7 +29,7 @@ import { useNote, useNoteMutations } from "./useKnowledge";
  * that band's height. Reading is the default; the other two are one click and they remember nothing, so nobody
  * lands somewhere they did not choose.
  *
- * THE CONNECTIONS ARE ALWAYS ON SCREEN, under whichever view is open — they are the reason this is a knowledge
+ * THE CONNECTIONS ARE ALWAYS ON SCREEN, under whichever view is open: they are the reason this is a knowledge
  * base rather than a folder, and putting them behind the map tab would mean the answer to "what else is about
  * this" required knowing to go and look. Each one is a link, with the relationship named, so following a chain
  * is a click per step. */
@@ -38,7 +38,7 @@ const { path } = defineProps<{ path: string }>();
 const emit = defineEmits<{ open: [path: string]; filter: [path: string]; forgotten: [] }>();
 
 /* The in-progress edit, owned by the VIEW rather than this pane: a draft has to survive reading another note
- * and coming back, and this pane is reused as the selection moves. `undefined` means "not editing" — one piece
+ * and coming back, and this pane is reused as the selection moves. `undefined` means "not editing": one piece
  * of state for both, so an editor can never be open with nothing in it. */
 const draft = defineModel<string | undefined>(`draft`);
 
@@ -48,7 +48,7 @@ const { save, remove } = useNoteMutations();
 const raw = computed(() => note.value?.content ?? ``);
 const view = ref<`read` | `map` | `source`>(`read`);
 
-// Leaving the note puts the view back but never the draft — one is where you happened to be looking, the other
+// Leaving the note puts the view back but never the draft: one is where you happened to be looking, the other
 // is the reader's unsaved words. The confirmation and the last error go with it, inside the composable.
 const {
     source,
@@ -71,7 +71,7 @@ const {
     onRemoved: () => emit(`forgotten`),
 });
 
-// Editing lands on the SOURCE, because the source is what is being edited — and it is where Cancel leaves you,
+// Editing lands on the SOURCE, because the source is what is being edited, and it is where Cancel leaves you,
 // looking at the file you just decided not to change.
 const edit = (): void => {
     startEdit();
@@ -84,7 +84,7 @@ const facts = computed<string[][]>(() => (note.value?.facts ?? []).map((fact) =>
 
 /* Resolution is the backend's answer, not a second set of rules here: every link this note holds arrived
  * already resolved, so the prose decorator is a lookup over that. A target that isn't in it is a note nobody
- * has written — drawn as unfinished rather than as a link that goes nowhere. */
+ * has written: drawn as unfinished rather than as a link that goes nowhere. */
 const resolved = computed(() => new Map((note.value?.linksTo ?? []).map((link) => [link.title, link.path])));
 const decorate = (fragment: DocumentFragment): void => linkifyNoteRefs(fragment, (target) => resolved.value.get(target));
 const onProseClick = (event: MouseEvent): void => {
@@ -98,7 +98,7 @@ const onProseClick = (event: MouseEvent): void => {
 
 <template>
     <!-- The pane is the note; the bar under it is what the note is CONNECTED to. Two elements rather than one,
-         because <NoteEditor>'s body scrolls and the connections must not scroll away — they are the reason this is
+         because <NoteEditor>'s body scrolls and the connections must not scroll away: they are the reason this is
          a knowledge base rather than a folder, and on a long note they would otherwise be a page down. -->
     <div class="flex min-h-0 flex-1 flex-col gap-2">
         <NoteEditor
@@ -121,7 +121,7 @@ const onProseClick = (event: MouseEvent): void => {
                 <Icon name="file" class="shrink-0 text-xs text-subtle" />
             </template>
             <!-- WHAT KIND OF THING THIS IS, and nothing else. A badge sits beside the title on the header's one
-                 shrinking row, so every additional one is width taken off the note's NAME — and a note's tags are
+                 shrinking row, so every additional one is width taken off the note's NAME, and a note's tags are
                  open-ended, so a well-tagged note here truncated its own title to a single letter. The kind is the
                  one fact worth that trade; the tags moved to the meta line below, which wraps. -->
             <template #badges>
@@ -150,7 +150,7 @@ const onProseClick = (event: MouseEvent): void => {
             </template>
 
             <!-- WHICH VIEW rides a row of its own rather than the header's, and that is width, not taste: a
-                 header's title, badges and actions share ONE shrinking row, and this control is ~140px of it —
+                 header's title, badges and actions share ONE shrinking row, and this control is ~140px of it:
                  beside three icon buttons in a pane this narrow, the note's own NAME truncated to a single
                  letter. It also belongs here on the merits: the switch is about the body underneath it, not
                  about the note the header names. -->
@@ -168,14 +168,14 @@ const onProseClick = (event: MouseEvent): void => {
                 </div>
             </template>
 
-            <template #confirm> Delete “{{ note?.summary.title }}”? Anything that links to it becomes a link to a note nobody has written. </template>
+            <template #confirm> Delete "{{ note?.summary.title }}"? Anything that links to it becomes a link to a note nobody has written. </template>
 
             <NoteGraph v-if="view === `map`" :path="path" @open="emit(`open`, $event)" />
 
             <template v-else>
                 <!-- The header's plain facts, above the prose: these are what somebody came to look up.
                      Padded by a wrapper rather than by the table, because horizontal padding on a <table>
-                     does not indent its cells — the labels sat flush against the panel's edge. -->
+                     does not indent its cells: the labels sat flush against the panel's edge. -->
                 <div v-if="facts.length > 0" class="px-5 pt-4">
                     <InfoTable :rows="facts" />
                 </div>
@@ -187,7 +187,7 @@ const onProseClick = (event: MouseEvent): void => {
                     style="--prose-measure: 74ch"
                     @click="onProseClick"
                 />
-                <p v-else class="px-5 py-4 text-xs text-subtle">No text yet — this note is its header.</p>
+                <p v-else class="px-5 py-4 text-xs text-subtle">No text yet: this note is its header.</p>
             </template>
         </NoteEditor>
 
@@ -204,7 +204,7 @@ const onProseClick = (event: MouseEvent): void => {
                     <button v-if="link.path" type="button" class="text-link hover:underline" @click="emit(`open`, link.path)">
                         {{ link.title }}
                     </button>
-                    <span v-else class="text-subtle underline decoration-dotted underline-offset-2" :title="`No note for “${link.title}” yet`">
+                    <span v-else class="text-subtle underline decoration-dotted underline-offset-2" :title="`No note for "${link.title}" yet`">
                         {{ link.title }}
                     </span>
                 </span>

@@ -6,7 +6,7 @@ import { hetznerCreate, hetznerOptions } from "./hetzner.js";
 import { oracleCreate, oracleOptions } from "./oracle.js";
 import { cloudInitUserData } from "./user-data.js";
 
-// Route the stubbed fetch by method + URL substring, recording calls for payload assertions — the
+// Route the stubbed fetch by method + URL substring, recording calls for payload assertions: the
 // ../cloudflare.test.ts helper, with the JSON error tolerance the providers' plain-text 500s need.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
@@ -255,7 +255,7 @@ describe(`oracle`, () => {
         });
     });
 
-    it(`reuses an existing intentic network untouched — no creates, no route rewrite`, async () => {
+    it(`reuses an existing intentic network untouched: no creates, no route rewrite`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/images?`), respond: () => json([{ id: `img` }]) },
             {
@@ -274,7 +274,7 @@ describe(`oracle`, () => {
         expect(calls.filter((entry) => entry.method !== `GET`).map((entry) => entry.url)).toEqual([expect.stringContaining(`/instances/`)]);
     });
 
-    // The reused-network routes every capacity test shares — only the instance POST (and the domain list the
+    // The reused-network routes every capacity test shares: only the instance POST (and the domain list the
     // walk fetches after a first miss) differ per case.
     const capacityStubs = () => [
         { match: (method: string, url: string) => method === `GET` && url.includes(`/images?`), respond: () => json([{ id: `img` }]) },
@@ -299,7 +299,7 @@ describe(`oracle`, () => {
             ...capacityStubs(),
             {
                 match: (method, url) => method === `POST` && url.endsWith(`/instances/`),
-                // ad1 (the pick) refuses, ad2 has room — reading the body decides, so the stub is stateless.
+                // ad1 (the pick) refuses, ad2 has room: reading the body decides, so the stub is stateless.
                 respond: () => json({ code: `InternalError`, message: `Out of host capacity.` }, 500),
             },
         ]);
@@ -326,7 +326,7 @@ describe(`oracle`, () => {
         expect(last?.availabilityDomain).toBe(`ad2`);
     });
 
-    it(`names the A1 capacity refusal honestly — after every domain — and never launches a non-free shape`, async () => {
+    it(`names the A1 capacity refusal honestly: after every domain, and never launches a non-free shape`, async () => {
         stubFetch([
             ...capacityStubs(),
             {

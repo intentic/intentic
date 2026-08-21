@@ -6,12 +6,12 @@ import { INDEX_NAME, noteTitle, projectLabel } from "./memoryNote";
 import MemoryPane from "./MemoryPane.vue";
 import { useMemory } from "./useMemory";
 
-/* The memory extension: what the agent carries between sessions — the MEMORY.md index it loads at the start of
+/* The memory extension: what the agent carries between sessions, the MEMORY.md index it loads at the start of
  * every one, plus a markdown note per fact, per project. Read it to know what it believes, edit a note to
  * correct it, forget one to take it back.
  *
  * WHICH NOTE IS A PICKER, NOT A SECOND RAIL. This was an index column beside the reader, and as a hub section
- * that put two navigation columns side by side — the hub's 16rem rail, then a 14rem one, then whatever was
+ * that put two navigation columns side by side: the hub's 16rem rail, then a 14rem one, then whatever was
  * left for the note. The note is the content and it was getting the smallest third of the width. A picker says
  * the same thing (every note, grouped by project, filterable once the list is long) in one control on the row
  * the section header already occupies, and hands the whole remaining width to the prose.
@@ -25,7 +25,7 @@ import { useMemory } from "./useMemory";
 
 const { files, error, isLoading } = useMemory();
 
-/* THE SELECTION IS ONE STRING, `project/name` — the picker's option value, the draft map's key and the
+/* THE SELECTION IS ONE STRING, `project/name`: the picker's option value, the draft map's key and the
  * reader's remount key are all the same identity, so none of them can drift from the others. A project
  * directory never contains a slash (see projectLabel), so the first one splits it back apart. */
 const keyOf = (project: string, name: string): string => `${project}/${name}`;
@@ -40,7 +40,7 @@ const note = computed(() => {
 const selectedEntry = computed(() => files.value.find((file) => keyOf(file.project, file.name) === selected.value));
 
 /* Unsaved edits, keyed by note. Held here, above the reader, because the reader is REUSED as the selection
- * moves — without this, reading another note to check a fact would silently drop the correction being written.
+ * moves: without this, reading another note to check a fact would silently drop the correction being written.
  * A note with a draft says so in the picker, so an edit left open can be found again. */
 const drafts = ref(new Map<string, string>());
 const draft = computed<string | undefined>({
@@ -59,12 +59,12 @@ const draft = computed<string | undefined>({
 
 const noteLabel = (name: string): string => (name === INDEX_NAME ? `Index` : noteTitle(name));
 
-/* One group per project, MEMORY.md pinned first — it is the map to everything under it — and the rest left in
+/* One group per project, MEMORY.md pinned first: it is the map to everything under it, and the rest left in
  * the daemon's newest-first order, so what the agent learned most recently leads. Projects keep that order
  * too: the one being worked in is the one that just wrote a note.
  *
  * The annotation is when the note was last written, EXCEPT while an edit is open on it, where the fact worth
- * the space is that the edit exists — that is what makes an abandoned correction findable again. */
+ * the space is that the edit exists: that is what makes an abandoned correction findable again. */
 const options = computed<PickerOptions>(() => {
     const byProject = new Map<string, MemoryFileEntry[]>();
     for (const file of files.value) {
@@ -90,7 +90,7 @@ const projectCount = computed(() => new Set(files.value.map((file) => file.proje
 const totalBytes = computed(() => files.value.reduce((total, file) => total + file.sizeBytes, 0));
 
 /* Open on the index instead of an empty pane: it is the one note that summarises all the others, and it is
- * what the agent itself reads first. Every width does this now — the picker sits above the reader rather than
+ * what the agent itself reads first. Every width does this now: the picker sits above the reader rather than
  * in front of it, so landing in a note hides nothing the reader came for. */
 watch(
     files,
@@ -107,7 +107,7 @@ watch(
     { immediate: true },
 );
 
-// A reference inside a note names a sibling in the SAME project — memory notes never cross projects.
+// A reference inside a note names a sibling in the SAME project: memory notes never cross projects.
 const openSibling = (name: string): void => {
     if (note.value !== undefined) {
         selected.value = keyOf(note.value.project, name);
@@ -116,18 +116,18 @@ const openSibling = (name: string): void => {
 </script>
 
 <template>
-    <!-- A HUB SECTION BODY — no page header and no frame of its own: the hub draws both. -->
+    <!-- A HUB SECTION BODY, no page header and no frame of its own: the hub draws both. -->
     <div class="flex flex-col gap-3">
         <Notice v-if="error" :of="noticeOf(error)" />
 
         <!-- The section's one row of chrome: what a memory note is, which one is open, and what the whole set
-             amounts to. The picker rides here rather than above the reader because this row exists anyway —
+             amounts to. The picker rides here rather than above the reader because this row exists anyway:
              navigation that costs no vertical space of its own is the entire reason it stopped being a column. -->
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <InfoHint label="Memory">
                 <span class="block text-sm font-medium text-content">Agent memory</span>
                 <span class="mt-1 block text-xs text-muted">
-                    The agent keeps a persistent memory per project: <b>MEMORY.md</b> — the index it loads at the start of every session — plus one
+                    The agent keeps a persistent memory per project: <b>MEMORY.md</b>, the index it loads at the start of every session, plus one
                     markdown note per fact (who you are, feedback it was given, project context, references). Edit a note to correct it, or forget it
                     to take the fact back. References between notes are links: follow them to read the chain.
                 </span>
@@ -160,7 +160,7 @@ const openSibling = (name: string): void => {
                 <Icon name="sparkles" class="text-base text-subtle" />
                 <p class="text-content">Nothing remembered yet.</p>
                 <p class="max-w-sm text-xs text-muted">
-                    Notes appear here as the agent saves what it learns while working — how you like things done, how this repo is put together, what
+                    Notes appear here as the agent saves what it learns while working: how you like things done, how this repo is put together, what
                     it was corrected on.
                 </p>
             </div>
@@ -184,7 +184,7 @@ const openSibling = (name: string): void => {
             >
                 <Icon name="sparkles" class="text-base text-subtle" />
                 <p class="text-sm text-muted">Pick a note to read it.</p>
-                <p class="max-w-xs text-xs text-subtle">Start with <b>Index</b> — it's the map the agent itself opens first.</p>
+                <p class="max-w-xs text-xs text-subtle">Start with <b>Index</b>: it's the map the agent itself opens first.</p>
             </section>
         </div>
     </div>

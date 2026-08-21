@@ -2,8 +2,8 @@ import type { PipelineJob } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { jobLineage, pipelineDag, pipelineStages } from "./pipelineDag";
 
-/* What the expanded job graph claims about a run: which cards fade, which edges light, and — the part that
- * matters most — that a run arriving WITH its dependencies declared is drawn from those and not from a guess
+/* What the expanded job graph claims about a run: which cards fade, which edges light, and, the part that
+ * matters most: that a run arriving WITH its dependencies declared is drawn from those and not from a guess
  * about what overlapped in time. The two sources of shape are tested side by side because the fallback has to
  * keep working exactly as it did for every run whose workflow file we cannot read. */
 
@@ -25,7 +25,7 @@ const stageRun = pipelineStages([
     staged(`ship`, `deploy`),
 ]);
 
-/* The shape that prompted all of this — the user's own ci.yml, which the wave layering rendered as a flat
+/* The shape that prompted all of this: the user's own ci.yml, which the wave layering rendered as a flat
  * line. Every job here starts at a DIFFERENT time and none overlap, so timestamps alone would put all six in
  * six sequential steps; `needs` is what makes it branch. */
 const declaredRun = pipelineStages([
@@ -63,7 +63,7 @@ describe(`pipelineStages`, () => {
 });
 
 describe(`pipelineDag with declared dependencies`, () => {
-    it(`draws one edge per declared dependency — not a stage-wide join`, () => {
+    it(`draws one edge per declared dependency, not a stage-wide join`, () => {
         const edges = pipelineDag(declaredRun).edges.map((edge) => `${edge.from}>${edge.to}`);
         // `changes` sits in level 0 beside `preflight` but gates only `release`; a bipartite join would have
         // wired it into both level-1 verifies.

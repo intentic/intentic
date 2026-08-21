@@ -80,7 +80,7 @@ const parseRequest = (body: string): ProviderRequest => {
 const answerOf = (query: string): object => ({
     example: true,
     query,
-    summary: `Example answer for "${query}": this endpoint is the reference implementation of a paid service — it verified the platform's signature, streamed its progress, and a real provider would answer here.`,
+    summary: `Example answer for "${query}": this endpoint is the reference implementation of a paid service, it verified the platform's signature, streamed its progress, and a real provider would answer here.`,
     sources: [{ title: `Offer a paid service`, url: `https://intentic.dev/developers/services/` }],
 });
 
@@ -153,7 +153,7 @@ export const createProvider = ({ secret, now = () => new Date() }: ProviderOptio
          * the internet against your own upstream costs, which is why the admission probe sends a forged and
          * a replayed call and refuses to list you unless BOTH die here. */
         if (!verifySignature(body, request.headers.get(`x-intentic-timestamp`) ?? undefined, request.headers.get(`x-intentic-signature`) ?? undefined, secret, now)) {
-            return json({ error: `bad signature — only calls forwarded by the platform are served` }, 401);
+            return json({ error: `bad signature, only calls forwarded by the platform are served` }, 401);
         }
         const parsed = parseRequest(body);
         if (parsed.scenario === `refuse`) {

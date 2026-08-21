@@ -63,10 +63,10 @@ import { sumUsage, type UsageFrame } from "./turn-usage.js";
 // without an @-mention. Four-backtick fence so a selection containing ``` doesn't break out.
 const editorContextNote = (context: EditorContext): string => {
     if (context.selection === undefined) {
-        return `The user has \`${context.file}\` open in the editor — "this file" likely refers to it.`;
+        return `The user has \`${context.file}\` open in the editor: "this file" likely refers to it.`;
     }
     const range = context.startLine !== undefined && context.endLine !== undefined ? ` (lines ${context.startLine}-${context.endLine})` : "";
-    return `The user has \`${context.file}\` open in the editor with this text selected${range} — "this" likely refers to it:\n\`\`\`\`\n${context.selection}\n\`\`\`\``;
+    return `The user has \`${context.file}\` open in the editor with this text selected${range}: "this" likely refers to it:\n\`\`\`\`\n${context.selection}\n\`\`\`\``;
 };
 
 /* Frames that could only exist because a model request SUCCEEDED: the provider's own words, its thinking, or a
@@ -203,7 +203,7 @@ async function* runConversationTurn(
         Date.now(),
     );
     if (!began) {
-        yield { kind: "error", code: "agent-busy", message: "This agent is already running a turn — wait for it to finish." };
+        yield { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." };
         yield { kind: "done" };
         return;
     }
@@ -618,7 +618,7 @@ const sessionToResume = async (services: Services, input: AgentTurn, effectiveCw
     const held = await services.perf
         .track("turn.preflight.session", {}, () => adapter.holdsSession(services, sessionId, effectiveCwd))
         .catch((error: unknown) => {
-            services.logger.warn({ err: error, sessionId }, "session probe failed — resuming as asked");
+            services.logger.warn({ err: error, sessionId }, "session probe failed, resuming as asked");
             return true;
         });
     return held ? sessionId : undefined;
@@ -954,7 +954,7 @@ async function* runTurn(
     if (preflightMs >= SLOW_PREFLIGHT_MS) {
         services.logger.warn(
             { preflightMs, stages: preflightStages },
-            "turn preflight slow — the stage marks say which step, and a stalled event loop inflates all of them at once",
+            "turn preflight slow: the stage marks say which step, and a stalled event loop inflates all of them at once",
         );
     }
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });
@@ -1392,7 +1392,7 @@ export const createAgentRoutes = (services: Services) => {
         rewind: i.rewind.handler(async ({ input }) => {
             const outcome = await rewindConversation(services, input.conversationId, input.index);
             if (outcome === "busy") {
-                throw new ORPCError("CONFLICT", { message: "This agent is running a turn — stop it before going back." });
+                throw new ORPCError("CONFLICT", { message: "This agent is running a turn, stop it before going back." });
             }
             if (outcome === "no-checkpoint") {
                 throw new ORPCError("NOT_FOUND", { message: "That message has no saved file state to go back to." });

@@ -100,7 +100,7 @@ export const sessionUpdateOf = (event: AgentEvent, cwd: string): SessionUpdate |
             // Defensive (v1 never sends isolated turns): a one-line summary beats silence if it ever arrives.
             const text = event.landed
                 ? "Changes landed in the main tree."
-                : `Changes stayed in the worktree — conflicts: ${(event.conflicts ?? []).map((conflict) => conflict.paths.join(", ")).join("; ")}.`;
+                : `Changes stayed in the worktree, conflicts: ${(event.conflicts ?? []).map((conflict) => conflict.paths.join(", ")).join("; ")}.`;
             return { sessionUpdate: "agent_message_chunk", content: { type: "text", text } };
         }
         default:

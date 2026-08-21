@@ -1,7 +1,7 @@
 {
     "name": "@intentic/gate",
     "version": "0.0.0",
-    "description": "Run an intentic release gate from a CI pipeline — POST what the pipeline knows, wait for the run, exit on the verdict",
+    "description": "Run an intentic release gate from a CI pipeline, POST what the pipeline knows, wait for the run, exit on the verdict",
     "license": "MIT",
     "type": "module",
     "repository": {

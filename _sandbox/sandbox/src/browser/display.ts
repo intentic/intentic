@@ -19,7 +19,7 @@ const waitForSocket = async (): Promise<void> => {
         }
         await sleep(50);
     }
-    throw new Error("Xvfb did not come up (no X socket at /tmp/.X11-unix/X99) — rebuild the sandbox to install it");
+    throw new Error("Xvfb did not come up (no X socket at /tmp/.X11-unix/X99): rebuild the sandbox to install it");
 };
 
 // Ensure Xvfb is running on :99 and return the DISPLAY value. Idempotent + concurrency-safe (one spawn, shared

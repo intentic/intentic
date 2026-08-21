@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-repo-apps",
     "version": "1.0.0",
-    "description": "Apps — a monorepo's apps and their tests, as a first-party intentic extension",
+    "description": "Apps, a monorepo's apps and their tests, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

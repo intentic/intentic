@@ -9,7 +9,7 @@ import { IGNORED_DIRS, isPublicPath, isReferencePath } from "@intentic/workspace
  * over: `ls /work` opened 42 of them, a bare directory listing was the first action in 41%, and the first six
  * search/read results came back at a median ~21k characters (~5.3k tokens) before a single line of the actual
  * job was read. The median session then spent 19 read/search calls before its first edit. None of that is the
- * agent wandering — 52 of those sessions reached their eventual target area within two actions, it is a fixed
+ * agent wandering: 52 of those sessions reached their eventual target area within two actions, it is a fixed
  * entry toll, and the toll is the part a map removes.
  *
  * WHY IT IS AREAS AND NOT FILES, which is the part that took measuring to believe. Those same 100 sessions read
@@ -433,7 +433,7 @@ const render = (map: WorkspaceMap): string => {
         "",
         map.cwd === map.project ? `You are at the top of ${project}.` : `You are here: \`${map.cwd}\``,
         "",
-        `${project} — ${map.areas.length} area${map.areas.length === 1 ? "" : "s"}${map.omitted > 0 ? `, plus ${map.omitted} smaller ones not listed` : ""}`,
+        `${project}, ${map.areas.length} area${map.areas.length === 1 ? "" : "s"}${map.omitted > 0 ? `, plus ${map.omitted} smaller ones not listed` : ""}`,
     ];
     const tail = map.siblings.length > 0 ? ["", `Also under the workspace root: ${map.siblings.map((name) => `${name}/`).join(", ")}`] : [];
     // Purposes are dropped from the smallest areas up, so the shed always costs the least-consulted line first.

@@ -48,7 +48,7 @@ export interface HarnessEndpoint {
  *
  * A routed turn runs the Claude Code harness against the translator but spends a Google (or ChatGPT, or Kimi)
  * subscription, and the harness knows only that a 429 came back. So it says "Claude", and it sets its retry
- * delay from its OWN backoff curve — 620ms, then 1072ms, then 2281ms. Reading that delay as a reset instant is
+ * delay from its OWN backoff curve: 620ms, then 1072ms, then 2281ms. Reading that delay as a reset instant is
  * what put "Resets 5:32 PM" under a Google weekly quota that was five days out, on a turn that never touched
  * Anthropic.
  *
@@ -240,14 +240,14 @@ export const harnessReadyProviders = async (services: Services): Promise<Record<
  * an empty model, which the harness would answer by resolving its own Anthropic alias, at an endpoint that has
  * never heard of it. */
 /* THE TRIAL RESOLVES FROM CONSTANTS, not from discovery, because everything about it IS constant: the model id
- * is synthetic and never changes (TRIAL_MODEL_ID — the platform picks the real model per message), and the
+ * is synthetic and never changes (TRIAL_MODEL_ID: the platform picks the real model per message), and the
  * route is the translator's static `free-trial` entry, written whenever a platform is configured at all
- * (trial-endpoint.ts, trialCompatEntry). So no catalog is fetched here — the fetch bought nothing (the answer
+ * (trial-endpoint.ts, trialCompatEntry). So no catalog is fetched here: the fetch bought nothing (the answer
  * is a known constant) and sold a failure mode: a platform blip at resolve time refused a turn the translator
  * could have served, as "its model catalog could not be read".
  *
  * The capability read is what still gates, and it reads the platform's cached answer about whether a trial is
- * OFFERED. A cold cache — a turn arriving before boot's fire-and-forget probe has landed — is re-probed once,
+ * OFFERED. A cold cache (a turn arriving before boot's fire-and-forget probe has landed) is re-probed once,
  * on the turn's own clock, so the refusal below is only ever given on the platform's actual word and never on
  * an unanswered question. */
 const resolveTrialCredentials = async (services: Services): Promise<HarnessCredentialsResult> => {
@@ -288,14 +288,14 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
     }
     const capability = await services.capabilities.get(id);
     if (capability === undefined || capability.kind !== "endpoint") {
-        return { ok: false, message: `Unknown model endpoint "${id}" — add it as an Endpoint capability first.` };
+        return { ok: false, message: `Unknown model endpoint "${id}", add it as an Endpoint capability first.` };
     }
     const config = capability.config;
     const catalog = await services.endpointModels.models(id, config);
     if (catalog.models.length === 0) {
         return {
             ok: false,
-            message: `${id} has published no models — check the server is running at ${config.baseUrl} and has a model loaded.`,
+            message: `${id} has published no models, check the server is running at ${config.baseUrl} and has a model loaded.`,
         };
     }
     const resolved = routedModel(catalog, model);
@@ -340,7 +340,7 @@ export const resolveHarnessCredentials = async (
     if (input.agent === "gemini") {
         return {
             ok: false,
-            message: "Gemini doesn't run under the Claude Code harness — Google refuses that loop. It runs on its own runtime instead.",
+            message: "Gemini doesn't run under the Claude Code harness, Google refuses that loop. It runs on its own runtime instead.",
         };
     }
     if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi") {
@@ -422,8 +422,8 @@ export const resolveHarnessCredentials = async (
         // that inline and hold the message for replay once it lands.
         const revoked = accountId !== undefined && (await services.claudeStore.list()).some((a) => a.id === accountId && a.needsReauth === true);
         return revoked
-            ? { ok: false, code: "claude-reauth", message: "Claude sign-in was revoked — reconnect the account to pick this conversation back up." }
-            : { ok: false, message: "No Claude account connected — connect it in Setup before chatting." };
+            ? { ok: false, code: "claude-reauth", message: "Claude sign-in was revoked, reconnect the account to pick this conversation back up." }
+            : { ok: false, message: "No Claude account connected, connect it in Setup before chatting." };
     }
     // Attribution follows the TOKEN, not the id: an account whose refresh yielded nothing served none of this
     // turn (the container's own credential did), so naming it would file the usage against one that never ran.

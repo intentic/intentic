@@ -21,7 +21,7 @@ import type { CapabilityHandler } from "../capability.js";
 const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocols, plus the container privileges they share.
 # WireGuard: wg-quick and the resolvconf its DNS= handling shells out to.
 # FortiGate SSL-VPN: openconnect with its vpnc routing script. openconnect routes over tun rather than spawning
-#   pppd, so it needs no /dev/ppp — which is why it, not openfortivpn, is the client here.
+#   pppd, so it needs no /dev/ppp, which is why it, not openfortivpn, is the client here.
 # IPsec: strongSwan, plus BOTH charon plugin sets. libcharon-extauth-plugins is the one that matters and is
 #   easy to miss: xauth-generic lives there, not in libcharon-extra-plugins (which ships only xauth-eap and
 #   xauth-pam, neither of which can answer a gateway's XAuth challenge with a username and password). Without
@@ -41,7 +41,7 @@ description: Inspect, connect and disconnect this sandbox's VPN tunnels. Use whe
 
 # VPN tunnels
 
-This sandbox's VPNs are configured by the user (WireGuard, FortiGate SSL-VPN, or IPsec). Use the \`vpn\` command —
+This sandbox's VPNs are configured by the user (WireGuard, FortiGate SSL-VPN, or IPsec). Use the \`vpn\` command:
 it goes through the daemon, so what you do here is what the user sees in the UI, and vice versa.
 
 \`\`\`sh
@@ -52,20 +52,20 @@ vpn connect <name> --otp 123456   # gateways that ask for a one-time 2FA code
 vpn disconnect <name>     # drop it
 \`\`\`
 
-While a tunnel is up, routing follows what it pushed — matching traffic just works, with no per-command setup.
+While a tunnel is up, routing follows what it pushed: matching traffic just works, with no per-command setup.
 \`vpn list\` shows the routed networks, so \`0.0.0.0/0\` means everything is going through the tunnel.
 
 Notes:
 - Lost the internet, or a command started hanging, right after a tunnel came up? That is a FULL TUNNEL whose
-  gateway does not route the internet: \`vpn list\` shows \`0.0.0.0/0\`, so everything — including your own
-  connection out of this sandbox — is being handed to a gateway that drops most of it. Disconnect it to get back,
+  gateway does not route the internet: \`vpn list\` shows \`0.0.0.0/0\`, so everything, including your own
+  connection out of this sandbox: is being handed to a gateway that drops most of it. Disconnect it to get back,
   and tell the user to narrow that VPN capability's "Routed networks" to the networks behind the gateway; both
-  work at once after that. Never work around it by editing /etc/ipsec.d — connect rewrites those files.
+  work at once after that. Never work around it by editing /etc/ipsec.d: connect rewrites those files.
 - You cannot read a VPN's credentials, and you do not need to: \`vpn connect\` uses the stored ones.
-- A one-time code cannot be guessed or stored — if a connect fails asking for one, ask the user for a current code.
+- A one-time code cannot be guessed or stored: if a connect fails asking for one, ask the user for a current code.
 - A tunnel marked \`unavailable\` needs a sandbox rebuild (the user does this from Sandbox ▸ Environment); say so
   rather than trying to install a VPN client yourself.
-- A tunnel the user set to auto-connect comes back on its own after a sandbox restart — only toggle it when asked.
+- A tunnel the user set to auto-connect comes back on its own after a sandbox restart: only toggle it when asked.
 `;
 
 // A live VPN link mapped onto the capability grid's four states. "connecting" is deliberately `pending` rather
@@ -88,7 +88,7 @@ const capabilityStatus = (state: string, detail: string | undefined): Capability
 };
 
 export const vpnHandler: CapabilityHandler = {
-    /* The credential a user ROTATES, one per provider — /secrets reveals and replaces exactly this field.
+    /* The credential a user ROTATES, one per provider: /secrets reveals and replaces exactly this field.
      * wireguard's whole conf is secret (it holds the private key); fortinet has one password. An ipsec tunnel
      * carries two (the group PSK and, when XAuth is on, the per-user password): the per-user one is the rotatable
      * half, so it wins when present. Rotating the PSK of an XAuth tunnel is a re-add of the capability (same name
@@ -178,7 +178,7 @@ export const vpnHandler: CapabilityHandler = {
             // very add composes is what installs it.
             yield {
                 kind: "log",
-                message: `Stored ${id} — this sandbox doesn't carry ${missing} yet. Rebuild it from the Environment card; the tunnel dials itself when it restarts.`,
+                message: `Stored ${id}, this sandbox doesn't carry ${missing} yet. Rebuild it from the Environment card; the tunnel dials itself when it restarts.`,
             };
             return;
         }

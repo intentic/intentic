@@ -55,7 +55,7 @@ test("cleanLines: cap elides the middle past MAX when enabled", () => {
 });
 
 /* A line is not a unit of size. `grep -rn --include=*.css` over minified CSS returns sixty lines and 130 KB, and
- * the line cap never looked at it — 8.2% of one ledger window's entire raw volume arrived this way. */
+ * the line cap never looked at it: 8.2% of one ledger window's entire raw volume arrived this way. */
 test("cleanLines: cap trims long-line output that never reaches the line limit", () => {
     const lines = Array.from({ length: 40 }, (_, i) => `src/a${i}.css:1:${"x".repeat(2000)}`);
     const out = cleanLines(lines, { command: "grep -rn x --include=*.css .", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
@@ -89,7 +89,7 @@ test("cleanLines: a single line over the whole budget is truncated rather than d
 });
 
 // `git --no-pager diff` is the form this workspace's own instructions ask for; read as a log it had its middle
-// gutted — a 274-line diffstat came back as 81 lines.
+// gutted: a 274-line diffstat came back as 81 lines.
 test("cleanLines: git global options before the verb still read as a deliberate read", () => {
     const lines = Array.from({ length: 300 }, (_, i) => `+ line ${i}`);
     for (const command of ["git --no-pager diff --stat", "git -c core.pager=cat diff", "git --no-pager show HEAD"]) {
@@ -113,7 +113,7 @@ test("cleanLines: a deliberate read is not capped at MAX, even behind a `cd … 
     }
 });
 
-/* What production hands `cleanLines` is the LAUNCHER line, not the shell statement — and every test above this
+/* What production hands `cleanLines` is the LAUNCHER line, not the shell statement, and every test above this
  * one passed the shell statement, which is how a read detector that never fired on a bare `cat` survived. One
  * day of real commands: 88 of 93 shell reads misread as logs, five gutted reads of the workspace README. */
 const WRAPPED = (inner) => `nsenter --mount=/proc/1/ns/mnt --wd=WORKSPACE_ROOT -- nice -n 10 ionice -c 2 -n 7 bash -c '${inner}'`;
@@ -125,7 +125,7 @@ test("cleanLines: a read is recognised through the nsenter/bash -c wrapper, with
     }
 });
 
-test("cleanLines: a log is still capped through the wrapper — `cat` in a word is not the `cat` command", () => {
+test("cleanLines: a log is still capped through the wrapper, `cat` in a word is not the `cat` command", () => {
     const lines = Array.from({ length: 400 }, (_, i) => `line ${i}`);
     for (const inner of ["pnpm install --concat-logs", "cd /work && ls -R", "git log --oneline -400"]) {
         expect(cleanLines(lines, { command: WRAPPED(inner), exitCode: "0", enabled: new Set(CLEANERS) }).lines.length).toBeLessThan(100);
@@ -156,7 +156,7 @@ test("filterOutput: strips ANSI and appends a footer with the handle when the tr
 });
 
 /* The two halves of the footer are priced separately because they are worth different things. Nobody retrieves
- * three elided lines of progress noise — across 10,446 agent commands the handle was followed zero times — but
+ * three elided lines of progress noise: across 10,446 agent commands the handle was followed zero times, but
  * "you are not looking at all of it" is what stops a trimmed result being read as a complete one. */
 test("filterOutput: a small trim keeps the counts and drops the retrieval handle", () => {
     const raw = `${[...Array.from({ length: 4 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`), "done"].join("\n")}\n`;
@@ -167,7 +167,7 @@ test("filterOutput: a small trim keeps the counts and drops the retrieval handle
 
 test("filterOutput: a trim smaller than the footer it would buy keeps the trim and drops the footer", () => {
     // One `total 48` header is ten bytes. Buying anything with it is how `ls` came to hand back MORE than it
-    // was given — the never-worse rule, which sits behind the handle gate and is not replaced by it.
+    // was given: the never-worse rule, which sits behind the handle gate and is not replaced by it.
     const raw = "total 48\n-rw-r--r--  1 root root  3801 Jul 30 13:38 a.ts\n";
     const out = filterOutput(raw, "ls -la", "0", "1", "/logs/x.log").out;
     expect(out.length).toBeLessThanOrEqual(raw.length);
@@ -222,9 +222,9 @@ test("redact: masks secret-named assignments, AWS keys, and bearer tokens on suc
 const maskedWith = (values, lines) => cleanLines(lines, { command: "cat config", exitCode: "0", enabled: parseCleaners("redact"), values }).lines;
 
 /* THE NAME HEURISTIC'S FLOOR, and what value-masking is for. Every field name below is one the capability
- * union itself declares secret, and none of them says token/secret/password/api-key — so the pattern half
+ * union itself declares secret, and none of them says token/secret/password/api-key, so the pattern half
  * cannot see them, however it is extended. Measured against the six declared shapes, five went through.
- * A KNOWN value masks to its `{{secret:name}}` reference — the token the daemon's exits resolve back — where
+ * A KNOWN value masks to its `{{secret:name}}` reference: the token the daemon's exits resolve back, where
  * the guessing patterns above keep the anonymous mask. */
 test("redact: field names the pattern list cannot know leak without the values, and are masked with them", () => {
     const lines = [
@@ -273,7 +273,7 @@ test("redact: a quoted value is masked whole, and the quotes survive so the line
 /* The second regression, measured the same way as the first: over one day the redactor masked 182 lines a model
  * then had to work from and caught zero secrets. Every case here was observed, not imagined.
  *
- * The token COUNTS are the ones that bite hardest — this workspace's own spend ledger is JSON full of fields
+ * The token COUNTS are the ones that bite hardest: this workspace's own spend ledger is JSON full of fields
  * named `…Tokens`, so masking them both destroys the number and breaks the parse for whatever reads it next.
  * Note `outputTokens` beside `cacheReadTokens`: under the old six-character floor the mask fired as a function
  * of MAGNITUDE, which is why it passed every small test and only failed on real data. */
@@ -304,15 +304,15 @@ test("redact: a path, a template interpolation or an env-var name is not a crede
     expect(redacted(structural)).toEqual(structural);
 });
 
-test("redact: still takes a real credential — by issuer prefix at any length, or by entropy and length", () => {
+test("redact: still takes a real credential, by issuer prefix at any length, or by entropy and length", () => {
     expect(redacted([`ANTHROPIC_API_KEY=sk-ant-api03-abcdefghij`])).toEqual(["ANTHROPIC_API_KEY=***"]);
     expect(redacted([`SLACK_TOKEN=xoxb-1234-5678-abcdefghij`])).toEqual(["SLACK_TOKEN=***"]);
     expect(redacted([`API_KEY="a1b2c3d4e5f6g7h8i9j0k1"`])).toEqual([`API_KEY="***"`]);
 });
 
 // The regression this rule exists for: source code says "token" constantly, and every one of these reached a
-// model corrupted — `=***` is indistinguishable from `!==`, and a masked type annotation loses the type.
-test("redact: leaves source code alone — comparisons, type annotations, property access and calls", () => {
+// model corrupted: `=***` is indistinguishable from `!==`, and a masked type annotation loses the type.
+test("redact: leaves source code alone, comparisons, type annotations, property access and calls", () => {
     const code = [
         `if (oauthToken === undefined && services.config.claudeCodeOauthToken === "") {`,
         `let oauthToken: string | undefined;`,
@@ -373,7 +373,7 @@ test("files cleaner: folds a run of bare paths by directory, keeping every name 
 test("files cleaner: leaves short runs, grep diagnostics and word lists alone", () => {
     const short = ["a/one.ts", "a/two.ts", "a/three.ts"];
     expect(cleanLines(short, { command: "find .", exitCode: "0", enabled: parseCleaners("files") }).lines).toEqual(short);
-    // `path:line:` is a diagnostic, not a path — folding it would destroy the line numbers it exists to carry.
+    // `path:line:` is a diagnostic, not a path, folding it would destroy the line numbers it exists to carry.
     const grep = Array.from({ length: 20 }, (_, i) => `src/mod.ts:${i}:import x`);
     expect(cleanLines(grep, { command: "grep -rn import src", exitCode: "0", enabled: parseCleaners("files") }).lines).toEqual(grep);
     const words = Array.from({ length: 20 }, (_, i) => `package-${i}`);
@@ -444,7 +444,7 @@ test("collapseCached: the named command is truncated so the marker stays cheap",
     expect(second.body.length).toBeLessThan(300);
 });
 
-// The back-reference must point at the FIRST producer, not the most recent one — a pointer that keeps walking
+// The back-reference must point at the FIRST producer, not the most recent one: a pointer that keeps walking
 // toward the reader eventually names the call directly above and stops being worth following.
 test("collapseCached: the back-reference keeps naming the earliest command, not the latest", () => {
     const store = memoryStore();

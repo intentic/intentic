@@ -37,7 +37,7 @@ const parse = (text: string): Record<string, string> =>
 const HOSTNAME = `sandbox-${createHash(`sha256`).update(`tok`).digest(`hex`).slice(0, 12)}.intentic.dev`;
 
 // A minted setup code: the reachability grant was bought at mint (sandbox.setupCode) and stored IN the
-// payload, so the claim is a pure read — it hands the box the whole grant and calls no provider at all.
+// payload, so the claim is a pure read: it hands the box the whole grant and calls no provider at all.
 const intenticRow = () => ({
     id: `s1`,
     token: `tok`,
@@ -77,7 +77,7 @@ describe(`POST /setup/claim`, () => {
         // Two independent one-shot credentials, never the same bytes: one enrolls a file-sync agent, the other a
         // machine agent that can restart this sandbox, and a shared token would make redeeming either spend both.
         expect(values[`HOST_PAIR_TOKEN`]).not.toBe(values[`SYNC_PAIR_TOKEN`]);
-        // The claim's ONE write: the stamp that tells the setup wizard the pasted command reached a machine —
+        // The claim's ONE write: the stamp that tells the setup wizard the pasted command reached a machine:
         // and the previous run's setup report cleared with it, so a fixed-and-re-run machine never shows last
         // time's failure over this run's progress. Nothing else about the row moves here.
         expect(update).toHaveBeenCalledExactlyOnceWith({
@@ -112,7 +112,7 @@ describe(`POST /setup/report`, () => {
         expect(res.status).toBe(200);
         expect(update).toHaveBeenCalledExactlyOnceWith({
             where: { id: `s1` },
-            // `at` is the platform's own clock — a machine with a wrong clock must not narrate from the past.
+            // `at` is the platform's own clock: a machine with a wrong clock must not narrate from the past.
             data: { setupReport: { stage: `preflight`, failed, at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) } },
         });
     });
@@ -126,7 +126,7 @@ describe(`POST /setup/report`, () => {
         expect(update.mock.calls[0]?.[0].data.setupReport.failed).toEqual([]);
     });
 
-    it(`404s an expired code and writes nothing — possession of a live code is the auth`, async () => {
+    it(`404s an expired code and writes nothing: possession of a live code is the auth`, async () => {
         const update = vi.fn();
         const prisma = fakePrisma({
             sandbox: { findUnique: vi.fn().mockResolvedValue({ ...intenticRow(), setupCodeExpiresAt: new Date(Date.now() - 1) }), update },
@@ -182,7 +182,7 @@ describe(`POST /sandbox/announce`, () => {
         expect(findUnique).not.toHaveBeenCalled();
     });
 
-    /* daemonUrl is what the browser sends the user's Google credential to, unprobed — so a connect token that
+    /* daemonUrl is what the browser sends the user's Google credential to, unprobed, so a connect token that
      * could rewrite it would be trading a container-env secret for the owner's identity. It can't: the address
      * is one we already know, from whichever half of setup established it. */
     it(`refuses a daemonUrl that isn't the address derived from the sandbox's own token`, async () => {
@@ -193,7 +193,7 @@ describe(`POST /sandbox/announce`, () => {
 
         const res = await announce(prisma, `tok`, `https://evil.example`);
         expect(res.status).toBe(409);
-        /* Neither the URL nor lastSeenAt moves — an unvetted address must not read as a live sandbox. What IS
+        /* Neither the URL nor lastSeenAt moves: an unvetted address must not read as a live sandbox. What IS
          * written is the disagreement itself, both halves of it: the refusal used to be a log line only, which
          * is what made a mis-addressed sandbox look exactly like one that never started. */
         expect(update).toHaveBeenCalledExactlyOnceWith({
@@ -206,7 +206,7 @@ describe(`POST /sandbox/announce`, () => {
         expect((await announce(prisma, `tok`, derived)).status).toBe(200);
     });
 
-    /* A row with neither record — attached by hand, or created before the hostname was stored — has nothing to
+    /* A row with neither record (attached by hand, or created before the hostname was stored) has nothing to
      * check against. It learns the address on the first announce and holds it from then on, so the field is
      * never free-form for longer than one write. */
     it(`pins on first announce when nothing on the row predicts the address`, async () => {
@@ -230,7 +230,7 @@ const bootReport = (prisma: PrismaClient, token: string | undefined, body: unkno
     });
 
 /* The announce's other half: whether the sandbox's PUBLIC address answers, as established by the box probing
- * itself. Separate from the announce because the two claims fail separately — the tunnel migration produced a
+ * itself. Separate from the announce because the two claims fail separately: the tunnel migration produced a
  * fleet that registered perfectly and served nobody, and nothing in the registry could tell them apart. */
 describe(`POST /sandbox/boot-report`, () => {
     it(`stores the verdict against the sandbox, stamping 'at' server-side`, async () => {
@@ -240,7 +240,7 @@ describe(`POST /sandbox/boot-report`, () => {
 
         const res = await bootReport(prisma, `tok`, { reach: `unreachable`, detail: `its tunnel has not come up.` });
         expect(res.status).toBe(200);
-        // Matched by the token's digest, exactly like the announce — the same secret, the same lookup.
+        // Matched by the token's digest, exactly like the announce: the same secret, the same lookup.
         expect(findUnique).toHaveBeenCalledWith({ where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } });
         expect(update).toHaveBeenCalledExactlyOnceWith({
             where: { id: `s1` },
@@ -255,7 +255,7 @@ describe(`POST /sandbox/boot-report`, () => {
         });
     });
 
-    it(`accepts a bare verdict — the healthy path carries no detail`, async () => {
+    it(`accepts a bare verdict: the healthy path carries no detail`, async () => {
         const update = vi.fn().mockResolvedValue({});
         const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1` }), update } });
         expect((await bootReport(prisma, `tok`, { reach: `reachable` })).status).toBe(200);
@@ -283,10 +283,10 @@ describe(`POST /sandbox/boot-report`, () => {
 // before any Cloudflare call.
 
 /* THE ONE-GOOGLE-SIGN-IN ENDPOINT. The browser mints a Google ID token, signs into the platform with it, and
- * keeps the same token for its sandbox — which is what removed the second Google ask. This holds the only
+ * keeps the same token for its sandbox, which is what removed the second Google ask. This holds the only
  * thing a unit test can hold about it usefully: that the route is MOUNTED and verifying. It was absent
  * entirely until the one-tap plugin was added, and a missing route is indistinguishable from a broken one
- * from the browser's side — both send the user down the redirect fallback, silently, forever. */
+ * from the browser's side: both send the user down the redirect fallback, silently, forever. */
 describe(`POST /api/auth/one-tap/callback`, () => {
     const post = (idToken: string) =>
         createApp(

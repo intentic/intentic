@@ -11,17 +11,17 @@ import { computed, ref } from "vue";
  *   measured           the probes that ran, and how long ago. Probes refresh on a daily-to-weekly TTL, so "clean"
  *                      from last Tuesday is a genuinely different claim from "clean" as of an hour ago, and a
  *                      panel that showed only the verdict would quietly pass off the one as the other.
- *   not measured       no package.json, no lockfile, knip not installed — the probes this repository cannot run.
+ *   not measured       no package.json, no lockfile, knip not installed: the probes this repository cannot run.
  *                      No refresh button, because `available` is re-checked hourly by the runner anyway
  *                      (chores-store's RETRY_MS).
- *   not applicable     the chores whose SUBJECT does not exist here — no Dockerfile to slim, no pipeline to
+ *   not applicable     the chores whose SUBJECT does not exist here: no Dockerfile to slim, no pipeline to
  *                      tighten. Those rows are dropped from the list entirely (verdict.ts), and this is the
  *                      record that they were considered, so "why is there no Docker chore in this repo?" has an
  *                      answer one glance away rather than a support question.
  *
  * A COUNT, THEN THE REASONS ON REQUEST. Both of the "no" halves used to be printed in full, every time: thirteen
  * chores each carrying a sentence explaining itself, wrapping to eight lines of grey text above a list of two
- * rows. It was accurate and nobody read it — and text nobody reads is worse than absent, because it buys the
+ * rows. It was accurate and nobody read it, and text nobody reads is worse than absent, because it buys the
  * silence of the reader rather than their agreement. What the reader actually needs standing is the SIZE of what
  * is missing; the reasons are what they want once, when something surprises them.
  *
@@ -58,7 +58,7 @@ const measured = computed(() =>
                 title: spec.title,
                 measures: spec.measures,
                 /* What this probe has to say for itself: an age when it measured something, and otherwise how it
-                 * broke. Truncated in the strip and given in full on hover — a failure carries the tool's own
+                 * broke. Truncated in the strip and given in full on hover: a failure carries the tool's own
                  * words, which are as long as the tool felt like being, and one of them wrapping across four
                  * lines would push every other measurement off the strip.
                  *
@@ -93,7 +93,7 @@ const unmeasured = computed(() =>
 );
 
 // A not-applicable verdict carries its cause as the headline (verdict.ts), which is the only place it is ever
-// read — and the reason that headline is a bare clause rather than a sentence is this grouping.
+// read, and the reason that headline is a bare clause rather than a sentence is this grouping.
 const ruledOut = computed(() => byCause(inapplicable.map((verdict) => ({ cause: verdict.headline, name: verdict.chore.title.toLowerCase() }))));
 
 // The one line that is always visible, and the only part of the two "no" halves most readers ever need. Counts
@@ -112,7 +112,7 @@ const summary = computed(() => {
 
 <template>
     <!-- A WASH, not an outlined box. It sits between the page title and a column of bordered row groups, and an
-         outline at that position reads as a third panel competing with both — the same call Documentation's
+         outline at that position reads as a third panel competing with both: the same call Documentation's
          strips make, for the same reason. -->
     <div v-if="measured.length > 0 || summary !== ``" class="flex flex-col gap-1.5 rounded-lg bg-content/4 px-3 py-2">
         <div v-if="measured.length > 0" class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -130,7 +130,7 @@ const summary = computed(() => {
                     {{ entry.note }}
                 </span>
                 <!-- The button holds its place while the probe runs rather than disappearing, so the strip does
-                     not reflow under the pointer that just pressed it — and so there is somewhere to look. -->
+                     not reflow under the pointer that just pressed it, and so there is somewhere to look. -->
                 <button
                     type="button"
                     class="shrink-0 cursor-pointer text-subtle hover:text-content disabled:cursor-default disabled:opacity-40"

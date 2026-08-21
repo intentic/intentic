@@ -47,7 +47,7 @@ export interface TurnStream {
 // Prepended to a streamed wake's prompt so the model doesn't ALSO send the reply itself (which would duplicate
 // the streamed message). Provider-neutral: the daemon delivers the assistant text; tools are for other actions.
 const STREAM_NOTE =
-    "Your reply is delivered to the user live as you type it — just answer normally in plain text. Do NOT send it yourself with any tool (no curl/API post of your reply); use provider send tools only to act elsewhere (react, or post to a different channel).";
+    "Your reply is delivered to the user live as you type it: just answer normally in plain text. Do NOT send it yourself with any tool (no curl/API post of your reply); use provider send tools only to act elsewhere (react, or post to a different channel).";
 
 /* THE SPIN-LOOP GUARD. An automation that fails is normal; one that fails EVERY time is misconfigured, and the
  * scheduler will otherwise keep spending a turn's worth of tokens on it on every tick, nightly, hourly, or

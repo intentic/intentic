@@ -15,7 +15,7 @@ describe("referenceTails", () => {
         expect(referenceTails("/history/worktrees/agent-7/_apps/foo.ts", "/work")).toContain("_apps/foo.ts");
     });
 
-    test("never cuts down to a bare filename — one `index.ts` is as good as another", () => {
+    test("never cuts down to a bare filename: one `index.ts` is as good as another", () => {
         expect(referenceTails("a/b/index.ts", "/work").at(-1)).toBe("b/index.ts");
         expect(referenceTails("index.ts", "/work")).toEqual([]);
     });
@@ -28,11 +28,11 @@ describe("referenceTails", () => {
 
 describe("rankRefCandidates", () => {
     test("keeps only matches that end in the tail on a segment boundary", () => {
-        // `mypages/` merely ends with the same characters — the daemon's glob can't tell, so this must.
+        // `mypages/` merely ends with the same characters: the daemon's glob can't tell, so this must.
         expect(rankRefCandidates("pages/Foo.vue", ["app/mypages/Foo.vue", "app/pages/Foo.vue"])).toEqual(["app/pages/Foo.vue"]);
     });
 
-    test("ranks the shallowest match first — the app's file, not a copy in a fixture tree", () => {
+    test("ranks the shallowest match first: the app's file, not a copy in a fixture tree", () => {
         expect(rankRefCandidates("pages/Foo.vue", ["a/b/c/pages/Foo.vue", "a/pages/Foo.vue"])).toEqual(["a/pages/Foo.vue", "a/b/c/pages/Foo.vue"]);
     });
 
@@ -41,7 +41,7 @@ describe("rankRefCandidates", () => {
     });
 });
 
-test("isTestPath: test files, fixture dirs and runner configs — never product code that merely says 'test'", () => {
+test("isTestPath: test files, fixture dirs and runner configs: never product code that merely says 'test'", () => {
     for (const path of [
         `src/agents/land.test.ts`,
         `src/pages/Foo.spec.tsx`,

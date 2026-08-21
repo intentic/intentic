@@ -39,7 +39,7 @@ const call = async (token: string, method: string, path: string, body?: unknown)
     }
     if (response.status === 401 || response.status === 403) {
         throw new CloudCredentialError(
-            `DigitalOcean rejected the token — create a personal access token with write scope (API → Tokens) and paste it again.`,
+            `DigitalOcean rejected the token: create a personal access token with write scope (API → Tokens) and paste it again.`,
         );
     }
     const parsed = errorSchema.safeParse(await response.json().catch(() => undefined));

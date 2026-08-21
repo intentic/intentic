@@ -105,7 +105,7 @@ describe(`desktop handoff`, () => {
     });
 
     // A sign-in that left no refresh token, or an account since unlinked. Both are "we hold nothing", and the
-    // page answers them the same way it always did — by showing Google's button.
+    // page answers them the same way it always did: by showing Google's button.
     it(`says it holds nothing rather than failing when the refresh is refused`, async () => {
         const ctx = context({
             auth: {

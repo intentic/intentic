@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 import { type QuickModelChoice, type QuickModelSource, quickModelKey, resolveQuickModels } from "./quick-model.js";
 
-/* Which models a small automatic helper spends, and in which order. The rule answers two surfaces at once —
- * the daemon walks it, the browser names its head in the settings row — so what these tests pin is that a
+/* Which models a small automatic helper spends, and in which order. The rule answers two surfaces at once:
+ * the daemon walks it, the browser names its head in the settings row, so what these tests pin is that a
  * sandbox's connections alone decide it, with no stored id to go stale, and that there is always a rung
  * underneath the first one whenever the sandbox has another account to reach for. */
 
@@ -14,7 +14,7 @@ const KIMI: QuickModelSource = { provider: `kimi`, ready: true, models: [`kimi-k
 
 const offline = (source: QuickModelSource): QuickModelSource => ({ ...source, ready: false });
 
-// The model that answers when nothing goes wrong — the head of the chain, which is what most of what follows is
+// The model that answers when nothing goes wrong: the head of the chain, which is what most of what follows is
 // about and what every surface naming the spend up front reads.
 const head = (sources: readonly QuickModelSource[], pinned: readonly string[]): QuickModelChoice | undefined =>
     resolveQuickModels(sources, pinned)[0];
@@ -24,12 +24,12 @@ test("reaches for the efficient rung of the one connected provider, never its fl
 });
 
 test("spends the FREE channel over the subscription when both offer the same rung", () => {
-    // Both publish a cheap-tier row, so nothing separates them on capability — and one of them costs the user
+    // Both publish a cheap-tier row, so nothing separates them on capability, and one of them costs the user
     // nothing while the other eats headroom they watch. A background helper should not quietly bill the Claude plan.
     expect(head([CLAUDE, GOOGLE], [])).toEqual({ provider: `gemini`, model: `gemini-3-flash-lite` });
 });
 
-test("puts tier ahead of cost — a free frontier model is still the wrong tool for a commit message", () => {
+test("puts tier ahead of cost: a free frontier model is still the wrong tool for a commit message", () => {
     // Google connected but publishing only its Pro line. Ordering on price first would seat a flagship here,
     // which is the exact outcome the feature exists to avoid.
     const proOnly: QuickModelSource = { provider: `gemini`, ready: true, models: [`gemini-3-pro`] };
@@ -90,7 +90,7 @@ test("skips a connected provider whose catalog has not loaded yet", () => {
     expect(head([unloaded], [])).toBeUndefined();
 });
 
-/* THE CHAIN — what the daemon walks when the model at the top of it refuses. A spent allowance is the ordinary
+/* THE CHAIN: what the daemon walks when the model at the top of it refuses. A spent allowance is the ordinary
  * case, not the exotic one: the account a helper shares with the chat runs out mid-afternoon, and the whole
  * point of the list is that the click still lands on the next rung down. */
 
@@ -111,7 +111,7 @@ test("drops a pin whose provider went away and keeps the rest of the order intac
 
 test("stops at the end of a pinned list rather than reaching for an account the user left out", () => {
     // Google and Kimi are connected and cheaper. The user wrote down one model, so one model is what this may
-    // spend — a pin exists precisely to keep a helper off the accounts it does not name.
+    // spend: a pin exists precisely to keep a helper off the accounts it does not name.
     expect(resolveQuickModels([CLAUDE, GOOGLE, KIMI], [`claude:claude-haiku-4-5`])).toEqual([{ provider: `claude`, model: `claude-haiku-4-5` }]);
 });
 
@@ -122,7 +122,7 @@ test("names each model once, however many times the list repeats it", () => {
     ]);
 });
 
-test("Auto is a ladder too — every connected provider's cheap rung, best first", () => {
+test("Auto is a ladder too, every connected provider's cheap rung, best first", () => {
     expect(resolveQuickModels([CLAUDE, GOOGLE, KIMI], [])).toEqual([
         { provider: `gemini`, model: `gemini-3-flash-lite` },
         { provider: `claude`, model: `claude-haiku-4-5-20251001` },
@@ -135,11 +135,11 @@ test("Auto is a ladder too — every connected provider's cheap rung, best first
  * dropped would print one model's name in the settings row and spend a different account entirely. */
 const OLLAMA: QuickModelSource = { provider: `endpoint/ollama`, ready: true, models: [`qwen3-coder`, `gemma3-27b`] };
 
-test("honours a pin on a configured endpoint — the whole id, not the half before its slash", () => {
+test("honours a pin on a configured endpoint: the whole id, not the half before its slash", () => {
     expect(head([CLAUDE, OLLAMA], [`endpoint/ollama:qwen3-coder`])).toEqual({ provider: `endpoint/ollama`, model: `qwen3-coder` });
     // And it round-trips through the key shape the picker mints, which is where the slash-not-colon rule earns
     // itself: parsePinned splits on the FIRST colon, so an `endpoint:ollama` id would have parsed the provider
-    // as "endpoint" and the model as "ollama:qwen3-coder" — a pin that silently resolves to nothing.
+    // as "endpoint" and the model as "ollama:qwen3-coder": a pin that silently resolves to nothing.
     expect(quickModelKey({ provider: `endpoint/ollama`, model: `qwen3-coder` })).toBe(`endpoint/ollama:qwen3-coder`);
 });
 
@@ -152,7 +152,7 @@ test("leaves Auto to the providers whose price is known, rather than reaching fo
 
 test("still answers from an endpoint when it is the only thing configured", () => {
     // No tier word in either id, so the shared id-derived ordering decides between them exactly as it does for
-    // Kimi above — the point here is that a sandbox whose only model API is its owner's still gets an answer
+    // Kimi above: the point here is that a sandbox whose only model API is its owner's still gets an answer
     // rather than the disabled "nothing connected" button.
     expect(head([offline(CLAUDE), OLLAMA], [])).toEqual({ provider: `endpoint/ollama`, model: `qwen3-coder` });
 });

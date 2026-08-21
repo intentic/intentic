@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import { createBufferedPainter, createStreamingPainter, framePainter, type Painter, type StreamPoster } from "./painter.js";
 
 // One suite for the machine that used to be tested four times, once per connector, against four identical
-// fakes. Slack's tuning (3800/1500ms) stands in for all of them — the constants are parameters now, and the
+// fakes. Slack's tuning (3800/1500ms) stands in for all of them: the constants are parameters now, and the
 // per-connector poster adapters are thin enough that their listeners' own tests cover the wiring.
 const TUNING = { maxChars: 3_800, editIntervalMs: 1_500 };
 
@@ -52,7 +52,7 @@ test("deltas arriving after the rate-limited first paint are edited into the sam
         expect(fake.messages).toEqual(["one"]);
         painter.delta(" two");
         await vi.advanceTimersByTimeAsync(2_000);
-        // Still one message — the reply GROWS rather than spamming the thread.
+        // Still one message: the reply GROWS rather than spamming the thread.
         expect(fake.messages).toEqual(["one two"]);
         expect(fake.posts).toBe(1);
         expect(fake.updates).toBeGreaterThanOrEqual(1);
@@ -129,7 +129,7 @@ test("framePainter routes deltas to one painter per automation and surfaces fail
     paint({ automationId: "a", delta: " more" });
     paint({ automationId: "a", failed: "usage limit reached" });
     paint({ automationId: "a", end: true });
-    // One painter per automation, reused across frames — two automations answering one mention don't share.
+    // One painter per automation, reused across frames: two automations answering one mention don't share.
     expect(made).toEqual(["a", "b"]);
     expect(painters.get("a")).toEqual({ deltas: ["one", " more"], ended: true });
     expect(painters.get("b")).toEqual({ deltas: ["two"], ended: false });

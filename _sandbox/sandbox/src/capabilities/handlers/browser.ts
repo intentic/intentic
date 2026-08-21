@@ -82,7 +82,7 @@ export const browserHandler: CapabilityHandler = {
         const { platform, identity } = config as BrowserConfig;
         const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("browser", platform));
         if (contribution === undefined) {
-            throw new Error(`no browser platform "${platform}" — install the extension that declares it`);
+            throw new Error(`no browser platform "${platform}": install the extension that declares it`);
         }
         /* WHOSE BROWSER THIS ACCOUNT LIVES IN, resolved at add-time for the same reason the URLs are: a card
          * naming an identity that isn't there would otherwise surface later as browser tools over an empty
@@ -90,7 +90,7 @@ export const browserHandler: CapabilityHandler = {
          * which address the signup forms get, a fact the platform pack cannot know. */
         const born = identity === undefined ? undefined : await ctx.capabilities.get(identity);
         if (identity !== undefined && born?.kind !== "identity") {
-            throw new Error(`no identity "${identity}" — add the identity first, or leave the field empty for a standalone account`);
+            throw new Error(`no identity "${identity}": add the identity first, or leave the field empty for a standalone account`);
         }
         /* WHERE THIS ACCOUNT'S BROWSER OPENS, settled HERE rather than when the login window is opened. A card
          * pins it or the form answers it, and "neither" is a real possibility for the generic session, so it is
@@ -98,14 +98,14 @@ export const browserHandler: CapabilityHandler = {
          * as a sign-in window that comes up blank. */
         const urls = browserUrls(contribution.spec, config as Record<string, string>);
         if (urls === undefined) {
-            throw new Error(`"${platform}" needs a page to open — fill in the site's address`);
+            throw new Error(`"${platform}" needs a page to open: fill in the site's address`);
         }
         const site = siteOf(urls.homeUrl) ?? siteOf(urls.loginUrl);
         if (site === undefined) {
-            throw new Error(`"${urls.homeUrl}" is not a web address — include https:// and the site's host`);
+            throw new Error(`"${urls.homeUrl}" is not a web address: include https:// and the site's host`);
         }
         if (!("skill" in contribution.spec)) {
-            throw new Error(`the extension declaring "${platform}" has no readable skill file — reinstall it`);
+            throw new Error(`the extension declaring "${platform}" has no readable skill file: reinstall it`);
         }
         // The route upserts AFTER apply, so this entry rides in as the delta. The converge failing to render
         // this group's skill afterwards is the same rotted-install fact the spec check above fronts.
@@ -114,8 +114,8 @@ export const browserHandler: CapabilityHandler = {
             kind: "log",
             message:
                 born === undefined
-                    ? `Connected "${id}" on ${site}. Rebuild the sandbox if prompted, then open "Log in" to sign in — or ask the agent to sign in (or sign up) for you. Once connected, the agent acts as you there.`
-                    : `Filed "${id}" on ${site} under the identity "${born.id}" — it shares that identity's browser. Ask the agent to sign in (or sign up) through it, or open "Log in" to do it yourself.`,
+                    ? `Connected "${id}" on ${site}. Rebuild the sandbox if prompted, then open "Log in" to sign in, or ask the agent to sign in (or sign up) for you. Once connected, the agent acts as you there.`
+                    : `Filed "${id}" on ${site} under the identity "${born.id}", it shares that identity's browser. Ask the agent to sign in (or sign up) through it, or open "Log in" to do it yourself.`,
         };
     },
     // Two distinct pending states. The web UI (Capabilities.vue) routes the rebuild one to the Environment card
@@ -130,7 +130,7 @@ export const browserHandler: CapabilityHandler = {
             return { state: "pending", detail: "rebuild the sandbox to finish browser setup (Environment card)" };
         }
         if (!hasSession(ctx.workspace.root, id)) {
-            return { state: "pending", detail: "log in to connect your account — or ask the agent to sign in for you" };
+            return { state: "pending", detail: "log in to connect your account, or ask the agent to sign in for you" };
         }
         return { state: "active" };
     },

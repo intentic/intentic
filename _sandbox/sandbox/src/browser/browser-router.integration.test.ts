@@ -7,16 +7,16 @@ import { afterEach, expect, test } from "vitest";
 
 /* The router's whole contract, driven over real stdio against real child processes:
  *
- *   1. the handshake and the tool list are answered WITHOUT a backend — the entire point, since the harness
- *      asks both of every server at startup whether or not the turn ever browses — and every listed tool
+ *   1. the handshake and the tool list are answered WITHOUT a backend: the entire point, since the harness
+ *      asks both of every server at startup whether or not the turn ever browses, and every listed tool
  *      carries the injected `account` parameter;
  *   2. a tool call resolves `account` (account id or identity id) to the profile owner, spawns that owner's
  *      backend, strips the parameter, and pipes the answer back; two owners get two backends;
- *   3. an id outside the manifest is refused with the granted set named — the persona enforcement seam;
+ *   3. an id outside the manifest is refused with the granted set named: the persona enforcement seam;
  *   4. stdin closing (the turn ending) kills the backends.
  *
  * The backend is a canary script standing in for @playwright/mcp: same wire protocol, and it writes a marker
- * file on spawn — the file IS the assertion that lazy means lazy. It echoes a call's arguments back, which is
+ * file on spawn: the file IS the assertion that lazy means lazy. It echoes a call's arguments back, which is
  * how the stripping of `account` is asserted from the outside. */
 
 const ROUTER = fileURLToPath(new URL("../../bin/browser-router.mjs", import.meta.url));
@@ -148,7 +148,7 @@ test("handshake and tools/list cost no backend, and every tool gains the require
     expect(await exists(harness.markers["identity-1"] as string)).toBe(false);
     expect(await exists(harness.markers["standalone"] as string)).toBe(false);
     // …but the schema had to come from somewhere: the probe ran once and its answer is cached UNMUTATED for
-    // every later router of this version — the account parameter is injected on the way out, not into the cache.
+    // every later router of this version: the account parameter is injected on the way out, not into the cache.
     expect(JSON.parse(await readFile(harness.schemaCachePath, "utf8"))).toEqual([
         { name: "browser_probe", description: "canary tool", inputSchema: { type: "object", properties: {} } },
     ]);
@@ -181,7 +181,7 @@ test("a call routes by account to the owner's backend with the parameter strippe
     expect(await exists(harness.markers["standalone"] as string)).toBe(true);
 });
 
-test("an account outside the manifest is refused with the granted set named — and no backend pays for it", async () => {
+test("an account outside the manifest is refused with the granted set named, and no backend pays for it", async () => {
     const harness = await startRouter();
     await handshake(harness);
     const denied = await rpc(harness.router, {
@@ -207,7 +207,7 @@ test("an account outside the manifest is refused with the granted set named — 
     expect(await exists(harness.markers["standalone"] as string)).toBe(false);
 });
 
-test("the turn ending — stdin closing — kills the backends", async () => {
+test("the turn ending, stdin closing: kills the backends", async () => {
     const harness = await startRouter();
     await handshake(harness);
     await rpc(harness.router, {
@@ -221,11 +221,11 @@ test("the turn ending — stdin closing — kills the backends", async () => {
     for (let waited = 0; (await exists(harness.markers["identity-1"] as string)) && waited < 5_000; waited += 50) {
         await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    // SIGTERM — the canary unlinks its marker on the way out.
+    // SIGTERM: the canary unlinks its marker on the way out.
     expect(await exists(harness.markers["identity-1"] as string)).toBe(false);
 });
 
-test("a second turn's router answers tools/list straight from the cache — no probe, no backend", async () => {
+test("a second turn's router answers tools/list straight from the cache: no probe, no backend", async () => {
     const first = await startRouter();
     await handshake(first);
     await rpc(first.router, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });

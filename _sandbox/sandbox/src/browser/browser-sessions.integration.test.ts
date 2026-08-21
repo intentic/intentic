@@ -22,14 +22,14 @@ test("a browser tool's server and session name are derived the same way everywhe
     expect(browserServerOfTool("mcp__hashline__hashline_edit")).toBeUndefined();
     expect(browserServerOfTool("Bash")).toBeUndefined();
 
-    // Eight characters of the SDK session id — the same slice agentSessionName takes, so a conversation's
+    // Eight characters of the SDK session id: the same slice agentSessionName takes, so a conversation's
     // shell and its browser are visibly the pair they are.
     expect(browserSessionName("abcd1234-5678-90ab-cdef-1234567890ab")).toBe("browser-abcd1234");
     expect(browserSessionName("!!!")).toBeUndefined();
 });
 
 /* THE SEAM NOTHING ELSE COVERS: that the browser the agent drives and the browser the daemon watches are the
- * same browser. Every part of it is real — the MCP spec this daemon builds, a Chromium it launches itself, the
+ * same browser. Every part of it is real: the MCP spec this daemon builds, a Chromium it launches itself, the
  * PreToolUse hook the SDK would fire, and a CDP attach over the debugging port that spec asked for. Mocking any
  * of it would only prove the mock.
  *
@@ -38,7 +38,7 @@ test("a browser tool's server and session name are derived the same way everywhe
 const SESSION_ID = "e2e11111-2222";
 const SESSION = "browser-e2e11111";
 
-/* Wait for something Chromium does on its own timetable — a paint lands, a tab appears, a frame arrives —
+/* Wait for something Chromium does on its own timetable: a paint lands, a tab appears, a frame arrives:
  * rather than sleeping a guess past it. Every wait below used to be a fixed sleep and the screencast's was the
  * one that lost: the high-resolution still is DEBOUNCED 400ms off the LAST motion frame, and capturing it makes
  * the page repaint, so the stream self-sustains on a ~550ms cycle with the first webp ~600ms in. That fits
@@ -104,7 +104,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         const input = { hook_event_name: "PreToolUse", tool_name: "mcp__web__browser_navigate", session_id: SESSION_ID, tool_input: { url } };
         await hook?.(input as never, "t1", { signal: new AbortController().signal });
 
-        // The session exists from the hook alone — before Chromium has painted anything — which is what puts it
+        // The session exists from the hook alone: before Chromium has painted anything, which is what puts it
         // on the rail at the start of a slow first navigation rather than after it.
         expect(listBrowserSessions().map((session) => session.name)).toContain(SESSION);
 
@@ -126,12 +126,12 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         // The page's own account of itself, which is what the session's pill says.
         expect(listed?.label).toBe("Probe Page");
         expect(listed?.server).toBe("web");
-        // Motion frames while it paints, then — 400ms after it settles — the high-resolution still that is what
+        // Motion frames while it paints, then (400ms after it settles) the high-resolution still that is what
         // anyone actually reads. A stream that only ever sent jpeg would mean the settle capture never fired.
         expect(formats).toContain("jpeg");
         expect(formats).toContain("webp");
 
-        // ONE page so far, and it is the active one — the tab strip's first tab.
+        // ONE page so far, and it is the active one: the tab strip's first tab.
         expect(listed?.pages).toHaveLength(1);
         const first = listed?.pages[0];
         expect(first?.url).toBe(url);
@@ -139,7 +139,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         expect(first?.active).toBe(true);
 
         // A second tab, opened the way the agent opens one. Both list, the NEW one is active (it is what the
-        // agent just drove), and the ids are distinct — which is what lets the strip tell them apart across a
+        // agent just drove), and the ids are distinct, which is what lets the strip tell them apart across a
         // relist even though they are the same url.
         const opened = await call("tools/call", { name: "browser_tabs", arguments: { action: "new" } });
         expect(opened.result?.isError ?? false).toBe(false);
@@ -149,7 +149,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         expect(new Set(twoTabs?.pages.map((page) => page.id)).size).toBe(twoTabs?.pages.length);
         expect(twoTabs?.pages.filter((page) => page.active)).toHaveLength(1);
 
-        // Every listed page can be bound — that round trip (list an id → get a Page back) is the whole
+        // Every listed page can be bound: that round trip (list an id → get a Page back) is the whole
         // contract the view's tab strip rests on.
         for (const page of twoTabs?.pages ?? []) {
             expect(browserSessionPage(SESSION, page.id)).toBeDefined();
@@ -157,7 +157,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         expect(browserSessionPage(SESSION, "p-nope")).toBeUndefined();
 
         /* PINNING: once the user picks a tab, a tab the agent opens next must not steal the picture. Without
-         * this the strip would be a lie — you would click a page, the agent would open another, and you would
+         * this the strip would be a lie: you would click a page, the agent would open another, and you would
          * silently be watching something you never chose. */
         const pinTarget = browserSessionPage(SESSION, twoTabs?.pages[0]?.id ?? "");
         expect(pinTarget).toBeDefined();
@@ -167,7 +167,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
             const boundToFirst = pinnedCast.attached();
             const third = await call("tools/call", { name: "browser_tabs", arguments: { action: "new" } });
             expect(third.result?.isError ?? false).toBe(false);
-            // Wait for the tab to LAND rather than for a guess at how long that takes — the pin has proved
+            // Wait for the tab to LAND rather than for a guess at how long that takes: the pin has proved
             // nothing until there is a page the stream could have been stolen by.
             await settle(() => pagesOf() >= 3);
             expect(pagesOf()).toBeGreaterThanOrEqual(3);
@@ -194,7 +194,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
             // fewer than none is not a thing.
             await new Promise((resolve) => setTimeout(resolve, 1000));
             expect(whilePaused).toBe(0);
-            // And one frame away from coming back — no reconnect, no rebind.
+            // And one frame away from coming back: no reconnect, no rebind.
             await pausedCast.setPaused(false);
             await settle(() => whilePaused > 0);
             expect(whilePaused).toBeGreaterThan(0);
@@ -202,7 +202,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
             await pausedCast.stop();
         }
 
-        // The kill route's half: closing the browser ends the session, and the row stays readable afterwards —
+        // The kill route's half: closing the browser ends the session, and the row stays readable afterwards:
         // including where the agent went, which is the point of keeping a finished session listable at all.
         await closeBrowserSession(SESSION);
         const dead = listBrowserSessions().find((session) => session.name === SESSION);
@@ -210,7 +210,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         expect(dead?.pages.length).toBeGreaterThanOrEqual(2);
         expect(dead?.finishedAt).toBeGreaterThan(0);
         /* AND IT STILL SAYS WHERE IT ENDED. A finished session labels off the last page the agent DROVE, not off
-         * the live active slot — that slot is walked back by every closing page, and Chromium going away closes
+         * the live active slot: that slot is walked back by every closing page, and Chromium going away closes
          * them all, so reading it here left every finished pill saying "web" at exactly the moment its label was
          * the only thing left to tell two records apart. */
         expect(dead?.label).toBe("Probe Page");

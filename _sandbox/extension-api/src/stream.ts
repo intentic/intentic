@@ -23,7 +23,7 @@ async function* sseFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<stri
             const result = await Promise.race([reader.read(), idle]);
             clearTimeout(timer!);
             if (result === "idle") {
-                return; // daemon went silent past the heartbeat window — end rather than hang
+                return; // daemon went silent past the heartbeat window: end rather than hang
             }
             const { done, value } = result;
             if (done) {

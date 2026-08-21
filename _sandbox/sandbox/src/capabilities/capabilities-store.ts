@@ -63,7 +63,7 @@ export const fileCapabilitiesStore = (path: string, onInvalid?: (id: string, rea
                 const id = rawId(entry) ?? "<unnamed>";
                 const reason = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
                 onInvalid?.(id, reason);
-                report({ kind: "invalidEntry", detail: `${id} — ${reason}` });
+                report({ kind: "invalidEntry", detail: `${id}, ${reason}` });
             }
             return raw;
         },

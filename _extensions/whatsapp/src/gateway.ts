@@ -126,7 +126,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
             deliver: async (channelId, text) => {
                 const connection = firstReady();
                 if (connection === undefined) {
-                    throw new GatewayRefusal("WhatsApp is not connected — pair the device from the capability card first.");
+                    throw new GatewayRefusal("WhatsApp is not connected: pair the device from the capability card first.");
                 }
                 for (let base = 0; base < text.length; base += WHATSAPP_MAX) {
                     await connection.sendText(chatJidOf(channelId), text.slice(base, base + WHATSAPP_MAX));
@@ -139,7 +139,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                 if (req.method === "GET" && path === "/chats") {
                     const connection = firstReady();
                     if (connection === undefined) {
-                        return { status: 503, body: "WhatsApp is not connected — pair the device from the capability card first." };
+                        return { status: 503, body: "WhatsApp is not connected, pair the device from the capability card first." };
                     }
                     const chats = await connection.listChats();
                     return {
@@ -156,7 +156,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                     }
                     const connection = firstReady();
                     if (connection === undefined) {
-                        return { status: 503, body: "WhatsApp is not connected — pair the device from the capability card first." };
+                        return { status: 503, body: "WhatsApp is not connected, pair the device from the capability card first." };
                     }
                     await connection.sendText(chatJidOf(chat), text);
                     return { body: `Sent to ${chatJidOf(chat)}.` };
@@ -168,7 +168,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                     }
                     const connection = firstReady();
                     if (connection === undefined) {
-                        return { status: 503, body: "WhatsApp is not connected — pair the device from the capability card first." };
+                        return { status: 503, body: "WhatsApp is not connected, pair the device from the capability card first." };
                     }
                     await connection.sendFile(chatJidOf(chat), filePath);
                     return { body: `Sent ${filePath} to ${chatJidOf(chat)}.` };
@@ -184,7 +184,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                             return { body: written };
                         }
                     }
-                    return { status: 404, body: "No downloadable media under that id — only recently received messages can be fetched." };
+                    return { status: 404, body: "No downloadable media under that id, only recently received messages can be fetched." };
                 }
                 return undefined;
             },

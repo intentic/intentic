@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe(`fly`, () => {
-    it(`creates the app on its OWN network — hosted sandboxes must not share the org's 6PN`, async () => {
+    it(`creates the app on its OWN network: hosted sandboxes must not share the org's 6PN`, async () => {
         const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `app1` }) }]);
         await createApp(`tok`, `intentic`, `intentic-sbx-abc`);
         expect(calls[0]?.body).toEqual({ app_name: `intentic-sbx-abc`, org_slug: `intentic`, network: `intentic-sbx-abc` });
@@ -73,7 +73,7 @@ describe(`fly`, () => {
         expect(calls).toHaveLength(2);
     });
 
-    it(`updates a stopped machine without launching it — callers own the one explicit start`, async () => {
+    it(`updates a stopped machine without launching it: callers own the one explicit start`, async () => {
         const config = flyMachineConfig({
             name: `app`,
             image: `ghcr.io/intentic/sandbox:stable`,

@@ -6,19 +6,19 @@ import { workspaceMapNote, workspaceMapOf } from "./workspace-map.js";
 
 /* PROPERTIES WORTH PINNING, and each is one the map is wrong in a way nobody would notice without a test.
  *
- * That the STARTING POSITION decides what is mapped — the whole feature is "answer for where this run begins",
+ * That the STARTING POSITION decides what is mapped: the whole feature is "answer for where this run begins",
  * and a regression to "always map the root" produces a note that is still plausible, still well-formed, and
  * answers a question nobody asked.
  *
  * That the shape rules are SHAPE rules. Areas, shelves and purposes are derived from what a directory has, not
  * from names this repository happens to use, and the only way that stays true is to assert it against layouts
- * this repository does not have — a Cargo workspace, a Python project, a repo whose only documentation is a
+ * this repository does not have: a Cargo workspace, a Python project, a repo whose only documentation is a
  * README with a badge row at the top.
  *
  * That a purpose is never INVENTED. An empty line is a correct answer and a confident wrong one is not, so the
  * no-manifest-no-README case is asserted to be empty rather than to be anything.
  *
- * And that the budget SHEDS rather than truncates, saying what it dropped — a list that quietly stops reads as
+ * And that the budget SHEDS rather than truncates, saying what it dropped: a list that quietly stops reads as
  * a complete list, which is the one failure mode that makes a map worse than no map. */
 
 const dirs: string[] = [];
@@ -66,7 +66,7 @@ test("the map is rooted at the project the run starts in, not at the workspace",
         "shop/catalog/a.ts": "",
     });
 
-    // Standing two levels inside `shop` — the project is shop, and the workspace's other entries are named
+    // Standing two levels inside `shop`: the project is shop, and the workspace's other entries are named
     // rather than mapped.
     const map = workspaceMapOf({ root, cwd: join(root, "shop/checkout") });
 
@@ -120,7 +120,7 @@ test("a shelf among real areas stays one line, and opens only when the run is in
     const shut = workspaceMapOf({ root: outside, cwd: outside });
     const open = workspaceMapOf({ root: inside, cwd: join(inside, "packages/web") });
 
-    // Either way the top level is the top level — the shelf never dissolves into its contents.
+    // Either way the top level is the top level: the shelf never dissolves into its contents.
     expect(named(shut)).toEqual(["docs", "packages", "infra"]);
     expect(named(open)).toEqual(["docs", "packages", "infra"]);
     // The count is known whether or not the packages are listed; the listing is what the run's position buys.
@@ -148,7 +148,7 @@ test("a purpose is read from whatever manifest the ecosystem uses, and a README 
         "read-thing/README.md":
             "# read-thing\n\n[![build](https://img.shields.io/x.svg)](https://ci.example)\n\n> a pull quote\n\nA documented thing.\n",
         "read-thing/a.md": "",
-        // Nothing to say — and an empty purpose is the answer, not a guess.
+        // Nothing to say, and an empty purpose is the answer, not a guess.
         "quiet-thing/a.txt": "",
     });
 
@@ -176,7 +176,7 @@ test("build output, dependencies and the workspace's reserved directories are no
         "public/report.html": "",
     });
 
-    // Sorted here because these two are the same size and the tie-break is alphabetical — which is a detail of
+    // Sorted here because these two are the same size and the tie-break is alphabetical, which is a detail of
     // the ranking, not of what counts as an area.
     expect(named(workspaceMapOf({ root, cwd: root })).toSorted()).toEqual(["lib", "src"]);
 });
@@ -206,7 +206,7 @@ test("the note holds its budget by shedding detail, and says how much it shed", 
 
     expect(note).toBeDefined();
     expect(note?.length).toBeLessThanOrEqual(2_800);
-    // What was dropped is counted out loud — the list must never merely stop.
+    // What was dropped is counted out loud: the list must never merely stop.
     expect(note).toMatch(/not listed|and \d+ more/);
 });
 

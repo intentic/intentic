@@ -91,7 +91,7 @@ describe(`the hosted hour meter`, () => {
         });
 
         /* A running machine's stretch is real but unfinished. Billing it now would either double-count it at
-         * the next settle or need a second stamp to remember it had not — so it is left open, and the daily
+         * the next settle or need a second stamp to remember it had not, so it is left open, and the daily
          * sweep closes it once the box has actually stopped. */
         it(`leaves a running machine's stretch open and bills nothing`, async () => {
             stubMachine(`started`);
@@ -139,7 +139,7 @@ describe(`the hosted hour meter`, () => {
         });
 
         // A sub-minute stretch rounds to nothing, and writing a zero-minute row would be a row that says
-        // nothing happened. The stretch still closes — that is what stops it being counted twice later.
+        // nothing happened. The stretch still closes: that is what stops it being counted twice later.
         it(`writes no row for a stretch too short to round to a minute, but still closes it`, async () => {
             stubMachine(`stopped`, new Date().toISOString());
             const prisma = prismaWith({});

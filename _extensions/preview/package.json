@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-preview",
     "version": "1.0.0",
-    "description": "Preview — a repo's dev server in a live iframe, as a first-party intentic extension",
+    "description": "Preview, a repo's dev server in a live iframe, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-telegram",
     "version": "1.0.0",
-    "description": "Telegram — the connected bot as an agent tool, plus the long-polling gateway as a baked extension process",
+    "description": "Telegram, the connected bot as an agent tool, plus the long-polling gateway as a baked extension process",
     "license": "MIT",
     "private": true,
     "type": "module",

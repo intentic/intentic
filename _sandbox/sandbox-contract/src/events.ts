@@ -737,7 +737,7 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                  * is, so nothing is re-run and nothing asks the user to reconnect, the one recovery that looks
                  * plausible and is guaranteed to waste their time. */
                 "claude-not-entitled",
-                // The model provider itself failed transiently — 500/502/503, a 529 at capacity, a dropped
+                // The model provider itself failed transiently: 500/502/503, a 529 at capacity, a dropped
                 // socket, and the harness's own in-turn retries did not outlast it. Nothing about the workspace
                 // or the request is wrong, so the daemon remembers the turn and re-runs it on an escalating
                 // backoff (provider-health.ts): the frame is a notice about a turn that is coming back, and
@@ -813,7 +813,7 @@ export type AttachFrame = z.infer<typeof AttachFrameSchema>;
 // and telling the model to "continue from that point instead of starting over" about words it has never seen
 // is how a resume reads as the user contradicting themselves.
 const REPEATED =
-    "The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.";
+    "The interrupted request is repeated below, where part of it was already completed in this session, continue from that point instead of starting over.";
 export const RESUME_NOTES = {
     auth: `The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically. ${REPEATED}`,
     outage: `The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically. ${REPEATED}`,
@@ -822,7 +822,7 @@ export const RESUME_NOTES = {
     // instead, and this is the turn their answer starts (turn-resume.ts). What rides below the note is the
     // answer itself, so the model picks the session back up at exactly the decision it had handed over.
     answered:
-        "The sandbox restarted while this conversation was waiting for the user to respond; it is back, and their response follows below — continue from where the session left off.",
+        "The sandbox restarted while this conversation was waiting for the user to respond; it is back, and their response follows below: continue from where the session left off.",
 } as const;
 
 // The prompt a resume actually sends: the note (each carries its own account of what the words below are),
@@ -860,9 +860,9 @@ export type ResumeReason = keyof typeof RESUME_NOTES;
 export type ResumeDisclosure = { readonly kind: "notice"; readonly text: string } | { readonly kind: "note"; readonly note: TurnNote };
 
 const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
-    auth: { kind: "notice", text: "Claude sign-in renewed — this turn picked up where it left off." },
-    outage: { kind: "notice", text: "The model provider came back — this turn picked up where it left off." },
-    restart: { kind: "notice", text: "The sandbox came back — this turn picked up where it left off." },
+    auth: { kind: "notice", text: "Claude sign-in renewed, this turn picked up where it left off." },
+    outage: { kind: "notice", text: "The model provider came back, this turn picked up where it left off." },
+    restart: { kind: "notice", text: "The sandbox came back, this turn picked up where it left off." },
     answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
 };
 

@@ -10,7 +10,7 @@ import { addressPoolOf, isPrivileged, withEngineSettings } from "./docker.js";
 test("the fragment carries the privileged directive plus the engine pack when the base image lacks it", async () => {
     const fragment = (await registry.docker.fragment?.({})) ?? "";
     expect(fragment).toContain("# intentic:runtime --privileged");
-    // The engine half is the docker pack, and WHETHER it rides depends on the image the suite runs in — a
+    // The engine half is the docker pack, and WHETHER it rides depends on the image the suite runs in: a
     // core image (or a dev checkout) composes the install, a standard image (stamped base) yields the
     // directive alone, a cache-hit rebuild. Both are the contract, so the install is pinned against the
     // pack's own content and its presence against the stamp, rather than against wherever this happens to run.
@@ -22,7 +22,7 @@ test("the fragment carries the privileged directive plus the engine pack when th
 /* The gpu option's fragment has to satisfy BOTH layers or the option is a lie: the directive gets the devices
  * as far as this container, and the toolkit registers the nvidia runtime with the dockerd running INSIDE it.
  * With only the first, the agent's `docker compose up` still dies on `could not select device driver "nvidia"`
- * in a container that can see the GPU — which is the exact failure this whole option exists to end. */
+ * in a container that can see the GPU, which is the exact failure this whole option exists to end. */
 test("the gpu option adds the passthrough directive AND the toolkit the nested engine needs", async () => {
     const fragment = (await registry.docker.fragment?.({ gpu: "on" })) ?? "";
     expect(fragment).toContain("# intentic:runtime --privileged");
@@ -39,7 +39,7 @@ test("gpu off leaves no trace in the fragment", async () => {
     }
 });
 
-// The echo is what the browser may see of a config — and what re-opening the card pre-fills its controls from.
+// The echo is what the browser may see of a config, and what re-opening the card pre-fills its controls from.
 test("the echo carries every option, so the card opens on what the user actually set", () => {
     expect(registry.docker.echo({ gpu: "on", registryMirror: "https://mirror.example" }, new Map())).toEqual({
         gpu: true,
@@ -54,14 +54,14 @@ test("the echo carries every option, so the card opens on what the user actually
  * option that leaked into the fragment would change the overlay's hash and so demand an owner-approved rebuild
  * for a value dockerd rereads every time it starts. This test is the guard on that; the daemon.json half is
  * `withEngineSettings` below. */
-test("engine options never touch the fragment — only the image family costs a rebuild", async () => {
+test("engine options never touch the fragment: only the image family costs a rebuild", async () => {
     const engine = { registryMirror: "https://mirror.example", insecureRegistries: "registry.lan:5000", addressPool: "10.201.0.0/16" };
     expect(await registry.docker.fragment?.(engine)).toBe(await registry.docker.fragment?.({}));
 });
 
 /* MERGED, never written over: the GPU fragment's `nvidia-ctk runtime configure` writes its runtime into this
  * same file at build time, so a wholesale write would un-register the nvidia runtime the first time somebody
- * set a registry mirror — turning the GPU option off from the inside, with no diff and no message. */
+ * set a registry mirror: turning the GPU option off from the inside, with no diff and no message. */
 test("engine settings merge into daemon.json and leave what they don't own alone", () => {
     const existing = { runtimes: { nvidia: { path: "nvidia-container-runtime" } }, "log-level": "warn" };
     const merged = withEngineSettings(existing, {
@@ -72,7 +72,7 @@ test("engine settings merge into daemon.json and leave what they don't own alone
     expect(merged["runtimes"]).toEqual(existing.runtimes);
     expect(merged["log-level"]).toBe("warn");
     expect(merged["registry-mirrors"]).toEqual(["https://mirror.example"]);
-    // One field, pasted as people paste lists — commas and whitespace both separate.
+    // One field, pasted as people paste lists: commas and whitespace both separate.
     expect(merged["insecure-registries"]).toEqual(["registry.lan:5000", "other.lan:5000"]);
     expect(merged["default-address-pools"]).toEqual([{ base: "10.201.0.0/16", size: 24 }]);
 });
@@ -84,10 +84,10 @@ test("clearing an engine option deletes its key rather than leaving the old valu
     expect(withEngineSettings(withSettings, {})).toEqual({});
 });
 
-/* An address pool that dockerd would reject takes the engine down at start — from a field whose whole purpose
+/* An address pool that dockerd would reject takes the engine down at start: from a field whose whole purpose
  * is fixing a network. Anything that isn't a CIDR is ignored instead, and a pool declared smaller than /24
  * carves at its own prefix rather than asking for the impossible. */
-test("the address pool is parsed defensively — junk is ignored, small pools carve at their own prefix", () => {
+test("the address pool is parsed defensively: junk is ignored, small pools carve at their own prefix", () => {
     expect(addressPoolOf("10.201.0.0/16")).toEqual({ base: "10.201.0.0/16", size: 24 });
     expect(addressPoolOf("192.168.16.0/26")).toEqual({ base: "192.168.16.0/26", size: 26 });
     for (const junk of ["10.201.0.0", "not-a-cidr", "10.201.0.0/33", "999.1.1.1/16", "", undefined]) {
@@ -95,7 +95,7 @@ test("the address pool is parsed defensively — junk is ignored, small pools ca
     }
 });
 
-test("docker cannot be removed — de-privileging a sandbox with live engine state is not a silent toggle", () => {
+test("docker cannot be removed: de-privileging a sandbox with live engine state is not a silent toggle", () => {
     expect(registry.docker.remove).toBeUndefined();
 });
 
@@ -108,7 +108,7 @@ test("isPrivileged reads CAP_SYS_MODULE (bit 16) out of CapEff", () => {
     expect(isPrivileged("CapEff:\t00000000a82c25fb\n")).toBe(false);
     // Docker's default unprivileged cap set.
     expect(isPrivileged("CapEff:\t00000000a80425fb\n")).toBe(false);
-    // The vpn capability's grant — NET_ADMIN (bit 12) on top of the sandbox set — is still not privileged.
+    // The vpn capability's grant (NET_ADMIN (bit 12) on top of the sandbox set) is still not privileged.
     expect(isPrivileged("CapEff:\t00000000a82c35fb\n")).toBe(false);
     // A plain user process / unreadable status.
     expect(isPrivileged("CapEff:\t0000000000000000\n")).toBe(false);

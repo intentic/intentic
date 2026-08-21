@@ -194,7 +194,7 @@ export const askQuickModel = async (
 ): Promise<QuickModelAnswer> => {
     const chain = resolveQuickModels(await quickModelSources(services), (await services.sandboxSettings.get()).quickModel);
     if (chain.length === 0) {
-        throw new Error(`No AI account is connected to this sandbox — connect one in Sandbox ▸ Agent first.`);
+        throw new Error(`No AI account is connected to this sandbox: connect one in Sandbox ▸ Agent first.`);
     }
     /* The walk as it stands, re-told whole after every beat. Wrapped so a listener that throws is the
      * listener's problem: this function's job is the answer, and the report may never cost the user the

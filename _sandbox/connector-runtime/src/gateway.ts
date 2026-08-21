@@ -157,7 +157,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
     const missing =
         (name: string): (() => void) =>
         () =>
-            log.error({ name }, "missing required env — the gateway can't start");
+            log.error({ name }, "missing required env: the gateway can't start");
     const daemonBase = requireEnv("INTENTIC_DAEMON", missing("INTENTIC_DAEMON"));
     const panelToken = requireEnv("INTENTIC_PANEL_TOKEN", missing("INTENTIC_PANEL_TOKEN"));
     const port = Number(requireEnv("PORT", missing("PORT")));

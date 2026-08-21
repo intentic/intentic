@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-whatsapp",
     "version": "1.0.0",
-    "description": "WhatsApp — a linked-device connection as an agent tool, plus the multi-device gateway as a baked extension process",
+    "description": "WhatsApp, a linked-device connection as an agent tool, plus the multi-device gateway as a baked extension process",
     "license": "MIT",
     "private": true,
     "type": "module",

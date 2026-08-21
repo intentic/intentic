@@ -85,7 +85,7 @@ const renderListing = (listing: {
     readonly sampleRequest: string;
 }): string =>
     [
-        `${listing.slug} — ${listing.name} (${listing.publisher})${listing.probation ? ` [new]` : ``}`,
+        `${listing.slug}, ${listing.name} (${listing.publisher})${listing.probation ? ` [new]` : ``}`,
         `  ${listing.description}`,
         `  ${listing.creditsPerRun} credits per run`,
         listing.sampleRequest !== `{}` ? `  example request: ${listing.sampleRequest}` : undefined,
@@ -104,10 +104,10 @@ const executeRun = async (deps: ToolDeps, ownerId: string, slug: string, body: s
     if (run.kind === `refused`) {
         const { json } = refusalResponse(run.refusal);
         const error = (json as { error?: { message?: string } | string }).error;
-        return say(typeof error === `string` ? error : (error?.message ?? `That run was refused — nothing was charged.`), true);
+        return say(typeof error === `string` ? error : (error?.message ?? `That run was refused, nothing was charged.`), true);
     }
     if (run.kind === `failed`) {
-        return say(`${run.service.name} did not answer — nothing was charged. Please try again shortly.`, true);
+        return say(`${run.service.name} did not answer: nothing was charged. Please try again shortly.`, true);
     }
     if (run.kind === `answered`) {
         // A provider's own 4xx: a complete answer, CHARGED, relayed verbatim, "your query was malformed" is
@@ -150,7 +150,7 @@ const executeRun = async (deps: ToolDeps, ownerId: string, slug: string, body: s
     // Always settled, even on a throw: not settling would leave a charge with no ledger entry.
     await run.settle(served);
     if (!served || result === undefined) {
-        return say(`${run.service.name} did not finish its answer — nothing was charged. Please try again shortly.`, true);
+        return say(`${run.service.name} did not finish its answer: nothing was charged. Please try again shortly.`, true);
     }
     return say(`${result}\n\n— charged ${run.credits} credits, ${run.remaining} left today.`);
 };
@@ -164,7 +164,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
             title: `List premium services`,
             description:
                 `What the intentic services catalog lists, what each run costs in membership credits, and how many are ` +
-                `left today. Free to call, spends nothing. Read this before services_run — the slug, the price and the ` +
+                `left today. Free to call, spends nothing. Read this before services_run: the slug, the price and the ` +
                 `provider's own example request all come from here.`,
             inputSchema: {},
         },
@@ -172,7 +172,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
             const catalog = await readServiceCatalog(prisma, config, ownerId, deps.now());
             if (catalog.services.length === 0) {
                 return say(
-                    `No premium services are listed on this platform yet. Carry on with your ordinary tools — and if a paid ` +
+                    `No premium services are listed on this platform yet. Carry on with your ordinary tools, and if a paid ` +
                         `service plausibly could have answered, file one line with services_wanted so providers can see the demand.`,
                 );
             }
@@ -204,7 +204,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
             const catalog = await readServiceCatalog(prisma, config, ownerId, at);
             const listing = catalog.services.find((entry) => entry.slug === slug);
             if (listing === undefined) {
-                return say(`No service is listed as "${slug}" — services_list names what exists.`, true);
+                return say(`No service is listed as "${slug}": services_list names what exists.`, true);
             }
             /* THE MEMBERSHIP DOOR, answered before any card goes up. A non-member's approval page could only
              * offer a button that does not work, so the useful thing to put in front of them is the join page
@@ -217,7 +217,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
                         mode: `url`,
                         message:
                             `Running ${listing.name} needs an intentic membership (${listing.creditsPerRun} credits per run). ` +
-                            `Open this to join — no sandbox and no install needed.`,
+                            `Open this to join: no sandbox and no install needed.`,
                         url: `${config.webOrigin}/join`,
                         elicitationId: randomUUID(),
                     },
@@ -225,7 +225,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
             }
             const service = await prisma.service.findUnique({ where: { slug }, select: { id: true } });
             if (service === null) {
-                return say(`No service is listed as "${slug}" — services_list names what exists.`, true);
+                return say(`No service is listed as "${slug}": services_list names what exists.`, true);
             }
             const body = canonicalRequest(request);
             const recent = await findRecentOffer(prisma, { userId: ownerId, serviceId: service.id, request: body }, at);
@@ -233,11 +233,11 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
              * that reappears the instant it is dismissed is a nag, and the point of the gate is that "no" is an
              * answer the agent acts on rather than works around. */
             if (recent?.status === `declined`) {
-                return say(`The owner skipped this run — nothing was charged. Continue without the service.`, true);
+                return say(`The owner skipped this run: nothing was charged. Continue without the service.`, true);
             }
             if (recent?.status === `expired` || (recent?.status === `pending` && recent.expiresAt <= at)) {
                 return say(
-                    `The approval went unanswered and expired — nothing was charged. Continue without the service; ` +
+                    `The approval went unanswered and expired: nothing was charged. Continue without the service; ` +
                         `ask again only if the owner comes back to it.`,
                     true,
                 );
@@ -274,7 +274,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
                     mode: `url`,
                     message:
                         `${listing.name} costs ${listing.creditsPerRun} credits per run. Open this to see what will be sent, ` +
-                        `then approve or skip it — nothing is charged until you do.`,
+                        `then approve or skip it: nothing is charged until you do.`,
                     url: `${config.webOrigin}/approve/${offerId}`,
                     elicitationId: offerId,
                 },
@@ -291,7 +291,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
         {
             title: `File a capability the catalog lacks`,
             description:
-                `The catalog had nothing that answered — say what you looked for, in one plain line. Spends nothing, asks ` +
+                `The catalog had nothing that answered: say what you looked for, in one plain line. Spends nothing, asks ` +
                 `nobody, published only as an aggregate count so providers can see unmet demand. Describe the CAPABILITY ` +
                 `("flight price lookups with dates"), never the task's specifics, names, or anything personal.`,
             inputSchema: {
@@ -304,7 +304,7 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
                 return say(`A want is one plain line describing the capability, ${WANT_MIN}–${WANT_MAX} characters.`, true);
             }
             if (filed.kind === `rate_limited`) {
-                return say(`That's ${WANTS_PER_DAY} wants filed today — the daily bound. The list resets at UTC midnight.`, true);
+                return say(`That's ${WANTS_PER_DAY} wants filed today: the daily bound. The list resets at UTC midnight.`, true);
             }
             return say(`Filed. Carry on with your ordinary tools.`);
         },

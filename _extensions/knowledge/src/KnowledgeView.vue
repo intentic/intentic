@@ -17,7 +17,7 @@ import { filterOptions, type Filters, useNoteMutations, useOverview, useSearch }
 import NoteIndex from "./NoteIndex.vue";
 import KnowledgePane from "./KnowledgePane.vue";
 
-/* THE KNOWLEDGE SECTION — the owner's knowledge base: notes about the world this work happens in, and the graph
+/* THE KNOWLEDGE SECTION, the owner's knowledge base: notes about the world this work happens in, and the graph
  * those notes already form.
  *
  * SEARCH IS THE NAVIGATION. There is no tree of folders here and deliberately so: a knowledge base is reached
@@ -25,18 +25,18 @@ import KnowledgePane from "./KnowledgePane.vue";
  * with a filter set rather than a different screen. One route answers all of them, so the list can never
  * disagree with itself about what the knowledge base holds.
  *
- * A HUB SECTION, so this file draws neither a page title nor a frame — the hub draws both. That constraint is
+ * A HUB SECTION, so this file draws neither a page title nor a frame: the hub draws both. That constraint is
  * what shapes the layout: the section is a wide band rather than a page, so the chrome is one row, the index is
  * a narrow column beside the note rather than a second rail in front of it, and in a narrow body it folds above
  * the note instead of hiding it.
  *
- * WHAT IS UNFINISHED ABOUT THE KNOWLEDGE BASE gets a strip, and only when there IS something — links pointing at notes
+ * WHAT IS UNFINISHED ABOUT THE KNOWLEDGE BASE gets a strip, and only when there IS something: links pointing at notes
  * nobody wrote, kinds the vocabulary has not adopted, notes that fell out of the graph. A permanent panel
  * reading "0 problems" would spend the same space to say nothing, and would train the reader to stop looking at
  * the place where the real thing eventually appears. */
 
 /* MEASURED ON THIS BODY, not on the screen and not on the hub. The section sits inside a hub, inside the
- * workspace pane, beside a chat panel the reader can drag — so by the time a note gets here the width left is
+ * workspace pane, beside a chat panel the reader can drag, so by the time a note gets here the width left is
  * nothing the window can predict. Below ~36rem a 16rem index beside a note leaves neither readable. */
 const body = ref<HTMLElement | undefined>(undefined);
 const stacked = useNarrow(body, 36);
@@ -61,7 +61,7 @@ const typeChoice = computed<string>({ get: () => type.value ?? ``, set: (value) 
 const tagChoice = computed<string>({ get: () => tag.value ?? ``, set: (value) => (tag.value = value === `` ? undefined : value) });
 
 const selected = ref<string>();
-/* Unsaved edits, keyed by note. Held here, above the pane, because the pane is REUSED as the selection moves —
+/* Unsaved edits, keyed by note. Held here, above the pane, because the pane is REUSED as the selection moves:
  * without this, opening a linked note to check a fact would silently drop the correction being written. */
 const drafts = ref(new Map<string, string>());
 const draft = computed<string | undefined>({
@@ -78,7 +78,7 @@ const draft = computed<string | undefined>({
     },
 });
 
-// Open on the first answer, so the section is never a list with an empty half beside it — and follow the list
+// Open on the first answer, so the section is never a list with an empty half beside it, and follow the list
 // when what is selected drops out of it, which is what happens as somebody types.
 watch(hits, () => {
     if (selected.value === undefined || !hits.value.some((hit) => hit.path === selected.value)) {
@@ -92,7 +92,7 @@ const open = (path: string): void => {
     selected.value = path;
 };
 
-// "Show these in the list" — re-aim the list at everything linking to the open note. The one navigation that
+// "Show these in the list": re-aim the list at everything linking to the open note. The one navigation that
 // genuinely replaces the query, so it clears the rest of the filters rather than compounding with them.
 const showLinked = (path: string): void => {
     q.value = ``;
@@ -112,13 +112,13 @@ watch(q, () => (linkedTo.value = undefined));
 const linkedToTitle = computed(() => hits.value.find((hit) => hit.path === linkedTo.value)?.title ?? linkedTo.value);
 
 /* THE TWO STANDING FACTS THIS SECTION REPORTS ARE <Notice>S, not strips of its own. Both were hand-rolled
- * bordered rows — one for "the list is aimed at a note's neighbours", one for "there are loose ends" — and
+ * bordered rows: one for "the list is aimed at a note's neighbours", one for "there are loose ends", and
  * a hand-rolled strip is the first thing to disagree with the app about tone, weight and where the way out
  * sits. `info` is the tone for a fact the reader may want and never has to act on, which is what both are. */
 const linkedNotice = computed<NoticeModel | undefined>(() =>
     linkedTo.value === undefined
         ? undefined
-        : { tone: `info`, title: `Everything linking to “${linkedToTitle.value}”`, action: { label: `Show everything`, run: clearFilters } },
+        : { tone: `info`, title: `Everything linking to "${linkedToTitle.value}"`, action: { label: `Show everything`, run: clearFilters } },
 );
 
 /* The one-line report on what is unfinished, and only when there IS something. Ordered by what a reader can
@@ -150,7 +150,7 @@ const health = computed<NoticeModel | undefined>(() => {
 
 const error = computed(() => overviewError.value ?? searchError.value);
 
-/* Starting it off writes ONE note — the vocabulary — and opens it. Not a folder of example people: a
+/* Starting it off writes ONE note, the vocabulary, and opens it. Not a folder of example people: a
  * knowledge base seeded with facts about nobody has to be emptied before it can say anything true. What a new
  * knowledge base actually lacks is the handful of words it is going to use, which is also the one thing the owner and
  * the agent cannot each guess at consistently on their own. */
@@ -162,13 +162,13 @@ const startKnowledge = async (): Promise<void> => {
 </script>
 
 <template>
-    <!-- A HUB SECTION BODY — no page header and no frame of its own: the hub draws both. -->
+    <!-- A HUB SECTION BODY, no page header and no frame of its own: the hub draws both. -->
     <div ref="body" class="flex min-h-0 flex-col gap-3">
         <Notice v-if="error" :of="noticeOf(error)" />
 
         <!-- The section's one row of chrome, and it is the app's <FilterBar>: free text on the left taking the
              row's slack, the controls that narrow the same list in their own matched track, and what does not
-             narrow anything sitting chromeless beside them. The field spanning the row is the point — the bar
+             narrow anything sitting chromeless beside them. The field spanning the row is the point: the bar
              then shares its left and right edges with the two panes under it, instead of huddling in a corner
              above them. The pickers are `ghost` because the track is already the box. -->
         <FilterBar
@@ -208,11 +208,11 @@ const startKnowledge = async (): Promise<void> => {
                 <InfoHint label="Knowledge">
                     <span class="block text-sm font-medium text-content">The knowledge base</span>
                     <span class="mt-1 block text-xs text-muted">
-                        A folder of markdown notes — <b>{{ overview?.folder ?? `knowledge/` }}</b> in your workspace — where each note is a
+                        A folder of markdown notes: <b>{{ overview?.folder ?? `knowledge/` }}</b> in your workspace, where each note is a
                         <i>thing</i>
                         (a person, a project, a decision, a word) and each link is a connection between two of them. The agent reads it before
                         answering questions about your world and writes to it when it learns something durable; you read, correct and delete here.
-                        Open it in Obsidian or put it under git — it is only ever markdown.
+                        Open it in Obsidian or put it under git: it is only ever markdown.
                     </span>
                 </InfoHint>
             </template>
@@ -228,7 +228,7 @@ const startKnowledge = async (): Promise<void> => {
             <Icon name="sitemap" class="text-base text-subtle" />
             <p class="text-content">Nothing here yet.</p>
             <p class="max-w-md text-xs text-muted">
-                Notes appear here as the agent learns durable things about your world — who you work with, what a project is for, what was decided and
+                Notes appear here as the agent learns durable things about your world, who you work with, what a project is for, what was decided and
                 why. Ask it to remember something, or drop your own markdown into
                 <b>{{ overview?.folder ?? `knowledge/` }}</b> and it will be read the same way.
             </p>
@@ -266,7 +266,7 @@ const startKnowledge = async (): Promise<void> => {
                 @forgotten="selected = undefined"
             />
 
-            <!-- The same dashed placeholder the empty state above uses, from the same helper — it was spelled
+            <!-- The same dashed placeholder the empty state above uses, from the same helper: it was spelled
                  out by hand here, two elements away from the call that produces it. -->
             <section v-else :class="ui.emptyState(`flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-10`)">
                 <Icon name="sitemap" class="text-base text-subtle" />

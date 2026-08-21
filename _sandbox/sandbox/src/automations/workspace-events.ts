@@ -85,7 +85,7 @@ const enqueue = (services: Services, id: string, event: WorkspaceEvent, wake: Wa
         queue.waiting.push(event);
         if (queue.waiting.length > QUEUE_MAX) {
             const dropped = queue.waiting.shift();
-            services.logger.warn({ automation: id, agent: dropped?.agentId }, "chore backlog full — dropped the oldest waiting event");
+            services.logger.warn({ automation: id, agent: dropped?.agentId }, "chore backlog full, dropped the oldest waiting event");
         }
     }
     void pump(services, id, wake);
@@ -111,7 +111,7 @@ export const dispatchWorkspaceEvent = async (services: Services, event: Workspac
             .append({
                 direction: "system",
                 type: "deps.fix_unarmed",
-                content: `Checks broke for ${event.deps?.project === "" ? "the workspace root" : (event.deps?.project ?? "a project")} and no automation is enabled for it — the "Fix what a dependency change broke" chore on the Automations page can handle this for you.`,
+                content: `Checks broke for ${event.deps?.project === "" ? "the workspace root" : (event.deps?.project ?? "a project")} and no automation is enabled for it, the "Fix what a dependency change broke" chore on the Automations page can handle this for you.`,
                 outcome: "error",
                 conversationId: event.agentId,
             })

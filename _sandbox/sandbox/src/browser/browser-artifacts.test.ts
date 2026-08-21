@@ -84,7 +84,7 @@ test.each(["mcp__web__browser_navigate", "Write", "mcp__web__browser_snapshot"])
 });
 
 /* The other direction: the tool's ANSWER back into a picture the chat can show. @playwright/mcp replies with a
- * markdown link relative to the agent's cwd, which for a repo cwd climbs out of the repo — useless to fetch
+ * markdown link relative to the agent's cwd, which for a repo cwd climbs out of the repo: useless to fetch
  * until it is put back into the workspace-root-relative route space. */
 test("a screenshot's answer becomes a workspace path the chat can render", () => {
     const answer = "### Result\n- [Screenshot of viewport](../.intentic/records/artifacts/browser/page-2026-07-30.png)\n";
@@ -99,7 +99,7 @@ test("a screenshot taken at the workspace root resolves the same way", () => {
     expect(screenshotImage(answer, "/work", OUTPUT)).toEqual({ type: "image", path: ".intentic/records/artifacts/browser/shot.png" });
 });
 
-// A link we can't place inside the output dir is a file this module never dictated — claiming it would put an
+// A link we can't place inside the output dir is a file this module never dictated: claiming it would put an
 // arbitrary path from tool output in front of the user as "the screenshot".
 test.each([
     ["a link outside the output dir", "- [Something](../src/index.ts)"],

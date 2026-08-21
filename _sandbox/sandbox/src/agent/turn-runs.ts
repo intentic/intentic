@@ -176,7 +176,7 @@ export interface RunOptions {
 
 // Start a detached run for the conversation's turn, or undefined when one is already live (the route 409s,
 // the client serializes its own turns, so a live run means another window/device is mid-turn). The pump owns
-// the generator: a thrown turn is folded into the log as an error frame (an abort — /agent/stop, as a clean
+// the generator: a thrown turn is folded into the log as an error frame (an abort, /agent/stop, as a clean
 // done), so followers always see the run settle.
 export function startTurnRun(
     turnFn: TurnFn,

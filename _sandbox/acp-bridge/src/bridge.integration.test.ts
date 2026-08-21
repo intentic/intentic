@@ -8,7 +8,7 @@ import { fakeDaemon } from "./__fixtures__/fake-daemon.js";
 import { bridgeAgentApp } from "./bridge.js";
 import type { BridgeConfig } from "./config.js";
 
-/* The bridge under test is the real agent() app driven through the SDK's in-process composition — real
+/* The bridge under test is the real agent() app driven through the SDK's in-process composition: real
  * JSON-RPC routing, a fake daemon behind it (the reverse of the sandbox's fake-acp-agent fixture). */
 
 const CONFIG: BridgeConfig = { url: "https://sandbox.example", token: "ict_test", agent: "claude", model: undefined };
@@ -141,7 +141,7 @@ test("an error frame fails the prompt as a JSON-RPC error AFTER the stream drain
 test("no configuration ⇒ session/new fails auth_required (the editor then runs an auth method)", async () => {
     const daemon = fakeDaemon(() => []);
     // No `config` and an isolated config dir: resolveConfig finds nothing (env vars would leak in only if the
-    // test runner exported them — the bridge env names are specific enough not to).
+    // test runner exported them: the bridge env names are specific enough not to).
     const app = bridgeAgentApp({ clientFor: () => daemon.client, configDir: await mkdtemp(join(tmpdir(), "acp-none-")) });
     const conn = client({ name: "editor" }).connect(app);
     await expect(conn.agent.request(methods.agent.session.new, { cwd: "/x", mcpServers: [] })).rejects.toMatchObject({ code: -32000 });

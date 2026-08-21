@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { TaskChecklist } from "./task-checklist.js";
 
-// Every result string here is verbatim from a live 2.1.220 turn — the parser has no other contract.
+// Every result string here is verbatim from a live 2.1.220 turn: the parser has no other contract.
 const create = (list: TaskChecklist, toolUseId: string, subject: string, id: string, activeForm?: string) => {
     list.created(toolUseId, { subject, description: subject, ...(activeForm !== undefined ? { activeForm } : {}) });
     return list.resolved(toolUseId, `Task #${id} created successfully: ${subject}`);
@@ -52,7 +52,7 @@ test("an update for a task this process never saw is ignored", () => {
     expect(list.updated({ taskId: "7", status: "deleted" })).toBeUndefined();
 });
 
-test("TaskList is authoritative — it adopts tasks created before we attached", () => {
+test("TaskList is authoritative: it adopts tasks created before we attached", () => {
     const list = new TaskChecklist();
     expect(list.listed("#1 [completed] Gamma one\n#2 [in_progress] Delta two")).toEqual([
         { content: "Gamma one", status: "completed" },

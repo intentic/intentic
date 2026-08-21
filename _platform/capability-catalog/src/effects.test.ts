@@ -80,7 +80,7 @@ describe("capabilityEffects", () => {
             contribution: connector({ id: "postgres", fragment: "env/postgres.Dockerfile" }),
         });
         expect(postgres).toContainEqual({ kind: "image" });
-        // Discord's whisper fragment is connector spec data like any other — the image effect derives from it.
+        // Discord's whisper fragment is connector spec data like any other: the image effect derives from it.
         const discord = capabilityEffects({
             kind: "cli",
             id: "discord",
@@ -114,14 +114,14 @@ describe("capabilityEffects", () => {
         expect(full).toContainEqual({ kind: "process", names: ["gateway"] });
     });
 
-    /* An endpoint's whole consequence is WHERE the turns go — it rides the translator that is already baked and
+    /* An endpoint's whole consequence is WHERE the turns go: it rides the translator that is already baked and
      * already running, so it needs no rebuild and starts nothing. The panel claiming either would be teaching the
      * user to expect a rebuild prompt that never comes. */
     it("discloses the model endpoint's destination, and claims no rebuild or process", () => {
         expect(capabilityEffects({ kind: "endpoint", config: { baseUrl: "http://host.docker.internal:11434/v1" } })).toEqual([
             { kind: "endpoint", url: "http://host.docker.internal:11434/v1" },
         ]);
-        // Named the moment the field is filled, so the disclosure can be read BEFORE the add — including the
+        // Named the moment the field is filled, so the disclosure can be read BEFORE the add: including the
         // pre-typing state, where it still has to say what will leave.
         expect(capabilityEffects({ kind: "endpoint", config: {} })).toEqual([{ kind: "endpoint", url: "" }]);
         // A key is the ordinary second effect, from the live form or from an installed instance's echo.
@@ -169,7 +169,7 @@ describe("capabilityEffects", () => {
         });
     });
 
-    // One profile per CONNECTION, named after the site it is a profile of — so a second account of that site
+    // One profile per CONNECTION, named after the site it is a profile of, so a second account of that site
     // discloses its own stored session rather than looking like a second row about the first one's.
     it("keeps a browser profile per connected account", () => {
         expect(capabilityEffects({ kind: "browser", id: "reddit-work", config: { platform: "reddit" } })).toEqual([
@@ -179,7 +179,7 @@ describe("capabilityEffects", () => {
         ]);
     });
 
-    // A stored password is a stored credential and the panel says so — from the form value while adding, and
+    // A stored password is a stored credential and the panel says so: from the form value while adding, and
     // from the masked hasPassword echo on an entry already stored (the raw value never reaches the browser).
     it("discloses a browser account's stored password as a secret", () => {
         expect(capabilityEffects({ kind: "browser", id: "reddit-work", config: { platform: "reddit", password: "s3cret!" } })).toContainEqual({
@@ -198,7 +198,7 @@ describe("capabilityEffects", () => {
 
     /* A GENERIC SESSION'S ROW NAMES THE SITE, not the card. "Keeps a logged-in website browser profile" would be
      * true of nothing in particular, on the one row where the user decides whether to store a session and a
-     * passkey at all — so the address they typed is read down to its host and stands in. */
+     * passkey at all, so the address they typed is read down to its host and stands in. */
     it("names the site a generic browser session points at", () => {
         const [, , profile] = capabilityEffects({
             kind: "browser",
@@ -209,9 +209,9 @@ describe("capabilityEffects", () => {
     });
 
     /* The row is live while the address is being typed, and the fallback is for what cannot be read as an address
-     * AT ALL — empty, or a host with no scheme. A partial host is deliberately NOT special-cased: the only rule
+     * AT ALL, empty, or a host with no scheme. A partial host is deliberately NOT special-cased: the only rule
      * that would catch "https://adm" is "a host needs a dot", and that would throw away `localhost:3000` and a
-     * LAN hostname — which are precisely the internal admin panels this card exists for. */
+     * LAN hostname, which are precisely the internal admin panels this card exists for. */
     it("falls back to the card when the address cannot be read at all", () => {
         const bare = capabilityEffects({ kind: "browser", id: "acme", config: { platform: "website", homeUrl: "admin.acme.com" } });
         expect(bare[2]).toEqual({ kind: "profile", platform: "website" });
@@ -219,7 +219,7 @@ describe("capabilityEffects", () => {
         expect(empty[2]).toEqual({ kind: "profile", platform: "website" });
     });
 
-    // A host with no dot is a real answer, not a typo — an internal panel on the sandbox's own machine.
+    // A host with no dot is a real answer, not a typo: an internal panel on the sandbox's own machine.
     it("keeps a schemeless-looking but valid host, port and all", () => {
         const [, , profile] = capabilityEffects({
             kind: "browser",

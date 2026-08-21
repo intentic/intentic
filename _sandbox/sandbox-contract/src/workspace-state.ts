@@ -253,7 +253,7 @@ const STATE_FILES = [
     {
         path: ".intentic/config/automations.json",
         invalidates: [],
-        why: "Declared by the intentic.automations extension's contributes.files — `automations` is its query key, not core's.",
+        why: "Declared by the intentic.automations extension's contributes.files, `automations` is its query key, not core's.",
         portability: "carry",
         versioned: true,
     },
@@ -273,13 +273,13 @@ const STATE_FILES = [
     {
         path: ".intentic/records/automation-runs.json",
         invalidates: [],
-        why: "Declared by the intentic.automations extension's contributes.files — `automations` is its query key, not core's.",
+        why: "Declared by the intentic.automations extension's contributes.files, `automations` is its query key, not core's.",
         portability: "carry",
     },
     {
         path: ".intentic/records/approvals/",
         invalidates: [],
-        why: "Declared by the intentic.automations extension's contributes.files — `automation-approvals` is its query key, not core's.",
+        why: "Declared by the intentic.automations extension's contributes.files, `automation-approvals` is its query key, not core's.",
         portability: "carry",
     },
     /* The maintenance ledger and probe evidence, written by the daemon's chores-store and rendered by the
@@ -290,7 +290,7 @@ const STATE_FILES = [
     {
         path: ".intentic/records/chores/",
         invalidates: [],
-        why: "Declared by the intentic.maintenance extension's contributes.files — `maintenance-report`/`maintenance-runs` are its query keys, not core's.",
+        why: "Declared by the intentic.maintenance extension's contributes.files, `maintenance-report`/`maintenance-runs` are its query keys, not core's.",
         portability: "carry",
     },
     /* The documentation STAGING tree (documentation extension's paths.ts): generation writes here, the owner
@@ -300,7 +300,7 @@ const STATE_FILES = [
     {
         path: ".intentic/config/docs/",
         invalidates: [],
-        why: "Declared by the intentic.documentation extension's contributes.files — `documentation`/`documentation-runs` are its query keys, not core's.",
+        why: "Declared by the intentic.documentation extension's contributes.files, `documentation`/`documentation-runs` are its query keys, not core's.",
         portability: "carry",
         authored: true,
         outsideWriter: "the intentic.documentation extension's staging writes (its paths.ts)",
@@ -324,7 +324,7 @@ const STATE_FILES = [
     {
         path: ".intentic/records/loops.json",
         invalidates: [],
-        why: "Ralph loops and their iteration history. Nothing observes it: where a RUNNING loop stands rides on the fleet roster (AgentSummary.loop), which the /events stream already pushes about once a second, and a second source invalidating on this file could only ever disagree with the card beside it. The iteration list of an ENDED loop is an on-demand read — nothing renders it until someone opens it (web's useLoops, which holds no query for exactly this reason).",
+        why: "Ralph loops and their iteration history. Nothing observes it: where a RUNNING loop stands rides on the fleet roster (AgentSummary.loop), which the /events stream already pushes about once a second, and a second source invalidating on this file could only ever disagree with the card beside it. The iteration list of an ENDED loop is an on-demand read, nothing renders it until someone opens it (web's useLoops, which holds no query for exactly this reason).",
         portability: "carry",
     },
 
@@ -343,7 +343,7 @@ const STATE_FILES = [
     {
         path: ".intentic/records/thread-sessions.json",
         invalidates: [],
-        why: "Thread bookkeeping (an inbound thread — a Front Desk visitor, a Discord or Slack channel — → sandbox conversation + provider session), written on EVERY inbound message. Nothing in the browser reads it: what a thread produces is a conversation, and the fleet board already learns about that from the agent registry's own push. Naming a key here would bill every connected browser a refetch per inbound message — the request storm this table's own note warns about — to refresh nothing it can see.",
+        why: "Thread bookkeeping (an inbound thread, a Front Desk visitor, a Discord or Slack channel, → sandbox conversation + provider session), written on EVERY inbound message. Nothing in the browser reads it: what a thread produces is a conversation, and the fleet board already learns about that from the agent registry's own push. Naming a key here would bill every connected browser a refetch per inbound message, the request storm this table's own note warns about, to refresh nothing it can see.",
         portability: "carry",
     },
     /* SPLIT, so that "what an extension is configured to do" and "the token it does it with" stop being one file.
@@ -370,7 +370,7 @@ const STATE_FILES = [
     {
         path: ".intentic/config/extension-settings.json",
         invalidates: [],
-        why: "Held in a module-level shallowRef store per extension (web's extensionSettingsStore) with no query observer, and deliberately so: api.settings.get must answer SYNCHRONOUSLY from an extension's first activate() line, and the store outlives every component scope. A module-level QueryObserver is the one shape that would make invalidation refetch, and this app already ruled it out — it detaches on the queryClient.clear() at logout (see useSandbox's sandbox-list mirror). So a remote member's setting edit reaches this browser on its next load, not live.",
+        why: "Held in a module-level shallowRef store per extension (web's extensionSettingsStore) with no query observer, and deliberately so: api.settings.get must answer SYNCHRONOUSLY from an extension's first activate() line, and the store outlives every component scope. A module-level QueryObserver is the one shape that would make invalidation refetch, and this app already ruled it out, it detaches on the queryClient.clear() at logout (see useSandbox's sandbox-list mirror). So a remote member's setting edit reaches this browser on its next load, not live.",
         portability: "carry",
         versioned: true,
     },
@@ -416,7 +416,7 @@ const STATE_FILES = [
     {
         path: ".intentic/records/extension-usage.json",
         invalidates: [],
-        why: "Which of the routes each extension DECLARED it has actually called — the evidence behind the permissions list on its row. The one entry here whose empty set is a RATE decision rather than an architectural one: every browser with the app open reports its batch on a timer, so wiring this to the `extensions` query would refetch the whole list every few seconds for a figure nobody is watching change. The tab reads it when it loads, which is when anyone is reading it.",
+        why: "Which of the routes each extension DECLARED it has actually called, the evidence behind the permissions list on its row. The one entry here whose empty set is a RATE decision rather than an architectural one: every browser with the app open reports its batch on a timer, so wiring this to the `extensions` query would refetch the whole list every few seconds for a figure nobody is watching change. The tab reads it when it loads, which is when anyone is reading it.",
         portability: "carry",
     },
     /* THE ONE ENTRY WHERE "HOLDS NO CREDENTIAL" IS TRUE AND `versioned` IS STILL WRONG, which is worth stating
@@ -433,9 +433,9 @@ const STATE_FILES = [
     {
         path: ".intentic/identity/members.json",
         invalidates: [],
-        why: "Not this view's source at all: SandboxAccess renders the PLATFORM's invite records (apiClient.invite.list), and this file is the daemon's ENFORCED copy — written first so a grant the enforcer never got is never recorded, then never read back. A change here means the two disagreed, which the write order makes fail-closed rather than stale.",
+        why: "Not this view's source at all: SandboxAccess renders the PLATFORM's invite records (apiClient.invite.list), and this file is the daemon's ENFORCED copy, written first so a grant the enforcer never got is never recorded, then never read back. A change here means the two disagreed, which the write order makes fail-closed rather than stale.",
         portability: "identity",
-        note: "Re-invite collaborators from the Access tab — a grant is the platform's record, and the target enforces its own copy.",
+        note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy.",
     },
 
     // ---- daemon-owned, nothing derives from watching them ----
@@ -455,7 +455,7 @@ const STATE_FILES = [
         invalidates: [],
         why: "AI-provider credentials and runtime homes, plus the capability and extension-settings secret vaults; each account is rendered through owner-gated provider routes.",
         portability: "secret",
-        note: "Sign the agent's AI accounts in again on the Agent tab, then re-enter each connection's credential on Capabilities and each extension's secret settings on Extensions — both arrived listed but unauthenticated.",
+        note: "Sign the agent's AI accounts in again on the Agent tab, then re-enter each connection's credential on Capabilities and each extension's secret settings on Extensions, both arrived listed but unauthenticated.",
     },
     /* Agent session transcripts, rewritten on every streamed token.
      *
@@ -470,7 +470,7 @@ const STATE_FILES = [
     {
         path: ".intentic/records/sessions/claude/",
         invalidates: [],
-        why: "Agent session transcripts — see the note above on why the memory notes under it stay polled.",
+        why: "Agent session transcripts, see the note above on why the memory notes under it stay polled.",
         portability: "carry",
     },
     {
@@ -482,7 +482,7 @@ const STATE_FILES = [
     {
         path: ".intentic/local/cache/",
         invalidates: [],
-        why: "Rebuildable indexes and caches — the iq index and its vector sidecar, the whisper model; ignored by the watcher and recreated from carried workspace content.",
+        why: "Rebuildable indexes and caches, the iq index and its vector sidecar, the whisper model; ignored by the watcher and recreated from carried workspace content.",
         portability: "derived",
     },
     /* Connector and extension scratch, one directory per extension under runtime/extensions/<id>
@@ -518,14 +518,14 @@ const STATE_FILES = [
     {
         path: ".intentic/local/newest-run.json",
         invalidates: [],
-        why: "The newest daemon version that ever ran this workspace (store/newest-run.ts) — a downgrade tripwire, about THIS sandbox the way rule-firings is.",
+        why: "The newest daemon version that ever ran this workspace (store/newest-run.ts), a downgrade tripwire, about THIS sandbox the way rule-firings is.",
         portability: "derived",
         note: "The target stamps its own daemon version on first boot.",
     },
     {
         path: ".intentic/records/verify.json",
         invalidates: [],
-        why: "The dependency verifier's verdict memory; nothing renders it directly — outcomes reach the owner as activity entries and workspace events.",
+        why: "The dependency verifier's verdict memory; nothing renders it directly, outcomes reach the owner as activity entries and workspace events.",
         portability: "carry",
     },
     {
@@ -539,7 +539,7 @@ const STATE_FILES = [
         invalidates: [],
         why: "Webhook secret + conclusion memory; the Pipelines view reads it through /ci/runs, not off disk.",
         portability: "secret",
-        note: "Re-add the CI webhook on the Pipelines view — its secret is per-sandbox.",
+        note: "Re-add the CI webhook on the Pipelines view, its secret is per-sandbox.",
     },
     /* THE ONE ENTRY THAT OPTS OUT OF THE BACKUP, and the reason the flag exists rather than the rule simply
      * reading `portability !== "derived"`. It is `identity` like the three below it, so the derived answer would
@@ -555,7 +555,7 @@ const STATE_FILES = [
         why: "Hashed control tokens (the ACP editor bridge, and anything else driving this sandbox from outside), listed on demand by the owner.",
         portability: "identity",
         backup: false,
-        note: "Mint fresh control tokens — the old ones authenticate against the source sandbox.",
+        note: "Mint fresh control tokens, the old ones authenticate against the source sandbox.",
     },
     {
         path: ".intentic/identity/owner.json",
@@ -585,12 +585,12 @@ const STATE_FILES = [
         invalidates: [],
         why: "Browser-login profiles: Chromium rewrites these constantly. Descent-ignored by the watcher outright.",
         portability: "derived",
-        note: "Log the agent's browser back into any site it needs — profiles do not travel.",
+        note: "Log the agent's browser back into any site it needs, profiles do not travel.",
     },
     {
         path: ".intentic/local/extensions/",
         invalidates: [],
-        why: "Extension checkouts — whole git clones. The `extensions` query is driven by the capability manifest above, not by their contents.",
+        why: "Extension checkouts, whole git clones. The `extensions` query is driven by the capability manifest above, not by their contents.",
         portability: "derived",
         note: "Extensions re-clone from the capability manifest on the target's next reconcile.",
     },

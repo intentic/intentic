@@ -19,7 +19,7 @@ export const AutomationTemplateContributionSchema = z.object({
     id: z
         .string()
         .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/)
-        .describe('Prefills the automation name, and is what "does one of these exist already" is asked by — so spell it as an id, not as prose.'),
+        .describe('Prefills the automation name, and is what "does one of these exist already" is asked by, so spell it as an id, not as prose.'),
     title: z.string().min(1),
     logo: z.string().min(1).optional().describe("A simple-icons slug for the card."),
     icon: z.string().min(1).optional().describe("A name from the host's icon set, drawn when no simple-icons slug fits."),
@@ -29,7 +29,7 @@ export const AutomationTemplateContributionSchema = z.object({
         .array(z.string().min(1))
         .optional()
         .describe(
-            "Capability providers that make this template work — any one connected is enough (fixing CI rides github or gitlab). Omitted ⇒ nothing to connect, so it is always offered.",
+            "Capability providers that make this template work: any one connected is enough (fixing CI rides github or gitlab). Omitted ⇒ nothing to connect, so it is always offered.",
         ),
     // Shaped loosely here and parsed strictly at the merge: the manifest package cannot see the trigger union
     // (the dependency runs the other way), so the daemon is where a declaration meets the real schema.
@@ -48,7 +48,7 @@ export const AutomationTemplateContributionSchema = z.object({
         .string()
         .min(1)
         .optional()
-        .describe("A condition that must hold before the turn runs — what makes a template safe to leave switched on."),
+        .describe("A condition that must hold before the turn runs: what makes a template safe to leave switched on."),
     holdForSeconds: z.number().int().positive().optional().describe("Wait this long and coalesce repeats, rather than firing on every event."),
     prompt: z.string().min(1).describe("The turn this starts. You own the trigger's payload vocabulary, so you own the prompt that reads it."),
     note: z.string().min(1).optional(),
@@ -63,7 +63,7 @@ export const AutomationTemplateContributionSchema = z.object({
         .enum(["create", "configure"])
         .optional()
         .describe(
-            "Absent ⇒ it waits in the gallery, where you go once you know what you want. `create` puts a card on the page that makes it, switched off, in one click. `configure` puts one there that opens the dialog prefilled, for a template that cannot work unconfigured. Both are for what a user would never think to go looking for — mark everything as offered and you have rebuilt the gallery with extra steps.",
+            "Absent ⇒ it waits in the gallery, where you go once you know what you want. `create` puts a card on the page that makes it, switched off, in one click. `configure` puts one there that opens the dialog prefilled, for a template that cannot work unconfigured. Both are for what a user would never think to go looking for: mark everything as offered and you have rebuilt the gallery with extra steps.",
         ),
     // Whether what this makes watches THIS codebase (the chores shelf) rather than the outside world. Declared
     // rather than read off the trigger: a nightly dependency sweep and a nightly Stripe poll are both schedules.
@@ -71,7 +71,7 @@ export const AutomationTemplateContributionSchema = z.object({
         .boolean()
         .optional()
         .describe(
-            "Whether what this makes watches THIS codebase rather than the outside world. Declared rather than read off the trigger — a nightly dependency sweep and a nightly Stripe poll are both schedules.",
+            "Whether what this makes watches THIS codebase rather than the outside world. Declared rather than read off the trigger: a nightly dependency sweep and a nightly Stripe poll are both schedules.",
         ),
 });
 export type AutomationTemplateContribution = z.infer<typeof AutomationTemplateContributionSchema>;
@@ -79,6 +79,6 @@ export type AutomationTemplateContribution = z.infer<typeof AutomationTemplateCo
 export const automationTemplatesPoint = {
     name: "automationTemplates",
     description:
-        "Starting points this pack offers in the automation composer — a trigger, a prompt written for that trigger's payload, and whatever guard makes it safe to leave on. Declared by whoever knows the service rather than by the composer, so they appear when your pack is installed and disappear with it. Pure prefill: creating one makes an ordinary automation.",
+        "Starting points this pack offers in the automation composer, a trigger, a prompt written for that trigger's payload, and whatever guard makes it safe to leave on. Declared by whoever knows the service rather than by the composer, so they appear when your pack is installed and disappear with it. Pure prefill: creating one makes an ordinary automation.",
     schema: z.array(AutomationTemplateContributionSchema),
 } as const satisfies ContributionPoint;

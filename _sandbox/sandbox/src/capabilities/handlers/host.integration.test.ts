@@ -16,7 +16,7 @@ import { hostHandler } from "./host.js";
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 // A ctx exposing only what hostHandler touches. The machine is never enrolled here, which is the pre-Connect
-// state every add starts in — enrolling one needs a real socket from a real computer.
+// state every add starts in: enrolling one needs a real socket from a real computer.
 const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
     const root = mkdtempSync(join(tmpdir(), "host-cap-"));
     const ctx = {
@@ -64,7 +64,7 @@ test("apply installs the contributed OS pack with the core tools note and this i
     expect(skill).toContain("name: my-laptop");
     expect(skill).not.toContain("${tools}");
     expect(skill).not.toContain("${id}");
-    // Added but never connected — the user's next action is running the one-liner over there, and the card says so.
+    // Added but never connected: the user's next action is running the one-liner over there, and the card says so.
     expect(await hostHandler.status(ctx, "my-laptop", laptop.config)).toEqual({
         state: "pending",
         detail: "click Connect and run the one-liner on that computer",

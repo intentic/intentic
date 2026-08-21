@@ -14,7 +14,7 @@ test("a gate URL and nothing else is a call with the defaults", () => {
     });
 });
 
-test("the URL's own path names the door — no mode input to disagree with it", () => {
+test("the URL's own path names the door: no mode input to disagree with it", () => {
     const parsed = parseInputs({ INPUT_URL: FIRE_URL });
     expect(parsed.kind === "inputs" && parsed.inputs.door).toBe("fire");
 });
@@ -51,7 +51,7 @@ test("the default request is the commit, the branch, and the link a reviewer wou
     expect(defaultRequest(env, { pull_request: { html_url: "https://github.com/acme/app/pull/7" } })).toBe(
         "commit abc123 on main — https://github.com/acme/app/pull/7",
     );
-    // Outside a runner there is nothing to compose from — empty, which the process refuses before spending a run.
+    // Outside a runner there is nothing to compose from: empty, which the process refuses before spending a run.
     expect(defaultRequest({}, undefined)).toBe("");
 });
 
@@ -73,7 +73,7 @@ test("the summary carries the verdict, its reason and the run id", () => {
     expect(summary).toContain("run-3");
 });
 
-test("fail annotates as error, blocked follows the setting, pass stays quiet — payload escaped", () => {
+test("fail annotates as error, blocked follows the setting, pass stays quiet: payload escaped", () => {
     const of = (outcome: "pass" | "fail" | "blocked", blockedAsFailure: boolean) =>
         annotationOf({ outcome, reason: "50% done\nnot yet", runId: "r" }, blockedAsFailure);
     expect(of("pass", false)).toBeUndefined();

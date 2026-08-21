@@ -23,7 +23,7 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         ...overrides,
     }) as OrpcContext;
 
-// A platform WITH mail credentials — the only way to reach the two outcomes that exist once a send is
+// A platform WITH mail credentials: the only way to reach the two outcomes that exist once a send is
 // attempted (refused) or deliberately skipped (a link nobody else could open).
 const mailConfig = (webOrigin: string) =>
     ({
@@ -87,14 +87,14 @@ describe(`invite routes`, () => {
             },
         ]);
         // No mail credentials in this context: the invite still stands and the link comes back for the owner
-        // to carry. `delivery` is the whole point — the caller must be able to tell that apart from a send.
+        // to carry. `delivery` is the whole point: the caller must be able to tell that apart from a send.
         expect(result.delivery).toBe(`unconfigured`);
         expect(result.link).toMatch(/^https:\/\/app\.test\/invite\/.+/);
     });
 
     /* THE MAIL IS NOT THE GRANT. Both tests below cover the same regression from opposite ends: a send that
      * fails used to throw out of the handler, so the browser got a 500 over a roster that already showed the
-     * person pending — reported to the user as "is the sandbox online?" about a sandbox that was fine. */
+     * person pending: reported to the user as "is the sandbox online?" about a sandbox that was fine. */
     it(`invite.create survives a refused email and hands back the link`, async () => {
         const findMany = vi.fn().mockResolvedValue([]);
         const prisma = fakePrisma({
@@ -115,7 +115,7 @@ describe(`invite routes`, () => {
         expect(result.delivery).toBe(`refused`);
         expect(result.link).toMatch(/^https:\/\/app\.test\/invite\/.+/);
         // WHAT THE PROVIDER SAID, carried to the owner. Without it the card can only say "the email was
-        // refused", which is where three rounds of "why is it failing" came from — the answer existed the
+        // refused", which is where three rounds of "why is it failing" came from: the answer existed the
         // whole time, in a console on somebody else's machine.
         expect(result.reason).toContain(`422`);
         // And it is still an incident on the server even though the request succeeded.
@@ -159,7 +159,7 @@ describe(`invite routes`, () => {
         expect(update).toHaveBeenCalledWith({ where: { id: `m1` }, data: { acceptedAt: expect.any(Date) } });
         expect(result).toEqual({ sandboxId: `s1` });
 
-        // A different Google account can't accept — the invite is locked to the invited email.
+        // A different Google account can't accept: the invite is locked to the invited email.
         const wrong = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(memberRow), update: vi.fn() } });
         await expectOrpcCode(call(inviteRoutes.accept, { token: `tok` }, { context: context({ prisma: wrong }) }), `FORBIDDEN`);
     });

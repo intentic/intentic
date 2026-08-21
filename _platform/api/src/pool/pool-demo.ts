@@ -40,7 +40,7 @@ export const seedDemoService = async (prisma: PrismaClient, config: Config): Pro
         publisher: `intentic`,
         name: `Demo Research`,
         description:
-            `A demonstration research run — answers a canned summary for any query, so you can watch the metered flow end to end. ` +
+            `A demonstration research run: answers a canned summary for any query, so you can watch the metered flow end to end. ` +
             `The request's optional "scenario" picks the outcome (ok, slow, refuse, fail, broken) and "paceMs" the stream's tempo.`,
         // Named for what it is, though a demo run never crosses a socket: the route dispatches the demo's
         // forward into its own app (pool.routes.ts), because the platform's public address is not reliably
@@ -106,7 +106,7 @@ export const parseDemoRequest = (body: string): DemoRequest => {
 const demoAnswer = (query: string): object => ({
     demo: true,
     query,
-    summary: `Demo summary for "${query}": this canned answer proves the metered path end to end — your credits were spent, the call was signature-verified, and a real provider would answer here.`,
+    summary: `Demo summary for "${query}": this canned answer proves the metered path end to end, your credits were spent, the call was signature-verified, and a real provider would answer here.`,
     sources: [{ title: `The creator pool, documented`, url: `https://intentic.dev/api/earn/` }],
 });
 
@@ -154,7 +154,7 @@ export const demoRespond = (request: DemoRequest): DemoResponse => {
             body: JSON.stringify({
                 error: {
                     type: `demo_refusal`,
-                    message: `The demo declined this query on purpose (scenario "refuse") — a provider's 4xx is a complete, paid answer, relayed verbatim.`,
+                    message: `The demo declined this query on purpose (scenario "refuse"), a provider's 4xx is a complete, paid answer, relayed verbatim.`,
                 },
             }),
         };
@@ -163,7 +163,7 @@ export const demoRespond = (request: DemoRequest): DemoResponse => {
         return {
             kind: `answer`,
             status: 500,
-            body: JSON.stringify({ error: `the demo fell over on purpose (scenario "fail") — the platform refunds a run nobody served` }),
+            body: JSON.stringify({ error: `the demo fell over on purpose (scenario "fail"), the platform refunds a run nobody served` }),
         };
     }
     const lines = demoLines(request);

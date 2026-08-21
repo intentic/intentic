@@ -21,10 +21,10 @@ import { useApps } from "./useApps";
 import { useVitest } from "./useVitest";
 
 /* The workspace extension (formerly two tiles: apps + vitest). One tile per repo. A monorepo shows three
- * groups: Apps (startable instances — live status + preview + start/stop + an Add-an-app dialog, each with its
+ * groups: Apps (startable instances, live status + preview + start/stop + an Add-an-app dialog, each with its
  * own vitest projects as a Run-tests action), Packages (non-app _apps/<x> dirs that carry tests but no preview),
- * and Library tests (_libs/* + the repo root). A vitest-only repo shows a single flat Tests list. Every run —
- * dev servers, test runs, the add-apps job — is a tmux session the daemon creates and the ONE global terminal
+ * and Library tests (_libs/* + the repo root). A vitest-only repo shows a single flat Tests list. Every run:
+ * dev servers, test runs, the add-apps job: is a tmux session the daemon creates and the ONE global terminal
  * panel attaches; there is no embedded terminal. Each Run targets its OWN session so a second Run never
  * no-ops against a still-running one. */
 
@@ -50,7 +50,7 @@ const stopped = computed(() => apps.value.filter((app) => !app.running));
 const running = computed(() => apps.value.filter((app) => app.running));
 
 // The type signal (issue: api/web read identical). An app's `kind` is the manifest key it was scaffolded from,
-// or the framework the daemon detected for an app it found by convention — a frontend (web/landing/astro) and
+// or the framework the daemon detected for an app it found by convention: a frontend (web/landing/astro) and
 // a backend (api) get a distinct icon + tint + kind pill so they're told apart at a glance. Matched by the
 // canonical keys and framework names with a loose contains() so a custom-named instance (e.g. "storefront-api")
 // still classifies; an unrecognized kind falls back to the neutral package glyph and shows itself raw, and an
@@ -80,7 +80,7 @@ const appRows = computed(() => apps.value.map((app) => ({ ...app, badge: kindOf(
 
 const headerTitle = computed(() => (props.monorepo ? `Apps` : `Tests`));
 const headerDescription = computed(() =>
-    props.monorepo ? `Start your apps, open a live preview, and run their tests.` : `Run this repo’s vitest suites.`,
+    props.monorepo ? `Start your apps, open a live preview, and run their tests.` : `Run this repo's vitest suites.`,
 );
 
 // Vitest projects split into: this repo's startable apps' own tests, non-app _apps/<x> packages, and libraries.
@@ -132,7 +132,7 @@ const runTests = (suffix: string, dirs: readonly string[]): Promise<void> =>
 
 // Poll until the add-apps session is gone or its tab dims (running=false once the daemon's sweep sees the job's
 // shell back at its prompt), then clear the spinner and refresh so the new apps appear. A transient list failure
-// keeps polling — the job's fate is unknown.
+// keeps polling: the job's fate is unknown.
 const watchAdd = (): void => {
     addPoll ??= setInterval(async () => {
         const sessions = await listTerminals().catch(() => undefined);
@@ -146,7 +146,7 @@ const watchAdd = (): void => {
     }, 2500);
 };
 
-// Kick off the add-apps tmux job (from the dialog's picks) and hand the user its terminal tab — the terminal IS
+// Kick off the add-apps tmux job (from the dialog's picks) and hand the user its terminal tab: the terminal IS
 // the live install log and survives refresh/navigation. Completion is observed by watchAdd polling `running`.
 const add = (entries: { template: string; name: string }[]): Promise<void> =>
     act(async () => {
@@ -161,10 +161,10 @@ const add = (entries: { template: string; name: string }[]): Promise<void> =>
         watchAdd();
     });
 
-// Any start opens the global terminal focused on the app — the terminals ARE the launch feedback (install +
+// Any start opens the global terminal focused on the app: the terminals ARE the launch feedback (install +
 // boot stream live). The panel is opened UP FRONT so its chrome appears instantly, and it is opened BY NAME:
 // the session doesn't exist until the POST lands, and a panel opened with no name on an empty strip fills the
-// gap with its own `web-*` shell — the stray "1" tab that used to greet every Start. Naming it makes the panel
+// gap with its own `web-*` shell: the stray "1" tab that used to greet every Start. Naming it makes the panel
 // wait for this session instead. Focused again once the POST returns (startApp no longer blocks on a refetch),
 // which is when the tab is really there.
 const startOne = (app: string): Promise<void> =>
@@ -173,7 +173,7 @@ const startOne = (app: string): Promise<void> =>
         await startApp(app);
         openFocused(sessionOf(app));
     });
-// Start all opens on the FIRST app's terminal for the same reason — some session has to be named, and the one
+// Start all opens on the FIRST app's terminal for the same reason: some session has to be named, and the one
 // at the top of the list is the one the panel would have landed on anyway.
 const startAll = (): Promise<void> =>
     act(async () => {
@@ -189,7 +189,7 @@ const startAll = (): Promise<void> =>
 const stopAll = (): Promise<void> => act(async () => Promise.all(running.value.map((app) => stopApp(app.app))).then(() => undefined));
 
 // A refresh/navigation during a run: the tmux job survived it, so recover the "Adding…" state from the
-// terminals list and resume watching. Unmount only stops the watcher — the job and its tab live on globally.
+// terminals list and resume watching. Unmount only stops the watcher: the job and its tab live on globally.
 onMounted(async () => {
     const sessions = await listTerminals().catch(() => undefined);
     if (sessions !== undefined && sessions.some((session) => session.name === ADD_SESSION && session.running)) {
@@ -229,7 +229,7 @@ onUnmounted(() => {
                      at-a-glance signal, backed by a kind pill. -->
                 <section v-if="monorepo">
                     <!-- The scan of the workspace, as the rows it is about to produce. The empty state was
-                         already held back until the answer was in, which left the section blank meanwhile —
+                         already held back until the answer was in, which left the section blank meanwhile:
                          correct, and indistinguishable from a repository with no apps in it. -->
                     <div v-if="isLoading && outline" class="overflow-hidden rounded-lg border border-line bg-card" role="status" aria-busy="true">
                         <span class="sr-only">Reading this repository's apps…</span>
@@ -246,7 +246,7 @@ onUnmounted(() => {
                     </div>
 
                     <div v-else-if="appRows.length === 0 && !isLoading" :class="ui.emptyState()">
-                        No apps yet — use “Add app” to scaffold one and get a live preview.
+                        No apps yet: use "Add app" to scaffold one and get a live preview.
                     </div>
                     <div v-else class="overflow-hidden rounded-lg border border-line bg-card">
                         <div class="flex flex-col divide-y divide-line">
@@ -295,7 +295,7 @@ onUnmounted(() => {
                                     label="Run tests"
                                     size="small"
                                     severity="secondary"
-                                    v-tooltip.top="'Run this app’s vitest projects'"
+                                    v-tooltip.top="'Run vitest for this app'"
                                     @click="runTests(`${app.app}__test`, testsOf(app.app))"
                                 >
                                     <template #icon><Icon name="bolt" /></template>
@@ -311,12 +311,12 @@ onUnmounted(() => {
                     </div>
                     <div v-if="adding" class="mt-2 flex items-center gap-2 text-xs text-muted">
                         <Icon name="spinner" spin />
-                        <span>Adding apps — follow progress in the terminal.</span>
+                        <span>Adding apps: follow progress in the terminal.</span>
                     </div>
                 </section>
 
                 <!-- Packages: _apps/<x> dirs that carry tests but aren't startable template apps (e.g. cli/sandbox/sync).
-                     A secondary group — muted surface + denser rows — so it never competes with the startable apps. -->
+                     A secondary group: muted surface + denser rows, so it never competes with the startable apps. -->
                 <section v-if="monorepo && packageEntries.length > 0" class="mt-6">
                     <h3 :class="ui.sectionLabel('mb-2')">Packages</h3>
                     <div class="overflow-hidden rounded-lg border border-line/60 bg-card/40">
@@ -362,7 +362,7 @@ onUnmounted(() => {
                 <!-- A vitest-only (non-monorepo) repo: a single flat Tests list over every project (Run-all lives in the header). -->
                 <section v-if="!monorepo">
                     <div v-if="projects.length === 0 && !testsLoading" :class="ui.emptyState()">
-                        No vitest projects found — nothing here owns a vitest.config.* or *.test.* file.
+                        No vitest projects found: nothing here owns a vitest.config.* or *.test.* file.
                     </div>
                     <div v-else class="overflow-hidden rounded-lg border border-line bg-card">
                         <div class="flex flex-col divide-y divide-line">

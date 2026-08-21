@@ -43,7 +43,7 @@ const SERVER_INFO = { name: `intentic`, version: `1.0.0` } as const;
 
 const INSTRUCTIONS =
     `intentic's premium services: metered capabilities (research, data, heavy compute) priced in the owner's ` +
-    `membership credits. Call services_list first — it names what exists, what a run costs, and what is left today. ` +
+    `membership credits. Call services_list first: it names what exists, what a run costs, and what is left today. ` +
     `services_run asks for ONE run: the owner approves it on a page this platform renders, and only their click ` +
     `there releases the spend, so prefer free tools when they answer just as well and never loop runs. A service ` +
     `that fails to answer is refunded automatically. If nothing in the catalog answers a need a paid service ` +

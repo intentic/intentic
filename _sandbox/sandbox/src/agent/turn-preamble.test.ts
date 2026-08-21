@@ -14,7 +14,7 @@ test("strip is the builder's inverse, for one note and for both", () => {
 });
 
 // The whole point of the literal-slash note is positional: with it in front, the user's `/` is no longer the
-// first thing the CLI's command parser sees. Restore then has to give the message back exactly as typed —
+// first thing the CLI's command parser sees. Restore then has to give the message back exactly as typed:
 // including that leading slash, which is what the user wrote and what search and titles index.
 test("the literal-slash note moves the user's `/` off the front, and strip puts it back", () => {
     const prompt = "/workspace view does not remember the file tree";
@@ -24,12 +24,12 @@ test("the literal-slash note moves the user's `/` off the front, and strip puts 
     expect(stripTurnPreamble(withTurnPreamble([note, notice, LITERAL_SLASH_NOTE], prompt))).toBe(prompt);
 });
 
-/* THE DEPENDENCY NOTICE HAS TWO OPENINGS, and for a long time only one of them was anchored — so this case is
+/* THE DEPENDENCY NOTICE HAS TWO OPENINGS, and for a long time only one of them was anchored, so this case is
  * built by calling the real builder rather than from a literal like the fixture above. A hand-written one would
  * have drifted exactly the way the two modules did: the stale half opens with its own sentence, the stripper
  * recognized nothing, and every restored message in this very workspace wore three lines about node_modules in
  * front of what the user actually typed. */
-test("the stale-only notice — the shape this workspace itself produces — strips like every other", () => {
+test("the stale-only notice (the shape this workspace itself produces) strips like every other", () => {
     const stale = setupNoticeFor([
         {
             dir: "intentic",
@@ -49,12 +49,12 @@ test("no notes ⇒ the prompt rides untouched, and strip leaves ordinary message
     expect(stripTurnPreamble("fix the bug")).toBe("fix the bug");
 });
 
-test("a user quoting the notice mid-message keeps their text — strip anchors on the START", () => {
+test("a user quoting the notice mid-message keeps their text: strip anchors on the START", () => {
     const quoted = `My sessions get appended:\n\n${notice}\n\n---\n\nDespite dependencies being installed!`;
     expect(stripTurnPreamble(quoted)).toBe(quoted);
 });
 
-test("only the FIRST separator is consumed — a prompt containing --- survives", () => {
+test("only the FIRST separator is consumed: a prompt containing --- survives", () => {
     const prompt = "intro\n\n---\n\noutro";
     expect(stripTurnPreamble(withTurnPreamble([notice], prompt))).toBe(prompt);
 });
@@ -63,7 +63,7 @@ test("a message that starts with a header but has no separator is left alone", (
     expect(stripTurnPreamble(notice)).toBe(notice);
 });
 
-/* Two layers add notes now — honoured() for every runtime, then the harness arm on top (turn-plan.ts) — and a
+/* Two layers add notes now: honoured() for every runtime, then the harness arm on top (turn-plan.ts), and a
  * second separator would put the inner layer back in the user's bubble on restore. One separator, always. */
 test("a second pass of notes merges into the first rather than nesting a separator", () => {
     const inner = withTurnPreamble([note], "fix the bug");
@@ -75,13 +75,13 @@ test("a second pass of notes merges into the first rather than nesting a separat
     expect(stripTurnPreamble(outer)).toBe("fix the bug");
 });
 
-/* WHAT THE CHAT GETS TO SHOW — the other half of the strip, and the half that did not exist. Every assertion
+/* WHAT THE CHAT GETS TO SHOW: the other half of the strip, and the half that did not exist. Every assertion
  * below is really the same one: whatever came off the user's words is still reachable, whole, and labelled.
  *
  * These pair with the strip tests above deliberately. The two functions read one list and must answer about the
- * same span of text — a note the stripper cuts but the splitter cannot name is a note the user watches an agent
+ * same span of text: a note the stripper cuts but the splitter cannot name is a note the user watches an agent
  * act on with no way to read it, which is the failure this whole mechanism exists to prevent. */
-test("what strip removes, the split hands back — titled, whole, and in the order it was sent", () => {
+test("what strip removes, the split hands back: titled, whole, and in the order it was sent", () => {
     const sent = withTurnPreamble([note, notice], "fix the bug");
 
     expect(preambleNotes(sent)).toEqual([
@@ -93,7 +93,7 @@ test("what strip removes, the split hands back — titled, whole, and in the ord
 });
 
 // The two halves of the dependency notice are one string built by one function, and they say different things
-// to different audiences — so they are two rows, not one, and the split has to find the second's opening.
+// to different audiences, so they are two rows, not one, and the split has to find the second's opening.
 test("the dependency notice's two halves come back as two rows", () => {
     const both =
         setupNoticeFor([
@@ -140,7 +140,7 @@ test("a re-run unwraps the same whichever way its note and the preamble are nest
     }
 });
 
-// An ordinary prompt is neither, and unwrapping is what every reader runs on every message — so it has to hand
+// An ordinary prompt is neither, and unwrapping is what every reader runs on every message, so it has to hand
 // back exactly what it was given rather than finding structure that is not there.
 test("an ordinary prompt unwraps to itself", () => {
     expect(unwrapStoredPrompt("fix the bug")).toEqual({ text: "fix the bug", notes: [] });

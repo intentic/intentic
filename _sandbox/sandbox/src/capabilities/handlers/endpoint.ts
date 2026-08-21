@@ -40,13 +40,13 @@ export const endpointHandler: CapabilityHandler = {
         if (catalog.models.length === 0) {
             yield {
                 kind: "log",
-                message: `Stored ${id} — it published no models yet. Check the server is running at that URL and has a model loaded; the card re-probes on every visit.`,
+                message: `Stored ${id}, it published no models yet. Check the server is running at that URL and has a model loaded; the card re-probes on every visit.`,
             };
             return;
         }
         yield {
             kind: "log",
-            message: `${id} serves ${catalog.models.length} model${catalog.models.length === 1 ? "" : "s"} (${catalog.default} by default) — it appears as a provider in the chat picker.`,
+            message: `${id} serves ${catalog.models.length} model${catalog.models.length === 1 ? "" : "s"} (${catalog.default} by default), it appears as a provider in the chat picker.`,
         };
     },
     status: async (ctx, id, config) => {

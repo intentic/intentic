@@ -203,7 +203,7 @@ export const runPayoutsLogged = async (deps: PayoutDeps, logger: Logger): Promis
         if (outcome.paid) {
             logger.info(outcome, `pool: creator paid`);
         } else {
-            logger.warn(outcome, `pool: payout pending — will retry under the same key`);
+            logger.warn(outcome, `pool: payout pending, will retry under the same key`);
         }
     }
 };

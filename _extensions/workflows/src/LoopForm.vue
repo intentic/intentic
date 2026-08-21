@@ -3,11 +3,11 @@ import { Button, ui, Modal, SegmentedControl } from "@intentic/extension-ui";
 import type { LoopCheck, LoopDesign, LoopOutput } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 
-/* THE SAVED-LOOP FORM — the long questions about looping, asked ONCE per loop instead of once per use.
+/* THE SAVED-LOOP FORM: the long questions about looping, asked ONCE per loop instead of once per use.
  *
  * This is the old composer dialog with its first field removed and a name put in its place, and that swap is
  * the whole redesign. The field it lost was THE GOAL, which is the only thing about a loop that is genuinely
- * different every time — and the one thing the user has already written, in the message box, before they ever
+ * different every time, and the one thing the user has already written, in the message box, before they ever
  * reached for the control. Everything that remains is machinery: how it ends, what memory it carries, how far
  * it may go. Machinery is what a saved thing is for.
  *
@@ -15,8 +15,8 @@ import { computed, ref, watch } from "vue";
  * middle of writing a message, which no honest version of this form is; here it is a form on the surface that
  * owns the thing, where a form belongs and where nobody is mid-sentence.
  *
- * THE ORDER IS WHAT THE AUTHOR KNOWS, unchanged from the dialog it replaces: the name, then how it ENDS —
- * the one decision worth thinking about, and the one that decides whether the loop is trustworthy — then the
+ * THE ORDER IS WHAT THE AUTHOR KNOWS, unchanged from the dialog it replaces: the name, then how it ENDS:
+ * the one decision worth thinking about, and the one that decides whether the loop is trustworthy: then the
  * ceilings, pre-filled with defaults that are safe on their own.
  */
 
@@ -40,7 +40,7 @@ const maxIterations = ref(8);
 const maxSpendUsd = ref(5);
 const stallLimit = ref(2);
 
-/* Every open reloads the form from the loop it was opened on — or clears it for a new one. Immediate, because
+/* Every open reloads the form from the loop it was opened on, or clears it for a new one. Immediate, because
  * the dialog is mounted once and reused: without this, editing a loop after creating one would show the last
  * thing typed, which is the mistake here that costs real money the next time somebody picks it. */
 watch(
@@ -80,14 +80,14 @@ const stopOptions = [
 const contextNote = computed(() =>
     context.value === `fresh`
         ? `Every round starts a new session against the same working tree, and carries its notes in a progress file. Slower per round, and it does not drift.`
-        : `Each round continues the same session. Cheaper and it keeps the reasoning — but a long loop starts agreeing with itself.`,
+        : `Each round continues the same session. Cheaper and it keeps the reasoning, but a long loop starts agreeing with itself.`,
 );
 const stopNote = computed(() => {
     if (stopKind.value === `command`) {
         return `Run after every round. Exit 0 ends the loop. The only check here whose answer does not come from a model.`;
     }
     return stopKind.value === `claim`
-        ? `The agent writes a verdict each round. Self-assessed, so it is advisory — pair it with a tight round ceiling.`
+        ? `The agent writes a verdict each round. Self-assessed, so it is advisory: pair it with a tight round ceiling.`
         : `A separate model, which did none of the work, rules on the agent's own report against your rubric.`;
 });
 
@@ -196,7 +196,7 @@ const submit = (): void => {
                 <!-- The stall limit is the one nobody would think to set, and the one that saves the most: an
                      agent re-reading the same files forever raises no error at all. -->
                 <span class="text-2xs text-subtle">
-                    An idle round is one that changed nothing in the tree — that, not an error, is how a loop usually goes wrong.
+                    An idle round is one that changed nothing in the tree: that, not an error, is how a loop usually goes wrong.
                 </span>
             </div>
         </div>

@@ -4,7 +4,7 @@ import { ref } from "vue";
 
 /* Share a live preview: the one-click viral primitive. A running panel/forwarded port already answers at a PUBLIC
  * `preview-*` / `port-*` hostname (the preview proxy has no auth in front of it), so its URL is a working, sendable
- * link the instant it's up — every shared URL is a live demo of the app and an implicit invite back to Intentic.
+ * link the instant it's up: every shared URL is a live demo of the app and an implicit invite back to Intentic.
  * This surfaces that link with a copy action AND says plainly that it's public, so "shareable" never reads as
  * "leaked". Presentational: the caller passes the already-resolved public `url`. */
 

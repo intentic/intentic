@@ -15,7 +15,7 @@ describe(`toCell`, () => {
     });
 
     it(`renders an empty cell as blank rather than as a word`, () => {
-        // A sheet is mostly holes. `null` and `undefined` both have to reach the template as nothing at all —
+        // A sheet is mostly holes. `null` and `undefined` both have to reach the template as nothing at all:
         // rendering the string "null" down a column is the classic version of this bug.
         expect(toCell(null)).toBeNull();
         expect(toCell(undefined)).toBeNull();

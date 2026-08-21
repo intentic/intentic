@@ -26,7 +26,7 @@ import type { AgentHarness, AgentProvider, PermissionMode } from "./schemas.js";
  * drops the field. The record is what fixed that, and this is what keeps it honest.
  *
  * By SHAPE, not by a list: PROVIDERS × HARNESSES comes from the catalog itself, so a provider added tomorrow is
- * covered the day it is added. If a pair fails here, the answer is a row in capabilitiesOf — never a special
+ * covered the day it is added. If a pair fails here, the answer is a row in capabilitiesOf: never a special
  * case in the surface that asked. */
 
 const pairs: { provider: AgentProvider; harness: AgentHarness }[] = PROVIDERS.flatMap((provider) =>
@@ -42,20 +42,20 @@ describe("every provider/harness pair declares what it can do", () => {
         expect(["claude-code", "codex", "opencode", "opencode-gemini", "acp", "pi"]).toContain(capabilities.runtime);
         expect(["modes", "plan"]).toContain(capabilities.permissions);
         expect(["full", "browser", "http", "none"]).toContain(capabilities.mcp);
-        // Every runtime executes SOMETHING — a record listing no backend would hide the shell every loop has.
+        // Every runtime executes SOMETHING: a record listing no backend would hide the shell every loop has.
         expect(capabilities.execution).toContain("shell");
         for (const backend of capabilities.execution) {
             expect(["shell", "js"]).toContain(backend);
         }
         expect(["namespace", "cwd"]).toContain(capabilities.isolation);
         expect(["replace", "append", "none"]).toContain(capabilities.instructions);
-        // The permission modes offered must include the mode a clamp falls back to — a floor that isn't in the
+        // The permission modes offered must include the mode a clamp falls back to: a floor that isn't in the
         // list would leave the composer showing a posture the runtime can't hold.
         expect(modesFor(capabilities)).toContain(clampMode("default", capabilities));
     });
 });
 
-// An ACP provider is an installed capability's id — any string that isn't a native provider. It gets the ACP
+// An ACP provider is an installed capability's id: any string that isn't a native provider. It gets the ACP
 // floor whatever harness the client happened to send, because the agent IS its own loop.
 test("an unknown provider id is an ACP agent, on either harness", () => {
     for (const harness of HARNESSES) {
@@ -63,12 +63,12 @@ test("an unknown provider id is an ACP agent, on either harness", () => {
     }
 });
 
-/* THE `pi` ID IS RESERVED for the Pi coding agent's own RPC runtime — an `agent`-kind capability like any ACP
+/* THE `pi` ID IS RESERVED for the Pi coding agent's own RPC runtime: an `agent`-kind capability like any ACP
  * agent, but served over Pi's JSONL protocol, which carries abilities the ACP floor cannot: real mid-turn
  * steering, the thinking-level scale, a published command list. Falling to the ACP record instead would strip
  * exactly the abilities that justify a fifth runtime. */
 describe("the pi provider", () => {
-    it("runs the pi runtime on either harness — pi is its own loop", () => {
+    it("runs the pi runtime on either harness: pi is its own loop", () => {
         for (const harness of HARNESSES) {
             expect(capabilitiesOf("pi", harness.value).runtime).toBe("pi");
         }
@@ -96,7 +96,7 @@ describe("the pi provider", () => {
  * "there is nothing to choose". Claude is always its own Claude Code loop. Kimi has no native runtime at all
  * (Moonshot speaks the Anthropic protocol directly), so it runs Claude Code whatever the client sent. Gemini is
  * Kimi's mirror: it has no CLAUDE CODE road, because that loop announces itself in every request and Google's
- * Antigravity channel refuses on the announcement — every account, every time, reported as a spent quota it
+ * Antigravity channel refuses on the announcement: every account, every time, reported as a spent quota it
  * never was. */
 test("only codex and grok change runtime with the harness", () => {
     const switched = PROVIDERS.filter((provider) => capabilitiesOf(provider.value, "native") !== capabilitiesOf(provider.value, "claude-code"));
@@ -105,26 +105,26 @@ test("only codex and grok change runtime with the harness", () => {
 });
 
 /* THE RULE THAT KEEPS CLAUDE CODE TRAFFIC AWAY FROM GOOGLE, asserted where it is decided rather than at each of
- * the surfaces that obey it. Everything downstream — the adapter that serves a turn, the transcript store, the
- * quick helper's choice of loop — reads the runtime off this record, so a Gemini turn asking for Claude Code and
+ * the surfaces that obey it. Everything downstream: the adapter that serves a turn, the transcript store, the
+ * quick helper's choice of loop: reads the runtime off this record, so a Gemini turn asking for Claude Code and
  * getting it back would put the refused loop on the road again everywhere at once. */
 test("gemini answers with its own runtime whatever harness is asked for", () => {
     const native = capabilitiesOf("gemini", "native");
 
     expect(native.runtime).toBe("opencode-gemini");
     expect(capabilitiesOf("gemini", "claude-code")).toEqual(native);
-    // Same abilities as the Grok loop it shares — only the runtime id, which keys adapter health, differs.
+    // Same abilities as the Grok loop it shares: only the runtime id, which keys adapter health, differs.
     expect({ ...native, runtime: "opencode" }).toEqual(capabilitiesOf("grok", "native"));
 });
 
-test("codex and grok under the Claude Code harness get the full ceiling — it is the same loop", () => {
+test("codex and grok under the Claude Code harness get the full ceiling, it is the same loop", () => {
     for (const provider of ["codex", "grok"] as const) {
         expect(capabilitiesOf(provider, "claude-code")).toEqual(capabilitiesOf("claude", "native"));
     }
 });
 
 // The composer's four modes describe behaviours the Claude Code loop actually has. A runtime whose every tool
-// call is pre-approved has two postures, so it is offered two names — not four names for two behaviours.
+// call is pre-approved has two postures, so it is offered two names, not four names for two behaviours.
 test("a plan-only runtime offers the two postures it has", () => {
     expect(modesFor(capabilitiesOf("codex", "native"))).toEqual(["plan", "bypassPermissions"]);
     expect(modesFor(capabilitiesOf("claude", "native"))).toEqual(["default", "acceptEdits", "plan", "bypassPermissions"]);
@@ -138,7 +138,7 @@ test("a mode the runtime can't hold falls back to the one it runs; one it can ho
     expect(clampMode("acceptEdits", capabilitiesOf("claude", "native"))).toBe("acceptEdits");
 });
 
-/* The user-facing half. The full ceiling says nothing — an empty list is what hides the picker's block — and
+/* The user-facing half. The full ceiling says nothing: an empty list is what hides the picker's block, and
  * every axis the record carries has a sentence here, because a capability nobody can read is how this started. */
 test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(limitationsOf(capabilitiesOf("claude", "native"))).toEqual([]);
@@ -149,15 +149,15 @@ test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(grok).toContain("no effort control");
     expect(grok).toContain("worktree by working directory only");
 
-    // ACP takes our http MCP tools when it advertises them, so its line is a narrowing rather than an absence —
+    // ACP takes our http MCP tools when it advertises them, so its line is a narrowing rather than an absence:
     // and it publishes commands and terminals, which must NOT be listed as missing.
     const acp = limitationsOf(capabilitiesOf("some-installed-agent", "native"));
-    expect(acp).toContain("MCP tools only — no plugins or browser");
+    expect(acp).toContain("MCP tools only: no plugins or browser");
     expect(acp).not.toContain("no slash commands");
     expect(acp).not.toContain("no terminal panel");
 
     const codex = limitationsOf(capabilitiesOf("codex", "native"));
-    expect(codex).toContain("browser tools only — no plugins or other MCP tools");
+    expect(codex).toContain("browser tools only: no plugins or other MCP tools");
     expect(codex).not.toContain("no MCP tools or plugins");
 });
 
@@ -179,7 +179,7 @@ test("every axis a record can lack has words for it", () => {
     };
 
     // Eleven DISCLOSABLE axes, eleven sentences: an axis added to the interface without one would silently
-    // never be disclosed. fastMode is the deliberate twelfth — a record alone can't tell the truth about it (a
+    // never be disclosed. fastMode is the deliberate twelfth: a record alone can't tell the truth about it (a
     // translator-routed turn reads true here and still can't go fast), so it is answered by fastAllowed
     // instead. Anything else added to the interface has to move this number.
     expect(limitationsOf(nothing)).toHaveLength(11);
@@ -196,12 +196,12 @@ test("the instruction axis discloses its two weaker answers, differently", () =>
     expect(grok).toContain("added to theirs");
     expect(grok).not.toContain("isn't applied");
     expect(acp).toContain("isn't applied");
-    // Codex on its own runtime replaces, like the Claude Code loop — so it has nothing to disclose here.
+    // Codex on its own runtime replaces, like the Claude Code loop, so it has nothing to disclose here.
     expect(limitationsOf(capabilitiesOf("codex", "native")).join(" ")).not.toContain("system prompt");
 });
 
 /* The JS backend is hosted by the one loop the daemon can put its own execution seam through. Pinned as a test
- * rather than left to the records because turn planning gates the backend on this axis — a runtime gaining it
+ * rather than left to the records because turn planning gates the backend on this axis: a runtime gaining it
  * here without a seam behind it would advertise code runs that can never execute. */
 test("only the Claude Code loop hosts the js execution backend", () => {
     for (const { provider, harness } of pairs) {
@@ -230,7 +230,7 @@ describe("the max-effort rule", () => {
         expect(effortAllowed("high", "kimi", false)).toBe(true);
     });
 
-    it("is repaired, not refused, on the way to the API — the tier drops, the user's thinking choice does not", () => {
+    it("is repaired, not refused, on the way to the API: the tier drops, the user's thinking choice does not", () => {
         expect(sendableEffort("max", false)).toBe("high");
         expect(sendableEffort("max", undefined)).toBe("high");
         expect(sendableEffort("max", true)).toBe("max");
@@ -241,7 +241,7 @@ describe("the max-effort rule", () => {
 
 /* AN `endpoint/<id>` PROVIDER is a model API the user configured, and the one thing this record has to get right
  * about it is that it is NOT an ACP agent. Both are minted by installing a capability and both are unknown to
- * NATIVE_PROVIDERS, so the id is the only thing that tells them apart — and they want opposite records: an ACP
+ * NATIVE_PROVIDERS, so the id is the only thing that tells them apart, and they want opposite records: an ACP
  * agent brings its own loop and gets the documented floor, while an endpoint is driven BY the Claude Code loop
  * and gets its full ceiling. Getting this backwards would strip steering, per-tool approvals, MCP and the mount
  * namespace from every turn on a user's own model. */
@@ -262,7 +262,7 @@ describe("a configured model endpoint", () => {
         expect(endpointProvider("gpu-box")).toBe("endpoint/gpu-box");
         expect(endpointIdOf(endpointProvider("gpu-box"))).toBe("gpu-box");
         expect(isEndpointProvider("endpoint/gpu-box")).toBe(true);
-        // A bare id that merely starts with the word is not one — the separator is what makes the namespace.
+        // A bare id that merely starts with the word is not one: the separator is what makes the namespace.
         expect(isEndpointProvider("endpoints-r-us")).toBe(false);
         expect(endpointIdOf("claude")).toBeUndefined();
         // Its credential was configured with the endpoint, so there is nothing left for a connect gate to offer.
@@ -271,7 +271,7 @@ describe("a configured model endpoint", () => {
 });
 
 /* FAST SPEED IS OFFERED ON THREE CONDITIONS AT ONCE, and the interesting cases are the ones where two of them
- * hold. A translator-routed provider runs the Claude Code loop — same record, same ceiling — and still cannot go
+ * hold. A translator-routed provider runs the Claude Code loop: same record, same ceiling, and still cannot go
  * fast, because the harness refuses a non-Anthropic endpoint; a Claude model that publishes no `fast` badge
  * cannot either. Both would be silent failures if the composer offered the control anyway: the turn runs, the
  * answer arrives, and only the bill says it was standard speed. */
@@ -281,7 +281,7 @@ describe("offering fast speed", () => {
     });
 
     it("is refused for a routed provider on the Claude Code loop, whose endpoint is not first-party", () => {
-        // Grok under the claude-code harness reads the FULL Claude Code record — the capability alone would say
+        // Grok under the claude-code harness reads the FULL Claude Code record: the capability alone would say
         // yes. It is served through the sandbox's translator, so the harness would report `not_first_party`.
         expect(capabilitiesOf("grok", "claude-code").fastMode).toBe(true);
         expect(fastAllowed(capabilitiesOf("grok", "claude-code"), "grok", ["fast"])).toBe(false);
@@ -291,7 +291,7 @@ describe("offering fast speed", () => {
 
     it("is refused for a Claude model whose catalog row doesn't publish it", () => {
         expect(fastAllowed(capabilitiesOf("claude", "native"), "claude", ["reasoning"])).toBe(false);
-        // The seed floor and any provider that reports ids only — no capabilities published, nothing claimed.
+        // The seed floor and any provider that reports ids only: no capabilities published, nothing claimed.
         expect(fastAllowed(capabilitiesOf("claude", "native"), "claude", undefined)).toBe(false);
     });
 

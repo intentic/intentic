@@ -109,7 +109,7 @@ const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini"> = {
     preflight: (services, input, context) => planGeminiTurn(services, input, context),
     health: async (services) => {
         if (services.config.translator.url === "") {
-            return unavailable("This sandbox has no model translator — run one built from the published image to use Gemini.");
+            return unavailable("This sandbox has no model translator: run one built from the published image to use Gemini.");
         }
         const accounts = await attempt(() => services.cliProxy.accounts());
         if (accounts === undefined) {
@@ -163,7 +163,7 @@ const PI_ADAPTER: AgentAdapter<"pi"> = {
             return unavailable("Add the Pi Agent capability to run Pi here.");
         }
         const head = capability.config.command.trim().split(/\s+/)[0] ?? "";
-        return (await onPath(head)) ? ready() : unavailable(`\`${head}\` is not on PATH — rebuild the sandbox so the Pi install lands in the image.`);
+        return (await onPath(head)) ? ready() : unavailable(`\`${head}\` is not on PATH, rebuild the sandbox so the Pi install lands in the image.`);
     },
     /* A Pi session is a JSONL file (the id on the wire IS its path, pi/pi-agent.ts), so whether a resume can
      * still happen is whether the file is still there. Asked of the filesystem rather than of Pi, because

@@ -10,7 +10,7 @@ import { composeAsk } from "./prompt.js";
  * unprompted when the registry lists a new sha, so the owner opens a finished account instead of starting one. */
 const UPDATE_INVARIANTS =
     `This turn reads and reports; it changes nothing and installs nothing. Clone into a scratch directory ` +
-    `outside the workspace and read the diff between the two commits — the installed code was approved once ` +
+    `outside the workspace and read the diff between the two commits: the installed code was approved once ` +
     `already, so what is between them is the whole subject. Lead with the manifest's delta: any route added to ` +
     `\`permissions.sandbox\` is reach the owner never approved and the headline whatever else changed. Then the ` +
     `code: what behaviour changed, in the owner's terms, citing file and line.`;
@@ -33,5 +33,5 @@ export const updateBrief = ({ label, url, fromRef, toRef, path }: UpdateBrief): 
         diagnosis: `The manifest (intentic-extension.json at the extension root) is the contract on both sides of the diff, so its delta is readable exactly like the code's.`,
         goal: `Read the diff and say what the update actually is: the manifest delta first, then what the code now does that it did not, and what it stopped doing.`,
         invariants: UPDATE_INVARIANTS,
-        done: `Done when you end on a recommendation the owner can act on — update, update and watch something named, or stay on ${fromRef.slice(0, 7)} — with the change that decided it cited by file and line.`,
+        done: `Done when you end on a recommendation the owner can act on, update, update and watch something named, or stay on ${fromRef.slice(0, 7)}, with the change that decided it cited by file and line.`,
     });

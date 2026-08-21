@@ -53,7 +53,7 @@ describe(`search`, () => {
         expect(hit?.snippet).toBe(`Built the engine Ada wrote for.`);
     });
 
-    /* A snippet is shown as evidence under a title, not rendered — so the markers that only mean something to a
+    /* A snippet is shown as evidence under a title, not rendered, so the markers that only mean something to a
      * renderer read as damage. The words themselves are never touched. */
     it(`shows a matched line as words rather than as markup`, () => {
         const marked = buildIndex([

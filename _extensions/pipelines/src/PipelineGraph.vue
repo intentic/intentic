@@ -11,11 +11,11 @@ import { formatDuration, STATUS_TONE } from "./statusVisual";
 const { stages, recurring } = defineProps<{
     stages: readonly PipelineStage[];
     // Job name → consecutive runs it has been failing. A job in here is the same breakage as last time, not a
-    // new one — the difference between "triage this" and "you already know".
+    // new one: the difference between "triage this" and "you already know".
     recurring: ReadonlyMap<string, number>;
 }>();
 
-// Popovers are addressed by stage index — a derived GitHub wave has no name to key on, and GitLab stage
+// Popovers are addressed by stage index: a derived GitHub wave has no name to key on, and GitLab stage
 // names are only unique by convention.
 const popovers = ref<Record<number, InstanceType<typeof Popover> | null>>({});
 const open = ref<number | undefined>();
@@ -28,11 +28,11 @@ const toggleStage = (index: number, event: Event): void => {
     open.value = open.value === index ? undefined : index;
 };
 
-// Hover text: what the stage is called, how it ended, and — when it holds more than the one job its label
-// already names — how many jobs are inside.
+// Hover text: what the stage is called, how it ended, and, when it holds more than the one job its label
+// already names: how many jobs are inside.
 const stageTooltip = (stage: PipelineStage, index: number): string => {
     const detail = stage.jobs.length > 1 ? ` · ${stage.jobs.length} jobs` : ``;
-    return `${stageLabel(stage, index)} — ${STATUS_TONE[stage.status].label}${detail}`;
+    return `${stageLabel(stage, index)}: ${STATUS_TONE[stage.status].label}${detail}`;
 };
 </script>
 

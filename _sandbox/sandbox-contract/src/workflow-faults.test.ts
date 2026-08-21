@@ -3,7 +3,7 @@ import { type Workflow, WorkflowSchema, type WorkflowStep } from "./schemas.js";
 import { workflowFaults, workflowRunFaults } from "./workflow-faults.js";
 
 /* The GATE rules. The graph rules beside them are exercised by the scheduler's own integration tests, which
- * have a real run to check them against; these have none to check, which is the point — every fault here is one
+ * have a real run to check them against; these have none to check, which is the point: every fault here is one
  * the workflow has to be refused for BEFORE a run, because the failure it prevents costs a full fan-out of
  * sessions and then reports nothing anybody can act on.
  */
@@ -78,7 +78,7 @@ test("a gate on a field the step does not declare is refused", () => {
 test("a gate on a list field is refused", () => {
     const steps = [judge({ output: { kind: "json", fields: [{ name: "release", type: "string[]", description: "the verdicts", required: true }] } })];
     const faults = workflowFaults(gated({ steps }));
-    expect(faults).toEqual([`The gate reads "release", which is a list — a release decision has to be one value.`]);
+    expect(faults).toEqual([`The gate reads "release", which is a list: a release decision has to be one value.`]);
 });
 
 // The expensive one to discover at run time: it passes every save, then blocks a release on the one commit
@@ -86,10 +86,10 @@ test("a gate on a list field is refused", () => {
 test("a gate on an optional field is refused", () => {
     const steps = [judge({ output: { kind: "json", fields: [{ name: "release", type: "string", description: "pass | fail", required: false }] } })];
     const faults = workflowFaults(gated({ steps }));
-    expect(faults).toEqual([`The gate reads "release", which "Judge" declares optional — it has to be required.`]);
+    expect(faults).toEqual([`The gate reads "release", which "Judge" declares optional, it has to be required.`]);
 });
 
-/* THE RUN-TIME RULE, kept apart from every rule above it because it is not about the graph — and the graph is
+/* THE RUN-TIME RULE, kept apart from every rule above it because it is not about the graph, and the graph is
  * what gets saved. A design whose steps take their goal and instruction from the request is the ordinary shape
  * and must save cleanly; it is only unrunnable on the particular run that brought no request.
  */
@@ -102,7 +102,7 @@ test("a design whose steps inherit is a perfectly good design", () => {
 });
 
 /* Refused at the door rather than discovered by the first step, because this is the one combination with
- * nothing to tell the model at all — and by the time a step found out, the run has already opened a session per
+ * nothing to tell the model at all, and by the time a step found out, the run has already opened a session per
  * root and started paying for them.
  */
 test("running an inheriting design with no request is refused", () => {
@@ -120,7 +120,7 @@ test("a step that declares only one of the two still needs a request", () => {
     expect(workflowRunFaults(gated({ steps: [judge({ prompt: undefined })] }), undefined)).toHaveLength(1);
 });
 
-// A design that says everything itself is startable from anywhere, with no composer behind it — which is what
+// A design that says everything itself is startable from anywhere, with no composer behind it, which is what
 // keeps the gate's webhook and the workflows page working for the designs written that way.
 test("a design that declares everything runs with no request at all", () => {
     expect(workflowRunFaults(gated(), undefined)).toEqual([]);

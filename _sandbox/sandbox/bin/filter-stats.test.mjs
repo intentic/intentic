@@ -11,7 +11,7 @@ test("summarizeStats: saved-% and tokens come from the cleaned population only",
     expect(report.rawTokens).toBe(3000); // (4000+8000)/4
     expect(report.emittedTokens).toBe(300); // (400+800)/4
     expect(report.savedPct).toBe(90);
-    // Ranked by what each mechanism SAVED, not by how often it fired — a handler can match constantly and be
+    // Ranked by what each mechanism SAVED, not by how often it fired: a handler can match constantly and be
     // worth nothing, which is exactly what this list is read to find out.
     expect(report.perCleaner).toEqual([
         { id: "test", commands: 1, savedTokens: 1500 },
@@ -47,7 +47,7 @@ test("summarizeStats: a separated holdout publishes the median saving", () => {
 });
 
 test("summarizeStats: a holdout the cleaners did not separate publishes no number at all", () => {
-    // The two arms are the same distribution — which is what an ineffective config looks like, and also what a
+    // The two arms are the same distribution, which is what an ineffective config looks like, and also what a
     // real one looks like on a window too short to tell. Either way the honest report is silence.
     const rows = [
         ...Array.from({ length: 200 }, (_, i) => ({
@@ -73,7 +73,7 @@ test("summarizeStats: high-volume cleaned commands with no cleaner surface as ga
         { command: "weird-tool run", rawBytes: 9000, emittedBytes: 9000, matched: [], heldOut: false },
         { command: "weird-tool run", rawBytes: 3000, emittedBytes: 3000, matched: [], heldOut: false },
     ];
-    // One row per command, `commands` runs summing to `tokens` — the list is read for which handler to write
+    // One row per command, `commands` runs summing to `tokens`: the list is read for which handler to write
     // next, and that is a question about a command over its runs, not about a single expensive run.
     expect(summarizeStats(rows).gaps).toEqual([{ command: "weird-tool run", commands: 2, tokens: 3000 }]);
 });

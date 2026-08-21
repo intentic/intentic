@@ -40,7 +40,7 @@ const deliverInvite = async (
     try {
         return { link, delivery: await sendInviteEmail(context.config, context.logger, { to, sandboxName, inviterName, link }) };
     } catch (error) {
-        context.logger.error({ err: error, to }, `invite email refused — the invite stands, the link did not travel`);
+        context.logger.error({ err: error, to }, `invite email refused, the invite stands, the link did not travel`);
         const said = error instanceof Error ? error.message : String(error);
         return { link, delivery: `refused`, reason: said.slice(0, REASON_LIMIT) };
     }
@@ -133,7 +133,7 @@ export const inviteRoutes = {
         }
         const decision = inviteAcceptDecision(member, user.email, new Date());
         if (decision === `expired`) {
-            throw new ORPCError(`BAD_REQUEST`, { message: `This invite link has expired — ask the owner to resend it.` });
+            throw new ORPCError(`BAD_REQUEST`, { message: `This invite link has expired, ask the owner to resend it.` });
         }
         if (decision === `wrong-email`) {
             throw new ORPCError(`FORBIDDEN`, { message: `This invite is for ${member.email}. Sign in with that Google account to accept.` });

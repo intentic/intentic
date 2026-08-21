@@ -1,7 +1,7 @@
 {
     "name": "@intentic/extension-manifest",
     "version": "0.0.0",
-    "description": "What an intentic extension DECLARES — the intentic-extension.json schema and the sandbox-route allowlist rule",
+    "description": "What an intentic extension DECLARES, the intentic-extension.json schema and the sandbox-route allowlist rule",
     "license": "MIT",
     "type": "module",
     "repository": {

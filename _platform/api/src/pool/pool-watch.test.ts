@@ -4,12 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
 import { runWatch, watchVerdict } from "./pool-watch.js";
 
-/* Gate 4 — the only gate that never finishes. The verdict is a pure function of counted rows on purpose, so
+/* Gate 4: the only gate that never finishes. The verdict is a pure function of counted rows on purpose, so
  * every threshold boundary can be pinned here without a database, and so the rule stated on the site is
  * literally the rule that runs. */
 
 // No SECRETS_KEY, so the canary's decryptSecret passes the fixture's plaintext signing key straight through
-// (crypto.ts) — which is exactly the unconfigured-dev path, and keeps these tests about the watch.
+// (crypto.ts), which is exactly the unconfigured-dev path, and keeps these tests about the watch.
 const config = {
     secrets: { key: `` },
     pool: {
@@ -47,7 +47,7 @@ describe(`the watch verdict`, () => {
     });
 
     /* A partial window cannot trip. Judging a listing on its first three runs would delist a working service
-     * that met one bad afternoon — and the refunds already made those three runs free to the member. */
+     * that met one bad afternoon, and the refunds already made those three runs free to the member. */
     it(`will not trip on a window that is not full yet`, () => {
         expect(watchVerdict(config, { status: `probation`, recent: runs(3, 3), servedTotal: 0 })).toBe(`keep`);
     });
@@ -114,12 +114,12 @@ const row = (over: Partial<Row> = {}): Row => ({
     ...over,
 });
 
-// The canary's fetch. Every call fails, which is all these tests need — the probe's own pass/fail logic has
+// The canary's fetch. Every call fails, which is all these tests need: the probe's own pass/fail logic has
 // its suite next door.
 const deadProvider = (async () => new Response(`down`, { status: 503 })) as unknown as typeof fetch;
 
 // Public DNS, so a failing canary is failing because the PROVIDER is down rather than because a fixture
-// hostname does not resolve — which is the thing these tests mean to be about.
+// hostname does not resolve, which is the thing these tests mean to be about.
 const publicLookup = vi.fn(async () => [{ address: `93.184.216.34`, family: 4 }]) as unknown as Parameters<typeof runWatch>[0][`lookupFn`];
 
 describe(`the watch, run over live listings`, () => {

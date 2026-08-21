@@ -12,7 +12,7 @@ import {
     WHY_MAX,
 } from "./mcp-offer.js";
 
-/* THE SPEND GATE'S OWN TESTS. What is being pinned here is not CRUD — it is the one property that lets a
+/* THE SPEND GATE'S OWN TESTS. What is being pinned here is not CRUD: it is the one property that lets a
  * coding agent on somebody's laptop be handed a spending catalogue: an approval exists only if the owner's
  * browser wrote it, and it releases exactly one run. Every test below is a way that could stop being true. */
 
@@ -32,7 +32,7 @@ interface Row {
     decidedAt: Date | null;
 }
 
-// An in-memory service_offer table with the SAME conditional-update semantics the real one has — updateMany
+// An in-memory service_offer table with the SAME conditional-update semantics the real one has: updateMany
 // filtered on status returns a count, which is what makes "one approval, one run" a race-proof property
 // rather than a hopeful read-then-write.
 const fakePrisma = (seed: readonly Partial<Row>[] = []) => {
@@ -141,7 +141,7 @@ describe(`the offer's lifecycle`, () => {
     });
 });
 
-describe(`settling — the only door to approved`, () => {
+describe(`settling, the only door to approved`, () => {
     it(`approves a live offer once, and reads a second click as already settled`, async () => {
         const { prisma, rows } = fakePrisma([{ id: `o1` }]);
         expect(await settleOffer(prisma, `o1`, `u1`, true, NOW)).toBe(`approved`);
@@ -168,7 +168,7 @@ describe(`settling — the only door to approved`, () => {
     });
 });
 
-describe(`consuming the grant — one approval, one run`, () => {
+describe(`consuming the grant: one approval, one run`, () => {
     it(`spends an approved offer and refuses the second attempt`, async () => {
         const { prisma } = fakePrisma([{ id: `o1`, status: `approved`, request: `{"q":"x"}` }]);
         const first = await consumeGrant(prisma, `o1`, `u1`, NOW);
@@ -199,7 +199,7 @@ describe(`consuming the grant — one approval, one run`, () => {
         expect(rows[0]?.status).toBe(`expired`);
     });
 
-    it(`still spends a fresh approval whose ASK clock has passed — ten minutes bounds the question, not the yes`, async () => {
+    it(`still spends a fresh approval whose ASK clock has passed: ten minutes bounds the question, not the yes`, async () => {
         const { prisma } = fakePrisma([{ id: `o1`, status: `approved`, decidedAt: NOW, expiresAt: new Date(NOW.getTime() - 1) }]);
         expect((await consumeGrant(prisma, `o1`, `u1`, NOW)).kind).toBe(`granted`);
     });
@@ -235,7 +235,7 @@ describe(`how a retry finds its own offer`, () => {
         expect(await findRecentOffer(prisma, { userId: `u1`, serviceId: `s1`, request: `{"q":"x"}` }, muchLater)).toBeUndefined();
     });
 
-    /* A run that already happened must never make the NEXT identical ask look answered — otherwise a second
+    /* A run that already happened must never make the NEXT identical ask look answered: otherwise a second
      * run of the same query would silently reuse a spent approval instead of asking again. */
     it(`never returns a spent offer`, async () => {
         const { prisma } = fakePrisma([{ id: `o1`, status: `spent`, decidedAt: NOW }]);

@@ -23,37 +23,37 @@ import { conversationIdOf } from "./runs";
 import { useChores } from "./useChores";
 import { useRuns } from "./useRuns";
 
-/* MAINTENANCE — the chore book, against this workspace, with the evidence attached.
+/* MAINTENANCE: the chore book, against this workspace, with the evidence attached.
  *
- * TWO AXES, AND THEY DO DIFFERENT JOBS. A chore is decided and acted on PER REPOSITORY — "update dependencies" in
- * two repositories is two different pieces of work with two different answers — so the repository is what the rail
+ * TWO AXES, AND THEY DO DIFFERENT JOBS. A chore is decided and acted on PER REPOSITORY: "update dependencies" in
+ * two repositories is two different pieces of work with two different answers, so the repository is what the rail
  * scopes by, and one repository's chores are what the body is about. But repository is a bad way to SORT the rows
  * inside it: it was one flat column of thirteen, where "16 advisories · carrying" and "not surveyed in 90 days"
  * were the same object with a different badge colour, and the reader had to re-derive from each row how alarmed to
  * be. Grouped by kind (CHORE_KINDS), the same rows read as "one risk you are carrying, two things accruing, one
- * drift, two reading assignments" — and the page finally says out loud that only one of the six is urgent.
+ * drift, two reading assignments", and the page finally says out loud that only one of the six is urgent.
  *
  * That grouping is also the page keeping its own promise. Every row here shows its working so you can disagree
  * with it; the ordering was the one editorial claim the page made, it lived in a comment in the chore book, and it
- * was thrown away at render — a claim nobody could see, let alone argue with.
+ * was thrown away at render: a claim nobody could see, let alone argue with.
  *
  * The rail NARROWS, it does not select a document: every row is a real chore under "All repositories" as much as
  * under one of them. So the page keeps <SplitView>'s default `collapse` behaviour on a phone, and the rail sits
  * above the list rather than covering it. It disappears entirely when there is one repository or when the host
- * pinned one (the Workspace tree's per-repo panel) — an index over a single thing is a column of chrome.
+ * pinned one (the Workspace tree's per-repo panel): an index over a single thing is a column of chrome.
  *
- * The filter defaults to what needs attention, and that is the only thing hidden by default — "Everything" is one
+ * The filter defaults to what needs attention, and that is the only thing hidden by default: "Everything" is one
  * click away and shows the clear and unmeasured rows too. Both halves matter. A surface that only ever shows
  * problems cannot be used to check that there are none, and the reason a chore is CLEAR (measured yesterday,
  * nothing found) is exactly the reassurance someone opens this page for.
  *
  * Opening the page acknowledges what is on it (attention.ts): the rail's badge means "evidence you have not seen",
- * so seeing it is what clears it. Nothing is marked done, nothing is dismissed — the chores stay exactly as due as
+ * so seeing it is what clears it. Nothing is marked done, nothing is dismissed: the chores stay exactly as due as
  * they were.
  *
  * EVERY NUMBER ON THIS PAGE SAYS HOW OLD IT IS, and the page never claims a measurement it knows is out of date.
  * The deep probes refresh on a weekly TTL, so an hour after a turn deleted the dead code the row was still
- * quoting the count from six days before it — with a line underneath saying a turn had run, which read as "we
+ * quoting the count from six days before it: with a line underneath saying a turn had run, which read as "we
  * checked and nothing moved". Nothing had checked. The measurement's age now rides on the row itself, and a chore
  * whose evidence predates its last turn steps down to `stale` (verdict.ts): still listed, still showing what it
  * found, but no longer due and offering a re-measure rather than a second turn. */
@@ -73,7 +73,7 @@ const notice = ref<string>();
 
 /* WHICH REPOSITORY IS IN VIEW LIVES IN THE URL, so "what does intentic owe" is a link somebody can be sent.
  * Derived from the query rather than mirrored into a ref: one direction of flow, and Back/Forward work for free.
- * Absent means every repository, which is why it is `undefined` rather than a sentinel — the tidy URL is the one
+ * Absent means every repository, which is why it is `undefined` rather than a sentinel: the tidy URL is the one
  * you get by default. The filter is NOT in the URL: it is a posture, not a place. */
 const query = computed(() => api.route.query());
 const repo = computed<string | undefined>({
@@ -83,13 +83,13 @@ const repo = computed<string | undefined>({
 
 const rowKey = (verdict: ChoreVerdict): string => `${verdict.repo}|${verdict.chore.id}`;
 
-// A month. Long enough to mean "not this cycle" and short enough that nobody has to remember they said it —
+// A month. Long enough to mean "not this cycle" and short enough that nobody has to remember they said it:
 // a snooze that outlives the reason for it is indistinguishable from the chore being wrong.
 const SNOOZE_MS = 30 * 86_400_000;
 
 /* WHAT THE RAIL LISTS. The count is what is DUE, not how many chores exist: thirteen is the same number in every
  * repository and says nothing. Whether any of them is a risk being CARRIED is the row's COLOUR rather than a
- * second number — one live advisory and one dependency drift are not the same morning's work, but two numbers in
+ * second number: one live advisory and one dependency drift are not the same morning's work, but two numbers in
  * a 16rem column read as "1 5" with nothing saying which is which, and the reader who needs the distinction is
  * scanning, not hovering. Tint is the encoding the rows themselves already use for the same fact (ChoreRow's
  * badge is warning for `carrying` and info for everything else), so the rail and the list say it the same way.
@@ -127,7 +127,7 @@ const railAll = computed<RepoRailAll>(() => {
     return { icon: `wrench`, meta: String(due), tone: railTone(carrying), tooltip: railNote(due, carrying) };
 });
 
-/* The rail exists when the view is the thing choosing the scope, and not when the host already fixed it — which is
+/* The rail exists when the view is the thing choosing the scope, and not when the host already fixed it, which is
  * the whole difference between the two surfaces. Deliberately NOT "when there is more than one repository": that
  * is unknown until the report lands, so the column would appear a moment after the page did and shove the list
  * 17rem sideways under the reader's eyes, to reach a case the rail surface cannot be in anyway (the report always
@@ -136,13 +136,13 @@ const railed = computed(() => pinned === undefined);
 
 const scoped = computed(() => (repo.value === undefined ? byRepo.value : byRepo.value.filter((group) => group.repo === repo.value)));
 
-/* A chore that does not APPLY here is not a row under any filter — there is no Dockerfile to slim, no pipeline to
+/* A chore that does not APPLY here is not a row under any filter: there is no Dockerfile to slim, no pipeline to
  * tighten, no documentation to re-read, and listing it as "clear" would claim we checked something that does not
  * exist. It is not hidden either: <RepoScope> counts them in one line and opens to every one of them and why, so
  * "why is there no Docker chore in this repository?" has an answer one click away rather than a support question. */
 /* `stale` is under "Needs attention" alongside due and snoozed, and it has to be. It is the state a chore lands
  * in the moment a turn finishes on it, so filtering it out would make a chore VANISH from the page exactly when
- * the owner came back to see what happened to it — the same disappearance the settled note exists to prevent,
+ * the owner came back to see what happened to it: the same disappearance the settled note exists to prevent,
  * arriving through the filter instead. What it needs is a measurement rather than a turn, but it does need one. */
 const shown = (verdict: ChoreVerdict): boolean =>
     verdict.state !== `not-applicable` &&
@@ -176,7 +176,7 @@ const groups = computed(() =>
     }),
 );
 
-// The freshness statement is about ONE repository's measurements, so it renders when the scope is one repository —
+// The freshness statement is about ONE repository's measurements, so it renders when the scope is one repository:
 // which "All repositories" also is in a workspace that only has one, and that is the right answer there too.
 const only = computed(() => (scoped.value.length === 1 ? scoped.value[0] : undefined));
 // Under a wider scope the repository is what tells two otherwise identical rows apart, so the row carries it.
@@ -185,7 +185,7 @@ const showRepo = computed(() => scoped.value.length > 1);
 const scopeDue = computed(() => scoped.value.flatMap((group) => group.verdicts).filter((verdict) => verdict.state === `due`).length);
 
 /* Acknowledge whatever is currently on screen, whenever it changes while this page is open. `immediate` because
- * the common case is arriving here BECAUSE the tile was lit — the first render is the moment the evidence was
+ * the common case is arriving here BECAUSE the tile was lit: the first render is the moment the evidence was
  * seen. Idempotent by digest, so the repeated firing this watcher does costs one comparison and no write. It is
  * the RENDERED rows, not every verdict in the workspace: acknowledging a repository the reader has not opened
  * would spend the badge on evidence nobody looked at. */
@@ -197,7 +197,7 @@ watch(
     { immediate: true },
 );
 
-// Finished runs become ledger rows here, on the same data the page already holds — see useRuns.promote for why
+// Finished runs become ledger rows here, on the same data the page already holds: see useRuns.promote for why
 // the agent writes a file and the browser does the recording. Workspace-wide on purpose: a run that landed is a
 // fact about the ledger, not about what is currently in view.
 const ledgerRunIds = computed(
@@ -237,11 +237,11 @@ const onRefreshProbe = (id: string): void => {
     void attempt(`ask for that measurement`, () => refreshProbe(at, id));
 };
 
-/* Re-measure everything ONE chore rests on, from its own row — the move a stale row offers instead of a turn.
+/* Re-measure everything ONE chore rests on, from its own row: the move a stale row offers instead of a turn.
  * The row carries its repository, so this works under "All repositories" where the scope strip's buttons cannot.
  *
  * `attempt` here covers the ASK, not the measurement: the request is milliseconds and the sweep is minutes, and
- * conflating them is what made this button feel broken — the page's busy flag went up and straight back down
+ * conflating them is what made this button feel broken: the page's busy flag went up and straight back down
  * while the actual work had not started. What the reader watches instead is `measuring`, which lives as long as
  * the probe does. */
 const onRemeasure = (verdict: ChoreVerdict): void => {
@@ -276,7 +276,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                     { label: `Everything`, value: `all`, title: `Every chore in the book, including the clear and the unmeasured` },
                 ]"
             />
-            <!-- IT RE-READS, IT DOES NOT RE-MEASURE, and it used to say "Refresh · Re-read the evidence" — which
+            <!-- IT RE-READS, IT DOES NOT RE-MEASURE, and it used to say "Refresh · Re-read the evidence", which
                  is the button anyone presses after a chore's work lands, and the reason they conclude the page is
                  broken when the numbers do not move. Measuring again costs a subprocess and minutes, so it stays
                  a per-chore decision on the row that needs it; this one says what it actually does. -->
@@ -284,7 +284,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                 quiet
                 icon="refresh"
                 label="Reload"
-                hint="Re-read the latest results — to measure again, open a chore"
+                hint="Re-read the latest results: to measure again, open a chore"
                 :disabled="busy"
                 @click="void refresh()"
             />
@@ -313,7 +313,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
 
         <template #detail>
             <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
-                <!-- Nothing has come back yet — including the window where the sandbox handshake still gates the
+                <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
                      fetch. Show the book's shape rather than a sentence, so the page that arrives is the page you
                      were already looking at. -->
                 <MaintenanceSkeleton v-if="isPending" />
@@ -329,7 +329,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                     <Button size="small" severity="secondary" text label="Show everything" @click="filter = `all`" />
                 </div>
 
-                <!-- ONE GROUP PER KIND, in the book's own order — the four claims the page makes, each with the
+                <!-- ONE GROUP PER KIND, in the book's own order: the four claims the page makes, each with the
                      sentence that argues for it (CHORE_KINDS) beside the heading. -->
                 <template v-else>
                     <RowGroup

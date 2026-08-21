@@ -3,7 +3,7 @@ import type { Config } from "../../config.js";
 import { hostedFleet, renderHostedFleet } from "./hosted-fleet.js";
 
 /* WHAT THE FLY CONSOLE CANNOT SAY. The fleet view exists for exactly one confusion: a warm machine's app is
- * named `<prefix>-pool-<hex>` before anybody claims it, and Fly never lets a name change — so after a claim
+ * named `<prefix>-pool-<hex>` before anybody claims it, and Fly never lets a name change, so after a claim
  * that app is a person's sandbox still called `pool`. These pin the classification that fixes it, including
  * the two disagreements between Fly and the platform (an app with no row, a row with no app) that are the
  * only reasons an operator would go looking. */
@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe(`hostedFleet`, () => {
-    it(`names a claimed pool app for what it is — the console only ever sees the word "pool"`, async () => {
+    it(`names a claimed pool app for what it is: the console only ever sees the word "pool"`, async () => {
         stubApps([`intentic-sbx-pool-claimed1`, `intentic-sbx-pool-warm1`]);
         const fleet = await hostedFleet(fakePrisma([taken()], [{ appName: `intentic-sbx-pool-warm1`, region: `arn`, state: `ready` }]), config());
         expect(fleet).toEqual([
@@ -54,7 +54,7 @@ describe(`hostedFleet`, () => {
         ]);
     });
 
-    it(`separates a hand-off in flight from standing stock — a claiming row is nobody's to destroy`, async () => {
+    it(`separates a hand-off in flight from standing stock: a claiming row is nobody's to destroy`, async () => {
         stubApps([`intentic-sbx-pool-mid`]);
         const fleet = await hostedFleet(fakePrisma([], [{ appName: `intentic-sbx-pool-mid`, region: `iad`, state: `claimed` }]), config());
         expect(fleet[0]?.role).toBe(`claiming`);

@@ -30,7 +30,7 @@ test("hasSession flips on the connected marker; clearSession resets it", async (
     expect(hasSession(root, "reddit")).toBe(false);
     await markConnected(root, "reddit");
     expect(hasSession(root, "reddit")).toBe(true);
-    // Marker is per-account — connecting reddit doesn't connect x.
+    // Marker is per-account: connecting reddit doesn't connect x.
     expect(hasSession(root, "x")).toBe(false);
     await clearSession(root, "reddit");
     expect(hasSession(root, "reddit")).toBe(false);
@@ -77,9 +77,9 @@ test("the login lock is exclusive per account", () => {
     expect(isProfileOpen("youtube")).toBe(false);
     expect(acquireProfileLock("youtube")).toBe(true);
     expect(isProfileOpen("youtube")).toBe(true);
-    // A second acquire while held fails — one guided login at a time per account.
+    // A second acquire while held fails: one guided login at a time per account.
     expect(acquireProfileLock("youtube")).toBe(false);
-    // A different account is unaffected — including a second account of the same site, which is what lets the
+    // A different account is unaffected: including a second account of the same site, which is what lets the
     // owner sit in one Reddit by hand while the agent works in the other.
     expect(acquireProfileLock("reddit-work")).toBe(true);
     expect(acquireProfileLock("reddit-personal")).toBe(true);
@@ -92,7 +92,7 @@ test("the login lock is exclusive per account", () => {
 // ── The identity as profile owner ───────────────────────────────────────────────────────────────────────────
 
 /* THE SHARING RULE, in the one place it lives. An identity-born account resolving to its identity's profile is
- * what makes "Continue with Google" one click — the Google session is in the same browser — and everything
+ * what makes "Continue with Google" one click: the Google session is in the same browser, and everything
  * else here (dirs, passkeys, locks) keys off this answer, so this is the test that guards the whole design. */
 test("profileOwner: identity-born accounts share the identity's browser; everything else owns its own", () => {
     const identity: Capability = { id: "main", kind: "identity", config: { email: "me@gmail.com", openAccounts: "off" } };
@@ -101,13 +101,13 @@ test("profileOwner: identity-born accounts share the identity's browser; everyth
     expect(profileOwner(identity)).toBe("main");
     expect(profileOwner(born)).toBe("main");
     expect(profileOwner(standalone)).toBe("reddit-personal");
-    // One profile, one passkey store, one lock — the born account and its identity resolve to the same paths.
+    // One profile, one passkey store, one lock: the born account and its identity resolve to the same paths.
     const root = tempRoot();
     expect(sessionDir(root, profileOwner(born))).toBe(sessionDir(root, profileOwner(identity)));
     expect(passkeyPath(root, profileOwner(born))).toBe(passkeyPath(root, profileOwner(identity)));
 });
 
-/* Removing one account out of an identity's browser must not sign its siblings out — the profile and the
+/* Removing one account out of an identity's browser must not sign its siblings out: the profile and the
  * passkeys belong to the identity, and only the removed entry's own marker goes. clearSession stays the whole
  * teardown for the OWNER (the identity itself, or a standalone account). */
 test("clearMarker disconnects one entry without touching the shared profile", async () => {

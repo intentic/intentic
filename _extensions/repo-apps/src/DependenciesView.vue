@@ -5,7 +5,7 @@ import { computed, ref, toRef } from "vue";
 import { useWorkspaceGraph } from "./useWorkspaceGraph";
 
 /* The monorepo's workspace package dependency graph: one card per package (colored by its top-level dir),
- * edges flowing dependency → dependent left-to-right. Dev deps hide behind a toggle — with them shown, hub
+ * edges flowing dependency → dependent left-to-right. Dev deps hide behind a toggle: with them shown, hub
  * devDependencies like a shared tsconfig swamp the picture. Selecting a package highlights its transitive
  * closure both ways (what it uses vs what uses it, tinted apart) and dims the rest. */
 
@@ -92,7 +92,7 @@ const dagNodes = computed<DagNode<WorkspacePackage>[]>(() =>
     })),
 );
 // The API edge says "from DEPENDS ON to"; rendered flipped (dependency → dependent) so dependencies sit left
-// and the arrow of time flows into the things built on top — same orientation as the live-status graph.
+// and the arrow of time flows into the things built on top: same orientation as the live-status graph.
 const dagEdges = computed<DagEdge[]>(() =>
     visibleEdges.value.map((edge) => ({
         from: edge.to,
@@ -136,7 +136,7 @@ const dagEdges = computed<DagEdge[]>(() =>
             </div>
         </div>
         <!-- The graph fills the pane, so the wait for it is the largest blank in this tab. Drawn as a scatter
-             of package cards at the size the real ones land at — not as a graph: the shape of somebody's
+             of package cards at the size the real ones land at, not as a graph: the shape of somebody's
              dependency tree is the one thing this view exists to show and the last thing to invent. -->
         <div v-if="isLoading && outline" class="min-h-0 flex-1 p-2" role="status" aria-busy="true">
             <span class="sr-only">Reading the workspace graph…</span>
@@ -146,7 +146,7 @@ const dagEdges = computed<DagEdge[]>(() =>
         </div>
 
         <Card v-else-if="packages.length === 0 && !isLoading" dashed class="text-center text-sm text-muted">
-            No workspace packages found — pnpm-workspace.yaml names no package dirs.
+            No workspace packages found: pnpm-workspace.yaml names no package dirs.
         </Card>
         <div v-else class="min-h-0 flex-1">
             <DagGraph v-model="selectedId" :nodes="dagNodes" :edges="dagEdges" :node-height="52">

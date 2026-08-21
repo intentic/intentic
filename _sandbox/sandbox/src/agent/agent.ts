@@ -671,7 +671,7 @@ const askServer = (
         tools: [
             tool(
                 "ask",
-                'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option — a free-text choice is provided automatically. Set multiSelect when several options may be picked together.',
+                'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option: a free-text choice is provided automatically. Set multiSelect when several options may be picked together.',
                 {
                     questions: z
                         .array(
@@ -795,7 +795,7 @@ const permissionGate =
             const { reply, resolved } = await wait(request.signal);
             push(resolved);
             if (!reply.approve) {
-                return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan — do not exit plan mode yet." };
+                return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan, do not exit plan mode yet." };
             }
             // Setting the mode on the session is what actually moves the SDK out of plan mode.
             push({ kind: "mode", mode: POST_PLAN_MODE });

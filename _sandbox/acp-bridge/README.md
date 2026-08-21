@@ -30,7 +30,7 @@ line up in the editor.
 }
 ```
 
-Alternatively run `npx @intentic/acp-bridge login` once — credentials persist in `~/.intentic/acp/`.
+Alternatively run `npx @intentic/acp-bridge login` once: credentials persist in `~/.intentic/acp/`.
 
 3. Open your synced sandbox folder as the editor project, pick the **intentic** agent in the agent panel,
    and chat. Switch the agent with `INTENTIC_AGENT` (`claude` default, `codex`, `grok`, or an installed ACP
@@ -39,18 +39,18 @@ Alternatively run `npx @intentic/acp-bridge login` once — credentials persist 
 ## What maps how
 
 - Tool calls stream with kinds, statuses, file locations, and inline diffs (paths joined onto your project
-  root — open the synced folder for exact alignment).
+  root: open the synced folder for exact alignment).
 - The **Plan** mode proposes first: approval rides the editor's permission prompt ("Approve plan" / "Keep
   planning"). Clarifying questions arrive the same way, one prompt per question.
 - The sandbox does all file/terminal I/O remotely; the bridge deliberately declines the editor's fs and
   terminal capabilities (your synced folder is the local mirror).
-- Cancel stops the stream (soft — the sandbox turn may finish server-side). Revoking the token in the app
+- Cancel stops the stream (soft: the sandbox turn may finish server-side). Revoking the token in the app
   cuts the bridge off immediately.
 
 ## Key files
 
-- [src/bridge.ts](src/bridge.ts) — the adapter itself: editor on stdio, sandbox over the wire.
-- [src/translate.ts](src/translate.ts) — ACP messages to and from the daemon's own shapes.
-- [src/daemon-client.ts](src/daemon-client.ts) — the remote half of the connection.
-- [src/login.ts](src/login.ts) / [src/config.ts](src/config.ts) — pairing an editor with a sandbox, and remembering it.
-- [src/cli.ts](src/cli.ts) — what the editor actually spawns.
+- [src/bridge.ts](src/bridge.ts), the adapter itself: editor on stdio, sandbox over the wire.
+- [src/translate.ts](src/translate.ts): ACP messages to and from the daemon's own shapes.
+- [src/daemon-client.ts](src/daemon-client.ts): the remote half of the connection.
+- [src/login.ts](src/login.ts) / [src/config.ts](src/config.ts): pairing an editor with a sandbox, and remembering it.
+- [src/cli.ts](src/cli.ts): what the editor actually spawns.

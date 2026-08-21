@@ -19,12 +19,12 @@ test("ordinary messages ride untouched", () => {
     expect(stripAttachmentNote("fix the bug")).toEqual({ text: "fix the bug", attachments: [] });
 });
 
-test("a user quoting the note wording mid-message keeps their text — strip anchors on the END", () => {
+test("a user quoting the note wording mid-message keeps their text: strip anchors on the END", () => {
     const quoted = `${withAttachmentNote("look at this", paths)}\n\nDoes that text mean anything?`;
     expect(stripAttachmentNote(quoted)).toEqual({ text: quoted, attachments: [] });
 });
 
-test("a prompt whose own tail looks like a list is left alone — only the injected header anchors", () => {
+test("a prompt whose own tail looks like a list is left alone: only the injected header anchors", () => {
     const listy = "todo:\n- one\n- two";
     expect(stripAttachmentNote(listy)).toEqual({ text: listy, attachments: [] });
 });

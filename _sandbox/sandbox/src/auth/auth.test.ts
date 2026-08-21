@@ -61,7 +61,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         await expect(authz.authorize("tok-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
-    test("returns the verifier's full identity — presence shows name/picture to the other members", async () => {
+    test("returns the verifier's full identity: presence shows name/picture to the other members", async () => {
         const authz = createAuthorizer({
             verify: async () => ({ email: "a@x.com", name: "Ada", picture: "https://p/a.png" }),
             owner: memOwner("a@x.com"),
@@ -108,7 +108,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             members: memMembers(),
             expectedOwner: "a@x.com",
         });
-        // Wrong account can't claim ownership — and nothing is written, so the right account can still bind after.
+        // Wrong account can't claim ownership, and nothing is written, so the right account can still bind after.
         await expect(authz.authorize("tok-b", undefined)).rejects.toBeInstanceOf(ForbiddenError);
         expect(await owner.read()).toBeUndefined();
         // A differently-cased match still binds.
@@ -174,7 +174,7 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
         });
         await expect(authz.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
         await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator" });
-        // A verified session is still subject to per-request membership — revoking a member kills live sessions.
+        // A verified session is still subject to per-request membership: revoking a member kills live sessions.
         await expect(authz.authorize("sess-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
         await expect(authz.authorizeOwner("sess-a")).resolves.toBeUndefined();
         await expect(authz.authorizeOwner("sess-m")).rejects.toBeInstanceOf(ForbiddenError);
@@ -191,7 +191,7 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
         await expect(authz.authorize("bogus", undefined)).rejects.toThrow(/invalid token/);
     });
 
-    test("a session can never first-bind — an unbound daemon takes only a fresh Google proof", async () => {
+    test("a session can never first-bind: an unbound daemon takes only a fresh Google proof", async () => {
         const owner = memOwner();
         const authz = createAuthorizer({
             verify: verifierFor({ "tok-a": "a@x.com" }),

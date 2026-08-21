@@ -10,7 +10,7 @@ import { identityHandler, identityLoginUrl } from "./identity.js";
 
 /* The browser handler's harness, one directory over: a ctx exposing only what identityHandler touches, on a
  * fresh temp workspace. `capabilities` carries the store the converge derives the SHARED `identities` skill
- * from — mutable, because the routes upsert after apply and the second identity's converge must still see the
+ * from: mutable, because the routes upsert after apply and the second identity's converge must still see the
  * first (the delta covers only the entry mid-apply). */
 const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: string; capabilities: Capability[] } => {
     const root = mkdtempSync(join(tmpdir(), "identity-cap-"));
@@ -38,16 +38,16 @@ test("apply lands the identity on the shared identities skill; status is pending
 
     await drain(identityHandler.apply(ctx, "main", config()));
     const skill = await readWorkspaceFile(identitiesSkillPath(root));
-    // ONE skill for every identity — never a per-identity clone — with this identity as a roster line.
+    // ONE skill for every identity (never a per-identity clone) with this identity as a roster line.
     expect(skill).toContain("name: identities");
-    expect(skill).toContain("- `main` — studio@gmail.com");
-    // The tools are the routed browser server's, addressed by account — the id every roster line leads with.
+    expect(skill).toContain("- `main`: studio@gmail.com");
+    // The tools are the routed browser server's, addressed by account: the id every roster line leads with.
     expect(skill).toContain("mcp__browser__browser_");
     expect(skill).toContain("`account`");
     // The switch is off, and the skill says so out loud rather than leaving the agent to hit the tool's refusal.
     expect(skill).toContain("may NOT open accounts");
 
-    // No session yet — pending either way (with or without the browser pack, the detail differs, never the state).
+    // No session yet: pending either way (with or without the browser pack, the detail differs, never the state).
     expect((await identityHandler.status(ctx, "main", config())).state).toBe("pending");
 });
 
@@ -56,7 +56,7 @@ test("the open-accounts switch flips the skill's guidance to the open_account pl
     await drain(identityHandler.apply(ctx, "main", config({ openAccounts: "on" })));
     const skill = await readWorkspaceFile(identitiesSkillPath(root));
     expect(skill).toContain("open_account");
-    expect(skill).toContain("- `main` — studio@gmail.com · may open accounts");
+    expect(skill).toContain("- `main`: studio@gmail.com · may open accounts");
     expect(skill).not.toContain("no identity here may open accounts");
 });
 
@@ -67,8 +67,8 @@ test("two identities are two roster lines on one skill, and each keeps its own s
     await drain(identityHandler.apply(ctx, "scout", config({ email: "scout@gmail.com", openAccounts: "on" })));
 
     const skill = await readWorkspaceFile(identitiesSkillPath(root));
-    expect(skill).toContain("- `main` — studio@gmail.com · may NOT open accounts");
-    expect(skill).toContain("- `scout` — scout@gmail.com · may open accounts");
+    expect(skill).toContain("- `main`: studio@gmail.com · may NOT open accounts");
+    expect(skill).toContain("- `scout`: scout@gmail.com · may open accounts");
     // Both route from the one catalog line.
     expect(skill).toMatch(/^description: .*main \(studio@gmail\.com\).*scout \(scout@gmail\.com\)/m);
 });

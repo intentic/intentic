@@ -3,12 +3,12 @@ import { Button, ui, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge }
 import { ref } from "vue";
 import { useShares } from "./useShares";
 
-/* SHARED CONVERSATIONS — the owner's complete picture of which of their chats a stranger can read.
+/* SHARED CONVERSATIONS: the owner's complete picture of which of their chats a stranger can read.
  *
  * Its own section above the published files, on the same reasoning that makes the file list what it is: the
  * outbox has no auth in front of it, so nothing about what is exposed may be a surprise. A conversation is the
  * most sensitive thing this workspace can publish, and it is also the one thing the file list could not
- * describe — a page and a folder of pictures say nothing about which chat they came from, how much of it
+ * describe: a page and a folder of pictures say nothing about which chat they came from, how much of it
  * travelled, or when the snapshot was taken. Those three facts are the row.
  *
  * `sharedAt` is the load-bearing one, because a share is FROZEN: the date is not decoration, it is the line
@@ -32,7 +32,7 @@ const act = async (id: string, action: (id: string) => Promise<unknown>): Promis
 };
 
 const DAY = 86_400_000;
-// Absolute once it is more than a day old, relative before that — the two ways this date gets read. "3h ago"
+// Absolute once it is more than a day old, relative before that: the two ways this date gets read. "3h ago"
 // answers "is this current?"; a date answers "which version of the conversation did they see?".
 const when = (at: number): string => {
     const ago = Date.now() - at;
@@ -53,7 +53,7 @@ const when = (at: number): string => {
             <InfoHint label="Shared conversations">
                 <span class="block text-sm font-medium text-content">Chats you've published</span>
                 <span class="mt-1 block text-xs text-muted">
-                    Each of these is a read-only page anyone with the link can open — no sign-in. It shows the conversation as it was when you shared
+                    Each of these is a read-only page anyone with the link can open: no sign-in. It shows the conversation as it was when you shared
                     it, so anything said since stays private until you press <b>Update</b>. Share a chat from its right-click menu in the chat list.
                 </span>
             </InfoHint>
@@ -90,7 +90,7 @@ const when = (at: number): string => {
                         </a>
                         <CopyButton v-if="share.url" :text="share.url" label="Copy link" />
                         <!-- Update, not "re-share": the link does not change, which is the whole point of
-                             having it — it is already in somebody's messages. -->
+                             having it: it is already in somebody's messages. -->
                         <Button
                             label="Update"
                             size="small"

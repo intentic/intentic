@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { generatePassword, siteLabel } from "./accounts-tools.js";
 
 /* The generator is the one pure piece of the accounts tools (the rest is SDK-tool wiring over the stores, the
- * hashline precedent), and it mints REAL credentials — so what is worth holding is the policy: long enough,
+ * hashline precedent), and it mints REAL credentials, so what is worth holding is the policy: long enough,
  * every class present (sites that demand "one uppercase, one digit, one symbol" must never bounce a generated
  * password into a retry loop the agent cannot see the reason for), and drawn from the conservative symbol set
  * virtually every policy accepts. */
@@ -15,7 +15,7 @@ test("a generated password satisfies the strictest common site policy", () => {
         expect(password).toMatch(/[A-Z]/);
         expect(password).toMatch(/[0-9]/);
         expect(password).toMatch(/[!@#$%^*\-_+=]/);
-        // Nothing outside the declared sets — an exotic character is a character some site rejects.
+        // Nothing outside the declared sets: an exotic character is a character some site rejects.
         expect(password).toMatch(/^[a-zA-Z0-9!@#$%^*\-_+=]+$/);
     }
 });
@@ -26,7 +26,7 @@ test("two generated passwords are never the same credential", () => {
 });
 
 /* The other piece of the roster that is a decision rather than wiring: which name an account is announced
- * under. Pure string work — whether a line also says the account is SIGNED IN is a marker on disk, so those
+ * under. Pure string work, whether a line also says the account is SIGNED IN is a marker on disk, so those
  * tests sit next door under the integration budget (accounts-tools.integration.test.ts). */
 
 // An account on the generic card would otherwise print "website", which is the card and not the site.

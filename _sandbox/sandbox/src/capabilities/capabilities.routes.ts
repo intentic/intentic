@@ -55,7 +55,7 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
              * connection the user actually asked about half-moved to punish them for an unrelated fault. The
              * reference itself is already saved, which is the part that would otherwise dangle. */
             services.logger.warn(
-                `capabilities: renamed "${from}" but could not refresh "${next.id}" (${error instanceof Error ? error.message : String(error)}) — re-add it from its card`,
+                `capabilities: renamed "${from}" but could not refresh "${next.id}" (${error instanceof Error ? error.message : String(error)}), re-add it from its card`,
             );
         }
     };
@@ -103,7 +103,7 @@ const withKeptSecrets = async (services: Services, input: Capability): Promise<C
     const missing = kept.filter((key) => typeof storedConfig[key] !== "string" || isVaulted(storedConfig[key]));
     if (missing.length > 0) {
         throw new ORPCError("BAD_REQUEST", {
-            message: `nothing stored for ${missing.join(", ")} on "${input.id}" — enter the value rather than keeping it`,
+            message: `nothing stored for ${missing.join(", ")} on "${input.id}", enter the value rather than keeping it`,
         });
     }
     return CapabilitySchema.parse({ ...input, config: { ...config, ...Object.fromEntries(kept.map((key) => [key, storedConfig[key]])) } });
@@ -145,7 +145,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
         add: i.add.handler(async function* ({ input, context }) {
             const handler = registry[input.kind];
             if (adding.has(input.id)) {
-                throw new ORPCError("CONFLICT", { message: `"${input.id}" is already being added — wait for it to finish` });
+                throw new ORPCError("CONFLICT", { message: `"${input.id}" is already being added, wait for it to finish` });
             }
             // Extensions ship code that runs trusted in the browser shell and the agent's turns, installing
             // one IS the trust decision, so only the owner may make it (mirrors /environment/approve; loopback
@@ -200,7 +200,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     yield {
                         kind: "log",
                         message:
-                            "This capability extends the sandbox image — a one-time rebuild is needed. Open the Sandbox page's Environment card for the command.",
+                            "This capability extends the sandbox image: a one-time rebuild is needed. Open the Sandbox page's Environment card for the command.",
                     };
                 }
                 yield { kind: "result", ok: true };
@@ -387,7 +387,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 throw new ORPCError("CONFLICT", { message: "this agent declares no login command" });
             }
             if (!services.terminalRun.visible) {
-                throw new ORPCError("CONFLICT", { message: "no visible terminal in this environment — run the login command manually" });
+                throw new ORPCError("CONFLICT", { message: "no visible terminal in this environment, run the login command manually" });
             }
             const session = capabilityJobSession(input.id);
             const run = promisify(execFile);
@@ -411,13 +411,13 @@ export const createCapabilitiesRoutes = (services: Services) => {
             const field = contribution?.spec.fields.find((candidate) => candidate.totp === true);
             const seed = field === undefined ? undefined : (capability.config as Record<string, unknown>)[field.key];
             if (typeof seed !== "string" || seed === "") {
-                throw new ORPCError("CONFLICT", { message: `"${input.id}" stores no TOTP secret — add one on its capability card` });
+                throw new ORPCError("CONFLICT", { message: `"${input.id}" stores no TOTP secret, add one on its capability card` });
             }
             try {
                 return totpCode(seed, Date.now());
             } catch (error) {
                 const reason = error instanceof Error ? error.message : String(error);
-                throw new ORPCError("CONFLICT", { message: `the stored TOTP secret is unusable (${reason}) — re-add it on the capability card` });
+                throw new ORPCError("CONFLICT", { message: `the stored TOTP secret is unusable (${reason}), re-add it on the capability card` });
             }
         }),
     };

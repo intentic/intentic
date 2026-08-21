@@ -4,7 +4,7 @@ import { createProvider } from "./provider.js";
 
 /* What is pinned here is the provider CONTRACT as this reference implements it: signed calls served, forged
  * and replayed calls refused, and each scenario answering the shape the platform's forward expects. The
- * platform-side proof — the REAL admission probe and a REAL metered run driven against this very handler —
+ * platform-side proof: the REAL admission probe and a REAL metered run driven against this very handler:
  * lives in the api package (pool-conformance.test.ts), where the real forward and probe are importable. */
 
 const SECRET = `example-secret`;
@@ -58,7 +58,7 @@ describe(`the example provider`, () => {
         expect((await provider().fetch(request)).status).toBe(401);
     });
 
-    it(`answers health without a signature — it is for the provider's own uptime checks`, async () => {
+    it(`answers health without a signature: it is for the provider's own uptime checks`, async () => {
         const response = await provider().fetch(new Request(`https://svc.example.test/healthz`));
         expect(response.status).toBe(200);
     });

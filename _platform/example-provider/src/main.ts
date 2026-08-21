@@ -7,10 +7,10 @@ import { createProvider } from "./provider.js";
 
 const secret = process.env[`SERVICE_SECRET`] ?? ``;
 if (secret === ``) {
-    console.error(`SERVICE_SECRET is required — it is the signing secret from your draft listing.`);
+    console.error(`SERVICE_SECRET is required: it is the signing secret from your draft listing.`);
     process.exit(1);
 }
 
 const port = Number(process.env[`PORT`] ?? 8790);
 Bun.serve({ port, fetch: createProvider({ secret }).fetch });
-console.log(`example provider listening on :${port} — GET /healthz, POST anything signed`);
+console.log(`example provider listening on :${port}: GET /healthz, POST anything signed`);

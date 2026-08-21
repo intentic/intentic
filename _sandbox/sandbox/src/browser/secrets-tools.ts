@@ -38,7 +38,7 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
         tools: [
             tool(
                 "type_secret",
-                "Type a stored secret into the FOCUSED field of a live browser page — a dashboard login, an API-key form. You never see the value: navigate with the browser tools, click the field, then call this with the secret's name (the same name `{{secret:name}}` masking shows you). Only user-kept secrets are typeable; an account's own password stays with type_credential.",
+                "Type a stored secret into the FOCUSED field of a live browser page, a dashboard login, an API-key form. You never see the value: navigate with the browser tools, click the field, then call this with the secret's name (the same name `{{secret:name}}` masking shows you). Only user-kept secrets are typeable; an account's own password stays with type_credential.",
                 {
                     browser: z.string().describe('Which browser holds the page: "web", or a browser account\'s capability id'),
                     name: z.string().describe("The stored secret's name, e.g. GRAFANA_ADMIN_PASSWORD"),
@@ -46,26 +46,26 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                 async ({ browser, name }) => {
                     const owner = deps.accounts[browser];
                     if (owner === undefined) {
-                        return fail(`no browser "${browser}" this turn drives — it is "web" or one of the account ids whose tools you hold`);
+                        return fail(`no browser "${browser}" this turn drives: it is "web" or one of the account ids whose tools you hold`);
                     }
                     let entry;
                     try {
                         entry = typeableSecret(await deps.secrets.list(), name);
                     } catch {
-                        return fail("the secret store could not be read — try again");
+                        return fail("the secret store could not be read: try again");
                     }
                     if (entry === undefined) {
                         return fail(
-                            `no typeable secret named "${name}" — the name is what ${secretReference("…")} masking shows, and only user-kept ` +
+                            `no typeable secret named "${name}": the name is what ${secretReference("…")} masking shows, and only user-kept ` +
                                 "secrets (the Secrets view's own entries) can be typed; ask the owner to add it there if it does not exist yet",
                         );
                     }
                     const page = browserAccountPage(owner);
                     if (page === undefined) {
-                        return fail(`"${browser}" has no live page — open the site with the browser tools first`);
+                        return fail(`"${browser}" has no live page: open the site with the browser tools first`);
                     }
                     if (!(await focusedEditable(page))) {
-                        return fail("no text field is focused on the page — browser_click the field first, then call this again");
+                        return fail("no text field is focused on the page: browser_click the field first, then call this again");
                     }
                     const host = ((): string => {
                         try {

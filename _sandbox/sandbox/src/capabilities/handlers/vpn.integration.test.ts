@@ -57,16 +57,16 @@ test("apply stores a 0600 wireguard conf named for its interface, plus the share
     const { ctx, root, home } = tempCtx();
     await withoutTooling(() => drain(vpnHandler.apply(ctx, "office", office.config)));
 
-    // The conf holds the interface's private key — never group/world-readable.
+    // The conf holds the interface's private key: never group/world-readable.
     expect(readFileSync(confPath(home, "office"), "utf8")).toBe(`${CONF}\n`);
     expect(statSync(confPath(home, "office")).mode & 0o777).toBe(0o600);
     // One shared skill teaches the agent to drive every tunnel through the daemon-backed `vpn` command rather
-    // than the underlying clients — that is what keeps agent-initiated and UI-initiated state identical.
+    // than the underlying clients: that is what keeps agent-initiated and UI-initiated state identical.
     const skill = await readWorkspaceFile(skillPath(root));
     expect(skill).toContain("name: vpn");
     expect(skill).toContain("vpn connect <name>");
     expect(skill).toContain("vpn disconnect <name>");
-    // It must NOT teach the raw clients — those would bypass the daemon and desync the UI.
+    // It must NOT teach the raw clients: those would bypass the daemon and desync the UI.
     expect(skill).not.toContain("wg-quick");
 });
 
@@ -109,7 +109,7 @@ test("a fortinet connection's password never reaches disk", async () => {
     await withoutTooling(() => drain(vpnHandler.apply(ctx, "hq", fortinet.config)));
 
     // The credential reaches openconnect over stdin at dial time (and never via argv), so the capability's
-    // state directory must hold no copy of it — the manifest is the single place it lives.
+    // state directory must hold no copy of it: the manifest is the single place it lives.
     const dir = join(home, ".intentic-vpn");
     const spilled = readdirSync(dir).filter((entry) => readFileSync(join(dir, entry), "utf8").includes("s3cret"));
     expect(spilled).toEqual([]);

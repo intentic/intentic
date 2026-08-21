@@ -42,7 +42,7 @@ const call = async (token: string, method: string, path: string, body?: unknown)
     }
     if (response.status === 401 || response.status === 403) {
         throw new CloudCredentialError(
-            `Hetzner rejected the API token — create a Read & Write token under the project the machine should live in (Security → API tokens) and paste it again.`,
+            `Hetzner rejected the API token: create a Read & Write token under the project the machine should live in (Security → API tokens) and paste it again.`,
         );
     }
     const parsed = errorSchema.safeParse(await response.json().catch(() => undefined));
@@ -52,7 +52,7 @@ const call = async (token: string, method: string, path: string, body?: unknown)
         // created the machine, pointing at the console beats a retry loop that can never succeed.
         if (code === `uniqueness_error`) {
             throw new CloudProviderError(
-                `A server with this sandbox's name already exists in your Hetzner project — it is probably a previous attempt; delete it in the Hetzner console, then retry.`,
+                `A server with this sandbox's name already exists in your Hetzner project: it is probably a previous attempt; delete it in the Hetzner console, then retry.`,
             );
         }
         if (code === `resource_limit_exceeded`) {
@@ -62,7 +62,7 @@ const call = async (token: string, method: string, path: string, body?: unknown)
         }
         if (code === `resource_unavailable`) {
             throw new CloudProviderError(
-                `Hetzner has no capacity for that server type in that location right now — pick another location or size and retry.`,
+                `Hetzner has no capacity for that server type in that location right now: pick another location or size and retry.`,
             );
         }
         throw new CloudProviderError(`Hetzner refused: ${message}`);

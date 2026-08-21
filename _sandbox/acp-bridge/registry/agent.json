@@ -2,7 +2,7 @@
     "id": "intentic",
     "name": "Intentic",
     "version": "0.0.0",
-    "description": "Drive the agents in your intentic sandbox (Claude, Codex, Grok, any ACP agent) from your editor — remote execution, locally mirrored workspace.",
+    "description": "Drive the agents in your intentic sandbox (Claude, Codex, Grok, any ACP agent) from your editor, remote execution, locally mirrored workspace.",
     "repository": "https://github.com/intentic/intentic",
     "website": "https://intentic.dev",
     "license": "MIT",

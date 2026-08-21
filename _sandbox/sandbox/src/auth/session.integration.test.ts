@@ -30,8 +30,8 @@ test("the secret is created 0600 and reused, so sessions survive a daemon restar
     await expect(createSessions(path).verify(token)).resolves.toEqual({ email: "a@x.com" });
 });
 
-/* The sign-out-everywhere primitive. Sessions are self-contained signed claims — nothing is stored per session,
- * so there is nothing to delete — which means re-keying the signer IS the revocation, and it has to be total:
+/* The sign-out-everywhere primitive. Sessions are self-contained signed claims: nothing is stored per session,
+ * so there is nothing to delete, which means re-keying the signer IS the revocation, and it has to be total:
  * every outstanding token, in every browser, including the one that asked. */
 test("rotate invalidates every outstanding session, and the new secret persists across a restart", async () => {
     const path = await secretPath();

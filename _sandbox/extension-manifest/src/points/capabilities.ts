@@ -32,7 +32,7 @@ export const CapabilityFieldSchema = z.object({
         .string()
         .optional()
         .describe(
-            "A line under this control, for what the label alone cannot say — a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+            "A line under this control, for what the label alone cannot say: a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
         ),
     /* This field's value only takes effect after the sandbox is REBUILT, it rides the environment overlay
      * rather than something the daemon can act on now. Rendered as a chip beside the label.
@@ -45,7 +45,7 @@ export const CapabilityFieldSchema = z.object({
         .boolean()
         .optional()
         .describe(
-            "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label — two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
+            "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label: two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
         ),
     default: z.string().optional(),
     options: z
@@ -64,7 +64,7 @@ export const CapabilityFieldSchema = z.object({
         .refine(isWhenExpression, { message: "not a valid `when` condition" })
         .optional()
         .describe(
-            "Only show this field while a condition over the answers already given holds — `auth == 'key'`, `provider in ['ipsec', 'fortinet']`, `!advanced`. Supports `&&`, `||`, `!`, comparisons and `in`.",
+            "Only show this field while a condition over the answers already given holds: `auth == 'key'`, `provider in ['ipsec', 'fortinet']`, `!advanced`. Supports `&&`, `||`, `!`, comparisons and `in`.",
         ),
     // A fixed value baked into the config rather than asked for, how a card pins a discriminator
     // (platform="reddit", provider="stripe"). Rendered as nothing; sent as itself.
@@ -72,7 +72,7 @@ export const CapabilityFieldSchema = z.object({
         .string()
         .optional()
         .describe(
-            'A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform="reddit", provider="stripe"). Renders as nothing.',
+            'A fixed value baked into the config rather than asked for: how a card pins its discriminator (platform="reddit", provider="stripe"). Renders as nothing.',
         ),
     /* This field holds a TOTP seed, the base32 key (or otpauth:// URI) a service shows when enrolling an
      * authenticator app. Declare it WITH `secret: true`: the seed is a durable second factor, so it is never
@@ -83,7 +83,7 @@ export const CapabilityFieldSchema = z.object({
         .boolean()
         .optional()
         .describe(
-            "This field holds a TOTP seed — the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
+            "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
         ),
 });
 export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
@@ -118,7 +118,7 @@ const CatalogSchema = z.object({
         .string()
         .min(1)
         .describe(
-            "ONE LINE — aim for 60 characters or fewer. The grid clamps it at two lines in a narrow pane, so a paragraph here is a paragraph the reader gets truncated. Everything longer belongs in `hint`.",
+            "ONE LINE: aim for 60 characters or fewer. The grid clamps it at two lines in a narrow pane, so a paragraph here is a paragraph the reader gets truncated. Everything longer belongs in `hint`.",
         ),
     category: z.string().min(1),
     // The paragraph. Shown under the add-form, and searched from the catalog, so the words that identify this
@@ -127,7 +127,7 @@ const CatalogSchema = z.object({
         .string()
         .optional()
         .describe(
-            'The paragraph, shown under the add form and searched from the catalog — so the words that identify this card to someone hunting for it ("webauthn", "socket mode") belong here even when the tile cannot show them.',
+            'The paragraph, shown under the add form and searched from the catalog, so the words that identify this card to someone hunting for it ("webauthn", "socket mode") belong here even when the tile cannot show them.',
         ),
     // The credential-creation walkthrough the install dialog renders (the platform catalog's guide shape).
     guide: z
@@ -177,7 +177,7 @@ export const CapabilityContributionSchema = z
             env: z
                 .record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string())
                 .describe(
-                    "The environment the agent's shell gets, as value templates over the fields — `${field}` substitutes, `${field:uri}` percent-encodes. Each name is suffixed per instance.",
+                    "The environment the agent's shell gets, as value templates over the fields: `${field}` substitutes, `${field:uri}` percent-encodes. Each name is suffixed per instance.",
                 ),
             skill: z
                 .string()
@@ -211,19 +211,19 @@ export const CapabilityContributionSchema = z
                 .url()
                 .optional()
                 .describe(
-                    "What the sign-in window opens; the profile it persists IS the credential. Optional so one card can be the generic one that asks for the URL on its form instead — but a card must either pin this or declare a field that supplies it, or the window opens on nothing.",
+                    "What the sign-in window opens; the profile it persists IS the credential. Optional so one card can be the generic one that asks for the URL on its form instead, but a card must either pin this or declare a field that supplies it, or the window opens on nothing.",
                 ),
             homeUrl: z
                 .url()
                 .optional()
                 .describe(
-                    "Where that same profile opens once it HAS a session — the owner's own hands on the connected browser. Separate from loginUrl because for some platforms the login lives on another site entirely (YouTube signs in at accounts.google.com).",
+                    "Where that same profile opens once it HAS a session: the owner's own hands on the connected browser. Separate from loginUrl because for some platforms the login lives on another site entirely (YouTube signs in at accounts.google.com).",
                 ),
             skill: z
                 .string()
                 .min(1)
                 .describe(
-                    "Checkout-relative SKILL.md teaching the agent this site's actions — rendered once per site, all its connected accounts on one roster (`${accounts}`), the core tool note at `${tools}`.",
+                    "Checkout-relative SKILL.md teaching the agent this site's actions: rendered once per site, all its connected accounts on one roster (`${accounts}`), the core tool note at `${tools}`.",
                 ),
         }),
         // An operating system a connected computer can run, the skill pack that teaches the agent THAT machine's
@@ -249,7 +249,7 @@ export const CapabilityContributionSchema = z
             if (Object.values(spec.env).some((template) => template.includes(`\${${field.key}}`) || template.includes(`\${${field.key}:uri}`))) {
                 ctx.addIssue({
                     code: "custom",
-                    message: `env must not reference the totp field "${field.key}" — the daemon mints codes from it instead`,
+                    message: `env must not reference the totp field "${field.key}", the daemon mints codes from it instead`,
                 });
             }
         }
@@ -275,6 +275,6 @@ export const contributionDiscriminator = (kind: string): string | undefined => D
 export const capabilitiesPoint = {
     name: "capabilities",
     description:
-        'Capability cards this pack adds to the "+" grid — a connected CLI tool, a site the agent acts on as the owner through the shared browser, an operating system pack, or a preset over a core kind. The card and its form are data here; the machinery that acts on them is core, which is why a card may only name one of these four kinds.',
+        'Capability cards this pack adds to the "+" grid: a connected CLI tool, a site the agent acts on as the owner through the shared browser, an operating system pack, or a preset over a core kind. The card and its form are data here; the machinery that acts on them is core, which is why a card may only name one of these four kinds.',
     schema: z.array(CapabilityContributionSchema),
 } as const satisfies ContributionPoint;

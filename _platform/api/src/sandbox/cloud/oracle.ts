@@ -46,7 +46,7 @@ const call = async (credential: OciCredential, method: string, url: string, body
     const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
     if (response.status === 401) {
         throw new CloudCredentialError(
-            `Oracle rejected the API key (${failure.success ? failure.data.message : `not authenticated`}) — re-paste the config snippet and the matching private key from Profile → API keys.`,
+            `Oracle rejected the API key (${failure.success ? failure.data.message : `not authenticated`}), re-paste the config snippet and the matching private key from Profile → API keys.`,
         );
     }
     if (failure.success) {
@@ -56,7 +56,7 @@ const call = async (credential: OciCredential, method: string, url: string, body
         // wizard keys its keep-trying offer on it.
         if (/out of host capacity/i.test(failure.data.message)) {
             throw new OracleCapacityError(
-                `Oracle has ${ORACLE_CAPACITY_PHRASE} in that availability domain right now (their notorious A1 shortage). Capacity is released continuously — retry in a bit.`,
+                `Oracle has ${ORACLE_CAPACITY_PHRASE} in that availability domain right now (their notorious A1 shortage). Capacity is released continuously: retry in a bit.`,
             );
         }
         if (failure.data.code === `LimitExceeded`) {
@@ -88,7 +88,7 @@ export const oracleOptions = async (config: string, privateKeyPem: string): Prom
     const first = domains[0];
     if (first === undefined) {
         throw new CloudProviderError(
-            `Oracle listed no availability domains for this tenancy — check that the config snippet's region is where your account lives.`,
+            `Oracle listed no availability domains for this tenancy: check that the config snippet's region is where your account lives.`,
         );
     }
     return {
@@ -128,7 +128,7 @@ const ensureNetwork = async (credential: OciCredential): Promise<{ subnetId: str
     for (let attempt = 0; vcn.lifecycleState !== `AVAILABLE`; attempt += 1) {
         if (attempt >= 15) {
             throw new CloudProviderError(
-                `Oracle's network stayed in ${vcn.lifecycleState} — retry in a minute (the half-made "${NETWORK_NAME}" network will be reused).`,
+                `Oracle's network stayed in ${vcn.lifecycleState}: retry in a minute (the half-made "${NETWORK_NAME}" network will be reused).`,
             );
         }
         await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -240,6 +240,6 @@ export const oracleCreate = async (config: string, privateKeyPem: string, create
         }
     }
     throw new CloudProviderError(
-        `Oracle has ${ORACLE_CAPACITY_PHRASE} in any availability domain of ${credential.region} right now (their notorious A1 shortage). Capacity is released continuously — keep this page open and it will keep trying, or come back later.`,
+        `Oracle has ${ORACLE_CAPACITY_PHRASE} in any availability domain of ${credential.region} right now (their notorious A1 shortage). Capacity is released continuously: keep this page open and it will keep trying, or come back later.`,
     );
 };

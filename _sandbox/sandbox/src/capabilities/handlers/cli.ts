@@ -105,7 +105,7 @@ export const cliHandler: CapabilityHandler = {
         const { provider } = cliConfig;
         const connector = (await contributionRegistry(hostOf(ctx))).get(contributionKey("cli", provider));
         if (connector === undefined) {
-            throw new Error(`no connector for provider "${provider}" — install the extension that declares it`);
+            throw new Error(`no connector for provider "${provider}": install the extension that declares it`);
         }
         const invalid = validateContributionConfig(connector.spec, cliConfig);
         if (invalid !== undefined) {
@@ -126,7 +126,7 @@ export const cliHandler: CapabilityHandler = {
             if (await extensionRuntimeAbsent(connector.extension)) {
                 throw new Error(`${provider} is ${RUNTIME_ABSENT_DETAIL}`);
             }
-            throw new Error(`the extension declaring "${provider}" has no readable skill file — reinstall it`);
+            throw new Error(`the extension declaring "${provider}" has no readable skill file: reinstall it`);
         }
         for (const key of keys) {
             skill = skill.replaceAll(`$${key}`, `$${key}_${suffix}`);

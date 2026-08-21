@@ -23,7 +23,7 @@ const turn = (overrides: Partial<AgentTurnIdentity> = {}): AgentTurnIdentity => 
     ...overrides,
 });
 
-// The guards read the ROSTER, not the persisted entry — half of what they test for is derived per pass and
+// The guards read the ROSTER, not the persisted entry: half of what they test for is derived per pass and
 // never touches disk (see archive.ts). Only the fields the guards actually look at are filled.
 const card = (overrides: Partial<AgentSummary> = {}): AgentSummary => ({
     id: "c1",
@@ -54,7 +54,7 @@ const stubWorktrees = (
 describe("archivable", () => {
     it("takes finished agents and leaves everything that still owes the user an answer", () => {
         expect(archivable(card({ status: "landed" }))).toBe(true);
-        // The throwaway probe — idle, nothing landed, nothing to lose. The case the Finished lane fills up with.
+        // The throwaway probe: idle, nothing landed, nothing to lose. The case the Finished lane fills up with.
         expect(archivable(card({ status: "idle" }))).toBe(true);
         // Its worktree is the running turn's live working state, and an awaiting turn is holding a question.
         expect(archivable(card({ status: "running" }))).toBe(false);
@@ -66,7 +66,7 @@ describe("archivable", () => {
          * entry: `ready` is derived per roster now, so an entry-level test would have called this agent idle
          * and swept a delta the user was still deciding about off the board. */
         expect(archivable(card({ status: "ready" }))).toBe(false);
-        // A turn the daemon died under. Nobody has seen that it stopped — and it is NOT running, so the guard
+        // A turn the daemon died under. Nobody has seen that it stopped, and it is NOT running, so the guard
         // above cannot be the one that saves it. Sweeping it away unread is the failure this status prevents.
         expect(archivable(card({ status: "interrupted" }))).toBe(false);
         // Already off the board.
@@ -78,7 +78,7 @@ describe("archivable", () => {
         expect(archivableByAge(card({ updatedAt: now - 4 * DAY }), now, 3 * DAY)).toBe(true);
         // An agent the user is still talking to keeps resetting its own clock.
         expect(archivableByAge(card({ updatedAt: now - 2 * DAY }), now, 3 * DAY)).toBe(false);
-        // "Never" — the sweep is off, and the manual Clear button is the only way the lane empties.
+        // "Never": the sweep is off, and the manual Clear button is the only way the lane empties.
         expect(archivableByAge(card({ updatedAt: 0 }), now, 0)).toBe(false);
         // The age check never overrides the safety guards.
         expect(archivableByAge(card({ status: "error", updatedAt: 0 }), now, 3 * DAY)).toBe(false);
@@ -159,7 +159,7 @@ describe("purgeArchived", () => {
         const removed = await purgeArchived({ agents, agentWorktrees: worktrees, logger, purgeConversationState });
 
         expect(removed).toEqual(["filed"]);
-        // The worktree remnants AND the branch go — that is what makes this the destructive one, and it is the
+        // The worktree remnants AND the branch go: that is what makes this the destructive one, and it is the
         // entry's recorded composition that says which repos to tear down in.
         expect(remove).toHaveBeenCalledWith("filed", repos);
         expect(purgeConversationState).toHaveBeenCalledWith([expect.objectContaining({ id: "filed" })], [expect.objectContaining({ id: "onboard" })]);
@@ -224,10 +224,10 @@ describe("sweepAgedAgents", () => {
         const now = 10 * DAY;
         const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
-        // Old and finished — the sweep's target.
+        // Old and finished: the sweep's target.
         await agents.begin(turn({ conversationId: "old" }), 0);
         await agents.finish("old", now - 5 * DAY);
-        // Finished yesterday — still on the board.
+        // Finished yesterday: still on the board.
         await agents.begin(turn({ conversationId: "recent" }), 0);
         await agents.finish("recent", now - 1 * DAY);
         // Old, but mid-turn: its worktree is live working state.

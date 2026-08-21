@@ -42,7 +42,7 @@ test("the local sync folder carries the very id the sandbox's URL does", () => {
     const url = `https://${sandboxHostname(ID, "intentic.dev")}`;
     expect(sandboxIdFromUrl(url)).toBe(ID);
     expect(syncFolder("Radarsu Local", url)).toBe(`~/intentic/radarsu-local-${ID}`);
-    // A bare host (no scheme) and a port are both accepted — the daemon/CLI and the browser pass different shapes.
+    // A bare host (no scheme) and a port are both accepted: the daemon/CLI and the browser pass different shapes.
     expect(sandboxIdFromUrl(`${sandboxHostname(ID, "intentic.dev")}:443`)).toBe(ID);
     // Own-Cloudflare: the owner's chosen subdomain IS the id, so the folder still matches what they browse to.
     expect(syncFolder("shop", "https://dev-box.example.com")).toBe("~/intentic/shop-dev-box");

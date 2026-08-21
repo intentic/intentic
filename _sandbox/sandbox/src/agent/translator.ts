@@ -110,7 +110,7 @@ export const translatorWanted = async (services: Services): Promise<boolean> =>
 // What a user can DO about a helper the running image doesn't carry. The word "rebuild" is required: it is
 // what the UI reads to route a state to the Environment card, so it must survive any rewording of these strings.
 export const TRANSLATOR_BINARY_MISSING =
-    "This sandbox's image doesn't include the model translator yet — rebuild it from the Environment card in Sandbox ▸ Environment to add it.";
+    "This sandbox's image doesn't include the model translator yet: rebuild it from the Environment card in Sandbox ▸ Environment to add it.";
 // The rendered server config (on /history, outside the agent's reach); the login subprocess shares it via --config.
 export const cliProxyConfigPath = (config: Config): string => join(config.historyRoot, "translator", "config.yaml");
 // The Management API base (localhost-only) on the same port that serves the Anthropic endpoint.
@@ -210,7 +210,7 @@ export const startTranslator = (services: Services): void => {
     }
     const port = portOf(config.translator.url);
     if (port === undefined) {
-        logger.warn({ url: config.translator.url }, "translator: unparseable TRANSLATOR_URL — not starting");
+        logger.warn({ url: config.translator.url }, "translator: unparseable TRANSLATOR_URL, not starting");
         return;
     }
     const authDir = cliProxyAuthDir(authRoot);
@@ -223,7 +223,7 @@ export const startTranslator = (services: Services): void => {
         await mkdir(dirname(configPath), { recursive: true });
         // The trial's entry bakes the platform's address into the config, and on a dev machine that address is
         // the loopback tunnel's, which binds concurrently with this spawn. Waiting for its final answer (bound,
-        // failed, or not needed — settled either way, see PlatformTunnel.ready) is what makes the rendered
+        // failed, or not needed: settled either way, see PlatformTunnel.ready) is what makes the rendered
         // config deterministic instead of almost-always-right.
         await services.platformTunnel.ready;
         // The user's own endpoints, resolved before the spawn so the proxy comes up already serving them. Their
@@ -251,7 +251,7 @@ export const startTranslator = (services: Services): void => {
         child.on("exit", (code) => {
             child = undefined;
             delayMs = nextRestartDelay(delayMs, Date.now() - startedAt);
-            logger.warn({ code, output: outputTail.trim(), restartInMs: delayMs }, "translator: cli-proxy-api exited — restarting");
+            logger.warn({ code, output: outputTail.trim(), restartInMs: delayMs }, "translator: cli-proxy-api exited, restarting");
             setTimeout(() => void start().catch((error: unknown) => logger.warn({ err: error }, "translator restart failed")), delayMs).unref();
         });
     };
@@ -334,7 +334,7 @@ export const createCliProxyClient = (params: {
      * seconds between their sandbox starting and the proxy binding its port. */
     const unreachable = async (cause?: unknown): Promise<Error> =>
         (await binaryPresent())
-            ? new Error("The model translator isn't answering yet — it may still be starting up. Try again in a moment.", { cause })
+            ? new Error("The model translator isn't answering yet: it may still be starting up. Try again in a moment.", { cause })
             : new Error(TRANSLATOR_BINARY_MISSING, { cause });
 
     /* EVERY SUBSCRIPTION THIS SANDBOX HOLDS, from the running proxy when it is up, and from its credential
@@ -342,7 +342,7 @@ export const createCliProxyClient = (params: {
      *
      * The disk fallback is the difference between "we couldn't ask" and "there is nothing there", and getting
      * those two confused is what made a shelf of connected Google accounts disappear from the Agent tab and come
-     * back as a Connect button. The proxy is down for real windows — 15s of boot warm-up, and up to 5 minutes on
+     * back as a Connect button. The proxy is down for real windows: 15s of boot warm-up, and up to 5 minutes on
      * the restart ladder's ceiling, and this read is BOTH the settings list and the routed turn's credential
      * gate, so an empty answer in that window told the user they had never signed in and told their turn there
      * was nothing to run on. The tokens were on disk the whole time, which is where connectedTranslatorProviders

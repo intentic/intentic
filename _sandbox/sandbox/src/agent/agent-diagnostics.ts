@@ -99,7 +99,7 @@ const NAMED_MISSING = 3;
 const UNAVAILABLE_NOTE =
     "Type diagnostics are unavailable for this edit: the type-checker cannot resolve this package's dependencies " +
     "from where it runs, so it would report every import as broken whatever the edit did. That is a limit of this " +
-    "check, not a verdict on your tools or on the code — run the package's own type-check, lint or tests when you " +
+    "check, not a verdict on your tools or on the code: run the package's own type-check, lint or tests when you " +
     "need this file verified.";
 
 /* Said ALONGSIDE the diagnostics rather than instead of them, which is the difference between this and the
@@ -115,7 +115,7 @@ const staleNote = (missing: readonly string[]): string =>
     `${missing.length === 1 ? "is" : "are"} not installed (${missing.slice(0, NAMED_MISSING).join(", ")}${
         missing.length > NAMED_MISSING ? `, and ${missing.length - NAMED_MISSING} more` : ""
     }). Unresolved-import errors naming ${missing.length === 1 ? "it" : "those"} are the install being behind, not ` +
-    "a mistake in this code — do not edit working source to satisfy one, and do not run an install; the daemon " +
+    "a mistake in this code: do not edit working source to satisfy one, and do not run an install; the daemon " +
     "installs them once this turn ends, so this package's own checks are available next turn, not this one.";
 
 // PostToolUse on the native Edit/Write: type-check the touched file and feed compile errors back. Silent on

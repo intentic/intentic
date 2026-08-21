@@ -27,7 +27,7 @@ afterEach(async () => {
 });
 
 // A production-shaped workspace: /work with a --separate-git-dir root repo (a committed baseline) and one
-// nested "intent" role repo, real git dirs on the history volume — the layout worktrees must operate over.
+// nested "intent" role repo, real git dirs on the history volume: the layout worktrees must operate over.
 const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: ReturnType<typeof createAgentWorktrees> }> => {
     const base = await mkdtemp(join(tmpdir(), "intentic-worktrees-"));
     tempDirs.push(base);
@@ -58,14 +58,14 @@ const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: 
     return { work, historyRoot, worktrees };
 };
 
-// One package's installed tree. Untracked by design — this is exactly what a worktree checkout cannot carry.
+// One package's installed tree. Untracked by design: this is exactly what a worktree checkout cannot carry.
 const deps = async (repo: string, pkg: string): Promise<void> => {
     await mkdir(join(repo, pkg, "node_modules", "dep"), { recursive: true });
     await writeFile(join(repo, pkg, "node_modules", "dep", "index.js"), `dep of ${pkg === "" ? "root" : pkg}\n`);
 };
 
 // A repo with dependencies installed the way a real one has them: a committed ignore rule, tracked package
-// dirs, and node_modules trees outside version control. `rule` is what decides whether mirroring is safe —
+// dirs, and node_modules trees outside version control. `rule` is what decides whether mirroring is safe:
 // only a rule matching FILES too can hide a symlink from `add -A`. pkg/b is tracked but left uninstalled, so a
 // test can install it later and watch a re-ensure pick it up.
 const install = async (repo: string, rule: string): Promise<void> => {
@@ -108,7 +108,7 @@ test("a worktree resolves dependencies through links to the main checkout", asyn
     const conversation = await worktrees.ensure("c1", []);
     const worktree = join(conversation.cwd, "intent");
 
-    // A link, not a copy — and one per installed package, at the same relative path.
+    // A link, not a copy, and one per installed package, at the same relative path.
     expect(lstatSync(join(worktree, "node_modules")).isSymbolicLink()).toBe(true);
     expect(await readlink(join(worktree, "node_modules"))).toBe(join(work, "intent", "node_modules"));
     expect(await readFile(join(worktree, "node_modules", "dep", "index.js"), "utf8")).toBe("dep of root\n");
@@ -186,7 +186,7 @@ test("re-ensure keeps existing links and mirrors packages installed since the ch
     await install(intent, "**/node_modules");
     const created = await worktrees.ensure("c1", []);
 
-    // An install that lands after the agent's checkout already exists — the next turn's ensure must see it.
+    // An install that lands after the agent's checkout already exists: the next turn's ensure must see it.
     await deps(intent, "pkg/b");
     const restored = await worktrees.ensure("c1", created.repos);
     const worktree = join(restored.cwd, "intent");
@@ -199,7 +199,7 @@ test("re-ensure keeps existing links and mirrors packages installed since the ch
 
 // The mirror's form is a property of the CONTAINER, and worktrees outlive containers on /history: a checkout
 // created without the namespace carries absolute symlinks that, inside one, resolve back into the worktree
-// occupying /work — the anchor's mkdir dies on the loop. Ensure must converge the mirror to the current mode.
+// occupying /work: the anchor's mkdir dies on the loop. Ensure must converge the mirror to the current mode.
 test("re-ensure converts pre-namespace symlinks into mount points once isolation is available", async () => {
     const { work, historyRoot, worktrees } = await setup();
     const intent = join(work, "intent");
@@ -222,7 +222,7 @@ test("re-ensure converts pre-namespace symlinks into mount points once isolation
     const entry = lstatSync(join(worktree, "node_modules"));
     expect(entry.isSymbolicLink()).toBe(false);
     expect(entry.isDirectory()).toBe(true);
-    // Empty — the namespace binds the real tree onto it.
+    // Empty: the namespace binds the real tree onto it.
     expect(await readdir(join(worktree, "node_modules"))).toEqual([]);
     expect(lstatSync(join(worktree, "pkg", "a", "node_modules")).isDirectory()).toBe(true);
 });
@@ -241,7 +241,7 @@ test("re-ensure restores the symlink when isolation is lost, but never over a re
     });
     const created = await isolated.ensure("c1", []);
     const worktree = join(created.cwd, "intent");
-    // A real tree the agent put inside its worktree — content the flip must never delete.
+    // A real tree the agent put inside its worktree: content the flip must never delete.
     await writeFile(join(worktree, "pkg", "a", "node_modules", "local.js"), "installed\n");
 
     await worktrees.ensure("c1", created.repos);
@@ -252,7 +252,7 @@ test("re-ensure restores the symlink when isolation is lost, but never over a re
     expect(await readFile(join(worktree, "pkg", "a", "node_modules", "local.js"), "utf8")).toBe("installed\n");
 });
 
-// A package dir the agent's branch never had is not a package to mirror — planting a link would mean first
+// A package dir the agent's branch never had is not a package to mirror: planting a link would mean first
 // creating an untracked directory the checkout deliberately doesn't contain.
 test("a package absent from the agent's branch is not mirrored into its worktree", async () => {
     const { work, worktrees } = await setup();
@@ -269,7 +269,7 @@ test("a package absent from the agent's branch is not mirrored into its worktree
 });
 
 // The links point at the OWNER's real dependency trees. A teardown that followed them would delete the
-// workspace's installed packages — the worst failure this mechanism could have.
+// workspace's installed packages: the worst failure this mechanism could have.
 test("teardown drops the links without touching the main checkout's dependencies", async () => {
     const { work, worktrees } = await setup();
     const intent = join(work, "intent");
@@ -348,9 +348,9 @@ test("retire commits the worktree's uncommitted state onto the branch and keeps 
 
     await worktrees.retire("c1", conversation.repos, "Fix the parser");
 
-    // The checkout is gone — that is the whole point, one file tree per repo reclaimed.
+    // The checkout is gone: that is the whole point, one file tree per repo reclaimed.
     expect(existsSync(conversation.cwd)).toBe(false);
-    // Both repos' commits survive, and both hold the work the worktree was holding loose — read by the same
+    // Both repos' commits survive, and both hold the work the worktree was holding loose: read by the same
     // `agent/c1` name the live conversation used, which is the property parking is built to preserve.
     expect(await sh(work, "rev-parse", "-q", "--verify", "agent/c1")).not.toBe("");
     expect(await sh(work, "show", "agent/c1:new-file.md")).toBe("agent file");
@@ -382,11 +382,11 @@ test("retire is a no-op on a clean worktree beyond dropping the checkout", async
     await worktrees.retire("c1", conversation.repos, "nothing to do");
 
     expect(existsSync(conversation.cwd)).toBe(false);
-    // No empty "Agent:" commit — the branch still points where it did.
+    // No empty "Agent:" commit: the branch still points where it did.
     expect(await sh(work, "rev-parse", "agent/c1")).toBe(tip);
 });
 
-// PARKING — the ref half of retiring. What archiving costs a repo used to include one refs/heads/ entry per
+// PARKING: the ref half of retiring. What archiving costs a repo used to include one refs/heads/ entry per
 // conversation forever; these pin the shape that removed it without the caller noticing.
 test("retire takes the branch off refs/heads and ensure puts it back", async () => {
     const { work, worktrees } = await setup();
@@ -396,11 +396,11 @@ test("retire takes the branch off refs/heads and ensure puts it back", async () 
 
     await worktrees.retire("c1", created.repos, undefined);
 
-    // Off refs/heads — for both repos of the composition, which is where the count came from.
+    // Off refs/heads: for both repos of the composition, which is where the count came from.
     expect(await sh(work, "for-each-ref", "--format=%(refname)", "refs/heads/agent/")).toBe("");
     expect(await sh(join(work, "intent"), "for-each-ref", "--format=%(refname)", "refs/heads/agent/")).toBe("");
     // But still named by exactly the string every caller holds as entry.branch, and still the same commits
-    // plus the one retire made — so land, the review diff and every standing keep reading it unchanged.
+    // plus the one retire made, so land, the review diff and every standing keep reading it unchanged.
     expect(await sh(work, "rev-parse", "refs/agent/c1")).toBe(await sh(work, "rev-parse", "agent/c1"));
     expect(await sh(work, "merge-base", "--is-ancestor", tip, "agent/c1")).toBe("");
     expect(await sh(work, "show", "agent/c1:new-file.md")).toBe("agent file");
@@ -429,7 +429,7 @@ test("prune parks the branches of agents that are off the board and drops refs n
         () => ["c1"],
     );
 
-    // c1 converges onto the shelf; c2 is live and keeps its branch — the sweep never touches a checked-out one.
+    // c1 converges onto the shelf; c2 is live and keeps its branch: the sweep never touches a checked-out one.
     expect(await sh(work, "for-each-ref", "--format=%(refname:short)", "refs/heads/agent/")).toBe("agent/c2");
     expect(await sh(work, "rev-parse", "-q", "--verify", "refs/agent/c1")).not.toBe("");
     // The orphan goes: nothing left in the fleet can ever reach those commits again.

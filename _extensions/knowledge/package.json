@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-knowledge",
     "version": "1.0.0",
-    "description": "Knowledge — a markdown folder that is also a typed graph: the owner's notes, entities and relationships, browsable here and queryable by the agent",
+    "description": "Knowledge, a markdown folder that is also a typed graph: the owner's notes, entities and relationships, browsable here and queryable by the agent",
     "license": "MIT",
     "private": true,
     "type": "module",

@@ -3,7 +3,7 @@ import { Button, Card, Checkbox, ui, Icon, Modal } from "@intentic/extension-ui"
 import type { RepoApp, TemplateSummary } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 
-/* The Add-an-app dialog — the single entry point for scaffolding apps, kept behind a modal so the view stays a
+/* The Add-an-app dialog: the single entry point for scaffolding apps, kept behind a modal so the view stays a
  * clean apps+tests list. Pick one or more templates from the source repo's templates.json and name each
  * instance (multiple instances of one template type are supported, each a unique slug that doesn't collide with
  * a present app). A pure picker: it emits the chosen entries and closes; AppsView owns the addApps kickoff and

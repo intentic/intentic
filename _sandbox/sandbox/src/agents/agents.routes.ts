@@ -37,7 +37,7 @@ export const createAgentsRoutes = (services: Services) => {
     };
     const notRunning = (id: string): void => {
         if (services.agents.running(id)) {
-            throw new ORPCError("CONFLICT", { message: "the agent's turn is running — wait for it to finish" });
+            throw new ORPCError("CONFLICT", { message: "the agent's turn is running, wait for it to finish" });
         }
     };
     /* THE LAND GUARD, which is a softer thing than notRunning and deliberately so.
@@ -59,7 +59,7 @@ export const createAgentsRoutes = (services: Services) => {
      * them. */
     const landable = (id: string, force: boolean): void => {
         if (services.agents.writing(id) && !force) {
-            throw new ORPCError("CONFLICT", { message: "the agent is still writing — land again to apply its work as it stands" });
+            throw new ORPCError("CONFLICT", { message: "the agent is still writing, land again to apply its work as it stands" });
         }
     };
     /* Which SDK session holds this conversation's transcript, asked of the REGISTRY, which recorded it from
@@ -221,7 +221,7 @@ export const createAgentsRoutes = (services: Services) => {
                 return true;
             });
             if (outcome === undefined) {
-                throw new ORPCError("CONFLICT", { message: "the agent's turn is running — wait for it to finish" });
+                throw new ORPCError("CONFLICT", { message: "the agent's turn is running, wait for it to finish" });
             }
             return { ok: true } as const;
         }),

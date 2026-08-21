@@ -50,23 +50,23 @@ const GENERIC = "website";
 // the model can act on.
 export const openBrowserAccount = async (services: Services, input: OpenAccountInput): Promise<string> => {
     if (!ENTRY_ID.test(input.id) || input.id.length > 60) {
-        throw new Error(`"${input.id}" is not a usable account id — letters, digits, dashes and underscores, starting with a letter or digit`);
+        throw new Error(`"${input.id}" is not a usable account id: letters, digits, dashes and underscores, starting with a letter or digit`);
     }
     const identity = await services.capabilities.get(input.identity);
     if (identity?.kind !== "identity") {
-        throw new Error(`no identity "${input.identity}" — open_account files an account under an existing identity`);
+        throw new Error(`no identity "${input.identity}": open_account files an account under an existing identity`);
     }
     if ((identity.config as IdentityConfig).openAccounts !== "on") {
         throw new Error(
-            `the identity "${input.identity}" may not open accounts — its owner has not turned that on. Ask them to, or have them add the account themselves`,
+            `the identity "${input.identity}" may not open accounts: its owner has not turned that on. Ask them to, or have them add the account themselves`,
         );
     }
     if ((await services.capabilities.get(input.id)) !== undefined) {
-        throw new Error(`"${input.id}" already exists — pick another id, or act through the existing entry`);
+        throw new Error(`"${input.id}" already exists: pick another id, or act through the existing entry`);
     }
     const purpose = input.purpose.trim();
     if (purpose === "") {
-        throw new Error(`say what "${input.id}" is for — one line, which is what a later session reads to know whether to reuse this account`);
+        throw new Error(`say what "${input.id}" is for: one line, which is what a later session reads to know whether to reuse this account`);
     }
     const ctx = capabilityCtx(services);
     /* WHICH CARD THIS ACCOUNT GETS. A site the sandbox knows brings its own URLs and cheatsheet; anything else
@@ -75,7 +75,7 @@ export const openBrowserAccount = async (services: Services, input: OpenAccountI
     const platform = known ? input.platform : GENERIC;
     if (!known && (input.homeUrl ?? "") === "") {
         throw new Error(
-            `no site card for "${input.platform}", so the account rides the generic browser session — pass homeUrl (the page this account lives on once signed in) and it files fine`,
+            `no site card for "${input.platform}", so the account rides the generic browser session: pass homeUrl (the page this account lives on once signed in) and it files fine`,
         );
     }
     const entry: Capability = {
@@ -105,5 +105,5 @@ export const openBrowserAccount = async (services: Services, input: OpenAccountI
     // the site, so the difference, it will have to read the pages rather than being taught them, is its to know.
     return known
         ? lines.join("\n")
-        : `${lines.join("\n")}\nNo site card for "${input.platform}", so this account rides the generic browser session — you know the site only by what you read on it.`;
+        : `${lines.join("\n")}\nNo site card for "${input.platform}", so this account rides the generic browser session, you know the site only by what you read on it.`;
 };

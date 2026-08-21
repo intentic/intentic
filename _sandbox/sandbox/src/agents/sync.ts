@@ -112,7 +112,7 @@ const syncOne = async (
     }
     const head = await headSha(worktrees.mainDir(repo), git);
     if (head === undefined) {
-        return undefined; // Unborn HEAD, or the main checkout is gone — no main line to sit on.
+        return undefined; // Unborn HEAD, or the main checkout is gone: no main line to sit on.
     }
     const tip = (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim();
     if (tip === head || (await contains(worktree, tip, head, git))) {

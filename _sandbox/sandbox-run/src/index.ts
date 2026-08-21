@@ -23,7 +23,7 @@ import { shellQuote } from "./quote.js";
  * that hand-rolls a docker run mounting /work, instead of importing this module or invoking the verb,
  * fails there by discovery, not by being on a list. */
 
-// ——— Names ————————————————————————————————————————————————————————————————————————————————————————————
+// --- Names --------------------------------------------------------------------------------------------
 // Every per-sandbox object is derived from the slug with these prefixes, and every flow must derive them
 // identically or it targets someone else's container/volumes (cleanup.sh and the coexistence checks match
 // on the same shapes). The alias is the stable in-network hostname the tunnel sidecar dials.
@@ -47,7 +47,7 @@ export const sandboxNames = (slug: string): SandboxNames => ({
     network: `intentic-workspace-${slug}`,
 });
 
-// ——— Posture ——————————————————————————————————————————————————————————————————————————————————————————
+// --- Posture ------------------------------------------------------------------------------------------
 // The Linux capabilities EVERY sandbox container is granted. Scoped to the container, not host access; the
 // docker socket is never mounted.
 //
@@ -76,7 +76,7 @@ export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;
 export const RUNTIME_DIRECTIVE_PREFIX = "# intentic:runtime ";
 export const RUNTIME_DIRECTIVES = ["--device=/dev/net/tun", "--cap-add=NET_ADMIN", "--privileged", "--gpus=all"] as const;
 
-/* ——— Directives a HOST may not be able to honour ————————————————————————————————————————————————————————
+/* --- Directives a HOST may not be able to honour --------------------------------------------------------
  *
  * Most directives are all-or-nothing: without tun the VPN capability is dead, without --privileged dockerd is,
  * so a host that refuses them has broken the thing that asked and the launch should fail loudly. A few are not
@@ -144,7 +144,7 @@ export const runtimeDirectivesOf = (overlay: string): string[] => {
     return tokens;
 };
 
-// ——— Env ——————————————————————————————————————————————————————————————————————————————————————————————
+// --- Env ----------------------------------------------------------------------------------------------
 /* The vars a recreate replays from the running container, the union of what every creator sets, in one
  * canonical order. SANDBOX_IMAGE / SANDBOX_BASE_IMAGE / SANDBOX_ENVIRONMENT_HASH are deliberately absent:
  * they name the image being SWAPPED IN, so the emitter derives them from its own inputs, never from the
@@ -201,12 +201,12 @@ export const replayableEnv = (pairs: readonly (readonly [string, string])[]): [s
         return value === undefined || value === "" ? [] : [[name, value] as [string, string]];
     });
 
-// ——— Health ———————————————————————————————————————————————————————————————————————————————————————————
+// --- Health -------------------------------------------------------------------------------------------
 // A container that starts but crash-loops must not read as success, every flow gates on the daemon's own
 // /health with the same patience before declaring the sandbox up.
 export const HEALTH = { url: `http://localhost:${DAEMON_PORT}/health`, attempts: 15, intervalSeconds: 2 } as const;
 
-// ——— The loopback shortcut ————————————————————————————————————————————————————————————————————————————
+// --- The loopback shortcut ----------------------------------------------------------------------------
 /* A sandbox running on the SAME machine as the browser does not need Cloudflare in the middle: the container
  * publishes its daemon port on the host's loopback, and the browser dials that instead of the tunnel. Nobody
  * announces the address, the browser DERIVES it from the sandbox id it already holds (the leading label of
@@ -243,7 +243,7 @@ export const localDaemonUrl = (sandboxId: string, zone: string | undefined): str
 
 export const localDaemonUrlInsecure = (sandboxId: string): string => `http://127.0.0.1:${localDaemonPort(sandboxId)}`;
 
-// ——— The run ——————————————————————————————————————————————————————————————————————————————————————————
+// --- The run ------------------------------------------------------------------------------------------
 export interface SandboxRun {
     readonly names: SandboxNames;
     readonly image: string;

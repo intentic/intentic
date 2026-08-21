@@ -13,13 +13,13 @@ export const monorepoHandler: CapabilityHandler = {
     echo: () => ({}),
     // The name IS the repository's directory in the workspace, with the app panels and preview subdomains that
     // hang off it. Renaming here would leave the repo where it is and lose sight of it.
-    rename: { refuse: "This name is the monorepo's folder in your workspace — rename the repository itself instead." },
+    rename: { refuse: "This name is the monorepo's folder in your workspace, rename the repository itself instead." },
     apply: async function* (ctx, id) {
         // `--` is the separator in an app preview's key/subdomain (<repo>--<app>), so a monorepo name can't
         // contain it without risking a collision with another monorepo's app panel.
         if (!isValidRepoName(id) || id.includes("--")) {
             throw new Error(
-                `"${id}" is not a valid monorepo name — use lowercase letters, digits and single hyphens, and avoid the reserved repo names`,
+                `"${id}" is not a valid monorepo name: use lowercase letters, digits and single hyphens, and avoid the reserved repo names`,
             );
         }
         if (existsSync(join(ctx.workspace.root, id))) {
@@ -32,7 +32,7 @@ export const monorepoHandler: CapabilityHandler = {
         }
         yield { kind: "log", message: `Scaffolding pnpm + turbo monorepo "${id}"…` };
         await ctx.scaffoldMonorepo(id, session);
-        yield { kind: "log", message: `Monorepo "${id}" ready — open its panel to add apps (API / Web / Landing).` };
+        yield { kind: "log", message: `Monorepo "${id}" ready, open its panel to add apps (API / Web / Landing).` };
     },
     status: (ctx, id) => Promise.resolve(existsSync(join(ctx.workspace.root, id)) ? { state: "active" } : { state: "inactive" }),
 };

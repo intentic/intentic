@@ -104,7 +104,7 @@ const proseLines = (prompt: string): string[] => {
  *
  * Three outcomes, and the difference between them is the whole point. A remnant of SEVERAL words is the ask,
  * `Can you please fix the auth tests?` was carrying `fix the auth tests?`. A remnant of NOTHING was pure
- * greeting (`Hey, quick one —`), and returning empty is how the caller learns to read the next line instead.
+ * greeting (`Hey, quick one -`), and returning empty is how the caller learns to read the next line instead.
  * A remnant of ONE word means the opener was meaningful. `Hi there` is not a conversation about `there`,
  * and `So what?` is not one about `what?`, so the line stands as written. */
 const withoutOpener = (line: string): string => {

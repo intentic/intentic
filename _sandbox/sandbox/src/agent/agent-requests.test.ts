@@ -25,7 +25,7 @@ test("an abort settles the caller with its stand-in, but resolves the card as an
     controller.abort();
 
     const { reply, resolved } = await settled;
-    // The caller still gets an answer — the SDK's tool handler must never hang holding the turn open...
+    // The caller still gets an answer: the SDK's tool handler must never hang holding the turn open...
     expect(reply).toBe(onAbort);
     // ...but nobody chose it, so it must not replay as a decision: no reply, and the card freezes cancelled.
     expect(resolved).toEqual({ kind: "resolved", requestId: id });
@@ -51,7 +51,7 @@ test("a reply for another kind of card settles as the abort value rather than an
     expect(resolved).toEqual({ kind: "resolved", requestId: id });
 });
 
-// The restart path: a card restored from the journal answers to the id it was raised with one process ago —
+// The restart path: a card restored from the journal answers to the id it was raised with one process ago:
 // the id every replayed frame and saved answer draft still holds.
 test("a restored card settles under its original id", async () => {
     const { id, wait } = restoreRequest("r-restored", "question", onAbort, "c-1");
@@ -65,7 +65,7 @@ test("a restored card settles under its original id", async () => {
     expect(resolved).toEqual({ kind: "resolved", requestId: "r-restored", reply });
 });
 
-test("only the first settle counts — a second reply for the same id finds nothing to resolve", async () => {
+test("only the first settle counts: a second reply for the same id finds nothing to resolve", async () => {
     const { id, wait } = createRequest("question", onAbort);
     const settled = wait(new AbortController().signal);
 

@@ -2,7 +2,7 @@ import { parseEnv } from "node:util";
 import { expect, test } from "vitest";
 import { envLine, shellQuote, sqlLiteral } from "./quote.js";
 
-/* Each case here is a value that broke a real call site, asserted through the PARSER it broke — parseEnv for
+/* Each case here is a value that broke a real call site, asserted through the PARSER it broke: parseEnv for
  * .env, a shell for the command forms. Asserting the emitted text alone would pass for an escaping scheme the
  * consumer does not implement, which is exactly how the `.env` writers came to backslash-escape a quote that
  * Node's parser reads as a literal backslash. */
@@ -29,7 +29,7 @@ test("sqlLiteral doubles interior quotes and leaves backslashes alone", () => {
     expect(sqlLiteral(String.raw`a\b`)).toBe(String.raw`'a\b'`);
 });
 
-/* The inverse of shellQuote for one emitted word — strip the outer quotes, then collapse each `'\''` seam back
+/* The inverse of shellQuote for one emitted word: strip the outer quotes, then collapse each `'\''` seam back
  * to the quote it stands for. A shell would do this; doing it here keeps the composition test off the machine
  * (and out of the integration budget) while still asserting through a decoder rather than a transcription. */
 const unquoteShell = (word: string): string => (word.startsWith(`'`) ? word.slice(1, -1).replaceAll(`'\\''`, `'`) : word);
@@ -38,7 +38,7 @@ test("a SQL literal inside a shell command needs BOTH layers, and composes", () 
     const password = `x'"; id; #`;
     const statement = `ALTER ROLE "app" LOGIN PASSWORD ${sqlLiteral(password)}`;
     // Layer 1, Postgres: the quote that would have ended the string literal is doubled, so the injected
-    // statement is data. Derived from sqlLiteral, not transcribed — the escape belongs to the function.
+    // statement is data. Derived from sqlLiteral, not transcribed: the escape belongs to the function.
     expect(statement).toBe(`ALTER ROLE "app" LOGIN PASSWORD 'x''"; id; #'`);
     // Layer 2, the shell: the whole statement arrives as ONE argv word, byte-identical. Quoting only this
     // layer is what made a shell-safe statement a SQL injection; quoting only the other made it a shell one.
@@ -63,7 +63,7 @@ test("a value cannot add a second key to the file", () => {
     // its delimiter and has no escape for it. Picking a delimiter the value lacks is what closes it.
     const injected = `ab"\nEVIL=1`;
     // The old serialization: one stored value became a key the caller never asked to set. The fact is that
-    // EVIL exists at all, not where it sorts — parseEnv's key order is its own business.
+    // EVIL exists at all, not where it sorts: parseEnv's key order is its own business.
     expect(Object.keys(parseEnv(`SECRET="${injected}"\n`))).toContain("EVIL");
     expect(Object.keys(parseEnv(envLine("SECRET", injected)))).toEqual(["SECRET"]);
     expect(parseEnv(envLine("SECRET", injected))).toEqual({ SECRET: injected });

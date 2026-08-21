@@ -6,13 +6,13 @@ import { TRANSLATOR_BINARY_MISSING } from "./translator.js";
 /* THE SENTENCE THE TRANSLATOR WROTE IS THE SENTENCE THE USER READS.
  *
  * Every failure the CLIProxyAPI client can produce is already a sentence aimed at the person looking at the
- * Agent tab — "rebuild the image to add the translator", "Google sign-in failed to start (503)", or the
+ * Agent tab: "rebuild the image to add the translator", "Google sign-in failed to start (503)", or the
  * proxy's own reason for rejecting a pasted redirect URL. They all used to reach the browser as a bare
  * "Internal server error": oRPC replaces the message of any throw that is not an ORPCError, so the four
  * handlers here were deleting the one useful thing in each failure.
  *
  * That is the whole bug behind the report "my Google accounts expired and now I get Internal server error",
- * and behind the same string greeting new users — a sandbox on a core image has no translator binary at all,
+ * and behind the same string greeting new users: a sandbox on a core image has no translator binary at all,
  * so pressing Connect could only ever produce the one message that never got through.
  *
  * These tests assert the MESSAGE reaches a client, not the code: the message is what the card prints. */
@@ -46,7 +46,7 @@ test("a connect failure reaches the browser as the translator's own sentence, no
 });
 
 test("a completion failure carries the reason CLIProxyAPI gave for rejecting the pasted URL", async () => {
-    const reason = "state does not match any pending sign-in — start the connection again";
+    const reason = "state does not match any pending sign-in: start the connection again";
     const app = createApp(services({ config: withTranslator, cliProxy: failing(new Error(reason)) }));
 
     const response = await postJson(app, "/translator/gemini/complete", {

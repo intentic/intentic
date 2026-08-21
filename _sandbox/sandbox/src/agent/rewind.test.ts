@@ -5,7 +5,7 @@ import type { TurnAnchor } from "./turn-anchors.js";
 
 const CONVERSATION = "conv-1";
 
-// Only the services rewind touches, each recording what it was asked to do — the point of these tests is the
+// Only the services rewind touches, each recording what it was asked to do: the point of these tests is the
 // ORDER and the GUARD, not what git or the filesystem do underneath (history.integration.test.ts covers that
 // end).
 const deps = (overrides: {
@@ -14,7 +14,7 @@ const deps = (overrides: {
     readonly anchor?: TurnAnchor | null;
     readonly restored?: boolean;
     readonly entry?: boolean;
-    // Which repos of a worktree anchor refuse to reset — the checkout that is no longer there.
+    // Which repos of a worktree anchor refuse to reset: the checkout that is no longer there.
     readonly resetFails?: readonly string[];
 }) => {
     const calls: string[] = [];
@@ -82,7 +82,7 @@ const deps = (overrides: {
     return { services, calls, git };
 };
 
-test("restores, truncates and clears the session — in that order, all under the lease", async () => {
+test("restores, truncates and clears the session: in that order, all under the lease", async () => {
     const { services, calls } = deps({});
     const outcome = (await rewindConversation(services, CONVERSATION, 2)) as RewindResult;
 
@@ -95,7 +95,7 @@ test("restores, truncates and clears the session — in that order, all under th
 test("a running turn refuses the rewind before anything is touched", async () => {
     const { services, calls } = deps({ running: true });
     expect(await rewindConversation(services, CONVERSATION, 2)).toBe("busy");
-    // Not "it restored and then failed" — nothing ran at all, which is what makes the refusal safe.
+    // Not "it restored and then failed": nothing ran at all, which is what makes the refusal safe.
     expect(calls).toEqual([]);
 });
 
@@ -111,7 +111,7 @@ test("a checkpoint that vanishes between lookup and restore leaves the transcrip
     expect(calls).toEqual(["of", "restore"]);
 });
 
-// A conversation the registry has never seen still restores — the files are the part that matters, and there
+// A conversation the registry has never seen still restores: the files are the part that matters, and there
 // is no transcript to shorten.
 test("an unknown conversation restores with nothing dropped", async () => {
     const { services, calls } = deps({ entry: false });
@@ -120,7 +120,7 @@ test("an unknown conversation restores with nothing dropped", async () => {
 });
 
 /* THE ISOLATED ARM. A conversation working in a checkout of its own goes back to the commits its branch stood
- * on, not to a workspace checkpoint — the same three steps in the same order, in the currency it has. */
+ * on, not to a workspace checkpoint: the same three steps in the same order, in the currency it has. */
 test("an isolated conversation resets its own checkout, per repo, and names no timeline point", async () => {
     const { services, calls, git } = deps({
         anchor: {
@@ -135,7 +135,7 @@ test("an isolated conversation resets its own checkout, per repo, and names no t
     const outcome = (await rewindConversation(services, CONVERSATION, 2, git)) as RewindResult;
 
     // No `snapshot`: this rewind moved the conversation's own branch, and the workspace timeline has no row for
-    // it — offering one would select a checkpoint that has nothing to do with what just happened.
+    // it: offering one would select a checkpoint that has nothing to do with what just happened.
     expect(outcome).toEqual({ dropped: 4 });
     expect(calls).toEqual(["of", "reset:root", "clean:root", "reset:intent", "clean:intent", "truncate:2", "forgetAnchors:3", "clearSession"]);
 });

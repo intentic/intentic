@@ -133,7 +133,7 @@ const OVERLAY_FS_NAME = "intentic-modules";
 const overlayOptions = (lower: string, upper: string, work: string): string => {
     for (const path of [lower, upper, work]) {
         if (path.includes(",") || path.includes(":")) {
-            throw new Error(`turn isolation: overlay path cannot contain "," or ":" — ${path}`);
+            throw new Error(`turn isolation: overlay path cannot contain "," or ":", ${path}`);
         }
     }
     return `lowerdir=${lower},upperdir=${upper},workdir=${work}`;
@@ -441,7 +441,7 @@ export const createTurnIsolation = (options: { readonly root: string; readonly h
             if (!ok) {
                 logger.warn(
                     {},
-                    "turn isolation unavailable (no CAP_SYS_ADMIN) — isolated turns will see the shared /work; recreate the sandbox to enable it",
+                    "turn isolation unavailable (no CAP_SYS_ADMIN): isolated turns will see the shared /work; recreate the sandbox to enable it",
                 );
             }
             return ok;

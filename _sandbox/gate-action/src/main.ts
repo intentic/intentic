@@ -71,7 +71,7 @@ if (inputs.door === "fire") {
     if (!response.ok) {
         wiring(`the automation answered ${response.status}: ${detailOf(await response.text())}`);
     }
-    console.log("woke the agent — the automation accepted the payload and the run continues without this workflow");
+    console.log("woke the agent: the automation accepted the payload and the run continues without this workflow");
     process.exit(0);
 }
 

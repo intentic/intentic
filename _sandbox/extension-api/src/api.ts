@@ -488,14 +488,14 @@ export interface IntenticApi {
     };
     // Navigate the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").
     readonly navigate: (path: string) => void;
-    /* THE SAME PATH AS A BROWSER ADDRESS — what a view puts in an `<a href>` so the thing it draws is a real
+    /* THE SAME PATH AS A BROWSER ADDRESS: what a view puts in an `<a href>` so the thing it draws is a real
      * link and not a <button> that happens to move the shell.
      *
      * Every row and card in this app that goes somewhere has a URL behind it, and a view that only calls
      * `navigate` throws all of it away: nothing under the pointer in the status bar, nothing in the browser's
      * own right-click menu, nothing to copy, and Ctrl/⌘-click navigating the tab the user is reading instead
      * of opening a second one. So a navigational row renders as `<a :href="api.href(path)">` and calls
-     * `navigate` from its click handler — guarded with `browserOwnsClick` (@intentic/extension-ui) so a
+     * `navigate` from its click handler: guarded with `browserOwnsClick` (@intentic/extension-ui) so a
      * modified click is left to the browser. */
     readonly href: (path: string) => string;
     /* THE URL AS A VIEW'S STATE, so what a reader is looking at can be linked to.

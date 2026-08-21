@@ -61,17 +61,17 @@ test("reports nothing when the branch already sits on the main line", async () =
 });
 
 /* THE COLLISION A RENAME HIDES. `--name-only` reports a rename at its destination and nowhere else (git
- * detects renames by default — omitting `-M` does not turn that off), so main renaming a file the agent is
+ * detects renames by default: omitting `-M` does not turn that off), so main renaming a file the agent is
  * editing produced two path lists that could not intersect: `moved` named the destination, `mine` named the
  * source, and `overlap` came back empty. The turn preamble then told the agent main had moved underneath it
- * and named nothing — on the one file where its work was about to be replayed onto a path that no longer
+ * and named nothing: on the one file where its work was about to be replayed onto a path that no longer
  * exists. Same defect origins.ts carried on the attribution side. */
 test("a main-line RENAME of a file the agent edited is reported as an overlap", async () => {
     const { work, worktree, worktrees } = await setup();
     await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n");
     await sh(worktree, "add", "-A");
     await commit(worktree, "agent work");
-    // Main moves the very file the agent is holding, verbatim — a 100% rename, the case that collapses.
+    // Main moves the very file the agent is holding, verbatim: a 100% rename, the case that collapses.
     await sh(work, "mv", "app.ts", "renamed.ts");
     await commit(work, "user renamed it");
 
@@ -105,7 +105,7 @@ test("replays the agent's commits onto a main line that moved, and says what mov
     expect(await sh(worktree, "rev-list", "--count", `${await sh(work, "rev-parse", "HEAD")}..HEAD`)).toBe("1");
 });
 
-test("commits the worktree's dirty remainder first — a rebase refuses to start otherwise", async () => {
+test("commits the worktree's dirty remainder first: a rebase refuses to start otherwise", async () => {
     const { work, worktree, worktrees } = await setup();
     // An interrupted turn's leftovers: edited and never committed.
     await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n");
@@ -119,13 +119,13 @@ test("commits the worktree's dirty remainder first — a rebase refuses to start
     expect(await sh(worktree, "status", "--porcelain")).toBe("");
     expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("one\ntwo\nthree\nfour\nAGENT\n");
     expect(await readFile(join(worktree, "new.ts"), "utf8")).toBe("brand new\n");
-    // The remainder is provenance, carrying the agent title and the daemon's identity — land's own commit.
+    // The remainder is provenance, carrying the agent title and the daemon's identity: land's own commit.
     expect(await sh(worktree, "log", "-1", "--format=%s%n%an")).toBe("Agent: fix the thing\nintentic");
 });
 
 /* TWICE IN ONE TURN. The pass used to run once, at the turn's start; a turn that parks on a question or a plan
  * approval now takes it again when the card settles (agent.ts), because the user's main line does not stop
- * while they read. So each call has to measure from where the LAST one left the branch — a second report that
+ * while they read. So each call has to measure from where the LAST one left the branch: a second report that
  * re-counted the commits the first already replayed onto would tell the agent its ground had moved twice, and
  * hand the turn's chore a span reaching back behind work that is already in main. */
 test("a second sync in the same turn reports only what moved since the first", async () => {
@@ -149,7 +149,7 @@ test("a second sync in the same turn reports only what moved since the first", a
     const [second] = await sync(worktrees);
     expect(second).toMatchObject({ commits: 1, moved: ["app.ts"], overlap: ["app.ts"] });
     expect(second?.onto).toBe(await sh(work, "rev-parse", "HEAD"));
-    // One agent commit, still on top — replayed twice, duplicated neither time.
+    // One agent commit, still on top: replayed twice, duplicated neither time.
     expect(await sh(worktree, "rev-list", "--count", `${await sh(work, "rev-parse", "HEAD")}..HEAD`)).toBe("1");
     expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("USER\ntwo\nthree\nfour\nAGENT\n");
 });
@@ -171,7 +171,7 @@ test("a second sync says nothing when the main line stood still", async () => {
 test("rolls a conflicting rebase back and leaves the branch on its old base", async () => {
     const { work, worktree, worktrees } = await setup();
     const before = await sh(worktree, "rev-parse", "HEAD");
-    // Both sides rewrite the SAME line — nothing git can replay.
+    // Both sides rewrite the SAME line: nothing git can replay.
     await writeFile(join(worktree, "app.ts"), "one\ntwo\nAGENT\nfour\nfive\n");
     await sh(worktree, "add", "-A");
     await commit(worktree, "agent work");
@@ -182,7 +182,7 @@ test("rolls a conflicting rebase back and leaves the branch on its old base", as
     const [root] = await sync(worktrees);
     expect(root).toMatchObject({ repo: "root", blocked: true, commits: 1, overlap: ["app.ts"] });
     // Rolled all the way back: no rebase in progress, the agent's own commit still on top of its old base, and
-    // its content untouched. This is the state the turn runs in — exactly today's behaviour, nothing worse.
+    // its content untouched. This is the state the turn runs in: exactly today's behaviour, nothing worse.
     expect(await sh(worktree, "status", "--porcelain")).toBe("");
     expect(await sh(worktree, "rev-parse", "HEAD^")).toBe(before);
     expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("one\ntwo\nAGENT\nfour\nfive\n");

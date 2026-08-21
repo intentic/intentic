@@ -202,7 +202,7 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
             // The deadline aborts by design; only a genuine failure is worth a line in the log.
             if (!controller.signal.aborted) {
                 failed = true;
-                deps.logger.warn({ err: error }, "turn context: retrieval failed — the turn runs without pre-injected context");
+                deps.logger.warn({ err: error }, "turn context: retrieval failed, the turn runs without pre-injected context");
             }
             return undefined;
         });

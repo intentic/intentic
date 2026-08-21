@@ -138,13 +138,13 @@ const callWith = async <T>(botToken: string, method: string, body: object | unde
  * `deleteWebhook` our way out of that, it would silently break whatever else the owner pointed this bot at. */
 const fatalMessage = (error: TelegramApiError): string | undefined => {
     if (error.code === 401 || error.code === 404) {
-        return `Telegram rejected the bot token (${error.description}) — paste a fresh token from @BotFather on the Telegram capability`;
+        return `Telegram rejected the bot token (${error.description}): paste a fresh token from @BotFather on the Telegram capability`;
     }
     if (error.code === 403) {
-        return `Telegram refused this bot (${error.description}) — it may have been deleted or blocked; check it with @BotFather`;
+        return `Telegram refused this bot (${error.description}): it may have been deleted or blocked; check it with @BotFather`;
     }
     if (error.code === 409) {
-        return `Another reader is already receiving this bot's updates (${error.description}) — remove its webhook, or give this sandbox a bot of its own`;
+        return `Another reader is already receiving this bot's updates (${error.description}): remove its webhook, or give this sandbox a bot of its own`;
     }
     return undefined;
 };
@@ -160,7 +160,7 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
 
     const identity = await connectCall<TelegramUser>("getMe");
     if (identity.username === undefined) {
-        throw new FatalTelegramError("Telegram accepted the token but the bot has no username — give it one with @BotFather");
+        throw new FatalTelegramError("Telegram accepted the token but the bot has no username: give it one with @BotFather");
     }
 
     /* Start from NOW, not from the backlog. Telegram queues undelivered updates for 24 hours, so a gateway that

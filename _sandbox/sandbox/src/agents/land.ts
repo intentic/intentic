@@ -43,12 +43,12 @@ export interface LandOutcome extends LandResult {
     readonly changed: boolean;
     readonly repos: PersistedAgent["repos"];
     readonly diff: { files: number; insertions: number; deletions: number };
-    /* DID THIS LAND ACTUALLY JUDGE THE DELTA — false for `measure`, and that single bit is what stops a land
+    /* DID THIS LAND ACTUALLY JUDGE THE DELTA: false for `measure`, and that single bit is what stops a land
      * that touches nothing from retiring the verdict of one that did.
      *
      * `measure` runs at the end of every turn nobody let finish (agent.routes.ts settleLandBooks): a dismissed
      * question, the user's own Stop. It preserves the worktree's remainder, refreshes the diffstat and marks
-     * spans the main tree took by another road — and it deliberately never reaches the conflict gate, because
+     * spans the main tree took by another road, and it deliberately never reaches the conflict gate, because
      * its whole promise is that the main tree is not its to touch. So it always reports `conflicts: undefined`,
      * which recordLanded used to read as "nothing refuses anymore" and clear the stored report with.
      *
@@ -56,7 +56,7 @@ export interface LandOutcome extends LandResult {
      * report (standing.ts) and so went back to `ready`; the review's diff route re-derives its report only when
      * one is stored (agents.routes.ts) and so returned none; and "Have the agent resolve it" reads THAT and
      * refuses with "Nothing left for the agent to rebase" (agentActions.ts). Meanwhile the tree had not moved
-     * an inch, so a real land refused exactly as before — a dead end with no exit: land says conflict, resolve
+     * an inch, so a real land refused exactly as before, a dead end with no exit: land says conflict, resolve
      * says there is nothing to resolve, and the one press that could break the tie is the one being refused.
      *
      * A verdict may only be replaced by another verdict. */
@@ -512,7 +512,7 @@ export const landAgent = async (
         repos,
         diff,
         // `measure` never reaches the conflict gate, so it has no verdict to offer and must not retire the
-        // last one — see the field's own note above.
+        // last one: see the field's own note above.
         adjudicated: mode !== "measure",
         ...(conflicts.length > 0 ? { conflicts } : {}),
         ...(resolving.length > 0 ? { resolving } : {}),

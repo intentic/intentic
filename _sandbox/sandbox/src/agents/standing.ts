@@ -126,7 +126,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                 let produced = false;
                 for (const { composed, tip } of shas) {
                     if (tip === undefined) {
-                        continue; // The branch is gone — nothing of this agent's is left in this repo.
+                        continue; // The branch is gone: nothing of this agent's is left in this repo.
                     }
                     // Did this agent ever write anything? Asked of the branch, NOT of `landedTip`: the entry
                     // records a tip only for a land this daemon performed, and the case that most needs the

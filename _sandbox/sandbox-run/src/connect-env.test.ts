@@ -6,11 +6,11 @@ import { REPLAY_ENV } from "./index.js";
 
 /* The connect flow lives in the ic host-side CLI (_sandbox/ic, Rust), and what it hands the run contract is
  * invisible at every other layer: a key it fails to pass produces a sandbox that boots, logs nothing, serves
- * every request — and quietly lacks one capability. PLATFORM_URL taught this: the daemon skips announcing
+ * every request, and quietly lacks one capability. PLATFORM_URL taught this: the daemon skips announcing
  * when it is empty, the setup screen waits for nothing but that announce, so setup could never finish while
  * the sandbox itself looked perfectly healthy. This test parses the Rust source (the same way its
  * predecessor parsed connect.sh and connect.ps1) and pins that list against the contract's replay allowlist
- * — the one place the two languages must agree. */
+ *: the one place the two languages must agree. */
 
 const connectSource = readFileSync(join(repoRoot(import.meta.url), "_sandbox/ic/src/sandbox/connect.rs"), "utf8");
 

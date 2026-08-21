@@ -2,7 +2,7 @@ import type { CapabilityContribution } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
 import { CAPABILITY_CATALOG, contributionCard } from "./index.js";
 
-// The real shapes from _extensions/connectors/intentic-extension.json, abridged to the card-relevant data —
+// The real shapes from _extensions/connectors/intentic-extension.json, abridged to the card-relevant data:
 // pins that the derived per-engine cards keep the manifest defaults the old merged "sql" card got wrong
 // (mysql on port 5432 / user postgres).
 const postgres: CapabilityContribution = {
@@ -66,7 +66,7 @@ describe("contributionCard", () => {
         expect(card.category).toBe("extend");
     });
 
-    it("leaves no static card for any contributable kind — the catalog is extensible, the handlers are core", () => {
+    it("leaves no static card for any contributable kind: the catalog is extensible, the handlers are core", () => {
         // The boundary the extraction exists to hold: a kind an extension can supply a card for has NO static
         // card, so there is exactly one place a card of that kind comes from. What stays is one-to-one with a
         // handler it can't be separated from (docker's --privileged, vpn's NET_ADMIN, extension's own installer).
@@ -78,7 +78,7 @@ describe("contributionCard", () => {
             "endpoint",
             "extension",
             // Static like endpoint, and for the same reason: an identity has no site, so there is nothing an
-            // extension could vary — the email IS the card.
+            // extension could vary: the email IS the card.
             "identity",
             "integration",
             "mcp",
@@ -108,8 +108,8 @@ describe("contributionCard", () => {
 
     /* THE GENERIC BROWSER CARD renders like any other: the pinned discriminator, the answers that replace what a
      * site card pins in its manifest, then the core credential pair every browser card gets (what lets the agent
-     * sign the account in itself — the daemon types them, the agent never reads them). Worth holding, because the
-     * whole point of this card is that the FORM carries the site — a card that lost its URL fields would be an
+     * sign the account in itself: the daemon types them, the agent never reads them). Worth holding, because the
+     * whole point of this card is that the FORM carries the site: a card that lost its URL fields would be an
      * unfillable one, and the failure would only show up as a login window opening on nothing. */
     it("renders the generic browser card's own fields, since the site comes from the form", () => {
         const generic: CapabilityContribution = {
@@ -124,18 +124,18 @@ describe("contributionCard", () => {
             skill: "skills/website/SKILL.md",
         };
         const card = contributionCard(generic);
-        // …plus `identity` — whose browser the account lives in is core the way the credentials are.
+        // …plus `identity`, whose browser the account lives in is core the way the credentials are.
         expect(card.fields.map((field) => field.key)).toEqual(["platform", "homeUrl", "loginUrl", "purpose", "username", "password", "identity"]);
         expect(card.fields[0]).toEqual({ key: "platform", label: "", value: "website" });
-        // The credentials are optional and the password is a secret — a card that stored it in the clear, or
+        // The credentials are optional and the password is a secret: a card that stored it in the clear, or
         // demanded it from someone who signs in by hand, would be wrong in two different ways.
         expect(card.fields.find((field) => field.key === "password")).toMatchObject({ secret: true, optional: true });
-        // No brand to borrow — it stands for whatever site the user points it at, so it carries a glyph instead.
+        // No brand to borrow: it stands for whatever site the user points it at, so it carries a glyph instead.
         expect(card.logo).toBeUndefined();
         expect(card.icon).toBe("globe");
     });
 
-    // A card that declares one of the core credential keys itself keeps its own version — the core pair must
+    // A card that declares one of the core credential keys itself keeps its own version: the core pair must
     // not render the same input twice.
     it("does not duplicate a credential field the browser card declares itself", () => {
         const declaring: CapabilityContribution = {

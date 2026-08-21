@@ -25,15 +25,15 @@ test("isBehind stays quiet whenever it cannot be sure", () => {
 });
 
 /* A version with a segment that will not parse is read by its numeric prefix, and the failure is one-directional:
- * it can withhold a nag, never invent one. Both halves are pinned because only the second is a safety property —
+ * it can withhold a nag, never invent one. Both halves are pinned because only the second is a safety property:
  * the first is just the prefix doing its job. */
 test("a version that isn't dotted-numeric can only ever withhold the nudge", () => {
     expect(isBehind("1.2.0-rc.1", "1.183.0")).toBe(true); // the prefix already decides it: 2 is behind 183
     expect(isBehind("1.2.0-rc.1", "1.2.0")).toBe(false); // the unparseable segment is where they differ — silence
 });
 
-// The version every agent shipped before the release stamp existed. It is genuinely behind — it predates every
-// release that has one — and it must read that way, because those are the installs this whole signal is for.
+// The version every agent shipped before the release stamp existed. It is genuinely behind: it predates every
+// release that has one, and it must read that way, because those are the installs this whole signal is for.
 test("isBehind flags the hand-written version agents used to carry", () => {
     expect(isBehind("0.1.0", "1.183.0")).toBe(true);
 });

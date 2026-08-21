@@ -13,13 +13,13 @@ import { clientFor, collect, errorCode, runAgentTurn, services } from "../route-
 import { createRequest } from "./agent-requests.js";
 
 /* The agent routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
+ * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
  * one file that two agents working on unrelated features collided in every time. The fakes and the client
  * are shared (route-testing.ts); what lives here is what these routes do. */
 
 /* A WORKTREE SEAM OVER REAL GIT, for the one test that is about git.
  *
- * The harness stubs worktree mechanics on purpose — the worktree suites own them against real disk — but what a
+ * The harness stubs worktree mechanics on purpose: the worktree suites own them against real disk, but what a
  * turn's ENDING did to the branch and to the main tree cannot be asked of a stub. So only the parts a land
  * actually reaches are real here: a checkout, the branch it sits on, and the main tree it must not touch. The
  * lifecycle members stay inert, exactly as in the harness's own fake: this conversation's checkout is made once,
@@ -84,18 +84,18 @@ test("a second concurrent turn for the same conversation is refused with CONFLIC
         ),
     );
     const { run: first } = await client.agent.run({ prompt: "long task", conversationId: "conv1", isolated: true });
-    // The run is live (parked on the gate) — a second start bounces at the door, before any registry work.
+    // The run is live (parked on the gate): a second start bounces at the door, before any registry work.
     expect(await errorCode(client.agent.run({ prompt: "again", conversationId: "conv1", isolated: true }))).toBe("CONFLICT");
     release?.();
     // Attaching to its end is the settle barrier: the run finished and the registry mutex released.
     const frames = await collect(await client.agent.attach({ conversationId: "conv1" }));
     expect(frames[0]).toMatchObject({ kind: "attached", run: first });
-    // The next turn starts — and runs the full isolated path again.
+    // The next turn starts, and runs the full isolated path again.
     const events = await runAgentTurn(client, { prompt: "after", conversationId: "conv1", isolated: true });
     expect(events[0]).toMatchObject({ kind: "worktree" });
 });
 
-test("a chat turn without a conversationId is refused — the run registry has nothing to key it on", async () => {
+test("a chat turn without a conversationId is refused: the run registry has nothing to key it on", async () => {
     const client = clientFor(createApp(services()));
     expect(await errorCode(client.agent.run({ prompt: "hi" }))).toBe("BAD_REQUEST");
 });
@@ -110,7 +110,7 @@ test("isolated requires conversationId at the contract gate", async () => {
  * The refusal a turn files is what the account surfaces read afterwards, and its `kind` picks the sentence they
  * print: a `limit` says the account hit its ceiling, an `auth` says its credential was refused. Google's
  * Antigravity wording is not in the shared spent-allowance list on purpose (failure-sentences.ts), so a routed
- * turn that ran out of weekly headroom used to be filed as `auth` — and the picker told the user to go and
+ * turn that ran out of weekly headroom used to be filed as `auth`, and the picker told the user to go and
  * reconnect an account whose sign-in was perfect. */
 test("a rate-limited turn is filed as a limit even when the provider's wording is not one this daemon knows", async () => {
     const filed: { kind: string; message: string }[] = [];
@@ -133,16 +133,16 @@ test("a rate-limited turn is filed as a limit even when the provider's wording i
     expect(filed).toEqual([{ kind: "limit", message: "429 RESOURCE_EXHAUSTED: no headroom left" }]);
 });
 
-/* DISMISSING A QUESTION ENDS THE TURN, HERE — one request, not the browser's old two.
+/* DISMISSING A QUESTION ENDS THE TURN, HERE: one request, not the browser's old two.
  *
  * The rule is old: the card was raised because the agent could not choose, so waving it away answers nothing
  * and letting the turn run on means it guesses at the fork it just said it could not guess at. What this pins
  * is that the ending happens where the dismissal lands. Released-then-stopped, as two requests, left the
- * daemon holding a live turn with nothing parked on it for the round trip in between — a working agent, as far
- * as the roster could tell — so the board pulled the card out of Attention to say so and then moved it again
+ * daemon holding a live turn with nothing parked on it for the round trip in between: a working agent, as far
+ * as the roster could tell, so the board pulled the card out of Attention to say so and then moved it again
  * when the stop arrived. It also made where the card CAME TO REST a race: whichever request won.
  *
- * `idle` is the resting ending, the one that hands the question to git and puts the card in Finished — NOT the
+ * `idle` is the resting ending, the one that hands the question to git and puts the card in Finished: NOT the
  * `stopped` a Stop press writes (app.integration.test.ts), which waits in Attention to be picked up. Both are
  * endings the user chose; only one of them is them saying they are done with it. */
 test("dismissing a question ends the turn where the dismissal lands, and settles the card as finished", async () => {
@@ -152,7 +152,7 @@ test("dismissing a question ends the turn where the dismissal lands, and settles
         createApp(
             services({
                 agent: async function* (request) {
-                    // Exactly what the `ask` tool does — the card names the conversation it parked, which is
+                    // Exactly what the `ask` tool does: the card names the conversation it parked, which is
                     // what lets the reply route end that turn.
                     const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
                     yield { kind: "question", requestId: id, questions: [] };
@@ -177,11 +177,11 @@ test("dismissing a question ends the turn where the dismissal lands, and settles
     expect(await errorCode(client.agent.reply({ kind: "question", requestId, cancelled: true }))).toBe("NOT_FOUND");
 });
 
-/* A DISMISSED TURN STILL SETTLES ITS BOOKS — on the branch, and nowhere near the main tree.
+/* A DISMISSED TURN STILL SETTLES ITS BOOKS: on the branch, and nowhere near the main tree.
  *
  * Dismissing ends the turn by aborting it, and an aborted turn used to skip the whole end-of-turn pass. Skipping
  * the LAND is the point: half-finished work the user just waved away must not appear in their workspace. But
- * that pass is also the only moment a conversation reconciles with the world — the worktree's remainder is
+ * that pass is also the only moment a conversation reconciles with the world: the worktree's remainder is
  * preserved on the branch, the card's diffstat is refreshed, and a span the main tree has meanwhile taken by
  * another road is marked accounted-for. A conversation the user is done with has no next turn to do it in, which
  * is how a finished card came to sit there offering to land work the workspace already held. */
@@ -193,7 +193,7 @@ test("a dismissed question settles the turn's books on the branch, and lands not
         createApp(
             services({
                 agentWorktrees: worktrees,
-                // A REAL checkout has a before-state to pin, which the harness's absent one never does — so this
+                // A REAL checkout has a before-state to pin, which the harness's absent one never does, so this
                 // is the one route suite that reaches the turn's anchor store. Nothing here reads it back.
                 turnAnchors: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
                 agent: async function* (request) {
@@ -212,7 +212,7 @@ test("a dismissed question settles the turn's books on the branch, and lands not
     await client.agent.run({ prompt: "rename Credits?", conversationId: "conv1", isolated: true });
     await client.agent.reply({ kind: "question", requestId: await card, cancelled: true });
 
-    // The user's workspace is exactly as they left it — dismissing a question cannot put a line of code in it.
+    // The user's workspace is exactly as they left it: dismissing a question cannot put a line of code in it.
     expect(await sh(work, "status", "--porcelain")).toBe("");
     // The work itself is safe on the branch, and the card counts it: the diffstat only refreshes when the pass
     // ran, so this is what says the books were settled rather than left for a turn that never comes.
@@ -225,7 +225,7 @@ test("a dismissed question settles the turn's books on the branch, and lands not
  *
  * The steer used to reach the model and nothing else: the frame log never heard of it, so the settled record was
  * written without it (reopening the chat lost the message outright), every other window rendering the run never
- * drew it, and the one window that did drew it at the END of its own list — while the turn kept typing into the
+ * drew it, and the one window that did drew it at the END of its own list, while the turn kept typing into the
  * bubble above, printing the answer over the question. All three are the same missing fact, and the frame this
  * asserts is that fact: WHERE in the stream the turn took the words. */
 test("a steer taken mid-turn lands in the run's frames, and in the record, between what came before and the answer", async () => {

@@ -33,7 +33,7 @@ const gitFake = (options: { dirty?: readonly string[]; broken?: readonly string[
     return { git, calls };
 };
 
-// The common case by far, and the one that has to stay cheap: nothing to keep, so nothing is written — the
+// The common case by far, and the one that has to stay cheap: nothing to keep, so nothing is written, the
 // anchor is just where the branch already stands.
 test("a clean checkout is pinned without committing anything", async () => {
     const { git, calls } = gitFake();
@@ -48,7 +48,7 @@ test("a clean checkout is pinned without committing anything", async () => {
 });
 
 /* The case the anchor exists for. Between turns an agent's edits sit in the checkout uncommitted, so pinning
- * HEAD alone would name a state missing everything the previous turns did — and a fork or a rewind aimed at
+ * HEAD alone would name a state missing everything the previous turns did, and a fork or a rewind aimed at
  * this message would silently throw that work away. */
 test("a checkout holding work commits it before pinning, so the anchor includes it", async () => {
     const { git, calls } = gitFake({ dirty: ["root"] });
@@ -86,7 +86,7 @@ test("a fork that wants today's files names no base at all", async () => {
     expect(await forkWorktreeBase(anchors(anchor), undefined)).toBeUndefined();
 });
 
-/* A MAIN-TREE source's anchor is a workspace checkpoint, which is not a commit a checkout can be created at —
+/* A MAIN-TREE source's anchor is a workspace checkpoint, which is not a commit a checkout can be created at:
  * so the fork starts on today's files. It is still the fork the user asked for; what it cannot do is carry the
  * old files, and the menu that offered it does not claim otherwise for a chat on the shared workspace. */
 test("a main-tree source, and a message with no anchor, both fall through to today's files", async () => {

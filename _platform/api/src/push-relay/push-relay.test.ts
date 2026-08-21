@@ -8,7 +8,7 @@ import { pushRelayRoutes } from "./push-relay.routes.js";
 /* The relay's guarantees, which are the only things about it worth testing: the plaintext secret exists once
  * (the register response) and its hash is what a send is judged by; refusals speak the daemon's dead-channel
  * codes so pruning works end to end; and Apple's verdicts translate to exactly the right daemon-facing
- * statuses — in particular a misconfigured relay must read as "down", never as "prune every iPhone". */
+ * statuses: in particular a misconfigured relay must read as "down", never as "prune every iPhone". */
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
 
@@ -41,13 +41,13 @@ describe(`register`, () => {
         const grant = await call(pushRelayRoutes(() => forwarder(`delivered`)).register, { platform: `ios`, token: `tok-1` }, { context: ctx });
 
         expect(grant.deviceId).toBe(`d1`);
-        // The url is absolute and points at THIS platform — a self-hosted deployment's grants point home.
+        // The url is absolute and points at THIS platform: a self-hosted deployment's grants point home.
         expect(grant.url).toBe(`https://platform.example/rpc/push/send`);
         // The row holds a hash; the grant holds the secret; they must correspond and never coincide.
         const stored = upsert.mock.calls[0]?.[0];
         expect(stored.create.secretHash).not.toBe(grant.secret);
         expect(stored.create.secretHash).toMatch(/^[0-9a-f]{64}$/);
-        // Upserting by (user, token) is what makes a reinstall replace its row — and rotate the secret.
+        // Upserting by (user, token) is what makes a reinstall replace its row, and rotate the secret.
         expect(stored.where).toEqual({ userId_token: { userId: `u1`, token: `tok-1` } });
     });
 
@@ -56,7 +56,7 @@ describe(`register`, () => {
         await expect(call(routes.register, { platform: `ios`, token: `t` }, { context: context({ user: null }) })).rejects.toBeInstanceOf(ORPCError);
     });
 
-    it(`404s on a platform with no APNs key — a relay that cannot forward must say it does not exist`, async () => {
+    it(`404s on a platform with no APNs key: a relay that cannot forward must say it does not exist`, async () => {
         const routes = pushRelayRoutes(() => ({ enabled: false, send: vi.fn() }));
         await expect(call(routes.register, { platform: `ios`, token: `t` }, { context: context() })).rejects.toMatchObject({
             code: `NOT_FOUND`,
@@ -65,7 +65,7 @@ describe(`register`, () => {
 });
 
 describe(`unregister`, () => {
-    it(`scopes the delete to the caller's own rows — someone else's deviceId deletes nothing and learns nothing`, async () => {
+    it(`scopes the delete to the caller's own rows, someone else's deviceId deletes nothing and learns nothing`, async () => {
         const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
         const ctx = context({ prisma: fakePrisma({ pushDevice: { deleteMany } }) });
 
@@ -97,14 +97,14 @@ describe(`send`, () => {
         expect(apns.send).toHaveBeenCalledWith(`tok-1`, notification);
     });
 
-    it(`answers 404 for an unknown device — the daemon prunes and never retries`, async () => {
+    it(`answers 404 for an unknown device: the daemon prunes and never retries`, async () => {
         const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: vi.fn().mockResolvedValue(null) } }) });
         await expect(
             call(pushRelayRoutes(() => forwarder(`delivered`)).send, { deviceId: `dx`, secret: `s`, notification }, { context: ctx }),
         ).rejects.toMatchObject({ code: `NOT_FOUND` });
     });
 
-    it(`answers 403 for a rotated secret — the old daemon row is permanently dead`, async () => {
+    it(`answers 403 for a rotated secret: the old daemon row is permanently dead`, async () => {
         const { hash } = await minted();
         const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: vi.fn().mockResolvedValue(row(hash)) } }) });
         await expect(
@@ -112,7 +112,7 @@ describe(`send`, () => {
         ).rejects.toMatchObject({ code: `FORBIDDEN` });
     });
 
-    it(`deletes the row and answers 410 when Apple says the device is gone — both halves of the channel die together`, async () => {
+    it(`deletes the row and answers 410 when Apple says the device is gone: both halves of the channel die together`, async () => {
         const { secret, hash } = await minted();
         const remove = vi.fn().mockResolvedValue({});
         const ctx = context({
@@ -126,7 +126,7 @@ describe(`send`, () => {
         expect(remove).toHaveBeenCalledWith({ where: { id: `d1` } });
     });
 
-    it(`answers 502 on a transient — a misconfigured relay must never read as "prune every iPhone"`, async () => {
+    it(`answers 502 on a transient: a misconfigured relay must never read as "prune every iPhone"`, async () => {
         const { secret, hash } = await minted();
         const remove = vi.fn();
         const ctx = context({

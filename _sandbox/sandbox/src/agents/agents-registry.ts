@@ -1010,7 +1010,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     state.failure = sanitizeFailure(event.message);
                     break;
                 default:
-                    return; // delta/thinking/etc — not card-visible, skip the broadcast.
+                    return; // delta/thinking/etc, not card-visible, skip the broadcast.
             }
             broadcast();
         },
@@ -1137,7 +1137,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // outlived the land it asked for would read as a second, phantom ask.
             const { conflicts: cleared, landRequested: _answered, ...carried } = entry;
             /* ONLY A VERDICT MAY REPLACE A VERDICT. A `measure` land settles the books and never touches the
-             * main tree, so it reaches no conflict gate and reports none — read as "nothing refuses anymore"
+             * main tree, so it reaches no conflict gate and reports none: read as "nothing refuses anymore"
              * that silently deleted the last real refusal, and with it the premise the conflict standing, the
              * review's report and "Have the agent resolve it" all hang off (see LandOutcome.adjudicated).
              * It carries the stored report across instead; the derived layers retire it on their own terms the

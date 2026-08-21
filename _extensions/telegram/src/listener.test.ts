@@ -43,8 +43,8 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: Record<string, unknown>[]; st
     };
 };
 
-// The three fields Telegram always sends. Cases that are ABOUT an absent field — a photo with no caption, an
-// anonymous channel post — build up from here rather than clearing one off a fuller message, because
+// The three fields Telegram always sends. Cases that are ABOUT an absent field: a photo with no caption, an
+// anonymous channel post: build up from here rather than clearing one off a fuller message, because
 // exactOptionalPropertyTypes has no way to spell "clear this".
 const bare = (over: Partial<TelegramMessage> = {}): TelegramMessage => ({
     message_id: 11,
@@ -78,7 +78,7 @@ test("the author is whatever Telegram gave us to call them", () => {
     expect(authorNameOf(bare({ chat: { id: -1, type: "channel", title: "releases" } }))).toBe("releases");
 });
 
-test("a message addresses us when it names the bot or replies to it — and not otherwise", () => {
+test("a message addresses us when it names the bot or replies to it, and not otherwise", () => {
     const usernames = new Set([SELF_NAME]);
     const selfIds = new Set([SELF_ID]);
     expect(addressesUs(message(), usernames, selfIds)).toBe(false);
@@ -164,7 +164,7 @@ test("what the gateway watched go by becomes the history a later mention carries
     await vi.waitFor(() => expect(fake.dispatched).toHaveLength(1));
     listener.onUpdate(connection, { update_id: 2, message: message({ message_id: 2, text: `@${SELF_NAME} what happened?` }) });
     await vi.waitFor(() => expect(fake.streamed).toHaveLength(1));
-    // A bot cannot read a chat's past, so this ring is the only context there is — and it holds what came
+    // A bot cannot read a chat's past, so this ring is the only context there is, and it holds what came
     // BEFORE this message, not the message itself.
     expect(fake.streamed[0]?.["history"]).toEqual([
         { author: { id: "42", name: "Ada Lovelace" }, content: "the deploy went out at four", timestamp: "2025-08-13T16:20:30.000Z" },

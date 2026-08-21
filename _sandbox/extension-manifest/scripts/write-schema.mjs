@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Regenerate the authoring schema from the built dist — the committed half of the pair json-schema.ts explains.
+/* Regenerate the authoring schema from the built dist: the committed half of the pair json-schema.ts explains.
  * Run as `pnpm --filter @intentic/extension-manifest schema`, which builds first so the schema is always cut
  * from the points as they stand, never from a stale dist.
  *

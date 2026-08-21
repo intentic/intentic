@@ -102,7 +102,7 @@ test("available_commands_update maps to the commands frame", () => {
     });
 });
 
-test("ACP plan is a progress checklist — it maps to todos, never intentic's approval plan frame", () => {
+test("ACP plan is a progress checklist: it maps to todos, never intentic's approval plan frame", () => {
     expect(
         sessionUpdateEvent(
             {

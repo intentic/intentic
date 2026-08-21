@@ -51,7 +51,7 @@ export const linkifyNoteRefs = (fragment: DocumentFragment, resolve: (target: st
                 // list. It reads as unfinished rather than as broken, and it is not clickable, because there is
                 // nothing on the other side of it.
                 anchor.className = `text-subtle underline decoration-dotted underline-offset-2`;
-                anchor.title = `No note for “${target}” yet`;
+                anchor.title = `No note for "${target}" yet`;
             } else {
                 anchor.dataset[`kb`] = path;
                 anchor.className = `md-file-link`;

@@ -231,7 +231,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     if (persona.reason === "unknown-persona") {
         // Worth a line of its own: the turn asked to act as somebody and this workspace has no such card, so it
         // is about to run with nothing at all and the prompt will read as though it should have had everything.
-        services.logger.warn({ actsAs: input.actsAs }, "persona: no such card — this turn reaches no account and no tools");
+        services.logger.warn({ actsAs: input.actsAs }, "persona: no such card, this turn reaches no account and no tools");
     }
     /* The manifest as this turn may see it, narrowed ONCE and handed to every arm in place of the full list.
      * Filtering here rather than in each arm is what makes a shelf mean the same thing on every runtime, and
@@ -579,7 +579,7 @@ export const planGrokTurn = async (services: Services, input: AgentTurn, context
     if (!(await services.openCode.connected("xai"))) {
         return {
             ok: false,
-            message: "No Grok account connected — sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
+            message: "No Grok account connected, sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
         };
     }
     // Grok MUST ride an explicit, live-valid xAI model id: OpenCode's own default is a retired models.dev id
@@ -638,7 +638,7 @@ export const planGeminiTurn = async (services: Services, input: AgentTurn, conte
 export const planPiTurn = async (services: Services, _input: AgentTurn, context: TurnContext, granted: readonly Capability[]): Promise<TurnPlan> => {
     const capability = granted.find((entry) => entry.kind === "agent" && entry.id === PI_PROVIDER);
     if (capability === undefined || capability.kind !== "agent") {
-        return { ok: false, message: "Pi is not installed — add the Pi Agent capability first." };
+        return { ok: false, message: "Pi is not installed, add the Pi Agent capability first." };
     }
     return {
         ok: true,
@@ -662,7 +662,7 @@ export const planAcpTurn = async (
 ): Promise<TurnPlan> => {
     const capability = granted.find((entry) => entry.kind === "agent" && entry.id === provider);
     if (capability === undefined || capability.kind !== "agent") {
-        return { ok: false, message: `Unknown agent provider "${provider}" — add it as an Agent capability first.` };
+        return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
     }
     const acpConfig = capability.config;
     const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken)];

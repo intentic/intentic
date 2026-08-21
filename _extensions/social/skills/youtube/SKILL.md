@@ -15,5 +15,5 @@ ${accounts}
 - Reply: expand the target comment, click Reply, type, submit.
 - Like a video: click the like control under the player.
 - Subscribe (join a channel): open the channel or video and click Subscribe; for paid memberships click Join.
-- Note: creating **Community posts** isn't reliably reachable — do it only if the channel exposes the composer.
+- Note: creating **Community posts** isn't reliably reachable, do it only if the channel exposes the composer.
 ${tools}

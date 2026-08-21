@@ -10,7 +10,7 @@ import type { OrpcContext } from "../context.js";
 import { createAutomationsRoutes } from "./automations.routes.js";
 import { fileAutomationsStore } from "./automations-store.js";
 
-// Run now's REFUSALS, which are the half a by-hand fire can get wrong without anyone noticing — the fire it
+// Run now's REFUSALS, which are the half a by-hand fire can get wrong without anyone noticing: the fire it
 // does perform is the e2e suite's (it wants a real daemon behind it). Only the manifest is touched on these
 // paths, so the fake stops there.
 const fakeServices = (root: string): Services =>
@@ -22,11 +22,11 @@ const context: OrpcContext = { headers: new Headers(), method: "POST", url: "/au
 
 const automation = (id: string, trigger: Automation["trigger"]): Automation => ({ id, trigger, prompt: `wake:${id}`, enabled: true });
 
-test("run now refuses a chat listener — by hand there is no message, which is the whole thing it handles", async () => {
+test("run now refuses a chat listener: by hand there is no message, which is the whole thing it handles", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "routes-")));
     await services.automations.upsert(automation("chat", { kind: "listener", provider: "discord" }));
     const routes = createAutomationsRoutes(services);
-    /* Firing this by hand could only wake an agent told to handle the events riding with it and handed none —
+    /* Firing this by hand could only wake an agent told to handle the events riding with it and handed none:
      * and that pointless turn would hold the automation's one slot against the real mention arriving behind it,
      * which is exactly how a tested-by-hand listener came to look broken. The sentence names the way to test
      * one instead. */

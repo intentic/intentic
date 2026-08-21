@@ -19,7 +19,7 @@ describe("vaultConnections", () => {
     it("reads the write switch as the card's on/off", () => {
         expect(vaultConnections(env("V", { OBSIDIAN_WRITE_V: "on" }))[0]?.write).toBe(true);
         expect(vaultConnections(env("V", { OBSIDIAN_WRITE_V: "off" }))[0]?.write).toBe(false);
-        // Nothing at all on the card is the same answer as off — a missing switch must never read as consent.
+        // Nothing at all on the card is the same answer as off: a missing switch must never read as consent.
         expect(vaultConnections(env("V", { OBSIDIAN_WRITE_V: "" }))[0]?.write).toBe(false);
     });
 

@@ -13,7 +13,7 @@ export interface RuntimeHistoryMessage {
     readonly text: string;
 }
 
-const HEADER = "This conversation continues from another AI runtime. Prior transcript (oldest first) — treat it as your own conversation history:";
+const HEADER = "This conversation continues from another AI runtime. Prior transcript (oldest first): treat it as your own conversation history:";
 const SEPARATOR = "\n\n---\n\n";
 const MESSAGE_CHAR_CAP = 8_000;
 /* What the whole preamble may spend, in characters, roughly 30k tokens.

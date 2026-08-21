@@ -87,7 +87,7 @@ describe(`sandbox routes`, () => {
             `BAD_REQUEST`,
         );
         await expectOrpcCode(call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `nonsense` }, { context: context({ prisma }) }), `BAD_REQUEST`);
-        // A trailing slash is normalized away rather than rejected — daemon calls append an absolute path.
+        // A trailing slash is normalized away rather than rejected: daemon calls append an absolute path.
         const update = vi.fn().mockResolvedValue({ ...sandboxRow, daemonUrl: `https://sandbox.example.com` });
         const normalizing = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
         await call(
@@ -141,7 +141,7 @@ describe(`sandbox routes`, () => {
 
     /* The phone's handoff. Two properties are the whole point of the route and both are worth pinning: it can
      * only mail the CALLER (there is no recipient input to abuse), and what it mails is an address, not a
-     * credential — the setup code and the connect token must never ride a channel we hand to a mail provider. */
+     * credential: the setup code and the connect token must never ride a channel we hand to a mail provider. */
     it(`emailSetupLink mails the caller's own address a link that resumes this sandbox`, async () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, setupCode: `s3cr3t-code` }) } });
         const sent = vi.fn().mockResolvedValue(new Response(`{}`));
@@ -154,7 +154,7 @@ describe(`sandbox routes`, () => {
         const [mail] = sent.mock.calls[0] as [{ to: string; html: string }];
         expect(mail.to).toBe(`owner@example.com`);
         expect(mail.html).toContain(`https://app.test/setup?sandbox=s1`);
-        // The sandbox's own secrets stay off the wire — a mail is stored and forwarded by people we have no
+        // The sandbox's own secrets stay off the wire: a mail is stored and forwarded by people we have no
         // relationship with, and the page behind this link is session-gated anyway.
         expect(mail.html).not.toContain(`s3cr3t-code`);
         expect(mail.html).not.toContain(sandboxRow.token);
@@ -181,7 +181,7 @@ describe(`sandbox routes`, () => {
 
     /* THE MINT, on the self-hosted fabric: one account per sandbox, cached on the row, and a payload carrying
      * exactly what the box needs to enable and share. The owner email is lowercased into it for the reason it
-     * always was — the daemon binds that one Google identity as owner. */
+     * always was: the daemon binds that one Google identity as owner. */
     it(`setupCode mints the reachability grant, caches it, and hands the box its whole payload`, async () => {
         const update = vi.fn().mockResolvedValue(sandboxRow);
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
@@ -265,7 +265,7 @@ describe(`sandbox routes`, () => {
         expect(deleteRow).not.toHaveBeenCalled();
     });
 
-    it(`creates a second sandbox for an owner who already has one — there is no cap`, async () => {
+    it(`creates a second sandbox for an owner who already has one: there is no cap`, async () => {
         const create = vi.fn().mockResolvedValue({ ...sandboxRow, id: `s2` });
         const prisma = fakePrisma({ sandbox: { create } });
         const summary = await call(sandboxRoutes.create, { name: `second` }, { context: context({ prisma }) });
@@ -291,7 +291,7 @@ describe(`sandbox routes`, () => {
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma, config }) });
         expect(sandboxes.map((sandbox) => sandbox.providedTunnel)).toEqual([true, false, false]);
 
-        // The zone alone defaults even when the fabric is off (no admin token) — it must not flag on its own.
+        // The zone alone defaults even when the fabric is off (no admin token): it must not flag on its own.
         const tokenless = {
             intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true },
             zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: ``, zone: `sbx.test` },
@@ -307,7 +307,7 @@ describe(`sandbox routes`, () => {
 });
 
 describe(`cloud lane routes`, () => {
-    // A row a cloudProvision can act on: live intentic-mode setup code (plaintext payload — secrets.key is
+    // A row a cloudProvision can act on: live intentic-mode setup code (plaintext payload, secrets.key is
     // empty in the fake config, so encryptSecret was a passthrough when it was stored).
     const provisionable = {
         ...sandboxRow,
@@ -348,7 +348,7 @@ describe(`cloud lane routes`, () => {
         expect(update.mock.calls[0]![0]).toMatchObject({
             data: { cloud: { provider: `hetzner`, serverId: `42`, serverName: expectedName, location: `fsn1` } },
         });
-        // The summary carries the display facts (serverId stays in the row — the browser has no use for it).
+        // The summary carries the display facts (serverId stays in the row: the browser has no use for it).
         expect(summary.cloud).toEqual({ provider: `hetzner`, serverName: expectedName, location: `fsn1` });
     });
 

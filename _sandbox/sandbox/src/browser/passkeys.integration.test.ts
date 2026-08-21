@@ -16,7 +16,7 @@ const chromiumInstalled = async (): Promise<boolean> => {
     }
 };
 
-// WebAuthn requires a secure context and an rpId that is a domain — http://localhost is both, so the page must
+// WebAuthn requires a secure context and an rpId that is a domain: http://localhost is both, so the page must
 // be reached as literally "localhost", never 127.0.0.1.
 const serve = async (): Promise<{ url: string; close: () => void }> =>
     new Promise((resolve) => {
@@ -64,7 +64,7 @@ test("a passkey enrolled in one browser asserts in the next, carried only by the
     const site = await serve();
     // executablePath is not optional here: a bare headless launch asks for chromium-headless-shell, and the
     // image deletes that browser right after installing it (Dockerfile, "THE HEADLESS SHELL IS DELETED AGAIN
-    // IMMEDIATELY") because every launch the daemon makes names the full browser. This one has to as well —
+    // IMMEDIATELY") because every launch the daemon makes names the full browser. This one has to as well:
     // it is also the binary the gate above checked for.
     const browser = await chromium.launch({ headless: true, executablePath: chromium.executablePath(), args: ["--no-sandbox"] });
     try {
@@ -81,14 +81,14 @@ test("a passkey enrolled in one browser asserts in the next, carried only by the
         expect(stored?.isResidentCredential).toBe(true);
         await first.close();
 
-        // Browser two: a fresh context knows nothing — the store is the only carrier. Discoverable get() must
+        // Browser two: a fresh context knows nothing, the store is the only carrier. Discoverable get() must
         // find the restored credential and answer it.
         const second = await browser.newContext();
         const secondPage = await second.newPage();
         await armPasskeys(second, secondPage, store);
         await secondPage.goto(site.url);
         expect((await secondPage.evaluate(ASSERT)) as string).toBe(enrolledId);
-        // The assertion bumped the signature counter, and the bump must land back in the store — a counter that
+        // The assertion bumped the signature counter, and the bump must land back in the store: a counter that
         // ran backwards is what relying parties read as a cloned key.
         await expect.poll(async () => (await listPasskeys(store))[0]?.signCount ?? 0).toBeGreaterThan(stored?.signCount ?? 0);
         await second.close();
@@ -98,7 +98,7 @@ test("a passkey enrolled in one browser asserts in the next, carried only by the
     }
 });
 
-test("an absent or corrupt store lists no passkeys — the browser still arms", async () => {
+test("an absent or corrupt store lists no passkeys: the browser still arms", async () => {
     expect(await listPasskeys(join(tmpdir(), "passkeys-never-written.json"))).toEqual([]);
     const corrupt = join(mkdtempSync(join(tmpdir(), "passkeys-")), "x.json");
     await writeFile(corrupt, "{not json");

@@ -88,13 +88,13 @@ const attempts = (): WorkflowStep[] => [step(`attempt-a`, `Attempt A`, { agent: 
 // fix what it got wrong, fold in what the other did better, leave the project's own tests passing.
 const SYNTHESIS_PROMPT =
     `Two sessions were given the request above and each built it, on the branches named above. Read both diffs in ` +
-    `full — the diffs, not the summaries of them — and judge them against what was asked and against the code they ` +
+    `full: the diffs, not the summaries of them, and judge them against what was asked and against the code they ` +
     `had to live in, not against your own taste in style.\n\n` +
     `Then write the version worth keeping, here in your own worktree. Start from the stronger of the two rather ` +
     `than retyping it: in every repository where it changed files, bring its named branch in with \`git merge --squash\`, ` +
     `then fix what it got wrong and fold in whatever the other one did better. Run whatever this project uses to test ` +
     `itself and leave it passing. What lands must read as one change somebody made on purpose, not as two ` +
-    `stitched together — and say, in a sentence each, what you took from where.`;
+    `stitched together, and say, in a sentence each, what you took from where.`;
 
 export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
     {
@@ -168,7 +168,7 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                             {
                                 name: `preferred`,
                                 type: `string`,
-                                description: `attempt-a | attempt-b | neither — the strongest starting point after inspecting both diffs`,
+                                description: `attempt-a | attempt-b | neither, the strongest starting point after inspecting both diffs`,
                                 required: true,
                             },
                             {
@@ -243,7 +243,7 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
      * step says what to do with it. */
     {
         icon: `shield`,
-        summary: `The intelligent step for a CI pipeline. The pipeline POSTs what it knows — commit, branch, preview URL — to this workflow's own webhook, one session exercises the change and judges it, and the pipeline reads back pass, fail or blocked.`,
+        summary: `The intelligent step for a CI pipeline. The pipeline POSTs what it knows, commit, branch, preview URL, to this workflow's own webhook, one session exercises the change and judges it, and the pipeline reads back pass, fail or blocked.`,
         workflow: {
             id: `release-gate`,
             name: `Release gate`,
@@ -253,12 +253,12 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                 step(`judge`, `Judge the change`, {
                     goal: `The change the pipeline named has been exercised against the workspace and a defensible verdict recorded.`,
                     prompt:
-                        `A pipeline called this gate with everything it knows about a change — the text above: typically a commit, a branch, ` +
+                        `A pipeline called this gate with everything it knows about a change, the text above: typically a commit, a branch, ` +
                         `sometimes a preview URL. Find that change in this workspace and exercise it the way a careful reviewer would: read the ` +
                         `diff against what it claims to do, build and test where the project says how, open the preview if one is named. Judge ` +
                         `only the change in front of you, not the codebase's general state.\n\n` +
                         `Write "pass" only for work you actually verified; write "fail" when the change is broken or falls short of what it ` +
-                        `claims. If you cannot reach the work at all — the commit is not here, the preview does not answer — fail this step ` +
+                        `claims. If you cannot reach the work at all: the commit is not here, the preview does not answer, fail this step ` +
                         `rather than writing a verdict you never formed: the pipeline then reads "blocked", which is the honest answer.`,
                     output: {
                         kind: `json`,
@@ -266,13 +266,13 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                             {
                                 name: `verdict`,
                                 type: `string`,
-                                description: `pass | fail — pass only when the change was exercised and found safe to ship`,
+                                description: `pass | fail, pass only when the change was exercised and found safe to ship`,
                                 required: true,
                             },
                             {
                                 name: `reason`,
                                 type: `string`,
-                                description: `one sentence on why — the only line of this the pipeline log will show`,
+                                description: `one sentence on why, the only line of this the pipeline log will show`,
                                 required: true,
                             },
                         ],

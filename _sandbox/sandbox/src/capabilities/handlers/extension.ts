@@ -102,13 +102,13 @@ export const extensionHandler: CapabilityHandler = {
                 if (tier === "premium") {
                     const outcome = await ctx.donatePremium(extensionIdOf(manifest));
                     if (!outcome.ok) {
-                        throw new Error(`this is a premium extension — ${outcome.detail ?? "the donation could not be completed"}`);
+                        throw new Error(`this is a premium extension: ${outcome.detail ?? "the donation could not be completed"}`);
                     }
                     donation = { donated: outcome.donated };
                 }
                 // Prebuilt-dist rule: the sha the owner approved must BE the code that runs, no install-time build.
                 if (manifest.entry !== undefined && (await ctx.files.read(join(dir, manifest.entry))) === undefined) {
-                    throw new Error(`the manifest names entry "${manifest.entry}" but the checkout has no such file — commit the prebuilt bundle`);
+                    throw new Error(`the manifest names entry "${manifest.entry}" but the checkout has no such file: commit the prebuilt bundle`);
                 }
                 // An image fragment must exist and be RUN/ENV-only: extensions can install tools but not claim
                 // container privileges (those stay daemon-owned) or swap the base image.
@@ -120,7 +120,7 @@ export const extensionHandler: CapabilityHandler = {
                     }
                     const offending = invalidExtensionFragment(fragment);
                     if (offending !== undefined) {
-                        throw new Error(`the environment fragment may contain only RUN/ENV instructions — offending line: ${offending.trim()}`);
+                        throw new Error(`the environment fragment may contain only RUN/ENV instructions, offending line: ${offending.trim()}`);
                     }
                 }
             },
@@ -130,11 +130,11 @@ export const extensionHandler: CapabilityHandler = {
                 kind: "log",
                 message:
                     donation.donated > 0
-                        ? `Supported the creator with ${donation.donated} credits — thank you.`
-                        : "Already supported this creator this month — nothing charged.",
+                        ? `Supported the creator with ${donation.donated} credits: thank you.`
+                        : "Already supported this creator this month, nothing charged.",
             };
         }
-        yield { kind: "log", message: "Extension installed — reload the app to load its UI; agent contributions load next turn." };
+        yield { kind: "log", message: "Extension installed, reload the app to load its UI; agent contributions load next turn." };
     },
     status: async (ctx, id, config) => {
         const { path } = config as ExtensionConfig;

@@ -12,7 +12,7 @@ export const SettingContributionSchema = z.object({
     secret: z
         .boolean()
         .optional()
-        .describe("Mask the value in the UI and strip it from reads — a set secret round-trips as “still set”, never as its value."),
+        .describe("Mask the value in the UI and strip it from reads: a set secret round-trips as 'still set', never as its value."),
     env: z
         .string()
         .regex(/^[A-Z][A-Z0-9_]*$/)

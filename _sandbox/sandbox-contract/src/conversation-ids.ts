@@ -165,7 +165,7 @@ const randomBelow = (upperBound: number): number => {
 // browser tabs opened in the same instant are exactly the case this must not produce the same name for.
 const pick = <T>(values: readonly T[]): T => values[randomBelow(values.length)]!;
 
-// Lowercase base36, one character per draw — 0-9a-z, all of which the id guard accepts.
+// Lowercase base36, one character per draw: 0-9a-z, all of which the id guard accepts.
 const tail = (): string => Array.from({ length: TAIL_LENGTH }, () => randomBelow(36).toString(36)).join("");
 
 /* A fresh conversation id: `<adjective>-<noun>-<tail>`, e.g. `swift-otter-k9m2`. Sixteen characters or so

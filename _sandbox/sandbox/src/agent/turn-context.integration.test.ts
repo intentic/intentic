@@ -50,7 +50,7 @@ test("a question about the workspace is what gets retrieved for", () => {
     );
 });
 
-test("a prompt that already names its file is left alone — the model will just open it", () => {
+test("a prompt that already names its file is left alone: the model will just open it", () => {
     // Retrieval on top of an anchor the user typed spends tokens pointing at the thing being pointed at.
     expect(retrievalQueryOf("why does turn-plan.ts drop the model?")).toBeUndefined();
     expect(retrievalQueryOf("look at _sandbox/sandbox/src/agent and tell me what runs a turn")).toBeUndefined();
@@ -66,7 +66,7 @@ test("conversational turns are not questions about the code", () => {
     expect(retrievalQueryOf("")).toBeUndefined();
 });
 
-/* The gate above used to read "skip when EVERY word is conversational", and one word off the list defeated it —
+/* The gate above used to read "skip when EVERY word is conversational", and one word off the list defeated it:
  * most often a bare number. These are real prompts from one day that each bought a 1.2k-token search of the
  * index for words whose referent was in the previous turn. */
 test("a follow-up that points back at the last turn is not a query, however it is spelled", () => {
@@ -76,7 +76,7 @@ test("a follow-up that points back at the last turn is not a query, however it i
     expect(retrievalQueryOf("Got for all of it.")).toBeUndefined();
 });
 
-/* The other half of that gate, and its limit. A resumptive OPENING is not a veto — only a bar — because a
+/* The other half of that gate, and its limit. A resumptive OPENING is not a veto: only a bar, because a
  * message that starts by pointing back and then asks something real is a real question. The cost of keeping
  * those is that pure anaphora with enough words gets through too, and nothing lexical tells the two apart. */
 test("a resumptive opener still retrieves once the message carries its own question", () => {
@@ -121,9 +121,9 @@ test("the preamble round-trips: what restore gives back is the message alone", a
  * cross-encoder switched off for as long as the cross-encoder ran on the daemon's own thread: measured on one
  * week of real prompts, the full pipeline answered in ~1.2s idle and ~2.7s on a busy box, which is how the
  * deadline came to take four eligible turns in five. Both model stages moved to the engine's query worker, so
- * narrowing the pipeline here buys nothing — and a narrowing left behind after its reason expired is how a
+ * narrowing the pipeline here buys nothing, and a narrowing left behind after its reason expired is how a
  * feature quietly keeps paying a cost nobody can find. */
-test("the pre-injected query holds no stage back — the engine runs its full pipeline", async () => {
+test("the pre-injected query holds no stage back: the engine runs its full pipeline", async () => {
     const seen: Parameters<ResidentEngine["run"]>[0][] = [];
     const deps = depsOf((request) => {
         seen.push(request);
@@ -141,7 +141,7 @@ test("an ineligible prompt never reaches the engine", async () => {
 
 /* WHY NOTHING WAS PREPENDED, named rather than merely absent. All four of these used to return the same
  * undefined as a delivered note's opposite, so a turn assigned the treatment and a turn that got it were
- * indistinguishable downstream — which is how the experiment came to report a delta over an arm that was four
+ * indistinguishable downstream, which is how the experiment came to report a delta over an arm that was four
  * fifths untreated. */
 test("a weak answer is no answer, and says which kind of weak", async () => {
     const question = "how does the daemon decide which runtime serves a turn?";
@@ -185,7 +185,7 @@ test("a retrieval that outruns its deadline is abandoned, not waited on", async 
         const pending = retrieveTurnContext(deps, "how does the daemon decide which runtime serves a turn?");
         await vi.advanceTimersByTimeAsync(3_000);
         expect(await pending).toEqual({ skipped: "deadline", durationMs: 3_000 });
-        // The abort still goes out — it releases the half of a query that listens for it (the rg child).
+        // The abort still goes out: it releases the half of a query that listens for it (the rg child).
         expect(aborted).toBe(true);
         // An abort is this deadline firing, which is a decision, not a failure worth logging.
         expect(warn).not.toHaveBeenCalledTimes(2);
@@ -196,7 +196,7 @@ test("a retrieval that outruns its deadline is abandoned, not waited on", async 
 
 /* The one test that runs the REAL engine, because everything the note is made of comes from outside this
  * module: the renderer's answer capsule, the ranking that decides which file it names, and the exact bytes
- * that then have to survive the preamble round-trip. A stubbed outcome can't fail the way those can — a
+ * that then have to survive the preamble round-trip. A stubbed outcome can't fail the way those can: a
  * renderer that one day emits the preamble's own `---` separator would strip the user's message into the
  * daemon's note, and only a real answer would catch it. */
 test("against a real index: the note answers the question, and restore still gives the message back", async () => {

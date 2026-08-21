@@ -3,7 +3,7 @@
  * that one" is one question with one answer, and it lives here because both ends ask it: the daemon compares its
  * own build against the latest published release, and the browser compares a computer's agent against the same.
  *
- * Shared rather than copied because the two copies would not disagree until the day it mattered — 1.9.0 against
+ * Shared rather than copied because the two copies would not disagree until the day it mattered: 1.9.0 against
  * 1.10.0 is where a hand-rolled comparator goes wrong, and it goes wrong by reporting "up to date". */
 
 // Release versions are plain dotted numerics (semantic-release picks them), so there is no semver dependency to

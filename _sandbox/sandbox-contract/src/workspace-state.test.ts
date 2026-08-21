@@ -21,7 +21,7 @@ import {
 // What the automations extension declares in its manifest, and what the memory extension WOULD declare if the
 // watcher reported its files. Literals rather than the real manifests: an extension package importing this one is
 // the dependency direction, so reaching back for them here would invert it. The real manifests are checked
-// against this rule where they are loaded — web's fileBindings.test.ts and the daemon's file-bindings.test.ts.
+// against this rule where they are loaded: web's fileBindings.test.ts and the daemon's file-bindings.test.ts.
 const AUTOMATIONS: readonly FileContribution[] = [
     { path: `${STATE_DIR}/config/automations.json`, invalidates: [`automations`] },
     { path: `${STATE_DIR}/records/approvals/`, invalidates: [`automation-approvals`] },
@@ -45,14 +45,14 @@ describe(`staleQueryKeys`, () => {
     });
 
     it(`matches a name family and a one-file-per-entry directory through one prefix each`, () => {
-        // environment.Dockerfile, environment.custom.Dockerfile, environment.approved.Dockerfile — one entry.
+        // environment.Dockerfile, environment.custom.Dockerfile, environment.approved.Dockerfile: one entry.
         expect(staleQueryKeys([`.intentic/config/environment.custom.Dockerfile`], [])).toEqual([`environment`]);
         expect(staleQueryKeys([`.intentic/config/drafts/post-1.json`], [])).toEqual([`drafts`]);
     });
 
     it(`refreshes the Drafts view when the AGENT writes a draft`, () => {
         // The regression this table was reorganized around: the drafts skill writes these files directly, so
-        // there is no browser mutation to hang an invalidate on — the watcher push is the only signal, and it
+        // there is no browser mutation to hang an invalidate on: the watcher push is the only signal, and it
         // used to be dropped on the floor.
         expect(staleQueryKeys([`.intentic/config/drafts/post-1.json`], [])).toEqual([`drafts`]);
     });
@@ -75,7 +75,7 @@ describe(`staleQueryKeys`, () => {
     });
 
     it(`dedupes keys across a batch that touches several manifests`, () => {
-        // A capability add recomposes the overlay, so both entries claim `environment` — one refetch, not two.
+        // A capability add recomposes the overlay, so both entries claim `environment`: one refetch, not two.
         expect(staleQueryKeys([`.intentic/config/capabilities.json`, `.intentic/config/environment.Dockerfile`], [])).toEqual([
             `capabilities`,
             `environment`,
@@ -129,7 +129,7 @@ describe(`isReportedManifest`, () => {
 
     it(`stays quiet about daemon-written state the owner cannot repair`, () => {
         // The regression this exists for: the workflow ledger's records predated a schema that gained a required
-        // field, so every read reported the whole file ignored — advice ("fix the file") addressed to nobody,
+        // field, so every read reported the whole file ignored: advice ("fix the file") addressed to nobody,
         // about sixty kilobytes of machine JSON, and refreshed by no write because the ledger feeds no query, so
         // it sat on the card until the daemon restarted. A ledger recovers on its own next write instead.
         expect(isReportedManifest(`.intentic/records/workflow-runs.json`)).toBe(false);
@@ -142,7 +142,7 @@ describe(`isReportedManifest`, () => {
     });
 
     it(`does not report a file outside the workspace`, () => {
-        // What `relative` hands the daemon for the manifests it keeps under /history — never nameable on screen.
+        // What `relative` hands the daemon for the manifests it keeps under /history: never nameable on screen.
         expect(isReportedManifest(`../../history/settings.json`)).toBe(false);
     });
 });
@@ -158,7 +158,7 @@ describe(`WORKSPACE_STATE_FILES`, () => {
     it(`states a reason for every entry that invalidates nothing`, () => {
         // An empty `invalidates` is a real answer (daemon machine state, a deliberately-polled surface, a path
         // whose query keys belong to an extension), but a SILENT one is indistinguishable from the omission this
-        // table exists to prevent — which is exactly how drafts went missing. Requiring the reason is what makes
+        // table exists to prevent, which is exactly how drafts went missing. Requiring the reason is what makes
         // the difference visible at review time.
         for (const file of WORKSPACE_STATE_FILES) {
             if (file.invalidates.length === 0) {
@@ -179,7 +179,7 @@ describe(`WORKSPACE_STATE_FILES`, () => {
     });
 
     it(`only nests under an entry that invalidates nothing, so one write can't be billed twice`, () => {
-        // Entries may nest when a subtree needs a different portability class — stateFileFor's longest match
+        // Entries may nest when a subtree needs a different portability class: stateFileFor's longest match
         // keeps that unambiguous. Invalidation has no longest-match rule: staleQueryKeys unions every
         // matching entry, so a nest under an entry that DOES invalidate would bill the outer view's queries for
         // a write that belongs to the inner one. Nesting is therefore only legal beneath an empty `invalidates`.
@@ -247,7 +247,7 @@ describe(`isReviewableLockedPath`, () => {
     it(`admits the locked entry the root repo tracks, and nothing else locked`, () => {
         expect(isReviewableLockedPath(`.intentic/config/capabilities.json`)).toBe(true);
         // Every other locked entry is a credential, an identity binding or private runtime state. None is
-        // versioned, so none is reachable through a diff — the carve-out cannot widen without the flag.
+        // versioned, so none is reachable through a diff: the carve-out cannot widen without the flag.
         expect(isReviewableLockedPath(`.intentic/identity/owner.json`)).toBe(false);
         expect(isReviewableLockedPath(`.intentic/identity/members.json`)).toBe(false);
         expect(isReviewableLockedPath(`.intentic/secrets/ci.json`)).toBe(false);
@@ -257,7 +257,7 @@ describe(`isReviewableLockedPath`, () => {
         expect(isReviewableLockedPath(`.git/config`)).toBe(false);
     });
 
-    it(`answers only for the locked set — an ordinary path was never refused to begin with`, () => {
+    it(`answers only for the locked set: an ordinary path was never refused to begin with`, () => {
         // Tracked, but not locked: the guards never ask this of them, and a `true` here would read as "this
         // path needed a carve-out", which is a different and wrong statement.
         expect(isReviewableLockedPath(`.intentic/config/settings.json`)).toBe(false);
@@ -285,22 +285,22 @@ describe(`VERSIONED_STATE_PATHS`, () => {
      *
      * `versioned` carves an entry out of the root repo's wholesale `.intentic` exclusion, so marking one is the
      * difference between a file the owner reviews and a file the next baseline commit publishes into `git log`
-     * forever. A credential marked by a hurried hand is not recoverable by unmarking it later — the commit is
-     * already written — which is why the refusal is mechanical here rather than a rule in a comment. */
+     * forever. A credential marked by a hurried hand is not recoverable by unmarking it later: the commit is
+     * already written, which is why the refusal is mechanical here rather than a rule in a comment. */
     it(`never tracks a credential or an identity binding`, () => {
         const leaked = WORKSPACE_STATE_FILES.filter((file) => file.versioned && (file.portability === `secret` || file.portability === `identity`));
         expect(leaked.map((file) => file.path)).toEqual([]);
     });
 
-    /* Narrower than `carry` ON PURPOSE, and this is where that stays true. The two answer different questions —
-     * carry is "does it move to a new sandbox", versioned is "should a human review it changing" — so the
+    /* Narrower than `carry` ON PURPOSE, and this is where that stays true. The two answer different questions:
+     * carry is "does it move to a new sandbox", versioned is "should a human review it changing", so the
      * ledgers and the bulk are `carry` and deliberately absent: the run ledger is rewritten several times per
      * workflow step, the usage batch every few seconds a browser is open, and the transcripts run to hundreds of
      * megabytes. Tracking any of them buries the owner's code review under machine noise. */
     it(`leaves the ledgers and the bulk out even though they travel`, () => {
         for (const path of [
             `.intentic/records/workflow-runs.json`,
-            // Split out of the tracked automations manifest precisely so a fire stops dirtying it — the one
+            // Split out of the tracked automations manifest precisely so a fire stops dirtying it: the one
             // entry here that would be a REGRESSION rather than an oversight if it ever went tracked.
             `.intentic/records/automation-runs.json`,
             `.intentic/records/loops.json`,
@@ -315,11 +315,11 @@ describe(`VERSIONED_STATE_PATHS`, () => {
     });
 
     /* Spelled out rather than derived, so ADDING a tracked entry is a visible edit to this list and not a silent
-     * consequence of editing the table above — the review the flag itself exists to force. */
+     * consequence of editing the table above: the review the flag itself exists to force. */
     it(`tracks exactly the configuration slice plus the agent's own authored output`, () => {
         expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
             `.intentic/config/automations.json`,
-            /* The connections themselves, and the entry that took the longest to earn its place — it was classed
+            /* The connections themselves, and the entry that took the longest to earn its place: it was classed
              * `secret` on the strength of holding each capability's credential, which stopped being true when the
              * vault took the values out and left the shape behind. Connecting a deployment orchestrator, or
              * granting a connected computer shell and screen control, is the largest change made to what this
@@ -327,9 +327,9 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `.intentic/config/capabilities.json`,
             `.intentic/config/capability-dismissals.json`,
             /* The two entries the AGENT authors on its own initiative, and the reason `versioned` is not read as
-             * config-only. Both are the sandbox acting outward — a draft publishes words under the owner's name,
+             * config-only. Both are the sandbox acting outward: a draft publishes words under the owner's name,
              * a workspace extension is code that runs in the app and can serve HTTP with the workspace under
-             * node:fs — and both used to reach that far with no diff anywhere. Kept rather than consumed, one
+             * node:fs, and both used to reach that far with no diff anywhere. Kept rather than consumed, one
              * small file at a time, so tracking them yields a record instead of churn. */
             `.intentic/config/drafts/`,
             `.intentic/config/environment.Dockerfile`,
@@ -340,12 +340,12 @@ describe(`VERSIONED_STATE_PATHS`, () => {
              * behind it was not, so a commit could record turning an extension on and say nothing about what it
              * was told to do. Tracked once its declared-secret values moved to the vault. */
             `.intentic/config/extension-settings.json`,
-            // The owner's per-extension update posture (notify / agent / auto) — a standing decision about
+            // The owner's per-extension update posture (notify / agent / auto): a standing decision about
             // what may run unattended, which is exactly the kind of edit worth a line in `git log`.
             `.intentic/config/extension-update-policy.json`,
             `.intentic/config/loop-designs.json`,
             `.intentic/config/personas.json`,
-            // A persona's own kit — the prompt it runs on and the skills only its turns reach. Tracked for the
+            // A persona's own kit: the prompt it runs on and the skills only its turns reach. Tracked for the
             // reason its card is, one step further: this is the text that decides how that persona behaves.
             `.intentic/config/personas/`,
             `.intentic/config/settings.json`,
@@ -360,7 +360,7 @@ describe(`VERSIONED_STATE_PATHS`, () => {
 
     /* THE ASYMMETRY THIS CLOSED, kept as its own assertion because it is the failure rather than a detail of it:
      * the switch was tracked and the thing it switched was not, so a commit could record turning on an extension
-     * whose code nobody else could read — and a workspace extension has no install moment to review at instead. */
+     * whose code nobody else could read, and a workspace extension has no install moment to review at instead. */
     it(`tracks a workspace extension's code, not just the switch that enables it`, () => {
         expect(VERSIONED_STATE_PATHS).toContain(`.intentic/config/extension-enablement.json`);
         expect(VERSIONED_STATE_PATHS).toContain(`.intentic/config/workspace-extensions/`);
@@ -375,14 +375,14 @@ describe(`VERSIONED_STATE_PATHS`, () => {
         for (const path of [`.intentic/records/approvals/`, `.intentic/config/docs/`]) {
             expect([path, VERSIONED_STATE_PATHS.includes(path)]).toEqual([path, false]);
         }
-        // Both still reach workspace search — searchability is a property of the content, not of tracking.
+        // Both still reach workspace search: searchability is a property of the content, not of tracking.
         for (const path of [`.intentic/records/approvals/`, `.intentic/config/docs/`]) {
             const entry = WORKSPACE_STATE_FILES.find((file) => file.path === path);
             expect([path, entry?.versioned === true || entry?.authored === true]).toEqual([path, path === `.intentic/config/docs/`]);
         }
     });
 
-    /* The composed overlay is `derived` — recomposed on every boot from the custom file that IS tracked, against
+    /* The composed overlay is `derived`: recomposed on every boot from the custom file that IS tracked, against
      * whatever base image this container happens to be on. Tracking it would put a rewritten-at-startup file in
      * front of the owner as a change they made. */
     it(`tracks the environment overlay's source but not its composed output`, () => {
@@ -395,7 +395,7 @@ describe(`VERSIONED_STATE_PATHS`, () => {
  *
  * `stateGroupOf` reads three existing answers instead of adding a fourth, which is only sound while those answers
  * nest: reviewed and authored entries must all be `carry`, so "did a person write this" never has to be asked of
- * a credential. Nothing in the type system says so — `versioned: true` on a `secret` entry compiles — and the
+ * a credential. Nothing in the type system says so, `versioned: true` on a `secret` entry compiles, and the
  * failure would be quiet in the worst way: the entry would group as `secrets` (correctly kept out of the backup)
  * while the git exclude and the search floor, which read `versioned` directly, went on tracking and indexing it.
  * A credential in the owner's diff and in the search index, from one plausible-looking flag. */
@@ -439,8 +439,8 @@ describe(`state groups`, () => {
 
     /* THE LAYOUT GUARD, and the reason the folders can carry the rules at all.
      *
-     * Five prefixes replaced five hand-kept path lists — the git exclude, the search allow-list, the sync backup,
-     * the watcher skip, the export bundle — and every one of them is now only as true as the claim that an entry
+     * Five prefixes replaced five hand-kept path lists: the git exclude, the search allow-list, the sync backup,
+     * the watcher skip, the export bundle, and every one of them is now only as true as the claim that an entry
      * physically SITS in the folder its class puts it in. Nothing else checks that: the paths are literals, and a
      * credential typed into `config/` by mistake would compile, track in git, index in search and copy to the
      * owner's laptop, with each of those rules behaving exactly as designed. This is the one assertion standing
@@ -453,7 +453,7 @@ describe(`state groups`, () => {
     });
 
     /* The browser profiles' path is copied into @intentic/workspace-ignore (isBrowserProfilePath), which cannot
-     * import this package — it is the browser-safe half, deliberately free of zod and the contract surface, so
+     * import this package: it is the browser-safe half, deliberately free of zod and the contract surface, so
      * the platform's web bundle can take it. This is the guard that keeps the copy honest. If it fails, the
      * profiles moved and `BROWSER_PROFILE_GROUP` in _sandbox/workspace-ignore/src/constants.ts must move too, or
      * the tree will start eagerly walking a Chromium user-data dir and the watcher will report its churn. */
@@ -481,7 +481,7 @@ describe(`state groups`, () => {
 });
 
 /* WHAT THE OWNER'S MACHINE KEEPS. The sync ignored the whole state dir, so losing a sandbox lost every persona,
- * skill, automation, draft and transcript in it — a backup that held only the source tree. These pin the two
+ * skill, automation, draft and transcript in it: a backup that held only the source tree. These pin the two
  * halves of the fix: the slice that now comes down, and the credentials that still must not. */
 describe(`BACKED_UP_STATE_PATHS`, () => {
     it(`splits the table in two with nothing falling between`, () => {
@@ -503,14 +503,14 @@ describe(`BACKED_UP_STATE_PATHS`, () => {
         }
     });
 
-    it(`leaves the rebuildable bulk behind — it is size, not secrecy`, () => {
+    it(`leaves the rebuildable bulk behind: it is size, not secrecy`, () => {
         for (const path of stateGroupPaths(`local`)) {
             expect([path, BACKED_UP_STATE_PATHS.includes(path)]).toEqual([path, false]);
         }
     });
 
     /* The distinction `portability` alone cannot draw, and the reason the `backup` flag exists. Ownership records
-     * may never RESTORE into another sandbox — that is what `identity` means, and members.json's own entry argues
+     * may never RESTORE into another sandbox: that is what `identity` means, and members.json's own entry argues
      * why. None of that stops the owner keeping a copy of who could drive their own machine. */
     it(`copies the ownership records that may never travel`, () => {
         for (const path of [`.intentic/identity/owner.json`, `.intentic/identity/members.json`, `.intentic/identity/workspace.json`]) {
@@ -520,7 +520,7 @@ describe(`BACKED_UP_STATE_PATHS`, () => {
 
     it(`still withholds the tokens that authenticate against this sandbox`, () => {
         expect(BACKED_UP_STATE_PATHS).not.toContain(`.intentic/identity/control-tokens.json`);
-        // And it is the ONLY entry that opts out by hand — everything else follows from its class.
+        // And it is the ONLY entry that opts out by hand: everything else follows from its class.
         expect(WORKSPACE_STATE_FILES.filter((file) => file.backup === false).map((file) => file.path)).toEqual([
             `.intentic/identity/control-tokens.json`,
         ]);

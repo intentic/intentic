@@ -47,7 +47,7 @@ test("tickets are distinct and unguessable-width, so one does not predict the ne
 });
 
 /* The shared gate the three upgrade handlers call. It throws rather than returning a verdict so a handler
- * cannot forget to check — each call sits in a try that closes the socket 1008. */
+ * cannot forget to check: each call sits in a try that closes the socket 1008. */
 test("redeemTicket throws on a bad ticket and passes a good one", () => {
     const services = { auth: {}, wsTickets: createWsTickets() };
     expect(() => redeemTicket(services, urlWith("nope"), "maintainer")).toThrow();
@@ -55,7 +55,7 @@ test("redeemTicket throws on a bad ticket and passes a good one", () => {
 });
 
 /* The role floor at redemption: a ticket carries the tier it was minted under, and each socket names the tier
- * it demands — the terminal is a shell (maintainer), the sign-in browser adds credentials (owner). A ticket
+ * it demands: the terminal is a shell (maintainer), the sign-in browser adds credentials (owner). A ticket
  * below the floor is spent AND refused: failing the floor must not leave a replayable credential behind. */
 test("redeemTicket holds the ticket to the socket's floor, and a refused ticket is still spent", () => {
     const services = { auth: {}, wsTickets: createWsTickets() };
@@ -68,7 +68,7 @@ test("redeemTicket holds the ticket to the socket's floor, and a refused ticket 
     expect(() => redeemTicket(services, urlWith(services.wsTickets.mint(maintainer)), "maintainer")).not.toThrow();
 });
 
-// Loopback mode (tests, the host-internal preview) gates none of these routes and never minted a ticket —
+// Loopback mode (tests, the host-internal preview) gates none of these routes and never minted a ticket:
 // requiring one there would break the very compositions that have no auth to satisfy.
 test("redeemTicket is a no-op without an authorizer", () => {
     expect(() => redeemTicket({ auth: undefined, wsTickets: createWsTickets() }, urlWith(""), "owner")).not.toThrow();

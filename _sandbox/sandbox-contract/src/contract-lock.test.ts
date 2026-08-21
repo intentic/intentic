@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { currentLock } from "./contract-lock.js";
 
-/* The committed lock and the code must say the same thing — see contract-lock.ts for what the pair buys.
+/* The committed lock and the code must say the same thing: see contract-lock.ts for what the pair buys.
  *
  * This is the HALF that runs everywhere the tests run; the other half (a shrunk lock needs a declared break)
  * lives in prepass.mjs, which has git and this suite does not. */

@@ -30,7 +30,7 @@ test("green at the head ends the streak", () => {
     expect(failureStreaks([run(1, "success", 50), run(2, "failed", 40)])).toHaveLength(0);
 });
 
-test("canceled, skipped and running are not verdicts — they neither start nor break a streak", () => {
+test("canceled, skipped and running are not verdicts: they neither start nor break a streak", () => {
     const streaks = failureStreaks([
         run(1, "canceled", 60),
         run(2, "failed", 50),
@@ -58,19 +58,19 @@ test("a breakage badges once and then stays quiet however many more runs fail", 
 
 test("the tooltip names the branch while there is only one", () => {
     const streaks = failureStreaks([run(1, "failed", 50), run(2, "failed", 40)]);
-    expect(streakTooltip(streaks)).toBe("intentic main is failing — 2 runs in a row");
+    expect(streakTooltip(streaks)).toBe("intentic main is failing, 2 runs in a row");
     expect(streakTooltip([...streaks, ...failureStreaks([run(3, "failed", 50, "feat")])])).toBe("2 branches are failing");
 });
 
 /* The row tiering's two derivations. Same "green at the head" rule as the badge, read per run: which failure
  * still asks to be fixed, and which one a later green closed. */
 
-test("only the head of a red branch is an open failure — the ones behind it are the same breakage", () => {
+test("only the head of a red branch is an open failure: the ones behind it are the same breakage", () => {
     const head = run(1, "failed", 50);
     const behind = run(2, "failed", 40);
     const open = openFailures([head, behind, run(3, "success", 30)]);
     expect(open.has(head)).toBe(true);
-    // Unfixed, but not a second thing to fix — flagging it too is how one breakage becomes three demands.
+    // Unfixed, but not a second thing to fix: flagging it too is how one breakage becomes three demands.
     expect(open.has(behind)).toBe(false);
 });
 
@@ -101,7 +101,7 @@ test("a failure with nothing green after it is not superseded", () => {
 
 test("canceled and running runs after a failure do not supersede it", () => {
     const failure = run(1, "failed", 10);
-    // Neither is a verdict, so neither is evidence the branch recovered — the same rule the streaks follow.
+    // Neither is a verdict, so neither is evidence the branch recovered: the same rule the streaks follow.
     expect(supersededBy([run(2, "canceled", 30), run(3, "running", 20), failure]).size).toBe(0);
 });
 
@@ -115,7 +115,7 @@ const entry = (createdAt: number, failed: readonly string[] | undefined, branch 
 test("a job failing run after run is one problem, not many failures", () => {
     const recurring = recurringFailures([entry(50, ["eslint", "unit"]), entry(40, ["eslint"]), entry(30, ["eslint"]), entry(20, [])]);
     expect(recurring[0]).toMatchObject({ job: "eslint", runs: 3 });
-    // Failed once, in the newest run only — that is the thing that just changed, not a pattern.
+    // Failed once, in the newest run only: that is the thing that just changed, not a pattern.
     expect(recurring.find((item) => item.job === "unit")).toBeUndefined();
 });
 

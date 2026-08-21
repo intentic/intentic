@@ -15,6 +15,6 @@ export type ProcessContribution = z.infer<typeof ProcessContributionSchema>;
 export const processesPoint = {
     name: "processes",
     description:
-        "Long-lived background processes the daemon runs for this extension — a gateway holding a connection the daemon must not, a dev server. Managed the same way panel dev servers are, and startable and stoppable from the Extensions tab.",
+        "Long-lived background processes the daemon runs for this extension: a gateway holding a connection the daemon must not, a dev server. Managed the same way panel dev servers are, and startable and stoppable from the Extensions tab.",
     schema: z.array(ProcessContributionSchema),
 } as const satisfies ContributionPoint;

@@ -38,7 +38,7 @@ const stepFaults = (step: WorkflowStep, ids: ReadonlySet<string>): string[] => {
     if (step.handoff === "continue" && !continuesOneSession(step)) {
         faults.push(
             step.needs.length === 0
-                ? `"${step.title}" continues a session but starts the run — there is nothing to continue.`
+                ? `"${step.title}" continues a session but starts the run: there is nothing to continue.`
                 : `"${step.title}" continues a session but waits for ${step.needs.length} steps; it can only continue one.`,
         );
     }
@@ -136,7 +136,7 @@ const gateFaults = (workflow: Pick<Workflow, "steps" | "gate">): string[] => {
         return [`The gate reads "${gate.field}", which "${step.title}" does not declare.`];
     }
     if (field.type === "string[]") {
-        return [`The gate reads "${gate.field}", which is a list — a release decision has to be one value.`];
+        return [`The gate reads "${gate.field}", which is a list: a release decision has to be one value.`];
     }
     // The schema refuses this on save (pass is min(1)), but the designer edits drafts the schema never sees,
     // and an empty allowlist is a gate no run could ever answer "pass", which deserves a sentence, not a save error.
@@ -145,7 +145,7 @@ const gateFaults = (workflow: Pick<Workflow, "steps" | "gate">): string[] => {
     }
     // A field the step may legally omit is a gate that answers `blocked` whenever it does, which is a release
     // stuck on a technicality rather than on the product.
-    return field.required ? [] : [`The gate reads "${gate.field}", which "${step.title}" declares optional — it has to be required.`];
+    return field.required ? [] : [`The gate reads "${gate.field}", which "${step.title}" declares optional, it has to be required.`];
 };
 
 /* Why the graph is not runnable, as a list of sentences. Empty ⇒ it is. Shared by the save route (which

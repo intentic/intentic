@@ -8,7 +8,7 @@ import { forgetNamespace } from "../zrok-provision.js";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
-// The hosted lane's config, enabled — tests narrow fields per case.
+// The hosted lane's config, enabled: tests narrow fields per case.
 const config = (over?: Record<string, unknown>): Config =>
     ({
         webOrigin: `https://app.test`,
@@ -81,7 +81,7 @@ afterEach(() => {
 });
 
 describe(`hostedEnabled`, () => {
-    it(`needs BOTH the Fly credential and the tunnel fabric — machines without reachability boot to nothing`, () => {
+    it(`needs BOTH the Fly credential and the tunnel fabric: machines without reachability boot to nothing`, () => {
         expect(hostedEnabled(config())).toBe(true);
         expect(hostedEnabled(config({ hosted: { ...config().hosted, flyApiToken: `` } }))).toBe(false);
         expect(hostedEnabled(config({ zrok: { ...config().zrok, adminToken: `` } }))).toBe(false);
@@ -168,14 +168,14 @@ describe(`provisionHosted`, () => {
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
         expect(result).toEqual({ appName: `intentic-sbx-pool-abc123`, region: `iad` });
-        // The row was WON, not just read — the guarded update is what keeps two claimers off one machine.
+        // The row was WON, not just read: the guarded update is what keeps two claimers off one machine.
         expect(updateMany).toHaveBeenCalledWith({ where: { id: `p1`, state: `ready` }, data: { state: `claimed` } });
         // The identity goes in before the machine ever runs the sandbox, and the no-op boot override goes out.
         const update = calls.find((entry) => entry.url.endsWith(`/machines/m7`))?.body as {
             config: { env: Record<string, string>; init?: unknown; mounts: { volume: string }[]; metadata: Record<string, string> };
             skip_launch: boolean;
         };
-        // The stamp flips with the identity, in the same call — the app name will say `pool` forever, so this
+        // The stamp flips with the identity, in the same call: the app name will say `pool` forever, so this
         // is the only thing that can tell Fly this machine stopped being the platform's stock.
         expect(update.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1` });
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
@@ -185,7 +185,7 @@ describe(`provisionHosted`, () => {
         expect(update.config.mounts).toEqual([{ volume: `vol_7`, path: `/data` }]);
         expect(update.skip_launch).toBe(true);
         expect(calls.some((entry) => entry.url.endsWith(`/machines/m7/start`))).toBe(true);
-        // The user's clock starts here — the pool's own no-op boot was the platform's cost, not theirs.
+        // The user's clock starts here: the pool's own no-op boot was the platform's cost, not theirs.
         expect(created).toHaveBeenCalledWith({
             data: {
                 sandboxId: `s1`,
@@ -199,7 +199,7 @@ describe(`provisionHosted`, () => {
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
     });
 
-    it(`ignores warm machines in the wrong region — the residency promise beats the fast path`, async () => {
+    it(`ignores warm machines in the wrong region: the residency promise beats the fast path`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
@@ -208,7 +208,7 @@ describe(`provisionHosted`, () => {
         const findMany = vi.fn().mockResolvedValue([]);
         const prisma = fakePrisma({ hostedMachine: { create: vi.fn().mockResolvedValue({}) }, hostedPoolMachine: { findMany } });
         await provisionHosted(prisma as never, config(), logger, { ...args, region: `arn` });
-        // The pool was asked ONLY for the caller's region (and the current image) — never "anything warm".
+        // The pool was asked ONLY for the caller's region (and the current image): never "anything warm".
         expect(findMany).toHaveBeenCalledWith({
             where: { region: `arn`, state: `ready`, image: `ghcr.io/intentic/sandbox:stable` },
             orderBy: { createdAt: `asc` },
@@ -216,7 +216,7 @@ describe(`provisionHosted`, () => {
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
     });
 
-    it(`falls back to a cold build when the claim stumbles — the reader is owed a machine, not a pool hit`, async () => {
+    it(`falls back to a cold build when the claim stumbles: the reader is owed a machine, not a pool hit`, async () => {
         const created = vi.fn().mockResolvedValue({});
         const poolDelete = vi.fn().mockResolvedValue({});
         const calls = stubFetch([
@@ -246,7 +246,7 @@ describe(`provisionHosted`, () => {
 });
 
 describe(`wakeHosted`, () => {
-    it(`treats "already running" as success — the browser's daemon probe is the real verdict`, async () => {
+    it(`treats "already running" as success, the browser's daemon probe is the real verdict`, async () => {
         stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ error: `machine is started` }, 422) },
             { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `started` }) },
@@ -273,7 +273,7 @@ describe(`reapHostedOrphans`, () => {
                         apps: [
                             { name: `intentic-sbx-live` },
                             { name: `intentic-sbx-orphan` },
-                            // A warm machine waiting in the pool is OURS ON PURPOSE — a reaper that eats the
+                            // A warm machine waiting in the pool is OURS ON PURPOSE: a reaper that eats the
                             // pool every night would silently turn every claim back into a cold build.
                             { name: `intentic-sbx-pool-warm1` },
                             { name: `unrelated-app` },
@@ -318,7 +318,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     });
 
     /* The hours block is ABSENT for anyone the ceiling does not apply to, rather than present and generous.
-     * A member being shown a limit they do not have is the failure this shape exists to prevent — and the
+     * A member being shown a limit they do not have is the failure this shape exists to prevent, and the
      * same absence covers a self-hosted platform that meters nothing. */
     it(`hostedOffer tells a member nothing about hours, because none apply to them`, async () => {
         const member = fakePrisma({
@@ -398,7 +398,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(fetchSpy).toHaveLength(0);
     });
 
-    it(`hostedProvision 404s when the lane is off — a platform without the config simply has no such route`, async () => {
+    it(`hostedProvision 404s when the lane is off: a platform without the config simply has no such route`, async () => {
         await expect(
             call(
                 sandboxRoutes.hostedProvision,
@@ -420,13 +420,13 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-pool-abc123`, machineId: `m1` }), count: vi.fn() },
         });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
-        // `warm` is read off the app name (a pool claim keeps its pool name) — the wait card's promise rides on it.
+        // `warm` is read off the app name (a pool claim keeps its pool name): the wait card's promise rides on it.
         expect(summary.hosted).toEqual({ region: `iad`, warm: true });
         expect(fetchSpy).toHaveLength(0);
     });
 
     // The lane switch: a sandbox nobody ever connected to can hand its machine back. One that HAS connected
-    // cannot — that is a workspace with files on it, and destroying its machine belongs to the delete dialog.
+    // cannot: that is a workspace with files on it, and destroying its machine belongs to the delete dialog.
     it(`hostedRelease destroys the machine of a never-started sandbox and refuses on a live one`, async () => {
         const calls = stubFetch([{ match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) }]);
         const machineDelete = vi.fn().mockResolvedValue({});
@@ -500,7 +500,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             { context: routeContext({ prisma: fakePrisma({ sandbox: { findFirst } }) }) },
         );
         expect(result).toEqual({ ok: true });
-        // The access query admits owner OR accepted member — the OR is the contract here.
+        // The access query admits owner OR accepted member: the OR is the contract here.
         expect(findFirst.mock.calls[0]?.[0]?.where?.OR).toHaveLength(2);
     });
 });

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/sandbox-run",
     "version": "0.0.0",
-    "description": "The sandbox container's run contract — names, capability posture, env allowlist, runtime directives, and the docker-run emitter every creation path composes from",
+    "description": "The sandbox container's run contract, names, capability posture, env allowlist, runtime directives, and the docker-run emitter every creation path composes from",
     "license": "MIT",
     "type": "module",
     "repository": {

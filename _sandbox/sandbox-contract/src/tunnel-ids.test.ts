@@ -34,11 +34,11 @@ test("port slots are a fixed-size pool of DNS-safe labels, stable per token", ()
     expect(portSlotsFromToken(TOKEN)).toEqual(slots);
 });
 
-/* The whole point of the salt. The sandbox id is public — it is the leading label of the sandbox's own URL and
- * of every preview link its owner has shared — so anything derived from the id ALONE is derivable by whoever
+/* The whole point of the salt. The sandbox id is public: it is the leading label of the sandbox's own URL and
+ * of every preview link its owner has shared, so anything derived from the id ALONE is derivable by whoever
  * holds one of those links. Slots must not be: knowing a sandbox's id must not tell you where its forwarded
  * ports live. */
-test("slots are not derivable from the sandbox id — only from the token behind it", () => {
+test("slots are not derivable from the sandbox id: only from the token behind it", () => {
     expect(portSlotsFromToken(OTHER)).not.toEqual(portSlotsFromToken(TOKEN));
     // No slot leaks the id it will be paired with in `port-<slot>-<sandboxId>`.
     const id = sandboxIdFromToken(TOKEN);

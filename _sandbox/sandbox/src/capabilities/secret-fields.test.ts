@@ -8,7 +8,7 @@ import { partitionSecretValues } from "./secret-fields.js";
  * The two halves are individually sound and were silently incompatible. `secret-fields.ts` derives the
  * credential keys as the COMPLEMENT of a kind's `echo`, so a field nobody thought to echo is vaulted and the
  * manifest keeps VAULTED in its place. `capabilities-store.ts` validates each entry against CapabilitySchema on
- * READ, before the vault is consulted — correctly, because the store must not need the vault to know whether a
+ * READ, before the vault is consulted: correctly, because the store must not need the vault to know whether a
  * file is a manifest. Put together, a vaulted field whose schema refuses the marker string produces an entry
  * that can be written and never read again: it fails validation, and one bad entry is SKIPPED so the rest
  * survive (the right blast radius, and the reason this is silent).
@@ -16,14 +16,14 @@ import { partitionSecretValues } from "./secret-fields.js";
  * What that cost: the extension kind echoed neither `tier` nor `registry`, and the Discover page attaches the
  * registry it browsed to every install. So every extension installed from Discover was vaulted into an entry
  * whose `registry` was no longer a url, dropped from the capability list on the next read, and therefore absent
- * from the extension inventory that list is built from — no row, no on/off switch, no view, no settings, no
+ * from the extension inventory that list is built from: no row, no on/off switch, no view, no settings, no
  * CLI on the agent's PATH, and Discover still offering "Install" for something already on disk. The ipsec vpn
  * arm had the same shape waiting in three enum-and-CIDR dial parameters.
  *
  * So the guard is per KIND rather than per bug, and total over CapabilityKind: a new kind with an incomplete
  * echo fails here instead of in somebody's sandbox a release later. Arms of a discriminated union get their own
  * sample, because the echo branches on the discriminant and so does the schema. Samples are deliberately
- * MAXIMAL — every optional field populated — since an unpopulated field is not vaulted and proves nothing. */
+ * MAXIMAL: every optional field populated, since an unpopulated field is not vaulted and proves nothing. */
 
 const SHA = "9305c108986b03875ea559a7e59f9004df550e7f";
 
@@ -125,7 +125,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
         { id: "ollama", kind: "endpoint", config: { baseUrl: "https://x.example.com", protocol: "openai", apiKey: "sk-x", headers: "X-A: b" } },
     ],
     // Maximal like every sample here, and the kind with the least to hide: the wallet's signing key never
-    // enters this container, so its config is an address and the owner's own policy numbers — every one of
+    // enters this container, so its config is an address and the owner's own policy numbers: every one of
     // which the handler echoes, which is exactly what this guard is checking it still does.
     wallet: [
         {
@@ -170,7 +170,7 @@ test.each(Object.entries(SAMPLES).flatMap(([kind, samples]) => samples.map((samp
 // The vault is not a place to hide config: what leaves the manifest must be a credential, and the only way this
 // stays true is that nothing NON-secret is in the complement of the echo. Pinned for the kind whose echo the
 // install path depends on, with the two fields that were missing named outright.
-test("an extension's registry and tier stay in the manifest — they are catalogue facts, not credentials", () => {
+test("an extension's registry and tier stay in the manifest: they are catalogue facts, not credentials", () => {
     const sample = SAMPLES.extension[0];
     expect(sample).toBeDefined();
     const { values } = partitionSecretValues(sample as Capability, new Map());

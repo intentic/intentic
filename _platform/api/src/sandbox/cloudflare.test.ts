@@ -75,7 +75,7 @@ describe(`provisionSandboxTunnel`, () => {
     /* A FULL ZONE IS THE OPERATOR'S TO FIX, and until this it read as an intentic bug: the wizard showed
      * Cloudflare's own words ("POST /zones/44823fc…/dns_records failed (HTTP 400): 81045 Record quota
      * exceeded") to a person who could not act on them, on a deployment where NOTHING could be set up any more
-     * — every lane provisions this same tunnel. */
+     *: every lane provisions this same tunnel. */
     it(`says a full zone is a full zone, in words the operator can act on`, async () => {
         stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
@@ -111,7 +111,7 @@ describe(`provisionSandboxTunnel`, () => {
         };
         expect(ingress.config.ingress[0]).toEqual({ hostname, service: `http://intentic-sandbox-workspace:8787` });
         expect(ingress.config.ingress[1]).toEqual({ hostname: sshHostname, service: `ssh://intentic-sandbox-workspace:22` });
-        // The whole slot pool is routed at provision time — a port preview's first forward never waits on DNS.
+        // The whole slot pool is routed at provision time: a port preview's first forward never waits on DNS.
         const slots = portSlotsFromToken(connectToken);
         for (const [index, slot] of slots.entries()) {
             expect(ingress.config.ingress[2 + index]).toEqual({
@@ -165,8 +165,8 @@ describe(`deleteSandboxTunnel`, () => {
 
         await deleteSandboxTunnel({ apiToken: `api`, zone, connectToken });
 
-        // Connections are cleared BEFORE the tunnel delete — a just-stopped cloudflared leaves stale connections
-        // that would otherwise 1022 — then the CNAMEs are removed.
+        // Connections are cleared BEFORE the tunnel delete: a just-stopped cloudflared leaves stale connections
+        // that would otherwise 1022: then the CNAMEs are removed.
         const deletes = calls.filter((call) => call.method === `DELETE`).map((call) => call.url);
         const connectionsIdx = deletes.findIndex((url) => url.endsWith(`/cfd_tunnel/t1/connections`));
         const tunnelIdx = deletes.findIndex((url) => url.endsWith(`/cfd_tunnel/t1`));
@@ -281,7 +281,7 @@ describe(`ensurePreviewRoutes`, () => {
         expect(dns[1]).toMatchObject({ type: `CNAME`, name: portSlotHostname, content: `t1.cfargotunnel.com`, proxied: true });
     });
 
-    it(`is a handful of reads when everything already exists — no config PUT, no DNS writes`, async () => {
+    it(`is a handful of reads when everything already exists: no config PUT, no DNS writes`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
             { match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?name=`), respond: () => ok([{ id: `t1` }]) },
@@ -299,7 +299,7 @@ describe(`ensurePreviewRoutes`, () => {
                         },
                     }),
             },
-            // Both records already point at the tunnel — the content list proves it, so no per-name upserts run.
+            // Both records already point at the tunnel: the content list proves it, so no per-name upserts run.
             {
                 match: (method, url) => method === `GET` && url.includes(`content=`),
                 respond: () => ok([{ name: hostname }, { name: portSlotHostname }]),
@@ -355,7 +355,7 @@ const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
 describe(`reapStaleTunnels`, () => {
     const zone = `example.com`;
 
-    // A mixed account: only the aged sandbox-*/host-ssh- tunnels with no live connector should be reaped —
+    // A mixed account: only the aged sandbox-*/host-ssh- tunnels with no live connector should be reaped:
     // including one that never connected (status null).
     const tunnels = [
         { id: `t-healthy`, name: `sandbox-healthy`, status: `healthy`, conns_active_at: iso(0), created_at: iso(30 * DAY_MS) },
@@ -378,7 +378,7 @@ describe(`reapStaleTunnels`, () => {
             { match: (method) => method === `DELETE`, respond: () => ok({}) },
         ]);
 
-    it(`reaps aged tunnels with no live connector — including never-connected (null) — and spares the rest`, async () => {
+    it(`reaps aged tunnels with no live connector: including never-connected (null), and spares the rest`, async () => {
         const calls = stubReap();
 
         const result = await reapStaleTunnels({
@@ -460,7 +460,7 @@ describe(`reapStaleTunnels`, () => {
     it(`spares excluded tunnels even when aged and down (the pre-provisioned pool)`, async () => {
         const calls = stubReap();
 
-        // sandbox-old is aged + down (normally reaped) but excluded — so only host-ssh-old and the never-connected
+        // sandbox-old is aged + down (normally reaped) but excluded, so only host-ssh-old and the never-connected
         // sandbox-null are reaped.
         const result = await reapStaleTunnels({
             apiToken: `api`,
@@ -480,7 +480,7 @@ describe(`reapStaleTunnels`, () => {
     });
 
     // A stubbed reap where sandbox-old's *tunnel* delete responds with `code`, while its connections delete and
-    // every other tunnel's deletes succeed — so we can prove one bad delete no longer aborts the sweep.
+    // every other tunnel's deletes succeed, so we can prove one bad delete no longer aborts the sweep.
     const stubReapWithFailure = (code: number, status?: number) =>
         stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
@@ -506,7 +506,7 @@ describe(`reapStaleTunnels`, () => {
 
         expect(result).toEqual({ scanned: 7, reaped: 2, skipped: 1, failed: 0, reapedNames: [`host-ssh-old`, `sandbox-null`] });
         expect(failures).toEqual([]);
-        // The 1022 did not abort the sweep — the other aged tunnels were still reaped.
+        // The 1022 did not abort the sweep: the other aged tunnels were still reaped.
         expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/cfd_tunnel/t-host`))).toBe(true);
         expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/cfd_tunnel/t-null`))).toBe(true);
     });

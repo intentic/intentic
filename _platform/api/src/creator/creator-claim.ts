@@ -71,7 +71,7 @@ export const domainClaimProblem = (domain: string): string | undefined => {
         return `A publisher domain must be a name, not an IP address.`;
     }
     if (RESERVED_WORDS.some((word) => domain.includes(word))) {
-        return `A publisher domain may not contain ${RESERVED_WORDS.join(`, `)} — those words are reserved for the platform's own listings.`;
+        return `A publisher domain may not contain ${RESERVED_WORDS.join(`, `)}: those words are reserved for the platform's own listings.`;
     }
     return undefined;
 };
@@ -254,7 +254,7 @@ export const claimFailureReason = (publisher: string, report: ClaimReport): stri
     }
     const unreadable = attempts.filter((attempt) => attempt.outcome === `unreadable`).map((attempt) => attempt.repo);
     if (unreadable.length === attempts.length) {
-        return `None of ${attempts.map((attempt) => attempt.repo).join(`, `)} could be read just now. That is GitHub, not you — try again in a moment.`;
+        return `None of ${attempts.map((attempt) => attempt.repo).join(`, `)} could be read just now. That is GitHub, not you: try again in a moment.`;
     }
     const read = attempts.length - unreadable.length;
     const looked =
@@ -264,7 +264,7 @@ export const claimFailureReason = (publisher: string, report: ClaimReport): stri
               ? `Read all ${read} repositories listed under ${publisher}`
               : `Read ${read} of the ${attempts.length} repositories listed under ${publisher}`;
     return (
-        `${looked} — no ${CLAIM_PATH} on the default branch yet. ` +
+        `${looked}: no ${CLAIM_PATH} on the default branch yet. ` +
         `A push that landed on another branch does not count: the file has to be on the branch GitHub shows first.`
     );
 };
@@ -310,7 +310,7 @@ export const domainClaimFailureReason = (domain: string, report: ClaimReport): s
         return `${at} answered nothing readable yet. Serve the line shown here as plain text at exactly that path, over https, and try again.`;
     }
     return (
-        `${at} could not be read just now — the domain must resolve publicly and answer over https. ` +
+        `${at} could not be read just now: the domain must resolve publicly and answer over https. ` +
         `If the DNS record or the route is new, give it a moment and try again.`
     );
 };

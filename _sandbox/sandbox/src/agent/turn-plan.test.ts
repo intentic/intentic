@@ -10,7 +10,7 @@ import { conversationExperimentArm, planTurn, type TurnContext } from "./turn-pl
 
 /* WHAT A TURN IS ALLOWED TO RUN ON, and what it is handed once it may. Every case here used to be reachable
  * only through app.test.ts booting the whole daemon, which is why the four provider arms drifted apart in the
- * first place — each learned the same lessons separately (resolve a concrete model, or the SDK's own retired
+ * first place: each learned the same lessons separately (resolve a concrete model, or the SDK's own retired
  * default gets used). Which session a turn may resume is NOT among them: it is one rule for all four runtimes
  * and lives with the route that acts on it (app.integration.test.ts covers it end to end).
  *
@@ -29,7 +29,7 @@ vi.mock("../browser/browser-tools.js", () => ({
  * uninstalled dependencies before it dispatches (see honoured), and a root that exists would make every prompt
  * assertion below depend on whatever happens to be checked out on the machine running the suite. A root with
  * nothing in it discovers no projects and therefore earns no notice. That the notice DOES reach every arm is
- * asserted where a real tree can be built — turn-plan.integration.test.ts. */
+ * asserted where a real tree can be built: turn-plan.integration.test.ts. */
 const ROOT = "/nowhere/turn-plan";
 const IQ_PLUGIN_DIR = new URL("../../../../_search/iq/plugin/", import.meta.url).pathname;
 
@@ -55,7 +55,7 @@ const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // Read on every turn, not only a pinned one: an unattended wake that named no persona is exactly the
         // case whose answer must be "no accounts", so the read cannot be conditional on there being one.
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
-        // A measurement seam, not a behavioural one — the planning steps file their own spans so a slow turn
+        // A measurement seam, not a behavioural one: the planning steps file their own spans so a slow turn
         // names the step rather than the phase. Pass the work through and time nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         /* The schema's own defaults, which is what a workspace that has never written a settings file reads.
@@ -71,7 +71,7 @@ const servicesWith = (overrides: Partial<Services> = {}): Services =>
         /* Nothing to delegate to, which is the default this fixture wants: the delegation note is one of the
          * pieces composed into a Claude Code turn's instructions, so every such turn reaches this seam whether
          * or not it goes on to run. Grok's own gate reads the same method and overrides it with the same
-         * answer — one seam, asked by two callers, which is why it belongs in the shared fixture. */
+         * answer: one seam, asked by two callers, which is why it belongs in the shared fixture. */
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
         codexAgent: async function* () {},
         grokAgent: async function* () {},
@@ -140,7 +140,7 @@ test("a harness refusal rides through with the credential resolver's own code", 
 
 /* Both native arms resolve a CONCRETE model rather than letting their runtime pick, and for the same reason
  * twice over: the Codex CLI defaults to gpt-5-codex (which a subscription can reject) and OpenCode defaults to
- * a retired models.dev id xAI rejects outright. An omitted model is the common case — the client drops an
+ * a retired models.dev id xAI rejects outright. An omitted model is the common case: the client drops an
  * empty selection from the wire so the daemon resolves its own catalog default. */
 
 test("Codex resolves the catalog default when the turn pins no model", async () => {
@@ -257,7 +257,7 @@ test("iq search holdout assigns one balanced arm deterministically per conversat
     expect(arms).toEqual(new Set([true, false]));
 });
 
-// The harness arm is the deep one — it reaches settings, plugins, browser profiles and the workspace probe —
+// The harness arm is the deep one: it reaches settings, plugins, browser profiles and the workspace probe:
 // so it needs the seams those touch before it can be planned at all.
 const harnessServices = (overrides: Partial<Services> = {}): Services =>
     servicesWith({
@@ -275,7 +275,7 @@ test("the account the credential resolver answered with becomes the turn's attri
 });
 
 /* Delegation is offered only where the credential to act on it exists. An agent told in its system prompt that
- * it may shell out to Codex, whose Bash then has no CODEX_HOME, burns a tool call discovering that — so the note
+ * it may shell out to Codex, whose Bash then has no CODEX_HOME, burns a tool call discovering that, so the note
  * and the env are one decision, made together. */
 test("no reachable Codex means neither the delegation env nor the note that promises it", async () => {
     const plan = await planTurn(harnessServices(), turn(), context);
@@ -319,7 +319,7 @@ const codexServices = (overrides: Partial<Services> = {}): Services =>
     });
 
 // The route has already folded the turn's posture into the request by the time an arm is picked, so these are
-// context edits rather than turn edits — the same shape planTurn sees in production.
+// context edits rather than turn edits: the same shape planTurn sees in production.
 const asking = (overrides: Partial<AgentRequest>): TurnContext => ({ ...context, base: { ...base, ...overrides } });
 
 test("a plan-only runtime keeps `plan` and is handed no other permission mode", async () => {
@@ -330,7 +330,7 @@ test("a plan-only runtime keeps `plan` and is handed no other permission mode", 
     expect((planning as { request: AgentRequest }).request.permissionMode).toBe("plan");
 });
 
-test("the Claude Code loop keeps every mode — it is the runtime that honours them", async () => {
+test("the Claude Code loop keeps every mode: it is the runtime that honours them", async () => {
     const plan = await planTurn(harnessServices(), turn(), asking({ permissionMode: "acceptEdits" }));
 
     expect((plan as { request: AgentRequest }).request.permissionMode).toBe("acceptEdits");
@@ -338,7 +338,7 @@ test("the Claude Code loop keeps every mode — it is the runtime that honours t
 
 // --- the JS execution backend: planned with the request, only where the runtime hosts it ------------------
 
-test("a Claude turn carries the JS backend's plan — the turn tree, spawn beside its shell", async () => {
+test("a Claude turn carries the JS backend's plan, the turn tree, spawn beside its shell", async () => {
     const plan = await planTurn(harnessServices(), turn(), context);
 
     expect((plan as { request: AgentRequest }).request.jsExecution).toMatchObject({
@@ -350,7 +350,7 @@ test("a Claude turn carries the JS backend's plan — the turn tree, spawn besid
 });
 
 /* The user's own three-card sketch, as a test: code without bash is a real posture (the backend mounts, Bash
- * goes), and a card that switches code off keeps its shell — two switches, not one under two names. */
+ * goes), and a card that switches code off keeps its shell: two switches, not one under two names. */
 test("a card decides each backend on its own: code-only, and shell-only, both plan exactly what they say", async () => {
     const cards: Persona[] = [
         { id: "code-only", capabilities: [], powers: PersonaPowersSchema.parse({ shell: false }) },
@@ -392,8 +392,8 @@ test("effort reaches the runtimes that forward it and no others", async () => {
 /* FAST SPEED PASSES TWO GATES, and the second one is the whole reason this test exists.
  *
  * The first is the runtime's declared record, like every other control here. The second is the ROUTE: a
- * codex/grok/endpoint turn on the claude-code harness reads the FULL Claude Code record — same loop, same
- * ceiling, `fastMode: true` — and is then pointed at the sandbox's translator, which the harness refuses fast
+ * codex/grok/endpoint turn on the claude-code harness reads the FULL Claude Code record: same loop, same
+ * ceiling, `fastMode: true`, and is then pointed at the sandbox's translator, which the harness refuses fast
  * mode for because it is not Anthropic's own endpoint. A capability check alone therefore says yes to a turn
  * that cannot possibly go fast, and the user would be left reading `not_first_party` on a control the composer
  * offered them. */
@@ -404,7 +404,7 @@ test("fast speed reaches a native Claude turn", async () => {
 });
 
 test("fast speed is withheld from a routed turn, whose endpoint the harness would refuse", async () => {
-    // What makes a turn routed is the credential resolver handing back an endpoint instead of an OAuth token —
+    // What makes a turn routed is the credential resolver handing back an endpoint instead of an OAuth token:
     // the same shape a codex/grok/kimi/gemini turn on this harness gets in production.
     credentials.mockResolvedValue({
         ok: true,
@@ -413,7 +413,7 @@ test("fast speed is withheld from a routed turn, whose endpoint the harness woul
     const routed = await planTurn(harnessServices(), turn({ agent: "codex", harness: "claude-code" }), asking({ fast: true }));
     const request = (routed as { request: AgentRequest }).request;
 
-    // The turn really did take the harness arm and really is routed — otherwise this asserts nothing.
+    // The turn really did take the harness arm and really is routed: otherwise this asserts nothing.
     expect(request.baseUrl).toBe("http://127.0.0.1:8788");
     expect(request.fast).toBeUndefined();
 });
@@ -439,7 +439,7 @@ test("fast speed is withheld from every runtime that isn't the Claude Code loop"
 
 /* A runtime that can't enter the turn's mount namespace is cwd'd into its worktree and nothing more, so an
  * absolute /work path from a memory or an AGENTS.md reaches the SHARED checkout. The note is the only layer
- * left that can keep it inside its own branch — see turn-preamble.ts on why it is second-best. */
+ * left that can keep it inside its own branch: see turn-preamble.ts on why it is second-best. */
 test("a cwd-isolated runtime is told where its worktree is; a namespaced one needs no telling", async () => {
     const isolated: TurnContext = { ...context, localCwd: `${HISTORY_ROOT}/worktrees/abc/work`, effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work` };
     // OpenCode is its own loop with no spawn seam of ours, so it stays on the cwd side of the axis. Codex is on
@@ -470,7 +470,7 @@ test("a main-tree turn has no worktree to name, so it says nothing", async () =>
     expect((plan as { request: AgentRequest }).request.prompt).toBe("do the thing");
 });
 
-/* The pre-turn rebase is SILENT to the model — it moved the tree, and telling the agent so only ever bought a
+/* The pre-turn rebase is SILENT to the model: it moved the tree, and telling the agent so only ever bought a
  * verification sweep it then reported as green (turn-preamble.ts). The human still sees it in the transcript's
  * worktree frame; this is what keeps it out of the words any of the four runtimes read. */
 test("a rebased branch says nothing to any runtime", async () => {
@@ -488,8 +488,8 @@ test("a rebased branch says nothing to any runtime", async () => {
 // --- the turn's standing instructions, on every runtime that will take them --------------------------------
 
 /* THE SETTING WAS A CLAUDE CODE SETTING WEARING A SANDBOX SETTING'S NAME. The composer offers Codex, Grok and
- * Gemini on their own runtimes, and a turn on any of them ran without the owner's system prompt — and without
- * the persona note, which says which accounts a session may speak through — while nothing on screen said so.
+ * Gemini on their own runtimes, and a turn on any of them ran without the owner's system prompt, and without
+ * the persona note, which says which accounts a session may speak through, while nothing on screen said so.
  * The failure is silent by construction: a dropped prompt errors nowhere.
  *
  * So the assertions here are about WHICH FIELD each runtime gets, per its declared answer (capabilitiesOf's
@@ -509,7 +509,7 @@ test("a runtime that replaces is handed the owner's prompt; one that only adds i
     const codex = await planTurn(withSettings(codexServices(), customSettings()), turn({ agent: "codex" }), context);
     expect((codex as { request: AgentRequest }).request.systemPrompt).toBe("You write release notes.");
 
-    /* OpenCode has no seam for replacing its own base, so the owner's text arrives as an addition — which the
+    /* OpenCode has no seam for replacing its own base, so the owner's text arrives as an addition, which the
      * settings page says out loud rather than promising a replacement two providers cannot perform. */
     const grokServices = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
@@ -523,8 +523,8 @@ test("a runtime that replaces is handed the owner's prompt; one that only adds i
 });
 
 /* THE WORKSPACE CONVENTIONS TRAVEL TO THE RUNTIMES THAT HAVE NO OTHER WAY TO HEAR THEM. `refs/` and `public/`
- * are facts about the filesystem — one is excluded from every scanner, the other is served on the open
- * internet — so a Codex turn that has never been told is one that will eventually commit a clone or publish a
+ * are facts about the filesystem: one is excluded from every scanner, the other is served on the open
+ * internet, so a Codex turn that has never been told is one that will eventually commit a clone or publish a
  * log. The Claude Code loop composes them itself (sdkSystemPrompt), which is why it must NOT get them twice. */
 test("a native runtime is told the workspace conventions; the Claude Code loop is not told twice", async () => {
     const codex = await planTurn(codexServices(), turn({ agent: "codex" }), context);

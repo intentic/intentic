@@ -1,7 +1,7 @@
 {
     "name": "@intentic/gate-action",
     "version": "0.0.0",
-    "description": "The GitHub Action around the sandbox's two CI doors — wait on a release gate's verdict, or wake an event automation with the workflow's payload",
+    "description": "The GitHub Action around the sandbox's two CI doors, wait on a release gate's verdict, or wake an event automation with the workflow's payload",
     "license": "MIT",
     "private": true,
     "type": "module",

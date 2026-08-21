@@ -8,12 +8,12 @@ const ask = vi.fn<() => Promise<{ text: string }>>();
 vi.mock("../agent/quick-model.js", () => ({ askQuickModel: () => ask() }));
 vi.mock("../git/contract-shrink.js", () => ({ claimedContractShrink: async () => [] }));
 
-/* WHAT A USER IS TOLD WHILE THE SENTENCE IS BEING WRITTEN, AND IN WHAT ORDER — the only part of a landing
+/* WHAT A USER IS TOLD WHILE THE SENTENCE IS BEING WRITTEN, AND IN WHAT ORDER: the only part of a landing
  * anybody ever waits for.
  *
  * The wait is real (the model call is seconds) and it is spent in exactly one place: the Changes panel, with
  * this agent's "From" chip lit, reading the draft report. So the writes this function makes are a promise and
- * its answer, and the ORDER is the whole contract — the report may only end once there is something to show
+ * its answer, and the ORDER is the whole contract: the report may only end once there is something to show
  * for it. Ended first, as it once was when the flag and the sentence travelled different roads, "ready" lands
  * over an empty box. */
 
@@ -64,7 +64,7 @@ test("opens the report at the land, writes the sentence, and only then says the 
 });
 
 // Every other road out of the model call ends the report too, or a chip keeps saying "writing…" about a call
-// that ended minutes ago — and it ends `failed` with nothing written, which is the honest answer.
+// that ended minutes ago, and it ends `failed` with nothing written, which is the honest answer.
 test("a refusal ends the report as failed, with nothing written", async () => {
     ask.mockResolvedValue({ text: "I can't help with that." });
     await describeLanding(servicesWith(), "c1");

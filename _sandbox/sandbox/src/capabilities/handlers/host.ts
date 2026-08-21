@@ -35,7 +35,7 @@ export const hostHandler: CapabilityHandler = {
     rename: {
         carry: async (ctx, from, to) => {
             await ctx.hosts.rename(from, to);
-            ctx.hostHub.disconnect(from, "this computer was renamed — reconnecting under its new name");
+            ctx.hostHub.disconnect(from, "this computer was renamed: reconnecting under its new name");
             await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
     },
@@ -43,17 +43,17 @@ export const hostHandler: CapabilityHandler = {
         const host = config as HostConfig;
         const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("host", host.platform));
         if (contribution === undefined) {
-            throw new Error(`no host platform "${host.platform}" — install the extension that declares it`);
+            throw new Error(`no host platform "${host.platform}": install the extension that declares it`);
         }
         const skill = await contributedSkill(contribution, id, HOST_TOOLS_NOTE);
         if (skill === undefined) {
-            throw new Error(`the extension declaring "${host.platform}" has no readable skill pack — reinstall it`);
+            throw new Error(`the extension declaring "${host.platform}" has no readable skill pack: reinstall it`);
         }
         await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill);
         if (!(await ctx.hosts.enrolled(id))) {
             yield {
                 kind: "log",
-                message: `Added "${id}". Run the one-time command its card is offering on that computer — the agent can work on it from the next turn.`,
+                message: `Added "${id}". Run the one-time command its card is offering on that computer, the agent can work on it from the next turn.`,
             };
             return;
         }
@@ -64,7 +64,7 @@ export const hostHandler: CapabilityHandler = {
         yield {
             kind: "log",
             message: pushed
-                ? `Updated "${id}" — the new permissions are in force on that computer now.`
+                ? `Updated "${id}": the new permissions are in force on that computer now.`
                 : `Saved. "${id}" is offline; the new permissions apply the moment it reconnects.`,
         };
     },

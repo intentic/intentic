@@ -10,7 +10,7 @@ import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../wor
 import type { AgentRequest } from "./agent.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
 
-/* EVERY RUNTIME IS TOLD THE TREE IS BEHIND — BY WHATEVER SEAM IT HAS. Asserted here rather than in the unit
+/* EVERY RUNTIME IS TOLD THE TREE IS BEHIND: BY WHATEVER SEAM IT HAS. Asserted here rather than in the unit
  * suite because the only way to earn a dependency notice is to have a tree that has earned one.
  *
  * The fact itself is the one a turn cannot deduce and will otherwise be misled by: an unresolved import is the
@@ -21,7 +21,7 @@ import { planTurn, type TurnContext } from "./turn-plan.js";
  * WHAT DIFFERS PER RUNTIME IS THE DELIVERY, on the rule this function already applies to the worktree note: a
  * note is second-best to a mechanism, and belongs only where the mechanism cannot go. A `full` runtime is handed
  * readiness TOOLS and two hooks that fire on a real failure, each addressed to the turn that actually went near
- * a drifted project — so pushing the paragraph as well would charge every other turn in the conversation for
+ * a drifted project, so pushing the paragraph as well would charge every other turn in the conversation for
  * three facts it never needed, on every turn, for as long as the drift lasted. The native runtimes have no seam
  * for either, so for them the paragraph is still the whole of the defence and still arrives.
  *
@@ -31,7 +31,7 @@ import { planTurn, type TurnContext } from "./turn-plan.js";
  */
 
 // The harness arm's credential resolution, which is a question about the owner's accounts rather than about the
-// tree — stubbed so the Claude case below can reach the part this file is actually asserting on. The native arms
+// tree: stubbed so the Claude case below can reach the part this file is actually asserting on. The native arms
 // never call it.
 vi.mock("./harness-credentials.js", () => ({
     resolveHarnessCredentials: async () => ({ ok: true, credentials: { oauthToken: "***", account: "acc-1" } }),
@@ -46,7 +46,7 @@ const workspaceWithMissingDeps = async (): Promise<string> => {
 };
 
 /* An ISOLATED turn's tree as the DAEMON reaches it: the source is checked out, and every installed dependency
- * is an empty directory. That is not a broken worktree, it is the ordinary one — the real tree arrives as an
+ * is an empty directory. That is not a broken worktree, it is the ordinary one: the real tree arrives as an
  * overlay mounted inside the turn's own namespace (agents/worktrees.ts), which the daemon is not in. */
 const daemonSideWorktree = async (): Promise<string> => {
     const worktree = await mkdtemp(join(tmpdir(), "turn-plan-wt-"));
@@ -77,7 +77,7 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        // Every turn resolves a persona now, above the provider split, so every arm below reaches this — a
+        // Every turn resolves a persona now, above the provider split, so every arm below reaches this: a
         // workspace with no cards is the open attended posture these tests already assume.
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
         // A measurement seam, not a behavioural one: pass the work through and time nothing.
@@ -97,7 +97,7 @@ const promptOf = async (services: Services, turn: AgentTurn, context: TurnContex
     return (plan as { request: AgentRequest }).request.prompt;
 };
 
-/* The harness arm, which is the one that got the mechanism — and so the one that must no longer get the prose.
+/* The harness arm, which is the one that got the mechanism, and so the one that must no longer get the prose.
  *
  * A workspace this size regularly sits a few packages behind for hours at a time, and the paragraph was
  * re-stapled to the front of every message in every conversation for the whole of it. Nothing in it was untrue;
@@ -158,7 +158,7 @@ test("a resumed native session is not charged the same dependency paragraph on e
     expect(prompt).toBe("do the thing");
 });
 
-test("a native Grok turn hears it too — the note belongs to the tree, not to the runtime", async () => {
+test("a native Grok turn hears it too: the note belongs to the tree, not to the runtime", async () => {
     const root = await workspaceWithMissingDeps();
     const services = servicesIn(root, {
         openCode: unstubbed<Services["openCode"]>("openCode", {
@@ -188,7 +188,7 @@ test("an installed tree earns no notice, so an ordinary turn is the user's messa
 
 /* THE PROBE HAS TO ASK ABOUT THE TREE THE TURN RESOLVES THROUGH, which for an isolated turn is never the
  * worktree the daemon can see. Everything a worktree's imports resolve through is mounted into the turn's own
- * namespace and is an empty directory anywhere else — so a probe run daemon-side found the marker, walked it,
+ * namespace and is an empty directory anywhere else, so a probe run daemon-side found the marker, walked it,
  * found nothing, and declared the whole workspace uninstalled. Against this repository that was 663 phantom
  * dependencies and three paragraphs of untrue instruction in front of every isolated turn, telling the model to
  * distrust type errors that were fine and to expect imports to fail that did not. */
@@ -203,7 +203,7 @@ test("an isolated turn is not told its dependencies are missing just because the
 
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(main, await daemonSideWorktree()));
 
-    // Neither half of it — a worktree read daemon-side has the marker, so it earns the STALE wording rather
+    // Neither half of it: a worktree read daemon-side has the marker, so it earns the STALE wording rather
     // than the never-installed one, and that is the half nothing was anchored on.
     expect(prompt).not.toContain(STALE_NOTICE_HEADER);
     expect(prompt).not.toContain(SETUP_NOTICE_HEADER);

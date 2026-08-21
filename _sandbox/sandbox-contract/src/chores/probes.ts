@@ -463,7 +463,7 @@ export const PROBES: readonly ProbeSpec[] = [
         available: `find ${BUILD_DIRS.join(` `)} -maxdepth 4 -type f \\( -name '*.js' -o -name '*.mjs' -o -name '*.css' \\) 2>/dev/null | head -n 1 | grep -q .`,
         // Says what is missing AND that this never builds, because the obvious reading of "no build output" is
         // that we tried and it failed. The owner running their own build once is the whole fix.
-        unavailable: `no build output on disk — this reads the last build, it never runs one`,
+        unavailable: `no build output on disk, this reads the last build, it never runs one`,
         command: bundleCommand(),
         parse: parseBundle,
     },

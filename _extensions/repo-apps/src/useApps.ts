@@ -48,7 +48,7 @@ export function useApps(repo: Ref<string>) {
         try {
             await api.sandbox.json(`/workspace/repos/${encodeURIComponent(repo.value)}/apps/${encodeURIComponent(app)}/start`, { method: `POST` });
         } catch (err) {
-            await invalidate(); // the optimistic flip was wrong — reconcile to the daemon's truth
+            await invalidate(); // the optimistic flip was wrong: reconcile to the daemon's truth
             throw err;
         }
         void invalidate(); // reconcile previewUrl/healthy in the background; never blocks the caller's terminal open

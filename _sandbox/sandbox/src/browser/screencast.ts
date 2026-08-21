@@ -46,7 +46,7 @@ const CAPTURE_ECHO_MS = 250;
  * floor for a fast box. Being too wide costs nothing a viewer sees: a real change dropped inside the window is
  * re-read by the next capture and arrives sharp instead of blurry, which is what the sweep in
  * screencast.stale.integration.test.ts holds this to. Ceiling at STILL_IDLE_MS below, so that one freak capture
- * on a thrashing box — 5.5 seconds was the worst measured, cannot answer with half a minute of stills only. */
+ * on a thrashing box: 5.5 seconds was the worst measured, cannot answer with half a minute of stills only. */
 const CAPTURE_ECHO_FACTOR = 3;
 /* …EXCEPT THAT A FRAME INSIDE THAT WINDOW IS NOT ALWAYS OURS, and assuming it was is how the view came to lie.
  *

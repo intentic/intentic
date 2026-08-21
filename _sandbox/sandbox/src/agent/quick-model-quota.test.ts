@@ -38,13 +38,13 @@ test("steps over a routed fleet whose every account is spent, and says when it c
     // landing because nothing consulted the number that was already on file.
     const spent = await spentRung(routed({ pool: `Gemini models`, spent: 31, withHeadroom: 0, reopensAt: SECONDS + 3 * 86_400 }), GEMINI, NOW);
 
-    expect(spent?.reason).toBe(`All 31 connected accounts are out of Gemini models allowance — renews in about 3 days.`);
+    expect(spent?.reason).toBe(`All 31 connected accounts are out of Gemini models allowance, renews in about 3 days.`);
     expect(spent?.reopensAt).toBe(SECONDS + 3 * 86_400);
 });
 
 test("asks a routed rung while any one account still has room", async () => {
     // Everything cooling with headroom on file is not a quota problem, so the allowance may not be what steps
-    // over it — that is the refusal's job, and it lasts minutes rather than until a weekly reset.
+    // over it: that is the refusal's job, and it lasts minutes rather than until a weekly reset.
     await expect(spentRung(routed({ spent: 30, withHeadroom: 1 }), GEMINI, NOW)).resolves.toBeUndefined();
 });
 
@@ -76,7 +76,7 @@ test("steps over Claude only when every connected account is at its cap", async 
     const spent = await spentRung(claude({ one: [weekly(100, SECONDS + 7_200)], two: [weekly(100, SECONDS + 3_600)] }), HAIKU, NOW);
 
     // The EARLIEST reset, because either account reopening is enough to unblock the rung.
-    expect(spent?.reason).toBe(`All 2 connected Claude accounts are out of allowance — renews in about 1h.`);
+    expect(spent?.reason).toBe(`All 2 connected Claude accounts are out of allowance, renews in about 1h.`);
     expect(spent?.reopensAt).toBe(SECONDS + 3_600);
 });
 
@@ -87,7 +87,7 @@ test("asks Claude while one account of several still has room", async () => {
 test("a per-model pool at its cap does not retire the whole Claude rung", async () => {
     /* The subtlety that decides whether this feature is safe. A plan's per-model allowance ("Fable", "Opus")
      * arrives under the provider's own display name, and nothing connects that name to the model id this helper
-     * is about to run — so a spent Fable pool says nothing about a cheap Haiku call. Reading it as one allowance
+     * is about to run, so a spent Fable pool says nothing about a cheap Haiku call. Reading it as one allowance
      * would take the most reliable rung in the chain out of service on a limit it does not spend. */
     const account = { one: [weekly(12), { kind: `model:Fable`, label: `Fable`, utilization: 100 }] };
 

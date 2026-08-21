@@ -17,7 +17,7 @@ describe("the readable half", () => {
     });
 
     // A title in a writing system this alphabet cannot carry leaves the random half standing alone, which is
-    // still a perfectly good id — and a better outcome than an address full of percent-encoding.
+    // still a perfectly good id, and a better outcome than an address full of percent-encoding.
     it("falls back to the random half when a title has no letters to give", () => {
         expect(shareStem("日本語のタイトル")).toBe("");
         expect(shareId("日本語のタイトル", "3f9c")).toBe("3f9c");

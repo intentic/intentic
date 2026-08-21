@@ -38,13 +38,13 @@ test("the wait rides beside the token without corrupting the URL", () => {
     expect(targetOf("https://box.example/workflows/wf/gate?token=t", 300)).toBe("https://box.example/workflows/wf/gate?token=t&wait=300");
 });
 
-// The client must outlast the server's hold, so the deadline that fires is the daemon's — which stops the
-// run — and never the client's, which would abandon it mid-spend.
+// The client must outlast the server's hold, so the deadline that fires is the daemon's, which stops the
+// run, and never the client's, which would abandon it mid-spend.
 test("the HTTP timeout is a minute past the gate's own hold", () => {
     expect(clientTimeoutMs(1800)).toBe(1860 * 1_000);
 });
 
-/* THE HAND VALIDATOR AGAINST THE CONTRACT — the one test that pays for this package having no dependencies.
+/* THE HAND VALIDATOR AGAINST THE CONTRACT: the one test that pays for this package having no dependencies.
  * Whatever GateVerdictSchema accepts, readVerdict must accept; if the wire shape ever moves, this is the
  * build that goes red instead of somebody's pipeline going blind. */
 test("readVerdict agrees with the contract's own schema", () => {

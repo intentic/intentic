@@ -3,7 +3,7 @@ import { ModelsSchema, NativeProviderParamSchema } from "../schemas.js";
 
 // EVERY NATIVE PROVIDER'S PICKER CATALOG, ON ONE ROUTE.
 //
-// There were five of these — /claude/models, /codex/models, /grok/models, /kimi/models, /gemini/models, one per
+// There were five of these: /claude/models, /codex/models, /grok/models, /kimi/models, /gemini/models, one per
 // provider, each a contract entry, a route factory and a service field wired separately. They differed in
 // nothing: same method, same output schema, same "the daemon's catalog for this provider, never empty". Three of
 // the five route files were the same fifteen lines with a name swapped, and the daemon paid for that shape twice

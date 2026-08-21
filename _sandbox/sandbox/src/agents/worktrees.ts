@@ -399,7 +399,7 @@ export const createAgentWorktrees = (
                 recorded.map(async ({ repo }) => {
                     const worktree = worktreeDir(id, repo);
                     if (!(await exists(join(worktree, ".git")))) {
-                        return; // Never created, or already retired — nothing to preserve.
+                        return; // Never created, or already retired: nothing to preserve.
                     }
                     // ONE spawn to answer "is there anything to keep", which is the answer in the common case:
                     // a cleanly-landed agent's worktree is already clean, because land committed its remainder.

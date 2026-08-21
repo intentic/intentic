@@ -7,7 +7,7 @@ import { watchDelegationSignals, type DelegationSignalsWatcher } from "./delegat
 import { listSubagentSessions, noteDelegation, resetSubagents, subagentSource, type SubagentTurn } from "./subagents.js";
 
 /* The spool is the codex hook's half of the conversation (codex-config.ts writes the hook; this reads what it
- * drops). The suite writes the same files the hook script produces and asserts the roster heard them — and
+ * drops). The suite writes the same files the hook script produces and asserts the roster heard them, and
  * that the spool is empty afterwards, because a spool that keeps its files re-folds them forever. */
 
 const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: undefined });

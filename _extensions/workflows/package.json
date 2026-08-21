@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-workflows",
     "version": "1.0.0",
-    "description": "Workflows — designed graphs of agent sessions, each producing a declared output, as a first-party intentic extension",
+    "description": "Workflows, designed graphs of agent sessions, each producing a declared output, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-slack",
     "version": "1.0.0",
-    "description": "Slack — the connected workspace as an agent tool, plus the Socket Mode gateway as a baked extension process",
+    "description": "Slack, the connected workspace as an agent tool, plus the Socket Mode gateway as a baked extension process",
     "license": "MIT",
     "private": true,
     "type": "module",

@@ -37,7 +37,7 @@ const LISTING: ListingInput = {
 const SECRET = `probe-secret`;
 const NOW = new Date(`2026-08-17T12:00:00.000Z`);
 
-// DNS that answers public space for everything — the resolve check has its own tests below.
+// DNS that answers public space for everything: the resolve check has its own tests below.
 const publicLookup = vi.fn(async () => [{ address: `93.184.216.34`, family: 4 }] as LookupAddress[]) as unknown as typeof import("node:dns/promises").lookup;
 
 const ndjson = (): string =>
@@ -75,7 +75,7 @@ describe(`the listing rules`, () => {
     });
 
     /* All problems at once, not the first. A provider fixing four things should learn all four in one round
-     * trip — the alternative is four submissions to discover what a published rule could have told them. */
+     * trip: the alternative is four submissions to discover what a published rule could have told them. */
     it(`reports every problem together rather than the first one`, () => {
         const problems = checkListingRules(config, {
             ...LISTING,
@@ -128,7 +128,7 @@ describe(`the conformance probe`, () => {
     });
 
     /* The two checks that are the whole reason the signature exists. An endpoint that answers a forged call
-     * can be billed by anyone on the internet against the provider's own upstream costs — listing it would be
+     * can be billed by anyone on the internet against the provider's own upstream costs: listing it would be
      * doing the provider harm, so it is not admitted however well it serves. */
     it(`fails an endpoint that answers a forged signature`, async () => {
         const verdict = await probeService(

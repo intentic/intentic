@@ -7,7 +7,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities-store.js";
 
-// A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
+// A store over a fresh temp path (the .intentic dir doesn't exist yet: the store must create it on write).
 const tempStore = (): { store: CapabilitiesStore; path: string } => {
     const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "config", "capabilities.json");
     return { store: fileCapabilitiesStore(path), path };
@@ -48,7 +48,7 @@ test("a corrupt or schema-invalid manifest reads as empty rather than throwing",
 test("ONE unreadable entry never takes the rest of the manifest down with it", async () => {
     // The regression that made a rebuild loop: parsing the file as z.array(CapabilitySchema) returned an EMPTY
     // manifest for any single bad entry, so a capability whose config shape changed under it silently erased
-    // devops, docker and every mcp connector too — and the composed overlay collapsed to a bare FROM, which the
+    // devops, docker and every mcp connector too, and the composed overlay collapsed to a bare FROM, which the
     // Environment card then asked the owner to rebuild.
     const invalid: string[] = [];
     const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "config", "capabilities.json");
@@ -58,14 +58,14 @@ test("ONE unreadable entry never takes the rest of the manifest down with it", a
         path,
         JSON.stringify([
             { id: "devops", kind: "devops", config: {} },
-            // A vpn entry in the shape that predates the provider union — unreadable by this daemon.
+            // A vpn entry in the shape that predates the provider union: unreadable by this daemon.
             { id: "office", kind: "vpn", config: { config: "[Interface]\n", enabled: "on" } },
             { id: "linear", kind: "mcp", config: { url: "https://a/mcp" } },
         ]),
     );
 
     expect((await store.list()).map((capability) => capability.id)).toEqual(["devops", "linear"]);
-    // The drop is reported, never silent — a capability vanishing from the UI must be diagnosable.
+    // The drop is reported, never silent: a capability vanishing from the UI must be diagnosable.
     expect(invalid).toEqual(["office"]);
 });
 
@@ -88,7 +88,7 @@ test("an unreadable entry survives writes instead of being quietly deleted", asy
     expect((await store.list()).map((capability) => capability.id)).toEqual(["linear", "office"]);
 });
 
-test("removing an unreadable entry works — the escape hatch when re-adding isn't wanted", async () => {
+test("removing an unreadable entry works: the escape hatch when re-adding isn't wanted", async () => {
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify([{ id: "office", kind: "vpn", config: { config: "[Interface]\n", enabled: "on" } }]));

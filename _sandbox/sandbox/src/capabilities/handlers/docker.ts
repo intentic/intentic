@@ -41,7 +41,7 @@ const DOCKER_DIRECTIVE = `# docker capability: this directive grants dockerd the
  * nvidia-ctk writes /etc/docker/daemon.json at BUILD time rather than the handler doing it at apply time: the
  * file has to be there before dockerd starts, and boot restore starts dockerd without going through apply. */
 const GPU_FRAGMENT = `# docker capability, gpu option: the host's NVIDIA GPUs, passed through to the nested engine.
-# The toolkit registers the nvidia runtime with the dockerd that runs INSIDE this container — the outer
+# The toolkit registers the nvidia runtime with the dockerd that runs INSIDE this container: the outer
 # --gpus below only gets the devices as far as this container's own /dev.
 RUN install -m 0755 -d /etc/apt/keyrings \\
     && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey -o /etc/apt/keyrings/nvidia-container-toolkit.asc \\
@@ -58,7 +58,7 @@ RUN nvidia-ctk runtime configure --runtime=docker
 // actually happened to the ask is SANDBOX_GPU (see gpuState).
 const gpuAsked = (config: unknown): boolean => (config as DockerConfig | undefined)?.gpu === "on";
 
-/* ——— The ENGINE family: options dockerd reads, not the image ————————————————————————————————————————————
+/* --- The ENGINE family: options dockerd reads, not the image --------------------------------------------
  *
  * These land in /etc/docker/daemon.json and take effect on a dockerd restart, seconds, no rebuild, no new
  * image. That is the whole reason they are a separate family from `gpu` (DockerConfigSchema explains the
@@ -171,7 +171,7 @@ const startDockerd = async (ctx: CapabilityCtx): Promise<boolean> => {
             return true;
         }
     }
-    ctx.logger.warn("docker: dockerd did not become ready within 30s — its output is in the panel-docker terminal");
+    ctx.logger.warn("docker: dockerd did not become ready within 30s, its output is in the panel-docker terminal");
     return false;
 };
 
@@ -192,12 +192,12 @@ const applyEngineSettings = async (ctx: CapabilityCtx, config: unknown): Promise
     // node's writeFile, not ctx.files: that service is the WORKSPACE's, and /etc is not the workspace.
     await writeFile(DAEMON_JSON, `${JSON.stringify(next, null, 4)}\n`);
     if (!(await dockerUp())) {
-        return "Engine settings saved — they apply when the Docker Engine starts.";
+        return "Engine settings saved: they apply when the Docker Engine starts.";
     }
     ctx.panels.stop(DOCKER_PANEL_KEY);
     return (await startDockerd(ctx))
-        ? "Engine settings applied — the Docker Engine restarted, so anything it was running has stopped."
-        : "Engine settings saved, but dockerd did not come back within 30s — check the panel-docker terminal.";
+        ? "Engine settings applied: the Docker Engine restarted, so anything it was running has stopped."
+        : "Engine settings saved, but dockerd did not come back within 30s, check the panel-docker terminal.";
 };
 
 /* WHAT BECAME OF THE GPU ASK, the runner's answer, stamped as SANDBOX_GPU by the run contract, because from
@@ -239,9 +239,9 @@ const optionStatuses = async (config: unknown): Promise<CapabilityStatus[]> => {
         return [{ state: "pending", detail: "GPU access: rebuild required" }];
     }
     if (state === "unsupported") {
-        return [{ state: "error", detail: "GPU access: this host's Docker has no nvidia runtime — install nvidia-container-toolkit on it" }];
+        return [{ state: "error", detail: "GPU access: this host's Docker has no nvidia runtime, install nvidia-container-toolkit on it" }];
     }
-    return (await gpuVisible()) ? [] : [{ state: "error", detail: "GPU access: passed through but no device answers — check the host's driver" }];
+    return (await gpuVisible()) ? [] : [{ state: "error", detail: "GPU access: passed through but no device answers, check the host's driver" }];
 };
 
 // An error outranks a pending: of two things to say on one line, the one that will never fix itself wins.
@@ -290,9 +290,9 @@ export const dockerHandler: CapabilityHandler = {
             yield existsSync("/opt/sandbox")
                 ? {
                       kind: "log" as const,
-                      message: `Stored ${id} — this image doesn't carry the Docker Engine yet. Rebuild the sandbox from the Environment card; the engine installs and starts with the rebuild.`,
+                      message: `Stored ${id}, this image doesn't carry the Docker Engine yet. Rebuild the sandbox from the Environment card; the engine installs and starts with the rebuild.`,
                   }
-                : { kind: "log" as const, message: `Stored ${id} — no docker CLI in this dev run; the engine starts in a real sandbox container.` };
+                : { kind: "log" as const, message: `Stored ${id}, no docker CLI in this dev run; the engine starts in a real sandbox container.` };
             return;
         }
         if (await dockerUp()) {
@@ -312,18 +312,18 @@ export const dockerHandler: CapabilityHandler = {
             await applyEngineSettings(ctx, config);
             yield {
                 kind: "log",
-                message: `Stored ${id} — this sandbox isn't running privileged yet. Rebuild it from the Environment card; the Docker Engine starts automatically when it restarts.`,
+                message: `Stored ${id}, this sandbox isn't running privileged yet. Rebuild it from the Environment card; the Docker Engine starts automatically when it restarts.`,
             };
             return;
         }
         await applyEngineSettings(ctx, config);
         yield { kind: "log", message: "Starting the Docker Engine (its output is in the panel-docker terminal)…" };
         if (await startDockerd(ctx)) {
-            yield { kind: "log", message: "Docker Engine up — docker and docker compose now work in the workspace." };
+            yield { kind: "log", message: "Docker Engine up, docker and docker compose now work in the workspace." };
             yield* reportOptions(config);
             return;
         }
-        yield { kind: "log", message: "dockerd did not become ready within 30s — check the panel-docker terminal." };
+        yield { kind: "log", message: "dockerd did not become ready within 30s, check the panel-docker terminal." };
     },
     // The engine's own state first, an option caveat on a card that reads "active" is a caveat; on one that
     // reads "dockerd not running" it is noise in front of the thing actually broken.
@@ -352,7 +352,7 @@ export const startDockerdIfEnabled = async (ctx: CapabilityCtx): Promise<void> =
         return;
     }
     if (!(await privileged())) {
-        ctx.logger.warn("docker: capability enabled but the container is not privileged — rebuild from the Environment card");
+        ctx.logger.warn("docker: capability enabled but the container is not privileged, rebuild from the Environment card");
         return;
     }
     await startDockerd(ctx);

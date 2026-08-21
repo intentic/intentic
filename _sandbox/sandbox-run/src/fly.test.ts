@@ -30,7 +30,7 @@ describe(`flyMachineConfig`, () => {
         ]);
     });
 
-    it(`drops empty env values — an empty secret must not shadow the workspace .env`, () => {
+    it(`drops empty env values, an empty secret must not shadow the workspace .env`, () => {
         const config = flyMachineConfig({
             ...run,
             env: [
@@ -42,7 +42,7 @@ describe(`flyMachineConfig`, () => {
         expect(`HOST_SSH_KEY` in config.env).toBe(false);
     });
 
-    it(`keeps the volume layout under the mount path — the entrypoint's VM mode links onto these`, () => {
+    it(`keeps the volume layout under the mount path, the entrypoint's VM mode links onto these`, () => {
         expect(FLY_VOLUME_LAYOUT.workspace.startsWith(`${FLY_VOLUME_PATH}/`)).toBe(true);
         expect(FLY_VOLUME_LAYOUT.history.startsWith(`${FLY_VOLUME_PATH}/`)).toBe(true);
         expect(FLY_VOLUME_LAYOUT.docker.startsWith(`${FLY_VOLUME_PATH}/`)).toBe(true);

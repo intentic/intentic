@@ -37,7 +37,7 @@ import { type BenchTask, taskFor } from "./agent-tasks.js";
 // How the mainstream harnesses steer delegation: the model keeps every tool and decides for itself when to
 // hand tedious work to a subagent, so its own reasoning context stays on the problem.
 const SUBAGENT_NUDGE = [
-    "Delegate the tedious parts. When a step is mechanical — sweeping the tree, reading many files, gathering facts — spawn a subagent with the Agent tool to do it and report back, so your own context stays on the problem instead of filling with raw output.",
+    "Delegate the tedious parts. When a step is mechanical: sweeping the tree, reading many files, gathering facts, spawn a subagent with the Agent tool to do it and report back, so your own context stays on the problem instead of filling with raw output.",
     "Do the reasoning yourself: decide what is needed and what the results mean. A subagent gathers; it does not decide.",
 ].join("\n\n");
 
@@ -327,7 +327,7 @@ const report = (results: readonly RunResult[]): void => {
             // reason a bare "tokens" number misleads: under prompt caching almost all input arrives as cache
             // reads, so input-plus-output can fall while the context actually fed to the models grows.
             process.stdout.write(
-                `\n${task}: ${arm} vs solo — cost ${delta((result) => result.costUsd)} · fed ${delta(context)} · peak ${delta((result) => result.contextPeak)} · output ${delta((result) => result.outputTokens)} · solved ${solveDelta > 0 ? "+" : ""}${Math.round(solveDelta * 100)}pp\n`,
+                `\n${task}: ${arm} vs solo, cost ${delta((result) => result.costUsd)} · fed ${delta(context)} · peak ${delta((result) => result.contextPeak)} · output ${delta((result) => result.outputTokens)} · solved ${solveDelta > 0 ? "+" : ""}${Math.round(solveDelta * 100)}pp\n`,
             );
         }
     }
@@ -433,7 +433,7 @@ const main = async (): Promise<void> => {
         }
         const token = await promptForToken();
         if (token === "") {
-            process.stderr.write("No token given — nothing to run.\n");
+            process.stderr.write("No token given: nothing to run.\n");
             process.exit(1);
         }
         process.env["CLAUDE_CODE_OAUTH_TOKEN"] = token;
@@ -456,7 +456,7 @@ const main = async (): Promise<void> => {
     const worstCaseMinutes = Math.round((tasks.length * arms.length * options.runs * options.timeoutMs) / 60_000);
     process.stdout.write(
         `imp-bench · ${tasks.length} task(s) × ${arms.length} arm(s) × ${options.runs} run(s) · model=${options.model ?? "account default"}\n` +
-            `timeout ${options.timeoutMs / 1000}s per run — up to ${worstCaseMinutes} min if everything runs long. Ctrl-C is safe; nothing is written outside temp dirs.\n`,
+            `timeout ${options.timeoutMs / 1000}s per run: up to ${worstCaseMinutes} min if everything runs long. Ctrl-C is safe; nothing is written outside temp dirs.\n`,
     );
     for (const task of tasks) {
         process.stdout.write(`\n${task.id}: ${task.title}\n`);

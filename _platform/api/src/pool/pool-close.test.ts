@@ -113,7 +113,7 @@ describe(`month arithmetic`, () => {
         ];
         const split = distribute(10, shares);
 
-        // 10 across three equal earners cannot be equal — but it must still be exactly 10.
+        // 10 across three equal earners cannot be equal, but it must still be exactly 10.
         expect(split.reduce((sum, value) => sum + value, 0)).toBe(10);
         expect(split).toEqual([4, 3, 3]);
     });
@@ -121,7 +121,7 @@ describe(`month arithmetic`, () => {
     it(`distributes nothing when there is nothing to distribute or nobody to receive it`, () => {
         expect(distribute(0, [{ publisher: `a`, amountCents: 100, credits: 0 }])).toEqual([0]);
         expect(distribute(500, [])).toEqual([]);
-        // A month whose earners all rounded to zero has no basis to split by — and must not divide by it.
+        // A month whose earners all rounded to zero has no basis to split by, and must not divide by it.
         expect(distribute(500, [{ publisher: `a`, amountCents: 0, credits: 0 }])).toEqual([0]);
     });
 });
@@ -146,7 +146,7 @@ describe(`closing a month`, () => {
         });
 
         expect(outcome.closed).toBe(true);
-        // Published revenue is what Stripe settled, NOT members × price — the two differ here on purpose.
+        // Published revenue is what Stripe settled, NOT members × price: the two differ here on purpose.
         expect(written.month).toMatchObject({
             month: `2026-07`,
             members: 2,
@@ -225,7 +225,7 @@ describe(`closing a month`, () => {
 
         const outcome = await closeMonth(`2026-07`, { prisma, config, gateway: gatewayWith({ grossCents: 0, feeCents: 0 }), now: () => NOW });
 
-        // A month nobody earned in is still a closed month — skipping it would leave it open forever, and the
+        // A month nobody earned in is still a closed month: skipping it would leave it open forever, and the
         // catch-up loop would retry it every day for as long as the platform runs.
         expect(outcome).toMatchObject({ month: `2026-07`, closed: true, statements: 0, distributedCents: 0 });
         expect(written.month).toMatchObject({ month: `2026-07`, earnedCents: 0, distributedCents: 0 });

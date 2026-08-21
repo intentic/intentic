@@ -5,7 +5,7 @@ import { componentStem, frameworksOf, IDIOM_RULES, idiomRule, UI_FRAMEWORKS, use
  *
  * Most of what is below guards a failure that CANNOT be seen by reading the table: a pattern is interpolated into
  * a shell command that runs on someone else's machine at three in the morning, so a stray quote is not a typo
- * anyone reviews — it is a probe that dies in a workspace nobody is watching, with a shell error for a reason. */
+ * anyone reviews: it is a probe that dies in a workspace nobody is watching, with a shell error for a reason. */
 
 describe(`the patterns are safe to interpolate`, () => {
     // The scan wraps every pattern and glob in shell single quotes. One apostrophe inside ends the quoting and
@@ -29,7 +29,7 @@ describe(`the patterns are safe to interpolate`, () => {
 
     /* Rust's regex crate has no lookaround, and getting it means ripgrep's -P, which is a compile-time option on
      * the box the sweep happens to run on. A rule that seems to need one is asking a question about the FILE
-     * rather than about a line — which is what `absent` is. */
+     * rather than about a line, which is what `absent` is. */
     test(`no pattern uses a lookaround`, () => {
         for (const rule of IDIOM_RULES) {
             expect(rule.pattern, rule.id).not.toMatch(/\(\?<?[=!]/);
@@ -109,7 +109,7 @@ describe(`the name two components share`, () => {
     });
 
     /* The trap in stripping a trailing number. `H1` and `H2` are different components and reduce to the same
-     * single letter, so the stem is only accepted when what survives is still long enough to mean something —
+     * single letter, so the stem is only accepted when what survives is still long enough to mean something:
      * otherwise the untouched name is kept and the two stay apart. */
     test(`short names keep their digits rather than collapsing together`, () => {
         expect(componentStem(`src/type/H1.tsx`)).toBe(`h1`);

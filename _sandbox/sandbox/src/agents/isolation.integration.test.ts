@@ -16,7 +16,7 @@ import {
     nsenterPrefix,
 } from "./isolation.js";
 
-/* The namespace itself needs CAP_SYS_ADMIN, which no test runner is guaranteed to have — so what is asserted
+/* The namespace itself needs CAP_SYS_ADMIN, which no test runner is guaranteed to have, so what is asserted
  * here is the PLAN: the ordering that makes the mounts correct, and the path translation the daemon depends
  * on. A wrong order fails silently at runtime (the agent writes into a tree that looks right), which is
  * exactly the class of bug worth pinning down in a unit test. */
@@ -39,7 +39,7 @@ test("the namespace is made private before anything is mounted", () => {
     const lines = isolationScript(plan).split("\n");
     expect(lines[0]).toBe("set -e");
     expect(lines[1]).toBe("mount --make-rprivate /");
-    // Every mount comes after it — otherwise the "isolated" turn rewrites the daemon's own /work.
+    // Every mount comes after it: otherwise the "isolated" turn rewrites the daemon's own /work.
     expect(lines.findIndex((line) => line.startsWith("mount --bind"))).toBeGreaterThan(1);
 });
 
@@ -53,7 +53,7 @@ test("the main root is bound aside before the worktree shadows it", () => {
 
 test("shared state is re-bound from the aside mount, not from the shadowed path", () => {
     const script = isolationScript(plan);
-    // Sourcing this from /work would name the worktree's own (empty) copy — the mount would succeed and the
+    // Sourcing this from /work would name the worktree's own (empty) copy: the mount would succeed and the
     // agent would silently lose the transcript store. A BIND, not an overlay: a transcript written here has
     // to reach the daemon.
     expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/.intentic`)} ${shellQuote("/work/.intentic")}`);
@@ -67,7 +67,7 @@ test("the reference shelf comes back into the worktree, read-only, and only when
     // call rediscovering that the shelf only exists at MAIN_MOUNT.
     expect(script).toContain(`if [ -d ${shellQuote(`${MAIN_MOUNT}/refs`)} ]; then`);
     expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/refs`)} ${shellQuote("/work/refs")}`);
-    // `ro` is ignored on the bind itself — it takes only on the remount, and the shelf is read-only by contract.
+    // `ro` is ignored on the bind itself: it takes only on the remount, and the shelf is read-only by contract.
     expect(script).toContain(`mount -o remount,bind,ro ${shellQuote("/work/refs")}`);
     // Guarded, because most workspaces have no shelf and `set -e` would kill the namespace over its absence.
     expect(script).toContain(`fi`);
@@ -81,7 +81,7 @@ test("a mirrored tree is an overlay over the main checkout, never a writable bin
     expect(script).toContain(
         `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/node_modules,upperdir=/history/overlays/abc/node_modules/upper,workdir=/history/overlays/abc/node_modules/work`)} ${shellQuote("/work/node_modules")}`,
     );
-    // One layer per mount, keyed by the package path — a nested tree must not share (or nest inside) the
+    // One layer per mount, keyed by the package path: a nested tree must not share (or nest inside) the
     // root's layer, and upper/work must be siblings.
     expect(script).toContain(
         `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/_apps/web/node_modules,upperdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/work`)} ${shellQuote("/work/_apps/web/node_modules")}`,
@@ -90,7 +90,7 @@ test("a mirrored tree is an overlay over the main checkout, never a writable bin
     expect(script).toContain(
         `mkdir -p ${shellQuote("/work/node_modules")} ${shellQuote("/history/overlays/abc/node_modules/upper")} ${shellQuote("/history/overlays/abc/node_modules/work")}`,
     );
-    // Nothing binds a dependency tree any more — a single leftover bind is the whole hole reopened.
+    // Nothing binds a dependency tree any more: a single leftover bind is the whole hole reopened.
     expect(script).not.toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/node_modules`)}`);
     // Build output rides the same mechanism: without it a worktree resolves third-party imports but not its
     // own siblings', and every suite that crosses a package boundary dies at collection.
@@ -101,7 +101,7 @@ test("a mirrored tree is an overlay over the main checkout, never a writable bin
 
 test("a path that would corrupt the overlay option string is refused rather than mounted wrong", () => {
     // The kernel splits these options on "," and ":", so a path carrying either would mount something other
-    // than what was asked for — which is exactly the silent-wrong-tree failure this module exists to prevent.
+    // than what was asked for, which is exactly the silent-wrong-tree failure this module exists to prevent.
     expect(() => isolationScript({ ...plan, overlays: "/history/overlays/a,b" })).toThrow(/cannot contain/);
 });
 
@@ -112,7 +112,7 @@ test("the anchor announces readiness only after the mounts, then becomes the nam
     expect(lines.at(-2)).toBe(`echo ${ANCHOR_READY}`);
     expect(lines.at(-1)).toBe("exec sleep infinity");
     expect(lines.findLastIndex((line) => line.startsWith("mount -t overlay"))).toBeLessThan(lines.length - 2);
-    // `exec`, so the sleep IS the pid nsenter targets — a shell waiting on a child would hold the namespace
+    // `exec`, so the sleep IS the pid nsenter targets: a shell waiting on a child would hold the namespace
     // under a different pid than the one handed out.
     expect(lines.at(-1)?.startsWith("exec ")).toBe(true);
 });
@@ -135,7 +135,7 @@ test("a path the agent reports is translated back to the worktree for the daemon
     expect(inWorktree("/work/intentic/src/x.ts", undefined)).toBe("/work/intentic/src/x.ts");
 });
 
-/* The same mapping backwards, for quoting a daemon-side answer into the conversation — a type diagnostic above
+/* The same mapping backwards, for quoting a daemon-side answer into the conversation: a type diagnostic above
  * all. The worktree path is real and openable, and reaching it directly is what puts a turn's edits outside its
  * own namespace, so a report that names it reads as an instruction to go there. */
 test("a path the daemon reports is translated back to the name the agent uses", () => {
@@ -182,7 +182,7 @@ test("dependency and build-output dirs are discovered shallowest-first so a pare
     await mkdir(join(root, "_libs", "ui", "dist"), { recursive: true });
     // Never descended into: the walk must not plant a mount inside a dependency tree.
     await mkdir(join(root, "node_modules", "pkg", "node_modules"), { recursive: true });
-    // A build CACHE is deliberately not mirrored — main's tsbuildinfo would tell the turn's incremental build
+    // A build CACHE is deliberately not mirrored: main's tsbuildinfo would tell the turn's incremental build
     // that the mirrored dist already covers sources the turn has since changed.
     await mkdir(join(root, "_libs", "ui", ".cache"), { recursive: true });
 
@@ -194,7 +194,7 @@ test("dependency and build-output dirs are discovered shallowest-first so a pare
     ]);
 });
 
-test("a dir the checkout fills is never mirrored — a tracked build output stays the agent's own", async () => {
+test("a dir the checkout fills is never mirrored: a tracked build output stays the agent's own", async () => {
     const root = await mkdtemp(join(tmpdir(), "isolation-"));
     tempDirs.push(root);
     await mkdir(join(root, "_libs", "ui", "dist"), { recursive: true });

@@ -52,7 +52,7 @@ export const parseInputs = (env: Readonly<Record<string, string | undefined>>): 
     try {
         path = new URL(url).pathname;
     } catch {
-        return { kind: "error", message: "the url input is not a URL — paste the door URL exactly as the sandbox hands it out" };
+        return { kind: "error", message: "the url input is not a URL, paste the door URL exactly as the sandbox hands it out" };
     }
     const door = doorOf(path);
     if (door === undefined) {

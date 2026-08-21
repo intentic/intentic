@@ -21,9 +21,9 @@
                         "url": "https://pi.dev",
                         "linkLabel": "About Pi",
                         "steps": [
-                            "Add this capability — it bakes the Pi CLI into the sandbox image (a one-time rebuild).",
+                            "Add this capability: it bakes the Pi CLI into the sandbox image (a one-time rebuild).",
                             "Connect a model: run `pi` in a Terminal and type /login for a Claude/ChatGPT/Copilot subscription, or add API keys as `KEY=VALUE` lines in the environment block.",
-                            "Pick a default model inside Pi with /model — Pi owns its model catalog.",
+                            "Pick a default model inside Pi with /model: Pi owns its model catalog.",
                             "Pi then appears as a provider in the chat's model picker."
                         ]
                     }

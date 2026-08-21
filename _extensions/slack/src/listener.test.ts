@@ -126,7 +126,7 @@ test("a follow-up in a thread the bot already replied in needs no re-tag", async
     const connection = fakeConnection({
         conversations: {
             history: async () => ({ messages: [] }),
-            // The bot is in this thread — so the untagged follow-up is still for it.
+            // The bot is in this thread, so the untagged follow-up is still for it.
             replies: async () => ({ messages: [{ user: SELF, text: "on it", ts: "1.0" }] }),
         },
     });
@@ -201,7 +201,7 @@ test("every envelope is acked, including one we choose not to dispatch", async (
         type: "events_api",
         body: { event: event as never, team_id: "T1" },
     });
-    // An unacked envelope is redelivered three times and then costs the app its socket — so a filtered event
+    // An unacked envelope is redelivered three times and then costs the app its socket, so a filtered event
     // has to be acked exactly as a dispatched one is.
     listener.onEvent(connection, acking(messageEvent({ subtype: "channel_join" }), "join"));
     listener.onEvent(connection, acking(messageEvent({ user: SELF }), "self"));

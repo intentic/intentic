@@ -26,7 +26,7 @@ describe("command classification", () => {
         expect(classifyCommand(command)).toBeUndefined();
     });
 
-    // `echo test` must not read as a test run just because the word appears — the classifier keys on the
+    // `echo test` must not read as a test run just because the word appears: the classifier keys on the
     // command position, not on a substring anywhere in the line.
     test("a check named only as an argument is not evidence", () => {
         expect(classifyCommand("echo test")).toBeUndefined();

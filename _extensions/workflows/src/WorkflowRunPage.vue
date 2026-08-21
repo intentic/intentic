@@ -7,11 +7,11 @@ import { host } from "./host";
 import { STEP_TONE, workflowDag } from "./workflowDag";
 import { useWorkflows } from "./useWorkflows";
 
-/* WATCHING A RUN — the same page shape as the designer, and read-only.
+/* WATCHING A RUN: the same page shape as the designer, and read-only.
  *
  * IT USES DagGraph, NOT DagEditor, and that is the point of there being two: nothing here is editable, so
  * nothing here offers a handle to drag or an edge to click. The graph is the same picture either way because
- * both read `workflowDag` and both draw `WorkflowNodeCard` — a run and the design it came from must not look
+ * both read `workflowDag` and both draw `WorkflowNodeCard`: a run and the design it came from must not look
  * like two different workflows.
  *
  * A run is the longest-lived thing in the product, so the question this answers is not "what happened" but
@@ -20,7 +20,7 @@ import { useWorkflows } from "./useWorkflows";
  *
  * THE STEP PANEL LEADS WITH THE OUTPUT, not the status: by the time you have clicked a node you know its
  * colour, and what you came for is what it decided. The transcript link is last because it is the escape
- * hatch — if the output answered the question you never needed it.
+ * hatch: if the output answered the question you never needed it.
  */
 
 const { run } = defineProps<{ run: WorkflowRun }>();
@@ -68,7 +68,7 @@ const stopRun = async (): Promise<void> => {
 };
 
 /* A step's conversation is an ordinary fleet agent, so its chat is reachable exactly as any other agent's is.
- * This is the door from a block on the diagram to the session log behind it — and it is a real link (appLink),
+ * This is the door from a block on the diagram to the session log behind it, and it is a real link (appLink),
  * so the address is under the pointer and Ctrl/⌘-click opens the log beside the diagram it came from. */
 const chatLink = (conversationId: string) => {
     const path = `/agents/${encodeURIComponent(conversationId)}`;
@@ -140,7 +140,7 @@ const chatLink = (conversationId: string) => {
 
                 <p v-if="shown.document?.reason" class="text-xs text-content">{{ shown.document.reason }}</p>
                 <p v-if="shown.document?.evidence" class="text-2xs text-subtle">{{ shown.document.evidence }}</p>
-                <!-- The step's own last words, only when there is no document to show instead — otherwise the
+                <!-- The step's own last words, only when there is no document to show instead: otherwise the
                      panel says the same thing twice in two registers. -->
                 <p v-else-if="shown.report && shown.document === undefined" class="whitespace-pre-wrap text-xs text-subtle">{{ shown.report }}</p>
 

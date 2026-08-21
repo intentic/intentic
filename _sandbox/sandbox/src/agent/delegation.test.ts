@@ -9,7 +9,7 @@ test("no connected provider means no note", () => {
 test("codex-only note documents codex exec and resume with the hook-trust flag, and no opencode", () => {
     const note = delegationNote({ codexHome: `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex/a1` });
     expect(note).toContain("codex exec --sandbox danger-full-access --dangerously-bypass-hook-trust --skip-git-repo-check");
-    // The resume command carries the flag too — a continued thread reports the same way a fresh one does.
+    // The resume command carries the flag too: a continued thread reports the same way a fresh one does.
     expect(note).toContain("--dangerously-bypass-hook-trust resume <threadId>");
     expect(note).toContain("CODEX_HOME");
     expect(note).not.toContain("opencode");
@@ -19,7 +19,7 @@ test("grok-only note attaches to the warm server under the delegation title, and
     const note = delegationNote({ openCodeUrl: "http://127.0.0.1:4096", grokModel: "grok-4.20-0309-non-reasoning" });
     expect(note).toContain("opencode run --attach http://127.0.0.1:4096 --title intentic-delegation --model xai/grok-4.20-0309-non-reasoning");
     expect(note).toContain("--session <id>");
-    // Attach mode is what replaced the per-command credential prefix — the server holds the credential.
+    // Attach mode is what replaced the per-command credential prefix: the server holds the credential.
     expect(note).not.toContain("XDG_DATA_HOME");
     expect(note).not.toContain("codex exec");
 });

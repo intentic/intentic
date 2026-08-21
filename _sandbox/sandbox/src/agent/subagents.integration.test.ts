@@ -27,7 +27,7 @@ import { delegationIdOfTitle } from "../grok/opencode.js";
 const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: undefined });
 
 // A `task_started` as the SDK delivers it. An override spelled out as `undefined` states that the SDK sent the
-// task WITHOUT that field — the case two of these suites are about — which is why the override map admits
+// task WITHOUT that field: the case two of these suites are about, which is why the override map admits
 // undefined where SubagentTaskMessage's own optional fields do not.
 const started = (over: { [K in keyof SubagentTaskMessage]?: SubagentTaskMessage[K] | undefined } = {}): SubagentTaskMessage =>
     ({
@@ -65,8 +65,8 @@ describe("the SDK's own subagents", () => {
     });
 
     /* THE ONE FACT THE TASK STREAM NEVER CARRIES. A child the parent walked away from is `is_backgrounded` on a
-     * task_updated patch that does not come — a real backgrounded child was watched through birth, work, report
-     * and death without it arriving once — so the spawning tool call is where it comes from instead. The mark is
+     * task_updated patch that does not come: a real backgrounded child was watched through birth, work, report
+     * and death without it arriving once, so the spawning tool call is where it comes from instead. The mark is
      * laid before the record exists, because that is the order the stream has, and it has to reach the BORN
      * frame: no later frame carries the field. */
     it("takes 'backgrounded' from the spawning tool call, onto the frame that announces the child", () => {
@@ -75,7 +75,7 @@ describe("the SDK's own subagents", () => {
         expect(listSubagentSessions()).toMatchObject([{ id: "call-1", background: true }]);
     });
 
-    // And a child the turn blocks on says nothing at all, rather than saying "background: false" — the pill is
+    // And a child the turn blocks on says nothing at all, rather than saying "background: false", the pill is
     // about the one case, and the absent field is what keeps it off every other card.
     it("leaves an unmarked child without the flag", () => {
         expect(noteSubagentTask(turn(), started())).not.toHaveProperty("background");
@@ -83,7 +83,7 @@ describe("the SDK's own subagents", () => {
     });
 
     // The id is the SPAWNING TOOL CALL's, which is what makes the card and the record point at each other with no
-    // correlation step — so a task with no tool_use id has no id to be listed under. The SDK's own note on
+    // correlation step, so a task with no tool_use id has no id to be listed under. The SDK's own note on
     // skip_transcript says as much: an ambient/housekeeping task is not a child anybody started.
     it("skips a task with no tool_use id, and an ambient one", () => {
         expect(noteSubagentTask(turn(), started({ tool_use_id: undefined }))).toBeUndefined();
@@ -93,7 +93,7 @@ describe("the SDK's own subagents", () => {
 
     /* THE BUG THIS SURFACE SHIPPED WITH. The SDK runs one task machine for all of its background work, so a Bash
      * command sent to the background arrives as a task_started with a tool_use id and a description, exactly like
-     * a child does — and the area filled up with shell commands listed as agents, each opening on an empty
+     * a child does, and the area filled up with shell commands listed as agents, each opening on an empty
      * transcript because no per-child JSONL exists for something that was never a child. */
     it("files agent tasks only, not the shell/monitor/workflow work the same stream carries", () => {
         expect(
@@ -105,7 +105,7 @@ describe("the SDK's own subagents", () => {
         // shell commands on this surface. A real child that arrives unlabelled is still adopted by the hooks.
         expect(noteSubagentTask(turn(), started({ tool_use_id: "call-4", subagent_type: undefined }))).toBeUndefined();
         expect(listSubagentSessions()).toEqual([]);
-        // Either field is enough on its own — the Task tool sets subagent_type, the machine's discriminant is
+        // Either field is enough on its own: the Task tool sets subagent_type, the machine's discriminant is
         // task_type, and a child carrying only the latter is still a child.
         expect(noteSubagentTask(turn(), started({ tool_use_id: "call-5", subagent_type: undefined, task_type: "subagent" }))).toMatchObject({
             kind: "subagent",
@@ -126,7 +126,7 @@ describe("the SDK's own subagents", () => {
             }),
         );
         expect(first).toEqual({ kind: "subagent_update", id: "call-1", tokens: 4200, toolUses: 7, lastTool: "Grep" });
-        // Nothing changed the second time, so there is no frame — a client that re-renders per update should not
+        // Nothing changed the second time, so there is no frame: a client that re-renders per update should not
         // be woken by a progress message that said the same thing again.
         expect(
             noteSubagentTask(turn(), {
@@ -181,11 +181,11 @@ describe("the SDK's own subagents", () => {
     });
 });
 
-/* THE PAIRING BETWEEN A CHILD AND THE TOOL CALL THAT SPAWNED IT — the fact the whole transcript door hangs on,
+/* THE PAIRING BETWEEN A CHILD AND THE TOOL CALL THAT SPAWNED IT: the fact the whole transcript door hangs on,
  * and the one this surface shipped without. It was read in the SubagentStart hook, which fires BEFORE the SDK
  * writes the meta file it was being read from, so it never once succeeded; the SubagentStop hook was the only
  * one that ever landed a pairing, and that hook never comes for a backgrounded child whose parent turn ends
- * first — which is the Agent tool's DEFAULT. Every one of those children listed its tokens and its tool count
+ * first, which is the Agent tool's DEFAULT. Every one of those children listed its tokens and its tool count
  * and then opened on "No transcript was recorded", with its JSONL complete on disk. */
 describe("pairing a child to its transcript", () => {
     const meta = (dir: string, agentId: string, body: Record<string, unknown>): Promise<void> =>
@@ -214,12 +214,12 @@ describe("pairing a child to its transcript", () => {
         await meta(dir, "a1b2c3", { toolUseId: "call-1", agentType: "Explore", model: "opus", spawnDepth: 1 });
 
         expect(await subagentAgentId("call-1")).toBe("a1b2c3");
-        // And the rest of the meta rides along — the model and the spawn depth reach the card the same way.
+        // And the rest of the meta rides along: the model and the spawn depth reach the card the same way.
         expect(listSubagentSessions()).toMatchObject([{ id: "call-1", model: "opus", spawnDepth: 1 }]);
     });
 
     // Nothing to scan (no child of this turn ever started, so no hook ever named a directory) and no such
-    // child — both are "no transcript", which is what the surface already draws.
+    // child: both are "no transcript", which is what the surface already draws.
     it("answers nothing for a child it cannot place", async () => {
         noteSubagentTask(turn(), started());
         expect(await subagentAgentId("call-1")).toBeUndefined();
@@ -255,7 +255,7 @@ describe("delegations", () => {
     });
 
     // A resumed thread is the same agent carrying on, so it updates the record it names rather than opening a
-    // second one — and a command that merely MENTIONS a delegation verb is not an agent at all.
+    // second one, and a command that merely MENTIONS a delegation verb is not an agent at all.
     it("takes the thread id off a resume, and ignores a command that only mentions codex", () => {
         noteDelegation(turn(), {
             id: "bash-3",
@@ -280,7 +280,7 @@ describe("delegations", () => {
     /* A BACKGROUNDED DELEGATION'S RESULT ANNOUNCES ITS START, NOT ITS END. Settling on it is a measured lie: a
      * `codex exec` sent to the background was marked completed 0.2 seconds in, and the roster said "done" for
      * the 103 seconds the delegate went on working. So the start message settles nothing and the delegate keeps
-     * counting as one of the children the session is waiting on — the background task's own notification, which
+     * counting as one of the children the session is waiting on: the background task's own notification, which
      * lands when the command exits, is what ends it and carries the report. */
     it("leaves a backgrounded delegation running until its background task reports", () => {
         expect(noteDelegation(turn(), { id: "bash-8", command: "codex exec 'audit the gate'", background: true })).toMatchObject({
@@ -329,7 +329,7 @@ describe("the roster", () => {
     });
 
     // A stopped turn reports no terminal status for the children it was running, so the turn's end is what
-    // settles them — a child left "running" forever is the lie this registry exists to remove.
+    // settles them: a child left "running" forever is the lie this registry exists to remove.
     it("kills whatever is still live when the turn ends", () => {
         noteSubagentTask(turn(), started());
         noteDelegation(turn(), { id: "bash-1", command: "codex exec 'go'", background: false });
@@ -359,7 +359,7 @@ describe("the roster", () => {
     });
 });
 
-/* What the delegate ITSELF reports — the codex hook spool and the warm OpenCode server's events — folded onto
+/* What the delegate ITSELF reports (the codex hook spool and the warm OpenCode server's events) folded onto
  * the records the Bash stream opened. The suite drives the same entry points the transports call
  * (delegation-signals.ts, grok/opencode.ts): nothing here fakes a roster. */
 describe("delegation signals", () => {
@@ -389,7 +389,7 @@ describe("delegation signals", () => {
         spawn("bash-1", true);
         noteDelegationSignal({ delegationId: "bash-1", event: "report", summary: "Ported the module; tests pass." });
         expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "completed", summary: "Ported the module; tests pass." }]);
-        // The background task's exit notification lands minutes later with a stdout digest — the report stands.
+        // The background task's exit notification lands minutes later with a stdout digest: the report stands.
         noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "bash-1", status: "completed", summary: "stdout digest" });
         expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", summary: "Ported the module; tests pass." }]);
     });
@@ -411,7 +411,7 @@ describe("delegation signals", () => {
         expect(() => noteDelegationSignal({ delegationId: "nobody", event: "blocked" })).not.toThrow();
     });
 
-    it("shows what the delegate is doing — a working signal's tool is the record's live line", () => {
+    it("shows what the delegate is doing: a working signal's tool is the record's live line", () => {
         spawn();
         noteDelegationSignal({ delegationId: "bash-1", event: "working", tool: "Bash" });
         expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "running", lastTool: "Bash" }]);
@@ -432,13 +432,13 @@ describe("delegation signals", () => {
         expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "failed", summary: "Looks good.", error: "ERROR: session expired" }]);
     });
 
-    /* THE OPENCODE SESSION IS PAIRED BY NAME, NOT BY TIMING. This replaced a guess — the youngest grok
-     * delegation that did not have a session yet — which two concurrent runs could cross. The title the
+    /* THE OPENCODE SESSION IS PAIRED BY NAME, NOT BY TIMING. This replaced a guess: the youngest grok
+     * delegation that did not have a session yet, which two concurrent runs could cross. The title the
      * PreToolUse rewrite stamps (agent-terminals.ts) carries the spawning call's own id, so it cannot. */
     it("pairs an opencode session with the delegation its title names, even with two running at once", () => {
         noteDelegation(turn(), { id: "grok-1", command: "opencode run --attach http://127.0.0.1:4096 'first'", background: true });
         noteDelegation(turn(), { id: "grok-2", command: "opencode run --attach http://127.0.0.1:4096 'second'", background: true });
-        // Both sessions land, youngest-first — the order that used to hand grok-1's session to grok-2.
+        // Both sessions land, youngest-first: the order that used to hand grok-1's session to grok-2.
         noteDelegationSignal({ delegationId: delegationIdOfTitle("intentic-delegation-grok-1")!, thread: "ses_one", event: "session" });
         noteDelegationSignal({ delegationId: delegationIdOfTitle("intentic-delegation-grok-2")!, thread: "ses_two", event: "session" });
         expect(subagentSource("grok-1")).toMatchObject({ thread: "ses_one" });
@@ -452,7 +452,7 @@ describe("delegation signals", () => {
         ).toEqual(["grok-2"]);
     });
 
-    // A session belonging to nothing this daemon started — the Grok adapter's own turns — carries no id, and
+    // A session belonging to nothing this daemon started (the Grok adapter's own turns) carries no id, and
     // an unnamed session is left alone rather than pinned on whichever delegation happens to be youngest.
     it("reads no delegation out of a title that does not carry one", () => {
         expect(delegationIdOfTitle("some other session")).toBeUndefined();
@@ -487,7 +487,7 @@ describe("waitForSubagent", () => {
         expect(await wait).toMatchObject({ outcome: "blocked", matched: { id: "bash-1", status: "blocked" } });
     });
 
-    it("a blocked flicker still wakes the waiter — the listener runs inside the transition, not after it", async () => {
+    it("a blocked flicker still wakes the waiter: the listener runs inside the transition, not after it", async () => {
         spawn("bash-1");
         const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000 });
         // Blocked and immediately un-blocked, with no await in between: a poll would have missed it.
@@ -496,7 +496,7 @@ describe("waitForSubagent", () => {
         expect(await wait).toMatchObject({ outcome: "blocked" });
     });
 
-    it("with no target, the first of the conversation's children to move settles the wait — other conversations' don't", async () => {
+    it("with no target, the first of the conversation's children to move settles the wait: other conversations' don't", async () => {
         spawn("bash-1");
         noteDelegation(
             { conversationId: "conv-2", cwd: WORKSPACE_ROOT, sessionId: "sess-2", subagentsDir: undefined },
@@ -528,8 +528,8 @@ describe("waitForSubagent", () => {
     });
 
     /* A WAIT THAT CANNOT BE SATISFIED ANSWERS NOW, rather than sleeping out its ten minutes. The candidate set
-     * cannot grow while the wait runs — the only thing that opens a child of this conversation is the turn
-     * parked inside this call — so a set with no live member is already the final answer. Both of these used to
+     * cannot grow while the wait runs: the only thing that opens a child of this conversation is the turn
+     * parked inside this call, so a set with no live member is already the final answer. Both of these used to
      * hold the turn for the full timeout and then say nothing more than they can say here. */
     it("answers immediately when nothing live could ever satisfy the wait", async () => {
         // "any", with no children at all.
@@ -571,7 +571,7 @@ describe("how a subagent ends", () => {
             "t1",
             { signal: new AbortController().signal },
         );
-        // The SDK's exit notification lands afterwards with its own digest of the run — the child's words stand.
+        // The SDK's exit notification lands afterwards with its own digest of the run: the child's words stand.
         noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "call-1", status: "completed", summary: "ran 12 tools" });
         expect(listSubagentSessions()).toMatchObject([{ id: "call-1", status: "completed", summary: "Found it in the reducer." }]);
     });

@@ -3,7 +3,7 @@ import { checks } from "./invariant.js";
 import type { JournalEntry, TurnJournal } from "./turn-journal.js";
 
 /* The window this check exists to close: a turn is running, its journal write was swallowed, and the next
- * container recreate — an update, an environment approval, a dev swap — ends it with nothing to resume from. */
+ * container recreate (an update, an environment approval, a dev swap) ends it with nothing to resume from. */
 
 const fail = (message: string): never => {
     throw new Error(message);
@@ -39,7 +39,7 @@ test("a live turn with no journal entry is named", async () => {
     await expect(run([], [{ conversationId: "c1", startedAt: NOW - 60_000 }])).rejects.toThrow(/1 live turn\(s\).*c1/);
 });
 
-test("a turn younger than the grace is not yet due — the write is queued, not lost", async () => {
+test("a turn younger than the grace is not yet due: the write is queued, not lost", async () => {
     await expect(run([], [{ conversationId: "c1", startedAt: NOW - 1_000 }])).resolves.toBeUndefined();
 });
 

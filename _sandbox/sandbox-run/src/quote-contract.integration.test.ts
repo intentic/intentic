@@ -3,16 +3,16 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { expect, test } from "vitest";
 
-/* NOBODY HAND-ROLLS A QUOTE — enforced by discovery, not by a list.
+/* NOBODY HAND-ROLLS A QUOTE: enforced by discovery, not by a list.
  *
  * The dangerous pattern this repo actually had was one shape, repeated: a secret or operator-supplied value
  * spliced into a command as `'${value}'` or `"${value}"`, on the assumption that it contains no quote of its
- * own. It held until a restic password contained an apostrophe — and then the write either corrupted (a `.env`
+ * own. It held until a restic password contained an apostrophe, and then the write either corrupted (a `.env`
  * value truncated at the quote, so the backups encrypt under a key nobody has) or executed (a `$(…)` past the
  * closing quote of a command a daemon runs on a host as root).
  *
  * Enumerating the sites did not work. A correct POSIX quoter already existed and had been COPIED four times
- * rather than shared, and the first sweep that fixed "every site" still missed seven — including a second
+ * rather than shared, and the first sweep that fixed "every site" still missed seven: including a second
  * `valkey-cli -a '<password>'` one file away from the one it did fix. That is a discovery failure, so the
  * guard is discovery: walk the repo, recognize the shape, and require the file to import the real quoters.
  *
@@ -40,7 +40,7 @@ const COMMENT = /^\s*(?:\/\/|\/\*|\*)/;
 
 const QUOTERS = /@intentic\/sandbox-run\/quote/;
 
-// Not a workspace concern the leaf lib should take a dependency for — the set that matters here is small.
+// Not a workspace concern the leaf lib should take a dependency for: the set that matters here is small.
 const IGNORED_DIRS = new Set(["node_modules", "dist", "build", "coverage", "refs", "public"]);
 
 const walk = async (dir: string): Promise<string[]> => {

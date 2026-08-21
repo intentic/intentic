@@ -17,14 +17,14 @@ description: Run commands and copy files on the connected remote machines over S
 # SSH machines (connected)
 
 Each connected machine is an ssh-config Host alias in \`~/.ssh/intentic-hosts/\`. There is no separate credential
-to manage — \`ssh <alias>\` is already configured (host, user, port, key).
+to manage: \`ssh <alias>\` is already configured (host, user, port, key).
 
 - List connected machines: \`grep -h '^Host ' ~/.ssh/intentic-hosts/*.conf\`
 - Run a command: \`ssh <alias> "uptime"\`
-- Copy a file up: \`scp ./local.txt <alias>:/remote/path\` — down: \`scp <alias>:/remote/path ./\`
+- Copy a file up: \`scp ./local.txt <alias>:/remote/path\`, down: \`scp <alias>:/remote/path ./\`
 - Sync a directory: \`rsync -az ./dir/ <alias>:/remote/dir/\`
 
-If a machine uses password auth, a \`~/.ssh/intentic-hosts/<alias>.pass\` file exists — prefix the command with
+If a machine uses password auth, a \`~/.ssh/intentic-hosts/<alias>.pass\` file exists: prefix the command with
 \`sshpass -f ~/.ssh/intentic-hosts/<alias>.pass\`, e.g. \`sshpass -f ~/.ssh/intentic-hosts/<alias>.pass ssh <alias> "uptime"\`.
 
 Notes: first connect to a machine auto-accepts its host key (accept-new). \`<alias>\` is the name the machine was

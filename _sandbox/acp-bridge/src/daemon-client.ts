@@ -27,7 +27,7 @@ export interface DaemonClient {
 
 const raise = (status: number, body: string): never => {
     if (status === 401) {
-        throw RequestError.authRequired({ details: "The sandbox rejected the bridge token — mint a new one in the sandbox's Sync settings." });
+        throw RequestError.authRequired({ details: "The sandbox rejected the bridge token, mint a new one in the sandbox's Sync settings." });
     }
     throw RequestError.internalError({ details: `sandbox responded ${status}: ${body.slice(0, 300)}` });
 };

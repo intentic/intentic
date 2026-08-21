@@ -3,8 +3,8 @@ import { Icon } from "@intentic/extension-ui";
 import { onMounted, ref, watch } from "vue";
 
 /* DOCX preview: renders a Word document into HTML via docx-preview (lazy-imported so its ~jszip payload stays
- * out of the initial bundle). docx-preview builds DOM nodes programmatically from the OOXML — it does not inject
- * the document's own raw HTML — and we mount it in a container we own, so a workspace .docx can't run script.
+ * out of the initial bundle). docx-preview builds DOM nodes programmatically from the OOXML: it does not inject
+ * the document's own raw HTML, and we mount it in a container we own, so a workspace .docx can't run script.
  * The host (FileViewer) fetches the file's bytes and passes them as `blob`; this component only renders. */
 
 const { blob } = defineProps<{ blob: Blob }>();

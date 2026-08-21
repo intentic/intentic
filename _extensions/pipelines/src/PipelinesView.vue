@@ -36,13 +36,13 @@ const api = host();
 const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
 
 // Opening the view IS reading it: stamp read state so the rail stops flagging breakages now on screen. Only
-// on mount — re-stamping as runs stream in would swallow a failure that lands while the tab sits in the
+// on mount: re-stamping as runs stream in would swallow a failure that lands while the tab sits in the
 // background, which is exactly the one the badge exists for.
 onMounted(() => void markPipelinesSeen());
 
 /* WHICH REPOSITORY THE BOARD IS SCOPED TO LIVES IN THE URL, so "is intentic red" is a link somebody can be sent.
  * Derived from the query rather than mirrored into a ref: one direction of flow, and Back/Forward work for free.
- * Absent means every repository, which is why it is `undefined` rather than a sentinel — the tidy URL is the one
+ * Absent means every repository, which is why it is `undefined` rather than a sentinel: the tidy URL is the one
  * you get by default.
  *
  * A selection the workspace no longer maps is not a scope. It resolves against the standings rather than being
@@ -58,7 +58,7 @@ const scopeRepo = computed<string | undefined>({
 /* WHAT THE BOARD SPENDS A CARD ON. Under "all repositories", a repository with no runs and no webhook warning is
  * a rail row and nothing more: it has one sentence to say and it was saying it in a 112px bordered card, four of
  * which filled the whole first screen above the only repository that runs pipelines at all. A hook warning keeps
- * a runless repository in the body on purpose — it is the explanation for the silence, and hiding the answer
+ * a runless repository in the body on purpose: it is the explanation for the silence, and hiding the answer
  * along with the question is how a board starts lying (repoStandings.ts has the full ranking).
  *
  * Ask for one repository and you get it whatever it has to say, empty state included: that is the answer to the
@@ -66,21 +66,21 @@ const scopeRepo = computed<string | undefined>({
 const sections = computed(() => (scope.value === undefined ? standings.value.filter((standing) => !standing.silent) : [scope.value]));
 const scopedRuns = computed<readonly PipelineRun[]>(() => (scope.value === undefined ? runs.value : scope.value.runs));
 
-/* WHAT THE RAIL LISTS. ONE NUMBER PER ROW, and it is BROKEN BRANCHES — the same edge-not-level rule as the rail
+/* WHAT THE RAIL LISTS. ONE NUMBER PER ROW, and it is BROKEN BRANCHES: the same edge-not-level rule as the rail
  * badge (ciStreaks), so a repository three runs deep in one breakage says "1" and not "3". A repository that is
  * fine says 0, and that zero is worth printing: a board you cannot use to confirm there is nothing wrong is only
- * half a board. But a number is only worth printing where a zero MEANS something — in the silent group nothing
+ * half a board. But a number is only worth printing where a zero MEANS something: in the silent group nothing
  * has ever run, so "0 branches failing" would be a claim about a repository nobody has heard from.
  *
- * The second fact a row could carry — a webhook that never registered, so the numbers beside it may be stale — is
+ * The second fact a row could carry (a webhook that never registered, so the numbers beside it may be stale) is
  * the number's COLOUR rather than a second number, and `standingNote` is where the whole state is spelled out.
  *
  * The vendor glyph rather than a folder: which host a repository is on decides where its runs come from and where
- * "open pipelines" lands, and it is free here — the sections below already carry it.
+ * "open pipelines" lands, and it is free here: the sections below already carry it.
  *
  * The repositories with no runs at all are a LABELLED GROUP at the bottom rather than rows mixed into the list: an
  * empty repository and a healthy one both show nothing, and the heading is what tells them apart. Only that group
- * is named — a heading over everything else would name a distinction nobody is making. */
+ * is named: a heading over everything else would name a distinction nobody is making. */
 const railRow = (standing: RepoStanding): RepoRailRow => ({
     value: standing.repo.repo,
     label: standing.repo.repo,
@@ -106,7 +106,7 @@ const railAll = computed<RepoRailAll>(() => {
     };
 });
 
-// Which jobs keep breaking — free of extra requests, since the rows already load these same job lists.
+// Which jobs keep breaking: free of extra requests, since the rows already load these same job lists.
 const { recurring } = useFailureHistory(scopedRuns);
 // job name → how many runs it has been failing, for the branch a given row belongs to.
 const recurringByBranch = computed(() => {
@@ -122,7 +122,7 @@ const recurringByBranch = computed(() => {
 const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurringByBranch.value.get(`${run.repo}\n${run.branch}`) ?? new Map();
 
 /* Which red rows still carry an open problem. The list is chronological, so without this every failure ever
- * recorded keeps a primary "Fix with agent" — one branch breakage becomes six identical demands, and the run
+ * recorded keeps a primary "Fix with agent": one branch breakage becomes six identical demands, and the run
  * that broke main an hour ago looks exactly like the one a green run closed yesterday. Same rule the rail badge
  * runs on (ciStreaks), applied to the rows instead of the tile. Read off every run rather than the scoped ones:
  * a branch's history is the same history whichever repository the reader happens to be looking at. */
@@ -131,7 +131,7 @@ const superseded = computed(() => supersededBy(runs.value));
 
 /* THE WAY OUT TO THE VENDOR, per repo, and pointed at PIPELINES rather than at the project.
  *
- * The header action used to be one link per host ORIGIN — github.com, gitlab.com — which is the vendor's
+ * The header action used to be one link per host ORIGIN: github.com, gitlab.com, which is the vendor's
  * front door and a level above everything this page shows. Nobody reading a CI board wants github.com; they
  * want the run list for the repo whose red row they are looking at. So the header carries one link per repo
  * and each lands on that repo's pipeline list, which is the same surface this view is a mirror of.
@@ -189,7 +189,7 @@ const act = async (run: PipelineRun, action: typeof rerun | typeof cancel): Prom
     }
 };
 
-// `pick` is set only when the reader used the caret beside this row's button — otherwise the daemon opens the
+// `pick` is set only when the reader used the caret beside this row's button: otherwise the daemon opens the
 // session on the sandbox's agent-run list, which is the ordinary path and the one that stays one click long.
 const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promise<void> => {
     busy.value = actionKey(run);
@@ -198,7 +198,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         const { conversationId } = await fix.mutateAsync({ run, pick });
         // The BOARD with the new card focused, not the agent's diff view: the turn started a second ago and has
         // nothing to review yet, so what the user wants is to watch it work beside their other agents. `?focus`
-        // is the fleet's own deep link — it waits for the card to reach the roster, then selects and reveals it.
+        // is the fleet's own deep link: it waits for the card to reach the roster, then selects and reveals it.
         api.navigate(`/agents?focus=${encodeURIComponent(conversationId)}`);
     } catch (failure) {
         actionError.value = failure instanceof Error ? failure.message : String(failure);
@@ -219,9 +219,9 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                 <span class="mt-1 block text-xs text-muted">
                     Every workspace repo whose remote lands on a connected GitHub/GitLab account is watched: completed pipelines arrive over a
                     webhook, can wake <b>CI automations</b> (see Automations), and land here. <b>Fix with agent</b> starts an isolated agent seeded
-                    with that run's failed jobs' logs and takes you to its card on the Agents board — it stands out on the failure a branch is
+                    with that run's failed jobs' logs and takes you to its card on the Agents board: it stands out on the failure a branch is
                     actually stuck on, and stays quiet on older failures a later green run has already left behind. It opens on the model in Sandbox ▸
-                    Agent ▸ Models; the caret beside it runs one fix on something else. Each row's circles are its stages — click one for that stage's
+                    Agent ▸ Models; the caret beside it runs one fix on something else. Each row's circles are its stages: click one for that stage's
                     jobs, or expand the row for the full job graph.
                 </span>
             </InfoHint>
@@ -245,7 +245,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         </template>
 
         <!-- Only where there is a choice to make. An index over one repository is 16rem of chrome pointing at the
-             only thing on screen — and unlike Maintenance, whose report always carries the workspace root
+             only thing on screen, and unlike Maintenance, whose report always carries the workspace root
              alongside, a workspace with exactly one CI-mapped repo is an ordinary case here. -->
         <template v-if="repos.length > 1" #rail>
             <RepoRail v-model="scopeRepo" :groups="railGroups" :all="railAll" memory="pipelines.repo" />
@@ -253,7 +253,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
 
         <template #detail>
             <div class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
-                <!-- Nothing has come back yet — including the window where the sandbox handshake still gates the
+                <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
                      fetch. Show the board's shape rather than a bare page that is indistinguishable from "you have
                      no repos connected". -->
                 <PipelinesSkeleton v-if="isPending" />
@@ -297,7 +297,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                     <div class="flex flex-col gap-6">
                         <RowGroup v-for="standing in sections" :key="standing.repo.repo" :label="standing.repo.repo">
                             <template #info>
-                                <!-- The REPO itself, not its pipelines — the header action above already owns
+                                <!-- The REPO itself, not its pipelines: the header action above already owns
                                      that rung, and this line's job is to say which project the group is. Text and
                                      destination agree: the words are the project path, the link is the project. -->
                                 <a
@@ -333,7 +333,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                         </RowGroup>
 
                         <p v-if="repos.length === 0" class="py-8 text-center text-sm text-muted">
-                            No workspace repo maps to a connected GitHub/GitLab account — clone a repo from your connected host, or connect the
+                            No workspace repo maps to a connected GitHub/GitLab account: clone a repo from your connected host, or connect the
                             matching capability on the + page.
                         </p>
 

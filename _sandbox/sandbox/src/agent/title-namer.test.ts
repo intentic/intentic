@@ -31,7 +31,7 @@ test("keeps quotes that are part of the name", () => {
 });
 
 /* The action tag reaches the browser's sessionCategory.ts as the kind of work the card is tinted by, so the
- * separator in front of it is normalised rather than taken as written — a model that answered with the right
+ * separator in front of it is normalised rather than taken as written: a model that answered with the right
  * name and a dash still gets its tag read. */
 
 test("normalises whatever separator the model reached for", () => {
@@ -53,7 +53,7 @@ test("returns empty for a reply with nothing in it", () => {
 });
 
 /* The pass itself, over a fake registry: only the entry read and the title write matter to these rules, and
- * the quick model is the mock above — what it answers (or that it was never asked) IS each test's subject. */
+ * the quick model is the mock above: what it answers (or that it was never asked) IS each test's subject. */
 
 // The conditions the CLI reports as prose (failure-sentences.ts). Every rule below is asserted over BOTH,
 // because this pass guarded the first alone and the second walked in and took four sessions' names.
@@ -101,7 +101,7 @@ test.each(FAILURE_SENTENCES)("a quick-model reply reading %s never becomes the n
     expect(setTitle).not.toHaveBeenCalled();
 });
 
-test.each(FAILURE_SENTENCES)("a stored title stolen by %s counts as no name — the pass runs again and heals it", async (failure) => {
+test.each(FAILURE_SENTENCES)("a stored title stolen by %s counts as no name: the pass runs again and heals it", async (failure) => {
     const setTitle = vi.fn<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ text: "Auth test flakiness · fix" });
     await nameAgentTitle(servicesWith({ title: failure, titleSource: "model" }, setTitle), "c1", "fix the auth tests");

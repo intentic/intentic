@@ -217,7 +217,7 @@ test("what the gateway watched go by becomes the history a later mention carries
         ),
     );
     await vi.waitFor(() => expect(fake.streamed).toHaveLength(1));
-    // WhatsApp has no history to fetch — the ring holds what came BEFORE this message, and only that.
+    // WhatsApp has no history to fetch: the ring holds what came BEFORE this message, and only that.
     expect(fake.streamed[0]?.["history"]).toEqual([
         { author: { id: "4915222222222", name: "Ada" }, content: "release went out at four", timestamp: "2025-08-13T16:20:30.000Z" },
     ]);

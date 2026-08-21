@@ -244,7 +244,7 @@ export const fileAgentsStore = (path: string): AgentsStore => ({
         try {
             raw = await readFile(path, "utf8");
         } catch {
-            return []; // Absent ⇒ a fresh sandbox — the one case where an empty fleet is the truth.
+            return []; // Absent ⇒ a fresh sandbox: the one case where an empty fleet is the truth.
         }
         let parsed: unknown;
         try {

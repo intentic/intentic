@@ -4,7 +4,7 @@ import { resolveConnections } from "./activity.routes.js";
 
 type Conn = ActivityStatus["connections"][number];
 const conn = (gateway: Conn["gateway"], capabilityId = "discord"): Conn => ({ capabilityId, provider: "discord", gateway });
-const ERROR = "Discord rejected the bot token — check the capability's botToken";
+const ERROR = "Discord rejected the bot token: check the capability's botToken";
 
 // idle = no enabled listener automation: the gateway is up but deliberately not connecting, so every card reads
 // "idle" and no login error is surfaced (there was no login attempt to fail).
@@ -24,7 +24,7 @@ test("lastError rides only a disconnected connection", () => {
     expect(resolved[2]).toEqual({ capabilityId: "d3", provider: "discord", gateway: "connecting" });
 });
 
-// A down connection with nothing in the error log stays a bare "Not listening" — no lastError key at all.
+// A down connection with nothing in the error log stays a bare "Not listening": no lastError key at all.
 test("a disconnected connection with no recorded error carries no lastError", () => {
     const resolved = resolveConnections([conn("disconnected")], false, undefined);
     expect(resolved).toEqual([{ capabilityId: "discord", provider: "discord", gateway: "disconnected" }]);

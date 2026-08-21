@@ -65,14 +65,14 @@ export const resolveCommandSecrets = async (command: string, secrets: SecretAcce
     try {
         registry = await secrets.list();
     } catch {
-        return { refusal: "the secret store could not be read — the reference cannot be resolved; retry, or run the command without it" };
+        return { refusal: "the secret store could not be read, the reference cannot be resolved; retry, or run the command without it" };
     }
     const { text, used, unknown } = resolveSecretReferences(command, registry);
     if (unknown.length > 0) {
         const known = registry.map((secret) => secret.name);
         return {
             refusal:
-                `no stored secret named ${unknown.map((name) => `"${name}"`).join(", ")} — ` +
+                `no stored secret named ${unknown.map((name) => `"${name}"`).join(", ")}: ` +
                 (known.length === 0 ? "nothing is stored yet; ask the owner to add it on the Secrets view" : `stored names: ${known.join(", ")}`),
         };
     }

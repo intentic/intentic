@@ -5,7 +5,7 @@ import type { Config } from "../config.js";
 import type { StripeGateway } from "../pool/pool-stripe.js";
 import { draftService, listServices, probeOwnService, publishService, rotateServiceSecret, updateService, withdrawService, type ServiceDeps } from "./creator-services.js";
 
-/* THE PROVIDER'S SIX OPERATIONS, end to end without a network, a Stripe account or a provider — which is the
+/* THE PROVIDER'S SIX OPERATIONS, end to end without a network, a Stripe account or a provider, which is the
  * point of the injectable shape: a whole admission, from draft to live, runs in a millisecond here.
  *
  * What these pin down is the awkward half of the design. Publishing lands in PROBATION rather than listed;
@@ -164,7 +164,7 @@ describe(`a provider listing a service`, () => {
         await expect(draftService(depsOf(prisma), `user-1`, { ...INPUT, name: `x`, creditsPerRun: 9_000 })).rejects.toThrow(/name must be.*price must be/s);
     });
 
-    /* The whole point of the change: passing the gates lists it, with no operator in the loop — and lands it
+    /* The whole point of the change: passing the gates lists it, with no operator in the loop, and lands it
      * in probation, which is what makes saying that safe. */
     it(`goes live into probation the moment the gates pass, with no operator`, async () => {
         const { prisma, services } = fakePrisma();
@@ -201,7 +201,7 @@ describe(`a provider listing a service`, () => {
         await expect(publishService(depsOf(prisma), `user-2`, INPUT.slug)).rejects.toThrow(/no listing called/);
     });
 
-    /* The live-listing cap bounds nothing if drafts are unlimited — unlimited drafts are unlimited rows and
+    /* The live-listing cap bounds nothing if drafts are unlimited: unlimited drafts are unlimited rows and
      * unlimited slugs held out of the namespace. Suspended rows are exempt: they are history somebody's
      * earnings hang off. */
     it(`counts drafts against the per-account cap, but not suspended history`, async () => {
@@ -235,7 +235,7 @@ describe(`a provider changing a live listing`, () => {
         return fake;
     };
 
-    /* An endpoint that can be swapped after admission would make the probe decorative — it proves an
+    /* An endpoint that can be swapped after admission would make the probe decorative: it proves an
      * endpoint, not a promise. The swap costs a re-probe and a fresh trip through probation. */
     it(`drops a live listing back to draft when its endpoint moves`, async () => {
         const { prisma, services } = await live();

@@ -35,7 +35,7 @@ import { linkFields, slugify } from "./note-shape.js";
  * Exit codes as `kb` uses them, because the agent already reasons in them: 0 found something, 1 found nothing,
  * 2 could not run. */
 
-const USAGE = `obsidian — your Obsidian vault, live, through its Local REST API.
+const USAGE = `obsidian: your Obsidian vault, live, through its Local REST API.
 
   obsidian status                is the vault reachable, and may I write to it
   obsidian vaults                every connected vault, by the name --vault takes
@@ -129,7 +129,7 @@ const statusVerb = async (run: Run): Promise<number> => {
         [
             `${run.vault.name}  ${run.vault.url}`,
             `  reachable, ${info.authenticated === false ? "but the key was refused" : "key accepted"}`,
-            `  ${run.vault.write ? "writing is allowed" : "READ ONLY — turn the write switch on in the Obsidian card to change that"}`,
+            `  ${run.vault.write ? "writing is allowed" : "READ ONLY, turn the write switch on in the Obsidian card to change that"}`,
             `  new notes go to ${run.vault.folder === "" ? "the vault root" : run.vault.folder}`,
         ].join("\n"),
     );
@@ -214,7 +214,7 @@ const openVerb = async (run: Run): Promise<number> => {
 // The one gate that matters here. Stated as the switch the owner actually sees, so the agent relays something
 // the person can act on rather than "permission denied".
 const refuseReadOnly = (run: Run, verb: string): number =>
-    fail(run, `this vault is connected read-only — turn on "Let the agent write notes" in the Obsidian card to ${verb}.`);
+    fail(run, `this vault is connected read-only: turn on "Let the agent write notes" in the Obsidian card to ${verb}.`);
 
 const writeVerb = async (run: Run): Promise<number> => {
     if (!run.vault.write) {
@@ -322,7 +322,7 @@ const pullVerb = async (run: Run, root: string): Promise<number> => {
         [
             `${written.length} note${written.length === 1 ? "" : "s"} copied into ${root}`,
             ...written.map((path) => `  ${path}`),
-            ...(failed.length === 0 ? [] : ["could not copy:", ...failed.map((entry) => `  ${entry.file} — ${entry.error}`)]),
+            ...(failed.length === 0 ? [] : ["could not copy:", ...failed.map((entry) => `  ${entry.file}, ${entry.error}`)]),
         ].join("\n"),
     );
     return written.length === 0 ? 1 : 0;
@@ -334,7 +334,7 @@ const pushVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     }
     const names = run.args.positionals.filter((positional) => positional !== "");
     if (names.length === 0) {
-        return fail(run, "which notes? obsidian push <name…> — a title, an alias, a filename or a path.");
+        return fail(run, "which notes? obsidian push <name…>: a title, an alias, a filename or a path.");
     }
     const into = flag(run.args, "into") ?? run.vault.folder;
     const written: string[] = [];
@@ -345,7 +345,7 @@ const pushVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
             // Never a silent miss: what was asked for comes back with the closest names the knowledge folder
             // does hold, which is the difference between a retry and a guess.
             const near = search(index, { query: name, limit: 3 }).map((hit) => hit.path);
-            failed.push({ name, error: `no note by that name${near.length === 0 ? "" : ` — closest: ${near.join(", ")}`}` });
+            failed.push({ name, error: `no note by that name${near.length === 0 ? "" : `, closest: ${near.join(", ")}`}` });
             continue;
         }
         const target = into === "" ? note.path : `${into.replace(/^\/+|\/+$/g, "")}/${note.path}`;
@@ -364,7 +364,7 @@ const pushVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
         [
             `${written.length} note${written.length === 1 ? "" : "s"} copied into the vault`,
             ...written.map((path) => `  ${path}`),
-            ...(failed.length === 0 ? [] : ["could not copy:", ...failed.map((entry) => `  ${entry.name} — ${entry.error}`)]),
+            ...(failed.length === 0 ? [] : ["could not copy:", ...failed.map((entry) => `  ${entry.name}, ${entry.error}`)]),
         ].join("\n"),
     );
     return written.length === 0 ? 1 : 0;
@@ -389,7 +389,7 @@ const main = async (): Promise<number> => {
     const connections = vaultConnections(process.env);
     if (args.verb === "vaults") {
         if (connections.length === 0) {
-            out(json ? JSON.stringify({ vaults: [] }, undefined, 2) : "no Obsidian vault is connected — add the Obsidian card in Capabilities.");
+            out(json ? JSON.stringify({ vaults: [] }, undefined, 2) : "no Obsidian vault is connected, add the Obsidian card in Capabilities.");
             return 1;
         }
         out(
@@ -452,7 +452,7 @@ const main = async (): Promise<number> => {
         }
         case "push": {
             if (files.length === 0) {
-                emit(run, { folder: root, notes: 0 }, `no notes yet in ${root} — nothing to push.`);
+                emit(run, { folder: root, notes: 0 }, `no notes yet in ${root}, nothing to push.`);
                 return 1;
             }
             return await pushVerb(run, buildIndex(files));

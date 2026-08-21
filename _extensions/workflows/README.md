@@ -3,7 +3,7 @@
 Multi-step agent work, designed as a graph and run as one thing.
 
 Where an automation is one trigger and one prompt, a workflow is a sequence: steps that fan out, feed each other,
-and converge — designed on a canvas, saved, and then run with its progress visible per step.
+and converge: designed on a canvas, saved, and then run with its progress visible per step.
 
 ## Responsibilities
 
@@ -20,15 +20,15 @@ and converge — designed on a canvas, saved, and then run with its progress vis
 
 ## Key files
 
-- [src/workflowDraft.ts](src/workflowDraft.ts) — the draft/saved split, and what editing does to it.
-- [src/workflowDag.ts](src/workflowDag.ts) — steps and dependencies as a layout the canvas can draw.
-- [src/workflowEdit.ts](src/workflowEdit.ts) — the edit operations, as pure functions over a draft.
-- [src/templates.ts](src/templates.ts) — the pre-built workflows, and what each is for.
-- [src/useWorkflows.ts](src/useWorkflows.ts) — the list, and the runs against it.
+- [src/workflowDraft.ts](src/workflowDraft.ts): the draft/saved split, and what editing does to it.
+- [src/workflowDag.ts](src/workflowDag.ts): steps and dependencies as a layout the canvas can draw.
+- [src/workflowEdit.ts](src/workflowEdit.ts): the edit operations, as pure functions over a draft.
+- [src/templates.ts](src/templates.ts): the pre-built workflows, and what each is for.
+- [src/useWorkflows.ts](src/useWorkflows.ts): the list, and the runs against it.
 
 ## How it fits
 
-Like automations, workflows are native to every sandbox — no capability to enable — so the view detects
+Like automations, workflows are native to every sandbox (no capability to enable) so the view detects
 unconditionally.
 
 ## Conventions & gotchas
@@ -39,7 +39,7 @@ unconditionally.
   so a stale browser cannot silently overwrite an existing workflow.
 - A model pin is the complete runtime choice: provider, model, account, and harness. Leaving it unpinned inherits
   the workspace's normal unattended model. A step can separately act as a persona; without one it keeps the
-  unattended default — full tools, no logged-in accounts.
+  unattended default: full tools, no logged-in accounts.
 - The gate's webhook token is minted by the daemon on first save and kept across every later edit, so the URL a
   pipeline was taught survives renames and re-pointed fields. Removing the gate revokes it; a future gate gets a
   new one.

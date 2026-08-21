@@ -39,7 +39,7 @@ describe(`runtimeBoundQueryKeys`, () => {
         expect(joined(runtimeBoundQueryKeys())).toEqual(joined(RUNTIME_DOMAIN_BINDINGS.flatMap((binding) => binding.invalidates)));
     });
 
-    it(`leaves no domain declaring no keys — a domain nothing renders has no reason to be pushed`, () => {
+    it(`leaves no domain declaring no keys: a domain nothing renders has no reason to be pushed`, () => {
         expect(RUNTIME_DOMAIN_BINDINGS.filter((binding) => binding.invalidates.length === 0)).toEqual([]);
     });
 });

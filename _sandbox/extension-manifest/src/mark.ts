@@ -50,7 +50,7 @@ export const MARK_FIELDS = {
         .max(ART_MAX_BYTES)
         .optional()
         .describe(
-            "This extension's own mark, as a complete SVG document inline — the tier an author controls fully. Give it a viewBox and let it fill its own square edge to edge; it is drawn as the tile, not as a glyph on a plate. Kept as readable SVG text (not base64) so a registry reviewer can see what they are publishing, drawn inert so it cannot script the page, and capped at 4 KB. Anything that does not parse as SVG falls back to `logo`, then `icon`, then initials.",
+            "This extension's own mark, as a complete SVG document inline: the tier an author controls fully. Give it a viewBox and let it fill its own square edge to edge; it is drawn as the tile, not as a glyph on a plate. Kept as readable SVG text (not base64) so a registry reviewer can see what they are publishing, drawn inert so it cannot script the page, and capped at 4 KB. Anything that does not parse as SVG falls back to `logo`, then `icon`, then initials.",
         ),
     // A simple-icons slug (https://cdn.simpleicons.org/<slug>). A "/<hex>" suffix forces a colour for marks
     // that vanish against the surface they land on (github's near-black).
@@ -58,13 +58,13 @@ export const MARK_FIELDS = {
         .string()
         .optional()
         .describe(
-            'A simple-icons slug, fetched from a CDN — right for standing in for somebody else\'s product. Add a "/<hex>" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.',
+            'A simple-icons slug, fetched from a CDN: right for standing in for somebody else\'s product. Add a "/<hex>" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.',
         ),
     // A name from the host's icon set (@intentic/ui IconName), drawn when no simple-icons slug fits.
     icon: z
         .string()
         .optional()
         .describe(
-            "A name from the host's own icon set, drawn when no simple-icons slug fits. It ships in the image, follows the theme and costs no request — what actually carries a first-party extension. An unknown name falls back to initials rather than to a hole.",
+            "A name from the host's own icon set, drawn when no simple-icons slug fits. It ships in the image, follows the theme and costs no request: what actually carries a first-party extension. An unknown name falls back to initials rather than to a hole.",
         ),
 };

@@ -6,7 +6,7 @@ import type { GitRunner } from "@intentic/scaffold";
 import { expect, test } from "vitest";
 import { capabilityRecommendations } from "./recommend.js";
 
-/* The scan exists to make specific failures legible — a compose-backed dev database against a dormant Docker
+/* The scan exists to make specific failures legible: a compose-backed dev database against a dormant Docker
  * Engine, a workspace of GitHub repos against an agent that cannot read one issue. So what these cases hold is
  * that the evidence is found where repos actually sit, that it identifies the right card, that a connected
  * capability stops it, and that a declined one stays declined only while it is answering the same claim. */
@@ -29,7 +29,7 @@ const gitWithRemotes =
         const urls = remotes[dir.split("/").pop() ?? ""] ?? [];
         return { stdout: urls.map((url) => `origin\t${url} (fetch)\norigin\t${url} (push)`).join("\n"), stderr: "" };
     };
-// No repo has a remote — the scan still runs, it just finds nothing to map.
+// No repo has a remote: the scan still runs, it just finds nothing to map.
 const noRemotes = gitWithRemotes({});
 
 const docker: Capability = { id: "docker", kind: "docker", config: { gpu: "off" } };
@@ -47,7 +47,7 @@ test("a compose file loose at the workspace root counts too", async () => {
     expect((await capabilityRecommendations(root, [], [], noRemotes)).map((entry) => entry.evidence)).toEqual(["compose.yaml"]);
 });
 
-test("nothing is recommended once the docker capability is active — the rebuild it asks for already happened", async () => {
+test("nothing is recommended once the docker capability is active: the rebuild it asks for already happened", async () => {
     const root = await workspace({ "intentic/docker-compose.yml": "" });
     expect(await capabilityRecommendations(root, [docker], [], noRemotes)).toEqual([]);
 });
@@ -57,7 +57,7 @@ test("a workspace with no compose file and no remotes recommends nothing", async
     expect(await capabilityRecommendations(root, [], [], noRemotes)).toEqual([]);
 });
 
-test("a dependency's compose file is not the user's stack — node_modules and dot-dirs are skipped", async () => {
+test("a dependency's compose file is not the user's stack, node_modules and dot-dirs are skipped", async () => {
     const root = await workspace({ "intentic/node_modules/some-pkg/docker-compose.yml": "", ".cache/compose.yml": "" });
     expect(await capabilityRecommendations(root, [], [], noRemotes)).toEqual([]);
 });

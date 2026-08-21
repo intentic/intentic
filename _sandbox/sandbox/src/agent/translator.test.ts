@@ -39,12 +39,12 @@ test("a run that stayed up resets the ladder", () => {
 });
 
 /* ONE REQUEST MAY NOT COST THE WHOLE FLEET. CLIProxyAPI retries a refusal on the next credential, and its own
- * default (0) means "every auth file you hold" — correct only if a refusal is always about the account it came
+ * default (0) means "every auth file you hold": correct only if a refusal is always about the account it came
  * from. Google's is not: it answers a request it objects to with the same RESOURCE_EXHAUSTED as a spent quota,
  * so one unservable request walked all 31 connected accounts, 44–62 upstream calls, ~60 seconds, every one of
  * them at ~0% utilization.
  *
- * Asserted on the rendered file because that is the only surface this repo owns — the walk happens inside a
+ * Asserted on the rendered file because that is the only surface this repo owns: the walk happens inside a
  * separate binary that reads it. A missing key is not a neutral omission here: it unmarshals to Go's zero, which
  * is the unbounded walk, which is how this went unnoticed. */
 test("bounds how many accounts one request may be retried on", () => {
@@ -103,7 +103,7 @@ test("starts Google's redirect login through CLIProxyAPI Antigravity auth URL", 
     });
 });
 
-/* A PROXY THAT DIDN'T ANSWER IS TWO DIFFERENT SITUATIONS, and the user's next move differs in each — so the
+/* A PROXY THAT DIDN'T ANSWER IS TWO DIFFERENT SITUATIONS, and the user's next move differs in each, so the
  * pair is pinned together. This used to be one test asserting the rebuild sentence for BOTH, which is how a
  * sandbox whose translator was merely mid-boot told its owner to go and rebuild the image: slow, and it changes
  * nothing, because the binary was there all along. Only the absence of the binary earns that instruction. */
@@ -130,8 +130,8 @@ test("asks the user to wait when the translator is present but not answering yet
     await expect(failure).rejects.not.toThrow(TRANSLATOR_BINARY_MISSING);
 });
 
-// The other half of "unreachable is not empty" — that a proxy which cannot be asked still yields the accounts on
-// disk — needs a real auth-dir, so it lives in translator.integration.test.ts under the budget for suites that
+// The other half of "unreachable is not empty": that a proxy which cannot be asked still yields the accounts on
+// disk: needs a real auth-dir, so it lives in translator.integration.test.ts under the budget for suites that
 // touch the machine.
 
 test("completes Google's redirect login via oauth-callback", async () => {
@@ -211,7 +211,7 @@ test("projects CLIProxyAPI's Kimi auth files as connected subscription accounts"
 
 /* The routed accounts' quota path, end to end through the client. Two things are being pinned, and they are the
  * two that were actually broken: the rows have to carry `usage` at all (a green dot for a spent account is the
- * bug this exists to fix), and reading them must never put an upstream round-trip on `accounts` — which is the
+ * bug this exists to fix), and reading them must never put an upstream round-trip on `accounts`, which is the
  * routed-turn credential gate as well as the settings list. */
 describe("translator subscription usage", () => {
     const cliProxyFetch = (calls: { url: string; body?: Record<string, unknown> }[]) =>
@@ -236,7 +236,7 @@ describe("translator subscription usage", () => {
                             auth_index: "google-index",
                             project_id: "google-project",
                         },
-                        // Grok has no readable quota — it must never reach the api-call path.
+                        // Grok has no readable quota: it must never reach the api-call path.
                         { name: "grok-a.json", provider: "xai", email: "grok@example.com", auth_index: "grok-index" },
                     ],
                 });
@@ -295,13 +295,13 @@ describe("translator subscription usage", () => {
         });
         // The credential-scoped proxy substitutes the token server-side; ours must never travel in the request.
         expect(JSON.stringify(proxied)).not.toContain("management-secret");
-        // Grok is not merely unmapped — it is never asked.
+        // Grok is not merely unmapped: it is never asked.
         expect(proxied.some((call) => call[`auth_index`] === "grok-index")).toBe(false);
         expect(accounts.grok[0]).not.toHaveProperty("usage");
     });
 
     /* `accounts` is the routed-turn credential gate. It answers from the store and SCHEDULES the pull, so the
-     * upstream round-trip can never land on a turn's startup path — the guarantee the earlier split into a
+     * upstream round-trip can never land on a turn's startup path: the guarantee the earlier split into a
      * second "with usage" method existed to provide, now held by the one method everything calls. */
     test("answers from the store and refreshes in the background rather than awaiting upstream", async () => {
         const calls: { url: string; body?: Record<string, unknown> }[] = [];
@@ -325,11 +325,11 @@ describe("translator subscription usage", () => {
         expect((await client.accounts()).codex[0]).toHaveProperty("usage");
     });
 
-    /* WHETHER A SPENT PROVIDER CAN SERVE THIS MODEL, and when it next can — the question a routed 429 leaves
+    /* WHETHER A SPENT PROVIDER CAN SERVE THIS MODEL, and when it next can: the question a routed 429 leaves
      * unanswered, because CLIProxyAPI balances across its whole credential set and reports only the last word on
      * it ("All credentials … are cooling down"), naming no account and carrying no per-account reset. These
      * snapshots are the only place either survives, so the lookup is pinned on the ordering, the abstention,
-     * and — the correction these tests exist for — the POOL the turn's model actually spends. */
+     * and (the correction these tests exist for) the POOL the turn's model actually spends. */
     const filesNamed = (provider: string, names: readonly string[]) =>
         (async (input: string | URL): Promise<Response> =>
             String(input).endsWith("/auth-files")
@@ -372,8 +372,8 @@ describe("translator subscription usage", () => {
     /* THE POOL THE MODEL SPENDS, which is the correction the rest of this rests on.
      *
      * One Google sign-in meters Gemini separately from the Claude and GPT models, on separate clocks. Reading
-     * both as one allowance answered a Claude Opus turn with the GEMINI pool's instant — on a pool that turn
-     * never touched — while the pool it WAS spending still had room. Same store, same account, same moment, two
+     * both as one allowance answered a Claude Opus turn with the GEMINI pool's instant: on a pool that turn
+     * never touched, while the pool it WAS spending still had room. Same store, same account, same moment, two
      * models, two different answers. */
     test("answers from the pool the turn's model spends, not from the account's fullest one", async () => {
         const { store } = memoryStore();
@@ -399,7 +399,7 @@ describe("translator subscription usage", () => {
         });
     });
 
-    /* ONE ACCOUNT WITH ROOM AMONG THIRTY SPENT ONES IS NOT A SPENT PLAN — the translator balances across all of
+    /* ONE ACCOUNT WITH ROOM AMONG THIRTY SPENT ONES IS NOT A SPENT PLAN: the translator balances across all of
      * them, so the one with room can serve the turn. No reset is reported for the same reason: the quota is not
      * what refused it, and naming a wall days out over a cooldown that clears in seconds is the lie this
      * replaces. */

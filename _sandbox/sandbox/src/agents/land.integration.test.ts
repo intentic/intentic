@@ -52,7 +52,7 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     return { work, worktrees, conversation };
 };
 
-test("land applies the delta as UNCOMMITTED main-tree changes — HEAD never moves", async () => {
+test("land applies the delta as UNCOMMITTED main-tree changes: HEAD never moves", async () => {
     const { work, worktrees, conversation } = await setup();
     const head = await sh(work, "rev-parse", "HEAD");
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
@@ -61,7 +61,7 @@ test("land applies the delta as UNCOMMITTED main-tree changes — HEAD never mov
     const result = await landAgent(worktrees, isolatedAgent(conversation.repos));
     expect(result.landed).toBe(true);
     expect(result.changed).toBe(true);
-    // The work arrived, but as plain uncommitted changes — the Changes panel is the review.
+    // The work arrived, but as plain uncommitted changes: the Changes panel is the review.
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one EDITED\nline two\nline three\n");
     expect(await readFile(join(work, "added.ts"), "utf8")).toBe("new file\n");
     expect(await sh(work, "rev-parse", "HEAD")).toBe(head);
@@ -99,7 +99,7 @@ test("incremental: a re-touched file lands its second delta onto the previously-
     const first = await landAgent(worktrees, isolatedAgent(conversation.repos));
     expect(first.landed).toBe(true);
 
-    // Turn 2 edits the SAME file again. Main still holds the landed (uncommitted) copy — the patch context
+    // Turn 2 edits the SAME file again. Main still holds the landed (uncommitted) copy: the patch context
     // matches it, so the second delta applies; a path-overlap test would have false-flagged this.
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three EDITED TOO\n");
     const second = await landAgent(worktrees, isolatedAgent(first.repos));
@@ -131,7 +131,7 @@ test("names only the paths that actually refuse, and counts what would land anyw
 
     const result = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
-    // `git apply` is atomic, so BOTH files are held back — but only one of them is the reason, and saying so
+    // `git apply` is atomic, so BOTH files are held back, but only one of them is the reason, and saying so
     // is the difference between "resolve this file" and a wall of every path the agent ever touched.
     expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 1, mainBranch: "main" }]);
     expect(existsSync(join(work, "added.ts"))).toBe(false);
@@ -139,7 +139,7 @@ test("names only the paths that actually refuse, and counts what would land anyw
 
 /* The stored report is a snapshot of land time, and its `workspace` reason is the one that rots: the user
  * clears their uncommitted copy by COMMITTING, which no land observes. Served verbatim, the old report kept
- * telling them "commit or stash" over a spotless tree — and kept the resolve flow refusing to hand the
+ * telling them "commit or stash" over a spotless tree, and kept the resolve flow refusing to hand the
  * conflict to the agent, though a rebase is now exactly what would fix it. */
 test("a workspace refusal re-derives as diverged once the user commits their edit", async () => {
     const { work, worktrees, conversation } = await setup();
@@ -152,7 +152,7 @@ test("a workspace refusal re-derives as diverged once the user commits their edi
     // While the user's copy is still dirty, the re-derivation agrees with the stored report.
     expect(await outstandingConflicts(worktrees, entry)).toEqual(refusal.conflicts);
 
-    // The user does what the report asked — commits. No land runs, so the STORED report still says
+    // The user does what the report asked: commits. No land runs, so the STORED report still says
     // `workspace`; the re-derivation moves with the world: the same blocker is now a committed divergence.
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "user commits their half");
@@ -176,7 +176,7 @@ test("a refusal whose cause has evaporated re-derives to no conflicts at all", a
 test("blames the moved main line, not the workspace, when the conflict is a committed divergence", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
-    // The main line moves on and COMMITS — the working tree is spotless, so the old dirty-overlap heuristic
+    // The main line moves on and COMMITS: the working tree is spotless, so the old dirty-overlap heuristic
     // found nothing to blame and fell back to naming the entire delta.
     await writeFile(join(work, "app.ts"), "line one MAIN\nline two\nline three\n");
     await sh(work, "add", "-A");
@@ -199,7 +199,7 @@ test("re-anchors on the merge-base, so an agent rebased onto the moved main line
     await writeFile(join(work, "main-only.ts"), "main work\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "main moved");
-    // The user rebases the agent onto it — the natural response to being told main moved on. The branch now
+    // The user rebases the agent onto it: the natural response to being told main moved on. The branch now
     // CONTAINS main's commit, so a delta measured from the frozen base would carry that commit back onto main
     // and fail wholesale, naming files the agent never opened.
     await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "rebase", await sh(work, "rev-parse", "HEAD"));
@@ -212,8 +212,8 @@ test("re-anchors on the merge-base, so an agent rebased onto the moved main line
     expect(await readFile(join(work, "main-only.ts"), "utf8")).toBe("main work\n");
 });
 
-/* The failure this pair exists to prevent: an agent that put its OWN work on the main line — pushed to main,
- * or had the user commit its branch by hand — arriving as a different commit than the one on its branch. The
+/* The failure this pair exists to prevent: an agent that put its OWN work on the main line, pushed to main,
+ * or had the user commit its branch by hand: arriving as a different commit than the one on its branch. The
  * merge-base anchor cannot see that (ancestry says the work is unmerged), so the patch re-offers content the
  * main tree already holds and every path of it refuses to apply. Reported as a conflict, that is a dead end:
  * a red card naming files the user never touched, with nothing to resolve and no way to clear it. */
@@ -224,7 +224,7 @@ test("work the agent committed onto the main line itself lands as a no-op instea
     await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
     await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "agent");
-    // The same content reaches main as its OWN commit — identical tree, unrelated sha.
+    // The same content reaches main as its OWN commit: identical tree, unrelated sha.
     await writeFile(join(work, "agent.ts"), "agent work\n");
     await writeFile(join(work, "app.ts"), "line one AGENT\nline two\nline three\n");
     await sh(work, "add", "-A");
@@ -234,15 +234,15 @@ test("work the agent committed onto the main line itself lands as a no-op instea
 
     expect(result.conflicts).toBeUndefined();
     expect(result.landed).toBe(true);
-    // Nothing was applied and nothing was disturbed — main is exactly where its own commit left it.
+    // Nothing was applied and nothing was disturbed: main is exactly where its own commit left it.
     expect(await sh(work, "status", "--porcelain")).toBe("");
     // The tip advances regardless: without it every later land re-offers this same delta forever.
     expect(result.repos[0]?.landedTip).toBe(await sh(conversation.cwd, "rev-parse", "HEAD"));
 });
 
-/* The other road work reaches main without landing: the BRANCH ITSELF gets merged — an agent told to "land
+/* The other road work reaches main without landing: the BRANCH ITSELF gets merged, an agent told to "land
  * on main" runs the merge with its own git, or the user merges the branch by hand. Ancestry then says
- * everything is merged (the merge-base IS the tip), so land rightly applies nothing — but it must still SAY
+ * everything is merged (the merge-base IS the tip), so land rightly applies nothing, but it must still SAY
  * SO: with landedTip left behind, the review counts every file as "not landed" forever, Land now stays armed
  * doing nothing, and a conflict report from before the merge never clears. */
 test("work that reached main by merging the branch advances landedTip as a real outcome", async () => {
@@ -261,7 +261,7 @@ test("work that reached main by merging the branch advances landedTip as a real 
     // A real outcome, not a silent no-op: changed makes the caller persist the tip and clear old conflicts.
     expect(result.changed).toBe(true);
     expect(result.repos[0]?.landedTip).toBe(tip);
-    // Nothing was applied and nothing was disturbed — main is exactly where its merge commit left it.
+    // Nothing was applied and nothing was disturbed: main is exactly where its merge commit left it.
     expect(await sh(work, "status", "--porcelain")).toBe("");
 
     // With the tip recorded, the NEXT land is the true no-op: no frame, no status flip.
@@ -292,7 +292,7 @@ test("merge mode lands every clean path and leaves the diverged one with conflic
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
     await writeFile(join(conversation.cwd, "added.ts"), "brand new\n");
-    // The main line moved on and committed, so the workspace is clean — which is what lets git merge at all.
+    // The main line moved on and committed, so the workspace is clean, which is what lets git merge at all.
     await writeFile(join(work, "app.ts"), "line one MAIN\nline two\nline three\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "main moved");
@@ -316,7 +316,7 @@ test("merge mode declines when the clash is with uncommitted work, because git c
 
     const result = await landAgent(worktrees, isolatedAgent(conversation.repos), "merge");
 
-    // `--3way` goes through the index and refuses on an unstaged path, applying NOTHING — so the honest
+    // `--3way` goes through the index and refuses on an unstaged path, applying NOTHING, so the honest
     // outcome is the same report `check` gives, and the user commits or stashes their copy first.
     expect(result.resolving).toBeUndefined();
     expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
@@ -326,7 +326,7 @@ test("merge mode declines when the clash is with uncommitted work, because git c
 test("a user edit ELSEWHERE in the same file still lands (patch context, not path sets)", async () => {
     const { work, worktrees } = await setup();
     // Far enough apart that the hunks' ±3 context lines never overlap (a 3-line file would make any
-    // same-file edit a context collision — that's the conflict test, not this one).
+    // same-file edit a context collision: that's the conflict test, not this one).
     const lines = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);
     const body = (edits: Record<number, string>): string => `${lines.map((line, index) => edits[index + 1] ?? line).join("\n")}\n`;
     await writeFile(join(work, "app.ts"), body({}));
@@ -341,14 +341,14 @@ test("a user edit ELSEWHERE in the same file still lands (patch context, not pat
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe(body({ 1: "line 1 AGENT", 12: "line 12 USER" }));
 });
 
-test("a delta living only in a NESTED repo lands — root has nothing it can stage, and says so quietly", async () => {
+test("a delta living only in a NESTED repo lands: root has nothing it can stage, and says so quietly", async () => {
     const { work, worktrees } = await setup();
     /* A workspace repo cloned under /work AFTER root's exclude list was derived, which is the state that made
      * this hard: root's `add -A` in the conversation's worktree stages the repo dir as a gitlink, and root's
-     * view of the agent's work is "modified: inner (modified content)" — dirt nothing can stage, because a
+     * view of the agent's work is "modified: inner (modified content)", dirt nothing can stage, because a
      * gitlink moves only when the nested repo's own HEAD does. Root is landed FIRST (the composition is
      * ["root", ...discovered]), so committing on that verdict used to abort the whole land with git's "no
-     * changes added to commit" — a 500 on POST /agents/{id}/land, with the agent's work stranded. Root keeps
+     * changes added to commit": a 500 on POST /agents/{id}/land, with the agent's work stranded. Root keeps
      * the repo out of its commit either way (git/root-repo.ts), so what it has to land stays nothing. */
     const inner = join(work, "inner");
     await mkdir(inner, { recursive: true });
@@ -372,7 +372,7 @@ test("a delta living only in a NESTED repo lands — root has nothing it can sta
 
 /* A RETIRED checkout (an archived agent, or a restored one whose next turn hasn't re-attached it yet) is not
  * "nothing to land": retire commits the worktree's remainder onto agent/<id>, so the branch holds everything
- * and the shared object store makes it readable from the main repo. Skipping the repo — the old behavior —
+ * and the shared object store makes it readable from the main repo. Skipping the repo: the old behavior:
  * returned landed:true having landed NOTHING, which stamped the card Landed over a review still counting
  * every file as pending, with Land now armed and useless. */
 test("a retired checkout still lands: the branch answers for the missing worktree", async () => {
@@ -388,7 +388,7 @@ test("a retired checkout still lands: the branch answers for the missing worktre
     expect(result.changed).toBe(true);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one EDITED\nline two\nline three\n");
     expect(await readFile(join(work, "added.ts"), "utf8")).toBe("new file\n");
-    // The cumulative diffstat still reports — the card's numbers survive the retired checkout.
+    // The cumulative diffstat still reports: the card's numbers survive the retired checkout.
     expect(result.diff.files).toBe(2);
     // landedTip reached the branch tip, so the review stops counting these files as pending.
     expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBe(await sh(work, "rev-parse", "agent/c1"));
@@ -408,7 +408,7 @@ test("a retired checkout with everything landed is a no-op that still reports th
     expect(again.diff.files).toBe(1);
 });
 
-test("a discard fired during an in-flight land queues behind the repo lock — land finishes first", async () => {
+test("a discard fired during an in-flight land queues behind the repo lock: land finishes first", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
 
@@ -452,7 +452,7 @@ test("a discard fired during an in-flight land queues behind the repo lock — l
 test("a fully reverted delta lands as a no-op: landedTip advances, no phantom conflict", async () => {
     const { work, worktrees, conversation } = await setup();
     // Turn 1 edits and commits; turn 2 reverts to the exact base content. tip ≠ base, but the base→tip
-    // patch is EMPTY — `git apply` rejects an empty patch, so without the net-zero branch this range would
+    // patch is EMPTY: `git apply` rejects an empty patch, so without the net-zero branch this range would
     // re-report a conflict (with no paths to resolve) on every future land, forever.
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
@@ -470,9 +470,9 @@ test("a fully reverted delta lands as a no-op: landedTip advances, no phantom co
     expect(again).toMatchObject({ landed: true, changed: false });
 });
 
-/* MEASURE MODE — auto-land off. Everything a land does except touching the main tree: the provenance commit,
+/* MEASURE MODE, auto-land off. Everything a land does except touching the main tree: the provenance commit,
  * the diffstat and the already-in-main bookkeeping all run, and the outstanding delta is reported `held`
- * rather than applied — the caller stamps the card "Ready to land" on it. */
+ * rather than applied: the caller stamps the card "Ready to land" on it. */
 test("measure holds the delta on the branch: nothing applies, tips stay, the diffstat still reports", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
@@ -483,13 +483,13 @@ test("measure holds the delta on the branch: nothing applies, tips stay, the dif
     // A real outcome (the caller persists and flips status on it), but not a landed one and not a refusal.
     expect(result).toMatchObject({ landed: false, changed: true, held: true });
     expect(result.conflicts).toBeUndefined();
-    // The main tree is byte-identical — the whole point of holding.
+    // The main tree is byte-identical: the whole point of holding.
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one\nline two\nline three\n");
     expect(existsSync(join(work, "added.ts"))).toBe(false);
     expect(await sh(work, "status", "--porcelain")).toBe("");
     // The card's numbers stay as current as a landed agent's.
     expect(result.diff).toEqual({ files: 2, insertions: 2, deletions: 1 });
-    // landedTip did NOT advance — the eventual deliberate land carries this exact delta…
+    // landedTip did NOT advance: the eventual deliberate land carries this exact delta…
     expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBeUndefined();
     // …and the provenance commit happened: the worktree's dirty state is safe on agent/c1.
     expect(await sh(conversation.cwd, "status", "--porcelain")).toBe("");
@@ -508,7 +508,7 @@ test("measure still recognizes work that reached main by another road, instead o
     await writeFile(join(conversation.cwd, "agent.ts"), "agent work\n");
     await sh(conversation.cwd, "add", "-A");
     await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "agent");
-    // The same content reaches main as its OWN commit — a held card offering to land this could never do
+    // The same content reaches main as its OWN commit: a held card offering to land this could never do
     // anything, which is the dead end the reverse probe exists to rule out.
     await writeFile(join(work, "agent.ts"), "agent work\n");
     await sh(work, "add", "-A");
@@ -544,7 +544,7 @@ test("deletes and renames land; a conflicted land keeps landedTip so recovery ap
     await writeFile(join(work, "renamed.ts"), "line one USER\nline two\nline three\n");
     const conflicted = await landAgent(worktrees, isolatedAgent(result.repos));
     expect(conflicted.landed).toBe(false);
-    // landedTip did NOT advance for the conflicted repo — Land now retries the exact same delta.
+    // landedTip did NOT advance for the conflicted repo: Land now retries the exact same delta.
     expect(conflicted.repos.find((repo) => repo.repo === "root")?.landedTip).toBe(result.repos.find((repo) => repo.repo === "root")?.landedTip);
     // User resolves (reverts their edit) → recovery lands the pending delta.
     await writeFile(join(work, "renamed.ts"), "line one\nline two\nline three\n");
@@ -554,7 +554,7 @@ test("deletes and renames land; a conflicted land keeps landedTip so recovery ap
 });
 
 /* THE RENAME THAT LANDED HALF-APPLIED. Whole-delta landing has always carried renames correctly (the test
- * above); the SUBSET land did not, and the two only meet when part of a delta is already in the main tree — a
+ * above); the SUBSET land did not, and the two only meet when part of a delta is already in the main tree: a
  * combination nothing covered, which is how this shipped.
  *
  * The mechanism, in one line: the subset was described by PATHS, and `git diff --name-only` names a rename at
@@ -570,7 +570,7 @@ test("a rename landing as part of a half-landed delta leaves no stale source beh
     await sh(conversation.cwd, "add", "-A");
     await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "rename plus a file");
     // Half of the delta reached main by another road, so the whole patch can no longer apply atomically and the
-    // land falls back to carrying only the outstanding remainder — here, the rename.
+    // land falls back to carrying only the outstanding remainder: here, the rename.
     await writeFile(join(work, "already.ts"), "already on main\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "half of it, by hand");
@@ -584,14 +584,14 @@ test("a rename landing as part of a half-landed delta leaves no stale source beh
     expect(existsSync(join(work, "app.ts"))).toBe(false);
 });
 
-// The same subset land carrying an outright DELETION — the other change whose whole content is the removal of a
+// The same subset land carrying an outright DELETION: the other change whose whole content is the removal of a
 // path, and so the other one a pathspec-built patch can silently decline to express.
 test("a deletion landing as part of a half-landed delta removes the file", async () => {
     const { work, worktrees } = await setup();
     await writeFile(join(work, "doomed.ts"), "delete me\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a file to delete");
-    // A checkout taken AFTER that commit, so the branch has the file to delete — setup()'s own predates it.
+    // A checkout taken AFTER that commit, so the branch has the file to delete: setup()'s own predates it.
     const conversation = await worktrees.ensure("c2", []);
     const recorded = { ...isolatedAgent(conversation.repos), id: "c2", branch: "agent/c2" };
     await rm(join(conversation.cwd, "doomed.ts"));
@@ -610,12 +610,12 @@ test("a deletion landing as part of a half-landed delta removes the file", async
 });
 
 /* The classifier's own half of the same defect. A rename-WITH-EDITS probed at its destination alone is a bare
- * file creation, and a creation applies against any tree whatsoever — so the user's conflicting edit to the
+ * file creation, and a creation applies against any tree whatsoever, so the user's conflicting edit to the
  * SOURCE was invisible to the probe and the change got called clean. The probe now spans both legs, which is
  * what lets the pre-image hunks meet the user's copy and refuse.
  *
  * (A 100%-similarity rename is a different case and not a conflict: it carries no hunks, so git renames the
- * user's content to the new path and nothing is lost — which is what `git mv` on a dirty file does too.) */
+ * user's content to the new path and nothing is lost, which is what `git mv` on a dirty file does too.) */
 test("a user edit under a rename-with-edits is a conflict, not a clean change", async () => {
     const { work, worktrees, conversation } = await setup();
     await sh(conversation.cwd, "mv", "app.ts", "moved.ts");
@@ -627,7 +627,7 @@ test("a user edit under a rename-with-edits is a conflict, not a clean change", 
     const result = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
     expect(result.landed).toBe(false);
-    // Reported at the destination — the path the user will go looking for — with their own copy as the cause.
+    // Reported at the destination (the path the user will go looking for) with their own copy as the cause.
     expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "moved.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
     // `check` promises a refusal changes nothing: the user's edit stands and no half-rename was written.
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
@@ -636,7 +636,7 @@ test("a user edit under a rename-with-edits is a conflict, not a clean change", 
 
 /* The review's span, measured the way the diff route now measures it (agent-changes.ts → anchorOf without
  * the landedTip rung). The bug this pins down: an agent whose worktree fast-forwarded onto newer main
- * commits reviewed everything main gained in between as ITS OWN output — one real card showed a hundred
+ * commits reviewed everything main gained in between as ITS OWN output: one real card showed a hundred
  * files of other agents' landed work under "the isolated branch this agent works on". */
 test("a worktree synced onto newer main commits does not review main's work as its own", async () => {
     const { work, conversation } = await setup();
@@ -655,7 +655,7 @@ test("a worktree synced onto newer main commits does not review main's work as i
     expect((await changesAgainstBase(conversation.cwd, base)).map((change) => change.path)).toContain("foreign.ts");
 });
 
-/* The CARD's counter over that same sequence — the half that was still measuring from the frozen base long
+/* The CARD's counter over that same sequence: the half that was still measuring from the frozen base long
  * after the review stopped. The card kept its own `git diff --shortstat base tip`, so a synced worktree
  * reported "336 files · +15604 −4427" on the board over a review listing six files and +446: the difference
  * was every commit main had gained since the checkout, counted as this agent's output. One reading now
@@ -698,7 +698,7 @@ test("after merging main into the branch, land measures from the merge-base, not
     await writeFile(join(work, "long.ts"), lines([0, "one AGENT"], [6, "seven OTHERS"]));
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "someone else");
-    // The agent syncs (merge main into its branch) and keeps working — an edit whose hunk CONTEXT reaches
+    // The agent syncs (merge main into its branch) and keeps working: an edit whose hunk CONTEXT reaches
     // the line someone else changed, which is what made the stale-anchored patch unapplicable.
     await sh(fresh.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "-m", "sync", await sh(work, "rev-parse", "HEAD"));
     await writeFile(join(fresh.cwd, "long.ts"), lines([0, "one AGENT"], [6, "seven OTHERS"], [3, "four AGAIN"]));
@@ -711,7 +711,7 @@ test("after merging main into the branch, land measures from the merge-base, not
 });
 
 /* A DELETION'S DEBRIS. Git tracks no directories, so the folder a deletion empties would sit in the main tree
- * forever — untracked, invisible to every git verb, and the user's to notice. A land takes its own debris with
+ * forever: untracked, invisible to every git verb, and the user's to notice. A land takes its own debris with
  * it: whichever apply path carried the removal, the emptied chain is gone afterwards, and folders the land did
  * NOT empty are never touched. */
 test("a land that deletes a folder's last file takes the emptied chain with it", async () => {
@@ -737,7 +737,7 @@ test("the subset land (part of the delta already in main) also prunes what its r
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "nested");
     const conversation = await worktrees.ensure("c2", []);
-    // The agent deletes the nested file AND edits app.ts — and the user has already applied the app.ts edit
+    // The agent deletes the nested file AND edits app.ts, and the user has already applied the app.ts edit
     // to main by hand, so the bulk check fails, classifyDelta drops that change as already-in-main, and the
     // remainder (the deletion) goes through applyChanges: the subset path.
     await rm(join(conversation.cwd, "src/old/legacy.ts"));

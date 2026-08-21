@@ -25,7 +25,7 @@ test("keeps a refused credential and a spent allowance apart by the prefix each 
 });
 
 /* THE CASE THAT MADE THIS NECESSARY. Kimi answers a spent Kimi Code plan with a 403, and a 403 is what the CLI
- * prints its "Failed to authenticate" prefix over — so the prefix-based classification, which is right about
+ * prints its "Failed to authenticate" prefix over, so the prefix-based classification, which is right about
  * what the CLI has stopped trying, is wrong about what the user must DO. Reading the sentence is what stops the
  * Agent tab from telling someone to reconnect an account in perfect health. */
 test("reads a spent plan in a routed provider's own words, whichever prefix the CLI wrote over it", () => {
@@ -47,8 +47,8 @@ test("ignores the transient throttling the harness retries through by itself", (
 });
 
 /* THE THIRD CONDITION, AND WHY IT NEEDED ONE. An organization that has switched Claude Code off for a seat
- * refuses every turn with a sentence that fits neither predicate above — no usage-limit prefix, and it does not
- * start with "Failed to authenticate" — so the frame went out uncoded and nothing durable was ever written about
+ * refuses every turn with a sentence that fits neither predicate above: no usage-limit prefix, and it does not
+ * start with "Failed to authenticate", so the frame went out uncoded and nothing durable was ever written about
  * it. The account meanwhile authenticates fine and its usage endpoint keeps publishing pools, so the picker went
  * on drawing a full, fresh ring over the one account in the list that could not run anything at all. */
 const SEAT_REVOKED =
@@ -72,12 +72,12 @@ test("does not read a spent plan or a revoked token as a revoked seat", () => {
 
 /* A FOURTH READING, AND THE ONE THAT ACTUALLY SHIPPED A BUG. Nothing was wrong with the provider: the naming
  * pass asked a healthy model to name a session, the opening prompt was too thin to name, and the model asked a
- * question back. Every predicate above passed it — it is neither a spent allowance nor a dead credential — so
+ * question back. Every predicate above passed it: it is neither a spent allowance nor a dead credential, so
  * it was written down as the conversation's name at the highest automatic rank, and the commit box then read
  * that name, prefixed it, and filed `feat: i need more context to name this session…` as a commit subject. */
 const DECLINED_NAMING = "I need more context to name this session. What feature, surface, file, or system does this touch?";
 
-test("reads a model asking for context as no answer at all — the reply that became a commit subject", () => {
+test("reads a model asking for context as no answer at all: the reply that became a commit subject", () => {
     expect(isDeclinedAnswer(DECLINED_NAMING)).toBe(true);
     // The conditions it is NOT: nothing here is a provider's fault, so nothing here should send the user to an
     // account screen or make them wait for a reset.
@@ -104,7 +104,7 @@ test("passes the names and subjects these seams actually exist to collect", () =
     expect(isDeclinedAnswer("Sandbox freezes · fix")).toBe(false);
     expect(isDeclinedAnswer("Commit message drafting · rethink")).toBe(false);
     expect(isDeclinedAnswer("refactor: drop the title-derived commit subject")).toBe(false);
-    // Empty is nothing, not a decline — every caller already treats it as nothing.
+    // Empty is nothing, not a decline: every caller already treats it as nothing.
     expect(isDeclinedAnswer("")).toBe(false);
     expect(isDeclinedAnswer("   ")).toBe(false);
 });

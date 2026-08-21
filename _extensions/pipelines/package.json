@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-pipelines",
     "version": "1.0.0",
-    "description": "Pipelines — CI runs on the workspace repos' GitHub/GitLab remotes, as a first-party intentic extension",
+    "description": "Pipelines, CI runs on the workspace repos' GitHub/GitLab remotes, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

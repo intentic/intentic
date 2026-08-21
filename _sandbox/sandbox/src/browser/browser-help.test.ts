@@ -4,7 +4,7 @@ import { clearBrowserHelp, closeBrowserSession, listBrowserSessions, openBrowser
 
 /* The help-request STATE, without a Chromium: openBrowserSession registers the record from the hook alone (the
  * attach dials a port nothing listens on, and closing the session is what stops it), so everything the /browsers
- * banner renders from — raise, list, clear, and the close-settles-the-waiter guarantee — is assertable here.
+ * banner renders from (raise, list, clear, and the close-settles-the-waiter guarantee) is assertable here.
  * The full drive-a-real-browser seam stays in browser-sessions.integration.test.ts. */
 
 const open = (sessionId: string, server: string): string => {
@@ -16,7 +16,7 @@ const open = (sessionId: string, server: string): string => {
 test("a help request lands on the account's running browser and lists for the banner", async () => {
     const name = open("he1p1111-2222", "reddit-work");
     try {
-        // Addressed by account, not by session name — the tool knows which sign-in it is stuck on.
+        // Addressed by account, not by session name: the tool knows which sign-in it is stuck on.
         expect(raiseBrowserHelp("nobody-connected-this", { requestId: "r0", message: "x", requestedAt: 1 })).toBeUndefined();
         expect(raiseBrowserHelp("reddit-work", { requestId: "r1", message: "please solve the captcha", requestedAt: 1 })).toBe(name);
 
@@ -34,7 +34,7 @@ test("a help request lands on the account's running browser and lists for the ba
 });
 
 /* The browser dying under a parked request must settle it: the parked tool call waits on a PERSON, not on
- * Chromium, so nothing else would ever release it — the turn would sit parked on a banner the close just took
+ * Chromium, so nothing else would ever release it: the turn would sit parked on a banner the close just took
  * down. The settle reads as "not helped", which is the honest account of a browser that closed first. */
 test("closing a browser settles its open help request as not-helped", async () => {
     const name = open("he1p3333-4444", "npmjs-main");

@@ -30,7 +30,7 @@ const props = defineProps<{
     // Job name → consecutive runs it has been failing on this branch. Lifted to the view because it is a fact
     // ACROSS runs, which no single row can see.
     recurring: ReadonlyMap<string, number>;
-    // Whether this failure is the branch's open problem, and — if a later run went green — which one closed it.
+    // Whether this failure is the branch's open problem, and: if a later run went green, which one closed it.
     // Both are cross-run facts too, and together they set how loudly the row asks to be fixed.
     open: boolean;
     superseded: PipelineRun | undefined;
@@ -55,14 +55,14 @@ const actionKey = `${props.run.host}:${props.run.project}:${props.run.runId}`;
 
 const tone = computed(() => STATUS_TONE[props.run.status]);
 const duration = computed(() => formatDuration(props.run.durationSeconds));
-// The commit subject is the headline. Without one, the vendor's own name for an unnamed pipeline — its id —
+// The commit subject is the headline. Without one, the vendor's own name for an unnamed pipeline: its id:
 // beats repeating the branch and sha that the line below already carries.
 const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
 const trigger = computed(() => triggerLabel(props.run.trigger));
 const jobCount = computed(() => stages.value.reduce((total, stage) => total + stage.jobs.length, 0));
 
 /* WHICH MODEL THIS ROW'S FIX WILL SPEND, and the caret that re-points it for this failure alone. Seeded from
- * the sandbox's agent-run list, which is also what the daemon will resolve if nobody touches it — asked of the
+ * the sandbox's agent-run list, which is also what the daemon will resolve if nobody touches it: asked of the
  * host rather than read here, so the two cannot disagree about what a click costs.
  *
  * Per ROW rather than per view: the choice belongs to the failure you are looking at, and the whole reason to
@@ -70,7 +70,7 @@ const jobCount = computed(() => stages.value.reduce((total, stage) => total + st
  * started, so the next fix on the same row opens on the standing list again. */
 const fixModel = useAgentRunPick(() => host().models);
 
-/* WHY THE BUTTON IS QUIET, for a demoted one — a Fix button at Re-run's weight reads as broken otherwise. The
+/* WHY THE BUTTON IS QUIET, for a demoted one: a Fix button at Re-run's weight reads as broken otherwise. The
  * two reasons differ enough to be worth different words: a superseded failure is over, while a failure behind
  * the head of an open breakage is very much alive, just not the run to start from.
  *
@@ -81,8 +81,8 @@ const fixHint = computed<string | undefined>(() => {
         return undefined;
     }
     return props.superseded !== undefined
-        ? `${props.run.branch} has passed since — this failure is history, but you can still start an agent on it`
-        : `Behind a newer failure on ${props.run.branch} — that one is the run to fix`;
+        ? `${props.run.branch} has passed since: this failure is history, but you can still start an agent on it`
+        : `Behind a newer failure on ${props.run.branch}, that one is the run to fix`;
 });
 
 const startFix = (): void => {
@@ -94,7 +94,7 @@ const startFix = (): void => {
 <template>
     <div class="group border-l-4 transition-colors" :class="[tone.rowBorder, expanded ? `bg-content/2` : `hover:bg-content/2`]">
         <!-- Run header row. IT WRAPS, because the pane it lives in is not the window: with the chat panel open
-             this row gets ~450px, and four rigid clusters in a nowrap line simply ran off the side of it — the
+             this row gets ~450px, and four rigid clusters in a nowrap line simply ran off the side of it: the
              stage circles landed on top of the branch name and "Fix with agent" was painted outside the pane. The
              commit line keeps a floor (it is the row's headline, and truncating it to nothing helps nobody) and
              the two right-hand clusters travel together, so what happens instead is a second line. -->
@@ -106,7 +106,7 @@ const startFix = (): void => {
             <!-- Pipeline info. The floor is what decides when this row breaks in two: a flex line wraps on the
                  items' MINIMUM widths, before any of them is allowed to shrink, so a generous floor here spends
                  itself as second lines on rows that had the room all along. 10rem is the commit subject's own
-                 floor — under it there is no headline left to read, which is the point at which stacking wins. -->
+                 floor: under it there is no headline left to read, which is the point at which stacking wins. -->
             <div class="min-w-40 flex-1">
                 <div class="flex items-center gap-2">
                     <a
@@ -120,7 +120,7 @@ const startFix = (): void => {
                     </a>
                     <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" class="shrink-0" />
                     <!-- Qualifies the verdict, so it sits with it: the run failed, and the branch has recovered
-                         since. Links to the green rather than just naming it — checking whether the job that
+                         since. Links to the green rather than just naming it: checking whether the job that
                          failed here even ran there is the one way to catch a "pass" that only skipped it. -->
                     <a
                         v-if="superseded"
@@ -128,7 +128,7 @@ const startFix = (): void => {
                         target="_blank"
                         rel="noopener"
                         class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle hover:text-link"
-                        v-tooltip.top="`${run.branch} went green again in this run — open it to check the job that failed here even ran`"
+                        v-tooltip.top="`${run.branch} went green again in this run: open it to check the job that failed here even ran`"
                     >
                         <Icon name="check-circle" class="text-2xs text-success" />
                         superseded by
@@ -154,7 +154,7 @@ const startFix = (): void => {
             </div>
 
             <!-- The stages and what you can do about them. They wrap between themselves as well, because the
-                 alternative is the stage circles being squeezed to a sliver by two buttons that refuse to shrink —
+                 alternative is the stage circles being squeezed to a sliver by two buttons that refuse to shrink:
                  and the circles are what the row is FOR. `ml-auto` + `justify-end` keeps them to the right of
                  whichever line they land on. -->
             <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
@@ -185,7 +185,7 @@ const startFix = (): void => {
                     </span>
                     <div class="flex items-center gap-1">
                         <!-- Primary only on the branch's open failure. Every other red row keeps the same action at
-                             Re-run's weight: a log entry, not a demand — while the vendor's own re-runs and skipped
+                             Re-run's weight: a log entry, not a demand, while the vendor's own re-runs and skipped
                              jobs mean a green above is evidence, not proof, so the action stays one click away. -->
                         <AgentRunButton
                             v-if="run.status === `failed`"
@@ -236,7 +236,7 @@ const startFix = (): void => {
         <!-- Expanded: the run's job graph -->
         <div v-if="expanded" class="border-t border-line px-4 pb-4 pt-3">
             <!-- The heading is known before the jobs are, so it stays real text and only the graph band is a
-                 placeholder — sized to DagGraph's own floor (150px) so the row settles once, not twice. -->
+                 placeholder: sized to DagGraph's own floor (150px) so the row settles once, not twice. -->
             <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading jobs">
                 <div class="flex items-center justify-between">
                     <span class="text-2xs font-semibold uppercase tracking-wide text-subtle">Job graph</span>
@@ -283,7 +283,7 @@ const startFix = (): void => {
              worth reading whole, and the band in a list of rows can never be that. Its own component instance,
              so the trace pinned in the small one does not follow you in and the pan you leave behind is still
              there when you close. -->
-        <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="`${headline} — job graph`">
+        <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="`${headline}: job graph`">
             <PipelineDagGraph :stages="stages" :recurring="recurring" fill />
         </Modal>
     </div>

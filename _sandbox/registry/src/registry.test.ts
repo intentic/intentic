@@ -113,9 +113,9 @@ describe(`resolveRegistry`, () => {
         expect(resolveRegistry(premium, undefined, REGISTRY)[0]?.tier).toBe(`premium`);
     });
 
-    // Blocked rows must survive the resolve — deleting them is what hides a warning from the people who
+    // Blocked rows must survive the resolve: deleting them is what hides a warning from the people who
     /* The staleness rule the checks ride on: a fact is bound to the sha it was derived from, and a listing
-     * repointed since the last scan renders no checks at all — the honest gap — rather than yesterday's verdict
+     * repointed since the last scan renders no checks at all (the honest gap) rather than yesterday's verdict
      * describing today's pointer. */
     it(`joins checks only when they were derived from the sha the listing still pins`, () => {
         const facts = RegistryFactsSchema.parse({

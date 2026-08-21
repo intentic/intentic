@@ -110,7 +110,7 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
             await deps.agentWorktrees.retire(id, entry.repos, entry.title);
             done[index] = id;
         } catch (error) {
-            deps.logger.warn({ err: error, id }, "agents: archive skipped — worktree retire failed");
+            deps.logger.warn({ err: error, id }, "agents: archive skipped, worktree retire failed");
         }
     };
     await pooled(pending.length, retire);
@@ -158,7 +158,7 @@ export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> =
             await deps.agentWorktrees.remove(entry.id, entry.repos);
             done[index] = entry.id;
         } catch (error) {
-            deps.logger.warn({ err: error, id: entry.id }, "agents: purge skipped — worktree removal failed");
+            deps.logger.warn({ err: error, id: entry.id }, "agents: purge skipped, worktree removal failed");
         }
     });
     const removed = done.filter((id) => id !== undefined);

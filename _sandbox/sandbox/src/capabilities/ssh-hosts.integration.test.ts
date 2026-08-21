@@ -32,7 +32,7 @@ test("the managed dir is a symlink onto the history volume, and its aliases surv
     await linkSshHosts(history);
 
     expect(readFileSync(hostKeyPath("box"), "utf8")).toBe("PRIV\n");
-    // ~/.ssh/config went with the container, so the Include is re-ensured — without it the alias is inert.
+    // ~/.ssh/config went with the container, so the Include is re-ensured: without it the alias is inert.
     expect(readFileSync(join(recreated, ".ssh", "config"), "utf8")).toContain("Include intentic-hosts/*.conf");
 });
 
@@ -45,7 +45,7 @@ test("linkSshHosts repoints a stale link and refuses to replace a real directory
     await linkSshHosts(moved);
     expect(realpathSync(hostsDir())).toBe(realpathSync(join(moved, "ssh-hosts")));
 
-    // A real dir only happens outside the container — the developer's own keys are never clobbered.
+    // A real dir only happens outside the container: the developer's own keys are never clobbered.
     const home = tempHome();
     mkdirSync(join(home, ".ssh", "intentic-hosts"), { recursive: true });
     await expect(linkSshHosts(history)).rejects.toThrow(/not a symlink/);

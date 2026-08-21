@@ -16,7 +16,7 @@ test("leaves an ordinary prompt alone", () => {
     expect(parseRuntimeHistory("Continue.")).toBeUndefined();
 });
 
-/* What the record holds beyond prose — which is the point of seeding from it rather than from a text mirror of
+/* What the record holds beyond prose, which is the point of seeding from it rather than from a text mirror of
  * the client's bubbles. The new runtime is told WHICH files the old one touched and what the user attached, so
  * it can read them itself; tool OUTPUT is deliberately absent, being the bulk of a transcript and re-derivable
  * from the workspace. */
@@ -39,9 +39,9 @@ test("carries the files a turn touched and the files the user attached", () => {
 });
 
 /* THE FEATURE'S CONTRACT, as a test: a row the user PLACED wearing the agent's voice (agents.place) must reach
- * the new runtime spelled exactly like a row the agent genuinely said — the flag is for human readers only, and
+ * the new runtime spelled exactly like a row the agent genuinely said: the flag is for human readers only, and
  * any rendering of it here would hand the agent the one fact the feature exists to withhold. */
-test("renders a placed assistant row identically to a spoken one — the mark never reaches the agent", () => {
+test("renders a placed assistant row identically to a spoken one: the mark never reaches the agent", () => {
     const spoken: RestoredMessage[] = [{ role: "assistant", text: "I checked the tests." }];
     const planted: RestoredMessage[] = [{ role: "assistant", text: "I checked the tests.", placed: true }];
 

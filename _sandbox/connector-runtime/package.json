@@ -1,7 +1,7 @@
 {
     "name": "@intentic/connector-runtime",
     "version": "0.0.0",
-    "description": "The shared gateway runtime for realtime-connector extensions — daemon client, reconcile shell, reply painters and logger, written once instead of per channel",
+    "description": "The shared gateway runtime for realtime-connector extensions, daemon client, reconcile shell, reply painters and logger, written once instead of per channel",
     "license": "MIT",
     "type": "module",
     "private": true,

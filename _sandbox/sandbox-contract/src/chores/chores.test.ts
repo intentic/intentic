@@ -16,7 +16,7 @@ describe(`the chore book's order`, () => {
     });
 
     it(`keeps every chore in the book`, () => {
-        // The sort cannot drop an entry — but a future refactor to a filter-into-groups could, so the count is
+        // The sort cannot drop an entry, but a future refactor to a filter-into-groups could, so the count is
         // pinned to the ids rather than to a number, which says which one went missing.
         expect(new Set(CHORES.map((chore) => chore.id)).size).toBe(CHORES.length);
         expect(CHORES.length).toBe(17);

@@ -21,11 +21,11 @@ vi.mock("./one-shot-gemini.js", () => ({ runGeminiOneShot: (params: { model: str
 
 const { askQuickModel, REFUSED_FOR_MS } = await import("./quick-model.js");
 
-/* WALKING THE CHAIN — the daemon half of the ordered quick model. The contract decides the ORDER (its own
+/* WALKING THE CHAIN: the daemon half of the ordered quick model. The contract decides the ORDER (its own
  * suite pins that); what is testable here is the part only the daemon can do, which is notice that a model
  * refused and ask the next one instead of handing the user a button that did nothing. */
 
-// Two Claude rows and one Gemini row, both providers connected — enough for a pin to name a chain and for Auto
+// Two Claude rows and one Gemini row, both providers connected: enough for a pin to name a chain and for Auto
 // to have a second rung. Every catalog read here is a cached one in production, so asking for all of them is
 // the cheap part.
 const CATALOGS: Record<string, readonly string[]> = {
@@ -36,7 +36,7 @@ const CATALOGS: Record<string, readonly string[]> = {
 
 /* WHICH PROVIDERS' ACCOUNTS THE RECORDED QUOTA SAYS ARE SPENT. The reading itself has its own suite next door
  * (quick-model-quota.test.ts); what these tests are about is what the WALK does with it, so the two seams it
- * reads through are stood up at their thinnest — a fleet is spent or it is not.
+ * reads through are stood up at their thinnest: a fleet is spent or it is not.
  *
  * Default: nothing spent, so every existing test below asks its chain exactly as it always did. */
 const fakeServices = (quickModel: readonly string[], spent: readonly string[] = []): Services =>
@@ -68,16 +68,16 @@ const fakeServices = (quickModel: readonly string[], spent: readonly string[] = 
 
 const signal = (): AbortSignal => new AbortController().signal;
 
-// What the walk billed, in the order it spent it — one entry per model actually asked. Typed off the tracker's
+// What the walk billed, in the order it spent it: one entry per model actually asked. Typed off the tracker's
 // own signature rather than a lookalike, so a record the walk makes and this cannot hold is a type error here.
 type Billed = { op: string; ms: number; fields: PerfFields; failed?: boolean | undefined };
 const timed: Billed[] = [];
 
-/* The refusal memo is module state that outlives a call ON PURPOSE — that is the whole feature — so the clock
+/* The refusal memo is module state that outlives a call ON PURPOSE: that is the whole feature, so the clock
  * is what separates the tests rather than a reset hatch the daemon would never have. Each one starts a full
  * memo-length past the last, by which time anything the previous test left has expired. Measured off the memo
  * itself rather than a number written twice: the window is a tuning knob, and a suite that pinned its own idea
- * of it silently stops isolating its tests the day it is raised — which is exactly what happened when it went
+ * of it silently stops isolating its tests the day it is raised, which is exactly what happened when it went
  * from minutes to hours. Only `Date` is faked: this path has no timers of its own, and faking those would only
  * get in the way of the promises it does have. */
 const BETWEEN_TESTS_MS = REFUSED_FOR_MS + 60 * 60 * 1000;
@@ -90,7 +90,7 @@ beforeEach(() => {
     clock += BETWEEN_TESTS_MS;
     vi.setSystemTime(clock);
     /* RESET, not clear. `clearAllMocks` forgets the CALLS and keeps the queued one-time behaviours, so a
-     * `mockRejectedValueOnce` a test set up but never reached stays armed and fires inside the NEXT test — which
+     * `mockRejectedValueOnce` a test set up but never reached stays armed and fires inside the NEXT test, which
      * reads as that test's own subject failing, several cases away from the one that armed it. Every mock below
      * has its behaviour restored on the next two lines, so there is nothing for a reset to lose. */
     vi.resetAllMocks();
@@ -116,7 +116,7 @@ test("spends the first model in the order and reports nothing skipped", async ()
 test("steps over a spent allowance and answers on the next model down", async () => {
     // The case the whole feature exists for: the account the chat has been running on all afternoon is out, and
     // a commit message is not worth waiting six hours for.
-    oneShot.mockRejectedValueOnce(new Error(`ChatGPT usage limit reached — the allowance is exhausted.`));
+    oneShot.mockRejectedValueOnce(new Error(`ChatGPT usage limit reached: the allowance is exhausted.`));
 
     const answer = await askQuickModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), `draft`, signal());
 
@@ -159,7 +159,7 @@ test("stops the moment the user cancels rather than spending the rest of the cha
 
 test("falls through Auto's own ladder when nothing is pinned", async () => {
     // Auto is an order too, so a sandbox with three accounts keeps its commit messages when the cheapest one is
-    // out — without anybody having opened the settings row. Auto's head on these catalogs is the Gemini row (the
+    // out: without anybody having opened the settings row. Auto's head on these catalogs is the Gemini row (the
     // cheapest tier of the cheapest channel), which is why the refusal is armed on that road.
     geminiOneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
 
@@ -177,7 +177,7 @@ test("says the sandbox has no account rather than failing on a model call", asyn
 });
 
 /* NOT PAYING TWICE FOR THE SAME REFUSAL. What this is worth was measured on a real workspace: a first-pinned
- * model that answered nothing burned 58 seconds before the chain reached one that answered in 7 — and it burned
+ * model that answered nothing burned 58 seconds before the chain reached one that answered in 7, and it burned
  * them again on the next landing, and the one after, because the walk started from the top every time. */
 
 test("a model that just refused is stepped over without being asked again", async () => {
@@ -195,7 +195,7 @@ test("a model that just refused is stepped over without being asked again", asyn
     expect(answer.skipped).toEqual([{ choice: { provider: `codex`, model: `gpt-5.6` }, reason: expect.stringContaining(`usage limit`) }]);
 });
 
-test("asks it again once the memo has run out — an allowance resets and nothing announces it", async () => {
+test("asks it again once the memo has run out: an allowance resets and nothing announces it", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
     await askQuickModel(fakeServices(pinned), `draft`, signal());
@@ -224,7 +224,7 @@ test("an answer clears the memo, so a recovered model keeps its place at the top
 });
 
 // The memo saves time; it may never be the reason nothing gets asked at all. Every rung cooling down at once is
-// exactly when a helper must still try — that is the state the chain exists for.
+// exactly when a helper must still try: that is the state the chain exists for.
 test("tries the whole chain anyway when every rung is cooling down", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
     oneShot.mockRejectedValue(new Error(`usage limit reached`));
@@ -239,7 +239,7 @@ test("tries the whole chain anyway when every rung is cooling down", async () =>
 });
 
 /* GOOGLE NEVER SEES THE CLAUDE CODE HARNESS. That CLI writes an Anthropic identity line into every request, and
- * Google's Antigravity channel refuses on that exact sentence while calling it a spent quota — so a Gemini rung
+ * Google's Antigravity channel refuses on that exact sentence while calling it a spent quota, so a Gemini rung
  * taking that road is a rung that cannot answer, on any of the accounts, ever. The chat already runs Gemini on
  * its own runtime for this reason; these two tests are what stop the helper drifting back. */
 
@@ -260,7 +260,7 @@ test("keeps every other provider on the Claude Code harness", async () => {
     expect(geminiOneShot).not.toHaveBeenCalled();
 });
 
-/* NOT DISCOVERING WHAT IS ALREADY WRITTEN DOWN. The memo above only learns by being refused — one wasted call
+/* NOT DISCOVERING WHAT IS ALREADY WRITTEN DOWN. The memo above only learns by being refused: one wasted call
  * per rung, re-bought every time it expires. For most providers the answer is on file before anything is spent:
  * every account's headroom and the provider's own renewal instant. Measured the day this landed: a plan reading
  * 100% with a renewal three days out was still asked three times in a single landing. */
@@ -290,7 +290,7 @@ test("asks every rung anyway when the quota says the whole chain is spent", asyn
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(oneShot).toHaveBeenCalledTimes(1);
-    // The second pass RETRACTS the first's skips rather than adding to them — one walk, one entry per rung.
+    // The second pass RETRACTS the first's skips rather than adding to them: one walk, one entry per rung.
     expect(answer.skipped).toEqual([]);
 });
 
@@ -311,7 +311,7 @@ test("a cancel leaves no memo behind", async () => {
 });
 
 // `skipped` is what stood between the caller and the answer, so a cooling rung the walk never got as far as is
-// not one of them — reporting it would tell the user an account was passed over when it was simply not needed.
+// not one of them: reporting it would tell the user an account was passed over when it was simply not needed.
 test("does not report a cooling rung that sits behind the model that answered", async () => {
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
     await askQuickModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), `draft`, signal());
@@ -322,7 +322,7 @@ test("does not report a cooling rung that sits behind the model that answered", 
     expect(answer.skipped).toEqual([]);
 });
 
-/* THE LIVE VIEW OF THE WALK — every beat re-told whole, which is what the Changes panel's draft report renders.
+/* THE LIVE VIEW OF THE WALK: every beat re-told whole, which is what the Changes panel's draft report renders.
  * The order pinned here IS the user-visible timeline: asked, refused with the reason, asked the next, answered. */
 test("tells a listener every beat: asking, the refusal in its own words, and the answer", async () => {
     const beats: string[] = [];
@@ -356,7 +356,7 @@ test("a rung skipped on its memo is a beat too, with the remembered reason, and 
     expect(beats[0]).toEqual({ model: `gpt-5.6`, status: `skipped`, reason: `usage limit reached` });
 });
 
-/* WHICH MODEL TOOK THE TIME — the question the caller's own timing cannot answer, and the one that had to be
+/* WHICH MODEL TOOK THE TIME: the question the caller's own timing cannot answer, and the one that had to be
  * answered by watching CLI processes by hand. */
 test("bills every model it asks, by name, answered or refused", async () => {
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));

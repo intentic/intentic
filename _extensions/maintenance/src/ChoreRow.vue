@@ -17,16 +17,16 @@ import { computed, ref, watch } from "vue";
 import type { MeasuringProbe } from "./useChores";
 import type { ChoreRun } from "./useRuns";
 
-/* ONE CHORE, IN ONE REPOSITORY. The row has to answer three questions in one line — what is this, is it due, and
- * has anyone looked — and then, opened, show the evidence that decided it.
+/* ONE CHORE, IN ONE REPOSITORY. The row has to answer three questions in one line: what is this, is it due, and
+ * has anyone looked, and then, opened, show the evidence that decided it.
  *
  * The evidence is the part that matters. A maintenance surface that says "4 things need attention" and cannot
  * show its working is a surface people stop believing on the first row that turns out to be wrong, and after that
  * they stop reading the rest. So every claim here is expandable into the specific packages, files or advisories
- * behind it — and a CLEAR chore expands too, into what was measured and when, because "there is nothing to do
+ * behind it, and a CLEAR chore expands too, into what was measured and when, because "there is nothing to do
  * here" is only reassuring if you can see what was checked. */
 
-/* `showRepo` rather than a repo string, because the row already knows which repository it belongs to — what it
+/* `showRepo` rather than a repo string, because the row already knows which repository it belongs to: what it
  * cannot know is whether the list around it spans more than one. On a list scoped to a single repository the mark
  * is the same word on every row, which is noise; across repositories it is the only thing telling two otherwise
  * identical rows apart. */
@@ -51,7 +51,7 @@ const emit = defineEmits<{
 }>();
 
 /* Which model this chore's turn opens on, and the caret that re-points it for this chore alone. Per ROW, because
- * a board of chores starts many runs and the tier is a judgement about the one in front of you — "look into a
+ * a board of chores starts many runs and the tier is a judgement about the one in front of you: "look into a
  * flaky suite" and "fix a dependency bump" are not worth the same session. Seeded from the sandbox's agent-run
  * list, asked of the host so the button and the daemon cannot disagree about what a click costs. */
 const runModel = useAgentRunPick(() => host().models);
@@ -61,7 +61,7 @@ const startRun = (): void => {
 };
 
 /* WHAT IS BEING MEASURED FOR THIS ROW, right now. A chore rests on one or more probes (`needs`), and it is
- * measuring while any of them is — the evidence on screen is only replaced once they have all landed, so saying
+ * measuring while any of them is: the evidence on screen is only replaced once they have all landed, so saying
  * "done" after the first would be the same premature claim in a smaller costume. */
 const inFlight = computed(() => measuring.filter((entry) => entry.repo === verdict.repo && verdict.chore.needs.includes(entry.id)));
 const busyHere = computed(() => inFlight.value.length > 0);
@@ -70,7 +70,7 @@ const busyHere = computed(() => inFlight.value.length > 0);
 // measurement between them ticks once, not thirteen times.
 const now = useNow(busyHere);
 
-/* HOW LONG IT HAS BEEN GOING, and — the part a bare spinner cannot say — whether it has started at all. The
+/* HOW LONG IT HAS BEEN GOING, and: the part a bare spinner cannot say, whether it has started at all. The
  * runner has one lane across the whole sandbox, so a probe pressed while a jscpd sweep is mid-flight genuinely
  * waits, and a row counting up from a start that has not happened would be inventing progress. */
 const elapsed = computed<string>(() => {
@@ -82,14 +82,14 @@ const elapsed = computed<string>(() => {
     return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 });
 
-// What is actually being run, by the name the strip above uses for it — "measuring" is a spinner, "measuring
+// What is actually being run, by the name the strip above uses for it: "measuring" is a spinner, "measuring
 // dead code" is a fact, and the difference is whether the reader can tell a stuck row from a slow one.
 const measuringWhat = computed(() => inFlight.value.map((entry) => probeSpec(entry.id).measures).join(` and `));
 
 /* THE LANDING. A measurement that finishes silently is only half of the fix: the numbers change while the reader
  * is looking somewhere else on the page, and they are left comparing a row against their memory of it. So the
  * row keeps the headline it was carrying when the measurement started, and says what happened to it afterwards
- * — including, and especially, "nothing", which is the answer a re-measure most often has and the one a silent
+ *: including, and especially, "nothing", which is the answer a re-measure most often has and the one a silent
  * update is least able to give. Cleared on collapse; it is an acknowledgment, not a record. */
 const before = ref<string>();
 const landed = ref<{ from: string; to: string }>();
@@ -110,7 +110,7 @@ watch(busyHere, (running, was) => {
 // the same reason and one more: it is the state a row lands in BECAUSE the work got done, and a colour that reads
 // as a problem would make finishing a chore look like breaking something.
 const status = computed<{ variant: StatusVariant; label: string } | undefined>(() => {
-    // Measuring outranks every settled state, because it is the only one that is about to stop being true — and
+    // Measuring outranks every settled state, because it is the only one that is about to stop being true, and
     // a row that reads "stale" while it is being re-measured is the exact complaint this all started as.
     if (busyHere.value) {
         return { variant: `info`, label: `measuring` };
@@ -137,10 +137,10 @@ const status = computed<{ variant: StatusVariant; label: string } | undefined>((
  * and it is not what the eye is on when it reads "279 unreferenced files". */
 const measured = computed<string | undefined>(() => (verdict.measuredAt === undefined ? undefined : `measured ${timeAgo(verdict.measuredAt)}`));
 
-/* WHAT THE LAST RUN MEANS FOR THIS EVIDENCE — two sentences that were one, and had to be split because they are
+/* WHAT THE LAST RUN MEANS FOR THIS EVIDENCE: two sentences that were one, and had to be split because they are
  * opposite claims. "We looked again and it has not moved" is a finding; "we have not looked since" is the absence
- * of one. Both are said out loud rather than left implicit, because the alternative — a chore that silently stops
- * appearing due after a run — is how a surface loses the owner's trust in the other direction: they fix nothing,
+ * of one. Both are said out loud rather than left implicit, because the alternative: a chore that silently stops
+ * appearing due after a run, is how a surface loses the owner's trust in the other direction: they fix nothing,
  * the row goes quiet, and they conclude it was never real. */
 const evidenceNote = computed<string | undefined>(() => {
     if (verdict.state === `stale`) {
@@ -172,7 +172,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
             <!-- ONE LINE WITH ROOM FOR IT, TWO WITHOUT. On a wide row the title keeps its full width and the
                  headline takes the flexible column: truncating "4 majors waiting, 61 behind in total" to fit a
                  chore name nobody needed re-reading would lose the only part that changes. In a narrow pane there
-                 is no column wide enough for both, and the row that tried spilled its state badge off the card — so
+                 is no column wide enough for both, and the row that tried spilled its state badge off the card, so
                  the two stack, each truncating on its own line, and the badge stays where it can be read. -->
             <span class="flex min-w-0 flex-1 flex-col gap-0.5 @lg:flex-row @lg:items-center @lg:gap-3">
                 <span class="@lg:shrink-0 flex min-w-0 items-center gap-2">
@@ -195,10 +195,10 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
         </button>
 
         <div v-if="expanded" class="border-t border-line/60 bg-canvas px-4 py-4 @lg:px-6">
-            <!-- THE MEASUREMENT, WHILE IT IS HAPPENING — at the TOP of the opened row, above the evidence it is
+            <!-- THE MEASUREMENT, WHILE IT IS HAPPENING: at the TOP of the opened row, above the evidence it is
                  replacing, because that is the reading order the reader is in: they pressed the button, and the
                  next thing they look at has to be the answer to "did that do anything". It names the tool's
-                 subject, counts, and says out loud that the numbers underneath are the OLD ones — a panel that
+                 subject, counts, and says out loud that the numbers underneath are the OLD ones: a panel that
                  leaves stale figures under a spinner is inviting them to be read as the new result. -->
             <div v-if="busyHere" class="mb-3 flex items-start gap-2 rounded-lg bg-info/10 px-3 py-2">
                 <Icon name="spinner" spin class="mt-0.5 shrink-0 text-xs text-info" />
@@ -217,10 +217,10 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
             <!-- AND WHEN IT LANDS. Held until the row is collapsed rather than faded out on a timer: the reader
                  who pressed re-measure and then went to read something else comes back to the sentence, which is
                  the case an auto-dismissing toast serves worst. "Unchanged" is stated as loudly as a change,
-                 because it is a finding — it is the whole answer to "is this row still telling the truth". -->
+                 because it is a finding: it is the whole answer to "is this row still telling the truth". -->
             <div v-else-if="landed" class="mb-3 flex items-start gap-2 rounded-lg bg-success/10 px-3 py-2">
                 <Icon name="check-circle" class="mt-0.5 shrink-0 text-xs text-success" />
-                <!-- The claim on one line, what it found on the next — the same two-line shape as the strip
+                <!-- The claim on one line, what it found on the next: the same two-line shape as the strip
                      above, so a row that has just finished measuring reads as the sentence that replaced the
                      one before it rather than as a different kind of thing. The before/after is one wrapping
                      unit: split across lines, an arrow ends up alone at the end of a line pointing at nothing. -->
@@ -238,7 +238,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
 
             <!-- THE RULE, above the evidence and phrased as what WOULD make this due, so it reads the same whether
                  the chore is due or clear. Without it a row is asking to be taken on trust; with it, the reader
-                 can disagree with the rule rather than only with the number — which is the disagreement worth
+                 can disagree with the rule rather than only with the number, which is the disagreement worth
                  having, and the one that improves the book. -->
             <p class="mt-3 max-w-read text-2xs text-subtle">
                 <span class="text-content">{{ verdict.state === `due` ? `Shown because` : `Shows when` }}:</span> {{ verdict.chore.criterion }}
@@ -287,8 +287,8 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                     :label="busyHere ? `Measuring…` : `Re-measure`"
                     :title="
                         busyHere
-                            ? `Measuring ${measuringWhat} — a deep check can take a few minutes`
-                            : `Measure this again now — a deep check can take a few minutes`
+                            ? `Measuring ${measuringWhat}: a deep check can take a few minutes`
+                            : `Measure this again now, a deep check can take a few minutes`
                     "
                     :disabled="busy || busyHere"
                     @click="emit(`remeasure`)"

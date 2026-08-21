@@ -3,7 +3,7 @@ import { probeSpec } from "./probes.js";
 import { IDIOM_RULES } from "./stack.js";
 
 /* The parsers are the part of this library that faces someone else's output, so they are tested the way that
- * output actually arrives: real shapes, then the shapes that have historically broken things — a tool that
+ * output actually arrives: real shapes, then the shapes that have historically broken things, a tool that
  * printed a warning line before its JSON, a version whose fields moved, an empty run. The bar for every one of
  * them is the same: recognise it, or return undefined so the runner can record a failure. Never throw, and never
  * report a clean result from output it did not understand. */
@@ -135,7 +135,7 @@ describe(`knip`, () => {
         });
     });
 
-    // Without an `issues` array this is not knip's report, whatever else it contains — and reporting zero dead code
+    // Without an `issues` array this is not knip's report, whatever else it contains, and reporting zero dead code
     // from a shape we do not recognise is exactly the lie the state machine exists to prevent.
     test(`a shape without an issues array is a failure`, () => {
         expect(parse(`knip`, JSON.stringify({ files: [`src/old.ts`] }))).toBeUndefined();
@@ -233,8 +233,8 @@ describe(`ui`, () => {
     });
 
     /* Every path the sweep prints wears a `./`, because every ripgrep in it is handed `.` to walk. Downstream this
-     * would have to be remembered at each comparison — jscpd's paths against the component list, a bypass against
-     * a component — so it is spent once, here, and one spelling of a path leaves the parser. */
+     * would have to be remembered at each comparison: jscpd's paths against the component list, a bypass against
+     * a component, so it is spent once, here, and one spelling of a path leaves the parser. */
     test(`strips the prefix ripgrep prints for a path it was told to walk`, () => {
         expect(parse(`ui`, sweep(`COMPONENT\t./src/Button.vue`, `BYPASS\t./src/Button.vue:3`, `IDIOM\tvue-options-api\t./src/Old.vue`))).toEqual({
             id: `ui`,
@@ -257,7 +257,7 @@ describe(`ui`, () => {
 describe(`the sweep's composed command`, () => {
     const stages = (): string[] => probeSpec(`ui`).command.split(`; `);
 
-    /* Given no path, ripgrep searches STDIN whenever stdin is not a TTY — which is exactly how a probe is spawned.
+    /* Given no path, ripgrep searches STDIN whenever stdin is not a TTY, which is exactly how a probe is spawned.
      * The sweep exited 0, printed its marker and matched nothing, in every repository, forever, which the marker
      * line cannot catch because the sweep really did run. It reproduces from a child process and never from an
      * interactive shell, so the command is the only place it is visible. */
@@ -300,7 +300,7 @@ describe(`bundle`, () => {
     });
 
     // The `find` prints nothing for a directory that exists but holds no assets. `available` is supposed to catch
-    // that, and this is the second line of defence — a zero-byte bundle would otherwise read as a fact.
+    // that, and this is the second line of defence: a zero-byte bundle would otherwise read as a fact.
     test(`a directory line with no assets is an empty build, not a failure`, () => {
         expect(parse(`bundle`, `DIR\tbuild`)).toMatchObject({ bundle: { dir: `build`, assets: [], totalBytes: 0, totalGzip: 0 } });
     });

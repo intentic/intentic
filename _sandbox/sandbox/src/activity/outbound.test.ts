@@ -16,7 +16,7 @@ const capture = (): { appended: Partial<ActivityEvent>[]; services: Services } =
     return { appended, services };
 };
 
-// The turn that owns the sniffer — stamped on every call it records, so the audit feed can fold a turn's sends
+// The turn that owns the sniffer: stamped on every call it records, so the audit feed can fold a turn's sends
 // into that turn's own row.
 const TURN = "turn-1";
 
@@ -35,7 +35,7 @@ const result = (output: string, id = "t1", isError?: boolean): AgentEvent => ({
     content: [{ type: "text", text: output }],
 });
 
-// The exact command shapes DISCORD_SKILL teaches (capabilities/cli/providers.ts) — what real turns produce.
+// The exact command shapes DISCORD_SKILL teaches (capabilities/cli/providers.ts): what real turns produce.
 const SEND = `curl -s -X POST -H "Authorization: Bot $DISCORD_BOT_TOKEN" -H "Content-Type: application/json" -d '{"content":"hello"}' https://discord.com/api/v10/channels/123/messages`;
 const REACT = `curl -s -X PUT -H "Authorization: Bot $DISCORD_BOT_TOKEN" "https://discord.com/api/v10/channels/123/messages/456/reactions/%F0%9F%91%8D/@me"`;
 const READ = `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" "https://discord.com/api/v10/channels/123/messages?limit=20" | jq '.[] | {id, content}'`;
@@ -147,7 +147,7 @@ test("a telegram send records the method as the endpoint, with the chat and text
 });
 
 /* A BOT TOKEN MUST NEVER REACH THE ACTIVITY FEED. Telegram puts it in the URL path, the feed is read by people
- * and pasted into support threads, and the skills teach `$TELEGRAM_BOT_TOKEN` precisely so it does not expand —
+ * and pasted into support threads, and the skills teach `$TELEGRAM_BOT_TOKEN` precisely so it does not expand:
  * but a hand-typed one has to be dropped on the floor too, which is what recording only the method does. */
 test("a literally-pasted bot token does not survive into the recorded call", () => {
     const { appended, services } = capture();
@@ -171,12 +171,12 @@ test("file reads, uploads and downloads each classify without a token in the end
     expect(appended.map(({ type, method, endpoint, channelId }) => ({ type, method, endpoint, channelId }))).toEqual([
         { type: "file.read", method: "GET", endpoint: "/getFile", channelId: undefined },
         { type: "api.call", method: "GET", endpoint: "/file", channelId: undefined },
-        // A multipart upload carries the chat as a form field rather than in JSON — same fact, different syntax.
+        // A multipart upload carries the chat as a form field rather than in JSON: same fact, different syntax.
         { type: "message.send", method: "POST", endpoint: "/sendDocument", channelId: "-100123" },
     ]);
 });
 
-test("telegram reports a refusal in `description` where slack uses `error` — both read as a failed call", () => {
+test("telegram reports a refusal in `description` where slack uses `error`: both read as a failed call", () => {
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services, TURN);
     sniffer.observe(tool(TG_SEND));
@@ -184,7 +184,7 @@ test("telegram reports a refusal in `description` where slack uses `error` — b
     expect(appended.map(({ outcome, error }) => ({ outcome, error }))).toEqual([{ outcome: "error", error: "Bad Request: chat not found" }]);
 });
 
-/* WhatsApp's skill teaches a BIN, not curl — the paired socket lives in the gateway and the agent drives it
+/* WhatsApp's skill teaches a BIN, not curl: the paired socket lives in the gateway and the agent drives it
  * with `whatsapp send …`. The matcher parses that command shape, so sends land in the activity feed and the
  * `whatsapp.message.send` action rule has something to bite on. */
 test("a whatsapp CLI send records message.send with the chat and text, whatever the quoting", () => {
@@ -229,9 +229,9 @@ test("a failed whatsapp CLI call records the gateway's sentence as the error", (
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services, TURN);
     sniffer.observe(tool(`whatsapp send 4915112345678 hello there`, "t1"));
-    sniffer.observe(result("WhatsApp is not connected — pair the device from the capability card first.", "t1", true));
+    sniffer.observe(result("WhatsApp is not connected, pair the device from the capability card first.", "t1", true));
     expect(appended.map(({ outcome, error }) => ({ outcome, error }))).toEqual([
-        { outcome: "error", error: "WhatsApp is not connected — pair the device from the capability card first." },
+        { outcome: "error", error: "WhatsApp is not connected, pair the device from the capability card first." },
     ]);
 });
 

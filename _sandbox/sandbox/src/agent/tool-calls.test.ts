@@ -34,7 +34,7 @@ test("toolCategoryOf categorizes builtin names case-insensitively", () => {
 });
 
 /* THE CATEGORY ALONE CANNOT ANSWER "was this a search", and the search-teaching experiment is judged on the
- * answer. This workspace's own search tool is a CLI — `iq q "…"` is Bash, which categorizes as `execute` — so
+ * answer. This workspace's own search tool is a CLI: `iq q "…"` is Bash, which categorizes as `execute`, so
  * counting the `search` category would miss every search on a sandbox with iq switched on, which is the sandbox
  * the teaching is being measured against. */
 test("isSearchCall counts the CLI searches the category misses, and leaves shell plumbing alone", () => {
@@ -47,7 +47,7 @@ test("isSearchCall counts the CLI searches the category misses, and leaves shell
     // A command that greps its OWN output is shell plumbing, not the model looking for code.
     expect(isSearchCall({ category: "execute", target: `git log --oneline | grep fix` })).toBe(false);
     expect(isSearchCall({ category: "execute", target: `pnpm test` })).toBe(false);
-    // A tool with no command to read — a browser click is `execute` too.
+    // A tool with no command to read: a browser click is `execute` too.
     expect(isSearchCall({ category: "execute" })).toBe(false);
     expect(isSearchCall({ category: "read", target: "src/index.ts" })).toBe(false);
 });
@@ -74,7 +74,7 @@ test("toolCategoryOf categorizes MCP names by their tool segment's trailing verb
     expect(toolCategoryOf("mcp__voice__join_call")).toBe("other");
 });
 
-// Every browser tool used to fall through the suffix rule to "other" and draw the generic cog — a turn spent
+// Every browser tool used to fall through the suffix rule to "other" and draw the generic cog: a turn spent
 // clicking through the user's own app read as a column of identical grey rows.
 test("browser tools read as going somewhere, doing something, or looking at the result", () => {
     expect(displayNameOf("mcp__web__browser_navigate")).toBe("Browser navigate");
@@ -96,7 +96,7 @@ test("toolTarget picks the most specific key across both spelling families", () 
     expect(toolTarget({ command: "ls -la" })).toBe("ls -la");
     expect(toolTarget({ pattern: "TODO" })).toBe("TODO");
     expect(toolTarget({ url: "https://x.dev" })).toBe("https://x.dev");
-    // What a browser click/type is aimed at, in @playwright/mcp's own words — its `ref` ("e12") says nothing.
+    // What a browser click/type is aimed at, in @playwright/mcp's own words: its `ref` ("e12") says nothing.
     expect(toolTarget({ element: "Submit button", ref: "e12" })).toBe("Submit button");
     expect(toolTarget({ query: "how" })).toBe("how");
     expect(toolTarget({ file_path: "/work/a.ts", command: "ignored" })).toBe("/work/a.ts");
@@ -158,7 +158,7 @@ test("editDiffContent caps oversized sides and flags truncation", () => {
     }
 });
 
-test("editDiffContent degrades to undefined on unrecognized shapes — never throws", () => {
+test("editDiffContent degrades to undefined on unrecognized shapes: never throws", () => {
     expect(editDiffContent("Edit", { file_path: "/work/a.ts" }, CWD)).toBeUndefined();
     expect(editDiffContent("MultiEdit", { file_path: "/work/a.ts", edits: [] }, CWD)).toBeUndefined();
     expect(editDiffContent("Bash", { command: "ls" }, CWD)).toBeUndefined();

@@ -8,8 +8,8 @@ import { activateServer } from "./server.js";
 
 /* The backend as the daemon actually drives it: activateServer mounts one fetch handler, the host strips the
  * /x prefix, and everything below is real files on a real disk. Worth an integration test rather than unit
- * tests over the handlers, because what can break here is the WIRE — an output the contract's schema rejects,
- * a query parameter that never arrives — and none of that is visible from the inside. */
+ * tests over the handlers, because what can break here is the WIRE: an output the contract's schema rejects,
+ * a query parameter that never arrives, and none of that is visible from the inside. */
 
 let workspace: string;
 let handler: BackendRouteHandler;
@@ -74,7 +74,7 @@ describe(`the knowledge backend`, () => {
         const note = await json<Note>(`/note?path=${encodeURIComponent(`project/intentic.md`)}`);
         expect(note.summary.title).toBe(`Intentic`);
         expect(note.linkedFrom).toEqual([{ relation: `works_on`, path: `person/ada-lovelace.md`, title: `Ada Lovelace` }]);
-        // A link to a note nobody has written keeps its name and has nowhere to go — the knowledge base's to-do list.
+        // A link to a note nobody has written keeps its name and has nowhere to go: the knowledge base's to-do list.
         expect(note.linksTo).toEqual([{ relation: undefined, path: undefined, title: `nowhere` }]);
     });
 
@@ -184,7 +184,7 @@ describe(`the knowledge backend`, () => {
         const overview = await json<Overview>(`/overview`);
         expect(overview.noteCount).toBe(1);
         expect(overview.vocabulary.types).toContain(`person`);
-        // The vocabulary explains the link syntax in a fenced example — which must not become real links, or a
+        // The vocabulary explains the link syntax in a fenced example, which must not become real links, or a
         // brand-new knowledge base opens with a to-do list it invented about itself.
         expect(overview.broken).toEqual([]);
 

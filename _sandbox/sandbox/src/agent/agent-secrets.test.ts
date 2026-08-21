@@ -7,7 +7,7 @@ import { resolveCommandSecrets, type SecretAccess, secretCommandHooks, type Secr
 import { bashTmuxHooks } from "./agent-terminals.js";
 
 /* THE SHELL EXIT. A `{{secret:name}}` reference in the agent's command becomes the stored value in the line
- * the pane EXECUTES — and only there: the `-c` copy the cleaners and the ledger read keeps the agent's own
+ * the pane EXECUTES, and only there: the `-c` copy the cleaners and the ledger read keeps the agent's own
  * reference-form words. An unknown name refuses the command outright, because a reference that survives as
  * literal text is a config with a hole where a credential should be. */
 

@@ -11,7 +11,7 @@ test("an empty field scopes nothing", () => {
 test("a bare name is a file as well as a folder, at any depth", () => {
     expect(includeGlobs(`package.json`).globs).toEqual([`**/package.json`, `**/package.json/**`]);
     expect(includeGlobs(`docs`).globs).toEqual([`**/docs`, `**/docs/**`]);
-    // A trailing slash is noise — the folder form is generated either way.
+    // A trailing slash is noise: the folder form is generated either way.
     expect(includeGlobs(`docs/`).globs).toEqual([`**/docs`, `**/docs/**`]);
 });
 
@@ -41,6 +41,6 @@ test("a leading ! excludes instead", () => {
         globs: [`**/src`, `**/src/**`],
         notGlobs: [`**/*.test.ts`, `**/*.test.ts/**`],
     });
-    // A lone "!" excludes nothing — expanded, it would have matched everything.
+    // A lone "!" excludes nothing: expanded, it would have matched everything.
     expect(includeGlobs(`!`)).toEqual({ globs: [], notGlobs: [] });
 });

@@ -7,8 +7,8 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
 import { createExpiryTracker } from "./expiry.js";
 
-/* The tracker's one promise: the incremental answer equals the exact one — for a landing that rides the
- * increments from its first sight, every path `git diff landedHead..HEAD` would name is in the set — at ONE
+/* The tracker's one promise: the incremental answer equals the exact one, for a landing that rides the
+ * increments from its first sight, every path `git diff landedHead..HEAD` would name is in the set: at ONE
  * shared diff per head move instead of one full diff per landing. Real repos, because the promise is about
  * what git reports. */
 
@@ -58,7 +58,7 @@ test("a head move costs ONE diff for the whole repo, not one per landing", async
     const { dir, heads } = await repoWithCommits();
     const calls: string[][] = [];
     const tracker = createExpiryTracker(countingGit(calls));
-    // First sight of each landing is its own full diff — the exact fallback, paid once per landing ever.
+    // First sight of each landing is its own full diff: the exact fallback, paid once per landing ever.
     await tracker.committedSince(dir, "root", heads[0]!, heads[2]!);
     await tracker.committedSince(dir, "root", heads[1]!, heads[2]!);
     expect(calls).toHaveLength(2);
@@ -69,7 +69,7 @@ test("a head move costs ONE diff for the whole repo, not one per landing", async
     await tracker.committedSince(dir, "root", heads[1]!, heads[2]!);
     expect(calls).toEqual([]);
 
-    // The head moves — the commit case. The first ask pays the one shared increment; the rest ride it. This is
+    // The head moves: the commit case. The first ask pays the one shared increment; the rest ride it. This is
     // the line that used to read "one full diff per landing, per commit, forever" on the commit response path.
     calls.length = 0;
     await tracker.committedSince(dir, "root", heads[0]!, heads[3]!);
@@ -89,10 +89,10 @@ test("drop retires a landing's slot; the next ask re-derives it exactly", async 
 });
 
 /* The one-way door, stated as a test: a path committed and then REVERTED stays expired. The union keeps it,
- * a fresh full diff would not — and the union is right by the same reasoning the registry's absorbed mark
+ * a fresh full diff would not, and the union is right by the same reasoning the registry's absorbed mark
  * rests on: the commit put the lines in a reachable commit, and both consumers already treat that as terminal
  * at the landing granularity. */
-test("a commit-then-revert keeps the path expired — the door does not swing back", async () => {
+test("a commit-then-revert keeps the path expired: the door does not swing back", async () => {
     const { dir, heads } = await repoWithCommits();
     const tracker = createExpiryTracker();
     await tracker.committedSince(dir, "root", heads[3]!, heads[3]!);
@@ -106,6 +106,6 @@ test("a commit-then-revert keeps the path expired — the door does not swing ba
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "revert", "-n", "HEAD");
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "revert the rewrite");
     const reverted = await sh(dir, "rev-parse", "HEAD");
-    // git diff heads[3]..reverted is empty — but the tracker remembers the door was walked through.
+    // git diff heads[3]..reverted is empty, but the tracker remembers the door was walked through.
     expect([...(await tracker.committedSince(dir, "root", heads[3]!, reverted))]).toEqual(["a.ts"]);
 });
