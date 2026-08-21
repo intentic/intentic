@@ -83,6 +83,13 @@ const patchEditorSurface = (core: NonNullable<ShikiCore>): void => {
     const colors = (core.getTheme(shikiTheme(core)).colors ??= {});
     colors[`editor.background`] = bg;
     colors[`editorGutter.background`] = bg;
+    /* The minimap slider is the only standing "you are here" on a surface with no scrollbar (CodeView turns the
+     * vertical one off), and it is painted always rather than on hover, so it has to READ as a position marker
+     * without being a stripe across the code. VSCode's stock 20% grey is tuned for a slider you only ever see
+     * while pointing at it: a touch more presence here, in a neutral grey that works over both schemes. */
+    colors[`minimapSlider.background`] = `#7f7f7f40`;
+    colors[`minimapSlider.hoverBackground`] = `#7f7f7f59`;
+    colors[`minimapSlider.activeBackground`] = `#7f7f7f73`;
 };
 
 let ready: Promise<typeof Monaco> | undefined;

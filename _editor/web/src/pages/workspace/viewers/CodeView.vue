@@ -76,10 +76,38 @@ const jumpTo = (line: number): void => {
     if (monaco === undefined || editor.value === undefined) {
         return;
     }
+    const view = editor.value;
     const target = sourceLines === undefined ? line : modelLineOf(sourceLines, line);
-    editor.value.setPosition({ lineNumber: target, column: 1 });
-    editor.value.revealLineInCenter(target);
-    const marks = editor.value.createDecorationsCollection([
+    view.setPosition({ lineNumber: target, column: 1 });
+    view.revealLineInCenter(target);
+    /* THE REVEAL IS RE-ASSERTED UNTIL IT ACTUALLY LANDS, which is what makes the FIRST click on a search match
+     * land on the match. A jump that opens the file reveals into an editor Monaco has just created against a
+     * pane the browser has not finished laying out: measured at a height of 5px, `revealLineInCenter` scrolls to
+     * 3px and stays there, so the file opened at line 1 and only a SECOND click, on an editor that had since
+     * been measured, went to the line. Nothing about that is detectable up front (the pane may or may not be
+     * settled, the model may still be wrapping long lines), so instead of predicting it we check: while the
+     * target is not among the visible ranges, ask again, for a handful of frames.
+     *
+     * Bounded on purpose: it stops the moment the line is on screen, and gives up after ~half a second either
+     * way, so it can never sit there fighting a reader who has started scrolling. */
+    let attempts = 0;
+    let lastTop = view.getScrollTop();
+    const onScreen = (): boolean => view.getVisibleRanges().some((range) => range.startLineNumber <= target && target <= range.endLineNumber);
+    const settle = (): void => {
+        if (disposed || editor.value !== view || onScreen() || ++attempts > 30) {
+            return;
+        }
+        const top = view.getScrollTop();
+        // Only re-ask while the scroll is STUCK: smooth scrolling means the target is off screen for the frames
+        // the animation is running, and re-revealing into a live animation every frame makes it crawl.
+        if (top === lastTop) {
+            view.revealLineInCenter(target);
+        }
+        lastTop = top;
+        requestAnimationFrame(settle);
+    };
+    requestAnimationFrame(settle);
+    const marks = view.createDecorationsCollection([
         { range: new monaco.Range(target, 1, target, 1), options: { isWholeLine: true, className: `ws-line-flash` } },
     ]);
     clearTimeout(flashTimer);
@@ -185,7 +213,10 @@ onMounted(async () => {
         readOnly: !editable,
         domReadOnly: !editable,
         automaticLayout: true,
-        minimap: { enabled: true },
+        // The slider is the only thing on the minimap that says where you ARE, and Monaco's default hides it
+        // until the pointer comes over: with the vertical scrollbar off (below), that leaves the reader with no
+        // standing indication of their position in the file at all. So it is painted always.
+        minimap: { enabled: true, showSlider: `always` },
         // Wrap, so a long line is READ rather than scrolled to. Continuation rows carry no gutter number,
         // which is what marks them as a wrap. `bounded` rather than `on`: wrap at the viewport when the pane
         // is narrow, but on a wide one stop just past this repo's own 150-column format width, so formatted
@@ -243,6 +274,8 @@ onMounted(async () => {
     }
 
     // A content-search jump wins; otherwise restore the remembered position (first open of a file has none).
+    // The jump lands even though this editor was created a moment ago against a pane that may not be measured
+    // yet: jumpTo re-asserts the reveal until it takes.
     if (scrollToLine !== undefined) {
         jumpTo(scrollToLine.line);
         return;

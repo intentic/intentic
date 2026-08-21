@@ -184,7 +184,9 @@ onMounted(async () => {
         originalEditable: false,
         automaticLayout: true,
         renderSideBySide: split.value,
-        minimap: { enabled: true },
+        // Always-visible slider, for the reason the file surface documents (CodeView): with the scrollbars off,
+        // a hover-only slider leaves the reader nothing that says where in the file they are.
+        minimap: { enabled: true, showSlider: `always` },
         // Wrap both panes, on the file viewer's terms (CodeView): a review pane is HALF the width, so a line
         // that merely fit there now folds instead of hiding its tail behind a horizontal scroll. Monaco passes
         // this to each side through diffWordWrap, whose default is `inherit`; in unified mode it wraps the one
