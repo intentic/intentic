@@ -13,7 +13,6 @@ import {
     agentStatusMeta,
     attentionReason,
     type FleetLane,
-    formatCost,
     turnInFlight,
     unreadBadge,
 } from "../composables/agents/agentStatus";
@@ -343,11 +342,12 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
  * opened from History may have outlived its registry entry altogether. Meanwhile the browser is holding a
  * Conversation for every one of these tabs, and that object knows what it is running on, what it has spent
  * here and how much has been said, so the card asks the agent first and the conversation second, and only
- * the facts NEITHER of them holds (the diff, the daemon's cross-device age, unread) are agent-only.
+ * the facts NEITHER of them holds (the daemon's cross-device age, unread) are agent-only.
  *
- * The conversation's figures are this TAB's own tally, so they are rendered only when they are non-zero: a
- * chat restored from history has streamed nothing here, and printing `$0.00` under it would be the card
- * inventing a fact rather than lacking one. */
+ * WHAT THIS CARD DELIBERATELY DOES NOT KNOW: the spend, the diff and the turn count. They are the board's, and
+ * the argument is what each surface is READ FOR — the board is scanned to pick an agent out of forty, the rail
+ * to switch between the dozen you have open. Nothing here was ever decided by a dollar figure, and the line
+ * they filled is the one the live readout needs (see the meta template). */
 
 // The model, as the label the pickers use: worth a word the moment a fleet stops being one model deep (an
 // Opus session next to a Codex one is a real difference in what the card will cost and how it behaves). The
@@ -363,16 +363,6 @@ const modelOf = (entry: OpenChat): string | undefined => {
         return modelLabelFor(provider, model);
     }
     return sessionCategory(tabLabel(conversation)) === undefined ? undefined : providerLabel(provider);
-};
-
-const costOf = (entry: OpenChat): number | undefined =>
-    entry.agent?.costUsd ?? (entry.conversation.costUsd.value > 0 ? entry.conversation.costUsd.value : undefined);
-
-// Completed turns. The registry counts them across every device; a conversation this browser holds can count
-// the prompts in its own transcript, which is the same number whenever this tab saw the whole conversation.
-const turnsOf = (entry: OpenChat): number | undefined => {
-    const turns = entry.agent?.turns ?? entry.conversation.messages.value.filter((message) => message.role === `user`).length;
-    return turns > 0 ? turns : undefined;
 };
 
 /* THE LIVE LINE'S CONTENT, from whichever half is watching the turn. The registry's activity frames say what
@@ -399,16 +389,11 @@ const liveOf = (entry: OpenChat): { icon: IconName; text: string; since: number 
  * lone provider glyph floating on a line of its own. Asked per card rather than assumed from the join. */
 const hasMeta = (entry: OpenChat): boolean =>
     (entry.agent !== undefined &&
-        (attentionReason(entry.agent) !== undefined ||
-            unreadBadge(entry.agent) !== undefined ||
-            (entry.agent.diff !== undefined && (entry.agent.diff.insertions > 0 || entry.agent.diff.deletions > 0)) ||
-            entry.agent.updatedAt > 0)) ||
+        (attentionReason(entry.agent) !== undefined || unreadBadge(entry.agent) !== undefined || entry.agent.updatedAt > 0)) ||
     entry.conversation.unsent.value ||
     originOf(entry.conversation) !== undefined ||
     isArchived(entry.conversation) ||
-    modelOf(entry) !== undefined ||
-    costOf(entry) !== undefined ||
-    turnsOf(entry) !== undefined;
+    modelOf(entry) !== undefined;
 
 /* What the query found that ISN'T open in this window: the whole point of the filter reaching past its own
  * list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens the
@@ -766,7 +751,7 @@ const closeTab = (event: Event, id: string): void => {
                      is the container of several of the rows beneath it, not one of them. Clicking one is the
                      board card's own press (openRunInChat): its live sessions into the panes, or its diagram
                      when nothing is live, so the two doors into a run cannot behave differently. -->
-                <div v-if="runsIn(lane.key).length > 0" class="mb-1.5 flex min-w-0 flex-col gap-1.5">
+                <div v-if="runsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2">
                     <RailCard
                         v-for="run in runsIn(lane.key)"
                         :key="run.runId"
@@ -788,8 +773,8 @@ const closeTab = (event: Event, id: string): void => {
                         </template>
                     </RailCard>
                 </div>
-                <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-2.5 pb-1.5 text-2xs text-subtle">No matches</p>
-                <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-1.5">
+                <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-1 text-2xs text-subtle">No matches</p>
+                <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2">
                     <template v-for="{ conversation: c, agent } in cardsIn(lane.key)" :key="c.conversationId">
                         <!-- Renaming REPLACES the card rather than nesting a field inside it: an input in a
                              button is neither valid markup nor a usable caret. Enter commits, Esc cancels, blur
@@ -818,6 +803,7 @@ const closeTab = (event: Event, id: string): void => {
                             :status="statusOf({ conversation: c, agent })"
                             :live="liveOf({ conversation: c, agent })"
                             :now="now"
+                            tight
                             :selected="activeId === c.conversationId || showing(c.conversationId)"
                             :attention="lane.key === 'attention'"
                             :snippet="agent === undefined ? undefined : snippetOf(agent)"
@@ -850,9 +836,10 @@ const closeTab = (event: Event, id: string): void => {
                                     <Icon name="times" class="text-2xs" />
                                 </span>
                             </template>
-                            <!-- The crucial facts, one wrapping line at the board's own picks: why it needs
-                                 you (or that it's unread), where it came from, the model, cost, diff, how
-                                 long a conversation it has been, and the age, right-aligned. Drawn from the
+                            <!-- The crucial facts, one wrapping line: what the turn is doing and for how long
+                                 (the card's `tight` form puts the live readout at the head of this line rather
+                                 than on a row of its own), why it needs you or that it's unread, where it came
+                                 from, the model, and the age of a settled chat, right-aligned. Drawn from the
                                  fleet entry where there is one and from the conversation where there isn't
                                  (see "What the card knows"), so an off-roster chat keeps a populated card. -->
                             <template v-if="hasMeta({ conversation: c, agent })" #meta>
@@ -896,24 +883,18 @@ const closeTab = (event: Event, id: string): void => {
                                 <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
                                     <Icon name="box" class="text-2xs text-subtle" />
                                 </span>
+                                <!-- WHAT THIS LINE NO LONGER CARRIES, AND WHY. The spend, the diff and the turn
+                                     count used to sit here beside the model, and a rail is a SWITCHER: it is
+                                     read to answer "which chat do I go to", and not one of those three ever
+                                     decided that. What they did do was fill the line the running readout needs
+                                     (Bash · 4m 12s), pushing it onto a row of its own and buying every card a
+                                     third more height in the one place height is scarcest — a column of a
+                                     dozen open chats down the edge of a window. All three are still read where
+                                     they are read on purpose: the spend and the diff on the board's card and in
+                                     the Usage tab, the turn count in the conversation itself. -->
                                 <span v-if="modelOf({ conversation: c, agent }) !== undefined" class="max-w-24 truncate">{{
                                     modelOf({ conversation: c, agent })
                                 }}</span>
-                                <span v-if="costOf({ conversation: c, agent }) !== undefined" class="shrink-0">{{
-                                    formatCost(costOf({ conversation: c, agent })!)
-                                }}</span>
-                                <!-- The diff is the registry's alone: it is measured against the branch's base
-                                     daemon-side, and nothing this browser holds can stand in for it. -->
-                                <span
-                                    v-if="agent?.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)"
-                                    class="shrink-0 font-mono"
-                                >
-                                    <span class="text-success">+{{ agent.diff.insertions }}</span>
-                                    <span class="text-danger"> −{{ agent.diff.deletions }}</span>
-                                </span>
-                                <span v-if="turnsOf({ conversation: c, agent }) !== undefined" class="shrink-0" aria-label="Turns">
-                                    <Icon name="comments" class="mr-0.5 text-2xs" />{{ turnsOf({ conversation: c, agent }) }}
-                                </span>
                                 <!-- The age keeps to the settled cards: a running card's clock is the live
                                      line's ticking elapsed below, and two clocks on one card disagree by
                                      construction. -->
@@ -930,7 +911,7 @@ const closeTab = (event: Event, id: string): void => {
                 <button
                     v-if="lane.key === 'finished' && !filtering && hiddenFinished > 0"
                     type="button"
-                    :class="ui.addTile(`mt-1.5 gap-1 rounded-lg py-1.5 text-2xs`)"
+                    :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
                     @click="showAllFinished = !showAllFinished"
                 >
                     <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
@@ -948,7 +929,7 @@ const closeTab = (event: Event, id: string): void => {
                  group with a header). Only the ink is dropped a step: a muted title, no status glyph, since
                  nothing here is a session you are currently in. -->
             <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount">
-                <div class="flex min-w-0 flex-col gap-1.5">
+                <div class="flex min-w-0 flex-col gap-2">
                     <!-- The same identity tile as the lanes above: a hit here is a destination, and the
                          category tint says what kind of work it will turn out to be. -->
                     <RailCard

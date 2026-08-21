@@ -155,7 +155,7 @@
      * ONE FILL, mixed from the ink into the ground rather than named as a token, so it holds in both schemes
      * without a second rule: 4% of content over canvas lifts a dark ground and settles a light one, and it
      * lands between canvas and `--color-card` in both — which is the whole contract, since a card has to stay
-     * a step LIGHTER than the lane it sits on to read as an object (see .rail-card).
+     * a step LIGHTER than the lane it sits on to read as an object (see .session-card).
      *
      * The header inherits `--lane-fill` rather than re-deriving it: it has to be OPAQUE to occlude the cards
      * that scroll under it while pinned, and a header a shade off its own lane is a seam across the slab. */
@@ -165,6 +165,82 @@
     }
     .lane-header {
         background: var(--lane-fill);
+    }
+
+    /* A SESSION CARD — the one surface the fleet board (AgentCard), the workflow row (WorkflowRunCard) and
+     * every rail row (RailCard: the popped-out chat's open chats, the Subagents list) are all drawn on. It
+     * lives here rather than in any one of them because those lists are read minutes apart by the same eye:
+     * a board card and a rail row are ONE card in two frames, and every time the skin was written twice the
+     * two drifted — different fills, different selection metal, a left edge that stood down on one and stacked
+     * on the other. A component that wants a card writes `session-card` and stops choosing.
+     *
+     * EVERY STATE IS A VARIABLE, not a property. Written as plain properties, `:hover` (a class AND a
+     * pseudo-class) outranks `.session-card-on` (one class), so putting the pointer on the SELECTED card
+     * repainted its accent border grey. Through variables the states can be ordered after hover and win the
+     * tie, and hover keeps a channel of its own on a card that already wears the accent: the halo, rather than
+     * a second opinion about the edge.
+     *
+     * FIVE SHADOW SLOTS, because a second box-shadow rule REPLACES the first and these marks are independent:
+     * the attention bar (left edge), the selection ring, the skin's ledge, the selection lift and the skin's
+     * drop. A SKIN sets the two it owns (see skins/*.css) and never touches the three the app does.
+     * All five keep their INSET-NESS across every state (`inset 0 0 #0000` in the inset slots), because
+     * box-shadow only interpolates between lists that agree on it and a transition that cannot interpolate
+     * snaps. */
+    .session-card {
+        color: var(--color-muted);
+        cursor: pointer;
+        border-color: var(--card-border);
+        background-color: var(--card-fill);
+        --card-border: var(--color-line);
+        --card-fill: var(--color-card);
+        --card-accent: inset 0 0 #0000;
+        --card-ring: inset 0 0 #0000;
+        --card-ledge: inset 0 0 #0000;
+        --card-lift: 0 0 #0000;
+        --card-drop: 0 0 #0000;
+        box-shadow: var(--card-accent), var(--card-ring), var(--card-ledge), var(--card-lift), var(--card-drop);
+        /* The shadows transition WITH the colours: selecting a card used to fade its border over 150ms while
+           the ring snapped in on the first frame — one gesture arriving as two. */
+        transition:
+            color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+            background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+            border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+            box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .session-card:hover {
+        color: var(--color-content);
+        --card-border: var(--color-line-strong);
+        --card-fill: var(--color-overlay);
+    }
+    /* THE SELECTION RING IS INSET, and that is what keeps it whole. Drawn outwards it lies OUTSIDE the card's
+     * box, where two things ate it: the lane's pinned header, which is opaque and painted over the top of the
+     * first card in every lane, and the gap between cards, which a ring on each neighbour closed to nothing.
+     * Inside the box nothing can clip it, it follows the card's radius exactly, and the accent is one even
+     * weight the whole way round. A hairline against a border of the same colour, so the edge reads as a solid
+     * 2px of accent rather than as a line under a translucent wash. */
+    .session-card.session-card-on {
+        color: var(--color-content);
+        --card-border: var(--color-primary-500);
+        --card-fill: var(--color-overlay);
+        --card-ring: inset 0 0 0 1px var(--color-primary-500);
+        /* Offset down and pulled in by its spread, so it is a shadow UNDER the card rather than a glow around
+           it: it reaches barely a pixel above, which is the one direction a pinned lane header can cover. */
+        --card-lift: 0 1px 3px -1px color-mix(in srgb, var(--color-primary-500) 28%, transparent);
+    }
+    /* Hover on a card that already wears the accent deepens the halo instead of recolouring the edge. Its fill
+       is already the hover fill, so without this the selected card is the one row that answers the pointer
+       with nothing at all. */
+    .session-card.session-card-on:hover {
+        --card-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
+    }
+    /* THIS CARD IS WAITING ON YOU: a bar down the left edge, as an inset shadow rather than a wider border, so
+     * nothing shifts and a lane's cards keep their text on one axis. It STACKS with selection and paints over
+     * the ring (first in the list): opening the card that needs you must not erase the reason it is in the
+     * lane. A hairline-and-a-half in a settled amber, not 3px of the full role colour — these cards stack a few
+     * pixels apart, and at that spacing the bar reads as one ragged stripe down the lane rather than as a mark
+     * on each card. */
+    .session-card-attention {
+        --card-accent: inset 2px 0 0 0 var(--color-attention-edge);
     }
 }
 

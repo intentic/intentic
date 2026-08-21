@@ -181,3 +181,15 @@ Three selectors are worth copying rather than re-deriving, because each was a bu
   and a fixed toast layer, and a backdrop painted on the toast layer floats above the whole app;
 - a button-tier rule must exclude `.p-button-danger`, `.p-button-warn` and `.p-button-success` explicitly, or a
   `components`-layer tone silently repaints the destructive button in the skin's own metal.
+
+Two hooks the app maintains **for** the skins, and both were bugs first:
+
+- `.session-card` is the fleet board's card, the workflow row and every chat-rail row — one component in three
+  frames. A skin restyles it through the variables it declares (`--card-border`, `--card-fill`, `--card-ring`,
+  `--card-lift`, and the two the skin owns outright, `--card-ledge` and `--card-drop`); writing a flat
+  `box-shadow` on it wipes the attention bar and the selection ring with it. This replaced matching on whichever
+  utilities the board card happened to write, which reached the two board cards and left every rail row in raw
+  accent beside them.
+- `.field-bare` marks a field whose frame belongs to the box **around** it — the chat composer's textarea inside
+  its rounded form. The field rules must exclude it, base and focus both: cutting a recess into one puts a
+  square-cornered slot, and on focus a square-cornered halo, inside a rounded box.

@@ -304,7 +304,7 @@ watch(messages, () => {
                     </RouterLink>
                     <template v-for="lane in lanes" :key="lane.label">
                         <RailLane v-if="lane.rows.length > 0" :label="lane.label" :dot="lane.dot" :count="lane.rows.length">
-                            <div class="flex min-w-0 flex-col gap-1.5">
+                            <div class="flex min-w-0 flex-col gap-2">
                                 <RailCard
                                     v-for="session in lane.rows"
                                     :key="session.id"

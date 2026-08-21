@@ -47,22 +47,18 @@ const TONE: Record<WorkflowRun["state"], string> = {
         role="button"
         tabindex="0"
         :aria-label="`Open the sessions of ${run.workflow.name}`"
-        class="group flex w-full cursor-pointer select-none flex-col gap-1.5 rounded-lg border border-dashed p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col gap-1.5 rounded-lg border border-dashed p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
             /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it
-               rather than one of them. The attention bar is the agent card's, unchanged in colour and
-               width, but SOLID, because a dashed left edge at twice the weight of the rest is not one bar, it
-               is a column of ticks beside a dashed outline, and the two dashed rhythms at different weights
-               read as a rendering fault. `border-style` is per-side in CSS; Tailwind has no per-side utility
-               for it.
-               It stands down while the run is SELECTED, for the reason AgentCard's does: selection paints all
-               four edges, and a bar in another colour over the left one is a doubled edge rather than a second
-               fact. */
-            lane === 'attention' && !selected ? 'border-l-2 border-l-[var(--color-attention-edge)] [border-left-style:solid]' : '',
+               rather than one of them. Everything else — fill, border, hover, the selection ring and the
+               attention bar — is the session card's shared surface (.session-card in styles.css), the same one
+               the agent cards beside it and the chat rail's rows wear. The bar is an inset shadow there, so
+               nothing about it is dashed and the two rhythms can no longer argue. */
+            lane === 'attention' ? 'session-card-attention' : '',
             // The agent card's selection, on the agent card's channel: the chat panel is showing THIS run, and
             // a board that says so about a session but not about a run makes the run look like a thing you
             // cannot point the chat at.
-            selected ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50' : 'border-line bg-card hover:border-line-strong',
+            selected ? 'session-card-on' : '',
             stopping ? 'pointer-events-none opacity-60' : '',
         ]"
         @click="emit(`open`)"

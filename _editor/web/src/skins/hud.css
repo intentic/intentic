@@ -285,7 +285,10 @@
     /* EVERY CARD-PAINTED SURFACE IN THE APP, given the same sheen the .ui-card gets — a single gradient over the
      * top of the box. It touches only `background-image`, which no colour utility sets, so a caller who painted
      * their own background still wins outright and simply keeps the sheen. */
-    [data-skin="hud"] .bg-card {
+    [data-skin="hud"] .bg-card,
+    /* The session card (the board's, the workflow row's, every chat rail's) paints its own fill from a
+       variable rather than through `bg-card`, so it has to be named — one class for all three frames of it. */
+    [data-skin="hud"] .session-card {
         background-image:
             linear-gradient(180deg, color-mix(in oklab, var(--color-primary-200) 6%, transparent), transparent 44%),
             var(--hud-scan);
@@ -357,13 +360,16 @@
      * An input is a slot cut INTO the panel — recessed, darker than what surrounds it, with the light catching
      * its top edge. That inset shadow is the whole trick, and it is why the fields stop looking like flat
      * rectangles the moment the skin comes on. */
+    /* `.field-bare` is excluded here for the reason it is in the other skin: it marks a field whose frame is
+     * drawn by the box around it (the chat composer's textarea inside its rounded form). Cutting a slot into
+     * one of those puts a square-cornered recess, and on focus a square-cornered halo, inside a rounded box. */
     [data-skin="hud"] .p-inputtext,
-    [data-skin="hud"] textarea,
-    [data-skin="hud"] input[type="text"],
-    [data-skin="hud"] input[type="search"],
-    [data-skin="hud"] input[type="email"],
-    [data-skin="hud"] input[type="password"],
-    [data-skin="hud"] input[type="number"] {
+    [data-skin="hud"] textarea:not(.field-bare),
+    [data-skin="hud"] input[type="text"]:not(.field-bare),
+    [data-skin="hud"] input[type="search"]:not(.field-bare),
+    [data-skin="hud"] input[type="email"]:not(.field-bare),
+    [data-skin="hud"] input[type="password"]:not(.field-bare),
+    [data-skin="hud"] input[type="number"]:not(.field-bare) {
         background-color: oklch(11% 0.028 232);
         border-color: var(--hud-edge);
         box-shadow: inset 0 1px 3px oklch(6% 0.02 232 / 0.75);
@@ -378,8 +384,8 @@
      * thing on the panel. */
     [data-skin="hud"] .p-inputtext:focus,
     [data-skin="hud"] .p-inputtext:focus-visible,
-    [data-skin="hud"] textarea:focus,
-    [data-skin="hud"] input:focus-visible,
+    [data-skin="hud"] textarea:not(.field-bare):focus,
+    [data-skin="hud"] input:not(.field-bare):focus-visible,
     [data-skin="hud"] button:focus-visible,
     [data-skin="hud"] [tabindex]:focus-visible {
         outline: none;

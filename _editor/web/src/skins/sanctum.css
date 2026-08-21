@@ -477,6 +477,17 @@
             0 1px 3px -1px rgba(0, 0, 0, 0.5);
     }
 
+    /* THE SESSION CARD — the fleet board's cards, the workflow rows and every chat-rail row, which are one
+     * component (.session-card in the app's stylesheet) and so are one rule here. It cannot take the line
+     * above: that card paints its own fill from a variable rather than through `bg-card`, and it owns its
+     * box-shadow outright — five slots, of which the SKIN is handed exactly two. Writing the shadow flat here
+     * would wipe the attention bar and the selection ring with it. */
+    [data-skin="sanctum"] .session-card {
+        background-image: var(--sanctum-tooth);
+        --card-ledge: inset 0 1px 0 rgba(240, 214, 168, 0.06);
+        --card-drop: 0 1px 3px -1px rgba(0, 0, 0, 0.5);
+    }
+
     /* THE STEP ABOVE A CARD TAKES THE SAME STONE, and it has to, for a reason that only shows up once the tooth
      * exists: the tooth LIFTS the surface it lies on by several luminance levels, so a plate that has it and a
      * plate that does not are no longer in the order their tokens put them in. The fleet board's selected card
@@ -598,13 +609,19 @@
      * A field is a channel cut into the stone: darker than the plate around it, with the light catching the
      * upper lip of the cut. That inset shadow is the whole trick, and it is 3px tall at the top edge of an
      * empty box — it describes the cut without ever getting under a line of text. */
+    /* `.field-bare` IS EXCLUDED FROM ALL OF THIS, and it is not an escape hatch — it is a field whose frame
+     * belongs to the box AROUND it (the chat composer's textarea, which is a transparent slot inside a rounded
+     * form that draws the border, the fill and the focus ring for the whole assembly). Cutting a second recess
+     * into it painted a dark rectangle inside the composer, and the focus rule below drew a THIRD edge: a
+     * 3px accent band with the textarea's own square corners, inside the composer's rounded one. That is the
+     * doubled highlight around the message box. A field that has no frame of its own must not be given one. */
     [data-skin="sanctum"] .p-inputtext,
-    [data-skin="sanctum"] textarea,
-    [data-skin="sanctum"] input[type="text"],
-    [data-skin="sanctum"] input[type="search"],
-    [data-skin="sanctum"] input[type="email"],
-    [data-skin="sanctum"] input[type="password"],
-    [data-skin="sanctum"] input[type="number"] {
+    [data-skin="sanctum"] textarea:not(.field-bare),
+    [data-skin="sanctum"] input[type="text"]:not(.field-bare),
+    [data-skin="sanctum"] input[type="search"]:not(.field-bare),
+    [data-skin="sanctum"] input[type="email"]:not(.field-bare),
+    [data-skin="sanctum"] input[type="password"]:not(.field-bare),
+    [data-skin="sanctum"] input[type="number"]:not(.field-bare) {
         background-color: oklch(10.5% 0.005 78);
         border-color: var(--sanctum-rule-strong);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
@@ -620,8 +637,8 @@
      * argument. */
     [data-skin="sanctum"] .p-inputtext:focus,
     [data-skin="sanctum"] .p-inputtext:focus-visible,
-    [data-skin="sanctum"] textarea:focus,
-    [data-skin="sanctum"] input:focus-visible,
+    [data-skin="sanctum"] textarea:not(.field-bare):focus,
+    [data-skin="sanctum"] input:not(.field-bare):focus-visible,
     [data-skin="sanctum"] button:focus-visible,
     [data-skin="sanctum"] [tabindex]:focus-visible {
         outline: none;
@@ -1076,34 +1093,46 @@
 }
 
 /* ── THE PICKED CARD, IN THE SAME METAL AS THE PICKED ROW ──────────────────────────────────────────────────
- * The fleet board's selected card — the one whose chat is docked — is drawn by the app as `border-primary-500`
- * plus a two-pixel `ring-primary-500/50`. On the app's own dark scheme that is a considered choice; under this
- * skin it was a bright orange frame around a whole card, sitting in a lane of quiet stone, and it was reliably
- * the first thing the eye went to on the busiest screen in the product — for a fact ("this is the chat you
- * have open") that the reader already knows, because they opened it.
+ * A selected session card — the one whose chat is on screen — is drawn by the app in its own primary. On the
+ * app's dark scheme that is a considered choice; under this skin it was a bright orange frame around a whole
+ * card, sitting in a lane of quiet stone, and it was reliably the first thing the eye went to on the busiest
+ * screen in the product — for a fact ("this is the chat you have open") that the reader already knows, because
+ * they opened it.
  *
- * Selection is STRUCTURE — it says where you are — and this file already draws structure in gold three rows
- * up, for the picked row in every walkable list. A board card and a rail row are the same claim; they should
- * not be two different metals. So the card takes the gold too, and the accent goes back to meaning "act".
+ * Selection is STRUCTURE — it says where you are — and this file already draws structure in gold, for the
+ * picked row in every walkable list. A board card and a rail row are the same claim; they must not be two
+ * different metals. So the card takes the gold too, and the accent goes back to meaning "act".
  *
- * MATCHED ON THE PAIR, WHICH IS THE PRECISE PART. Neither class alone is safe to repaint: `border-primary-500`
- * is also a drag target, an editing field's rim and half a dozen other places where the accent means the user
- * is DOING something, and blanking it there would be this skin overreaching into the app's meaning. The two
- * classes TOGETHER appear on exactly the two board cards (AgentCard, WorkflowRunCard) and nowhere else, and
- * they appear together because they are one treatment.
+ * ONE SELECTOR FOR EVERY FRAME OF THE CARD, which is what the shared surface buys: this used to be matched on
+ * the utility PAIR the board card happened to write (`border-primary-500` + `ring-primary-500/50`), so it
+ * reached the two board cards and left every rail row — the popped-out chat, the Subagents list — in raw
+ * orange beside them. The rail was the surface that most looked like another product because of it.
  *
- * UNLAYERED, like the inscriptions below and for the same reason: both properties are set by utilities, and a
- * rule in `@layer components` loses to a utility however specific it is.
+ * AND IT IS A HALO, NOT A FRAME. Solid gold on the border plus a bright ring is a band of metal round the
+ * card, and a band that wide stops reading as "this one is picked" and starts reading as a second, brighter
+ * card. The border comes down to two-thirds strength and the ring is a soft one, which leaves a glow around a
+ * plate rather than a rim on it — the app already lifts the card to the overlay surface, and this skin's
+ * plates carry a shadow that a lifted one carries further. */
+[data-skin="sanctum"] .session-card.session-card-on {
+    --card-border: color-mix(in oklab, var(--sanctum-gold) 66%, transparent);
+    --card-ring: inset 0 0 0 1px rgba(201, 160, 92, 0.28);
+    --card-lift: 0 1px 3px -1px rgba(201, 160, 92, 0.35);
+}
+[data-skin="sanctum"] .session-card.session-card-on:hover {
+    --card-lift: 0 1px 6px -1px rgba(201, 160, 92, 0.5);
+}
+
+/* ── THE COMPOSER'S FRAME ──────────────────────────────────────────────────────────────────────────────────
+ * The message box is ONE field whose frame is the rounded form rather than the textarea inside it, so the box
+ * takes the treatment a focused field takes everywhere else here: a gold rim and one soft accent halo. The app
+ * draws it in its own primary, which under this skin lit a bright orange rectangle around the largest control
+ * on screen — permanently, for as long as anyone was typing — in the one colour the skin keeps for "act".
  *
- * AND IT IS A HALO, NOT A FRAME. Recolouring alone was not enough: solid gold on the border plus a two-pixel
- * ring at nearly half strength is a THREE-PIXEL BAND of metal round the card, and a band that wide stops
- * reading as "this one is picked" and starts reading as a second, brighter card. The border comes down to
- * two-thirds strength and the ring to a fifth, which leaves a soft glow around a plate rather than a rim on
- * it. Selection has three cues here and the frame only has to be one of them: the app also lifts the card to
- * the overlay surface, and this skin's plates already carry a shadow that a lifted one carries further. */
-[data-skin="sanctum"] .border-primary-500.ring-primary-500\/50 {
-    border-color: color-mix(in oklab, var(--sanctum-gold) 66%, transparent);
-    --tw-ring-color: rgba(201, 160, 92, 0.2);
+ * UNLAYERED, like the picked card above: `--tw-ring-color` is set by a utility (`focus-within:ring-…`), and a
+ * rule in `@layer components` loses to a utility however specific it is. */
+[data-skin="sanctum"] .composer-frame:focus-within {
+    border-color: var(--sanctum-gold);
+    --tw-ring-color: color-mix(in oklab, var(--color-primary-500) 24%, transparent);
 }
 
 /* ── THE INSCRIPTIONS ──────────────────────────────────────────────────────────────────────────────────────

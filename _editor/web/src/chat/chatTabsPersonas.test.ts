@@ -75,10 +75,10 @@ afterEach(() => {
 });
 
 const rows = (el: HTMLElement): string[] =>
-    [...el.querySelectorAll(`.rail-card`)].map((card) => card.querySelector(`.line-clamp-2`)?.textContent?.trim() ?? ``);
+    [...el.querySelectorAll(`.session-card`)].map((card) => card.querySelector(`.line-clamp-2`)?.textContent?.trim() ?? ``);
 
 const rowFor = (el: HTMLElement, label: string): HTMLElement | undefined =>
-    [...el.querySelectorAll(`.rail-card`)].find((card) => card.querySelector(`.line-clamp-2`)?.textContent?.trim() === label) as
+    [...el.querySelectorAll(`.session-card`)].find((card) => card.querySelector(`.line-clamp-2`)?.textContent?.trim() === label) as
         HTMLElement | undefined;
 
 /* THE HEADLINE PROPERTY, and the one the old design could not have: a workspace that has never pinned a single
@@ -177,7 +177,7 @@ const disclosureFor = (el: HTMLElement, label: string): HTMLElement | undefined 
 // The chats drawn UNDER a persona: everything the list holds that is not one of the persona rows themselves.
 const sessionRows = (el: HTMLElement): string[] => {
     const personaNames = new Set([`Work`, `Inbox Manager`]);
-    return [...el.querySelectorAll(`[data-chat-tab], .rail-card`)]
+    return [...el.querySelectorAll(`[data-chat-tab], .session-card`)]
         .map((card) => card.querySelector(`.line-clamp-2`)?.textContent?.trim() ?? ``)
         .filter((title) => !personaNames.has(title));
 };
@@ -192,7 +192,7 @@ it("lists a persona's chats and switches to the one you pick", async () => {
     await settle();
     expect(sessionRows(el)).toHaveLength(2);
 
-    // A SESSION row, addressed by what it offers to do: the persona cards are also `.rail-card`, and pressing
+    // A SESSION row, addressed by what it offers to do: the persona cards are also `.session-card`, and pressing
     // one of those would start a chat rather than switch to one.
     selected = [];
     el.querySelector(`[aria-label^="Open "]`)?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
@@ -256,11 +256,11 @@ it("rings the persona of the chat you walk in from, and opens it on that chat", 
 
     useChatGrouping().set(`persona`);
     await settle();
-    expect(rowFor(el, `Work`)?.classList.contains(`rail-card-on`)).toBe(true);
+    expect(rowFor(el, `Work`)?.classList.contains(`session-card-on`)).toBe(true);
     // ...and the chat itself, which means its group is open from the first frame: a ring on a row nobody can
     // see is not a highlight.
     expect(sessionRows(el)).toHaveLength(1);
-    expect(el.querySelector(`[aria-label^="Open "]`)?.classList.contains(`rail-card-on`)).toBe(true);
+    expect(el.querySelector(`[aria-label^="Open "]`)?.classList.contains(`session-card-on`)).toBe(true);
 });
 
 // An UNPINNED chat rings nobody, because there is nobody to ring: the seed is a fact the chat carries, never
@@ -273,7 +273,7 @@ it("rings nobody when the chat you walk in from names no persona", async () => {
 
     useChatGrouping().set(`persona`);
     await settle();
-    expect(rowFor(el, `Work`)?.classList.contains(`rail-card-on`)).toBe(false);
+    expect(rowFor(el, `Work`)?.classList.contains(`session-card-on`)).toBe(false);
     expect(sessionRows(el)).toEqual([]);
 });
 

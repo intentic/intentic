@@ -37,8 +37,9 @@ import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 
 /* One fleet agent, mock-level hierarchy: provider mark + title + status/attention chip; model · session meta;
- * the live activity line while running; and one closing summary line that carries the stats
- * (cost · +ins −dels · msgs · subagents · context ring) with the time pinned to its right.
+ * the live activity line while running, which carries what the turn is doing AND how long it has been at it
+ * (the chat rail's line, to the letter); and one closing summary line that carries the stats
+ * (cost · +ins −dels · subagents · context ring) with the settled card's date pinned to its right.
  * `now` ticks from AgentsView so every card's elapsed readout advances together without per-card timers. The
  * title renames in place (hover pencil → inline input); the drill-in rides beside it as a hover glyph, except
  * on a card that needs the user, where it is spelled out on the summary line. The root is a div-button, not a
@@ -221,8 +222,9 @@ const stats = computed(
 // turn, and the client-only standings have none to draw on. A chat reopened from History sits in this lane too
 // (nothing is running, nothing is owed) and knows nothing about how it ended; its chip already says what it is.
 const completed = computed(() => lane.value === `finished` && !unregistered(props.agent.status));
-// Whether this card can date itself at all: a draft that has never been touched cannot.
-const dated = computed(() => props.agent.startedAt !== undefined || props.agent.archivedAt !== undefined || props.agent.updatedAt > 0);
+// Whether this card can date itself at all: a draft that has never been touched cannot, and neither can a
+// RUNNING one — its clock is the elapsed on the activity line, so the summary row must not be opened for it.
+const dated = computed(() => props.agent.archivedAt !== undefined || (!turnInFlight(props.agent) && props.agent.updatedAt > 0));
 /* WHETHER THE CLOSING LINE HAS ANYTHING TO SAY. The stats and the time-ago used to be two rows, and the second
  * of them held four characters and an affordance that only appears under the pointer: a full row of card
  * height, on every card on the board, so that a lane fit five agents where it could have fit six. They are one
@@ -329,26 +331,21 @@ const grab = (event: PointerEvent): void => {
         role="button"
         tabindex="0"
         :aria-label="`Focus agent: ${displayTitle}`"
-        class="group flex w-full cursor-pointer select-none flex-col gap-1.5 rounded-lg border p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col gap-1.5 rounded-lg border p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
-            /* TWO STATES, TWO CHANNELS. `selected` (this card's chat is the one docked) and the Attention lane
-               are unrelated facts that were both drawn as a coloured 1px outline plus a faint ring: near
-               identical at a glance, so selecting a card that needed the user ERASED the very cue that put it
-               there. They are told apart by WHERE they are drawn: selection is a ring around the whole card
-               plus a lifted surface (a property of the user's focus, in the app's own primary), attention is a
-               solid bar down the left edge (a property of the agent, in warning: the same colour as its chip
-               on the row above, settled into the card so a lane of them reads as one mark per card rather than
-               as a stripe: --color-attention-edge in styles.css, shared with the rail's copy of this bar).
+            /* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. `selected` (this card's chat is on screen)
+               and the Attention lane are unrelated facts, told apart by WHERE they are drawn: selection is a
+               ring around the whole card plus a lifted surface, attention is a bar down the left edge. Both,
+               with the fill, the border and the hover, are `.session-card` in styles.css — the same surface
+               the chat rail's row wears, because a board card and a rail row are one card in two frames and
+               every time this skin was written twice the two drifted.
 
-               THE BAR STANDS DOWN WHILE THE CARD IS SELECTED, and that is a third state rather than an
-               exception to the second. Selection already paints all four edges; a 2px bar in another colour
-               laid over the left one of them is not two facts told in two places, it is a doubled left edge:
-               two parallel lines a pixel apart in two different metals, which reads as a rendering fault
-               before it reads as anything. Nothing is lost: a card in Attention carries its reason chip on the
-               title row (Question for you, Error) which is the louder half of the pair and says WHY, and a
-               selected card is by definition the one already open in front of the reader. */
-            lane === 'attention' && !selected ? 'border-l-2 border-l-[var(--color-attention-edge)]' : '',
-            selected ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50' : 'border-line bg-card hover:border-line-strong',
+               THE BAR STACKS WITH SELECTION rather than standing down under it. The ring is an INSET hairline
+               now, so the bar paints over it instead of doubling an outward edge beside it — which is what
+               once forced the either/or — and opening the card that needs you no longer erases the reason it
+               is in the lane. */
+            lane === 'attention' ? 'session-card-attention' : '',
+            selected ? 'session-card-on' : '',
             dragging ? 'opacity-40' : '',
             pending !== undefined ? 'pointer-events-none opacity-60' : '',
         ]"
@@ -560,15 +557,18 @@ const grab = (event: PointerEvent): void => {
 
             <!-- The live line and the summary both claim the row's leftovers, so a wide board splits them and a
                  narrow one wraps the summary onto its own line rather than shaving the activity to an ellipsis. -->
-            <p
-                v-if="turnInFlight(agent) && activityText"
-                class="flex min-w-0 items-center gap-1.5 text-2xs text-link"
-                :class="dense ? 'min-w-32 flex-1' : ''"
-            >
+            <p v-if="turnInFlight(agent)" class="flex min-w-0 items-center gap-1.5 text-2xs text-link" :class="dense ? 'min-w-32 flex-1' : ''">
                 <!-- The glyph follows whichever fact leads the line: the children when they are the work, else
                      the tool the agent itself is on. -->
                 <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
-                <span class="truncate">{{ activityText }}</span>
+                <!-- WHAT IT IS DOING AND HOW LONG IT HAS BEEN AT IT, ON ONE LINE, which is the chat rail's own
+                     line to the letter. The clock used to sit at the far right of the summary row instead, a
+                     line below and half a card away from the tool it was timing, so the two facts that only
+                     mean anything together ("Bash", "4m 12s") had to be read as two. A turn with no frame yet
+                     still says `Working…` rather than dropping the line, because dropping it takes the clock
+                     with it and a running card with no clock is the one a reader cannot triage. -->
+                <span class="min-w-0 flex-1 truncate">{{ activityText ?? "Working…" }}</span>
+                <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>
             </p>
 
             <!-- THE CONFLICTED CARD'S WAY OUT, ON THE CARD. A refused land is the one state on this board that
@@ -761,12 +761,14 @@ const grab = (event: PointerEvent): void => {
                     <span v-else-if="review === undefined && completed" class="inline-flex shrink-0 items-center gap-1">
                         <Icon name="check" class="text-2xs" />Completed
                     </span>
-                    <span v-if="agent.startedAt !== undefined" class="shrink-0 text-link">{{ formatElapsed(agent.startedAt, now) }}</span>
-                    <!-- An archived card is read as a record, so it dates itself by when it LEFT the board:
+                    <!-- THE CLOCK HERE IS THE SETTLED CARD'S ONLY. A running turn's elapsed is on the activity
+                         line above, beside the tool it is timing, and two clocks on one card disagree by
+                         construction — the rail's rule, now the board's.
+                         An archived card is read as a record, so it dates itself by when it LEFT the board:
                          "last active 3d ago" is the same fact its neighbours already show and answers a question
                          nobody in an archive is asking. -->
-                    <span v-else-if="agent.archivedAt !== undefined" class="shrink-0"> Archived {{ relativeTime(agent.archivedAt) }} </span>
-                    <span v-else-if="agent.updatedAt > 0" class="shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
+                    <span v-if="agent.archivedAt !== undefined" class="shrink-0"> Archived {{ relativeTime(agent.archivedAt) }} </span>
+                    <span v-else-if="!turnInFlight(agent) && agent.updatedAt > 0" class="shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
                 </span>
             </div>
         </div>

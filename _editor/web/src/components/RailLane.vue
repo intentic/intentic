@@ -4,7 +4,7 @@
 
      It is a SLAB rather than a heading over loose cards (see .lane in styles.css): a rounded surface the
      lane's cards lie on, capped by its own header, separated from the next lane by a gap instead of by a
-     colour change. The header is the slab's cap: full-bleed to the rounded top through the negative margins,
+     colour change. The header is the slab's cap: full-bleed to the rounded top,
      painted in the lane's own fill so the two never seam, and PINNED while the lane scrolls, because a column
      this tall is read a screen at a time and a card only means "finished" while the lane it belongs to is
      still on screen. Its text starts where a card's content does, so the lane reads down one left edge.
@@ -30,12 +30,15 @@ defineProps<{
 </script>
 
 <template>
-    <section class="lane flex min-w-0 flex-col rounded-xl p-1">
-        <!-- The cap's last 4px are a MARGIN rather than padding, which changes nothing to look at (the header
-             is painted in the lane's own fill, so the strip is the same colour either way) and everything for
-             the first card: an opaque header that ends exactly where the card begins paints over whatever the
-             card draws at its top edge, and the lane's leading card is the one every list opens on. -->
-        <header class="lane-header sticky top-0 z-10 -mx-1 -mt-1 mb-1 flex items-center gap-2 rounded-t-xl px-3.5 pb-1 pt-2.5">
+    <section class="lane flex min-w-0 flex-col rounded-xl">
+        <!-- THE BOARD'S OWN LANE MEASUREMENTS, to the pixel: header `px-3 py-2`, cards inset `px-2` from the
+             slab's edge with `gap-2` between them (the <section> in AgentsView). They were a few pixels tighter
+             here, and that is exactly the drift the two lists cannot afford: a rail row and a board card are one
+             card in two frames, and a card sitting nearer its lane's edge in one of them reads as a different
+             component rather than as the same one at another width.
+             The header is opaque and ends exactly where the first card begins, so it paints over whatever that
+             card draws at its top edge while the lane scrolls under it. -->
+        <header class="lane-header sticky top-0 z-10 flex items-center gap-2 rounded-t-xl px-3 py-2">
             <span v-if="dot !== undefined" class="h-2 w-2 shrink-0 rounded-full" :class="dot"></span>
             <Icon v-else-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>
@@ -44,6 +47,10 @@ defineProps<{
             <!-- The lane's own bulk act, where the lane is the target: "Clear" on Finished. -->
             <slot name="actions" />
         </header>
-        <slot />
+        <!-- The lane's contents, inset and spaced by the LANE rather than by each caller: three lists picking
+             their own padding is how the rail and the board came apart in the first place. -->
+        <div class="flex min-w-0 flex-col gap-2 px-2 pb-2">
+            <slot />
+        </div>
     </section>
 </template>

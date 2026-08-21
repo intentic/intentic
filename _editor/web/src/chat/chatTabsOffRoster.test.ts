@@ -56,7 +56,7 @@ beforeEach(async () => {
     await nextTick();
 });
 
-it(`draws the model and the spend from the conversation when the fleet cannot resolve it`, async () => {
+it(`draws the model from the conversation when the fleet cannot resolve it`, async () => {
     const chat = useChat();
     const conversation = chat.active.value;
     // Registered, so the join treats it as a real agent that is merely off the roster, not as a draft (which
@@ -71,7 +71,10 @@ it(`draws the model and the spend from the conversation when the fleet cannot re
     const card = host!.querySelector(`[data-chat-tab]`);
     expect(card?.textContent).toContain(`Detached intentic chat · fix`);
     expect(card?.textContent).toContain(modelLabelFor(`claude`, `claude-opus-4-5`));
-    expect(card?.textContent).toContain(`$7.02`);
+    // ...and no spend, from either half of the join: money is the board's fact. A rail is a SWITCHER, read to
+    // pick between the chats you have open, and the line a dollar figure filled is the one the live readout
+    // needs (see ChatTabList's meta template).
+    expect(card?.textContent).not.toContain(`$7.02`);
 });
 
 it(`asks the daemon for the archive when an open chat is off the roster`, async () => {
@@ -85,7 +88,7 @@ it(`asks the daemon for the archive when an open chat is off the roster`, async 
     expect(vi.mocked(sandboxJson).mock.calls.some(([path]) => path === `/agents/archived`)).toBe(true);
 });
 
-it(`spends nothing it has not seen: a restored chat prints no zero`, async () => {
+it(`prints no spend at all, so a restored chat cannot print a zero`, async () => {
     const chat = useChat();
     const conversation = chat.active.value;
     conversation.registered.value = true;

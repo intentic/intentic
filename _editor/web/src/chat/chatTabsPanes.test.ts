@@ -118,9 +118,9 @@ it(`marks every chat on screen the same, whichever one holds the keyboard`, asyn
     await settle();
 
     expect(useChat().panes.value).toEqual([ids[0], ids[1]]);
-    expect(row(el, ids[0]!).className).toContain(`rail-card-on`);
-    expect(row(el, ids[1]!).className).toContain(`rail-card-on`);
-    expect(row(el, ids[2]!).className).not.toContain(`rail-card-on`);
+    expect(row(el, ids[0]!).className).toContain(`session-card-on`);
+    expect(row(el, ids[1]!).className).toContain(`session-card-on`);
+    expect(row(el, ids[2]!).className).not.toContain(`session-card-on`);
 });
 
 it(`still gives a row a column of its own when Ctrl says so`, async () => {
