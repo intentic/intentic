@@ -736,48 +736,52 @@
 }
 
 /* ── 7 · FAQ ─────────────────────────────────────────────
-   A REGISTER, NOT A STACK OF PANELS. The three bands used to run down a 44rem column with their labels
-   sitting on top of their own questions, which made the section a column of accordions with the right half
-   of the band empty beside it — and left a reader who wanted the privacy answers scrolling past two bands
-   of questions to find out where the third began.
-   The labels now stand in the margin, where a codex puts its rubric: the three subjects are legible in one
-   glance down the left, each question block hangs off a spine to their right, and the section uses the
-   width the band always had. Below 62rem the margin has nowhere to stand, so the label goes back above its
-   questions and the spine is dropped. */
+   THREE REGISTERS SIDE BY SIDE, rather than three stacked down one column.
+
+   The questions were always an accordion — fifteen native <details>, every one shut. What made the section
+   the second tallest on the page was not the answers, it was the ARRANGEMENT: three groups stacked, each
+   opening a fresh 3.25rem gap, each with a 15rem margin column holding a two-line rubric and then nothing
+   for the rest of its height. Fifteen one-line questions occupied 1328px, and about a third of the band's
+   width was permanently empty.
+
+   Standing the groups side by side spends that width instead of leaving it. The tallest column sets the
+   height, so the section costs six rows rather than fifteen; the three subjects are legible in one glance
+   across rather than one scroll down, which is what a set of rubrics is FOR; and each keeps its own spine,
+   so the columns read as three registers rather than as a table.
+
+   The rubric comes out of the margin and sits over its own list. It said the same thing there and cost
+   15rem to say it, which also squeezed the questions into a measure narrow enough to wrap them — the
+   arrangement was paying twice.
+
+   Two columns from 52rem where three would wrap every question, one below that. */
 .home .faq {
     display: grid;
-    gap: 3.25rem;
-    max-width: 66rem;
+    gap: 2.25rem 2.75rem;
     margin-top: 2.75rem;
 }
-.home .faq-group-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.25rem 0.85rem;
+@media (min-width: 52rem) {
+    .home .faq {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
-@media (min-width: 62rem) {
-    .home .faq-group {
-        display: grid;
-        grid-template-columns: 15rem minmax(0, 1fr);
+@media (min-width: 76rem) {
+    .home .faq {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
-    /* In the margin the two parts stack: a rubric is a heading with its gloss under it, not a heading with
-       a sentence run on beside it. */
-    .home .faq-group-head {
-        display: block;
-        padding: 0.9rem 2.25rem 0 0;
-    }
-    .home .faq-group-head p {
-        margin-top: 0.45rem;
-        line-height: 1.6;
-    }
-    /* THE SPINE. One rule, the page's lightest, running the full height of whichever side is taller — so it
-       reads as the edge of the register rather than as a border around the questions. */
-    .home .faq-list {
-        margin-top: 0;
-        border-left: 1px solid var(--color-line);
-        padding-left: 2.5rem;
-    }
+}
+/* A rubric is a heading with its gloss under it, not a heading with a sentence run on beside it. */
+.home .faq-group-head {
+    padding-bottom: 0.7rem;
+}
+.home .faq-group-head p {
+    margin-top: 0.35rem;
+    line-height: 1.55;
+}
+/* THE SPINE. One rule, the page's lightest, down the left of each register — what separates the three
+   columns from each other without drawing a box around any of them. */
+.home .faq-list {
+    border-left: 1px solid var(--color-line);
+    padding-left: 1.4rem;
 }
 .home .faq-group-head h3 {
     margin: 0;
@@ -790,7 +794,6 @@
     color: var(--color-subtle);
 }
 .home .faq-list {
-    margin-top: 0.85rem;
     border-bottom: 1px solid var(--color-line);
 }
 .home .faq details {
@@ -802,7 +805,7 @@
     gap: 0.85rem;
     cursor: pointer;
     list-style: none;
-    padding: 1rem 0;
+    padding: 0.7rem 0;
     font-size: 0.9375rem;
     line-height: 1.45;
     color: var(--color-content);
@@ -814,7 +817,7 @@
 /* The answer hangs under its question rather than under the mark: indented by the mark's width plus its
    gap, so the first word of the answer starts on the same axis as the first word of the question. */
 .home .faq-answer {
-    padding: 0 0 1.25rem 1.45rem;
+    padding: 0 0 1rem 1.45rem;
 }
 .home .faq-answer p {
     margin: 0 0 0.7rem;

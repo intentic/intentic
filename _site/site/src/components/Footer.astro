@@ -1,6 +1,6 @@
 ---
 import { apiHref } from "@intentic-dev/site-content/api";
-import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
+import { compareFamilies, compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsDestinations } from "@intentic-dev/site-content/docs";
 import { guidePages, guidesHref } from "@intentic-dev/site-content/guides";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
@@ -87,22 +87,35 @@ const columns: { label: string; links: { href: string; label: string; external?:
     },
 ];
 
-/* The comparison shelf, as a BAND rather than a sixth column.
+/* The comparison shelf, as a BAND rather than a sixth column, and GROUPED rather than flat.
  *
- * Every other column is a handful of unlike things a reader picks between. This is twelve of one thing, and
- * as a column it stood four rows below its tallest neighbour and seven below its shortest, so the footer
- * ended on a single ragged spike with a hole beside it. Eleven rows of "vs X" are also not read the way a
- * column is read: nobody scans them top to bottom, they look for one name, and a wrapped line is the faster
- * shape for that.
+ * Every other column here is a handful of unlike things a reader picks between. This is twelve of one
+ * thing, and as a column it stood four rows below its tallest neighbour, so the footer ended on a ragged
+ * spike with a hole beside it. A band fixed the shape and left the real problem: twelve product names in
+ * one undifferentiated run, which is a list you can only use if you already know the name you want. A
+ * reader who does not — and that is most of them — cannot tell from "vs Hermes" whether Hermes is a rival,
+ * a thing that runs inside this, or something else entirely.
  *
- * No link is dropped in the move. A sitewide link to every comparison page is the reason this shelf is in
- * the footer at all rather than the top bar (see nav.ts), and a band keeps all twelve while costing two
- * lines instead of twelve rows.
- */
-const compareLinks = [
-    { href: compareHref(""), label: "Where intentic sits" },
-    ...comparePages.map((page) => ({ href: compareHref(page.slug), label: page.navLabel })),
-];
+ * THE ANSWER WAS ALREADY WRITTEN, in `compare.ts`: the shelf's whole argument is that most of the tools
+ * people name are NOT competitors, so every page is filed under one of five families, and each family
+ * carries a three-word verdict — "intentic runs these", "keep yours", "the opposite trade". Those verdicts
+ * are the most useful words on the shelf and the footer was throwing them away. Grouping by family puts
+ * each name under the sentence that says what kind of thing it is, and the whole band becomes readable
+ * without opening anything.
+ *
+ * NOT A FEATURE MATRIX, deliberately, and `compare.ts` says why at more length: a table where every row is
+ * a tick for us is the fastest way to lose the credibility the rest of the site is built on. The families
+ * are the honest compression — three of the five verdicts concede that the other tool is not competing.
+ *
+ * Families with no page of their own are dropped rather than rendered empty: `examples` names tools this
+ * site has no page for, and a heading with nothing under it is a promise the footer cannot keep. */
+const compareFamilyLinks = compareFamilies
+    .map((family) => ({
+        label: family.label,
+        verdict: family.verdict,
+        links: comparePages.filter((page) => page.family === family.id).map((page) => ({ href: compareHref(page.slug), label: page.navLabel })),
+    }))
+    .filter((family) => family.links.length > 0);
 
 const legalLinks = [
     { href: "/privacy/", label: "Privacy Policy" },
@@ -169,23 +182,44 @@ const legalLinks = [
         }
     </div>
 
-    {/* The comparison band. Label on the left at lg so the row reads as one sentence of links rather than a
-        headed block, and stacked below it on a phone where a 5rem label would leave the links a gutter. */}
+    {/* The comparison band, in the five families the shelf is actually organised in. Each family is a
+        heading, the verdict that family's page argues, and the tools this site has a page for — so a
+        reader scanning it learns what KIND of thing each name is before deciding whether to open it.
+        Three columns at xl, two on a tablet, one on a phone: the families are unlike each other, so they
+        read as a row of small headed lists rather than as one long run of names. */}
     <div class="relative mx-auto mt-12 max-w-7xl px-6">
         <div class="h-px bg-[linear-gradient(90deg,transparent,var(--color-line-strong)_20%,var(--color-line-strong)_80%,transparent)]" aria-hidden="true"></div>
-        <div class="flex flex-col gap-3 pt-7 lg:flex-row lg:items-baseline lg:gap-8">
-            <h3 class="eyebrow eyebrow-bare shrink-0">Compare</h3>
-            <ul class="flex flex-wrap gap-x-5 gap-y-2">
+        <div class="flex flex-col gap-5 pt-7 lg:flex-row lg:gap-8">
+            {/* The label column, and it carries the hub: "Compare" names the shelf, the link under it goes
+                to the page that answers the shelf's own question. `self-start` because an `.eyebrow` is an
+                inline-flex that would otherwise stretch to the grid's full height and centre itself. */}
+            <div class="flex shrink-0 flex-col items-start gap-2 self-start lg:w-32">
+                <h3 class="eyebrow eyebrow-bare">Compare</h3>
+                <a href={compareHref("")} class="link text-sm">Where intentic sits →</a>
+            </div>
+            <div class="grid flex-1 gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
                 {
-                    compareLinks.map((link) => (
-                        <li>
-                            <a href={link.href} class="text-sm text-muted transition-colors hover:text-primary-400">
-                                {link.label}
-                            </a>
-                        </li>
+                    compareFamilyLinks.map((family) => (
+                        <div>
+                            <div class="flex flex-wrap items-baseline gap-x-2">
+                                <span class="font-mark text-sm font-semibold text-content">{family.label}</span>
+                                {/* The three words that make the whole shelf worth reading: most of these
+                                    are not competitors, and the verdict is where that is said. */}
+                                <span class="text-2xs text-gold">{family.verdict}</span>
+                            </div>
+                            <ul class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+                                {family.links.map((link) => (
+                                    <li>
+                                        <a href={link.href} class="text-sm text-muted transition-colors hover:text-primary-400">
+                                            {link.label}
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     ))
                 }
-            </ul>
+            </div>
         </div>
     </div>
 

@@ -554,61 +554,73 @@
         opacity: 0.85;
     }
 
-    /* THE PRIMARY IS A PANEL OF DARK WOOD, not a wash of ember. The resting fill used to be one radial
-     * glow over stone, which read as the same lit-from-below light every band already carries.
+    /* ══ THE PRIMARY IS CAST BRONZE ══════════════════════════════════════════════════════════════════
      *
-     * WHY THE GRAIN IS RENDERED NOISE AND NOT STRIPED GRADIENTS. A repeating gradient tilted 2° off the
-     * axis has to step down one pixel row every ~28px, and each of its stops is a hard edge the rasteriser
-     * cannot anti-alias along its length — so a 220px button shows the staircase, and two periods beat
-     * against each other into a moiré. It read as a low-resolution photograph of wood rather than as wood.
-     * So the grain is GENERATED: one SVG carrying two `feTurbulence` fields, rasterised by the engine at
-     * whatever size the button happens to be. Frequency is deliberately lopsided — near-nothing across,
-     * high down the panel — which turns isotropic noise into streaks running the length of the board.
-     * Two fields, because real grain is two things: `d` is the dark figure, wide and slow, and `l` the
-     * fine pale fleck over it, an order finer and on its own seed so the two can never line up into
-     * corduroy. Both are matrixed to a FLAT colour with the noise driving only ALPHA — tinting the noise
-     * itself gives mud, since what varies in timber is how much light the fibre returns, not its hue.
+     * It was a panel of dark wood with an ember label, and as an object it was lovely. As the one thing on
+     * the page a reader is meant to press it failed, for a reason no amount of detail inside it could fix:
+     * a dark plate on a dark page is the same VALUE as everything around it. The eye finds edges of
+     * lightness before it finds anything else, and there were none — the button had a gold rule around it
+     * and so did every frame, every card and every ledge on the screen. Nothing said "this one".
      *
-     * AND THE PANEL IS DARKER THAN THE WOOD IT DEPICTS. The label sits ON this, so the wood's job is to be
-     * a ground, not a subject: the body runs #2a1a0d to #120a05 and the grain is held under 0.3 alpha,
-     * which puts the ember label around 10:1 against its own background instead of the ~4:1 a mid-brown
-     * gave it. The warmth is carried by the sill sheen and the gold rule, not by lightening the field the
-     * words have to be read against. */
+     * So the primary inverts. It is the only light-on-dark object on the site: a gilded plaque with the
+     * words cut INTO it, dark on metal, where everything else is cream on stone. One glance finds it from
+     * across the page, and it cannot be confused with a frame, because no frame here is filled.
+     *
+     * IT IS GOLD, NOT EMBER, and that distinction is the whole reason this stays honest. Ember is the
+     * brand's accent and the rule is that it is SPENT, never spread — the full stop on a headline beat, a
+     * lotus bullet, a link. Filling a 220px button with it would spend the page's one saturated colour on
+     * furniture and leave the accents with nothing to be brighter than. Gold is the site's STRUCTURAL
+     * metal, already in every rule; raising it from a hairline to a solid, in exactly one place, is a
+     * promotion the vocabulary already has a word for.
+     *
+     * THREE LAYERS MAKE IT METAL RATHER THAN A SWATCH, front to back: a specular sweep raking across the
+     * plate at the angle the page's own light comes from, a brushed grain, and the body. The grain is
+     * GENERATED rather than drawn as striped gradients for the reason the wood's was — a repeating
+     * gradient off-axis has to step a pixel row every so often, and each stop is a hard edge the
+     * rasteriser cannot anti-alias along its length, so it staircases at button size and beats into moiré.
+     * Turbulence has no period to beat against itself. Frequency is lopsided, near-nothing across and high
+     * down the plate, which is what turns isotropic noise into the drag marks of a wire brush; it is
+     * matrixed to a flat dark gold driving ALPHA only, because what varies across brushed metal is how
+     * much light a scratch throws back, not its hue. */
     .btn-primary {
-        color: #ffb367;
-        /* The letters are on texture, so they carry their own separation. Tight and nearly opaque: at this
-           size a soft shadow is a smudge, and what is wanted is a cut edge, not a glow. */
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
-        background-color: #1b1008;
+        /* Cut into the metal, not printed on it: a warm near-black, with one pale hairline above each
+           letter so the stroke reads as an edge with a depth rather than as ink. 11:1 on the plate. */
+        color: #21140a;
+        font-weight: 600;
+        text-shadow: 0 1px 0 rgba(255, 248, 232, 0.42);
+        background-color: #d9b169;
         background-image:
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='d' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.005 0.17' numOctaves='4' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.026 0 0 0 0 0.012 0.8 0 0 0 -0.22'/%3E%3C/filter%3E%3Cfilter id='l' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.009 0.95' numOctaves='3' seed='19'/%3E%3CfeColorMatrix values='0 0 0 0 0.74 0 0 0 0 0.52 0 0 0 0 0.3 0.34 0 0 0 -0.22'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23d)'/%3E%3Crect width='320' height='64' filter='url(%23l)'/%3E%3C/svg%3E"),
-            radial-gradient(135% 170% at 50% 124%, rgba(228, 138, 62, 0.22) 0%, rgba(150, 84, 40, 0.07) 44%, transparent 74%),
-            linear-gradient(180deg, #2a1a0d 0%, #1d1108 56%, #120a05 100%);
+            linear-gradient(100deg, transparent 26%, rgba(255, 250, 236, 0.42) 44%, rgba(255, 250, 236, 0.08) 55%, transparent 68%),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.23 0 0 0 0 0.07 0.5 0 0 0 -0.16'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23b)'/%3E%3C/svg%3E"),
+            linear-gradient(180deg, #f2d69f 0%, #ddb571 40%, #c99a4f 74%, #b3823c 100%);
         /* Stretched to the button rather than tiled: turbulence has no seam, so a repeat would show its
-           joins, and one field scaled to the panel is exactly how a board is cut from a plank. */
+           joins, and one field scaled to the plate is how a piece is brushed after it is cut. */
         background-size: 100% 100%;
         background-repeat: no-repeat;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(224,123,39,0.66)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(224,123,39,0.66)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(224,123,39,0.32)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(224,123,39,0.32)' stroke-width='2.24'/%3E%3C/svg%3E");
-        /* THE PANEL IS SEATED IN THE FRAME, not laid on it. A lit hairline along the top edge and a shadow
-           along the foot is the whole of a bevel at this size; the wide inner shadow behind them pulls the
-           four edges down so the board sits INSIDE the gold rule rather than floating level with it. */
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='2.24'/%3E%3C/svg%3E");
+        /* A lit hairline along the top edge and a shade along the foot is the whole of a bevel at this
+           size. The outer pair is what actually lifts the plate off the wall: a warm halo the near-black
+           page has nothing else like, and a short drop under it so the object has somewhere to sit. */
         box-shadow:
-            inset 0 1px 0 rgba(255, 219, 170, 0.11),
-            inset 0 -1px 0 rgba(0, 0, 0, 0.55),
-            inset 0 0 18px rgba(0, 0, 0, 0.5),
-            0 0 22px rgba(224, 123, 39, 0.16);
+            inset 0 1px 0 rgba(255, 252, 242, 0.8),
+            inset 0 -1px 0 rgba(88, 56, 18, 0.5),
+            inset 0 0 16px rgba(140, 94, 36, 0.25),
+            0 0 30px rgba(226, 168, 78, 0.3),
+            0 6px 18px -6px rgba(0, 0, 0, 0.75);
     }
     .btn-primary::before {
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(248,167,80,0.98)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(248,167,80,0.98)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(248,167,80,0.55)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(248,167,80,0.55)' stroke-width='2.24'/%3E%3C/svg%3E");
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,251,240,1)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,251,240,1)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(140,96,40,0.5)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(140,96,40,0.5)' stroke-width='2.24'/%3E%3C/svg%3E");
     }
-    /* The primary's hover wash is ember rather than stone, and it carries the brighter glow with it — one
-     * layer, one opacity, so the lift and the light arrive together. */
+    /* Under the pointer the plate catches more of the same light rather than changing colour: one warm
+       sheen, one opacity, so the lift arrives as a single movement. */
     .btn-primary::after {
-        background: radial-gradient(120% 160% at 50% 120%, rgba(245, 155, 63, 0.3) 0%, rgba(245, 155, 63, 0.1) 48%, transparent 78%);
-        box-shadow: inset 0 0 26px rgba(245, 155, 63, 0.18);
+        background: linear-gradient(180deg, rgba(255, 250, 236, 0.42) 0%, rgba(255, 244, 220, 0.12) 55%, transparent 100%);
     }
-    .btn-primary:hover {
-        color: #ffe3bd;
+    /* The label does not lighten on hover — it is cut into metal, and metal that brightens does not turn
+       its engraving pale. Only the plate moves. */
+    .btn-primary:hover,
+    .btn-primary:focus-visible {
+        color: #21140a;
     }
 
     /* The plain cartouche is already the secondary, so this only names it — every call site that says
