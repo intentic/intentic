@@ -55,21 +55,6 @@ import { workspacePaths } from "./workspace/workspace.js";
  * route suites live next to the routes they drive now; this is what they share. Not part of the build
  * (tsconfig `exclude`), type-checked with the tests (tsconfig.test.json). */
 
-/* A fire route answers 200 the moment it accepts the wake and lets the turn run DETACHED, so the run it records
- * lands some time after the response. That tail is not the fake agent (which completes instantly), it is the
- * real turn path around it: the extension/cli env scan off disk, the worktree compose, the land pass. On a
- * loaded runner (CI runs this package's 143 files alongside the rest of the monorepo) it outruns vi.waitFor's
- * 1s default often enough to have made these the suite's flakiest tests. This budget bounds a hang; it does not
- * measure latency, so it is set against the ceiling of the suite that actually runs it.
- *
- * That ceiling is the INTEGRATION one (60s): every caller is app.integration.test.ts, which reaches the machine
- * exactly as this comment describes. 4s was chosen to stay under the 5s UNIT budget so an overrun would report
- * as the assertion that did not settle rather than as a dead test, but that ceiling never applied here, and
- * the 4s it bought went back to measuring the runner: three verify jobs building at once outran it and broke
- * main. Well clear of the tail above, still a fraction of the 60s a genuine hang reports within.
- */
-export const TURN_SETTLES = { timeout: 30_000 } as const;
-
 /* Where the agent worktrees' MAIN checkouts would be, a path under tmpdir that is never created, so on every
  * host it is definitively absent. This suite drives the ROUTES; the worktree and land git mechanics have their
  * own suites against real repos (worktrees.integration.test.ts, land.integration.test.ts). The land pass a turn runs at its end reads

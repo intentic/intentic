@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentEvent, type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 import type { z } from "zod";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
@@ -59,7 +60,7 @@ test("a due cron wakes the agent once and records a completed run", async () => 
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect((await services.automations.get("inbox"))?.runs).toHaveLength(1));
+    await vi.waitFor(async () => expect((await services.automations.get("inbox"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts).toEqual(["wake:inbox"]);
     expect((await services.automations.get("inbox"))?.runs[0]?.outcome).toBe("completed");
 });
@@ -70,7 +71,7 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(1));
+    await vi.waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(1), SETTLES);
     const skipped = (await services.automations.get("guarded"))?.runs[0];
     expect(skipped?.outcome).toBe("skipped");
     expect(skipped?.detail).toBe("nothing new");
@@ -80,7 +81,7 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
     await automationIdle("guarded");
     await services.automations.upsert(automation("guarded", { guard: "true" }));
     await scheduler.tick(pastDue() + 61_000);
-    await vi.waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(2));
+    await vi.waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(2), SETTLES);
     expect((await services.automations.get("guarded"))?.runs[0]?.outcome).toBe("completed");
     expect(prompts).toEqual(["wake:guarded"]);
 });
@@ -92,7 +93,7 @@ test("event automations never tick; fireAutomation hands the payload to the guar
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect((await services.automations.get("sched"))?.runs).toHaveLength(1));
+    await vi.waitFor(async () => expect((await services.automations.get("sched"))?.runs).toHaveLength(1), SETTLES);
     // Only the schedule automation fired: events wait for their webhook.
     expect((await services.automations.get("hook"))?.runs).toEqual([]);
     expect(prompts).toEqual(["wake:sched"]);
@@ -175,7 +176,7 @@ test(`a requireApproval automation holds the wake instead of running it; cleared
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
     // The due cron enqueued one held wake and never woke the agent nor recorded a run.
-    await vi.waitFor(async () => expect(await services.approvals.list()).toHaveLength(1));
+    await vi.waitFor(async () => expect(await services.approvals.list()).toHaveLength(1), SETTLES);
     expect(prompts).toEqual([]);
     expect((await services.automations.get("gated"))?.runs).toEqual([]);
     expect((await services.approvals.list())[0]?.automationId).toBe("gated");
@@ -213,7 +214,7 @@ test("a holdForSeconds fire is held with a deadline, and the tick releases it on
     // Past the deadline and quiet: silence was consent, the wake runs with the held payload, once.
     live.length = 0;
     await scheduler.tick(Date.now() + 2_000);
-    await vi.waitFor(async () => expect((await services.automations.get("fixer"))?.runs).toHaveLength(1));
+    await vi.waitFor(async () => expect((await services.automations.get("fixer"))?.runs).toHaveLength(1), SETTLES);
     expect(await services.approvals.list()).toEqual([]);
     expect(prompts).toEqual(["wake:fixer\n\n--- Event payload ---\nchecks broke"]);
 });
@@ -228,7 +229,7 @@ test("cancelling is just removing the hold, and disabling the automation mid-cou
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(Date.now() + 2_000);
     // The stale hold is dropped rather than left to fire the day the automation is re-enabled.
-    await vi.waitFor(async () => expect(await services.approvals.list()).toEqual([]));
+    await vi.waitFor(async () => expect(await services.approvals.list()).toEqual([]), SETTLES);
     expect(prompts).toEqual([]);
 });
 
@@ -300,7 +301,7 @@ test("disabled automations and not-yet-due crons never fire; agent errors land a
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts, [{ kind: "error", message: "no credits" }, { kind: "done" }]));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect((await services.automations.get("broken"))?.runs).toHaveLength(1));
+    await vi.waitFor(async () => expect((await services.automations.get("broken"))?.runs).toHaveLength(1), SETTLES);
     expect((await services.automations.get("broken"))?.runs[0]).toMatchObject({ outcome: "error", detail: "no credits" });
     expect((await services.automations.get("off"))?.runs).toEqual([]);
     expect((await services.automations.get("later"))?.runs).toEqual([]);
@@ -459,7 +460,7 @@ test("an admission-floor hold parks a wake whose automation asked for nothing, a
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect(await services.approvals.list()).toHaveLength(1));
+    await vi.waitFor(async () => expect(await services.approvals.list()).toHaveLength(1), SETTLES);
     // "Ask me" from the floor is the same "ask me" as requireApproval: no deadline for the scan to release.
     expect((await services.approvals.list())[0]?.autoRunAt).toBeUndefined();
     expect(prompts).toEqual([]);

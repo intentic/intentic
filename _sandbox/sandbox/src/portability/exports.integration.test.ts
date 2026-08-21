@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 import type { Services } from "../composition.js";
 import { fakeFiles, memoryCapabilitiesStore, services } from "../route-testing.js";
 import { testConfig } from "../testing.js";
@@ -49,7 +50,7 @@ const settled = async (history: string, name: string): Promise<void> => {
     await vi.waitFor(async () => {
         const found = (await listExports(history)).find((entry) => entry.name === name);
         expect(found?.status ?? "packing").not.toBe("packing");
-    });
+    }, SETTLES);
 };
 
 test("an export survives the request that started it: it is named at once and finishes on its own", async () => {

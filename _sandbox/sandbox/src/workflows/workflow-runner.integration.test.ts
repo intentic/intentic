@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { type AgentEvent, type AgentTurn, LOOP_DIR, type Workflow, type WorkflowStep, workflowFaults } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
 import type { TurnFn } from "../loops/loop-runner.js";
@@ -343,7 +344,7 @@ test("the sandbox-wide workflow limit bounds several fan-outs together", async (
      * waiting for one, which is how one slow moment read as five broken tests.
      */
     try {
-        await vi.waitFor(() => expect(peak).toBe(4), { timeout: 10_000, interval: 5 });
+        await vi.waitFor(() => expect(peak).toBe(4), SETTLES);
     } finally {
         release();
     }
@@ -476,7 +477,7 @@ test("restart recovery gives a workflow-owned loop only to the workflow schedule
     );
 
     await resumeWorkflowExecution(services, claiming(root, prompts));
-    await vi.waitFor(async () => expect((await services.workflowRuns.get(opened.runId))?.state).toBe("done"));
+    await vi.waitFor(async () => expect((await services.workflowRuns.get(opened.runId))?.state).toBe("done"), SETTLES);
 
     expect(prompts).toHaveLength(1);
     expect((await services.workflowRuns.get(opened.runId))?.resumed).toBe(1);

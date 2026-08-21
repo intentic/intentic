@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
 import { expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 import {
     buildAuthorizeUrl,
     type ClaudeStore,
@@ -333,14 +334,14 @@ test("the last turn's release rotates the token there and then", async () => {
     const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
     const stop = startClaudeRefresh(store, 60 * 60_000, async () => ({ accessToken: "rotated" }));
     // The boot tick runs immediately; nothing holds the account, so it takes the gap it is already in.
-    await vi.waitFor(() => expect(store.current()?.accessToken).toBe("rotated"));
+    await vi.waitFor(() => expect(store.current()?.accessToken).toBe("rotated"), SETTLES);
     // Now with a turn in flight: the release is the trigger, so nothing moves until it lands.
     await store.write(stored({ accessToken: "second", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
     const release = holdAccount("a");
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(store.current()?.accessToken).toBe("second");
     release();
-    await vi.waitFor(() => expect(store.current()?.accessToken).toBe("rotated"));
+    await vi.waitFor(() => expect(store.current()?.accessToken).toBe("rotated"), SETTLES);
     stop();
 });
 

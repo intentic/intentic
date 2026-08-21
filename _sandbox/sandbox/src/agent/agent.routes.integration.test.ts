@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 
 import { createApp } from "../app.js";
 
@@ -268,7 +269,7 @@ test("a steer taken mid-turn lands in the run's frames, and in the record, betwe
         { kind: "delta", text: "will do" },
     ]);
     // And the copy a reopened chat is drawn from holds the same three speakers in the same order.
-    await vi.waitFor(() => expect(recorded).not.toHaveLength(0));
+    await vi.waitFor(() => expect(recorded).not.toHaveLength(0), SETTLES);
     expect(recorded.map(({ role, text }) => ({ role, text }))).toEqual([
         { role: "user", text: "ship it" },
         { role: "assistant", text: "on it" },

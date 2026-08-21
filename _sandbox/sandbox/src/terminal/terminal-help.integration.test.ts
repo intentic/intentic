@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { afterAll, expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 import { liveWindow, selectWindow } from "./terminal-help.js";
 import { captureScrollback } from "./terminal-session.js";
 
@@ -47,17 +48,14 @@ afterAll(kill);
 // what makes the assertions below about tmux's answer rather than about this machine's load.
 const addWindow = async (name: string, command: string, settled: "dead" | "waiting"): Promise<void> => {
     await execFileAsync("tmux", ["new-window", "-t", `=${SESSION}:`, "-n", name, command]);
-    await vi.waitFor(
-        async () => {
-            const { stdout } = await execFileAsync("tmux", ["list-panes", "-s", "-t", `=${SESSION}`, "-F", "#{window_name} #{pane_dead}"]);
-            const pane = stdout.split("\n").find((line) => line.startsWith(`${name} `));
-            expect(pane).toBe(`${name} ${settled === "dead" ? "1" : "0"}`);
-            if (settled === "waiting") {
-                expect((await captureScrollback(SESSION, 50))?.text ?? "").toContain("OTP:");
-            }
-        },
-        { timeout: 10_000, interval: 50 },
-    );
+    await vi.waitFor(async () => {
+        const { stdout } = await execFileAsync("tmux", ["list-panes", "-s", "-t", `=${SESSION}`, "-F", "#{window_name} #{pane_dead}"]);
+        const pane = stdout.split("\n").find((line) => line.startsWith(`${name} `));
+        expect(pane).toBe(`${name} ${settled === "dead" ? "1" : "0"}`);
+        if (settled === "waiting") {
+            expect((await captureScrollback(SESSION, 50))?.text ?? "").toContain("OTP:");
+        }
+    }, SETTLES);
 };
 
 test.skipIf(!HAS_TMUX)("the owner lands on the window still waiting, not on the newest one", async () => {
@@ -82,7 +80,7 @@ test.skipIf(!HAS_TMUX)("the owner lands on the window still waiting, not on the 
     // Answer it the way the owner would, and the session has nothing waiting left, which is the tool's own
     // refusal case ("nothing is waiting in your terminal") rather than a handover onto a dead pane.
     await execFileAsync("tmux", ["send-keys", "-t", `=${SESSION}:publish`, "123456", "Enter"]);
-    await vi.waitFor(async () => expect(await liveWindow(SESSION)).toBeUndefined(), { timeout: 10_000, interval: 50 });
+    await vi.waitFor(async () => expect(await liveWindow(SESSION)).toBeUndefined(), SETTLES);
 });
 
 // No session at all: the first thing the tool asks, on a turn that has run no command yet. It must answer

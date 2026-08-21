@@ -6,6 +6,7 @@ import { expect, test, vi } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
+import { SETTLES } from "@intentic/testing/vitest";
 import { fileApprovalsStore } from "./approvals-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import type { WakeFn } from "./scheduler.js";
@@ -78,10 +79,10 @@ test("a matching enabled chore wakes with the event as its payload", async () =>
     const prompts: string[] = [];
 
     expect(await dispatchWorkspaceEvent(services, event("a1"), fakeWake(prompts))).toEqual(["review"]);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("review:review");
     expect(prompts[0]).toContain(`"agentId":"a1"`);
-    await vi.waitFor(async () => expect((await services.automations.get("review"))?.runs[0]?.outcome).toBe("completed"));
+    await vi.waitFor(async () => expect((await services.automations.get("review"))?.runs[0]?.outcome).toBe("completed"), SETTLES);
 });
 
 test("disabled chores, other events and other repos never fire", async () => {
@@ -112,11 +113,11 @@ test("a burst QUEUES instead of dropping: every distinct agent gets reviewed, on
     await dispatchWorkspaceEvent(services, event("a2"), wake);
     await dispatchWorkspaceEvent(services, event("a3"), wake);
     // Serial: the first turn is running and holds the queue, so nothing else has woken yet.
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(`"agentId":"a1"`);
 
     release();
-    await vi.waitFor(() => expect(prompts).toHaveLength(3));
+    await vi.waitFor(() => expect(prompts).toHaveLength(3), SETTLES);
     expect(prompts[1]).toContain(`"agentId":"a2"`);
     expect(prompts[2]).toContain(`"agentId":"a3"`);
 });
@@ -129,13 +130,13 @@ test("a second event for a waiting agent REPLACES it rather than queueing a dupl
     const { wake, release } = blockingWake(prompts);
 
     await dispatchWorkspaceEvent(services, event("a1"), wake);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // Both land behind the running turn; the second supersedes the first, so a2 is reviewed ONCE, as "error".
     await dispatchWorkspaceEvent(services, event("a2", { outcome: "conflict" }), wake);
     await dispatchWorkspaceEvent(services, event("a2", { outcome: "error" }), wake);
 
     release();
-    await vi.waitFor(() => expect(prompts).toHaveLength(2));
+    await vi.waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
     expect(prompts[1]).toContain(`"outcome":"error"`);
 });
 
@@ -149,10 +150,10 @@ test("two different chores on one event do not run their turns at the same time"
 
     // Both match, so both queue, but a chore turn runs on the shared /work tree, so only one may be running.
     expect(await dispatchWorkspaceEvent(services, event("a1"), wake)).toEqual(["review", "docs"]);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
 
     release();
-    await vi.waitFor(() => expect(prompts).toHaveLength(2));
+    await vi.waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
 });
 
 test("a chore disabled while its backlog waits does not run", async () => {
@@ -163,12 +164,12 @@ test("a chore disabled while its backlog waits does not run", async () => {
     const { wake, release } = blockingWake(prompts);
 
     await dispatchWorkspaceEvent(services, event("a1"), wake);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     await dispatchWorkspaceEvent(services, event("a2"), wake);
     await services.automations.upsert(chore("review", { enabled: false }));
 
     release();
     // The queue re-reads the manifest per event, so the waiting one is abandoned, not run.
-    await vi.waitFor(async () => expect((await services.automations.get("review"))?.runs).toHaveLength(1));
+    await vi.waitFor(async () => expect((await services.automations.get("review"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts).toHaveLength(1);
 });

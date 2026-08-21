@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 import { createApp } from "../app.js";
 import { rejectAuth, rejectForbidden, services } from "../route-testing.js";
 import { testConfig } from "../testing.js";
@@ -100,7 +101,7 @@ test("starting an export answers with its name at once, and the list carries it 
     await vi.waitFor(async () => {
         const now = await jsonOf<{ exports: ExportRow[] }>(await app.request("/bundles"));
         expect(now.exports.find((entry) => entry.name === name)?.status).toBe("ready");
-    });
+    }, SETTLES);
 });
 
 test("a second start while one is packing is a 409, not a race", async () => {
@@ -122,7 +123,7 @@ test("download needs a ticket for THAT bundle, and serves it with a real length"
     await vi.waitFor(async () => {
         const now = await jsonOf<{ exports: ExportRow[] }>(await app.request("/bundles", { headers: owner }));
         expect(now.exports.find((entry) => entry.name === name)?.status).toBe("ready");
-    });
+    }, SETTLES);
 
     // No ticket, or one minted for a different bundle, buys nothing: the credential is scoped to one file.
     expect((await app.request(`/bundles/download?name=${encodeURIComponent(name)}`)).status).toBe(401);

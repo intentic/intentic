@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
@@ -60,7 +61,7 @@ const longLine = (tag: string): string => tag + "x".repeat(30_000);
  * the whole monorepo's run (the web suite's workers on the same cores) that second expired first and the
  * suite reported a threading bug that was a stopwatch. Generous and finite: a real regression still fails on
  * the assertion rather than hanging to the test timeout. */
-const eventually = (assertion: () => void | Promise<void>): Promise<void> => vi.waitFor(assertion, { timeout: 15_000 });
+const eventually = (assertion: () => void | Promise<void>): Promise<void> => vi.waitFor(assertion, SETTLES);
 
 // The provenance every push carries: the batching rules under test are about payloads and reply sinks, so the
 // origin/title are held constant and only the sink varies.

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
@@ -175,7 +176,7 @@ test("a sandbox without the tmux wrapper names no terminal", async () => {
     const { services } = fakeServices({ prepushCommand: "exit 0", visible: false });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("passed"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("passed"), SETTLES);
     expect((await check.state()).session).toBeUndefined();
 });
 
@@ -183,7 +184,7 @@ test("a zero exit is a passed result", async () => {
     const { services } = fakeServices({ prepushCommand: "echo all good; exit 0" });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("passed"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("passed"), SETTLES);
     expect((await check.state()).exitCode).toBe(0);
 });
 
@@ -192,7 +193,7 @@ test("a non-zero exit is a failed result carrying the output", async () => {
     const { services } = fakeServices({ prepushCommand: "echo boom >&2; exit 3" });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), SETTLES);
     const state = await check.state();
     expect(state.exitCode).toBe(3);
     // stderr counts: a suite's failure summary is as likely to arrive there as on stdout.
@@ -207,7 +208,7 @@ test("the output a failure carries is plain text, not the terminal's own bytes",
     const { services } = fakeServices({ prepushCommand: String.raw`printf '\033[31mboom\033[0m\n1/2\r2/2 done\n'; exit 1` });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), SETTLES);
     const { output } = await check.state();
     expect(output).toBe("boom\n2/2 done\n");
 });
@@ -218,7 +219,7 @@ test("the output a failure carries is capped to its tail", async () => {
     const { services } = fakeServices({ prepushCommand: "yes 0123456789 | head -n 5000; exit 1" });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 8_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), SETTLES);
     const { output } = await check.state();
     expect(output.length).toBe(24_000);
     // The TAIL, so the last thing the command printed is the last thing the prompt shows.
@@ -233,9 +234,9 @@ test("a second run while one is going starts nothing", async () => {
     // Two in the SAME TICK, which is the case `running` alone cannot guard: reading the settings is an await, so
     // both calls would find no run in flight and start a suite each.
     await Promise.all([check.run(), check.run()]);
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("running"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("running"), SETTLES);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("passed"), { timeout: 8_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("passed"), SETTLES);
     expect(runs()).toBe(1);
 });
 
@@ -248,7 +249,7 @@ test("a check that outruns the timeout is failed and timedOut, never cancelled",
     const { services } = fakeServices({ prepushCommand: "sleep 30", prepushTimeoutMs: 150 });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), SETTLES);
     expect((await check.state()).timedOut).toBe(true);
 });
 
@@ -258,9 +259,9 @@ test("a cancelled run is cancelled, not failed", async () => {
     const { services } = fakeServices({ prepushCommand: "sleep 30" });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("running"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("running"), SETTLES);
     check.cancel();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("cancelled"), { timeout: 8_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("cancelled"), SETTLES);
 });
 
 /* WHO GETS INTERRUPTED. The user is expected to start a push and go and do something else, so a red verdict has
@@ -270,21 +271,21 @@ test("a red verdict notifies devices; a pass and a cancel say nothing", async ()
     const red = fakeServices({ prepushCommand: "exit 1" });
     const redCheck = createPrepushCheck(red.services);
     await redCheck.run();
-    await vi.waitFor(async () => expect((await redCheck.state()).status).toBe("failed"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await redCheck.state()).status).toBe("failed"), SETTLES);
     expect(red.notified()).toEqual(["Checks failed"]);
 
     const green = fakeServices({ prepushCommand: "exit 0" });
     const greenCheck = createPrepushCheck(green.services);
     await greenCheck.run();
-    await vi.waitFor(async () => expect((await greenCheck.state()).status).toBe("passed"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await greenCheck.state()).status).toBe("passed"), SETTLES);
     expect(green.notified()).toEqual([]);
 
     const stopped = fakeServices({ prepushCommand: "sleep 30" });
     const stoppedCheck = createPrepushCheck(stopped.services);
     await stoppedCheck.run();
-    await vi.waitFor(async () => expect((await stoppedCheck.state()).status).toBe("running"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await stoppedCheck.state()).status).toBe("running"), SETTLES);
     stoppedCheck.cancel();
-    await vi.waitFor(async () => expect((await stoppedCheck.state()).status).toBe("cancelled"), { timeout: 8_000 });
+    await vi.waitFor(async () => expect((await stoppedCheck.state()).status).toBe("cancelled"), SETTLES);
     expect(stopped.notified()).toEqual([]);
 });
 
@@ -294,7 +295,7 @@ test("a timed-out check notifies as a timeout", async () => {
     const { services, notified } = fakeServices({ prepushCommand: "sleep 30", prepushTimeoutMs: 150 });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), SETTLES);
     expect(notified()).toEqual(["Checks timed out"]);
 });
 
@@ -304,7 +305,7 @@ test("a command the shell cannot find is a failure whose output says so", async 
     const { services } = fakeServices({ prepushCommand: "definitely-not-a-real-binary-xyz" });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).not.toBe("running"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).not.toBe("running"), SETTLES);
     const state = await check.state();
     expect(state.status).toBe("failed");
     expect(state.output).toContain("not found");
@@ -317,7 +318,7 @@ test("a command that could not be started at all is an error, not a failure", as
     const { services } = fakeServices({ prepushCommand: "exit 0", root: "/definitely/not/a/directory" });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).not.toBe("running"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).not.toBe("running"), SETTLES);
     const state = await check.state();
     expect(state.status).toBe("error");
     // It names the command, because what is broken is the thing the user typed rather than anything it ran.
@@ -330,7 +331,7 @@ test("clearing the command reports idle, whatever the last run concluded", async
     const { services, settings } = fakeServices({ prepushCommand: "exit 1" });
     const check = createPrepushCheck(services);
     await check.run();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), SETTLES);
     settings.current = { ...settings.current, rules: [] };
     expect(await check.state()).toEqual({ status: "idle", command: "", output: "" });
 });

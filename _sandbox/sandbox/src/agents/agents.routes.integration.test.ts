@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import { expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 
 import type { RestoredMessage } from "@intentic/sandbox-contract";
 
@@ -13,7 +14,17 @@ import { extensionProcessKey } from "../extensions/extension-processes.js";
 
 import { spokenLinesOf } from "../sessions/transcript-search.js";
 
-import { clientFor, codexConnectedProxy, collect, errorCode, fakeHistory, fakeProcesses, runAgentTurn, services, withTranslator } from "../route-testing.js";
+import {
+    clientFor,
+    codexConnectedProxy,
+    collect,
+    errorCode,
+    fakeHistory,
+    fakeProcesses,
+    runAgentTurn,
+    services,
+    withTranslator,
+} from "../route-testing.js";
 
 /* The agents routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
@@ -86,7 +97,7 @@ test("a workspace turn follows the same registry lifecycle without inventing a b
     expect(snapshots).toEqual(["user", "turn"]);
     expect((await client.agents.list()).agents).toMatchObject([{ id: "workspace-conv", status: "idle", sessionId: "sess-workspace", costUsd: 0.25 }]);
     expect((await client.agents.list()).agents[0]).not.toHaveProperty("branch");
-    await vi.waitFor(() => expect(spend).toMatchObject([{ conversationId: "workspace-conv" }]));
+    await vi.waitFor(() => expect(spend).toMatchObject([{ conversationId: "workspace-conv" }]), SETTLES);
     // Registry actions remain unified; branch actions are placement-specific and fail explicitly.
     expect(await errorCode(client.agents.diff({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.agents.autoLand({ id: "workspace-conv", autoLand: false }))).toBe("BAD_REQUEST");
@@ -367,12 +378,12 @@ test("a turn parked on a question lands without a force: it is waiting for the u
     await client.agent.run({ prompt: "ask me something", conversationId: "conv1", isolated: true });
     /* The park has to have been observed before the guard is asked: the frame travels the relay to get there,
      * behind the turn's own worktree setup. That is real machine work: ~0.4s idle, and several times that on a
-     * runner carrying the rest of the suite beside it. Budgeted explicitly for the same reason the integration
-     * suite has its own testTimeout (see _tools/testing/vitest.ts): waitFor's 1s default is a hang detector,
+     * runner carrying the rest of the suite beside it. On SETTLES for the same reason the integration suite
+     * has its own testTimeout (both in _tools/testing/vitest.ts): waitFor's 1s default is a hang detector,
      * and held to it this poll went green on an idle box and red under load, taking the four tests after it
      * down with it: a wait that expires here skips the release below, and the gated turn it leaves parked
      * holds conv1's slot in the run map for the rest of the file. */
-    await vi.waitFor(async () => expect((await client.agents.list()).agents[0]?.status).toBe("awaiting"), { timeout: 10_000 });
+    await vi.waitFor(async () => expect((await client.agents.list()).agents[0]?.status).toBe("awaiting"), SETTLES);
     // No `force`, and no refusal: this is the state the old guard sent the user away to wait on, when the
     // thing being waited for could only end once they came back and answered.
     expect(await client.agents.land({ id: "conv1" })).toMatchObject({ landed: false });
@@ -523,7 +534,9 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
                     truncate: async () => 0,
                 },
                 processes: fakeProcesses(ports),
-                ...(activity !== undefined ? { activity: { append: async (event: unknown) => void activity.push(event), list: async () => [] } } : {}),
+                ...(activity !== undefined
+                    ? { activity: { append: async (event: unknown) => void activity.push(event), list: async () => [] } }
+                    : {}),
             }),
         ),
     );
@@ -572,10 +585,12 @@ test("agents.place in a channel conversation delivers the line to the provider's
             placed: true,
         });
         // …and the activity feed shows the channel was told, the same row an agent's own send leaves.
-        await vi.waitFor(() =>
-            expect(activity.filter((event) => (event as { type?: string }).type === "message.send")).toMatchObject([
-                { provider: "discord", direction: "out", channelId: "123", content: "On it. checking now.", conversationId: "conv1" },
-            ]),
+        await vi.waitFor(
+            () =>
+                expect(activity.filter((event) => (event as { type?: string }).type === "message.send")).toMatchObject([
+                    { provider: "discord", direction: "out", channelId: "123", content: "On it. checking now.", conversationId: "conv1" },
+                ]),
+            SETTLES,
         );
     } finally {
         gateway.close();

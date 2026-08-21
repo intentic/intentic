@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { SETTLES } from "@intentic/testing/vitest";
 
 import type { AgentEvent, Capability, RestoredMessage } from "@intentic/sandbox-contract";
 
@@ -23,7 +24,6 @@ import type { AgentTool } from "./agent/agent-tools.js";
 import { testConfig } from "./testing.js";
 
 import {
-    TURN_SETTLES,
     clientFor,
     codexConnectedProxy,
     collect,
@@ -448,7 +448,7 @@ test("POST /automations/:id/fire skips bearer auth, enforces the automation toke
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ ok: true });
     // The turn runs detached (the fake agent completes instantly) and lands in the run history.
-    await vi.waitFor(async () => expect((await store.get("deploy"))?.runs).toHaveLength(1), TURN_SETTLES);
+    await vi.waitFor(async () => expect((await store.get("deploy"))?.runs).toHaveLength(1), SETTLES);
     expect((await store.get("deploy"))?.runs[0]?.outcome).toBe("completed");
 });
 
@@ -467,14 +467,14 @@ test("automations.run fires by hand on the real path: a disabled automation too,
 
     // The turn runs detached: the ack does not wait on it, because the guard alone may take a minute.
     expect(await client.automations.run({ id: "cron" })).toEqual({ ok: true });
-    await vi.waitFor(async () => expect((await store.get("cron"))?.runs).toHaveLength(1), TURN_SETTLES);
+    await vi.waitFor(async () => expect((await store.get("cron"))?.runs).toHaveLength(1), SETTLES);
     expect((await store.get("cron"))?.runs[0]?.outcome).toBe("completed");
 
     expect(await client.automations.run({ id: "paused" })).toEqual({ ok: true });
-    await vi.waitFor(async () => expect((await store.get("paused"))?.runs).toHaveLength(1), TURN_SETTLES);
+    await vi.waitFor(async () => expect((await store.get("paused"))?.runs).toHaveLength(1), SETTLES);
 
     expect(await client.automations.run({ id: "gated" })).toEqual({ ok: true });
-    await vi.waitFor(async () => expect((await store.get("gated"))?.runs).toHaveLength(1), TURN_SETTLES);
+    await vi.waitFor(async () => expect((await store.get("gated"))?.runs).toHaveLength(1), SETTLES);
     expect((await store.get("gated"))?.runs[0]?.outcome).toBe("completed");
 });
 
@@ -542,7 +542,7 @@ test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist
     expect(ok.headers.get("content-type")).toContain("text/event-stream");
     expect(ok.headers.get("access-control-allow-origin")).toBe("https://site.example");
     await ok.text();
-    await vi.waitFor(async () => expect((await store.get("support"))?.runs).toHaveLength(1), TURN_SETTLES);
+    await vi.waitFor(async () => expect((await store.get("support"))?.runs).toHaveLength(1), SETTLES);
     expect((await store.get("support"))?.runs[0]?.outcome).toBe("completed");
 
     // The preflight is answered with the reflected origin too, so the browser lets the cross-site POST through.

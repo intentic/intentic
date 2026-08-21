@@ -51,3 +51,22 @@ export const INTEGRATION_SUITE = {
     testTimeout: 60_000,
     hookTimeout: 60_000,
 } as const;
+
+/* THE SAME CEILING, ONE LAYER IN: what `vi.waitFor` is allowed inside an integration suite.
+ *
+ * It has to be said separately because vitest does not derive it from the budgets above. A wait gets ONE
+ * SECOND unless the call site says otherwise, whatever the test around it was allowed, so a suite given sixty
+ * seconds to clone a repo, boot a daemon or land a turn was still bounding every read-back at one, and the
+ * same latency-as-hang-detector mistake the split above exists to end came back at each call.
+ *
+ * It came back the expensive way, too: as a constant per file, invented after that file had already broken
+ * main. app.integration's TURN_SETTLES, turn-resume's READ_BACK and prepush's inline 5s were three answers to
+ * one question, and the newest of them had already been raised once, from 4s, when three verify jobs building
+ * at once outran it. The chore backlog in workspace-events drains in ~400ms with the package to itself and
+ * lost the second on a runner running every package's vitest at once, which is where this landed: two tests
+ * red on the push, green on every re-run, pointing at queue code that was working.
+ *
+ * 30s for the same reason the suite gets 60: well clear of what real work takes, still a fraction of the
+ * test's own budget, so an overrun reports as the assertion that never came true rather than as a dead test.
+ * It buys PATIENCE, not leniency, the assertion is untouched and a real regression fails exactly as before. */
+export const SETTLES = { timeout: 30_000 } as const;

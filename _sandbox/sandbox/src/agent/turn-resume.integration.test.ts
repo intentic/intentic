@@ -17,6 +17,7 @@ import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
+import { SETTLES } from "@intentic/testing/vitest";
 import type { TranscriptAgent } from "../sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
@@ -92,20 +93,6 @@ const settle = async (conversationId: string): Promise<void> => {
     await turnRunOf(conversationId)?.waitUntilFinished();
 };
 
-/* HOW LONG A WAIT ON THE FILESYSTEM IS GIVEN. The waits in this file come in two kinds: most watch an array
- * this file owns in memory, which is true on the next tick or never, and a few read back through a STORE:
- * the journal, the automations file, the transcript record, which is true only once a write has landed on
- * disk and been re-read.
- *
- * vitest gives a wait one second by default. That is generous for those writes on an idle machine and not
- * generous at all under `pnpm verify`, which runs this suite alongside fifty-eight other tasks on the same
- * cores: two of these failed a land there while passing every time the package was run on its own. The budget
- * is the one the rest of this package already uses for the same reason.
- *
- * It buys PATIENCE, not leniency: the assertion is unchanged and still has to come true, so a real
- * regression fails exactly as it did, five seconds later. */
-const READ_BACK = { timeout: 5_000 } as const;
-
 /* startConversationTurn is THE one way a conversation's turn starts, which is why the transcript hangs off it:
  * every provider goes through here, so every provider's conversation is readable afterwards. Run on codex/native
  * on purpose: the pair with no Claude Code session store behind it, whose chats opened blank for exactly as
@@ -120,7 +107,7 @@ test("a started turn records its settled transcript, whatever provider ran it", 
         harness: "native",
     });
     expect(started).toBeDefined();
-    await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2), READ_BACK);
+    await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2), SETTLES);
     // The user row is stamped with when it was sent; this suite is about which rows a settled turn records, so
     // it asserts the shape and lets the clock be a number.
     expect(await record.read("tr-record")).toEqual([
@@ -641,7 +628,7 @@ test("an interrupted chat turn is re-run under the restart note, on the session 
     };
     await resumeInterruptedTurns(services, capture, BOOT_AT);
 
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("The sandbox restarted");
     // The request rides again IN FULL: a bare "continue" would lose it.
     expect(prompts[0]).toContain("finish the report");
@@ -671,7 +658,7 @@ test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kill
         yield { kind: "done" };
     };
     await resumeInterruptedTurns(services, wake, BOOT_AT);
-    await vi.waitFor(() => expect(order).toContain(`wake`));
+    await vi.waitFor(() => expect(order).toContain(`wake`), SETTLES);
 
     // The spent attempt lands first; the resumed run's own entry (carrying the same spent count) follows.
     expect(order[0]).toBe(`record:attempts=1`);
@@ -742,7 +729,7 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
-    await vi.waitFor(async () => expect((await services.automations.get("hook"))?.runs).toHaveLength(2), READ_BACK);
+    await vi.waitFor(async () => expect((await services.automations.get("hook"))?.runs).toHaveLength(2), SETTLES);
 
     const runs = (await services.automations.get("hook"))?.runs ?? [];
     // Newest first: the completed re-fire sits above the interrupted record of the fire it replaced.
@@ -766,7 +753,7 @@ test("a re-fire skips the approval gate: the wake was already past it when the d
 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
-    await vi.waitFor(() => expect(prompts).toEqual(["sweep"]));
+    await vi.waitFor(() => expect(prompts).toEqual(["sweep"]), SETTLES);
     // Re-holding it would ask a question the owner has already answered.
     expect(await services.approvals.list()).toEqual([]);
 });
@@ -852,7 +839,7 @@ const parkedEntry = (conversationId: string, cards: ParkedCard[], extra: Partial
 // The rehydrated cards are up once their frames have folded through registry observe: the same moment the
 // fleet lights `awaiting` and an attached window renders them live.
 const cardsUp = async (observed: AgentEvent[], kind: ParkedCard["kind"]): Promise<void> => {
-    await vi.waitFor(() => expect(observed.map((event) => event.kind)).toContain(kind));
+    await vi.waitFor(() => expect(observed.map((event) => event.kind)).toContain(kind), SETTLES);
 };
 
 test("a parked turn is rehydrated at boot: the cards go back up as they stood, and nothing runs until the user answers", async () => {
@@ -872,7 +859,7 @@ test("a parked turn is rehydrated at boot: the cards go back up as they stood, a
     await vi.waitFor(async () => {
         const [entry] = await services.turnJournal.list();
         expect(entry?.kind === "turn" ? (entry.parked ?? []).map((card) => card.requestId) : []).toEqual(["r-up"]);
-    }, READ_BACK);
+    }, SETTLES);
 
     // Stop works on the rehydrated park like on any live turn: the cards freeze cancelled, resolved WITHOUT a
     // reply, and nothing resumes. The journal entry drains with the settled turn, as any settled turn's does.
@@ -881,7 +868,7 @@ test("a parked turn is rehydrated at boot: the cards go back up as they stood, a
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-up" });
     expect(prompts).toEqual([]);
     expect(resuming).toEqual([]);
-    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), READ_BACK);
+    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), SETTLES);
 });
 
 test("approving the restored plan resumes the session in the posture a live approval grants", async () => {
@@ -898,7 +885,7 @@ test("approving the restored plan resumes the session in the posture a live appr
     await cardsUp(observed, "plan");
 
     expect(resolveRequest({ kind: "plan", requestId: "r-plan", approve: true })).toBe(true);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // The answer is the prompt, behind the note that says the words are the user's response, not a repeat of
     // the original request, which the session already holds.
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
@@ -927,7 +914,7 @@ test("rejecting the restored plan with feedback goes back into plan mode carryin
     await cardsUp(observed, "plan");
 
     expect(resolveRequest({ kind: "plan", requestId: "r-rej", approve: false, feedback: "Use pnpm, not npm." })).toBe(true);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("Use pnpm, not npm.");
     expect(inputs[0]).toMatchObject({ permissionMode: "plan" });
     await settle("pk-rej");
@@ -941,7 +928,7 @@ test("answering the restored question resumes with the picks, worded as a live a
     await cardsUp(observed, "question");
 
     expect(resolveRequest({ kind: "question", requestId: "r-q", answers: { "Deploy now?": ["Yes"] } })).toBe(true);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // formatAnswers' own wording: the model reads ONE shape of answer whichever side of a restart it lands on.
     expect(prompts[0]).toContain("The user answered:");
     expect(prompts[0]).toContain("Deploy: Yes");
@@ -959,7 +946,7 @@ test("dismissing the restored question ends the turn quietly, exactly as a live 
     await settle("pk-dis");
     expect(prompts).toEqual([]);
     expect(resuming).toEqual([]);
-    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), READ_BACK);
+    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), SETTLES);
 });
 
 test("allowing the restored permission resumes the turn told to run the tool", async () => {
@@ -970,7 +957,7 @@ test("allowing the restored permission resumes the turn told to run the tool", a
     await cardsUp(observed, "permission");
 
     expect(resolveRequest({ kind: "permission", requestId: "r-allow", decision: "once" })).toBe(true);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
     expect(prompts[0]).toContain("The user allowed Bash");
     await settle("pk-allow");
@@ -983,7 +970,7 @@ test("denying the restored permission with feedback resumes as a redirection; a 
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "permission");
     expect(resolveRequest({ kind: "permission", requestId: "r-redir", decision: "deny", feedback: "Read the file instead." })).toBe(true);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("Read the file instead.");
     await settle("pk-redir");
 
@@ -1007,7 +994,7 @@ test("one answer resumes a turn parked on several cards: the others freeze cance
     await cardsUp(observed, "permission");
 
     expect(resolveRequest({ kind: "permission", requestId: "r-mp", decision: "once" })).toBe(true);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("The user allowed Bash");
     // The question the user did not answer froze cancelled: no reply on its resolved frame, and the resumed
     // turn re-asks what it still needs.

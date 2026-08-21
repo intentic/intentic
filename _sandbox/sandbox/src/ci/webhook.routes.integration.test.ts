@@ -8,6 +8,7 @@ import { defaultGit } from "@intentic/scaffold";
 import { Hono } from "hono";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
+import { SETTLES } from "@intentic/testing/vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -112,7 +113,7 @@ test("a failed run freshens the cache with failed jobs and wakes the ci automati
     expect(response.status).toBe(200);
     expect(services.ciRuns.sweep()).toMatchObject([{ repo: "web", runId: 7, status: "failed", failedJobs: ["lint"] }]);
     expect(await services.ciStore.lastConclusion("web", "main")).toBe("failed");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), { timeout: 3000 });
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_failed");
     expect(prompts[0]).toContain(`"lint"`);
     expect(prompts[0]).toContain(`"channelId":"web"`);
@@ -124,7 +125,7 @@ test("a success after a failure dispatches pipeline_succeeded AND pipeline_fixed
     const response = await deliver(app, await services.ciStore.secret(), workflowRun("success"));
     expect(response.status).toBe(200);
     expect(await services.ciStore.lastConclusion("web", "main")).toBe("success");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), { timeout: 3000 });
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_succeeded");
     expect(prompts[0]).toContain("pipeline_fixed");
 });
@@ -136,12 +137,12 @@ test("a failure after a recorded success dispatches pipeline_failed AND pipeline
     await services.ciStore.recordConclusion("web", "main", "success", 1);
     const secret = await services.ciStore.secret();
     expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), { timeout: 3000 });
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_failed");
     expect(prompts[0]).toContain("pipeline_broken");
 
     expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
-    await vi.waitFor(() => expect(prompts).toHaveLength(2), { timeout: 3000 });
+    await vi.waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
     expect(prompts[1]).toContain("pipeline_failed");
     expect(prompts[1]).not.toContain("pipeline_broken");
 });
@@ -226,7 +227,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
     });
     expect(accepted.status).toBe(200);
     expect(await services.ciStore.lastConclusion("app", "main")).toBe("success");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), { timeout: 3000 });
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_succeeded");
     expect(prompts[0]).toContain("gitlab.example.com/group/app/-/pipelines/42");
 });
