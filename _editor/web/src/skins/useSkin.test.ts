@@ -4,9 +4,11 @@
 // hud.css hangs off, and the webfont <link> that must not be there when no skin is on.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// `useSkin` reaches `useTheme` through the design system's barrel, which pulls in app-wide singletons that read
-// browser globals at import time (useDevice reads window.matchMedia): stood up for the package by
-// vitest.setup.ts, which runs before this file is loaded.
+// Eight `await import()` calls, one per test, because the subject is a module-scope singleton that reads
+// storage and the document as it evaluates: `vi.resetModules()` plus a fresh import IS the reset. That only
+// stays cheap because `useSkin` reaches `useTheme` through @intentic/ui/theme rather than the design system's
+// barrel; off the barrel each of these re-entered the component graph inside a test body, on the same clock as
+// the assertions, and lost the 20s budget to a busy machine.
 
 const load = () => import("./useSkin");
 const root = () => document.documentElement;

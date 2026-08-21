@@ -62,6 +62,10 @@
             "types": "./src/composables/useTextSize.ts",
             "default": "./src/composables/useTextSize.ts"
         },
+        "./theme": {
+            "types": "./src/composables/useTheme.ts",
+            "default": "./src/composables/useTheme.ts"
+        },
         "./styles/*": "./src/styles/*",
         "./async": {
             "types": "./src/lib/async.ts",

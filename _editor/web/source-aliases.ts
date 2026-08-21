@@ -102,6 +102,11 @@ export const sourceAliases = (): Record<string, string> => ({
     // terminal's grid all convert against (uiScale.ts), so it is reached from plain modules the shell loads on
     // every boot, and through the barrel, asking a column how wide it should be would boot Picker.vue.
     "@intentic/ui/text-size": fromRoot("_editor/ui/src/composables/useTextSize.ts"),
+    // And again, for the scheme-and-accent singleton: which mode the app is in is a two-attribute question on
+    // <html> that plain modules ask and answer (skins/useSkin.ts turns the scheme dark with the skin). Through
+    // the barrel that question costs mermaid, shiki and vue-flow, paid by every unit test that asks it, which
+    // is how a 20s budget meant to bound a HANG became a budget that a slow machine could lose to.
+    "@intentic/ui/theme": fromRoot("_editor/ui/src/composables/useTheme.ts"),
     "@intentic/ui": fromRoot("_editor/ui/src/index.ts"),
     /* THE EXTENSION KIT MUST RESOLVE TO SOURCE HERE, and unlike its neighbours above that is not a convenience
      *, it is the difference between an app and an infinite regress. `@intentic/extension-ui` is PUBLISHED, so
