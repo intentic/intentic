@@ -257,6 +257,15 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         }
         return effects;
     },
+    /* The standing consequence is the server the daemon runs; the multi-gigabyte download is disclosed on the
+     * model field itself, where the choice that sizes it is made. No `endpoint` row on purpose: that member
+     * exists to say a conversation LEAVES for a URL, and the whole point of this card is that it doesn't. The
+     * image + gpu rows appear exactly when the GPU switch is on, the one ask that rebuilds anything on the
+     * published image (the docker card's gpu option, one layer shallower). */
+    localmodel: (input) => [
+        { kind: "process", names: ["llama-server"] },
+        ...(input.config["gpu"] === "on" || input.config["gpu"] === true ? [{ kind: "image" } as const, { kind: "gpu" } as const] : []),
+    ],
     /* Deliberately NO `secret` row, which is the most informative thing this card's disclosure can say: the
      * signing key is held by the platform's custody provider and never enters the sandbox, so adding a
      * wallet stores no credential here at all. What it does add is the spend itself, with the numbers the

@@ -128,8 +128,12 @@ export const optionalDirective = (token: string): OptionalDirective | undefined 
 // The allowlisted runtime tokens of an overlay, or a throw naming the first token that is not, an unknown
 // directive is either a typo'd capability fragment or an escape attempt, and both must stop the recreate
 // rather than be skipped into a sandbox that silently lacks (or exceeds) its privileges.
+//
+// DEDUPED, first appearance wins: two capabilities may legitimately ask for the same grant (the docker card's
+// GPU option and a local model's both emit `--gpus=all`), and docker run accepts `--privileged` twice but not
+// every repeated flag, so the emitters downstream must never see one token per asker.
 export const runtimeDirectivesOf = (overlay: string): string[] => {
-    const tokens: string[] = [];
+    const tokens = new Set<string>();
     for (const line of overlay.split("\n")) {
         if (!line.startsWith(RUNTIME_DIRECTIVE_PREFIX)) {
             continue;
@@ -138,10 +142,10 @@ export const runtimeDirectivesOf = (overlay: string): string[] => {
             if (!(RUNTIME_DIRECTIVES as readonly string[]).includes(token)) {
                 throw new Error(`unsupported runtime directive '${token}' in the approved overlay`);
             }
-            tokens.push(token);
+            tokens.add(token);
         }
     }
-    return tokens;
+    return [...tokens];
 };
 
 // --- Env ----------------------------------------------------------------------------------------------

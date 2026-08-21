@@ -23,6 +23,7 @@ import { linkSshHosts } from "./capabilities/ssh-hosts.js";
 import { startTranslator } from "./agent/translator.js";
 import { onPath } from "./platform/on-path.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
+import { localModelPanelKey, startLocalModelsIfEnabled } from "./capabilities/handlers/localmodel.js";
 import { writeAgentToken } from "./auth/agent-token.js";
 import { startClaudeRefresh } from "./claude/claude-credentials.js";
 import { createCiPoller } from "./ci/poller.js";
@@ -655,9 +656,20 @@ const main = async (): Promise<void> => {
             (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
             (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
         const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
+        // A live llama-server is adopted for the dockerd reason, with a heavier price for getting it wrong:
+        // killing one throws away a loaded model, and reloading a large one costs minutes of dead picker.
+        const modelKeys = (await services.capabilities.list().catch(() => []))
+            .flatMap((capability) => (capability.kind === "localmodel" ? [localModelPanelKey(capability.id)] : []));
+        const modelsAlive: string[] = [];
+        for (const key of modelKeys) {
+            if (await services.processes.adopt(key, {}).catch(() => false)) {
+                modelsAlive.push(panelSession(key));
+            }
+        }
         await killStaleManagedSessions([
             ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
             ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
+            ...modelsAlive,
         ]).catch(() => undefined);
     });
     // A previous boot's check runs left per-run event files behind (their streams died with the daemon).
@@ -866,6 +878,11 @@ const main = async (): Promise<void> => {
     }
     if (role.container) {
         void startDockerdIfEnabled(bootCtx);
+    }
+    // Local model servers die with the container the same way dockerd does, while the manifest and the
+    // downloaded weights survive on /work: bring every ready one back. Best-effort like its siblings.
+    if (role.container) {
+        void startLocalModelsIfEnabled(bootCtx);
     }
     /* The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": serves those providers on
      * their connected subscription OAuth, plus the user's own openai-protocol endpoints.

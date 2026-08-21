@@ -23,7 +23,11 @@ const providers = [
 ];
 
 const others = [
-    { name: `A model endpoint`, detail: `Point the sandbox at any OpenAI-compatible API. Its catalog is read from the server itself, so the picker offers what that server actually serves.` },
+    {
+        name: `A local model`,
+        detail: `The sandbox downloads the weights and serves them itself: pick a model on the Local model card and it appears in the picker. Nothing to install, nothing leaves the machine; an NVIDIA GPU is one switch and one rebuild away. Small models shine as the quick model (free commit messages) and for work that must stay local.`,
+    },
+    { name: `A model endpoint`, detail: `Point the sandbox at any OpenAI-compatible API you already run: Ollama on this machine, vLLM on the GPU box, a gateway. Its catalog is read from the server itself, so the picker offers what that server actually serves.` },
     { name: `An ACP agent`, detail: `Any agent speaking the Agent Client Protocol, added as a capability. Adding one needs no update to intentic.` },
 ];
 ---

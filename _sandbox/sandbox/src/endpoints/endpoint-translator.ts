@@ -3,6 +3,7 @@ import type { Services } from "../composition.js";
 import { cliProxyManagementUrl } from "../agent/translator.js";
 import { trialCompatEntry } from "../trial/trial-endpoint.js";
 import { parseHeaders, versionedBase } from "./endpoint-config.js";
+import { endpointConfigOf } from "./local-model.js";
 
 /* AN OPENAI-COMPATIBLE ENDPOINT, EXPRESSED AS A CLIPROXYAPI PROVIDER, the whole of what makes a self-configured
  * model API drivable by a harness that speaks only the Anthropic Messages API.
@@ -46,17 +47,18 @@ export interface CompatEntry {
 }
 
 // Only openai-protocol endpoints ride the translator. An anthropic-protocol one already speaks the harness's own
-// wire, so it is pointed at directly (harness-credentials.ts) and has no business in this list. The trial is
-// excluded here because its entry is STATIC (trialCompatEntry, appended below): deriving it from the capability
-// list would tie the routing table back to the availability probe's timing, which is the fresh-install race this
-// split exists to end, and when the probe HAS answered, the layered capability would mint a second entry on the
-// same prefix.
+// wire, so it is pointed at directly (harness-credentials.ts) and has no business in this list. A localmodel
+// entry arrives here as the derived loopback endpoint it is (endpointConfigOf), openai by construction.
+//
+// The trial is excluded because its entry is STATIC (trialCompatEntry, appended below): deriving it from the
+// capability list would tie the routing table back to the availability probe's timing, which is the
+// fresh-install race that split exists to end, and when the probe HAS answered, the layered capability would
+// mint a second entry on the same prefix.
 export const translatedEndpoints = (capabilities: readonly Capability[]): { id: string; config: EndpointConfig }[] =>
-    capabilities.flatMap((capability) =>
-        capability.kind === "endpoint" && capability.config.protocol === "openai" && capability.id !== TRIAL_ENDPOINT_ID
-            ? [{ id: capability.id, config: capability.config }]
-            : [],
-    );
+    capabilities.flatMap((capability) => {
+        const config = capability.id === TRIAL_ENDPOINT_ID ? undefined : endpointConfigOf(capability);
+        return config !== undefined && config.protocol === "openai" ? [{ id: capability.id, config }] : [];
+    });
 
 /* One entry per endpoint, its models taken from the live catalog (which falls back to the last list this
  * endpoint answered with, see endpoint-catalog.ts for why that rung has to exist for this caller in particular).

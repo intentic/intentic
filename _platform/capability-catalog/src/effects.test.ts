@@ -53,6 +53,20 @@ describe("capabilityEffects", () => {
         });
     });
 
+    /* The GPU switch is the one ask on the local-model card that rebuilds anything, so it is the one thing
+     * that may add the image + gpu rows; and there is deliberately no `endpoint` row: that member says a
+     * conversation LEAVES for a URL, and the card's whole point is that it doesn't. */
+    it("a local model runs a process, and only its gpu switch costs an image and the host's GPUs", () => {
+        expect(capabilityEffects({ kind: "localmodel", config: { model: "owner/repo/m.gguf" } })).toEqual([
+            { kind: "process", names: ["llama-server"] },
+        ]);
+        expect(capabilityEffects({ kind: "localmodel", config: { model: "owner/repo/m.gguf", gpu: "on" } })).toEqual([
+            { kind: "process", names: ["llama-server"] },
+            { kind: "image" },
+            { kind: "gpu" },
+        ]);
+    });
+
     it("always stores an ssh credential on disk, for both auth modes", () => {
         for (const auth of ["key", "password"]) {
             expect(capabilityEffects({ kind: "ssh", config: { auth } })).toEqual([

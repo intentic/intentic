@@ -177,6 +177,13 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         On a Compose-managed sandbox that <code>privileged: true</code> stays your own edit to the file. The rebuild flow recreates
         containers with <code>docker run</code>, and would fight Compose over ownership if it wrote it for you.
     </p>
+    <p>
+        The nested engine also runs <strong>Ollama</strong>, for people who want that runtime specifically: <code>docker run -d -p
+        11434:11434 ollama/ollama</code> inside the sandbox (add <code>--gpus=all</code> once the docker capability's GPU option is on),
+        then point a <strong>Model endpoint</strong> card at <code>http://127.0.0.1:11434/v1</code>. If you don't care which runtime
+        serves the weights, the <strong>Local model</strong> card does all of this with one pick and no engine at all — see{" "}
+        <a href="/docs/models/">Models</a>.
+    </p>
 
     <h2>Environment overlays</h2>
     <p>

@@ -11,6 +11,7 @@ import {
 import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import { unversionedBase } from "../endpoints/endpoint-config.js";
 import { endpointModelId } from "../endpoints/endpoint-translator.js";
+import { endpointConfigOf } from "../endpoints/local-model.js";
 import type { Services } from "../composition.js";
 import { accountWithHeadroom } from "../usage/account-usage.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
@@ -287,15 +288,23 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
         return resolveTrialCredentials(services);
     }
     const capability = await services.capabilities.get(id);
-    if (capability === undefined || capability.kind !== "endpoint") {
+    // A localmodel capability resolves here too, as the loopback endpoint it derives (endpointConfigOf): the
+    // provider id is `endpoint/<id>` either way, and a turn on it is an endpoint turn in every particular.
+    const config = capability === undefined ? undefined : endpointConfigOf(capability);
+    if (capability === undefined || config === undefined) {
         return { ok: false, message: `Unknown model endpoint "${id}", add it as an Endpoint capability first.` };
     }
-    const config = capability.config;
     const catalog = await services.endpointModels.models(id, config);
     if (catalog.models.length === 0) {
         return {
             ok: false,
-            message: `${id} has published no models, check the server is running at ${config.baseUrl} and has a model loaded.`,
+            // A local model publishes nothing for an ordinary, self-resolving reason (weights still
+            // downloading, or the server still loading them), so it gets the sentence that says where to look
+            // rather than one telling the user to go check a server they never started.
+            message:
+                capability.kind === "localmodel"
+                    ? `${id} isn't serving yet, its model may still be downloading or loading. Check its capability card.`
+                    : `${id} has published no models, check the server is running at ${config.baseUrl} and has a model loaded.`,
         };
     }
     const resolved = routedModel(catalog, model);

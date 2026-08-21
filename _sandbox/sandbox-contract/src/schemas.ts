@@ -3232,6 +3232,7 @@ export const CapabilityKindSchema = z.enum([
     "host",
     "agent",
     "endpoint",
+    "localmodel",
     "wallet",
 ]);
 export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
@@ -3716,6 +3717,28 @@ export const EndpointConfigSchema = z.object({
     apiKey: z.string().optional(),
     headers: z.string().optional(),
 });
+
+/* A MODEL THE SANDBOX RUNS ITSELF, the managed counterpart of `endpoint`. An endpoint points at a server the
+ * USER operates; this one names weights, and the daemon does the operating: it downloads the file into the
+ * workspace cache, serves it with the image's bundled llama-server on a loopback port it owns, and registers
+ * the result exactly as if the user had added an endpoint at that port. Everything downstream (the picker, the
+ * translator, quick-model pinning) sees an `endpoint/<id>` provider and never learns the difference, which is
+ * why there is no baseUrl here: the URL is derived from the entry's id (the daemon's endpoints/local-model.ts),
+ * not a fact anyone typed.
+ *
+ * `model` is WHICH WEIGHTS, as a Hugging Face path (`owner/repo/file.gguf`, resolved to the repo's own
+ * download), so shipping a new recommended model is a catalog-card edit, not a daemon release. The reserved
+ * value "custom" defers to `url`, a direct GGUF link for people who know exactly what they want.
+ *
+ * `gpu` mirrors the docker card's option and rides the same allowlisted `--gpus=all` directive: the ASK lives
+ * here, what became of it is SANDBOX_GPU, stamped by the runner (see the docker handler's gpuState). "on"/"off"
+ * rather than a boolean for the manifest-wide reason DockerConfigSchema gives. */
+export const LocalModelConfigSchema = z.object({
+    model: z.string().min(1),
+    gpu: z.enum(["on", "off"]).default("off"),
+    url: z.url().optional(),
+});
+export type LocalModelConfig = z.infer<typeof LocalModelConfigSchema>;
 /* THE SANDBOX WALLET, a USDC balance the agent can spend on x402-payable endpoints, under owner policy.
  *
  * WHAT IS DELIBERATELY NOT HERE IS A KEY. The signing key lives with the PLATFORM (one wallet per owner,
@@ -3810,6 +3833,10 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     // precedent, with the prefix because these two are the only capability kinds that mint providers and they
     // want opposite ability records (an ACP agent owns its own loop; an endpoint runs the full Claude Code one).
     z.object({ id: entryId, kind: z.literal("endpoint"), config: EndpointConfigSchema }),
+    // A model the sandbox downloads and serves itself (LocalModelConfigSchema). Deliberately minting the SAME
+    // `endpoint/<id>` provider ids as the endpoint kind: to every consumer it IS an endpoint, one the daemon
+    // happens to operate, so a second provider namespace would be a second code path for the same turns.
+    z.object({ id: entryId, kind: z.literal("localmodel"), config: LocalModelConfigSchema }),
     // The sandbox's USDC wallet (WalletConfigSchema), one per sandbox; the key never enters the container.
     z.object({ id: entryId, kind: z.literal("wallet"), config: WalletConfigSchema }),
 ]);

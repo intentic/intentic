@@ -9,6 +9,7 @@ import {
     resolveQuickModels,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import { endpointConfigOf } from "../endpoints/local-model.js";
 import { harnessReadyProviders, resolveHarnessCredentials } from "./harness-credentials.js";
 import { runOneShot } from "./one-shot.js";
 import { runGeminiOneShot } from "./one-shot-gemini.js";
@@ -31,17 +32,22 @@ const catalogOf = async (services: Services, provider: NativeProvider): Promise<
     return catalog?.models.map((model) => model.id) ?? [];
 };
 
-// Every configured model endpoint, as a source. Ready by being installed, its credential (if any) was
-// configured with it, so there is no separate connection to check, and its catalog is the same probe the picker
-// and the card read. An endpoint that has published nothing contributes an empty list and simply never wins.
+// Every configured model endpoint, as a source, the sandbox-run local models among them (endpointConfigOf) —
+// a free, always-installed rung is exactly what a quick-model pin wants. Ready by being installed, its
+// credential (if any) was configured with it, so there is no separate connection to check, and its catalog is
+// the same probe the picker and the card read. An endpoint that has published nothing contributes an empty
+// list and simply never wins.
 const endpointSources = async (services: Services): Promise<QuickModelSource[]> => {
-    const endpoints = (await services.capabilities.list()).flatMap((capability) => (capability.kind === "endpoint" ? [capability] : []));
+    const endpoints = (await services.capabilities.list()).flatMap((capability) => {
+        const config = endpointConfigOf(capability);
+        return config === undefined ? [] : [{ id: capability.id, config }];
+    });
     return Promise.all(
-        endpoints.map(async (capability) => ({
-            provider: endpointProvider(capability.id),
+        endpoints.map(async ({ id, config }) => ({
+            provider: endpointProvider(id),
             ready: true,
             models: await services.endpointModels
-                .models(capability.id, capability.config)
+                .models(id, config)
                 .then((catalog) => catalog.models.map((model) => model.id))
                 .catch(() => []),
         })),

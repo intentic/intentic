@@ -8,6 +8,7 @@ import type { OrpcContext } from "../context.js";
 import { capabilityJobSession } from "../terminal/terminal-session.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
+import { mintsEndpointProvider } from "../endpoints/local-model.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
 import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensions/extension-processes.js";
 import { enabledExtensions } from "../extensions/installed-extensions.js";
@@ -186,8 +187,9 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 // entry is what makes ext-discord run), converge listener extensions on the new manifest.
                 void reconcileListenerProcesses(services);
                 // An endpoint is only drivable once the translator knows how to reach it, awaited, not fired and
-                // forgotten, so the "added" the user reads means the next turn on it will actually route.
-                if (input.kind === "endpoint") {
+                // forgotten, so the "added" the user reads means the next turn on it will actually route. A
+                // local model is an endpoint to the translator (mintsEndpointProvider), so it syncs the same way.
+                if (mintsEndpointProvider(input.kind)) {
                     await syncEndpointCompat(services);
                 }
                 // Fold this entry's image fragment(s) into the composed overlay (upsert first, so compose sees it).
@@ -257,7 +259,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             // connector's gateway by the capability serving it, the translator by the endpoint's name.
             await composeEnvironment(services);
             void reconcileListenerProcesses(services);
-            if (renamed.kind === "endpoint") {
+            if (mintsEndpointProvider(renamed.kind)) {
                 await syncEndpointCompat(services);
             }
             // The warm ACP subprocess is keyed by the old name; dropping it is what an edit already does, and
@@ -290,7 +292,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             await services.capabilities.upsert(updated);
             void reconcileListenerProcesses(services);
             // A rotated endpoint key is a new upstream credential, the translator holds the old one until told.
-            if (updated.kind === "endpoint") {
+            if (mintsEndpointProvider(updated.kind)) {
                 await syncEndpointCompat(services);
             }
             return { ok: true } as const;
@@ -312,7 +314,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             }
             await services.capabilities.remove(input.id);
             // Removed AFTER the manifest drops it, so the rebuilt list can't put the endpoint straight back.
-            if (capability.kind === "endpoint") {
+            if (mintsEndpointProvider(capability.kind)) {
                 await syncEndpointCompat(services);
             }
             await composeEnvironment(services);

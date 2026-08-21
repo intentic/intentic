@@ -41,6 +41,13 @@ reports the profile.
   utterances itself and posts each one's WAV to `/speech/transcribe`, where whisper.cpp answers
   (src/speech/transcribe.ts: the `whisper` feature pack, baked into standard images; the model downloads into
   the workspace volume on first use, shared with Discord voice).
+- Run a chat model inside the box when the owner adds a `localmodel` capability: the handler downloads the
+  chosen GGUF into the workspace cache and serves it with the image's bundled llama-server (the `llamacpp`
+  feature pack, baked into standard images; the optional CUDA build plus the `--gpus=all` directive ride the
+  overlay) on a loopback port derived from the entry's id. To everything downstream it is an `endpoint/<id>`
+  provider like any user-added model API: src/endpoints/local-model.ts is the one place the two kinds are
+  joined, and src/capabilities/handlers/localmodel.ts owns the download, the panel session and the boot
+  restore.
 - Manage the app dev server and report preview status, including what is ACTUALLY answering inside the box: each
   listening port with the process that took it and the terminal that process descends from, whoever started it.
 - Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the

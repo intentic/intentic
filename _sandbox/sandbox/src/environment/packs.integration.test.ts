@@ -87,7 +87,16 @@ test("pack pins are in lockstep with the daemon's own dependency versions", asyn
  * argument depends on: pre-trees packs above the daemon tree COPY, post-trees packs below it. */
 test("compose-image-dockerfile.mjs stamps the hashes this module computes, in the right halves", async () => {
     const composed = execFileSync("node", ["_tools/scripts/compose-image-dockerfile.mjs", "standard"], { cwd: repoRoot, encoding: "utf8" });
+    // The PROFILE's packs, not every shipped pack: llamacpp-cuda is deliberately overlay-only (hundreds of MB
+    // of CUDA runtime only a GPU-granted sandbox can use), so a stamp for it would be a lie the recompose
+    // reads as "already baked" and the GPU option would silently never install its build.
+    const profiles = JSON.parse(readFileSync(join(sandboxRoot, "packs/profiles.json"), "utf8")).profiles as Record<string, string[]>;
+    const standard = new Set(profiles["standard"] ?? []);
     for (const pack of await listPacks()) {
+        if (!standard.has(pack.name)) {
+            expect(composed, `${pack.name} is not in the standard profile and must not be stamped`).not.toContain(`> /opt/packs/${pack.name}`);
+            continue;
+        }
         expect(composed).toContain(`> /opt/packs/${pack.name}`);
         expect(composed, `stamp for ${pack.name} must be its content hash`).toContain(`'${pack.hash}' > /opt/packs/${pack.name}`);
     }

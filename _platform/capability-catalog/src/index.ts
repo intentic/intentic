@@ -803,13 +803,70 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "apiKey", label: "API key", secret: true, optional: true },
             { key: "headers", label: "Extra headers (Name: value per line)", optional: true, multiline: true },
         ],
-        hint: "A server on this machine is reachable at host.docker.internal, the sandbox always resolves it. Models are read from the endpoint itself, so pulling a new one just needs a reload. Most servers are OpenAI-compatible; pick Anthropic only if it serves /v1/messages.",
+        hint: "A server on this machine is reachable at host.docker.internal, the sandbox always resolves it. Models are read from the endpoint itself, so pulling a new one just needs a reload. Most servers are OpenAI-compatible; pick Anthropic only if it serves /v1/messages. No server yet? The Local model card runs one inside the sandbox for you.",
         guide: {
             steps: [
                 "Start your model server and note the URL its API is on (Ollama: `http://localhost:11434/v1`).",
                 "Running on THIS machine? Use `host.docker.internal` in place of `localhost`: the sandbox is a container.",
                 "Leave the key empty if the server has no auth; most self-hosted ones don't.",
                 "Its models then appear as their own provider in the chat's model picker.",
+            ],
+        },
+    },
+    /* THE MANAGED HALF of the concept above: the endpoint card points at a server the user operates, this one
+     * runs the server inside the sandbox. One decision (which weights) and everything else is the daemon's:
+     * the download, the loopback llama-server, the provider registration. The GPU switch is the single field
+     * that costs a rebuild, and it wears the chip that says so; on the published image everything else is
+     * add-and-chat. Model options carry Hugging Face paths so shipping a new recommendation is an edit here,
+     * never a daemon release, and the labels state the real cost (free memory) because that is the one fact a
+     * person needs before choosing. */
+    {
+        id: "localmodel",
+        name: "Local model",
+        kind: "localmodel",
+        category: "extend",
+        icon: "robot",
+        description: "A model that runs inside the sandbox: private, free.",
+        fields: [
+            {
+                key: "model",
+                label: "Model",
+                default: "unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+                options: [
+                    { value: "bartowski/Llama-3.2-3B-Instruct-GGUF/Llama-3.2-3B-Instruct-Q4_K_M.gguf", label: "Llama 3.2 3B, needs ~4 GB free RAM" },
+                    { value: "unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf", label: "Qwen3 4B, needs ~6 GB free RAM" },
+                    { value: "ggml-org/gpt-oss-20b-GGUF/gpt-oss-20b-mxfp4.gguf", label: "GPT-OSS 20B, needs ~16 GB free RAM" },
+                    {
+                        value: "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+                        label: "Qwen3 Coder 30B, needs ~24 GB free RAM",
+                    },
+                    { value: "custom", label: "Custom GGUF (advanced)" },
+                ],
+                hint: "Downloads once into the workspace (gigabytes, kept across rebuilds), then serves from this sandbox.",
+            },
+            {
+                key: "url",
+                label: "GGUF download URL",
+                placeholder: "https://huggingface.co/…/resolve/main/model.gguf",
+                when: "model == 'custom'",
+                hint: "A direct link to a .gguf file. You are choosing the memory it needs.",
+            },
+            {
+                key: "gpu",
+                label: "Use this machine's NVIDIA GPU",
+                boolean: true,
+                default: "off",
+                rebuild: true,
+                hint: "Needs nvidia-container-toolkit on the host. Off, the model runs on CPU, fine for the small ones.",
+            },
+        ],
+        hint: "Nothing leaves this machine: the sandbox downloads the model and serves it itself: no server to install, works offline. Small models won't replace your frontier chat model; they shine as the quick model (free commit messages) and for work that must stay local. Already running Ollama or vLLM? The Model endpoint card points at it instead.",
+        guide: {
+            steps: [
+                "Pick a model whose memory need fits this machine, the label says it.",
+                "On the standard image it downloads and serves right away; only the GPU switch asks for a rebuild.",
+                "It then appears as its own provider in the chat's model picker.",
+                "Optionally pin it as the quick model in Settings, and commit messages and titles then cost nothing.",
             ],
         },
     },

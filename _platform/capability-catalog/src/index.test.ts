@@ -84,6 +84,9 @@ describe("contributionCard", () => {
             // extension could vary: the email IS the card.
             "identity",
             "integration",
+            // Static for the docker reason: the card's GPU switch is a privileged runtime directive, and its
+            // handler (the download, the server, the boot restore) is core code no extension ships.
+            "localmodel",
             "mcp",
             "monorepo",
             "plugin",

@@ -137,6 +137,9 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
     endpoint: [
         { id: "ollama", kind: "endpoint", config: { baseUrl: "https://x.example.com", protocol: "openai", apiKey: "sk-x", headers: "X-A: b" } },
     ],
+    // Nothing here is a credential (public weights, an unauthenticated loopback server), so the echo must
+    // cover every field — `url` included, the one an incomplete echo would silently vault.
+    localmodel: [{ id: "qwen", kind: "localmodel", config: { model: "custom", gpu: "on", url: "https://example.com/m.gguf" } }],
     // Maximal like every sample here, and the kind with the least to hide: the wallet's signing key never
     // enters this container, so its config is an address and the owner's own policy numbers: every one of
     // which the handler echoes, which is exactly what this guard is checking it still does.

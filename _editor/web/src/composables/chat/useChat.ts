@@ -2022,8 +2022,10 @@ const loadCapabilityProviders = async (): Promise<void> => {
     // Labelled by the name the user gave the capability, there is no vendor to name here, and the id is the
     // word they will recognise ("ollama", "gpu-box"). The one exception is the trial, which the user did not
     // name because they did not add it: the daemon provisioned it, so it carries the product's own words.
+    // `localmodel` entries ride along because they ARE endpoints to every consumer — the daemon derives their
+    // loopback URL and serves their catalog on the same `endpoint/<id>` provider ids (the contract's arm note).
     endpointProviders.value = entries
-        .filter((entry) => entry.kind === `endpoint`)
+        .filter((entry) => entry.kind === `endpoint` || entry.kind === `localmodel`)
         .map((entry) => {
             const id = endpointProvider(entry.id);
             return { id, label: isTrialProvider(id) ? TRIAL_LABEL : entry.id };
