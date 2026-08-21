@@ -243,7 +243,7 @@
 
 /* ── The press into the demo ──────────────────────────
    It covers the whole centre frame so the whole picture is the target, and carries its own label in the
-   top-right corner. The scrim it lays down is nearly nothing at rest and a real veil under the pointer,
+   bottom-centre. The scrim it lays down is nearly nothing at rest and a real veil under the pointer,
    which is what makes the frame feel like something you can open rather than a picture of one.
    `inset` starts below the ledge so the ornament and the label never share a corner. */
 .home .play {
@@ -251,8 +251,8 @@
     inset: var(--corner-size) 0 0;
     z-index: 1;
     display: flex;
-    align-items: flex-start;
-    justify-content: flex-end;
+    align-items: flex-end;
+    justify-content: center;
     padding: 0.85rem;
     background: rgba(10, 7, 5, 0.06);
     transition: background-color 0.25s ease;
