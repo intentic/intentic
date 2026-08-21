@@ -153,7 +153,19 @@
      * dressed face of a plaque has to be cut in dark instead, which is also what it is in life: a chisel takes
      * material away, and the pits it leaves are the shadowed part of a lit face. Same frequency and the same
      * curve as the plates', so a plaque and the card behind it are unmistakably the same rock. */
-    --sanctum-tooth-cut: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.55' numOctaves='2' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.16 0 0 0 0 0.13 0 0 0 0 0.09 0.2 0 0 0 -0.06'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
+    --sanctum-tooth-cut: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.55' numOctaves='2' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.16 0 0 0 0 0.13 0 0 0 0 0.09 0.26 0 0 0 -0.075'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
+
+    /* THE VEINING — a slow, weak, warm cloud, and the one place in this file where a LOW-frequency variation is
+     * deliberately allowed. It exists because a uniform speckle cannot make stone: grit says "rough", but what
+     * says "quarried" is that the face is not the same colour twice over, and that difference is measured in
+     * centimetres, not in pixels. Without it the plaque is a grey rectangle with dust on it.
+     *
+     * WHY IT IS SAFE HERE AND NOWHERE ELSE. The file's rule bans a low-frequency wash under READING, because it
+     * changes what contrast the first line of a paragraph gets against the last. This lies under one short
+     * label on a control ~28px tall, and it swings under seven per cent of a colour the label already clears at
+     * about six to one — a change of a twentieth of a ratio point across a word. It is not permission to put
+     * this on a card. */
+    --sanctum-mottle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='v' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.035' numOctaves='3' seed='13' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.13 0 0 0 0 0.11 0 0 0 0 0.08 0.11 0 0 0 -0.035'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23v)'/%3E%3C/svg%3E");
 
     /* THE HORIZON — five towers on a stepped plinth, standing on the floor of the window. The site opens every
      * page on a temple; this is that temple seen from a long way off. It earns its place by being FAR AWAY:
@@ -346,13 +358,29 @@
      * the wall a lit stage rather than a wall, and made two panels of the same colour look like two colours
      * depending on where they sat.
      *
-     * PAINTED ON THE CANVAS, wherever the canvas is: the body, the route element that covers it, and every
-     * surface wearing `bg-canvas`. `background-attachment: fixed` anchors all of them to the viewport, which is
-     * what makes them read as ONE wall — the grain does not slide when a column scrolls, and the horizon stands
-     * on the floor of the window rather than on the floor of each box that shows a piece of it. */
+     * `background-attachment: fixed` anchors every layer to the viewport, which is what makes them read as ONE
+     * wall — the grain does not slide when a column scrolls, and the horizon stands on the floor of the window
+     * rather than on the floor of each box that shows a piece of it.
+     *
+     * ── THE WINDOW'S GROUND, AND ONLY THE WINDOW'S ────────────────────────────────────────────────────────
+     * THE DECORATED STACK IS THE BODY'S AND THE ROUTE ELEMENT'S. Everything else painted `bg-canvas` gets the
+     * grain alone, and that split exists because the full stack was on `.bg-canvas` for three cuts and was
+     * quietly wrong the whole time. `bg-canvas` is not only the window's floor: it is also every RECESS INSIDE
+     * a panel — a code pane, a filter field, and every node box in the workflow graph. Each of those repainted
+     * the vignette and the temple, and with the layers anchored to the VIEWPORT rather than to the element, a
+     * 90px node sitting low on the screen showed whatever slice of a distant temple happened to fall behind it.
+     * A silhouette of a building through a graph node is not a subtle bug, but it is an invisible one until
+     * somebody opens the one screen made of small canvas boxes.
+     *
+     * The rule that comes out of it is worth more than the fix: A DECORATION SIZED IN VIEWPORT TERMS MAY ONLY
+     * BE PAINTED ON A VIEWPORT-SIZED SURFACE. The grain is exempt because it has no size — it tiles at 240px
+     * and a slice of it is the same material as the whole.
+     *
+     * The cost is that an opaque `bg-canvas` pane covering the route element occludes the temple, which is
+     * correct: a code editor is not the floor of the window, and this skin's whole horizon design is that the
+     * temple is simply hidden by whatever the app puts in front of it. */
     [data-skin="sanctum"] body,
-    [data-skin="sanctum"] #app > :first-child,
-    [data-skin="sanctum"] .bg-canvas {
+    [data-skin="sanctum"] #app > :first-child {
         background-image:
             radial-gradient(135% 105% at 50% 36%, transparent 42%, oklch(9% 0.004 78 / 0.42) 100%),
             var(--sanctum-horizon),
@@ -366,6 +394,12 @@
             auto,
             auto min(11vh, 84px),
             auto;
+        background-attachment: fixed;
+    }
+
+    [data-skin="sanctum"] .bg-canvas {
+        background-image: var(--sanctum-grain);
+        background-repeat: repeat;
         background-attachment: fixed;
     }
 
@@ -667,25 +701,43 @@
         ) {
         color: #1d160e;
         font-weight: 600;
-        text-shadow: 0 1px 0 rgba(255, 250, 240, 0.26);
-        background-color: #9e9078;
-        /* The tooth TILES at its own gauge and only the body ramp is stretched — a face is dressed at a fixed
+        text-shadow: 0 1px 0 rgba(255, 250, 238, 0.26);
+        background-color: #c6baa4;
+        /* The tooth TILES at its own gauge and only the shading is stretched — a face is dressed at a fixed
          * scale and then the stone is cut to size, so a plaque and a card must show the same grain however
          * differently sized they are. Stretching it instead gives a small button a coarse speckle and a wide
          * one a smooth wash, which is two materials again. */
         background-image:
             var(--sanctum-tooth-cut),
-            linear-gradient(180deg, #b0a184 0%, #9e9078 46%, #867a60 100%);
+            var(--sanctum-mottle),
+            linear-gradient(180deg, rgba(255, 250, 238, 0.06), transparent 46%, rgba(0, 0, 0, 0.055));
         background-size:
             auto,
+            auto,
             100% 100%;
-        background-repeat: repeat, no-repeat;
-        border-color: rgba(52, 44, 34, 0.72);
+        background-repeat: repeat, repeat, no-repeat;
+        border-color: rgba(56, 47, 33, 0.34);
+        /* ── THE EDGE IS A CONTACT, NOT A BEVEL, AND THAT IS THE WHOLE OF THE SECOND ATTEMPT ──────────────
+         * The first cut of this plaque was reported, correctly, as looking like a button from a 1998 web page,
+         * and every one of the four things making it look that way was a thing added to make it look SOLID.
+         * A forty-level light-to-dark ramp down the body; a near-white hairline along the top; a hard dark one
+         * along the foot; an inner vignette pulling the corners in. That set is the emboss every OS toolkit of
+         * that era shipped, and the eye has thirty years of practice reading it as "widget" rather than as
+         * "material" — no amount of stone colour survives it.
+         *
+         * What a cut tile actually looks like: a body that is FLAT (real stone varies by a few per cent, not
+         * by a third), a single hairline where the top edge catches the light, and — the part that does the
+         * work — a hard dark line immediately UNDER the plate, which is the contact shadow of an object
+         * resting on something. Depth here is one pixel of darkness in the right place, plus a short soft
+         * drop; not four gradients arguing about where the light comes from.
+         *
+         * The two vertical washes that remain are six and five and a half per cent, which is about the range
+         * a real face varies across, and they are stated as alphas over the body rather than as three hex
+         * stops so that the ramp cannot drift from the colour it is shading. */
         box-shadow:
-            inset 0 1px 0 rgba(255, 245, 222, 0.32),
-            inset 0 -1px 0 rgba(44, 37, 28, 0.5),
-            inset 0 0 14px rgba(54, 46, 35, 0.16),
-            0 3px 9px -3px rgba(0, 0, 0, 0.65);
+            inset 0 1px 0 rgba(255, 250, 238, 0.16),
+            0 1px 0 rgba(0, 0, 0, 0.45),
+            0 2px 5px -2px rgba(0, 0, 0, 0.55);
     }
 
     [data-skin="sanctum"] .p-button:enabled:hover {
@@ -694,6 +746,42 @@
             inset 0 1px 0 rgba(240, 214, 168, 0.16),
             inset 0 -1px 0 rgba(0, 0, 0, 0.3),
             0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+
+    /* ── THE QUIET AND SEVERITY TIERS ARE OPAQUE PLATES, NOT WASHES ───────────────────────────────────────
+     * The app tints these by mixing the tone into TRANSPARENT — `color-mix(… 10%, transparent)` — which is a
+     * sound choice on a flat scheme and a bad one here, because on this skin whatever is behind the button is
+     * not flat. A `success` button on a card shows the card's tooth through itself; the same button on canvas
+     * shows the wall's grain and the vignette; drag the card and the tint moves with the ground under it. The
+     * report was that "Land now" looked transparent and weird, and it was: it WAS transparent, and the weird
+     * was the wall's speckle coming through a green film.
+     *
+     * Mixed into `--color-card` instead of into nothing. Same formula, same tone variable, same one-rule-per-
+     * state shape as the app's own — the only change is what the tint is mixed WITH, so a tier stays one
+     * colour wherever it is put and reads as a plate cut from stone and stained, rather than as a gel over
+     * whatever happened to be underneath.
+     *
+     * `secondary` has no tone of its own (the app spells its neutral inline), so it is given one here and then
+     * takes the same formula as the other three: one recipe for every tier that is not a plaque.
+     *
+     * THE HOVER RULE IS NOT OPTIONAL. The app's hover sits at three classes and this base at two — `:where()`
+     * is free — so without a hover of its own every one of these goes translucent again under the pointer. */
+    [data-skin="sanctum"] .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
+        --ui-button-tone: var(--color-content);
+    }
+    [data-skin="sanctum"]
+        .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn, .p-button-success):where(
+            :not(.p-button-text, .p-button-outlined, .p-button-link)
+        ) {
+        background-color: color-mix(in oklab, var(--ui-button-tone) 12%, var(--color-card));
+        border-color: color-mix(in oklab, var(--ui-button-tone) 30%, transparent);
+    }
+    [data-skin="sanctum"]
+        .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn, .p-button-success):where(
+            :not(.p-button-text, .p-button-outlined, .p-button-link)
+        ):enabled:hover {
+        background-color: color-mix(in oklab, var(--ui-button-tone) 20%, var(--color-card));
+        border-color: color-mix(in oklab, var(--ui-button-tone) 44%, transparent);
     }
 
     /* Hover raises the light on the stone and leaves the cutting alone: a carved letter does not go pale when
@@ -720,16 +808,16 @@
                 )
         ):enabled:hover {
         color: #1d160e;
-        background-color: #ad9f86;
+        background-color: #d3c8b3;
         background-image:
             var(--sanctum-tooth-cut),
-            linear-gradient(180deg, #bfb092 0%, #ad9f86 46%, #95886d 100%);
-        border-color: rgba(66, 56, 42, 0.8);
+            var(--sanctum-mottle),
+            linear-gradient(180deg, rgba(255, 250, 238, 0.07), transparent 46%, rgba(0, 0, 0, 0.05));
+        border-color: rgba(56, 47, 33, 0.4);
         box-shadow:
-            inset 0 1px 0 rgba(255, 247, 228, 0.42),
-            inset 0 -1px 0 rgba(44, 37, 28, 0.5),
-            inset 0 0 14px rgba(54, 46, 35, 0.14),
-            0 3px 9px -3px rgba(0, 0, 0, 0.65);
+            inset 0 1px 0 rgba(255, 250, 238, 0.2),
+            0 1px 0 rgba(0, 0, 0, 0.45),
+            0 2px 6px -2px rgba(0, 0, 0, 0.55);
     }
 
     /* ── THE LOUD BUTTON, AS A PLAQUE OF CAST BRONZE ──────────────────────────────────────────────────────
@@ -773,11 +861,11 @@
         color: #241708;
         font-weight: 600;
         text-shadow: 0 1px 0 rgba(255, 248, 232, 0.34);
-        background-color: #bfa471;
+        background-color: #cdb27c;
         background-image:
             linear-gradient(104deg, transparent 24%, rgba(255, 250, 236, 0.15) 45%, rgba(255, 250, 236, 0.03) 56%, transparent 70%),
             var(--sanctum-brushed),
-            linear-gradient(180deg, #d4bb8a 0%, #bfa471 42%, #a68b58 76%, #94794a 100%);
+            linear-gradient(180deg, #e2c996 0%, #cdb27c 42%, #b39763 76%, #a08654 100%);
         /* Stretched to the button rather than tiled: turbulence has no seam, so a repeat would show its joins,
          * and one field scaled to the plate is how a piece is brushed after it is cast. */
         background-size: 100% 100%;
@@ -787,20 +875,19 @@
          * The drop under it is what the plate sits on. No outer glow: that is the part that made the site's
          * version a lamp, and a lamp is exactly what a workspace cannot have. */
         box-shadow:
-            inset 0 1px 0 rgba(255, 252, 242, 0.5),
-            inset 0 -1px 0 rgba(66, 46, 18, 0.55),
-            inset 0 0 14px rgba(96, 70, 30, 0.22),
-            0 3px 10px -3px rgba(0, 0, 0, 0.7);
+            inset 0 1px 0 rgba(255, 252, 242, 0.34),
+            0 1px 0 rgba(0, 0, 0, 0.5),
+            0 2px 6px -2px rgba(0, 0, 0, 0.6);
     }
 
     /* Under the pointer the plate catches more of the same light rather than changing colour, and the
      * engraving does NOT lighten — metal that brightens does not turn its cut letters pale. */
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover {
-        background-color: #cdb180;
+        background-color: #dbc08b;
         background-image:
             linear-gradient(104deg, transparent 22%, rgba(255, 250, 236, 0.26) 45%, rgba(255, 250, 236, 0.06) 57%, transparent 72%),
             var(--sanctum-brushed),
-            linear-gradient(180deg, #e0c795 0%, #cdb180 42%, #b39a67 76%, #a08654 100%);
+            linear-gradient(180deg, #eed7a4 0%, #dbc08b 42%, #c1a672 76%, #ae945f 100%);
         border-color: rgba(96, 72, 32, 0.8);
     }
 

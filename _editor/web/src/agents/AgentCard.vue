@@ -639,8 +639,17 @@ const grab = (event: PointerEvent): void => {
 
             <!-- The READY card's press: the deliberate land the user opted into by turning auto-land off (see
                  `landable`). Success-styled with the check glyph exactly like the review panel's "Land now":
-                 the two are the same action on the same work, and must read as such. What landing DOES follows
-                 it in prose rather than on hover, like the resolve button above. -->
+                 the two are the same action on the same work, and must read as such.
+
+                 IT USED TO CARRY A LINE OF PROSE UNDER IT ("Arrives as uncommitted changes, your own commit
+                 stays the review step") and it is gone, which is a different judgement from the two sentences
+                 that remain on this card rather than a change of mind about them. Those explain a SITUATION the
+                 reader has not met before: why a conflicted card is offering to redo the merge, why a
+                 collaborator is being offered an ask instead of a land. This one explained the MECHANICS of a
+                 routine press, to the one person who cannot be surprised by them: landing is off by default, so
+                 a card only ever offers this button to somebody who went into settings and turned auto-land
+                 off. Two lines of standing explanation per card, on a board of forty, for a fact its own reader
+                 configured. The board is scanned; a card earns its height from what changes what you do next. -->
             <div v-if="landable && canShip" class="flex min-w-0 flex-col gap-0.5">
                 <!-- The standing ask leads the button it is about: a maintainer reading top-to-bottom meets the
                      reason before the press. -->
@@ -650,7 +659,6 @@ const grab = (event: PointerEvent): void => {
                 <Button size="small" severity="success" class="self-start whitespace-nowrap" @click.stop="emit('land')">
                     <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? "Landing…" : "Land now" }}
                 </Button>
-                <span class="text-2xs leading-snug text-subtle">Arrives as uncommitted changes: your own commit stays the review step.</span>
             </div>
 
             <!-- The same ready card in a collaborator's hands: the land is a maintainer's press, so the card

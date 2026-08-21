@@ -637,4 +637,27 @@ describe(`createPopout`, () => {
         await vi.advanceTimersByTimeAsync(10);
         expect(win.document.documentElement.hasAttribute(`data-text-size`)).toBe(false);
     });
+
+    /* THE SKIN, for the same reason and with a worse failure mode than the size. Every rule in a skin's
+     * stylesheet is scoped to `[data-skin]` (skins/README.md), so a pop-out document that has the sheets but
+     * not the attribute renders the app's DEFAULT look: no error, no missing style, just a chat window in a
+     * different design from the one it was torn out of. It went unnoticed for as long as skins existed. */
+    it(`carries the skin out to a pop-out window, and follows it when the reader changes it`, async () => {
+        createPopout(`skin-panel`, `Panel`, size);
+        const win = fakeWindow(`skin-panel`);
+
+        document.documentElement.setAttribute(`data-skin`, `sanctum`);
+        adopt(`skin-panel`, win);
+        expect(win.document.documentElement.getAttribute(`data-skin`)).toBe(`sanctum`);
+
+        document.documentElement.setAttribute(`data-skin`, `hud`);
+        await vi.advanceTimersByTimeAsync(10);
+        expect(win.document.documentElement.getAttribute(`data-skin`)).toBe(`hud`);
+
+        // `none` writes no attribute at all, so leaving a skin has to REMOVE it out here: a leftover value
+        // would keep the popped-out panel in a look the app itself has left.
+        document.documentElement.removeAttribute(`data-skin`);
+        await vi.advanceTimersByTimeAsync(10);
+        expect(win.document.documentElement.hasAttribute(`data-skin`)).toBe(false);
+    });
 });

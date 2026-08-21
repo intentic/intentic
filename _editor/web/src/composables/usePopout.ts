@@ -126,15 +126,21 @@ const RECLAIM_GRACE_MS = 2500;
 // under it being torn down.
 const HANDBACK_GRACE_MS = 2500;
 
-// What the design system keys off <html>: the color scheme (the PrimeVue dark preset and the role tokens) and
-// the base text size (tokens.css's root font-size, which every rem in the window is a multiple of). The pop-out
-// page ships a static guess at the scheme for its first paint and nothing else, so both are mirrored from the
-// live root here and re-mirrored on every change.
+// What the design system keys off <html>: the color scheme (the PrimeVue dark preset and the role tokens), the
+// base text size (tokens.css's root font-size, which every rem in the window is a multiple of), and the SKIN
+// (skins/useSkin.ts: every rule in a skin's stylesheet is scoped to this attribute, so a document without it
+// gets the app's own look no matter which stylesheets were cloned in). The pop-out page ships a static guess at
+// the scheme for its first paint and nothing else, so all three are mirrored from the live root here and
+// re-mirrored on every change.
+//
+// THE LIST IS THE CONTRACT, and it is the kind that fails silently: `data-skin` was missing for as long as skins
+// existed, and the symptom was not an error but a popped-out chat rendered in a different design from the window
+// it was torn off, every sheet present and every rule inert. Anything a stylesheet reads off <html> belongs here.
 //
 // The size has to be on THIS list rather than left to the pop-out page's own restore script: that script runs
 // once, at load, so a window opened before the reader changed the setting would sit at the old size for as long
 // as it stayed open, the whole panel, a size out of step with the app it was torn off.
-const ROOT_ATTRIBUTES = [`data-mode`, `data-text-size`];
+const ROOT_ATTRIBUTES = [`data-mode`, `data-text-size`, `data-skin`];
 
 const mirrorRoot = (doc: Document): void => {
     doc.documentElement.className = document.documentElement.className;

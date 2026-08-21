@@ -36,7 +36,7 @@ Sanctum read the rule as "no background-image on a plate" for one cut, and shipp
 in which every surface anyone actually looked at was a flat rectangle. The plates carry a tooth now, measured at
 under a hundredth of a contrast ratio point.
 
-Sanctum has paid for that rule and ten others, and the notes are kept at the top of the file:
+Sanctum has paid for that rule and thirteen others, and the notes are kept at the top of the file:
 
 - **Ornament on an edge becomes noise at UI size.** A carved arcade that reads as stone at 40px reads as a torn,
   dithered edge at 14px: and every panel in an app is a 14px edge. Character has to come from the material, the
@@ -64,6 +64,24 @@ Sanctum has paid for that rule and ten others, and the notes are kept at the top
   hero (see the note over `.btn-primary` in `global.css`), but its plaque is *polished*, and a specular
   highlight that is right for ninety seconds on a page is a lamp in the corner of the eye for nine hours in a
   window: same three layers, a third of the sweep, no outer halo.
+- **The emboss is what reads as "1990s", not the colour.** The stone plaque's first cut had a forty-level
+  light-to-dark ramp down the body, a near-white hairline on top, a hard dark one at the foot and an inner
+  vignette: the exact set every OS toolkit of that era shipped, and the eye has thirty years of practice
+  reading it as *widget* rather than as *material*. What replaced it: a flat body, ONE hairline where the top
+  edge catches light, and a hard dark line immediately under the plate, which is the contact shadow of an
+  object resting on something. Depth is one pixel of darkness in the right place. It also had to get much
+  LIGHTER, because a mid-tan plate with a bevel is a beige button, while a pale limestone one with dark cut
+  letters is an inscription.
+- **A tint mixed into `transparent` is a tint mixed into whatever is behind it.** The app tints its quiet and
+  severity buttons with `color-mix(… 10%, transparent)`, which is right on a flat scheme and wrong here: on a
+  card the button showed the card's tooth through itself, on canvas it showed the wall's grain and the
+  vignette, and dragging the card moved the tint with the ground under it. Mixed into `--color-card` instead:
+  same formula, same tone variable, one colour wherever the button is put.
+- **A decoration sized in viewport terms may only be painted on a viewport-sized surface.** The wall's vignette
+  and temple were painted on `.bg-canvas`, which is not only the window's floor: it is every recess inside a
+  panel, including each node box in the workflow graph. With the layers `fixed` to the viewport, a 90px node
+  low on the screen showed whatever slice of a distant temple fell behind it. The decorated stack belongs to
+  the body and the route element; everything else canvas-painted gets the grain, which has no size to be wrong.
 - **Beware `:where()` in a tier selector.** The button tiers are matched with `.p-button:where(:not(…))`, which
   keeps the exclusion list readable and contributes **nothing** to specificity: so a tier's base rule sits at
   one class while a generic `:enabled:hover` sits at three. Every tier that paints a `box-shadow` has to repaint
@@ -120,6 +138,12 @@ faces are paint, but the reading face sets the metrics of every truncated label 
 Component rules sit in `@layer components`, one layer below Tailwind's utilities on purpose: a caller who wrote
 `bg-warning/10` on a card still wins, exactly as they do without the skin. The one deliberate exception in each
 file is the section-label rule, which is unlayered because the treatment it restates is spelled out by utilities.
+
+The attribute has to travel to any document this app draws into, not just the one it booted in. A popped-out
+panel lives in a second window whose DOM is teleported from this realm, and `usePopout.ts` mirrors a fixed list
+of root attributes onto it: `data-skin` was missing from that list for as long as skins existed, so a
+popped-out chat rendered in the app's default look with every stylesheet present and every rule inert. Anything
+a skin reads off `<html>` belongs on that list.
 
 Both skins imply a dark scheme (PrimeVue keys its own dark preset off `data-mode`), so `useSkin` flips the scheme
 when a skin goes on. Each skin's display webfont is fetched only while that skin is active, and switching between

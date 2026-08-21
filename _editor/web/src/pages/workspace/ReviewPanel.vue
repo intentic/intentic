@@ -970,20 +970,22 @@ const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() =
     }
     return `push`;
 });
-// Label, glyph and the whole-sentence tooltip per verb: the same shape INDEX_VERB uses for the stage buttons.
+// Label and glyph per verb: the same shape INDEX_VERB uses for the stage buttons.
 // The icons match the row pills (↑ push, ↓ pull) so the bar and the rows read as one language.
+/* NO HINT ON THIS ONE, and the omission is the point. Each of these carried a sentence on hover ("Push your
+ * committed work to each repo's upstream") beside a button already labelled Push, on a bar whose other half is
+ * a live readout of exactly what will move (`syncSummary`: ↑3, ↓1, the repo spread). A hover label that repeats
+ * the label it hovers is a pop-up charged against every pass of the pointer for nothing, and this button sits in
+ * a 270px sidebar where the pointer passes constantly. The repo rows' own pills keep theirs: those are icon-only,
+ * so there the tooltip IS the label. */
 const SYNC_VERB: Record<
     "push" | "pull" | "sync" | "publish",
-    { readonly label: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload"; readonly hint: string }
+    { readonly label: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload" }
 > = {
-    push: { label: `Push`, icon: `arrow-up-right`, hint: `Push your committed work to each repo's upstream` },
-    pull: {
-        label: `Pull`,
-        icon: `arrow-down-left`,
-        hint: `Fast-forward each repo from its upstream, a diverged history is reported, never auto-merged`,
-    },
-    sync: { label: `Sync`, icon: `sync`, hint: `Pull each repo up to its upstream (fast-forward only), then push your committed work` },
-    publish: { label: `Publish`, icon: `cloud-upload`, hint: `Push and start tracking each branch on its remote` },
+    push: { label: `Push`, icon: `arrow-up-right` },
+    pull: { label: `Pull`, icon: `arrow-down-left` },
+    sync: { label: `Sync`, icon: `sync` },
+    publish: { label: `Publish`, icon: `cloud-upload` },
 };
 const syncMeta = computed(() => (syncVerb.value === undefined ? undefined : SYNC_VERB[syncVerb.value]));
 // The one-line readout beside the button: the counts its single word leaves out, plus the repo spread when more
@@ -1290,13 +1292,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              action and a one-line readout of what it will do. -->
         <div v-else-if="syncMeta !== undefined" class="flex shrink-0 items-center gap-1 border-b border-line p-2">
             <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ syncSummary }}</span>
-            <Button
-                size="small"
-                class="shrink-0 whitespace-nowrap"
-                :disabled="changes.actionBusy.value || pushFlow.running.value"
-                @click="doSync"
-                v-tooltip.right="syncMeta!.hint"
-            >
+            <Button size="small" class="shrink-0 whitespace-nowrap" :disabled="changes.actionBusy.value || pushFlow.running.value" @click="doSync">
                 <Icon :name="syncMeta!.icon" />{{ syncMeta!.label }}
             </Button>
         </div>
