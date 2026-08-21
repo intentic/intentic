@@ -6,24 +6,20 @@ A Windows and Linux desktop app that installs the sandbox, and the thing that up
 sign in, click **Run on this computer**.
 
 ```
-   ONE WINDOW — the manager takes the workspace's frame; an install stands in front of it
+   ONE WINDOW, THREE SCREENS TAKING TURNS IN IT — never two of them on screen at once
 
-┌─ Intentic ────────────────────────────┐   ┌─ Intentic — This computer ───────────┐
-│  app.intentic.dev — the hosted SPA    │   │  ● work     ▶ ■  update  logs        │
-│  ┌─ Setting up work ────── ─ □ × ┐    │ ⇄ │  folders · ports · image · agent     │
-│  │ Step 5 of 10   ~3 min   31%   │    │   └──────────────────────────────────────┘
-│  │ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░ │    │
-│  │ ✓ Check Docker                │    │
-│  │ ⟳ Download the sandbox image  │    │
-│  │ ○ Start your sandbox          │    │
-│  └───────────────────────────────┘    │
-└───────────────────────────────────────┘
-                    │                                       │
-                    └──────────── Rust shell ───────────────┘
-                         windows · tray · deep link · updater
-                                       │
-                        sh connect.sh / recreate.sh / cleanup.sh
-                        powershell connect.ps1 / recreate.ps1 / cleanup.ps1
+┌─ Intentic ──────────────────┐   ┌─ Intentic, Setting up… ─────┐   ┌─ Intentic, This computer ───┐
+│                             │   │ Setting up work on this PC  │   │ ● work        ▶ ■  update   │
+│  app.intentic.dev           │ ⇄ │ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░  31%  │ ⇄ │ folders · ports · image     │
+│  the hosted SPA             │   │ ✓ Check Docker              │   │ agent · logs                │
+│                             │   │ ⟳ Download the image        │   │                             │
+└─────────────────────────────┘   └─────────────────────────────┘   └─────────────────────────────┘
+               │                                │                                 │
+               └──────────────────────── Rust shell ──────────────────────────────┘
+                              windows · tray · deep link · updater
+                                             │
+                              sh connect.sh / recreate.sh / cleanup.sh
+                              powershell connect.ps1 / recreate.ps1 / cleanup.ps1
 ```
 
 ## What it is: and is not
@@ -68,32 +64,29 @@ So `windows.rs` keeps exactly one of them on screen: whichever screen is being s
 position and size, then the other hides. The title follows the content (`App.vue` sets it), the frame does
 not, and clicking a handoff reads as the window changing screens.
 
-**An install is the one thing that does not swap, and that is the same rule rather than a hole in it.** Setting
-up a sandbox is not somewhere the user went, it is something happening to the app they are already in: so the
-launcher face comes up *in front of* the workspace instead of replacing it: its own small frame
-(`SETUP_SIZE`), centred on the workspace, with that window left on screen behind it (`set_setup_frame`). Two
-mapped windows, one thing being asked of the user, which is what the rule was always about. It wore a full
-window once (title bar, taskbar entry, no way out in the corner) and read as a second application that had
-opened itself on top of the first. The card carries the **×** every installer has; it steps back to the
-workspace and nothing else, because the script is a process on this machine rather than something the window
-is holding up.
+**The setup screen was exempted from that for three releases, and the exemption is what this section is now
+mostly about.** The argument was good on paper: an install is not somewhere the user *went*, it is something
+happening to the app they are already in, so the launcher came up *in front of* the workspace rather than
+instead of it. It wore three shapes while that argument held — a full window, then an undecorated topmost
+sheet across the workspace's rectangle, then a small movable dialog centred on it that grew to fit its own
+card — and every one of them delivered the same thing to the person it was for: **two Intentic windows, two
+taskbar buttons and two alt-tab stops, during onboarding.** Onboarding is precisely the flow where a new user
+cannot yet tell which of two windows is the product. The reported complaint was exactly that.
 
-**It is an ordinary window, and that is the correction after the correction.** The first fix made the setup
-face undecorated, topmost and exactly the workspace's rectangle, with a dim drawn across it. On the path that
-matters most that was unusable: a first install starts from a link in the *browser*, so there is no workspace
-window to take a rectangle from and the sheet opened at the app's default 1440×900: which at Windows' usual
-150% scaling is 2160×1350 physical, over every other application, with no title bar to move it by and no
-button to minimise it. An install runs for minutes and it took the machine for all of them. So the setup
-window is movable, minimisable, resizable and never topmost.
+An install is a **screen** of this app now, and it arrives the way every other screen does: `show_launcher`
+takes the workspace's frame, the workspace hides, the title says which screen is up. There is one entry point
+because there is one gesture, and no `SETUP_SIZE`, no `set_setup_frame`, no `fit_setup` and no
+"is this window wearing the setup frame" flag in `state.rs` — all of that existed only to manage a second
+frame, and a second frame is the thing that was wrong.
 
-**And it grows to its card, because "it scrolls" was not enough.** The card was allowed to overflow a 620×640
-frame on the argument that a scroll container catches it. What that meant in practice, on exactly the machines
-this screen exists for, was a Windows PC reporting four things wrong with itself: no WSL2, no Docker, no
-group membership, no engine: and putting every one of them, plus the button that fixes them, below the fold
-of a small window with nothing on screen to say there was more. A user watched that install "hang on checking
-Docker": the diagnosis was correct, the buttons were drawn, and the part of the window they could see held a
-spinner. The card now measures itself and `fit_setup` resizes the window to it, capped at the work area: and
-the requirements list leads the card rather than sitting under ten rows of progress plan.
+Two consequences fall straight out of the collapse. The screen is **top-anchored and wider** (`max-w-3xl`)
+rather than a card floating in a small dialog, because it now has a full window's height to use: the failure
+that produced `fit_setup` — a Windows PC reporting four things wrong with itself, with every one of them plus
+the button that fixes them below the fold of a 620×640 window — is answered by the room, not by resizing the
+frame under the reader. And the card's **×** is a labelled *Back to your workspace* instead: a bare × on a
+window-filling screen reads as "close Intentic", which is the one thing it does not do. Either way out steps
+back to the workspace and stops nothing, the script being a process on this machine rather than something the
+window is holding up.
 
 **A window that fits the screen still has to be put on it, and for a while only the first half was done.**
 `fit_to_screen` stopped the app asking for a window taller than the display; nothing then chose where that
@@ -108,17 +101,22 @@ outer rectangle rather than the inner one, and offset by the work area's own ori
 a second monitor or with the taskbar docked left. A swap that has a real frame to inherit still overrides it:
 the window the user is already looking at outranks the middle of the screen.
 
-Both smoke tiers assert the geometry rather than a window count, since size and position are the only part of
-this a test outside the process can see: the setup window is much smaller than the workspace and centred on
-it. Asserting *equal* rectangles is what the sheet made sense of, and the tiers said so right up until the
-sheet went: worth remembering when reading their history, because a test that agrees with the code is not the
-same as a test that agrees with the user.
+Both smoke tiers assert the **count**, because the count is the property: after a setup link, exactly one of
+the app's windows is on screen and it is the setup screen. They spent two rewrites asserting geometry instead
+— equal rectangles for the sheet, then smaller-and-centred for the dialog — and both of those pass with a
+second window mapped, which is the whole of what was wrong. Worth remembering when reading their history: a
+test that agrees with the code is not the same as a test that agrees with the user.
 
 Three more consequences worth knowing:
 
 - **A cold start with the SPA's own link opens no workspace first.** `intentic://setup` in argv means the setup
-  window is what appears: otherwise the app would load the SPA only to stand in front of it a frame later.
-  With nothing behind it the window centres on the screen instead, and it is the same small frame either way.
+  screen is what appears: otherwise the app would load the SPA only to swap it away a frame later. With no
+  frame to inherit the window centres on the work area instead.
+- **A finished install lands *in* the workspace, not on the page that was waiting for it.** Handing the frame
+  back without a destination returns the webview to `/setup`, which then has to notice for itself that the
+  daemon is up. It does (it re-polls on focus), but the last thing a four-minute install would show is a
+  screen saying it is still waiting, so the hand-back navigates to the app's root — the same place the SPA's
+  own `enterWorkspace` goes.
 - **A parked setup runs on arrival: when the SPA's own window asked for it.** That button is the consent;
   asking again on a screen the user did not open is what made the handoff feel like a second, unrelated
   installer. It is also the *only* direction that consent covers, which is what [the link's
@@ -240,8 +238,8 @@ A Windows install once reported four specific things wrong with the machine, exi
 spinner. Nothing about the diagnosis was wrong; every part of *delivering* it was. That failure had five
 separate causes and all five are closed here, because any one of them alone reproduces it:
 
-- **The requirements lead the card**, above the progress plan rather than under it, and the window grows to
-  fit them (above). They were previously the last thing on a card taller than its window.
+- **The requirements lead the card**, above the progress plan rather than under it, on a screen that now has a
+  whole window's height for them (above). They were previously the last thing on a card taller than its window.
 - **A non-zero exit is not automatically a failure.** Every Windows install that needs anything ends its first
   pass non-zero *by design*: the flow reports what it would change and stops, because there is no terminal
   here to ask the one question on. `ic` now says which stop that was with a documented exit code
@@ -252,9 +250,13 @@ separate causes and all five are closed here, because any one of them alone repr
   could end with both halves false while a failed setup was on screen, handing the window back to the manager
   face and taking the failure with it. `take_pending_setup` is now take-once, and only finishing or the ×
   closes the screen.
-- **A stopped run raises its own window** (`setup_alert` → unminimise, show, `request_user_attention`). This
+- **A stopped run takes the window back** (`setup_alert` → unminimise, show, `request_user_attention`). This
   window is deliberately not topmost and deliberately minimisable, which is right for something that runs for
-  minutes and exactly why a failure behind the workspace changed only pixels nobody was looking at.
+  minutes and exactly why a failure nobody was looking at changed only pixels. It *swaps* when — and only
+  when — the workspace has the frame, because walking away from a running install hands it back, and a bare
+  `show()` from there would put this face up beside the workspace: the second window again, on the one screen
+  that most needs reading carefully. That case takes focus, since the window being read is the one stepping
+  aside; every other case stays a show and a hint.
 - **Every run writes a transcript to `~/.intentic/logs/desktop-<id>-<stamp>.log`**, whether or not anyone
   asks, with **Copy log** and **Open log folder** on the card. Before this, a run existed only as events in
   one webview: closing the card destroyed the only evidence there was.
@@ -425,7 +427,7 @@ report anything.
   one pure model (`setupPlan.ts`), one bridge module (`desktop.ts`) and one reporter (`analytics.ts`); the
   sandbox rows, their verbs and their output pane all come from the kit, so this app has no second opinion
   about them. The archived three-persona wizard is not here.
-- `src-tauri/src/`: the Tauri 2 shell. `windows.rs` (the frame swap, the install window and link
+- `src-tauri/src/`: the Tauri 2 shell. `windows.rs` (the frame swap, the close dialog and link
   interception), `scripts.rs`
   (the script runner), `commands.rs` (the UI's backend), `auth.rs` (the sign-in handoff), `update.rs` (the app
   keeping itself on the released version), `state.rs`, `setup_link.rs`.

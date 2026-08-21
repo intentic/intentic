@@ -65,10 +65,6 @@ pub struct AppState {
     names: Mutex<BTreeMap<String, String>>,
     /// Minted on first read, then held for the process — see [`AppState::install_id`].
     install_id: Mutex<Option<String>>,
-    /// Whether the launcher window is currently wearing the SETUP frame — a dialog-sized window, rather than
-    /// the full one the manager face fills. Nothing may inherit that frame (windows.rs `swap_in`), and a
-    /// window cannot be asked which of its faces is up, so the one place that sets it records it.
-    setup_frame: Mutex<bool>,
 }
 
 impl AppState {
@@ -84,17 +80,7 @@ impl AppState {
             pending_recreate: Mutex::new(None),
             names: Mutex::new(names),
             install_id: Mutex::new(None),
-            setup_frame: Mutex::new(false),
         })
-    }
-
-    /// Which frame the launcher window is wearing, recorded as it is put on (windows.rs `set_setup_frame`).
-    pub fn mark_setup_frame(&self, setup: bool) {
-        *self.setup_frame.lock().unwrap() = setup;
-    }
-
-    pub fn in_setup_frame(&self) -> bool {
-        *self.setup_frame.lock().unwrap()
     }
 
     pub fn app_url(&self) -> String {
@@ -244,7 +230,6 @@ mod tests {
             pending_recreate: Mutex::new(None),
             names: Mutex::new(BTreeMap::new()),
             install_id: Mutex::new(None),
-            setup_frame: Mutex::new(false),
         }
     }
 

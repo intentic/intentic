@@ -56,7 +56,7 @@ installing Docker, or downloading a CLI.
 | launch | the process survives startup and maps its workspace window |
 | web content | the workspace WebView requests the loopback page, rather than merely mapping an empty native frame |
 | deep link, app running | the same link reaches the instance already running, through the OS handler |
-| one window | …**in the workspace's place**, not beside it |
+| one window | …**in the workspace's place**, not beside it: exactly one of the app's windows on screen, and it is the setup screen |
 | uninstall | completes silently **with the app still running**, which is the ordinary state at uninstall time |
 
 Three of those rows are worth their own sentence:
@@ -74,8 +74,10 @@ first-time user's path. Running: the OS starts a second copy whose argv the sing
 
 **The one-window row** guards a failure invisible to every other assertion here: a setup screen that opens as a
 *second* window satisfies the search above it, and what the user gets is an unasked-for window in front of the
-one they were reading. The Windows driver uses `EnumWindows`, so two visible top-level windows owned by the same
-Tauri process remain two rows; `Get-Process.MainWindowHandle` would collapse them and make this assertion empty.
+one they were reading. That is not hypothetical — it shipped, as a deliberate exemption for the setup screen,
+and onboarding users reported it as "two Intentic windows and I don't know which one is the product". The
+Windows driver uses `EnumWindows`, so two visible top-level windows owned by the same Tauri process remain two
+rows; `Get-Process.MainWindowHandle` would collapse them and make this assertion empty.
 
 For releases, this tier receives the semantic version as an expected value and reads it back from Windows after
 installation. The release workflow builds that candidate once, runs it here, and gives the same downloaded file

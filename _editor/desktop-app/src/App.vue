@@ -41,8 +41,6 @@ import {
     sandboxRecreate,
     sandboxRemove,
     setupAlert,
-    setupFit,
-    setupFrame,
     setupRun,
     signOutForSetup,
     takePendingRecreate,
@@ -69,11 +67,11 @@ import {
  *   • run the setup the SPA just handed over (an `intentic://setup` link), showing what the script says
  *   • manage the containers on THIS machine afterwards: the sandbox rows and their verbs
  *
- * They are two SCREENS rather than two sections, and they are not the same KIND of thing. The manager is
- * somewhere you go: an ordinary window, in the frame the workspace was filling. A setup is something that
- * happens to the app you are already in, so it is a small window in FRONT of the workspace, which stays on
- * screen behind it (windows.rs): movable and minimisable like any other, because an install runs for
- * minutes and nothing here is worth taking someone's screen for.
+ * They are two SCREENS of one window, and they arrive the same way: this face takes the frame the workspace
+ * was filling and that one steps aside (windows.rs). The setup screen used to be the exception — a small
+ * window in FRONT of the workspace, with that window left mapped behind it — and what it produced was two
+ * Intentic windows during onboarding, which is the one flow where a new user has no idea which of them is the
+ * product. An install is a screen of this app, so it looks like one.
  *
  * Nothing of the manager shows under it either way: a container list, a version and an "Open workspace"
  * button would be a set of decisions to make about a machine whose sandbox is still being built.
@@ -199,63 +197,25 @@ const running = computed(() => activeRun.value !== undefined);
 // for why that is held rather than inferred.
 const setupMode = computed(() => setupOpen.value || activeRun.value === `setup`);
 
-/* THE WINDOW FOLLOWS THE CARD, RATHER THAN THE CARD BEING TRUSTED TO FIT ONE.
- *
- * The setup frame was measured against what this card draws, and the version of it that matters most is the
- * tallest one there is: a ten-step plan, and under it everything wrong with this PC, four rows, each with a
- * problem, a remedy and a badge, plus the button that fixes them. That does not fit 640 logical pixels, so
- * on exactly the machines this screen exists for, the list and its button sat below the fold of a small
- * window, in a scroll container with no visible affordance. One reported install ended there: the diagnosis
- * was right, the buttons were drawn, and what the user saw was a spinner.
- *
- * So the card measures itself and Rust grows the window to it, capped at what the screen can hold
- * (windows.rs). A ResizeObserver rather than a watcher on the state, because the height that matters is the
- * rendered one: a requirement with a long remedy wraps to three lines on a narrow window and to one on a
- * wide one, and no amount of counting rows knows that. */
-const card = ref<HTMLElement | undefined>(undefined);
-let cardSize: ResizeObserver | undefined;
-watch(card, (element) => {
-    cardSize?.disconnect();
-    cardSize = undefined;
-    if (element === undefined) {
-        return;
-    }
-    cardSize = new ResizeObserver(() => {
-        // The card's own height plus the padding either side of it: what the WINDOW has to be, not what the
-        // card is.
-        void setupFit(element.getBoundingClientRect().height + 32);
-    });
-    cardSize.observe(element);
-});
-
-/* WHETHER THIS SCREEN KNOWS YET WHICH FACE IT IS, and the reason the frame below waits for it.
+/* WHETHER THIS SCREEN KNOWS YET WHICH FACE IT IS, and the reason the title below waits for it.
  *
  * `setupMode` is derived from a handed-over setup that is READ, asynchronously, after this component mounts
  * (`loadPending`). Until that read lands it is `false`, which is not "the manager is up" but "nobody has
- * looked yet". Acting on that guess is what made an arriving setup flicker: Rust opens the window already
- * wearing the setup frame (windows.rs), this effect then fired on the pre-read `false` and asked for the
- * MANAGER frame: a full-sized window, with the manager's much larger minimum, and the read landing a
- * moment later asked for the dialog frame all over again. What the user saw was a window snapping to one
- * size and back, and for as long as the read took, a second full-sized window over the one they were reading.
- *
- * So the frame is only ever CHANGED here, never asserted from an unknown state. Rust has already set the
- * right one for whichever way this window opened; this file takes over on the first real transition. */
+ * looked yet". Titling the window on that guess puts `This computer` in the taskbar for the length of one
+ * IPC round trip on every arriving install, and a label that changes twice in half a second is one nobody
+ * can read. So the title is only ever changed here on a real transition. */
 const faceKnown = ref(false);
 
 /* The OS title follows the screen. Both faces of the app live in ONE frame (windows.rs), so the title is not
  * decoration: it is the taskbar entry, the alt-tab label, and the only thing outside this process that can
- * say which screen is up, which is what the desktop smoke tier asserts against, having deliberately no test
- * hook to read instead.
- *
- * The FRAME follows it too, and for the same reason it is decided here: setup is a dialog-sized window in
- * front of the workspace and the manager fills the frame the workspace was in, and which of the two is up is
- * this file's state: a setup can arrive at a manager window, and a finished one hands the window back. */
+ * say which screen is up, which is what the desktop smoke tiers assert against, having deliberately no test
+ * hook to read instead. The frame itself no longer follows anything — the two screens are the same window at
+ * the same size, which is the whole point of them being screens. */
 watchEffect(() => {
     if (!faceKnown.value) {
         return;
     }
     void getCurrentWindow().setTitle(setupMode.value ? `Intentic, Setting up your sandbox` : `Intentic, This computer`);
-    void setupFrame(setupMode.value);
 });
 
 /* --- HOW FAR THROUGH THE INSTALL IT IS (setupPlan.ts) ---
@@ -450,9 +410,15 @@ const runSetup = async (): Promise<void> => {
     if (ok) {
         pending.value = undefined;
         setupOpen.value = false;
-        // The daemon announced itself to the platform on boot, which is exactly what the SPA's setup screen
-        // has been polling for, so handing the window back is one poll away from showing the workspace.
-        await workspaceOpen();
+        /* AND THE WINDOW LANDS IN THE WORKSPACE, not on the page that was waiting for it.
+         *
+         * Handing the frame back without a destination returns the webview to `/setup`, which then has to
+         * notice for itself that the daemon is up — it polls, and it re-polls on focus, so it gets there, but
+         * the last thing a four-minute install shows is a screen saying it is still waiting. The sandbox
+         * announced itself to the platform on boot; that question is already answered. So this navigates to
+         * the app's root, which is the same place the SPA's own `enterWorkspace` goes, and the install ends
+         * on the product rather than one poll short of it. */
+        await workspaceOpen(`/`);
         return;
     }
     /* AND IF IT DID NOT FINISH, MAKE SURE SOMEBODY FINDS OUT.
@@ -808,23 +774,22 @@ onMounted(async () => {
 });
 onUnmounted(() => {
     clearInterval(ticker);
-    cardSize?.disconnect();
     stop.forEach((unlisten) => unlisten());
 });
 </script>
 
 <template>
-    <!-- SETUP: a small window of its own, in front of the workspace rather than instead of it (windows.rs).
-         It used to be a dim across the workspace's whole rectangle, which on the path that matters most: an
-         install started from the browser, with no workspace open yet: was a chromeless sheet over the entire
-         screen that could not be moved or minimised. So the card fills an ordinary movable window now, and
-         the dim is gone with the sheet that needed it.
-         `m-auto` rather than `items-center`: it centres the card the same way, and keeps the TOP of it
-         reachable when the content is taller than the window, where centring in a scroll container cuts it. -->
-    <div v-if="setupMode" class="flex h-dvh flex-col overflow-auto bg-canvas p-4 text-content">
-        <!-- A plain element around the card, because what the window has to be told is a RECTANGLE and a
-             component ref is an instance. `m-auto` moves here with it, so the centring is unchanged. -->
-        <div ref="card" class="m-auto w-full max-w-xl">
+    <!-- SETUP: a SCREEN of this window, in the frame the workspace was filling (windows.rs), not a second
+         window standing in front of it. It has been all three shapes now — a chromeless sheet across the
+         screen, a small dialog window over the workspace, and this — and the two it replaced share one fault:
+         they made the app be in two places at once during the flow that has to be the easiest one there is.
+
+         A column anchored to the TOP rather than a card floating in the middle: the thing this screen has to
+         draw on the machines it exists for is long (a ten-step plan, and above it everything wrong with this
+         PC), and a full window's height is now the room it gets rather than a frame that had to grow to fit
+         it. Top-anchored also means the heading does not move as rows arrive. -->
+    <div v-if="setupMode" class="h-dvh overflow-auto bg-canvas text-content">
+        <div class="mx-auto w-full max-w-3xl p-5">
             <Card class="flex w-full flex-col gap-3">
                 <div class="flex items-start gap-2.5">
                     <Icon name="bolt" class="mt-0.5 text-primary-400" />
@@ -835,16 +800,17 @@ onUnmounted(() => {
                             workspace once it answers.
                         </p>
                     </div>
-                    <!-- Where every installer keeps it, next to the window's own close for people who look here
-                     first. Either one steps back to the workspace and nothing else: the script is a process
-                     on this machine, not something this window is holding up. -->
+                    <!-- SAYS WHERE IT GOES, because this is a screen and not a dialog any more. As a bare ×
+                     on a window-filling screen it reads as "close Intentic", which is the one thing it does
+                     not do: it steps back to the workspace and nothing else, and the install carries on,
+                     being a process on this machine rather than something this window is holding up. -->
                     <button
                         type="button"
-                        aria-label="Close"
-                        class="-m-1 shrink-0 rounded-md p-1 text-subtle hover:bg-canvas hover:text-content"
+                        class="-my-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs text-subtle hover:bg-canvas hover:text-content"
                         @click="dismissSetup"
                     >
-                        <Icon name="times" />
+                        <Icon name="arrow-up-right" />
+                        <span>Back to your workspace</span>
                     </button>
                 </div>
                 <!-- The code this window came back to is older than the platform will accept. Said plainly, with
@@ -899,14 +865,13 @@ onUnmounted(() => {
 
                 <SetupProgress v-if="progressShown && !expired" :events="eventsOf(`setup`)" :view="progressShown" :running="activeRun === `setup`" />
 
-                <!-- Only on failure, and paired with a way out. A setup that stopped is the one place this app can
-                 strand someone, and "try again" as the only control is a dead end wearing a button. -->
-                <div v-if="(setupError || expired || wasStopped) && requirements.length === 0" class="flex flex-wrap items-center gap-2">
-                    <Button v-if="!expired" label="Try again" :disabled="running" @click="runSetup">
+                <!-- Only on failure. A setup that stopped is the one place this app can strand someone, so
+                 "try again" is never the only control on screen — the way out is the header's, which is up
+                 there in every state this row renders in and used to be repeated here as a second button
+                 with the same words on it. -->
+                <div v-if="(setupError || wasStopped) && !expired && requirements.length === 0" class="flex flex-wrap items-center gap-2">
+                    <Button label="Try again" :disabled="running" @click="runSetup">
                         <template #icon><Icon name="bolt" /></template>
-                    </Button>
-                    <Button severity="secondary" :text="true" label="Back to your workspace" @click="dismissSetup">
-                        <template #icon><Icon name="arrow-up-right" /></template>
                     </Button>
                 </div>
 

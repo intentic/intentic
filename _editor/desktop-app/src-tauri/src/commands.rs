@@ -643,24 +643,8 @@ pub fn workspace_open(app: AppHandle, path: Option<String>) {
     crate::windows::show_workspace_at(&app, path.as_deref());
 }
 
-/// Which face this window is wearing: the setup window, or the ordinary manager one. App.vue calls it
-/// alongside the title for the same reason the title is set there — the screen that is up is that file's
-/// state, and the frame has to follow it rather than be guessed at when the window opens (windows.rs).
-#[tauri::command]
-pub fn setup_frame(app: AppHandle, setup: bool) {
-    crate::windows::set_setup_frame(&app, setup);
-}
-
-/// Grow the setup window to the card it is drawing (windows.rs). Called from App.vue whenever the card's
-/// measured height changes — which is what keeps a requirements list from landing below the fold of a window
-/// sized for a run that had nothing to report.
-#[tauri::command]
-pub fn setup_fit(app: AppHandle, height: f64) {
-    crate::windows::fit_setup(&app, height);
-}
-
-/// Ask the OS to point at this window — a stopped setup that nobody is looking at is a stopped setup nobody
-/// finds out about.
+/// Ask the OS to point at this window, bringing it back to the front first — a stopped setup that nobody is
+/// looking at is a stopped setup nobody finds out about.
 #[tauri::command]
 pub fn setup_alert(app: AppHandle) {
     crate::windows::alert_setup(&app);

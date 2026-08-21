@@ -65,8 +65,6 @@ pub fn run() {
             commands::sandbox_logs,
             commands::machine_report,
             commands::workspace_open,
-            commands::setup_frame,
-            commands::setup_fit,
             commands::setup_alert,
             commands::close_workspace,
             commands::settings_get,

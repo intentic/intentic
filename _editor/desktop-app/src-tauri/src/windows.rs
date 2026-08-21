@@ -7,7 +7,8 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use crate::setup_link::{parse_link, Link, SetupArgs, Source};
 use crate::state::CloseAction;
 
-/* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows.
+/* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows, and there is no
+ * exception to that any more.
  *
  * There have to be two webviews. The workspace face is remote content (the hosted SPA) and gets no IPC at all;
  * the launcher face is local content holding this app's entire command surface. Tauri scopes capabilities by
@@ -16,15 +17,15 @@ use crate::state::CloseAction;
  *
  * What the user is owed is not one webview but one WINDOW, and that is what `swap_in` enforces: whichever face
  * is being shown first takes the other's frame — same position, same size — and the other steps aside. Only
- * the title changes, because it is the label on a taskbar entry and ought to say which screen is up. So the
- * sandbox manager reads as the window moving on rather than as a second app arriving on top of the first.
- * Before this, a first-time install ended with an unasked-for window called "Sandbox Manager" in front of the
- * one the user was reading, which is where they stopped.
+ * the title changes, because it is the label on a taskbar entry and ought to say which screen is up. So a
+ * screen change reads as the window moving on rather than as a second app arriving on top of the first.
  *
- * THE ONE EXCEPTION IS THE SETUP WINDOW, and it is the rule rather than a hole in it. An install is not
- * somewhere the user went, it is something happening to the app they are in, so the launcher comes up IN FRONT
- * of the workspace instead of replacing it — but as an ordinary small window over it, not as a sheet across
- * the screen (`set_setup_frame`). Two mapped windows, one thing being asked of the user. */
+ * THE SETUP SCREEN USED TO BE EXEMPT, on the argument that an install is not somewhere the user went but
+ * something happening to the app they are in — so the launcher came up IN FRONT of the workspace instead of
+ * replacing it. Whatever that argument was worth on paper, what it produced was two Intentic windows, two
+ * taskbar buttons and two alt-tab stops at the exact moment a first-time user has the least idea what this
+ * app is: the reported complaint was "I end up with two windows and I don't know which one is the product".
+ * An install is a SCREEN of this app now, and it arrives the way every other screen does. */
 pub const WORKSPACE: &str = "workspace";
 pub const LAUNCHER: &str = "launcher";
 
@@ -47,14 +48,13 @@ const MIN_SIZE: (f64, f64) = (900.0, 600.0);
  * a first impression that reads as broken. */
 const FRAME_ALLOWANCE: (f64, f64) = (16.0, 48.0);
 
-/* THE SIZE TO OPEN AT, given what this screen can actually show — and the other half of the display-scale
- * problem `SETUP_SIZE` below describes.
+/* THE SIZE TO OPEN AT, given what this screen can actually show.
  *
- * That one was solved by giving the setup face a small frame of its own. This is the same arithmetic biting
- * the window it opens in FRONT of: `DEFAULT_SIZE` is 1440×900 and was treated as if it always fits. It is
- * LOGICAL, so at the 150% scale most laptops are sold at it is 2160×1350 physical — on a panel with 1080
- * physical rows. The first window a new user ever sees opened a third taller than their display, with its
- * bottom edge and everything near it off the screen entirely.
+ * `DEFAULT_SIZE` is 1440×900 and was treated as if it always fits. It is LOGICAL, so at the 150% scale most
+ * laptops are sold at it is 2160×1350 physical — on a panel with 1080 physical rows. The first window a new
+ * user ever sees opened a third taller than their display, with its bottom edge and everything near it off
+ * the screen entirely. Both faces open through this, so it is one arithmetic rather than a rule each screen
+ * has to remember.
  *
  * Pure and separate from the monitor lookup so it can be tested against the numbers that actually break, and
  * fitted rather than merely capped: the preference wins whenever it fits, the screen wins whenever it does
@@ -158,25 +158,6 @@ fn place_in_work_area(window: &WebviewWindow, work: WorkArea, inner: (f64, f64))
     ));
 }
 
-/* THE SETUP WINDOW'S OWN FRAME — a dialog, sized to the card in it rather than to the screen.
- *
- * This used to be the workspace's whole rectangle, undecorated and topmost, with the card floating in a dim
- * that filled it. On the path that matters most — a first install, started from a link in the browser, with no
- * workspace window open yet — there was nothing to take a rectangle from, so it opened at DEFAULT_SIZE
- * instead: 1440×900 logical, which on a 150% display is 2160×1350 physical and covers a laptop screen whole.
- * Undecorated meant no title bar to drag it by and no button to minimise it, and topmost put it over every
- * other application, so an install that legitimately takes minutes took the machine with it.
- *
- * So the setup face is a window a person can deal with: its own small frame, decorations on, movable,
- * minimisable, resizable, and never topmost. It still comes up centred on the workspace when there is one, so
- * it still reads as something happening to the app you are in rather than a second app arriving.
- *
- * Measured against what App.vue draws in it — the card at its `max-w-xl`, plus the ten-step progress list and
- * the requirements list a stopped Windows install adds under it. The minimum is small enough to leave the
- * window useful when it is shrunk, since the card scrolls inside it. */
-const SETUP_SIZE: (f64, f64) = (620.0, 640.0);
-const SETUP_MIN: (f64, f64) = (420.0, 380.0);
-
 /// The dialog's frame. Fixed, because everything in it is: two choices and a line of small print — measured
 /// against the rendered content rather than guessed, with slack for a wider font. Taller on Windows, the one
 /// platform where the tray option has to say where the icon goes (CloseConfirm.vue).
@@ -191,13 +172,11 @@ const CONFIRM_SIZE: (f64, f64) = if cfg!(target_os = "windows") {
 /// is the same rectangle for two windows wearing the same decorations.
 fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
     if let Some(other) = other.filter(|other| other.is_visible().unwrap_or(false)) {
-        if frame_is_inheritable(&other) {
-            if let Ok(position) = other.outer_position() {
-                let _ = window.set_position(position);
-            }
-            if let Ok(size) = other.inner_size() {
-                let _ = window.set_size(size);
-            }
+        if let Ok(position) = other.outer_position() {
+            let _ = window.set_position(position);
+        }
+        if let Ok(size) = other.inner_size() {
+            let _ = window.set_size(size);
         }
         let _ = window.show();
         let _ = window.set_focus();
@@ -206,17 +185,6 @@ fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
     }
     let _ = window.show();
     let _ = window.set_focus();
-}
-
-/// Whether `window`'s frame is one to hand on. The SETUP frame is not: it is a dialog sized to its card, and a
-/// workspace that inherited it would come back from an install shrunk to the size of the installer that ran.
-/// It still steps aside — it just leaves nothing behind.
-fn frame_is_inheritable(window: &WebviewWindow) -> bool {
-    window.label() != LAUNCHER
-        || !window
-            .app_handle()
-            .state::<crate::state::AppState>()
-            .in_setup_frame()
 }
 
 /// Marks the page as running inside the desktop app. DETECTION ONLY — the handoff is the `intentic://`
@@ -480,9 +448,8 @@ pub fn resolve_close(app: &AppHandle, action: CloseAction, remember: bool) {
     apply_close(app, action);
 }
 
-/// The app's own face, built once and shown by whichever of its two screens is asking (`show_launcher` for
-/// the manager, `set_setup_frame` for the setup window). Never shown from here: the two want the window in
-/// two different places and at two different sizes, and one that appears before it has been put somewhere
+/// The app's own face, built once and shown by `show_launcher` — whichever of its two screens is up. Never
+/// shown from here: it has to be placed on the frame it is taking over before it is ever on screen, or it
 /// flashes in the old one.
 fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
     if let Some(window) = app.get_webview_window(LAUNCHER) {
@@ -495,12 +462,10 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
         .inner_size(size.0, size.1)
         .min_inner_size(min.0, min.1)
         /* The frame between "window mapped" and "webview painted", which is white by default and reads as a
-         * flash on a dark screen. Mirrors `--color-canvas` in dark mode (@intentic/ui semantic-colors.css),
-         * which index.html pins — the same colour the confirmation dialog paints for the same reason.
-         *
-         * This window used to be built `transparent` instead, for a setup face that was a dim across the
-         * workspace. Nothing is drawn through it now: both faces paint an opaque surface, and the setup one is
-         * a window of its own rather than a sheet over another. */
+         * flash on a dark screen — and this window maps at the exact moment the workspace steps aside, so a
+         * white frame here is a white flash in the middle of somebody's app. Mirrors `--color-canvas` in dark
+         * mode (@intentic/ui semantic-colors.css), which index.html pins — the same colour the confirmation
+         * dialog paints for the same reason. */
         .background_color(tauri::window::Color(15, 13, 10, 255))
         .visible(false)
         .build();
@@ -517,9 +482,9 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
             });
             // The same cold-start placement the workspace gets, and needed for the same reason: this face can
             // be the FIRST window an install ever shows (a link from the browser, nothing else running), and
-            // the platform's cascade puts a work-area-tall window's bottom edge under the taskbar. Both callers
-            // move it afterwards — the manager onto the workspace's frame, a setup into its own small centred
-            // one — so this only decides where a window nothing else has an opinion about goes.
+            // the platform's cascade puts a work-area-tall window's bottom edge under the taskbar. A swap with
+            // a workspace frame to inherit overrides it a moment later, so this only decides where a window
+            // nothing else has an opinion about goes.
             if let Some(screen) = screen {
                 place_in_work_area(&window, screen, size);
             }
@@ -532,150 +497,57 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
     }
 }
 
-/// The MANAGER screen — the sandboxes on this machine. An ordinary window, in the workspace's place.
+/* THIS APP'S OWN FACE, IN THE WORKSPACE'S PLACE — for BOTH of the screens it draws.
+ *
+ * There is one entry point because there is one gesture: the window stops showing the hosted product and
+ * starts showing this app, at the same size, in the same spot, under a title that says which screen it is on.
+ * WHICH screen is App.vue's business, not this file's (a setup can arrive at a manager window, and a finished
+ * one hands the window back), and the frame is identical either way, so there is nothing here to choose.
+ *
+ * The setup screen used to have a second entry point and a frame of its own — a small window centred on the
+ * workspace, with that window left mapped behind it. It was defended as "an install is not somewhere you go",
+ * and the user it was for saw two Intentic windows during the one flow where they know least about the app.
+ * A screen of this app is a screen of this app. */
 pub fn show_launcher(app: &AppHandle) {
     if let Some(window) = launcher(app) {
-        set_setup_frame(app, false);
         swap_in(&window, app.get_webview_window(WORKSPACE));
-    }
-}
-
-/* THE SETUP SCREEN IS A WINDOW IN FRONT, NOT A SHEET ACROSS THE SCREEN.
- *
- * It used to arrive the way the manager does: the launcher took the workspace's frame and the workspace
- * stepped aside. That is right for a manager, which is somewhere you GO, and wrong for an install, which is
- * something that HAPPENS to the app you are already in — it read as a second application that had opened
- * itself on top of the first.
- *
- * The first correction went too far the other way. The setup face became an undecorated, topmost window on
- * the workspace's exact rectangle, with App.vue drawing a dim across it, and on the path that matters most it
- * was unusable: a first install starts from a link in the BROWSER, so there is no workspace window to take a
- * rectangle from, and the window opened at its default 1440×900 — the better part of a laptop screen at any
- * display scale above 100%, over every other application, with no title bar to move it by and no way to
- * minimise it. An install takes minutes; that took the machine for all of them.
- *
- * So this is a window a person can deal with: its own dialog-sized frame (`SETUP_SIZE`), decorations on,
- * movable, minimisable, resizable, never topmost — centred on the workspace when one is up, which is what
- * keeps it reading as something happening to the app you are in. It has a taskbar entry, because a window
- * that can be minimised has to have somewhere to be minimised TO.
- *
- * Driven from App.vue rather than fixed at open, because which face is up is that screen's own state: a
- * setup can arrive at a manager window, and a finished one hands the window back.
- */
-pub fn set_setup_frame(app: &AppHandle, setup: bool) {
-    let Some(window) = app.get_webview_window(LAUNCHER) else {
-        return;
-    };
-    let state = app.state::<crate::state::AppState>();
-    let was_setup = state.in_setup_frame();
-    // Before the frame moves, so anything reading it while this runs already sees which one it is wearing.
-    state.mark_setup_frame(setup);
-    if !setup {
-        // Fitted to the screen, exactly as the opening frame is: this is the same full-window size, and the
-        // manager face restoring it unfitted would put the oversized window back on a scaled display the
-        // moment an install finished.
-        let screen = work_area(app);
-        let (full, min) = opening_bounds(screen.map(|screen| screen.size));
-        let _ = window.set_min_size(Some(LogicalSize::new(min.0, min.1)));
-        /* And a full window's SIZE back, when this is a setup frame being taken off. `show_launcher` swaps in
-         * the workspace's frame straight after and would make this redundant — but only when there is a
-         * workspace on screen to take one from, and the tray's Manager item reaches here with no promise of
-         * that. Without it the manager face draws in a 620-wide window, under its own 900 minimum. */
-        if was_setup {
-            let _ = window.set_size(LogicalSize::new(full.0, full.1));
-            // And a full window's PLACE back with it. A dialog-sized window sits wherever it was centred or
-            // dragged to; growing it to the full size around that point is the same overhang the cascade
-            // causes, reached a different way. Same precedence as the cold start: `show_launcher`'s swap
-            // overwrites this whenever there is a workspace frame to inherit instead.
-            if let Some(screen) = screen {
-                place_in_work_area(&window, screen, full);
-            }
-        }
-        return;
-    }
-    // The minimum comes down FIRST: it is the floor the size below has to clear, and the manager's floor is
-    // wider than this whole window.
-    let _ = window.set_min_size(Some(LogicalSize::new(SETUP_MIN.0, SETUP_MIN.1)));
-    let size = LogicalSize::new(SETUP_SIZE.0, SETUP_SIZE.1);
-    let _ = window.set_size(size);
-    /* Centred on the workspace, or on the screen when there is none — computed from the size just ASKED for
-     * rather than read back off the window. GTK resizes on its own clock, so a read-back here answers with
-     * the frame this window had a moment ago, and the setup that opened cold would be placed as if it were
-     * still 1440 wide. The title bar's height is not accounted for and does not need to be: it is a handful
-     * of pixels on a placement whose only job is "in the middle of what it is about". */
-    let behind = app
-        .get_webview_window(WORKSPACE)
-        .filter(|behind| behind.is_visible().unwrap_or(false));
-    center_over(&window, behind.as_ref(), size);
-    let _ = window.show();
-    let _ = window.set_focus();
-}
-
-/* THE SETUP WINDOW FOLLOWS ITS CARD, RATHER THAN THE CARD BEING TRUSTED TO FIT.
- *
- * `SETUP_SIZE` was measured against what App.vue draws — and the thing it has to draw on the machines that
- * need this screen most is the LONGEST version of that card: a ten-step plan, and under it a list of four
- * things wrong with this PC, each with a problem, a remedy and a badge. That is comfortably taller than 640,
- * so the part of the screen a user actually has to act on — the list, and the button that fixes it — sat
- * below the fold of a small window, inside a scroll container with no visible affordance, in a window that
- * may itself be behind the workspace. A reported Windows install failed exactly that way: everything worked,
- * the diagnosis was correct, the buttons were drawn, and the user saw a spinner and nothing else.
- *
- * So the card measures itself and the window grows to it, up to what the screen can hold. Growing DOWNWARD
- * from where the window already is would push it off the bottom, so it is re-placed in the work area after
- * the resize — the same placement the frame swap uses, for the same reason.
- */
-pub fn fit_setup(app: &AppHandle, content_height: f64) {
-    let Some(window) = app.get_webview_window(LAUNCHER) else {
-        return;
-    };
-    // Only the setup face has a card to fit. The manager's height is the frame it inherited.
-    if !app.state::<crate::state::AppState>().in_setup_frame() {
-        return;
-    }
-    let screen = work_area(app);
-    // Never past what the screen can show, and never below the frame's own floor: a card shorter than the
-    // window does not shrink it, because a window that resized on every render would be its own problem.
-    let ceiling = screen
-        .map(|screen| (screen.size.1 - FRAME_ALLOWANCE.1).max(SETUP_SIZE.1))
-        .unwrap_or(SETUP_SIZE.1);
-    let height = content_height.clamp(SETUP_SIZE.1, ceiling);
-    let width = SETUP_SIZE.0;
-    if (height - SETUP_SIZE.1).abs() < 1.0 {
-        return; // already the right size — no resize, no re-placement, no flicker
-    }
-    let _ = window.set_size(LogicalSize::new(width, height));
-    if let Some(screen) = screen {
-        place_in_work_area(&window, screen, (width, height));
     }
 }
 
 /* A RUN THAT STOPPED HAS TO REACH THE PERSON WHO STARTED IT.
  *
- * The setup window is deliberately not topmost and deliberately minimisable — an install runs for minutes
- * and taking someone's screen for it would be indefensible. The cost of that is the case this exists for: a
- * setup that fails while the window is minimised, or behind the workspace, changes only pixels nobody is
- * looking at. "The error did not surface and did not notify user" is precisely that.
+ * An install runs for minutes, and this window is deliberately minimisable and deliberately never topmost,
+ * because taking someone's screen for those minutes would be indefensible. The cost of that is the case this
+ * exists for: a setup that fails while the window is minimised, or while the user has gone back to their
+ * workspace, changes only pixels nobody is looking at. "The error did not surface and did not notify user"
+ * is precisely that.
  *
- * `request_user_attention` is the OS's own way to say so — a flashing taskbar button on Windows, the
- * equivalent hint on Linux — and it is the polite one: it does not steal focus, it waits to be noticed. The
- * unminimise and the show are what make there be something to notice.
+ * `request_user_attention` is the OS's own way to point at a window — a flashing taskbar button on Windows,
+ * the equivalent hint on Linux — and it is the polite one: it does not steal focus, it waits to be noticed.
+ * The unminimise and the show are what make there be something to notice.
+ *
+ * IT SWAPS WHEN, AND ONLY WHEN, THE WORKSPACE HAS THE FRAME. Walking away from a running install hands the
+ * window back, and a bare `show()` from there would put this face up BESIDE the workspace — reintroducing the
+ * second window at the worst possible moment, on the one screen that exists to be read carefully. That case
+ * has to take focus, because the window the user was looking at is the one stepping aside. Every other case
+ * does not, so it stays a show and a hint: raising a window somebody is not looking at over the application
+ * they moved on to is exactly what `request_user_attention` exists to avoid.
  */
 pub fn alert_setup(app: &AppHandle) {
     let Some(window) = app.get_webview_window(LAUNCHER) else {
         return;
     };
     let _ = window.unminimize();
-    let _ = window.show();
-    let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
-}
-
-/// Bring the setup window up in front of the workspace. The parked request is already in state; this is the
-/// frame.
-pub fn show_setup(app: &AppHandle) {
-    if launcher(app).is_some() {
-        set_setup_frame(app, true);
+    match app
+        .get_webview_window(WORKSPACE)
+        .filter(|workspace| workspace.is_visible().unwrap_or(false))
+    {
+        Some(workspace) => swap_in(&window, Some(workspace)),
+        None => {
+            let _ = window.show();
+        }
     }
+    let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
 }
 
 /// Links land here from three directions: the workspace webview's intercepted navigation, the second-instance
@@ -714,14 +586,14 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
     }
 }
 
-/// Hand a setup to the launcher face, which runs it on arrival (App.vue says why) — as an overlay over the
-/// workspace that asked for it, rather than in its place.
+/// Hand a setup to the launcher face, which runs it on arrival (App.vue says why) — in the frame the
+/// workspace that asked for it was occupying, which is the same handover every other screen of this app makes.
 fn park_setup(app: &AppHandle, args: SetupArgs) {
     *app.state::<crate::state::AppState>()
         .pending
         .lock()
         .unwrap() = Some(args);
-    show_setup(app);
+    show_launcher(app);
     let _ = tauri::Emitter::emit(app, "desktop://pending-setup", ());
 }
 
@@ -847,19 +719,19 @@ mod frame_tests {
         assert!(size.0 >= 1.0 && size.1 >= 1.0, "opened {size:?}");
     }
 
-    /// The setup window opens in the MIDDLE of the workspace, not on its corner — which is what says it is
-    /// about that window. Asserted on the arithmetic because the windows themselves exist only in a running
-    /// desktop session; the smoke tiers assert the same property against real ones.
+    /// The close confirmation opens in the MIDDLE of the window it is asking about, not on its corner — which
+    /// is what says it is about that window. Asserted on the arithmetic because the windows themselves exist
+    /// only in a running desktop session.
     #[test]
-    fn the_setup_window_lands_in_the_middle_of_the_workspace() {
+    fn the_close_dialog_lands_in_the_middle_of_the_window_it_is_about() {
         let workspace = PhysicalSize::new(1440u32, 900u32);
-        let setup = PhysicalSize::new(620u32, 640u32);
-        let at = centered(PhysicalPosition::new(100, 50), workspace, setup);
-        assert_eq!(at, PhysicalPosition::new(100 + 410, 50 + 130));
+        let dialog = PhysicalSize::new(460u32, 300u32);
+        let at = centered(PhysicalPosition::new(100, 50), workspace, dialog);
+        assert_eq!(at, PhysicalPosition::new(100 + 490, 50 + 300));
         // Concentric: the gap left on one side is the gap left on the other.
         assert_eq!(
             at.x - 100,
-            (workspace.width as i32 - setup.width as i32) - (at.x - 100)
+            (workspace.width as i32 - dialog.width as i32) - (at.x - 100)
         );
     }
 
@@ -962,15 +834,15 @@ mod frame_tests {
     }
 
     /// A window CENTRED on a smaller one hangs off it on both sides — the two stay concentric, where clamping
-    /// the offset to zero would shove it into a corner. The workspace can be dragged smaller than the setup
-    /// window's minimum, so this is a state a user can reach, not a hypothetical.
+    /// the offset to zero would shove it into a corner. A workspace dragged narrower than the close dialog is
+    /// a state a user can reach, not a hypothetical.
     #[test]
     fn a_window_larger_than_the_one_it_is_about_stays_concentric() {
         let at = centered(
             PhysicalPosition::new(0, 0),
-            PhysicalSize::new(400, 300),
-            PhysicalSize::new(620, 640),
+            PhysicalSize::new(400, 200),
+            PhysicalSize::new(460, 300),
         );
-        assert_eq!(at, PhysicalPosition::new(-110, -170));
+        assert_eq!(at, PhysicalPosition::new(-30, -50));
     }
 }

@@ -145,15 +145,9 @@ export const machineReport = async (): Promise<MachineReport | undefined> => {
  * reaches the SPA's Computers tab, the same machine's containers through the other door, so the two screens
  * that manage them are one click apart instead of each pretending to be the only one. */
 export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace_open`, { path: path ?? null });
-/* Which face this window is wearing. The setup screen is a small window of its own, centred on the workspace
- * and movable like any other; the manager fills the frame the workspace was in. windows.rs does the moving,
- * this says which is up. */
-export const setupFrame = (setup: boolean): Promise<void> => invoke(`setup_frame`, { setup });
-/* Grow the setup window to the card it is drawing. The card is at its tallest on exactly the machines this
- * screen exists for (a ten-step plan plus a list of everything wrong with this PC), and a fixed frame put
- * the list, and the button that fixes it, below the fold of a window nobody had reason to scroll. */
-export const setupFit = (height: number): Promise<void> => invoke(`setup_fit`, { height });
-/** Ask the OS to point at this window. For a run that stopped while nobody was looking at it. */
+/* Bring this window back to the front and ask the OS to point at it. For a run that stopped while nobody was
+ * looking at it — including one the user walked away from, where the workspace has the frame and this face has
+ * to take it back rather than open beside it (windows.rs). */
 export const setupAlert = (): Promise<void> => invoke(`setup_alert`);
 /** End a run and everything it started. */
 export const runStop = (id: string): Promise<void> => invoke(`run_stop`, { id });

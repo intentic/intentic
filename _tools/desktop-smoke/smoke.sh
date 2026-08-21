@@ -344,44 +344,24 @@ else
     cat "$LOG" >&2 || true
 fi
 
-# ...IN FRONT of the workspace and much smaller than it — the whole window model as one assertion, and worth
-# one because the failure it guards is invisible to every other assertion here. A setup screen that opens as a
-# second full-size window somewhere else on screen satisfies the title search above perfectly well, and what
-# the user gets is an unasked-for window beside the one they were reading.
+# ...IN THE WORKSPACE'S PLACE, not beside it — the whole window model as one assertion, and worth one because
+# the failure it guards is invisible to every other assertion here. A setup screen that opens as a second
+# window somewhere else on screen satisfies the title search above perfectly well, and what the user gets is an
+# unasked-for window beside the one they were reading. That is what shipped: the setup face was exempted from
+# the swap and came up as a small window over the workspace, so onboarding — the one flow where a new user has
+# no idea which window is the product — was the one flow that put two of them on screen.
 #
-# It used to be asserted as "the same rectangle", when setup was a chromeless sheet on the workspace's exact
-# frame. That is the shape this replaced: on a first install there is no workspace to take a frame from, so the
-# sheet came up at the app's default 1440x900 with no title bar and no way to minimise it, over everything.
-# What is asserted now is what makes it usable — a dialog-sized window, centred on the app it is about.
-
-# One number out of `xdotool getwindowgeometry --shell`, which prints X=/Y=/WIDTH=/HEIGHT= assignments. Read
-# with sed rather than eval'd into this shell: geometry is xdotool's output, not this script's code.
-geometry_of() { xdotool getwindowgeometry --shell "$1" | sed -n "s/^$2=//p"; }
-
-dialog_over_workspace() {
-    local setup workspace
-    setup=$(window_titled "$SETUP_TITLE" | head -1)
-    workspace=$(xdotool search --onlyvisible --name "^Intentic$" | head -1)
-    [ -n "$setup" ] && [ -n "$workspace" ] || return 1
-    local sx sy sw sh wx wy ww wh
-    sx=$(geometry_of "$setup" X) sy=$(geometry_of "$setup" Y)
-    sw=$(geometry_of "$setup" WIDTH) sh=$(geometry_of "$setup" HEIGHT)
-    wx=$(geometry_of "$workspace" X) wy=$(geometry_of "$workspace" Y)
-    ww=$(geometry_of "$workspace" WIDTH) wh=$(geometry_of "$workspace" HEIGHT)
-    # A window that unmapped between the search above and the reads here answers with nothing, and comparing
-    # nothing as a number is a shell error rather than a failed assertion. Retry instead — `until_true` will.
-    for number in "$sx" "$sy" "$sw" "$sh" "$wx" "$wy" "$ww" "$wh"; do
-        [ -n "$number" ] || return 1
-    done
-    # Smaller in both directions, and by a real margin — the workspace opens at 1440x900 and this at 620x640,
-    # so anything close to the workspace's own size is the sheet coming back.
-    [ "$sw" -lt $((ww * 3 / 4)) ] && [ "$sh" -lt "$wh" ] || return 1
-    # …and centred on it, which is what says the window is ABOUT the app rather than merely near it. A whole
-    # setup window's slack each way, so a window manager's own placement nudge is not a failure.
-    local dx=$(((sx + sw / 2) - (wx + ww / 2))) dy=$(((sy + sh / 2) - (wy + wh / 2)))
-    [ "${dx#-}" -le "$sw" ] && [ "${dy#-}" -le "$sh" ]
+# Counted rather than measured, because the number IS the property now. Earlier versions of this assertion
+# compared rectangles (equal, for a chromeless sheet; then smaller-and-centred, for a dialog), and both of
+# those could be satisfied by a second mapped window, which is the thing being ruled out.
+one_window_showing_setup() {
+    local ids count
+    ids=$(mapped_windows)
+    count=$(printf '%s\n' "$ids" | grep -c .)
+    [ "$count" -eq 1 ] || return 1
+    xdotool getwindowname "$ids" 2>/dev/null | grep -q "$SETUP_TITLE"
 }
-until_true 15 "the setup screen is a dialog-sized window centred on the workspace, not a sheet over the screen" dialog_over_workspace || {
+until_true 15 "the setup screen took the workspace's window rather than opening a second one" one_window_showing_setup || {
     echo "--- mapped windows ---" >&2
     mapped_windows | while read -r id; do
         echo "$id $(xdotool getwindowname "$id" 2>/dev/null) $(xdotool getwindowgeometry --shell "$id" 2>/dev/null | tr '\n' ' ')" >&2

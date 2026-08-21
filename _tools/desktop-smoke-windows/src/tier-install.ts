@@ -70,15 +70,8 @@ const SCREEN_SECONDS = 30;
  * measure a perfectly ordinary app is always showing two. What the rule means is windows a person can see. */
 const SINGLE_INSTANCE_WINDOW = `${APP_IDENTIFIER}-siw`;
 
-/** One window's rectangle as a string, so two of them can be compared (and printed) as one value. */
-const box = (window: WindowInfo): string => `${window.bounds.x},${window.bounds.y} ${window.bounds.width}×${window.bounds.height}`;
-
-/** Its centre, what "this window is about that one" is asserted on, two windows of different sizes having no
- * corner in common. */
-const middle = (window: WindowInfo): { x: number; y: number } => ({
-    x: window.bounds.x + window.bounds.width / 2,
-    y: window.bounds.y + window.bounds.height / 2,
-});
+/** One window's title and rectangle as a string, so a failed count can print what it counted. */
+const box = (window: WindowInfo): string => `${window.title} — ${window.bounds.x},${window.bounds.y} ${window.bounds.width}×${window.bounds.height}`;
 
 const describeWindows = async (): Promise<string> => {
     const titles = await windowTitles();
@@ -248,52 +241,29 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.detail(await describeWindows());
         }
 
-        /* …IN FRONT OF the workspace, and much smaller than it. The whole window model as one assertion, and
-         * worth one because the failure it guards is invisible to every other assertion here: a setup screen
-         * that opens as a second full-size window somewhere else satisfies the search above perfectly well,
-         * and what the user gets is an unasked-for window beside the one they were reading.
+        /* …IN THE WORKSPACE'S PLACE, not beside it. The whole window model as one assertion, and worth one
+         * because the failure it guards is invisible to every other assertion here: a setup screen that opens
+         * as a second window somewhere else satisfies the search above perfectly well, and what the user gets
+         * is an unasked-for window beside the one they were reading. That is exactly what shipped — the setup
+         * face was exempted from the swap and came up as a small window over the workspace — so onboarding,
+         * the one flow where a new user cannot yet tell which window is the product, was the one flow that put
+         * two of them on screen.
          *
-         * This was asserted as "the same rectangle" while setup was a chromeless sheet on the workspace's own
-         * frame. That is the shape it replaced, and this platform is where it was worst: a first install comes
-         * from a link in the browser with no workspace open, so the sheet came up at the app's default
-         * 1440×900, which at Windows' usual 150% scaling is 2160×1350 physical, over every other window, with
-         * no title bar to move it by and no button to minimise it. What is asserted now is what makes it
-         * usable: a dialog-sized window, centred on the app it is about. Taken after the search, so the move
-         * has landed. */
-        const faces = async (): Promise<{ setup?: WindowInfo; workspace?: WindowInfo }> => {
-            const own = (await appWindows(app)).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW);
-            const setup = own.find((window) => window.title.includes(SETUP_TITLE));
-            // Everything that is not the setup screen is the workspace: this app has exactly two faces, and
-            // the manager's is not up while a setup is.
-            const workspace = own.find((window) => !window.title.includes(SETUP_TITLE));
-            return { ...(setup && { setup }), ...(workspace && { workspace }) };
+         * COUNTED rather than measured, because the count IS the property. Two earlier versions of this
+         * assertion compared rectangles (equal, for a chromeless sheet across the workspace; then
+         * smaller-and-centred, for a dialog over it) and both could be satisfied while a second window was
+         * mapped, which is the thing being ruled out. Taken after the search above, so the swap has landed. */
+        const visibleFaces = async (): Promise<WindowInfo[]> => (await appWindows(app)).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW);
+        const oneWindowShowingSetup = async (): Promise<boolean> => {
+            const own = await visibleFaces();
+            return own.length === 1 && own[0]!.title.includes(SETUP_TITLE);
         };
-        const dialogOverWorkspace = async (): Promise<boolean> => {
-            const { setup, workspace } = await faces();
-            if (setup === undefined || workspace === undefined) {
-                return false;
-            }
-            // Smaller in both directions by a real margin, the workspace opens at 1440×900 and this at
-            // 620×640, so anything near the workspace's own width is the sheet coming back. And centred on it,
-            // which is what says the window is ABOUT the app rather than merely near it; a whole setup
-            // window's slack each way, so the desktop's own placement nudge is not a failure.
-            const smaller = setup.bounds.width < workspace.bounds.width * 0.75 && setup.bounds.height < workspace.bounds.height;
-            const [own, behind] = [middle(setup), middle(workspace)];
-            return smaller && Math.abs(own.x - behind.x) <= setup.bounds.width && Math.abs(own.y - behind.y) <= setup.bounds.height;
-        };
-        if (
-            !(await harness.untilTrue(
-                15,
-                `the setup screen is a dialog-sized window centred on the workspace, not a sheet over the screen`,
-                dialogOverWorkspace,
-            ))
-        ) {
-            /* The two rectangles FIRST, because they are the whole of what this assertion compared and a list
-             * of titles cannot say which way it went wrong. A missing one reads as a window that never came;
-             * a setup one the size of the workspace reads as the sheet, which is the failure this assertion
-             * exists for and the one the Linux tier prints geometry for. */
-            const { setup, workspace } = await faces();
-            harness.detail(`setup:     ${setup ? box(setup) : `(no such window)`}\nworkspace: ${workspace ? box(workspace) : `(no such window)`}`);
+        if (!(await harness.untilTrue(15, `the setup screen took the workspace's window rather than opening a second one`, oneWindowShowingSetup))) {
+            /* WHAT WAS COUNTED, first: a list of every window on the desktop cannot say whether the extra one
+             * was the app's. Two of the app's own is the failure this exists for; one that is not the setup
+             * screen is the swap having gone the wrong way, and they need different fixes. */
+            const own = await visibleFaces();
+            harness.detail(own.length === 0 ? `the app showed no window` : own.map((window) => `- ${box(window)}`).join(`\n`));
             harness.detail(await describeWindows());
         }
 
