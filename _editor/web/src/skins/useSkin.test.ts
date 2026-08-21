@@ -98,6 +98,6 @@ describe(`useSkin`, () => {
 
         expect(document.querySelectorAll(`#ui-skin-font`)).toHaveLength(1);
         expect(first).toContain(`Chakra+Petch`);
-        expect(second).toContain(`Cinzel`);
+        expect(second).toContain(`Baloo+2`);
     });
 });

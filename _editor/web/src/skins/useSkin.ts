@@ -5,8 +5,8 @@ import { useTheme } from "@intentic/ui";
  *
  * The accent picker and the light/dark switch both answer "what colour"; a skin answers "what is this thing made
  * of". `none` is the app as designed. `hud` is the heads-up display in skins/hud.css, deep cool glass over a
- * survey grid, lit hairlines, angular geometry. `sanctum` is skins/sanctum.css, flat carved stone, a gilded
- * hairline and an inner moulding round every plate, and inscriptional capitals.
+ * survey grid, lit hairlines, angular geometry. `sanctum` is skins/sanctum.css, the SITE'S design system worn by
+ * the app: warm ash stone, a gold rule round everything, two surfaces of dark timber, square corners.
  *
  * ONE ATTRIBUTE ON <html>, and that is the entire mechanism. Every rule in a skin's stylesheet is scoped to
  * `[data-skin="<name>"]`, so the workspace's normal look is not a set of overrides being undone, it is the
@@ -20,10 +20,10 @@ import { useTheme } from "@intentic/ui";
  * remembered across that: leaving the skin leaves them in dark, which is where they can see they are.
  *
  * THE DISPLAY FACE IS FETCHED ON DEMAND, AND IT IS PER SKIN. A look's typography is part of the look, the HUD
- * wants an angular technical face, the Sanctum wants Roman capitals cut in stone, and an app that downloads
- * either for a skin nobody has selected is an app charging everyone for one person's taste. The <link> is
- * swapped when the skin changes and removed when there is none; if it never arrives, the skin's `--*-display`
- * variable falls through to the app's own stack and everything still reads. */
+ * wants an angular technical face, the Sanctum wants the site's own two, and an app that downloads either for a
+ * skin nobody has selected is an app charging everyone for one person's taste. The <link> is swapped when the
+ * skin changes and removed when there is none; if it never arrives, the skin's own font variables fall through
+ * to the app's stack and everything still reads. */
 
 export type Skin = "none" | "hud" | "sanctum";
 
@@ -31,12 +31,13 @@ const STORAGE_KEY = `ui-skin`;
 const ATTRIBUTE = `data-skin`;
 const FONT_ELEMENT_ID = `ui-skin-font`;
 
-/* One entry per skin that wants a face of its own. Sanctum takes Cinzel, an inscriptional Roman capital, which
- * is the closest a webfont gets to letters cut into a wall, and the HUD takes Chakra Petch's angular technical
- * caps. A skin absent from this map simply loads nothing. */
+/* One entry per skin that wants a face of its own. The HUD takes Chakra Petch's angular technical caps. Sanctum
+ * takes the SITE'S two faces — Baloo 2 for every heading and label in the chrome, Playfair Display for the one
+ * heading in the app drawn at display size — so the workspace and the marketing pages are set in the same type.
+ * A skin absent from this map simply loads nothing. */
 const FONT_HREF: Partial<Record<Skin, string>> = {
     hud: `https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap`,
-    sanctum: `https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&display=swap`,
+    sanctum: `https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Playfair+Display:wght@600&display=swap`,
 };
 
 const isSkin = (value: unknown): value is Skin => value === `none` || value === `hud` || value === `sanctum`;
