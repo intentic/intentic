@@ -207,7 +207,11 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                         {{ sharePercent }}% of every credit you spend reaches the creator of what you installed or ran, on a
                         <a :href="transparencyUrl" target="_blank" rel="noopener" class="text-link hover:underline">public ledger</a>.
                     </p>
-                    <Button label="Manage on Stripe" severity="secondary" size="small" :loading="working" @click="open(`portal`)" />
+                    <!-- The money tier, not the neutral one. It is the only action on a member's page, and what
+                         it opens is the subscription itself — the same door as "join", from the other side. A
+                         quiet fill here left the one page in the product that is about money with nothing on it
+                         that looked like money. -->
+                    <Button label="Manage on Stripe" size="small" class="ui-button-loud" :loading="working" @click="open(`portal`)" />
                 </div>
             </Card>
         </template>

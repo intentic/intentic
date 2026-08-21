@@ -8,8 +8,11 @@ import { twMerge } from "tailwind-merge";
 /* THE ACTION BUTTON IS `<Button>`, IN FOUR TIERS AND TWO SIZES. Nothing else. The tiers are RANKS, so a screen
  * reads top-to-bottom by weight, and the whole set is spelled in primeng.css:
  *
- *   • LOUD, `class="ui-button-loud"`, the accent as a solid fill. The one place a screen asks for money, and
- *     the only button in the app that shouts. At most one per page, or it is not loud, it is just orange.
+ *   • LOUD, `class="ui-button-loud"`, the accent as a solid fill. THE MONEY TIER: the control that opens, fixes
+ *     or manages the paid relationship — join, update a declined card, manage the subscription, approve a run
+ *     that spends credits — and the only button in the app that shouts. At most one per page, or it is not
+ *     loud, it is just orange. (Not "asks for money" narrowly: a member's one door to their own subscription is
+ *     the same event to the reader, and on that page it is the only action there is.)
  *   • ACCENT, plain `<Button>`, the accent tinted. The action that COMMITS: New agent, Land now, Create.
  *   • BORING, `severity="secondary"`, a neutral fill of the same shape. Everything standing beside an accent.
  *     Same silhouette, different tone, which is the difference a reader can take in without stopping.

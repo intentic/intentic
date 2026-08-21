@@ -152,8 +152,34 @@
      * it: the button plaques. A light speckle is invisible on a pale stone — it has nowhere to go — so the
      * dressed face of a plaque has to be cut in dark instead, which is also what it is in life: a chisel takes
      * material away, and the pits it leaves are the shadowed part of a lit face. Same frequency and the same
-     * curve as the plates', so a plaque and the card behind it are unmistakably the same rock. */
-    --sanctum-tooth-cut: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.55' numOctaves='2' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.16 0 0 0 0 0.13 0 0 0 0 0.09 0.26 0 0 0 -0.075'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
+     * curve as the plates', so a plaque and the card behind it are unmistakably the same rock.
+     *
+     * A THIRD DEEPER THAN IT WAS, because the plaque under it came down about eight lightness points. Grit is
+     * an alpha, so the same alpha on a darker body is a fainter mark: holding the number would have quietly
+     * polished the face at the moment it was meant to get rougher. */
+    --sanctum-tooth-cut: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.55' numOctaves='2' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.15 0 0 0 0 0.12 0 0 0 0 0.085 0.32 0 0 0 -0.088'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
+
+    /* THE PITTING, AND ITS LIT LIPS — the pair of layers that is the difference between a dark speckle and a
+     * dressed face, and the reason a plaque now reads as rock at arm's length rather than only up close.
+     *
+     * THE FINE TOOTH ABOVE IS SUB-PIXEL AND THAT IS ITS LIMIT. At 1.55 cycles per pixel a feature is about
+     * two thirds of a pixel across, so what it paints is a DITHER: it stops the fill looking printed and can
+     * do nothing else, because the eye cannot resolve a single grain and so never sees one lit. Between that
+     * dither and the veining's slow cloud (0.035, a feature every thirty pixels) the face had NOTHING at the
+     * scale a chisel actually works at, which is a few pixels — and a surface with no structure in the band
+     * the eye reads texture in is a surface the eye reads as smooth.
+     *
+     * So one field at 0.4 — a feature every two and a half pixels — is laid down TWICE from the same seed:
+     * once dark, and once light and shifted a pixel DOWN. Same noise, offset by one pixel, is a relief: every
+     * hollow gets a shaded upper wall and a lit lower one, which is what a pit lit from above looks like and
+     * exactly how the letters are cut a few rules down. One field, two exposures — not two materials stacked,
+     * which is what a second independent noise would have been.
+     *
+     * The direction is not free. The light in this skin comes from ABOVE (every bevel in the file says so), so
+     * the lit copy goes BELOW the dark one. Flip it and every pit becomes a bump, and a face of bumps reads as
+     * hammered metal rather than as cut stone. */
+    --sanctum-pit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='p' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.4' numOctaves='3' seed='31' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.14 0 0 0 0 0.11 0 0 0 0 0.075 0.3 0 0 0 -0.09'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23p)'/%3E%3C/svg%3E");
+    --sanctum-pit-lip: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='l' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.4' numOctaves='3' seed='31' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 0.98 0 0 0 0 0.93 0.24 0 0 0 -0.078'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23l)'/%3E%3C/svg%3E");
 
     /* THE VEINING — a slow, weak, warm cloud, and the one place in this file where a LOW-frequency variation is
      * deliberately allowed. It exists because a uniform speckle cannot make stone: grit says "rough", but what
@@ -165,7 +191,7 @@
      * label on a control ~28px tall, and it swings under seven per cent of a colour the label already clears at
      * about six to one — a change of a twentieth of a ratio point across a word. It is not permission to put
      * this on a card. */
-    --sanctum-mottle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='v' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.035' numOctaves='3' seed='13' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.13 0 0 0 0 0.11 0 0 0 0 0.08 0.11 0 0 0 -0.035'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23v)'/%3E%3C/svg%3E");
+    --sanctum-mottle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='v' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.035' numOctaves='3' seed='13' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.12 0 0 0 0 0.1 0 0 0 0 0.075 0.14 0 0 0 -0.046'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23v)'/%3E%3C/svg%3E");
 
     /* THE HORIZON — five towers on a stepped plinth, standing on the floor of the window. The site opens every
      * page on a temple; this is that temple seen from a long way off. It earns its place by being FAR AWAY:
@@ -211,11 +237,12 @@
      * turns isotropic noise into brush drag; and it is matrixed to a FLAT dark gold driving ALPHA only,
      * because what varies across brushed metal is how much light a scratch throws back, not its hue.
      *
-     * A THIRD DEEPER THAN THE SITE'S (0.54 R − 0.16 against its 0.5 R − 0.16). The site's plaque is polished
-     * and can carry its character in the specular sweep; this one has had most of that sweep taken away, so
-     * the grain has to be what says "metal" — and a deeper brush is also what says "cast and left" rather than
-     * "just buffed". */
-    --sanctum-brushed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.3 0 0 0 0 0.2 0 0 0 0 0.06 0.54 0 0 0 -0.16'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23b)'/%3E%3C/svg%3E");
+     * THE SITE'S OWN NUMBERS, to the digit (0.5 R − 0.16 over a flat dark gold). They were a third deeper here
+     * for one cut, on the argument that a plate with its specular sweep taken away has to carry its character
+     * in the grain instead. The sweep is back — see the money plaque below — so the brush goes back with it:
+     * one piece of metal, described once, and the app's paying button is now the same object as the page that
+     * sold it rather than a near-miss of it. */
+    --sanctum-brushed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.23 0 0 0 0 0.07 0.5 0 0 0 -0.16'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23b)'/%3E%3C/svg%3E");
 
     /* THE ORNAMENT KIT — three of the site's four (ornaments.ts), redrawn as data URLs because a
      * background-image cannot take `currentColor`. The LOZENGE opens every section label. The TURNED CORNER is
@@ -716,24 +743,75 @@
                     .ui-button-loud
                 )
         ) {
-        color: #1d160e;
+        /* ── THE LABEL IS AN INCISION, WHICH IS THREE SHADOWS AND NOT ONE ─────────────────────────────────
+         * A cut letter is not dark ink on stone; it is a groove, and a groove lit from above shows three
+         * things. Its upper wall is turned AWAY from the light and goes to hard shade. That shade does not
+         * stop at the edge of the cut — it spreads a little onto the face above it, because the wall it came
+         * off is rough. And its lower wall is turned TOWARDS the light and is the brightest thing on the
+         * plaque. So: a hard dark line above the glyph, a soft one spreading up from it, a hard lit lip under.
+         *
+         * IT USED TO BE THE LIT LIP ALONE, at a quarter alpha, and one edge of a groove is not a groove — it
+         * is ink with a highlight, which is what the label was reported as. The shade above is the half that
+         * says "the stone continues over the top of this letter": without it the eye has no reason to read
+         * the dark shape as a hollow rather than as paint. Both halves, or neither.
+         *
+         * THE LIP IS LISTED FIRST BECAUSE SHADOWS STACK IN SOURCE ORDER, earliest on top, and the one place
+         * two of these meet is under a descender that hangs over the line below. There the lit edge is the
+         * one that must survive: it is the only thing in the recipe carrying the direction of the light.
+         *
+         * IT IS THE STONE'S OWN LIGHT, NOT WHITE. A near-white lip at this alpha stops reading as a lit face
+         * and starts reading as a drawn outline — the sticker effect — because nothing else on the plaque is
+         * within twenty levels of white. Warmed to the ash the plaque is cut from, it reads as the same rock
+         * catching the same lamp.
+         *
+         * READABILITY IS SET BY THE GLYPH, NOT BY THE RELIEF, and that is what keeps this safe. The letter's
+         * own colour is a warm near-black that clears about six to one on the dressed face — measured on the
+         * texture, at the foot of the wash, where the stone is darkest — and the relief is one pixel of it,
+         * so it sharpens the edge rather than thickening the stroke. A hair of tracking comes with it: a cut
+         * letter needs air around it or the shadows of two neighbouring stems meet and fill the gap between
+         * them. Inscriptional lettering is spaced for exactly this reason. */
+        color: #211a10;
         font-weight: 600;
-        text-shadow: 0 1px 0 rgba(255, 250, 238, 0.26);
-        background-color: #c6baa4;
+        letter-spacing: 0.012em;
+        text-shadow:
+            0 1px 0 rgba(244, 236, 218, 0.55),
+            0 -1px 0 rgba(24, 18, 10, 0.8),
+            0 -2px 2px rgba(24, 18, 10, 0.22);
+        /* THE FACE COMES DOWN EIGHT LIGHTNESS POINTS, from a bone that read as ivory or as warm plastic to a
+         * limestone the wall could plausibly have been quarried from. What is lost is nothing: a pale plaque
+         * was never carrying the contrast — the ink is, and it has six to one either way — and what is gained
+         * is that a mid grey takes a texture at all. Highlight and shade both have somewhere to go on it,
+         * which is why the pitting below can exist and could not before. */
+        background-color: #b3a794;
         /* The tooth TILES at its own gauge and only the shading is stretched — a face is dressed at a fixed
          * scale and then the stone is cut to size, so a plaque and a card must show the same grain however
          * differently sized they are. Stretching it instead gives a small button a coarse speckle and a wide
-         * one a smooth wash, which is two materials again. */
+         * one a smooth wash, which is two materials again.
+         *
+         * Top to bottom: the lit lips of the pits, the pits, the fine tooth, the slow veining, one wash. The
+         * lip layer is the pit layer's own noise moved a pixel down (see `--sanctum-pit-lip`), so the offset
+         * in `background-position` is not a nudge to taste — it IS the relief, and changing it to zero
+         * flattens the face back to a speckle. */
         background-image:
+            var(--sanctum-pit-lip),
+            var(--sanctum-pit),
             var(--sanctum-tooth-cut),
             var(--sanctum-mottle),
-            linear-gradient(180deg, rgba(255, 250, 238, 0.06), transparent 46%, rgba(0, 0, 0, 0.055));
+            linear-gradient(180deg, rgba(255, 250, 238, 0.05), transparent 46%, rgba(0, 0, 0, 0.07));
+        background-position:
+            0 1px,
+            0 0,
+            0 0,
+            0 0,
+            0 0;
         background-size:
             auto,
             auto,
+            auto,
+            auto,
             100% 100%;
-        background-repeat: repeat, repeat, no-repeat;
-        border-color: rgba(56, 47, 33, 0.34);
+        background-repeat: repeat, repeat, repeat, repeat, no-repeat;
+        border-color: rgba(44, 36, 24, 0.5);
         /* ── THE EDGE IS A CONTACT, NOT A BEVEL, AND THAT IS THE WHOLE OF THE SECOND ATTEMPT ──────────────
          * The first cut of this plaque was reported, correctly, as looking like a button from a 1998 web page,
          * and every one of the four things making it look that way was a thing added to make it look SOLID.
@@ -752,9 +830,9 @@
          * a real face varies across, and they are stated as alphas over the body rather than as three hex
          * stops so that the ramp cannot drift from the colour it is shading. */
         box-shadow:
-            inset 0 1px 0 rgba(255, 250, 238, 0.16),
-            0 1px 0 rgba(0, 0, 0, 0.45),
-            0 2px 5px -2px rgba(0, 0, 0, 0.55);
+            inset 0 1px 0 rgba(255, 250, 238, 0.2),
+            0 1px 0 rgba(0, 0, 0, 0.5),
+            0 2px 5px -2px rgba(0, 0, 0, 0.6);
     }
 
     [data-skin="sanctum"] .p-button:enabled:hover {
@@ -824,22 +902,25 @@
                     .ui-button-loud
                 )
         ):enabled:hover {
-        color: #1d160e;
-        background-color: #d3c8b3;
+        color: #211a10;
+        background-color: #c1b5a1;
         background-image:
+            var(--sanctum-pit-lip),
+            var(--sanctum-pit),
             var(--sanctum-tooth-cut),
             var(--sanctum-mottle),
-            linear-gradient(180deg, rgba(255, 250, 238, 0.07), transparent 46%, rgba(0, 0, 0, 0.05));
-        border-color: rgba(56, 47, 33, 0.4);
+            linear-gradient(180deg, rgba(255, 250, 238, 0.06), transparent 46%, rgba(0, 0, 0, 0.065));
+        border-color: rgba(44, 36, 24, 0.58);
         box-shadow:
-            inset 0 1px 0 rgba(255, 250, 238, 0.2),
-            0 1px 0 rgba(0, 0, 0, 0.45),
-            0 2px 6px -2px rgba(0, 0, 0, 0.55);
+            inset 0 1px 0 rgba(255, 250, 238, 0.24),
+            0 1px 0 rgba(0, 0, 0, 0.5),
+            0 2px 6px -2px rgba(0, 0, 0, 0.6);
     }
 
-    /* ── THE LOUD BUTTON, AS A PLAQUE OF CAST BRONZE ──────────────────────────────────────────────────────
-     * The app's `ui-button-loud` — four call sites in the whole product, all of them the place a screen asks
-     * for money.
+    /* ── THE LOUD BUTTON, AS THE SITE'S OWN GOLD PLATE ────────────────────────────────────────────────────
+     * The app's `ui-button-loud` — a handful of call sites in the whole product, every one of them the place a
+     * screen opens the paid relationship: join, fix the card that stopped working, manage the subscription,
+     * approve a run that costs credits.
      *
      * IT WAS A PANEL OF DARK TIMBER AND IT FAILED THE ONLY TEST THAT MATTERS FOR A PRIMARY. As an object the
      * board was the nicest thing in the file; as the one control a reader is meant to find, it was a dark
@@ -856,11 +937,29 @@
      * person reads stone-then-metal without being taught it, and it costs the skin no colour and no second
      * shape — which is the only kind of hierarchy that survives being repeated on three hundred screens.
      *
-     * IT IS CAST, NOT POLISHED, and that is the difference from the site's. A landing page is looked at for
-     * ninety seconds and can afford a mirror: the site's plaque runs a bright specular sweep, a lit outer halo
-     * and a pale body. In a window somebody sits in front of for nine hours, a highlight that bright is a lamp
-     * in the corner of the eye. Same three layers at a lower temperature — the sweep at a third of its
-     * strength and raking flatter, the halo gone entirely, the body deeper and duller. The site's object, aged.
+     * IT IS THE SITE'S PLATE, NOT A DULLED COPY OF IT, and that reverses this rule's own earlier decision. The
+     * argument for dulling it was sound in general and wrong here: a landing page is looked at for ninety
+     * seconds and can afford a mirror, a window is sat in front of for nine hours, so the sweep was cut to a
+     * third, the outer halo deleted and the body deepened — "the site's object, aged".
+     *
+     * What that missed is WHERE this object appears. It is not furniture. Nobody meets it on the board, in the
+     * tree, in a settings row or anywhere they spend those nine hours; it exists on the two screens that ask
+     * for money and on the dialog that spends some, and a person sees it a few times in a membership. A lamp
+     * in the corner of the eye is a real fault for a control you sit beside all day and no fault at all for
+     * one you meet on the way to a checkout — and the cost of dulling it was the thing that actually mattered:
+     * the app's paying button was a near-miss of the button that sold the product, which reads as a cheaper
+     * imitation of the page the reader just came from, on the one screen where trust is the product.
+     *
+     * So the numbers below are `.btn-primary`'s from global.css, to the digit: the same four-stop body, the
+     * same raking sweep at full strength, the same brushed field (`--sanctum-brushed`, restored to the site's
+     * own curve), the same bevel, inner glow, halo and drop.
+     *
+     * WHAT DOES NOT COME ACROSS IS THE CARTOUCHE. The site's plate is an octagon: corners notched with
+     * `clip-path` and a drawn frame laid in with `border-image`. Both are refused here, and the reason is the
+     * focus ring — this skin draws it as a `box-shadow`, and a box-shadow outside a clip-path is clipped away,
+     * so importing the notch would silently delete the keyboard ring from the one button on the page a
+     * keyboard user most needs to find. The app's radius and a warm rule instead: same metal, this skin's
+     * geometry.
      *
      * IT IS GOLD, NOT THE USER'S ACCENT, which reverses this file's earlier decision on purpose. The timber
      * panel was lit with the picked colour on the argument that the one shouting control should wear it. But
@@ -869,43 +968,58 @@
      * area on the screen. Gold is the structural metal and is already in every rule here; raising it from a
      * hairline to a solid in exactly one place is a promotion, not a new colour.
      *
-     * The label is a warm near-black with a pale hairline over each letter, so the stroke reads as an edge
-     * with depth rather than as ink: ~7:1 on the plate, and the pairing holds whatever accent is picked
-     * because neither side of it is the accent. */
+     * The label is a warm near-black with a pale hairline under each letter, so the stroke reads as an edge
+     * with depth rather than as ink: ~11:1 on the plate, and the pairing holds whatever accent is picked
+     * because neither side of it is the accent. It is a hairline and not the stone plaque's full three-part
+     * incision, and the difference is the material: metal is CUT, thin and clean, and takes no rough wall to
+     * throw a soft shade off. */
     [data-skin="sanctum"] .p-button.ui-button-loud,
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover,
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:active {
-        color: #241708;
+        color: #21140a;
         font-weight: 600;
-        text-shadow: 0 1px 0 rgba(255, 248, 232, 0.34);
-        background-color: #cdb27c;
+        letter-spacing: 0.015em;
+        text-shadow: 0 1px 0 rgba(255, 248, 232, 0.42);
+        background-color: #d9b169;
         background-image:
-            linear-gradient(104deg, transparent 24%, rgba(255, 250, 236, 0.15) 45%, rgba(255, 250, 236, 0.03) 56%, transparent 70%),
+            linear-gradient(100deg, transparent 26%, rgba(255, 250, 236, 0.42) 44%, rgba(255, 250, 236, 0.08) 55%, transparent 68%),
             var(--sanctum-brushed),
-            linear-gradient(180deg, #e2c996 0%, #cdb27c 42%, #b39763 76%, #a08654 100%);
+            linear-gradient(180deg, #f2d69f 0%, #ddb571 40%, #c99a4f 74%, #b3823c 100%);
         /* Stretched to the button rather than tiled: turbulence has no seam, so a repeat would show its joins,
          * and one field scaled to the plate is how a piece is brushed after it is cast. */
         background-size: 100% 100%;
         background-repeat: no-repeat;
-        border-color: rgba(78, 58, 26, 0.7);
+        /* THE CARTOUCHE'S PALE RULE, WITHOUT THE CARTOUCHE. The site draws a cream double frame into the
+         * notch; on a rounded rect the same idea is one warm-cream hairline, which is also what closes the
+         * plate off from the near-black window it floats on. */
+        border-color: rgba(255, 240, 205, 0.5);
         /* A lit hairline along the top edge and a shade along the foot is the whole of a bevel at this size.
-         * The drop under it is what the plate sits on. No outer glow: that is the part that made the site's
-         * version a lamp, and a lamp is exactly what a workspace cannot have. */
+         * The inner glow rounds the plate's own light off its edges; the outer pair is what lifts it clear of
+         * the wall — a warm halo this window has nothing else like, and a drop for it to sit on. */
         box-shadow:
-            inset 0 1px 0 rgba(255, 252, 242, 0.34),
-            0 1px 0 rgba(0, 0, 0, 0.5),
-            0 2px 6px -2px rgba(0, 0, 0, 0.6);
+            inset 0 1px 0 rgba(255, 252, 242, 0.8),
+            inset 0 -1px 0 rgba(88, 56, 18, 0.5),
+            inset 0 0 16px rgba(140, 94, 36, 0.25),
+            0 0 30px rgba(226, 168, 78, 0.3),
+            0 6px 18px -6px rgba(0, 0, 0, 0.75);
     }
 
     /* Under the pointer the plate catches more of the same light rather than changing colour, and the
-     * engraving does NOT lighten — metal that brightens does not turn its cut letters pale. */
+     * engraving does NOT lighten — metal that brightens does not turn its cut letters pale. One step up the
+     * same four stops, and the halo opens with it, so the lift arrives as a single movement. */
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover {
-        background-color: #dbc08b;
+        background-color: #e4bd78;
         background-image:
-            linear-gradient(104deg, transparent 22%, rgba(255, 250, 236, 0.26) 45%, rgba(255, 250, 236, 0.06) 57%, transparent 72%),
+            linear-gradient(100deg, transparent 24%, rgba(255, 252, 242, 0.52) 44%, rgba(255, 250, 236, 0.12) 56%, transparent 70%),
             var(--sanctum-brushed),
-            linear-gradient(180deg, #eed7a4 0%, #dbc08b 42%, #c1a672 76%, #ae945f 100%);
-        border-color: rgba(96, 72, 32, 0.8);
+            linear-gradient(180deg, #f8e2b3 0%, #e8c281 40%, #d4a75c 74%, #bd8f45 100%);
+        border-color: rgba(255, 244, 216, 0.62);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 253, 246, 0.9),
+            inset 0 -1px 0 rgba(88, 56, 18, 0.5),
+            inset 0 0 16px rgba(140, 94, 36, 0.2),
+            0 0 34px rgba(226, 168, 78, 0.38),
+            0 6px 18px -6px rgba(0, 0, 0, 0.75);
     }
 
     /* Solid accent controls — checkbox, radio, switch — read as inlay: the unticked box is cut down into the
