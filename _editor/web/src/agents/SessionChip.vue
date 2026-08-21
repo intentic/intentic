@@ -12,10 +12,21 @@
  *
  * `reveal` is the exception, and only on the agent's own page: there the chip opens the identity panel, which
  * is that page's subject rather than something in the way of it. The chevron is what marks it — a chip that
- * opens something has to look different from one that just says a name.
+ * opens something has to look different from one that just says a name. That spelling prints the name WHOLE:
+ * the detail page is the one surface whose subject is this agent, it has the width, and it is where somebody
+ * goes when the exact string is what they came for.
  *
- * No hover label on either spelling: the label spells the name out already, and the chevron says the other
- * one opens. */
+ * ── THE LABEL SPELLING IS ABBREVIATED, AND ONLY THE LABEL SPELLING ───────────────────────────────────────
+ * The rule and the whole argument for it live in `sessionChip.ts`; in one line, the shared `agent/` prefix
+ * goes and anything still over the budget loses its MIDDLE rather than its end. The CSS truncation stays
+ * underneath as the last resort for a very narrow lane.
+ *
+ * AND THE WHOLE NAME IS ON HOVER. That reverses this file's earlier note ("no hover label on either spelling:
+ * the label spells the name out already") and it is the same rule, not a new one: a hover label is wrong when
+ * it repeats what is on screen and right when it completes it. The label no longer spells the name out, so it
+ * now owes the reader the rest of it. */
+import { computed } from "vue";
+import { shortBranch } from "./sessionChip";
 
 const {
     branch,
@@ -29,6 +40,8 @@ const {
     compact?: boolean;
 }>();
 const emit = defineEmits<{ reveal: [event: MouseEvent] }>();
+
+const shown = computed(() => shortBranch(branch));
 
 const CHROME = `inline-flex min-w-0 items-center gap-1 rounded font-mono text-2xs text-subtle`;
 </script>
@@ -47,8 +60,8 @@ const CHROME = `inline-flex min-w-0 items-center gap-1 rounded font-mono text-2x
             <Icon name="chevron-down" class="shrink-0 text-[0.6rem] opacity-60" />
         </template>
     </button>
-    <span v-else :class="[CHROME, `max-w-full shrink`]">
+    <span v-else v-tooltip.top="branch" :class="[CHROME, `max-w-full shrink`]">
         <Icon name="code" class="shrink-0 text-2xs" />
-        <span class="truncate">{{ branch }}</span>
+        <span class="truncate">{{ shown }}</span>
     </span>
 </template>

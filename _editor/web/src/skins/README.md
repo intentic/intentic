@@ -10,10 +10,10 @@ There are two, and they are deliberately opposite materials:
   brackets instead of soft rounding, angular geometry, and an angular technical face on headings.
 - **Sanctum** (`sanctum.css`) — **the site's design system, worn by the app**. Same metals, same ink, same
   materials, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground with a
-  tooth in it, one gold rule round everything, cream ink, and the site's two faces. The rail and every overlay
-  are faced in the site's woven cloth; the one loud button is a cast plaque with the words cut into it; nothing
-  else is either. A distant temple stands on the floor of the window where the app has put nothing in front of
-  it.
+  whisper of tooth in it, one gold rule round everything, cream ink, and the site's two faces. The rail and
+  every overlay are a flat unlit shadow that the icons and the lists sit in; the two filled button tiers are
+  plaques with their labels cut into them, one carved stone and one cast bronze. A distant temple stands on the
+  floor of the window where the app has put nothing in front of it.
 
 **They part company on the accent, and that is the interesting difference.** The HUD is *lit* by the colour the
 user picked: every glow, edge and focus ring is mixed from `--color-primary-*`, so Lagoon gives it cyan and Ember
@@ -36,7 +36,7 @@ Sanctum read the rule as "no background-image on a plate" for one cut, and shipp
 in which every surface anyone actually looked at was a flat rectangle. The plates carry a tooth now, measured at
 under a hundredth of a contrast ratio point.
 
-Sanctum has paid for that rule and eight others, and the notes are kept at the top of the file:
+Sanctum has paid for that rule and ten others, and the notes are kept at the top of the file:
 
 - **Ornament on an edge becomes noise at UI size.** A carved arcade that reads as stone at 40px reads as a torn,
   dithered edge at 14px — and every panel in an app is a 14px edge. Character has to come from the material, the
@@ -48,26 +48,42 @@ Sanctum has paid for that rule and eight others, and the notes are kept at the t
 - **A brown ground makes gold invisible.** The cut before this one ran the stone ramp at three times the chroma,
   at a redder hue, and drew every rule in the accent — so the wall, the plates and the lines were all the same
   warm thing and none of them could be the brightest. The ground lost its colour and the metal kept it.
-- **The app's accent tier is six warm chips on a settings page.** `<Button>` tints itself from the picked colour,
-  and a screen carries half a dozen: Change, Save, Open, New workflow, Land now. In this skin that tier is a gold
-  cartouche with a cream label — the site's `.btn` — and `ui-button-loud` is the only filled control left. The
-  severities (`danger`, `warn`, `success`) keep their own tones, and have to be excluded **by name**: the app
-  sets each one's tone in `@layer primeng`, and a skin's `components` layer beats that layer outright.
-- **A dark primary on a dark window is not a primary.** For two cuts the one loud button was a panel of dark
-  timber with a warm rule round it — a lovely object, and indistinguishable at a glance from a card, a field, a
-  secondary button or a panel edge, because the eye finds differences of *lightness* first and there were none.
-  It inverts now: a cast plaque, the only light-on-dark thing in the app, with the label cut into it. The site
-  reached the identical conclusion about its own hero (see the note over `.btn-primary` in `global.css`) — but
-  its plaque is *polished*, and a specular highlight that is right for ninety seconds on a page is a lamp in the
-  corner of the eye for nine hours in a window. Same three layers, a third of the sweep, no outer halo.
+- **The app's accent tier is six warm chips on a settings page.** `<Button>` tints itself from the picked
+  colour, so every committing button came out a warm chip on a warm wall. The severities (`danger`, `warn`,
+  `success`) keep their own tones and have to be excluded **by name**: the app sets each one's tone in
+  `@layer primeng`, and a skin's `components` layer beats that layer outright.
+- **A dark primary on a dark window is not a primary.** The fix for the warm chips was a gold hairline round a
+  dark box, and it swapped a loud fault for a quiet one: a dark box inside a warm rule is also the description
+  of a card, a field, an input, a chip and a secondary button here. The primary had no property the furniture
+  did not share, so a screen had nothing on it that looked pressable — and the only honest report of it was the
+  user's, that the buttons had not meaningfully changed. The eye finds differences of *lightness* first.
+  Both filled tiers invert now: the committing button is a **carved stone plaque** cut from the wall's own
+  rock, `ui-button-loud` is a **cast bronze** one a clear step brighter, and both have their label cut INTO
+  them. Two materials, one hierarchy, no colour spent and no second shape — which is the only kind of hierarchy
+  that survives being repeated on three hundred screens. The site reached the same conclusion about its own
+  hero (see the note over `.btn-primary` in `global.css`), but its plaque is *polished*, and a specular
+  highlight that is right for ninety seconds on a page is a lamp in the corner of the eye for nine hours in a
+  window: same three layers, a third of the sweep, no outer halo.
+- **Beware `:where()` in a tier selector.** The button tiers are matched with `.p-button:where(:not(…))`, which
+  keeps the exclusion list readable and contributes **nothing** to specificity — so a tier's base rule sits at
+  one class while a generic `:enabled:hover` sits at three. Every tier that paints a `box-shadow` has to repaint
+  it in its own hover rule, or the plaque visibly sinks into the page the moment a pointer arrives.
 - **A light texture raises the ground it lies on.** The wall's tooth lifted the canvas by about five luminance
   levels, so a canvas token written at the app's own value *shipped* lighter than the app's — and the plates lost
   most of their step off it, which is why cards started reading as panes of glass. Surface tokens under a
   texture have to be chosen against what renders, not against what is written. Anything else keyed to the wall
   (the temple's alpha, the lane's fill) has to be re-checked whenever it moves.
-- **Two surfaces the app calls one material must render as one material.** The rail is `bg-card` in the shell's
-  own markup — the same surface as the file-tree header it stands beside — and painting it a colour of its own
-  did not make it a feature, it made a seam. A skin dresses a surface; it does not reassign it.
+- **The navigation rail is not a surface, it is a gap.** Three cuts spent the skin's material budget on it —
+  timber, then cloth on a brown ground, then the same cloth on the app's own `bg-card` — and each one failed
+  differently: a directional grain has room for three strokes across 48px, a colour of its own makes a seam
+  against the panel beside it, and a weave has a slow component that never averages out over a column that
+  narrow. The answer was that you look *past* a rail forty times a minute, so anything in it is something to
+  look past. It is flat, unlit, and a step deeper than the wall now. The overlays followed it there for the
+  same reason: a context menu is a thing you look *through* to a list of names.
+- **"In front" is a relationship, not a value.** The overlays used to sit a step ABOVE a card because that is
+  what floating usually means. But every plate in this skin is lit — bevel, ledge, drop — so a panel that goes
+  the other way, unlit and below the wall, is unmistakably not one of them and reads as floating over the lot
+  without ever being the brightest thing on screen.
 - **A site's squareness does not survive being repeated.** Sanctum copied the site's hard corner outright and it
   was wrong for the same reason it is right over there: a landing page draws about fifteen frames and they are
   large, a workspace draws hundreds and most of them are a 28px row or a 20px chip. At that size a right angle

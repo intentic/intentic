@@ -54,8 +54,11 @@ const TONE: Record<WorkflowRun["state"], string> = {
                width — but SOLID, because a dashed left edge at twice the weight of the rest is not one bar, it
                is a column of ticks beside a dashed outline, and the two dashed rhythms at different weights
                read as a rendering fault. `border-style` is per-side in CSS; Tailwind has no per-side utility
-               for it. */
-            lane === 'attention' ? 'border-l-2 border-l-[var(--color-attention-edge)] [border-left-style:solid]' : '',
+               for it.
+               It stands down while the run is SELECTED, for the reason AgentCard's does: selection paints all
+               four edges, and a bar in another colour over the left one is a doubled edge rather than a second
+               fact. */
+            lane === 'attention' && !selected ? 'border-l-2 border-l-[var(--color-attention-edge)] [border-left-style:solid]' : '',
             // The agent card's selection, on the agent card's channel: the chat panel is showing THIS run, and
             // a board that says so about a session but not about a run makes the run look like a thing you
             // cannot point the chat at.

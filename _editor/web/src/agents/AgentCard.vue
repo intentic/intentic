@@ -208,12 +208,12 @@ const context = computed(() => contextPct(props.agent.contextTokens, props.agent
  * nowhere. A row gated on a SUBSET of what it renders is a row that hides the rest.
  * The mirror of that mistake is a row gated on MORE than it renders, which opens an empty strip of padding: so
  * the diff clause is the diff chip's own condition rather than "there is a diff", since a diff of renames and
- * mode changes alone has nothing to draw. */
+ * mode changes alone has nothing to draw — and `turns` left this list the moment the turn chip left the row,
+ * or a card whose only number was its message count would have opened a strip with nothing in it. */
 const stats = computed(
     () =>
         props.agent.costUsd !== undefined ||
         (props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0)) ||
-        props.agent.turns !== undefined ||
         props.agent.subagents !== undefined ||
         context.value !== undefined,
 );
@@ -333,14 +333,21 @@ const grab = (event: PointerEvent): void => {
         :class="[
             /* TWO STATES, TWO CHANNELS. `selected` (this card's chat is the one docked) and the Attention lane
                are unrelated facts that were both drawn as a coloured 1px outline plus a faint ring — near
-               identical at a glance, and mutually exclusive, so selecting a card that needed the user ERASED
-               the very cue that put it there. They are now told apart by WHERE they are drawn, which means they
-               also stack: selection is a ring around the whole card plus a lifted surface (a property of the
-               user's focus, in the app's own primary), attention is a solid bar down the left edge (a property
-               of the agent, in warning — the same colour as its chip on the row above, settled into the card
-               so a lane of them reads as one mark per card rather than as a stripe: --color-attention-edge in
-               styles.css, shared with the rail's copy of this bar). */
-            lane === 'attention' ? 'border-l-2 border-l-[var(--color-attention-edge)]' : '',
+               identical at a glance, so selecting a card that needed the user ERASED the very cue that put it
+               there. They are told apart by WHERE they are drawn: selection is a ring around the whole card
+               plus a lifted surface (a property of the user's focus, in the app's own primary), attention is a
+               solid bar down the left edge (a property of the agent, in warning — the same colour as its chip
+               on the row above, settled into the card so a lane of them reads as one mark per card rather than
+               as a stripe: --color-attention-edge in styles.css, shared with the rail's copy of this bar).
+
+               THE BAR STANDS DOWN WHILE THE CARD IS SELECTED, and that is a third state rather than an
+               exception to the second. Selection already paints all four edges; a 2px bar in another colour
+               laid over the left one of them is not two facts told in two places, it is a doubled left edge —
+               two parallel lines a pixel apart in two different metals, which reads as a rendering fault
+               before it reads as anything. Nothing is lost: a card in Attention carries its reason chip on the
+               title row — Question for you, Error — which is the louder half of the pair and says WHY, and a
+               selected card is by definition the one already open in front of the reader. */
+            lane === 'attention' && !selected ? 'border-l-2 border-l-[var(--color-attention-edge)]' : '',
             selected ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50' : 'border-line bg-card hover:border-line-strong',
             dragging ? 'opacity-40' : '',
             pending !== undefined ? 'pointer-events-none opacity-60' : '',
@@ -498,18 +505,48 @@ const grab = (event: PointerEvent): void => {
             <OriginMark :origin="agent.origin" />
             <WorkflowMark :workflow="agent.workflow" />
 
-            <div v-if="model !== undefined || agent.branch !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle">
+            <!-- The row itself is revealed too when the MODEL is missing, which is the case where hiding the
+                 branch would otherwise leave a flex row holding one `display:none` child: no height of its own,
+                 but still a gap in the column above and below it. One display utility per state, chosen here
+                 rather than stacked in the class list — `hidden` and `flex` are the same property, and which
+                 wins between two plain utilities is Tailwind's emit order, not the order they are written. A
+                 variant (`group-hover:`) always sorts after its unvaried counterpart, so that pair is safe. -->
+            <div
+                v-if="model !== undefined || agent.branch !== undefined"
+                class="min-w-0 items-center gap-1.5 text-2xs text-subtle"
+                :class="model !== undefined || mobile ? 'flex' : 'hidden group-hover:flex'"
+            >
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
-                <template v-if="agent.branch !== undefined">
+                <!-- THE SESSION NAME IS REVEALED, NOT PRINTED, and the argument for that is the lane rather
+                     than the name. It is the only thing on this card anybody needs CHARACTER-EXACT — every
+                     other word here is read, not retyped — but "needed exactly, occasionally" and "shown on
+                     forty cards at once" are different claims, and it was answering the second while only ever
+                     being asked the first. A column of forty machine names in mono is the largest block of
+                     text on the board and the one nobody reads on the way past.
+                     ON HOVER, WHICH IS WHEN IT IS ASKED FOR. A pointer resting on a card is a reader who has
+                     stopped on it, which is exactly the moment the name becomes a fact about something rather
+                     than a row of noise. Revealed by `display`, not by opacity: an invisible chip that still
+                     holds its width leaves a gap in the line and puts a hover target under a pointer aiming
+                     at the card, and this line has no other reason to reserve space. Nothing moves vertically
+                     — the row exists either way, and only its own width changes.
+                     TOUCH GETS IT UNCONDITIONALLY. There is no hover on a phone, and a fact reachable only by
+                     a pointer is a fact a phone does not have — the same rule the card's hover actions follow.
+                     It stays a LABEL, not a control: a small target for a rare want, sitting mid-card in the
+                     path of the press that focuses the agent, is a target hit by accident more often than on
+                     purpose. Copying it is on the right-click menu (AgentsView), where the board keeps the
+                     decisions that are made about a card rather than to it; the full string is on its own
+                     hover, since what shows here is abbreviated (SessionChip). -->
+                <!-- The reveal rides a WRAPPER rather than the chip itself, because `hidden` and the chip's own
+                     `inline-flex` are both display utilities and which of them wins is Tailwind's emit order,
+                     not the order they are written in. A wrapper has no display of its own to argue with. -->
+                <span
+                    v-if="agent.branch !== undefined"
+                    class="min-w-0 items-center gap-1.5"
+                    :class="mobile ? 'inline-flex' : 'hidden group-hover:inline-flex'"
+                >
                     <span v-if="model !== undefined">·</span>
-                    <!-- The session name is the only thing on this card anybody needs CHARACTER-EXACT — every
-                         other word here is read, not retyped — but it is still a LABEL here, not a control.
-                         It briefly was one, and a small target for a rare want, sitting mid-card in the path of
-                         the press that focuses the agent, is a target hit by accident more often than on
-                         purpose. Copying it is on the right-click menu (AgentsView), where the board keeps the
-                         decisions that are made about a card rather than to it. -->
                     <SessionChip :branch="agent.branch" />
-                </template>
+                </span>
             </div>
 
             <!-- THE LOOP LINE. Above the activity line and never instead of it: the activity says what the
@@ -640,17 +677,23 @@ const grab = (event: PointerEvent): void => {
             >
                 <!-- No hover labels on the numbers. Chips side by side each raising its own box turned a glance
                      across the card's numbers into a strip of pop-ups, and every label was the legend for a
-                     glyph the reader had already decoded: the speech bubbles are turns, the ring is context. A
-                     stat you cannot name from its icon does not belong in a chip row.
-                     WHAT IS NOT HERE, AND WHY. The line carried a token reading (`277 / 65k`) and a count of
-                     files touched, and a board is scanned rather than studied — every chip in it spends the
-                     same glance, so a chip has to change what the reader does next or it is taxing the ones
-                     that do. Tokens were the raw form of the cost sitting beside them: two numbers, an icon,
-                     and no decision anybody makes from a board that the money figure does not make shorter.
-                     The file count was drawn with the duplicate-pages glyph — which reads as "copy", not as
-                     "files" — and stood next to the +/− that already says how big the change is. Both facts
-                     still exist where they are read on purpose rather than in passing: the tokens in the Usage
-                     tab, the files in the agent's own Changes panel. -->
+                     glyph the reader had already decoded: the ring is context. A stat you cannot name from its
+                     icon does not belong in a chip row.
+                     WHAT IS NOT HERE, AND WHY. The line carried a token reading (`277 / 65k`), a count of files
+                     touched, and a count of TURNS, and a board is scanned rather than studied — every chip in
+                     it spends the same glance, so a chip has to change what the reader does next or it is
+                     taxing the ones that do. Tokens were the raw form of the cost sitting beside them: two
+                     numbers, an icon, and no decision anybody makes from a board that the money figure does not
+                     make shorter. The file count was drawn with the duplicate-pages glyph — which reads as
+                     "copy", not as "files" — and stood next to the +/− that already says how big the change is.
+                     Turns are the newest to go and the clearest case: "9 messages" is a fact about a
+                     CONVERSATION, and a board is not read to find out about conversations, it is read to find
+                     out which agent needs a person. Nothing on this line was ever decided by it.
+                     All three still exist where they are read on purpose rather than in passing: the tokens in
+                     the Usage tab, the files in the agent's own Changes panel, and the turn count on the chat
+                     rail's card — which answers "what is in the chat I have open" rather than "which of forty
+                     agents do I go to", and is the one frame where the number is about the thing being read. -->
+
                 <!-- The card's cost is this agent's lifetime total, read only — the Usage tab still breaks it
                      down by day and model, but reaching it from here put a route change inside the chip row a
                      click aims THROUGH on its way to focusing the agent, and the misfires cost more than the
@@ -661,7 +704,6 @@ const grab = (event: PointerEvent): void => {
                     <span class="text-success">+{{ agent.diff.insertions }}</span>
                     <span class="text-danger"> −{{ agent.diff.deletions }}</span>
                 </span>
-                <span v-if="agent.turns !== undefined && agent.turns > 0"> <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }} </span>
                 <!-- THE AGENTS THIS AGENT STARTED. A card is the answer to "what is this agent up to", and one
                      running five children used to look exactly like one running none. A nested button, like the
                      cost above and for the same reason: the click opens the Subagents area rather than the agent
