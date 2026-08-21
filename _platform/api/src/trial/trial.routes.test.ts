@@ -465,7 +465,7 @@ describe("the free-trial key pool", () => {
             const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
             const pending = pool.call(`/chat/completions`, { method: `POST`, body: () => `{}`, observeHealth: true });
 
-            await vi.advanceTimersByTimeAsync(8_000);
+            await vi.advanceTimersByTimeAsync(20_000);
 
             expect((await pending)?.response.status).toBe(200);
             expect(fetchFn).toHaveBeenCalledTimes(2);
@@ -522,6 +522,91 @@ describe("the free-trial key pool", () => {
             { key: `Bearer k1`, model: `lite` },
         ]);
         expect(attempt?.model).toBe(`lite`);
+    });
+
+    /* THE OUTAGE THIS PAIR OF TESTS IS ABOUT: the preferred rung stopped answering upstream, holding every
+     * connection open instead of refusing, and the walk spent its entire clock discovering that on key after
+     * key. The fallback rung was answering in under a second the whole time and was never reached, so a trial
+     * with a healthy model and allowance to spare told every user it was unavailable. */
+    it("abandons a silent rung for the fallback instead of timing out on every key", async () => {
+        vi.useFakeTimers();
+        try {
+            const attempts: string[] = [];
+            const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+                const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+                attempts.push(model);
+                // Silence, not a refusal: the condition a per-key walk cannot tell apart from a slow answer.
+                return model === `flash` ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
+            });
+            const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
+            const pending = pool.call(`/chat/completions`, {
+                method: `POST`,
+                models: [`flash`, `lite`],
+                body: (model) => JSON.stringify({ model }),
+            });
+
+            await vi.advanceTimersByTimeAsync(20_000);
+
+            expect((await pending)?.model).toBe(`lite`);
+            // ONE timeout, not one per key: silence says the same thing on every credential in the pool.
+            expect(attempts).toEqual([`flash`, `lite`]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("skips the silent rung outright on the messages that follow", async () => {
+        vi.useFakeTimers();
+        try {
+            const attempts: string[] = [];
+            const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+                const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+                attempts.push(model);
+                return model === `flash` ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
+            });
+            const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
+            const send = () =>
+                pool.call(`/chat/completions`, { method: `POST`, models: [`flash`, `lite`], body: (model) => JSON.stringify({ model }) });
+
+            const first = send();
+            await vi.advanceTimersByTimeAsync(20_000);
+            await first;
+            attempts.length = 0;
+            const second = await send();
+
+            // The cooldown is what keeps the timeout to the first message rather than every message.
+            expect(second?.model).toBe(`lite`);
+            expect(attempts).toEqual([`lite`]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("tries a cooling rung again rather than refusing when no rung is left", async () => {
+        vi.useFakeTimers();
+        try {
+            let silent = true;
+            const attempts: string[] = [];
+            const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+                attempts.push((JSON.parse(String(init?.body)) as { model: string }).model);
+                return silent ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
+            });
+            const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
+            const send = () =>
+                pool.call(`/chat/completions`, { method: `POST`, models: [`flash`, `lite`], body: (model) => JSON.stringify({ model }) });
+
+            const first = send();
+            await vi.advanceTimersByTimeAsync(60_000);
+            await first;
+            silent = false;
+            attempts.length = 0;
+
+            // Both rungs are cooling, so the cooldown has no preference left to express and is ignored.
+            expect((await send())?.model).toBe(`flash`);
+            expect(attempts).toEqual([`flash`]);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("honours Retry-After when quarantining a rate-limited key", async () => {

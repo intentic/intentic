@@ -113,12 +113,39 @@ export interface TrialPool {
     readonly status: () => TrialServiceStatus;
 }
 
-// The pool is allowed several short attempts, but one bad upstream may not hold a trial turn open indefinitely.
-const ATTEMPT_TIMEOUT_MS = 8_000;
-const POOL_DEADLINE_MS = 20_000;
+/* HOW LONG A RUNG IS GIVEN TO SAY ANYTHING AT ALL, and why the old number was the whole outage.
+ *
+ * This timer covers RESPONSE HEADERS, and a model that is thinking has sent none yet. Google's free tier answers
+ * a one-word prompt on a healthy rung in under a second, and on an unhealthy one it does not answer at all: it
+ * holds the connection open, or returns a 503 half a minute later. There is no middle. So the timer only has to
+ * be longer than "healthy", and it was set to eight seconds, which a thinking model exceeds while working
+ * perfectly. Every real turn was cut off mid-answer and reported as the trial being unavailable.
+ *
+ * Twenty seconds is past anything a healthy rung has been measured at and still short enough that a hung one is
+ * abandoned while the user is waiting rather than after they have given up. The DEADLINE below spans the whole
+ * walk and has to fit the worst honest case, one dead rung timing out before the live one answers, which the old
+ * twenty seconds could not: it expired inside the first rung, so the fallback the ladder exists for was
+ * unreachable and a trial with a perfectly good second model served nobody. */
+const ATTEMPT_TIMEOUT_MS = 20_000;
+const POOL_DEADLINE_MS = 60_000;
 const AUTH_QUARANTINE_MS = 5 * 60_000;
 const QUOTA_QUARANTINE_MS = 30_000;
 const FAILURE_QUARANTINE_MS = 10_000;
+/* A RUNG THAT NEVER ANSWERED is sidelined for every key, which is the one place a model-wide fact may be
+ * inferred, and the opposite inference to the one `bucket` forbids.
+ *
+ * A refusal is per credential: a 401 is about the key, a 429 is about the key's quota on that model, and both
+ * arrive in milliseconds, so walking the rest of the pool costs nothing and is exactly right. SILENCE is not.
+ * A model the upstream has stopped serving hangs identically on every key, and a walk that discovers this one
+ * credential at a time spends a whole timeout per key to learn a single thing. Worse, it spends them BEFORE the
+ * rung that would have answered, so the healthy fallback is never reached.
+ *
+ * So the first timeout on a rung ends that rung's walk and cools the model itself: the next message skips it and
+ * is served by the fallback immediately, and the preference re-asserts itself once the condition can have
+ * cleared. Five minutes because that is the ladder's own capability TTL, so a rung the upstream has retired and
+ * a rung that has gone dark are rediscovered on the same rhythm. It is a demotion, not a verdict: nothing here
+ * removes a model, and one answer puts it back at the head of the ladder. */
+const MODEL_COOLDOWN_MS = 5 * 60_000;
 
 const retryAfterMs = (response: Response, now: number): number | undefined => {
     const value = response.headers.get(`retry-after`)?.trim();
@@ -165,6 +192,9 @@ const bucket = (key: string, model: string | undefined): string => `${key} ${mod
 export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => number = Date.now): TrialPool => {
     const keys = trialKeys(config);
     const quarantine = new Map<string, number>();
+    // Rungs that answered nothing, by model. Separate from `quarantine` rather than a reserved key inside it,
+    // because the two are about different things and only one of them may be inferred from silence.
+    const cooling = new Map<string, number>();
     let cursor = 0;
     let service: { health: TrialHealth; retryAt?: number } = { health: `unknown` };
 
@@ -182,10 +212,14 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
     const healthyKeys = (rotation: readonly string[], model: string | undefined, at: number): readonly string[] =>
         rotation.filter((key) => (quarantine.get(bucket(key, model)) ?? 0) <= at);
 
+    // A rung still inside its cooldown is skipped entirely: no key on it is worth the wait (see MODEL_COOLDOWN_MS).
+    const servable = (model: string | undefined, at: number): boolean => model === undefined || (cooling.get(model) ?? 0) <= at;
+
     // Read off the live quarantine rather than recomputed per key, since a bucket is now a pair and the map is
-    // the only thing that knows which pairs exist.
+    // the only thing that knows which pairs exist. Cooling rungs count too: a pool whose every rung is sidelined
+    // is unavailable until the first of them comes back, and that is the moment worth naming.
     const nextRetry = (at: number): number | undefined => {
-        const times = [...quarantine.values()].filter((retry) => retry > at);
+        const times = [...quarantine.values(), ...cooling.values()].filter((retry) => retry > at);
         return times.length === 0 ? undefined : Math.min(...times);
     };
 
@@ -230,9 +264,13 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
      * when the first cannot answer on any key, and interleaving them would hand a user the fallback model while
      * the one we would rather serve still had a working credential.
      *
-     * The deadline spans the entire walk rather than each rung. A caller is waiting on one message, and two
-     * rungs of twenty seconds is a forty-second silence that ends in a refusal, worse than the fast refusal it
-     * was trying to avoid. Whatever the walk has reached when the clock runs out is what gets answered. */
+     * The deadline spans the entire walk rather than each rung, and it has to be big enough to REACH the last
+     * rung, which is the property the old one quietly lacked. A ladder whose fallback is unreachable is not a
+     * ladder: when the preferred model went dark upstream the walk spent the whole clock timing out against it,
+     * and every message was refused while the rung below answered in under a second. Sized now for the worst
+     * honest walk (a silent rung abandoned at its timeout, then a live one), with the rung cooldown above
+     * keeping that price to the first message rather than every message. Whatever the walk has reached when the
+     * clock does run out is what gets answered. */
     const call: TrialPool["call"] = async (path, init) => {
         const started = now();
         const deadline = started + POOL_DEADLINE_MS;
@@ -242,8 +280,17 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
         let last: Response | undefined;
         let lastModel: string | undefined;
         let tried = 0;
-        for (const model of candidates) {
-            for (const key of healthyKeys(rotation, model, started)) {
+        /* EVERY RUNG COOLING IS NOT A REASON TO SERVE NOTHING, the same judgement the ladder makes about a
+         * capability listing that has retired all of them. A cooldown is a preference between rungs, and with no
+         * rung left to prefer it has nothing left to say: refusing here would turn one bad minute into a trial
+         * that answers 502 instantly without asking anyone, which is the failure this whole file exists to
+         * avoid. So the cooldowns are dropped for this walk and the ladder is tried as written. */
+        const warm = candidates.filter((model) => servable(model, started));
+        for (const model of warm.length > 0 ? warm : candidates) {
+            // `now()` rather than the walk's start: a rung sidelined a moment ago by the loop below is sidelined
+            // for the rest of this walk too, and reading the clock the quarantine was written against is what
+            // makes that true.
+            for (const key of healthyKeys(rotation, model, now())) {
                 const remaining = deadline - now();
                 if (remaining <= 0) {
                     break;
@@ -257,13 +304,25 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
                 };
                 const response = await responseWithin(key, path, attempt, Math.min(ATTEMPT_TIMEOUT_MS, remaining));
                 const at = now();
+                /* Nothing came back before the timer. The rung is done for this walk and cooled for the messages
+                 * that follow: see MODEL_COOLDOWN_MS for why silence is read as a fact about the model where a
+                 * refusal is read as one about the key. The pair is quarantined too, so a rung that comes back
+                 * out of cooldown still starts on a key that has not just failed us. */
                 if (response === undefined) {
                     quarantine.set(bucket(key, model), at + FAILURE_QUARANTINE_MS);
+                    if (model !== undefined) {
+                        cooling.set(model, at + MODEL_COOLDOWN_MS);
+                        break;
+                    }
                     continue;
                 }
                 await last?.body?.cancel().catch(() => undefined);
                 if (!poolRefused(response.status)) {
                     quarantine.delete(bucket(key, model));
+                    // A rung that just answered is not cooling, whatever an earlier walk concluded about it.
+                    if (model !== undefined) {
+                        cooling.delete(model);
+                    }
                     if (init.observeHealth === true) {
                         service = { health: tried === 1 && quarantine.size === 0 ? `healthy` : `degraded` };
                     }
