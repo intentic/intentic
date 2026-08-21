@@ -1776,6 +1776,110 @@ describe(`Conversation`, () => {
         expect(loadTrialStatusMock).toHaveBeenCalled();
     });
 
+    /* THE PRESS THAT COMPOUNDED ITSELF. A refused turn hands the words back to the queue, and the queue flushes
+     * as ONE message, so a chat bouncing off the same refusal turned the button into its own transcript: a real
+     * one reached "Continue\n\nContinue\n\nContinue\n\nContinue\n\nContinue\n\nContinue\n\nContinue", rendered as
+     * a single clamped bubble with a scrollbar, and that is what the agent read when a send finally landed. */
+    it(`retries the held nudge on a second Continue instead of stacking another copy of it`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.provider.value = `endpoint/free-trial`;
+        const trialSettings = { ...settings, agent: `endpoint/free-trial` } as const;
+        let turns = 0;
+        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/agent`) {
+                turns += 1;
+            }
+            const refused = sseResponse([
+                { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable, failed messages aren't counted.` },
+                { kind: `done` },
+            ]);
+            return turns <= 2 ? refused(path, init) : sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }])(path, init);
+        });
+
+        await conversation.send(`Continue`, trialSettings);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`Continue`]);
+
+        // Pressing it again is a RETRY of what is held, not a second thing to say: one message goes, and the
+        // queue does not grow while it keeps bouncing.
+        await conversation.enqueue(`Continue`);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(turnBodies()[1]).toMatchObject({ prompt: `Continue` });
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`Continue`]);
+
+        // A third press lands the turn, still on the one word.
+        await conversation.enqueue(`Continue`);
+        await vi.waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
+        expect(turnBodies()[2]).toMatchObject({ prompt: `Continue` });
+        expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `Continue` }]);
+    });
+
+    /* THE OTHER DOOR ONTO THE SAME PILE. A press that lands WHILE the turn is failing is queued against a queue
+     * the flush has already emptied, so it is the words coming BACK that meet it, from the other side. Steering
+     * is refused here (the trial has no queue-and-steer), which is exactly when the two end up side by side. */
+    it(`hands back a refused nudge as the one already pressed, not as a second copy in front of it`, async () => {
+        const conversation = new Conversation(`c1`);
+        let controller!: ReadableStreamDefaultController<Uint8Array>;
+        const body = new ReadableStream<Uint8Array>({
+            start(c) {
+                controller = c;
+                c.enqueue(sseFrame(head()));
+            },
+        });
+        sandboxRequestMock.mockImplementation((path: string) => {
+            if (path === `/agent/attach`) {
+                return Promise.resolve({ ok: true, body } as Response);
+            }
+            if (path === `/agent/steer`) {
+                return Promise.resolve({ ok: false, status: 404 } as Response);
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        });
+
+        const turn = conversation.send(`Continue`, settings);
+        // Pressed again while it hangs: unsteerable, so it waits in the queue.
+        await conversation.enqueue(`Continue`);
+        expect(conversation.queued.value).toHaveLength(1);
+        controller.enqueue(
+            sseFrame({
+                kind: `frame`,
+                seq: 1,
+                event: { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` },
+            }),
+        );
+        controller.enqueue(sseFrame({ kind: `end` }));
+        controller.close();
+        await turn;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`Continue`]);
+    });
+
+    // Only a nudge behind a nudge: words that never left, plus a "go ahead", are two things the user said and
+    // the queue carries both.
+    it(`keeps a nudge written behind a real message that never left`, async () => {
+        const conversation = new Conversation(`c1`);
+        let turns = 0;
+        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/agent`) {
+                turns += 1;
+            }
+            const refused = sseResponse([
+                { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` },
+                { kind: `done` },
+            ]);
+            return turns <= 1 ? refused(path, init) : sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }])(path, init);
+        });
+
+        await conversation.send(`fix the tests`, settings);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`fix the tests`]);
+
+        await conversation.enqueue(`go ahead`);
+        await vi.waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
+        expect(turnBodies()[1]).toMatchObject({ prompt: `fix the tests\n\ngo ahead` });
+    });
+
     it(`offers turning outage auto-resume on when the daemon only remembered the turn`, async () => {
         const conversation = new Conversation(`c1`);
         const retryAt = Math.floor(Date.now() / 1000) + 3_600;

@@ -31,6 +31,7 @@ import {
     type ChatMessage,
     continuationFor,
     isAwaitingDecision,
+    isNudgeText,
     recordedRows,
     withCancelledCards,
 } from "./transcript";
@@ -71,6 +72,29 @@ export interface QueuedMessage {
     readonly attachments: readonly ChatAttachment[];
     readonly editorContext?: EditorContext;
 }
+
+/* TWO "CARRY ON"S NEXT TO EACH OTHER IN THE QUEUE ARE ONE MESSAGE, and this is what says so.
+ *
+ * The queue flushes as a SINGLE turn (everything written while the agent worked belongs to one request), and a
+ * turn refused before it ran hands its words straight back to it. Put together, a chat that keeps bouncing off
+ * the same refusal compounds the press into the words themselves: the button is pressed, the send fails, the
+ * word comes back, the next press queues behind it, and the message grows by one "Continue" per attempt. A real
+ * transcript reached seven of them in one prompt, drawn as a single clamped bubble with a scrollbar, and that
+ * pile is what the agent read when a send finally got through.
+ *
+ * A nudge carries no instruction of its own (transcript.ts's ACKNOWLEDGMENTS is the same list the transcript
+ * folds turns by), so a second one behind an undelivered first says nothing the first didn't. The press still
+ * lands: what it means now is "try the held one again", which is what both callers do next.
+ *
+ * ADJACENT ONLY, and never against real words. Attachments make any text substantive ("continue" plus a
+ * screenshot is new material), and "fix the tests" that never left, followed by "go ahead", is a user answering
+ * something, which the queue joining the two is exactly what it is for. */
+const repeatsNudge = (message: { readonly text: string; readonly attachments: readonly ChatAttachment[] }, neighbour?: QueuedMessage): boolean => {
+    if (neighbour === undefined || message.attachments.length > 0 || neighbour.attachments.length > 0) {
+        return false;
+    }
+    return isNudgeText(message.text) && isNudgeText(neighbour.text);
+};
 
 // What a conversation is doing right now, surfaced as the tab's status icon.
 export type ConversationStatus = "idle" | "streaming" | "awaiting" | "error";
@@ -1222,7 +1246,7 @@ export class Conversation {
         const trimmed = text.trim();
         // The user is driving again, a Stop's hold on the queue is released (see `interrupted`).
         this.interrupted = false;
-        if (trimmed.length > 0 || attachments.length > 0) {
+        if ((trimmed.length > 0 || attachments.length > 0) && !repeatsNudge({ text: trimmed, attachments }, this.queued.value.at(-1))) {
             this.queued.value = [
                 ...this.queued.value,
                 { id: crypto.randomUUID(), text: trimmed, attachments, ...(editorContext !== undefined ? { editorContext } : {}) },
@@ -1245,7 +1269,13 @@ export class Conversation {
         if (bubble === undefined) {
             return;
         }
-        this.queued.value = [{ id: crypto.randomUUID(), text: bubble.text, attachments: bubble.attachments ?? [] }, ...this.queued.value];
+        const held = { text: bubble.text, attachments: bubble.attachments ?? [] };
+        // Pressed again while this very turn was failing, so the press is already queued and the words coming
+        // back are the same nudge: one of the two is the whole message (see repeatsNudge).
+        if (repeatsNudge(held, this.queued.value[0])) {
+            return;
+        }
+        this.queued.value = [{ id: crypto.randomUUID(), ...held }, ...this.queued.value];
     }
 
     // Release a hold placed by a failure the user has now fixed (reconnecting a revoked account) and let

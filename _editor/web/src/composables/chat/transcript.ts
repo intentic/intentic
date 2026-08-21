@@ -483,12 +483,17 @@ const ACKNOWLEDGMENTS = new Set([
     `👍`,
 ]);
 
+/* WORDS THAT ARE ONLY A NUDGE, read off text alone. Separate from the message-level check below because the
+ * queue asks this question BEFORE there is a message: a second "carry on" written behind an undelivered first
+ * one adds nothing to it, and Conversation.enqueue is where that has to be caught. */
+export const isNudgeText = (text: string): boolean => ACKNOWLEDGMENTS.has(bareText(text));
+
 // An attachment makes any text substantive, "continue" plus a screenshot is new material, not a nudge.
 export const isAcknowledgment = (message: ChatMessage): boolean => {
     if (message.role !== `user` || (message.attachments?.length ?? 0) > 0) {
         return false;
     }
-    return ACKNOWLEDGMENTS.has(bareText(message.text));
+    return isNudgeText(message.text);
 };
 
 /* WHICH CONTINUATION THIS CHAT'S NEXT PRESS SHOULD SEND. The refusal is read off the last PERMISSION card in

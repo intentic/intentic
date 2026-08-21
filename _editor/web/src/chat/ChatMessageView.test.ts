@@ -51,21 +51,15 @@ vi.mock("@intentic/ui", async () => {
 vi.mock("@intentic/ui/markdown", () => ({ copyCodeFromEvent: vi.fn() }));
 // withoutResumeNote is the real behaviour, not a stub: the errand row depends on it to recognise an errand a
 // resumed turn re-sent (errands.ts), and a mock that returned the text unchanged would hide that.
-vi.mock("@intentic/sandbox-contract", async () => {
-    const { GrantedRoleSchema, MemberRoleSchema, PushNotificationSchema, roleAtLeast, withoutResumeNote } =
-        await vi.importActual<typeof import("@intentic/sandbox-contract")>("@intentic/sandbox-contract");
-    // The role and push-notification vocabulary rides along real: api-contract's schemas evaluate
-    // MemberRoleSchema/GrantedRoleSchema/PushNotificationSchema at module load, so a mock without them kills
-    // every import graph that touches the platform contract.
-    return {
-        planParts: (text: string) => ({ body: text }),
-        GrantedRoleSchema,
-        MemberRoleSchema,
-        PushNotificationSchema,
-        roleAtLeast,
-        withoutResumeNote,
-    };
-});
+/* The contract rides along REAL, with one part stubbed. It used to be the other way round, a hand-written list
+ * of the few exports this file wanted, and that list was a tripwire: the contract is what the whole platform is
+ * spelled in, its vocabulary is evaluated at module load (role schemas, the capability catalog's country
+ * lists), and every addition to it took this suite down with "no such export on the mock" long before any test
+ * ran. Nothing here wants a bare module: it wants the real one with the plan parser out of the way. */
+vi.mock("@intentic/sandbox-contract", async (importActual) => ({
+    ...(await importActual<typeof import("@intentic/sandbox-contract")>()),
+    planParts: (text: string) => ({ body: text }),
+}));
 vi.mock("../composables/chat/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
 // formatElapsed is the real one: the loader's readout IS that format, so mocking it would test nothing.
 vi.mock("../composables/agents/agentStatus", async () => {
