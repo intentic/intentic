@@ -56,6 +56,7 @@ import { withRuntimeHistory } from "./runtime-history.js";
 import { turnRunOf } from "./turn-runs.js";
 import { nameAgentTitle } from "./title-namer.js";
 import { planTurn } from "./turn-plan.js";
+import { turnTier } from "./turn-tier.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
 
 // Fold the opt-in editor context (the composer chip, off by default) into the prompt: the file the user is
@@ -758,6 +759,36 @@ async function* runTurn(
             ? await handoffHistory(services, { ...input, conversationId: input.conversationId })
             : [];
     mark("history");
+    /* AUTOMATIC TIER SELECTION, judged here because this is where the turn is still a request rather than a
+     * plan: `input.model` is the user's own pick, unresolved, which is exactly the ceiling the judge needs, and
+     * everything below this line (the base request, planTurn, the arms' catalog validation) then treats the
+     * answer as though it had been sent that way.
+     *
+     * Settings are read once and handed to planTurn as well, which already accepts them for this reason, so
+     * the feature costs no extra read on a turn it does nothing to. In the default mode ("shadow") it does
+     * nothing to any turn: it records what it WOULD have done beside what the turn really cost, and that ledger
+     * is the only thing that can turn its weights into a measurement (see prompt-complexity.ts).
+     *
+     * The previous turn's verdict is the one input that cannot come from the request. It is read from the
+     * conversation's own entry, which `begin` has already carried forward for exactly this. */
+    const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
+    const tier = await services.perf.track("turn.tier", {}, () =>
+        turnTier(services, input, {
+            settings,
+            provider: input.agent ?? "claude",
+            lastTier: input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId)?.tier,
+        }),
+    );
+    // The turn as the rest of this function must see it. Only the model can differ, and only downward.
+    const planned: AgentTurn = tier?.model !== undefined ? { ...input, model: tier.model } : input;
+    if (tier !== undefined && input.conversationId !== undefined) {
+        // Fire-and-forget: the next turn's judgement wants it, this one does not, and a registry write must
+        // never be the thing that delays a turn the user is waiting on.
+        services.agents
+            .recordTier(input.conversationId, tier.verdict.tier)
+            .catch((error: unknown) => services.logger.warn({ err: error }, "auto tier: recording the verdict failed"));
+    }
+    mark("tier");
     const base: AgentRequest = {
         prompt: history.length > 0 ? withRuntimeHistory(promptWithEditor, history) : promptWithEditor,
         cwd: effectiveCwd,
@@ -768,7 +799,9 @@ async function* runTurn(
         signal: signal ?? new AbortController().signal,
         ...(Object.keys(cliEnv).length > 0 ? { cliEnv } : {}),
         ...(resumed !== undefined ? { sessionId: resumed } : {}),
-        ...(input.model !== undefined ? { model: input.model } : {}),
+        // `planned`, not `input`: a downgraded turn has to reach the arms as the model it will actually run,
+        // so their catalog validation and their fallbacks apply to that id rather than to the one it replaced.
+        ...(planned.model !== undefined ? { model: planned.model } : {}),
         ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
         ...(input.allowedTools !== undefined ? { allowedTools: input.allowedTools } : {}),
         ...(input.effort !== undefined ? { effort: input.effort } : {}),
@@ -781,13 +814,16 @@ async function* runTurn(
      * A refusal is one of them: an ordinary state of a sandbox (a session id that outlived its transcript, a
      * subscription nobody connected, an uninstalled Agent capability), reported as the error frame the
      * composer's connect gate reads. */
-    const plan = await planTurn(services, input, {
+    const plan = await planTurn(services, planned, {
         base,
         attachmentPaths,
         localCwd,
         effectiveCwd,
         cliEnv,
         steering,
+        // Read once above, for the tier judgement; planTurn accepts it precisely so the resolution happens once
+        // per turn rather than once per thing that needs it.
+        settings,
         ...(worktree !== undefined ? { resync: worktree.resync } : {}),
     });
     if (!plan.ok) {
@@ -1230,6 +1266,17 @@ async function* runTurn(
                     ...(plan.terseArm !== undefined ? { terse: plan.terseArm } : {}),
                     ...(plan.searchArm !== undefined ? { iqSearchArm: plan.searchArm } : {}),
                     ...(plan.searchCohort !== undefined ? { iqSearchCohort: plan.searchCohort } : {}),
+                    /* What the complexity judge said, and whether anything came of it. Absent together when
+                     * the judge did not run (settings.autoTier "off"), which the ledger must be able to tell
+                     * apart from a turn that scored zero, see UsageTurn.tierScore.
+                     *
+                     * `tierRouted` is not implied by the score: in shadow mode every turn is judged and none is
+                     * moved, and even switched on, a turn judged fast still runs standard when the provider
+                     * publishes nothing cheaper than the pick. Reading the score as the decision would report
+                     * savings that were never made. */
+                    ...(tier !== undefined
+                        ? { tierScore: tier.verdict.score, tierRules: [...tier.verdict.rules], tierRouted: tier.model !== undefined }
+                        : {}),
                 })
                 .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
         }

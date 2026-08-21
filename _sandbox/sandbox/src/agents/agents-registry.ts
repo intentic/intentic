@@ -211,6 +211,14 @@ export interface AgentsRegistry {
     readonly withRewindLease: <T>(conversationId: string, fn: () => Promise<T>) => Promise<T | undefined>;
     // Record the worktree composition on first creation (per-repo full base shas).
     readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][]) => Promise<void>;
+    /* Record what the complexity judge made of the turn just planned (PersistedAgent.tier), which the NEXT
+     * turn in this conversation reads as its `afterHardTurn` signal.
+     *
+     * Not part of `begin` because it is not a fact the caller has: the turn identity is what the client sent,
+     * and this is what the daemon concluded a moment later. Not broadcast either, unlike the settings it sits
+     * beside: no surface renders it, it is machinery for the next judgement, and putting it on the roster
+     * frame would spend a full board broadcast per turn to publish something nobody draws. */
+    readonly recordTier: (id: string, tier: "fast" | "standard") => Promise<void>;
     // Set the display title, subject to the source ranking (see AgentTitleSourceSchema): a rename always
     // lands, an automatic source only ever moves the title up. Deliberately does NOT bump updatedAt (a rename
     // must not fake-unread other browsers or reorder lanes) and takes no running guard, begin()/finish()
@@ -704,6 +712,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(effort !== undefined ? { effort } : {}),
                 ...(thinking !== undefined ? { thinking } : {}),
                 ...(fast !== undefined ? { fast } : {}),
+                // Carried, never taken from the turn: the client has no opinion about this and the daemon's own
+                // verdict for THIS turn is not in yet (it is written by recordTier, once the turn is planned).
+                // Listed here because `replace` is an explicit field list, so an omission is a deletion, and
+                // dropping it would reset every conversation's history of itself on every single turn.
+                ...(existing?.tier !== undefined ? { tier: existing.tier } : {}),
                 ...(account !== undefined ? { account } : {}),
                 ...(origin !== undefined ? { origin } : {}),
                 ...(existing?.sessionId !== undefined ? { sessionId: existing.sessionId } : {}),
@@ -765,6 +778,16 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 return;
             }
             replace({ ...entry, repos: [...repos] });
+            await persist();
+        },
+        recordTier: async (id, tier) => {
+            const entry = entryOf(id);
+            // A conversation whose entry has gone (archived, purged) mid-turn is not an error worth surfacing:
+            // there is no next turn for the value to be read by.
+            if (entry === undefined || entry.tier === tier) {
+                return;
+            }
+            replace({ ...entry, tier });
             await persist();
         },
         setTitle: async (id, title, source) => {

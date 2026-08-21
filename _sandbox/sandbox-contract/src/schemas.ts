@@ -1873,6 +1873,39 @@ export const SandboxSettingsSchema = z.object({
      * surface MAY still name one (the shared run button's caret, Acceptance's per-run pick), and that wins. */
     agentRunModels: z.array(z.string()).max(10).default([]),
     agentRunEffort: z.string().default(""),
+    /* AUTOMATIC TIER SELECTION: may the daemon run an easy-looking turn on a cheaper rung of the provider the
+     * user is already on, instead of on the model they picked?
+     *
+     * THREE STATES RATHER THAN A TOGGLE, because the middle one is the only honest way to reach the third.
+     * Nobody, this repo included, can name a sensible cutoff for "easy enough" without traffic to fit it
+     * against, and a routing threshold guessed in advance is how a cost feature quietly becomes a quality
+     * regression. So:
+     *   off     — the judge never runs. Nothing is scored, nothing is recorded, turns run on the user's pick.
+     *   shadow  — the judge runs and its verdict is written to the spend ledger beside what the turn actually
+     *             cost, and NOTHING IS ROUTED. This is the default: it spends no tokens, changes no behaviour,
+     *             and is the only thing that can turn the weights in prompt-complexity.ts from a hypothesis
+     *             into a measurement.
+     *   on      — a turn judged fast runs on the cheap rung (fast-tier.ts), when the provider publishes one.
+     *
+     * IT CAN ONLY EVER ROUTE DOWN. There is no "which model is the standard tier" setting because the standard
+     * tier is the model the user already chose, so the worst case of a wrong verdict is one turn's quality on a
+     * model they can see on the card and correct, never a bill they did not ask for. That asymmetry is why this
+     * can default to shadow rather than to off: shadow costs nothing and `on` cannot overspend. */
+    autoTier: z.enum(["off", "shadow", "on"]).default("shadow"),
+    /* WHICH CHEAP MODEL A DOWNGRADED TURN LANDS ON, an ordered list of `${provider}:${model}` keys
+     * (quickModelKey), or EMPTY for Auto.
+     *
+     * Empty is the default and the interesting case, exactly as quickModel's is: Auto is the cheapest row the
+     * turn's own provider publishes, read through the same cheap-end order (compareCheapestFirst), so the two
+     * features can never disagree about which rung is the cheap one, and connecting an account tomorrow
+     * improves the answer by itself.
+     *
+     * A LIST, so a sandbox working across several providers can name the rung it wants on each. But unlike the
+     * two lists above this one is NOT a failure ladder: entries naming a provider other than the turn's own are
+     * dropped rather than tried, because switching provider retires the conversation's session (turnRequest.ts
+     * `resumes`), and starting the conversation over to save a fraction of a cent is not a saving. The first
+     * entry that names this provider AND is genuinely cheaper than the pick wins; if none does, Auto answers. */
+    autoFastModels: z.array(z.string()).max(10).default([]),
     // How long a finished agent stays on the board before it is archived automatically (days; 0 ⇒ never).
     // Unlike every other flag here this one defaults ON, because the lane it governs is the board's only
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
@@ -6596,6 +6629,29 @@ export const UsageTurnSchema = z.object({
      *
      * Absent ⇒ as for `searchCalls`. */
     openingSearches: z.number().optional(),
+    /* WHAT THE COMPLEXITY JUDGE SAID ABOUT THIS TURN, and whether anything was done about it. The three fields
+     * automatic tier selection is calibrated from, and the reason it can ship in shadow at all.
+     *
+     * They live on the SPEND ledger rather than in a log of their own because the question they exist to answer
+     * is a question about money: what did the turns we would have downgraded actually cost, and what did the
+     * ones we did downgrade cost instead. A separate log would have to be joined back to this one on every
+     * read, and the join key (a turn) is already the row.
+     *
+     * `tierScore` is 0..1 from judgeComplexity, comparable against FAST_CEILING, which is the cutoff it was
+     * judged against at the time. Absent ⇒ the judge did not run (settings.autoTier "off", or a row written
+     * before this existed), which is NOT the same as a turn that scored zero.
+     *
+     * `tierRules` is which named features fired, and it is the half that makes the ledger analysable rather
+     * than merely tallyable: a score says a threshold was crossed, the rules say which feature is doing the
+     * work, and re-fitting the weights needs the second. Bounded by construction, there are ~19 of them.
+     *
+     * `tierRouted` is whether the turn ACTUALLY ran on the cheap rung. It is not implied by the score: a turn
+     * judged fast still runs standard in shadow mode, and still runs standard in `on` mode when the provider
+     * publishes nothing cheaper than the user's pick. Reading the score as the decision would report savings
+     * that were never made. */
+    tierScore: z.number().optional(),
+    tierRules: z.array(z.string()).optional(),
+    tierRouted: z.boolean().optional(),
 });
 export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 

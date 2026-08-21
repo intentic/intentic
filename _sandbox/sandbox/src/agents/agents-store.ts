@@ -82,6 +82,21 @@ export const PersistedAgentSchema = z.object({
     effort: z.string().optional(),
     thinking: z.boolean().optional(),
     fast: z.boolean().optional(),
+    /* WHAT THE COMPLEXITY JUDGE MADE OF THE LAST TURN HERE, the one piece of state automatic tier selection
+     * keeps, and the only thing that lets it see past the words of a follow-up (prompt-complexity.ts
+     * `afterHardTurn`).
+     *
+     * Persisted with the four settings above and for the same reason: the next turn's judgement reads it, and
+     * that turn may be sent tomorrow from another device. NOT on AgentSummary, unlike those four, because no
+     * surface draws it: putting it on the roster frame would spend a board broadcast per turn publishing
+     * machinery nobody can see.
+     *
+     * The JUDGEMENT, never what ran. A turn judged fast that ran standard anyway (nothing cheaper published, or
+     * the feature switched off) is a fact about this sandbox's configuration, while the next turn is asking
+     * about the difficulty of the work. Absent ⇒ nothing judged yet, which an opening message and a
+     * conversation older than the feature both are, and "no reason to be suspicious of these words" is the
+     * right reading for both. */
+    tier: z.enum(["fast", "standard"]).optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
     // Set when an automation opened this conversation for an outside message (a Discord mention, a web-chat

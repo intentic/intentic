@@ -230,6 +230,28 @@ export const compareCheapestFirst = (left: string, right: string): number => {
     );
 };
 
+/* IS `candidate` A STRICTLY CHEAPER RUNG THAN `pick`, on the tier ladder alone. The predicate automatic tier
+ * selection runs on (prompt-complexity.ts judges the turn, fast-tier.ts spends this to find something cheaper
+ * to run it on), and it lives here because it is a question about the tier vocabulary, which is this file's
+ * one curated fact.
+ *
+ * TIER ONLY, deliberately: not release, not thinking level. A downgrade has to be legible as a downgrade, and
+ * "the same model one release older" or "the same model with less thinking" are not the saving this mechanism
+ * promises, they are a different turn wearing the user's model name. Haiku under Sonnet is; Sonnet 4 under
+ * Sonnet 5 is not.
+ *
+ * AN UNRANKED FAMILY IS FALSE ON EITHER SIDE, and both directions matter. A candidate carrying no tier word is
+ * a provider's base line or a family nobody here has heard of, so calling it the budget option is a guess, and
+ * the scale already says the likelier reading is "next flagship". The PICK being unranked is the subtler half:
+ * the safety argument for automatic tier selection is that it can only ever route DOWN, and against an id whose
+ * tier is unknown nothing can be shown to be down. So an unrecognised pick is left alone rather than swapped
+ * for something merely known to be cheap, which is how a saving turns into a bill. */
+export const isCheaperRung = (candidate: string, pick: string): boolean => {
+    const candidateRank = tierRankOf(familyOf(candidate));
+    const pickRank = tierRankOf(familyOf(pick));
+    return candidateRank !== UNRANKED && pickRank !== UNRANKED && candidateRank > pickRank;
+};
+
 /* WOULD RUNNING THIS ID MAKE THE MODEL THINK, as far as its name admits, which for a routed catalog is as far
  * as anyone can tell without running it. True only for an id that spells out a level ABOVE the quiet end, so an
  * ordinary id nobody has annotated (claude-haiku-4-5, kimi-k2) is never accused of it.

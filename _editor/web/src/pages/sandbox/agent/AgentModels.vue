@@ -166,6 +166,29 @@ const agentRunEffort = computed(() => {
     return stored === `` || head === undefined ? stored : clampEffort(stored, head.provider, head.model, false);
 });
 
+/* THE THIRD ROW IS ABOUT THE CHAT, which the two above deliberately are not, and it is the only one that can
+ * change what a model the user picked themselves actually runs. So it says so, and its default says nothing at
+ * all: "Measure" judges every turn, records the verdict beside what the turn really cost, and moves nothing.
+ *
+ * It reuses the quick model's option groups rather than growing its own, because it is asking the identical
+ * question, which of this provider's rows is the cheap one, and two lists that answered it differently would be
+ * a bug wearing two names. */
+const fast = pinList(
+    () => settings.value?.autoFastModels ?? [],
+    (keys) => patch({ autoFastModels: [...keys] }),
+);
+const fastModelPickerOptions = computed(() => pickerOptionsFor(quickModelGroups.value, settings.value?.autoFastModels ?? []));
+
+/* Three states, in the order they escalate, and the middle one is the point of the control rather than a
+ * halfway house: nobody can name a sensible cutoff for "easy enough" before there is traffic to fit it against,
+ * so measuring first is how the third state stops being a guess. Worded for what each DOES, not for what it is
+ * called internally: "Measure" is the honest name for a mode whose whole content is that nothing happens. */
+const autoTierOptions = [
+    { label: `Off`, value: `off` },
+    { label: `Measure`, value: `shadow` },
+    { label: `On`, value: `on` },
+];
+
 // A pinned key is `${provider}:${model}` (quickModelKey): the provider prefix drives the row's brand mark.
 const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`:`)) as AgentProvider;
 </script>
@@ -278,8 +301,83 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                              and the caret is the answer to the question this row otherwise raises, which is what
                              to do when one particular failure wants a bigger model than the standing order. -->
                         <p class="text-2xs text-subtle">
-                            Used by Fix with agent, Maintenance, Documentation, Acceptance and pre-push fixes: the caret beside each button
-                            overrides this for a single run.
+                            Used by Fix with agent, Maintenance, Documentation, Acceptance and pre-push fixes: the caret beside each button overrides
+                            this for a single run.
+                        </p>
+                    </div>
+                </div>
+            </template>
+        </Row>
+
+        <!-- THE CHAT'S OWN TURNS, which the two rows above never touch. It is last because it is the only one
+             that can override a choice the user made a second ago, and a settings page owes that ordering:
+             read down and the reach grows, from jobs nobody picked a model for, to runs somebody started, to
+             the conversation in front of you. -->
+        <Row
+            icon="credit-card"
+            title="Automatic tier"
+            description="Run turns that look simple on a cheaper model from the same provider. It can only ever go cheaper than your pick, never dearer."
+        >
+            <template #control>
+                <SegmentedControl
+                    :model-value="settings?.autoTier ?? `shadow`"
+                    :options="autoTierOptions"
+                    @update:model-value="(autoTier: string) => patch({ autoTier: autoTier as `off` | `shadow` | `on` })"
+                />
+            </template>
+            <template #below>
+                <div class="flex flex-col gap-3">
+                    <!-- WHAT THE SETTING ACTUALLY DOES TODAY, one line per state, because the middle one is
+                         the default and does nothing visible: a control whose default has no observable effect
+                         reads as broken unless the screen says that IS the effect. -->
+                    <p v-if="settings?.autoTier === `off`" class="text-2xs text-muted">
+                        Every turn runs on the model you picked. Nothing is judged and nothing is recorded.
+                    </p>
+                    <p v-else-if="settings?.autoTier === `on`" class="text-2xs text-muted">
+                        A turn that looks simple runs on the cheaper model below. Follow-ups in a conversation that has already done hard work stay on
+                        your pick, and anything with a screenshot, a stack trace or a plan attached always does.
+                    </p>
+                    <p v-else-if="settings !== undefined" class="text-2xs text-muted">
+                        <span class="text-content">Measuring</span>: every turn is judged and the verdict is recorded beside what it cost, but every
+                        turn still runs on your own pick. Switch to On once the spend history says the judgement is worth acting on.
+                    </p>
+
+                    <div class="flex flex-col gap-1.5 border-t border-line pt-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="text-xs font-medium text-content">Cheaper model</span>
+                            <Picker
+                                v-model="fast.adding.value"
+                                :options="fastModelPickerOptions"
+                                :disabled="settings === undefined || quickModelGroups.length === 0"
+                                placeholder="Add a model…"
+                                class="w-56 py-1.5 text-xs"
+                                aria-label="Add a model for automatic tier selection"
+                            >
+                                <template #icon="{ option }">
+                                    <ProviderLogo :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
+                                </template>
+                            </Picker>
+                        </div>
+                        <ModelPinList
+                            v-if="fast.entries.value.length > 0"
+                            :entries="fast.entries.value"
+                            @promote="fast.promote"
+                            @remove="fast.remove"
+                        >
+                            <template #floor>Remove them all to go back to Auto.</template>
+                        </ModelPinList>
+                        <!-- Auto cannot be spelled out as a ladder the way the quick model's is: which model
+                             it reaches for depends on the provider the CONVERSATION is on, which this page
+                             cannot know. So it names the rule instead, which is the part worth knowing. -->
+                        <p v-else-if="settings !== undefined" class="text-2xs text-muted">
+                            <span class="text-content">Auto</span>: the cheapest model published by whichever provider the chat is already on. Add one
+                            to choose it yourself.
+                        </p>
+                        <!-- The constraint that shapes the whole feature, said plainly, because it is also the
+                             answer to the obvious question about why a pin on another provider is ignored. -->
+                        <p class="text-2xs text-subtle">
+                            Always the same provider as your pick: moving a conversation to another account starts its session over, which costs more
+                            than the swap saves.
                         </p>
                     </div>
                 </div>

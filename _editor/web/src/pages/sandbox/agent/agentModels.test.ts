@@ -126,3 +126,56 @@ test("keeps a pin whose account went away on screen, and says why it is greyed",
     expect(orderOnScreen(host)).toEqual([`GEMINI · Gemini 3 Flash Lite`, `CLAUDE · Claude Haiku 4.5`]);
     expect(host.textContent).toContain(`Not connected`);
 });
+
+/* THE AUTOMATIC-TIER ROW is the only setting on this page that can override a model the user picked a second
+ * ago, so what these pin is the two things a reader has to be able to trust: that its DEFAULT changes nothing,
+ * and that the screen says so. A control whose default has no visible effect reads as broken unless the row
+ * states that having no effect IS the effect. */
+
+// The three-way mode control, by the label a person clicks.
+const modeButton = (host: HTMLElement, label: string): HTMLButtonElement =>
+    [...host.querySelectorAll<HTMLButtonElement>(`[role="tablist"] button`)].find((button) => button.textContent?.trim() === label)!;
+
+test("defaults to measuring, and says on screen that nothing is being moved", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    expect(settings.value.autoTier).toBe(`shadow`);
+    expect(modeButton(host, `Measure`).getAttribute(`aria-selected`)).toBe(`true`);
+    expect(host.textContent).toContain(`every turn still runs on your own pick`);
+});
+
+test("switching the mode writes it, and the row then describes what it actually does", async () => {
+    const host = mount();
+    await Promise.resolve();
+    modeButton(host, `On`).click();
+
+    expect(patch).toHaveBeenCalledWith({ autoTier: `on` });
+    await Promise.resolve();
+    expect(host.textContent).toContain(`runs on the cheaper model below`);
+});
+
+test("off says the judgement stops too, not merely the routing", async () => {
+    // "Off" that kept scoring in the background would be a setting that does not mean what it says.
+    const host = mount();
+    await Promise.resolve();
+    modeButton(host, `Off`).click();
+    await Promise.resolve();
+
+    expect(host.textContent).toContain(`Nothing is judged and nothing is recorded`);
+});
+
+test("names the rule behind Auto, because which model it picks depends on a conversation this page cannot see", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    expect(host.textContent).toContain(`the cheapest model published by whichever provider the chat is already on`);
+});
+
+test("a pinned cheap model is drawn as written, in its own list", async () => {
+    settings.value = { ...settings.value, autoFastModels: [`claude:claude-haiku-4-5`] };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(orderOnScreen(host)).toEqual([`CLAUDE · Claude Haiku 4.5`]);
+});
