@@ -2,7 +2,7 @@ import { claudeContract } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
 import { errorCode, routesClient } from "../route-testing.js";
-import type { StoredAccount } from "./claude-credentials.js";
+import { displayLabel, type StoredAccount } from "./claude-credentials.js";
 import type { SeatRefusal } from "./claude-seats.js";
 import { type ClaudeRoutesDeps, createClaudeRoutes } from "./claude.routes.js";
 
@@ -65,8 +65,8 @@ test("Claude OAuth: accounts reflect the store, disconnect clears the named one"
             list: async () =>
                 [...accounts.values()].map((account) =>
                     account.scope !== undefined
-                        ? { id: account.id, label: account.label, connectedAt: account.connectedAt, scope: account.scope }
-                        : { id: account.id, label: account.label, connectedAt: account.connectedAt },
+                        ? { id: account.id, label: displayLabel(account), connectedAt: account.connectedAt, scope: account.scope }
+                        : { id: account.id, label: displayLabel(account), connectedAt: account.connectedAt },
                 ),
         }),
     );
@@ -117,8 +117,8 @@ test("Claude OAuth: an account its organization turned away says so without aski
             list: async () =>
                 [...accounts.values()].map((account) =>
                     account.revokedAt === undefined
-                        ? { id: account.id, label: account.label, connectedAt: account.connectedAt }
-                        : { id: account.id, label: account.label, connectedAt: account.connectedAt, needsReauth: true, detail: "Signed out" },
+                        ? { id: account.id, label: displayLabel(account), connectedAt: account.connectedAt }
+                        : { id: account.id, label: displayLabel(account), connectedAt: account.connectedAt, needsReauth: true, detail: "Signed out" },
                 ),
         }),
         [],
@@ -154,7 +154,7 @@ test("Claude OAuth: rename writes the label through, and 404s on an account that
             clear: async (id) => {
                 accounts.delete(id);
             },
-            list: async () => [...accounts.values()].map(({ accessToken: _token, ...account }) => account),
+            list: async () => [...accounts.values()].map(({ accessToken: _token, ...account }) => ({ ...account, label: displayLabel(account) })),
         }),
     );
     expect(await client.rename({ id: "a", label: " Work " })).toEqual({

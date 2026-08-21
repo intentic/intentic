@@ -169,7 +169,12 @@ export type TokenSet = z.infer<typeof TokenSetSchema>;
 // an unparsed read surfaces every stray .json as a blank account in the picker.
 const StoredAccountSchema = TokenSetSchema.extend({
     id: z.string(),
-    label: z.string(),
+    // ONLY A NAME THE USER TYPED. Absent means "no name of its own", and the row's name is DERIVED at read
+    // time (displayLabel) rather than frozen at connect time. That distinction is the whole point: Anthropic
+    // often answers the exchange without an identity and only reports the email on a later refresh, so a label
+    // baked in at connect time left the account reading "Claude" forever, next to the very email it had since
+    // learned. Deriving it means the row starts answering the moment the identity arrives.
+    label: z.string().optional(),
     connectedAt: z.number(), // epoch ms
     // Set when the refresh token itself is dead (Anthropic answered invalid_grant, revoked, or already
     // rotated out from under us). The credential is then unusable and only a reconnect fixes it, so it is
@@ -180,12 +185,17 @@ const StoredAccountSchema = TokenSetSchema.extend({
 });
 export type StoredAccount = z.infer<typeof StoredAccountSchema>;
 
+/* The name a row carries: what the user typed, else who the provider says this is, else the provider's own
+ * name. Derived on every read, never stored, so an identity learned on a later refresh renames the row by
+ * itself. The middle term is the point: "Claude" is a true but useless answer to "which account is this?". */
+export const displayLabel = (stored: Pick<StoredAccount, "label" | "email">): string => stored.label?.trim() || stored.email || "Claude";
+
 // The metadata view (no tokens) the account list surfaces. A revoked credential rides out as the same
 // needsReauth/detail pair Codex already uses, so the picker and the Setup row light up unchanged. The identity
 // rides ALONGSIDE the label rather than inside it, so a renamed account ("Work") can still show whose it is.
 export const toAccount = (stored: StoredAccount): OauthAccount => ({
     id: stored.id,
-    label: stored.label,
+    label: displayLabel(stored),
     connectedAt: stored.connectedAt,
     ...(stored.email !== undefined ? { email: stored.email } : {}),
     ...(stored.organization !== undefined ? { organization: stored.organization } : {}),
@@ -275,24 +285,22 @@ export const exchangeCode = (pastedCode: string, verifier: string, fallbackState
     });
 };
 
-/* The name a row carries, in one rule used by both connecting and renaming: what the user typed, else who the
- * provider says this is, else the provider's own name. The middle term is the point, "Claude" is a true but
- * useless answer to "which account is this?", and it was the ONLY answer a second connection could get. The
- * blank case matters on rename too: clearing the field means "go back to the derived name", not "leave this row
- * nameless". */
-const resolveLabel = (label: string, identity: Pick<TokenSet, "email">): string => label.trim() || identity.email || "Claude";
-
-// Tag a freshly-exchanged token set with a new account identity for storage.
+// Tag a freshly-exchanged token set with a new account identity for storage. A blank name is stored as NO
+// name (see the schema): the row then reads as whoever the provider says it is, now or on a later refresh.
 export const newAccount = (tokens: TokenSet, label: string): StoredAccount => ({
     id: randomUUID(),
-    label: resolveLabel(label, tokens),
+    ...(label.trim() !== "" ? { label: label.trim() } : {}),
     connectedAt: Date.now(),
     ...tokens,
 });
 
-// Rename a stored account, blank meaning "back to the derived name". Returns the account to persist; the caller
+// Rename a stored account, blank meaning "back to the derived name": the key is DROPPED rather than set to the
+// name it would derive to, so the row keeps following the identity. Returns the account to persist; the caller
 // owns the write, because it also owns the "does this account still exist?" answer.
-export const renameAccount = (stored: StoredAccount, label: string): StoredAccount => ({ ...stored, label: resolveLabel(label, stored) });
+export const renameAccount = (stored: StoredAccount, label: string): StoredAccount => {
+    const { label: _previous, ...rest } = stored;
+    return { ...rest, ...(label.trim() !== "" ? { label: label.trim() } : {}) };
+};
 
 export type RefreshFn = (refreshToken: string) => Promise<TokenSet>;
 

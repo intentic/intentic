@@ -33,6 +33,12 @@ import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDeta
 
 const { headroom, flank = `right` } = defineProps<{
     headroom: PlanHeadroom;
+    /* WHAT THIS ACCOUNT HAS ACTUALLY SPENT HERE ("14 turns · 2.1M in / 40k out · $3.12"), when the surface has
+     * such a line. It rides the card rather than the row because it is REFERENCE, not status: nobody scans a
+     * list of accounts to compare token counts, and printing it under every row turned the connection list
+     * into a wall of figures that buried the one thing the list is for (which account is this, and is it
+     * usable). Under the pools, since the pools are what gate the next turn and this is history. */
+    activity?: string;
     /* WHICH WAY THE CARD SPILLS: away from the row it belongs to, which only the row knows. A ring at the END
      * of its row (the picker's accounts, the composer's chip) spills right, into the app beside the panel; a
      * ring that IS the row's first element (the Agent tab's connection rows, where it stands in for the status
@@ -136,7 +142,7 @@ onBeforeUnmount(hide);
         <slot />
         <!-- The arc is aria-hidden and a card that needs a pointer never reaches a screen reader, so the whole
              breakdown is spoken here instead. -->
-        <span class="sr-only">{{ usageDetail(headroom) }}</span>
+        <span class="sr-only">{{ activity ? `${usageDetail(headroom)} ${activity}.` : usageDetail(headroom) }}</span>
 
         <Teleport v-if="open && anchor !== undefined" :to="anchor.ownerDocument.body">
             <!-- aria-hidden: the sr-only line above already says all of this, and saying it twice is worse than
@@ -180,6 +186,13 @@ onBeforeUnmount(hide);
                             />
                         </div>
                         <span v-if="pool.resetsAt !== undefined" class="text-2xs text-subtle">resets {{ formatReset(pool.resetsAt) }}</span>
+                    </div>
+
+                    <!-- What this sandbox has spent on the account, kept visually apart from the pools above:
+                         those are the plan's allowances, this is our own history against it. -->
+                    <div v-if="activity" class="flex flex-col gap-1 border-t border-line pt-2">
+                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">This sandbox</span>
+                        <span class="text-xs leading-relaxed text-muted">{{ activity }}</span>
                     </div>
 
                     <!-- Measured, and every pool has since reopened. Not the same as unmeasured, which draws no

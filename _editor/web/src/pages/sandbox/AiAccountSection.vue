@@ -162,12 +162,17 @@ const identityNote = (account: OauthAccount): string | undefined => {
     return ambiguousLabels.value.has(account.label) ? `connected ${relativeTime(account.connectedAt)}` : undefined;
 };
 
-/* A short usage summary line per account (from /system/usage).
+/* A short usage summary line per account (from /system/usage), shown INSIDE the ring's card rather than under
+ * the row (see ConnectionRow's `activity`).
  *
- * ALWAYS A LINE, once the read has landed: an account with no turns yet says so rather than dropping the line.
- * That read is a round trip behind the connections one, so a row that only grows a second line when it has
- * something to put there changes height a moment after it is painted, and the whole list under it jumps. With
- * the placeholder above it and this below, the row is one height from first paint to settled. */
+ * It used to be a permanent second line on every row, and that is what turned this list into a page of figures:
+ * turns, tokens in, tokens out, cache rate and dollars, repeated per account, above the one question the list
+ * exists to answer. None of it is status: it never changes what you would DO with the row. On the card it costs
+ * nothing until asked for, and it lands beside the pools, where a reader comparing spend to allowance already is.
+ *
+ * ALWAYS A LINE, once the read has landed: an account with no turns yet says so rather than dropping it, so the
+ * card never opens with a hole where a figure should be. Withheld entirely until the read lands, since the card
+ * is opened deliberately and a half-built one is worse than one that grew. */
 const usageLine = (id: string): string => {
     const usage = accountUsage.value[id];
     if (usage === undefined || usage.turns === 0) {
@@ -474,8 +479,8 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :state="account.needsReauth ? `reauth` : `connected`"
                     :tone="account.needsReauth ? `warning` : `default`"
                     :note="identityNote(account)"
-                    :description="account.needsReauth ? (account.detail ?? `Signed out, reconnect to keep using it.`) : usageLine(account.id)"
-                    :description-pending="!account.needsReauth && !usageLoaded"
+                    :description="account.needsReauth ? (account.detail ?? `Signed out, reconnect to keep using it.`) : undefined"
+                    :activity="account.needsReauth || !usageLoaded ? undefined : usageLine(account.id)"
                     :renamable="renamable"
                     :headroom="headroom"
                     :exhausted="exhausted"

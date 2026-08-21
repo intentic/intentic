@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { InfoHint, Row } from "@intentic/ui";
-import { nextTick, ref, useTemplateRef } from "vue";
+import { computed, nextTick, ref, useTemplateRef } from "vue";
 import UsageRing from "../../components/UsageRing.vue";
 import type { PlanHeadroom } from "../../composables/chat/usageStatus";
 
@@ -29,6 +29,8 @@ import type { PlanHeadroom } from "../../composables/chat/usageStatus";
 const {
     title,
     state,
+    activity,
+    headroom,
     interactive = false,
 } = defineProps<{
     title: string;
@@ -53,6 +55,11 @@ const {
     // This account's plan limits, when they have been read. Replaces the plain dot with a ring (and the card
     // that opens beside it) so the headroom is visible at a glance. Undefined = no reading, and the dot stays.
     headroom?: PlanHeadroom;
+    /* What this sandbox has spent on the connection. It belongs INSIDE the ring's card, not on the row: the
+     * row answers "which account is this and can I use it", and a permanent line of turns/tokens/dollars under
+     * every row answered a question nobody had while making that one harder to read. Falls back to the row's
+     * own description only when there is no ring to park it behind, so the figures are never simply lost. */
+    activity?: string;
     // Whether this account is exhausted (≥90% utilization). Dims the row so active accounts stand out.
     exhausted?: boolean;
 }>();
@@ -87,6 +94,9 @@ const cancel = (): void => {
     editing.value = false;
 };
 
+// No ring means no card to park the spend line in, so the row prints it after all rather than dropping it.
+const fallbackActivity = computed(() => (headroom === undefined ? activity : undefined));
+
 const DOT_TONE: Record<string, string> = {
     connected: `bg-success`,
     reauth: `bg-warning`,
@@ -109,7 +119,7 @@ const DOT_TONE: Record<string, string> = {
                          yellow / red) so the meaning is consistent. Hovering it opens the pool-by-pool card,
                          spilling LEFT into the page gutter: this ring opens its row, so everything to its right
                          is the row's own name, state and buttons. -->
-                    <UsageRing v-else-if="headroom" :headroom="headroom" flank="left" />
+                    <UsageRing v-else-if="headroom" :headroom="headroom" :activity="activity" flank="left" />
                     <span v-else class="h-1.5 w-1.5 rounded-full" :class="DOT_TONE[state]" />
                 </span>
                 <!-- The name, as a field you can type in the moment it is renamable. `w-44` rather than the
@@ -157,11 +167,11 @@ const DOT_TONE: Record<string, string> = {
         <!-- Indented to the title's x, not the glyph's: the description belongs to the name above it. A bar of
              the same line's height stands in while the read behind it is still out, so the row is its final
              height from the first frame. -->
-        <template v-if="description || descriptionPending" #description>
+        <template v-if="description || descriptionPending || fallbackActivity" #description>
             <span v-if="descriptionPending" class="flex min-h-[1lh] items-center pl-7" aria-hidden="true">
                 <span class="skeleton block h-2.5 w-56" />
             </span>
-            <span v-else class="block pl-7" :class="tone === `warning` ? `text-warning` : ``">{{ description }}</span>
+            <span v-else class="block pl-7" :class="tone === `warning` ? `text-warning` : ``">{{ description ?? fallbackActivity }}</span>
         </template>
         <template v-if="$slots[`control`]" #control><slot name="control" /></template>
         <template v-if="$slots[`below`]" #below><slot name="below" /></template>

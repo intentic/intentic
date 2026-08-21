@@ -1,7 +1,7 @@
 import type { AccountUsage } from "@intentic/sandbox-contract";
 import { pino } from "pino";
 import { expect, test, vi } from "vitest";
-import type { ClaudeStore, StoredAccount } from "../claude/claude-credentials.js";
+import { type ClaudeStore, displayLabel, type StoredAccount } from "../claude/claude-credentials.js";
 import type { AccountUsageStore } from "./account-usage.js";
 import { claudeUsageWindows, createClaudeUsageRefresher, readClaudeUsage } from "./claude-usage.js";
 
@@ -135,7 +135,7 @@ const memoryStores = (
             read: async (id) => accounts.find((entry) => entry.id === id),
             write: async () => {},
             clear: async () => {},
-            list: async () => accounts.map((entry) => ({ id: entry.id, label: entry.label, connectedAt: entry.connectedAt })),
+            list: async () => accounts.map((entry) => ({ id: entry.id, label: displayLabel(entry), connectedAt: entry.connectedAt })),
             withRefreshLock: (_id, act) => act(),
         },
         usage: {

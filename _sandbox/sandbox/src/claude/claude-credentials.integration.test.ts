@@ -7,6 +7,7 @@ import { expect, test, vi } from "vitest";
 import {
     buildAuthorizeUrl,
     type ClaudeStore,
+    displayLabel,
     ensureFreshToken,
     holdAccount,
     fileClaudeStore,
@@ -38,13 +39,14 @@ const memoryStore = (initial?: StoredAccount): ClaudeStore & { current: () => St
                 account = undefined;
             }
         },
-        list: async () => (account !== undefined ? [{ id: account.id, label: account.label, connectedAt: account.connectedAt }] : []),
+        list: async () => (account !== undefined ? [{ id: account.id, label: displayLabel(account), connectedAt: account.connectedAt }] : []),
         withRefreshLock: (_id, act) => act(),
         current: () => account,
     };
 };
 
-const stored = (tokens: TokenSet): StoredAccount => ({ id: "a", label: "Claude", connectedAt: 0, ...tokens });
+// Unnamed on purpose: the row's name is derived on read, so the store holds one only when the user typed it.
+const stored = (tokens: TokenSet): StoredAccount => ({ id: "a", connectedAt: 0, ...tokens });
 
 // Comfortably outside REFRESH_AHEAD_MS, so "valid" means valid rather than "about to be rotated".
 const LONG = 3 * 60 * 60_000;
@@ -61,23 +63,26 @@ test("buildAuthorizeUrl produces a PKCE authorize URL with the verifier/state to
 test("newAccount mints an id and falls back to a default label", () => {
     const first = newAccount({ accessToken: "t" }, "");
     expect(first.id.length).toBeGreaterThan(0);
-    expect(first.label).toBe("Claude");
+    // Nothing to name it after yet: nothing is STORED, and the display name falls back to the provider's.
+    expect(first.label).toBeUndefined();
+    expect(displayLabel(first)).toBe("Claude");
     expect(newAccount({ accessToken: "t" }, " work ").label).toBe("work");
 });
 
 // The whole reason a second account was indistinguishable from the first: unnamed, both rows said "Claude".
 test("newAccount names an unnamed account after the identity the sign-in reported", () => {
-    expect(newAccount({ accessToken: "t", email: "a@example.com" }, "").label).toBe("a@example.com");
+    expect(displayLabel(newAccount({ accessToken: "t", email: "a@example.com" }, ""))).toBe("a@example.com");
     // A name the user typed outranks the derived one: it is the more specific answer, and theirs.
-    expect(newAccount({ accessToken: "t", email: "a@example.com" }, "Work").label).toBe("Work");
+    expect(displayLabel(newAccount({ accessToken: "t", email: "a@example.com" }, "Work"))).toBe("Work");
 });
 
 test("renameAccount renames, and a blank name restores the derived one", () => {
     const account = stored({ accessToken: "t", email: "a@example.com" });
     expect(renameAccount(account, " Work ").label).toBe("Work");
-    expect(renameAccount(account, "").label).toBe("a@example.com");
+    expect(renameAccount(account, "").label).toBeUndefined();
+    expect(displayLabel(renameAccount(account, ""))).toBe("a@example.com");
     // Nothing to derive from: the provider default, never a nameless row.
-    expect(renameAccount(stored({ accessToken: "t" }), "").label).toBe("Claude");
+    expect(displayLabel(renameAccount(stored({ accessToken: "t" }), ""))).toBe("Claude");
 });
 
 // The identity travels beside the label, not inside it: a renamed account must still be able to say whose it is.
@@ -120,7 +125,7 @@ test("ensureFreshToken refreshes + persists when the token has expired, keeping 
         return { accessToken: "fresh", refreshToken: "r2", expiresAt: Date.now() + LONG };
     });
     expect(token).toBe("fresh");
-    expect(store.current()).toMatchObject({ id: "a", label: "Claude", accessToken: "fresh", refreshToken: "r2" });
+    expect(store.current()).toMatchObject({ id: "a", accessToken: "fresh", refreshToken: "r2" });
 });
 
 test("ensureFreshToken keeps the old refresh token when the refresh response omits one", async () => {
@@ -134,7 +139,10 @@ test("ensureFreshToken keeps the old refresh token when the refresh response omi
 test("a refresh teaches an account who it is without touching the name it already has", async () => {
     const store = memoryStore(stored({ accessToken: "stale", refreshToken: "r", expiresAt: Date.now() - 1000 }));
     await ensureFreshToken(store, "a", async () => ({ accessToken: "fresh", email: "a@example.com", organization: "Acme" }));
-    expect(store.current()).toMatchObject({ label: "Claude", email: "a@example.com", organization: "Acme" });
+    expect(store.current()).toMatchObject({ email: "a@example.com", organization: "Acme" });
+    // THE POINT OF DERIVING THE NAME: the row said "Claude" while the account was anonymous, and says who it
+    // is the moment the provider tells us, without a rename and without a second sign-in.
+    expect(displayLabel(store.current()!)).toBe("a@example.com");
 });
 
 // The mirror case: a response that says nothing about identity must not erase what we already knew.
