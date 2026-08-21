@@ -1078,7 +1078,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
             </div>
 
-            <div v-if="message.question" class="chat-surface w-full overflow-hidden rounded-xl">
+            <div v-if="message.question" class="chat-surface chat-question w-full overflow-hidden rounded-xl">
                 <!-- The question wraps in full here rather than truncating behind a tooltip; a multi-question
                      card carries a generic title and breaks each question out inline in the body below.
                      Body tier, font-medium: this header is a SENTENCE, often two lines of it, and prose held
@@ -1087,7 +1087,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                      card's body. Weight alone separates it from the options under it, and one step of it is
                      enough. The other card headers (plan / permission) keep the title tier: they are single
                      truncated lines, not prose. -->
-                <div class="flex items-start gap-2 border-b border-line px-3.5 py-2">
+                <div class="chat-question-header flex items-start gap-2 border-b border-line px-3.5 py-2">
                     <Icon name="comments" class="mt-0.5 text-sm text-link" />
                     <span class="min-w-0 flex-1 text-xs font-medium text-content">{{
                         message.question.questions.length > 1 ? "A few questions" : message.question.questions[0]?.question
@@ -1100,7 +1100,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
                 <div class="flex flex-col gap-4 px-3.5 py-3">
                     <div v-for="(question, index) in message.question.questions" :key="index" class="flex flex-col gap-2">
-                        <span v-if="message.question.questions.length > 1" class="text-xs font-medium text-content">{{ question.question }}</span>
+                        <span v-if="message.question.questions.length > 1" class="chat-question-title text-xs font-medium text-content">{{ question.question }}</span>
 
                         <div v-if="message.question.status === 'pending'" class="flex flex-col gap-1.5">
                             <!-- The one line that says out loud what the square marks below say by shape, and it
