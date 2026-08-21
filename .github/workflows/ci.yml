@@ -247,6 +247,14 @@ jobs:
           # is a cold install charged to whichever job lands on this workspace next.
           clean: false
       - run: node _tools/scripts/prepass.mjs --checks-only
+      # NO LITERAL CONTROL CHARACTERS IN TRACKED TEXT, the cheapest invariant in the pipeline and the one that
+      # had no runner. A NUL typed into a string literal instead of written as an escape is invisible in an
+      # editor and decisive everywhere else: git, grep, `file` and every diff viewer call the whole file binary,
+      # so the change arrives for review as "Binary file: no preview for this type". The script that catches it
+      # has existed since the first five files did that; it lived only in `pnpm check`, which no hook and no job
+      # runs, and seven more files picked up the same byte behind it. 4,300 files read in ~120ms, same shape as
+      # the step above: checkout only, no node_modules, no network.
+      - run: node _tools/scripts/control-chars.mjs
       # The publish set is the same shape of invariant — package.json files and nothing else — and it was
       # checked nowhere but release-prepare, which runs on main AFTER the release has already been decided.
       # That is where the extension-manifest → base dependency surfaced: the release failed on a list that a

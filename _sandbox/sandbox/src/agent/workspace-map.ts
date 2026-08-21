@@ -478,7 +478,7 @@ const cache = new Map<string, { at: number; note: string | undefined }>();
  * not ask for on this turn, so an unreadable directory or a filesystem that moved mid-walk must cost the note
  * and nothing else. Killing a turn over a failed convenience would make the feature worse than not having it. */
 export const workspaceMapNote = (input: WorkspaceMapInput): string | undefined => {
-    const key = `${input.root} ${input.cwd}`;
+    const key = `${input.root}\u0000${input.cwd}`;
     const hit = cache.get(key);
     if (hit !== undefined && Date.now() - hit.at < TTL_MS) {
         return hit.note;

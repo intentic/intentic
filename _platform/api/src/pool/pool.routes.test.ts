@@ -199,8 +199,9 @@ const fakePrisma = (seed?: Partial<Stored>) => {
             ),
         },
         serviceWant: {
-            count: vi.fn(async ({ where }: { where: { userId: string; createdAt: { gte: Date } } }) =>
-                stored.serviceWants.filter((row) => row.userId === where.userId && row.createdAt >= where.createdAt.gte).length,
+            count: vi.fn(
+                async ({ where }: { where: { userId: string; createdAt: { gte: Date } } }) =>
+                    stored.serviceWants.filter((row) => row.userId === where.userId && row.createdAt >= where.createdAt.gte).length,
             ),
             create: vi.fn(async ({ data }: { data: { userId: string; text: string; normalized: string } }) => {
                 const row = { ...data, createdAt: NOW };
@@ -236,11 +237,11 @@ const fakePrisma = (seed?: Partial<Stored>) => {
             groupBy: vi.fn(async ({ where }: { where: { serviceId: { in: string[] } } }) => {
                 const tally = new Map<string, number>();
                 for (const run of stored.serviceRuns.filter((run) => where.serviceId.in.includes(run.serviceId))) {
-                    const key = `${run.serviceId} ${run.status}`;
+                    const key = `${run.serviceId}\u0000${run.status}`;
                     tally.set(key, (tally.get(key) ?? 0) + 1);
                 }
                 return [...tally].map(([key, count]) => {
-                    const [serviceId = ``, status = ``] = key.split(` `);
+                    const [serviceId = ``, status = ``] = key.split(`\u0000`);
                     return { serviceId, status, _count: { _all: count } };
                 });
             }),

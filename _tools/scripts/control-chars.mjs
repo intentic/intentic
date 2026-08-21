@@ -6,6 +6,10 @@
  * write on purpose: a separator that cannot occur in the data is a real technique, and it cost this repo five
  * files, one of which spent six days and eighteen commits with no reviewable diff before anyone noticed.
  *
+ * It then cost seven more, because this script was only ever reachable through `pnpm check` — no hook, no CI job,
+ * nothing automatic. Being right is not the same as being run. It is now a step in the pre-push hook and in the
+ * `preflight` job, both of which need only a checkout, which is the whole reason it reads bytes and not a build.
+ *
  * The technique is fine; the spelling is not. The escape (backslash-u-0000) is the same code point at runtime
  * and leaves the file text, so this check asks for it and nothing else.
  *

@@ -182,7 +182,7 @@ const quarantineMs = (response: Response, now: number): number | undefined => {
  * observed on, the next model retries it, is refused identically, and quarantines that pair too. One
  * wasted attempt per model against a dead key, in exchange for never inferring a model-wide fact from a
  * model-scoped refusal. */
-const bucket = (key: string, model: string | undefined): string => `${key} ${model ?? ``}`;
+const bucket = (key: string, model: string | undefined): string => `${key}\u0000${model ?? ``}`;
 
 /* One live pool. Its rotation, quarantine and health belong to the route instance rather than to the module: a
  * test app (and any future second platform app in one process) gets an independent view of its own keys.

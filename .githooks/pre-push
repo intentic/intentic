@@ -12,6 +12,13 @@
 # in the working tree. The preflight job in .github/workflows/ci.yml is the same check on the other side of the push; this
 # one is what keeps the round trip from happening at all.
 #
+# The byte scan rides along for the same reason and at the same price: 4,300 tracked files read in ~120ms, no
+# install, no network. It was written after a literal NUL in a string literal turned five source files binary to
+# git, grep and every diff viewer — and then sat in `pnpm check` alone, where nothing automatic ever reached it,
+# while seven more files picked up the same byte. A gate no hook and no pipeline runs is a comment.
+#
 # No dependency guard, unlike commit-msg: this needs only node, which is the thing running the repo. Use
 # `git push --no-verify` when you genuinely mean to push a tree that does not pass.
-exec node _tools/scripts/prepass.mjs --checks-only
+set -e
+node _tools/scripts/prepass.mjs --checks-only
+exec node _tools/scripts/control-chars.mjs
