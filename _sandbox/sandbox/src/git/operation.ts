@@ -66,7 +66,7 @@ const gitDirOf = async (dir: string): Promise<string | undefined> => {
         // A relative pointer is resolved against the dir holding it, the rule gitfiles are defined by.
         return target === undefined ? undefined : resolve(dir, target);
     } catch {
-        return undefined; // Not a repo (or a torn pointer) — the same "nothing to report" as before.
+        return undefined; // Not a repo (or a torn pointer): the same "nothing to report" as before.
     }
 };
 

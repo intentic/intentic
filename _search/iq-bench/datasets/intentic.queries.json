@@ -191,7 +191,7 @@
             "verb": "q",
             "query": "renderText",
             "expected": [{ "file": "_search/iq-engine/src/render/text.ts", "line": 119, "tolerance": 5 }],
-            "notes": "bare identifier through `q`: classified as an identifier, so the symbols engine joins the fusion — the only path where the def multiplier can reorder anything"
+            "notes": "bare identifier through `q`: classified as an identifier, so the symbols engine joins the fusion, the only path where the def multiplier can reorder anything"
         }
     ]
 }

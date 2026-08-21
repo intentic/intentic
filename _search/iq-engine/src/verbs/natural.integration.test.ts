@@ -24,7 +24,7 @@ test("a natural-language query without a model runs BM25-ranked and says so", as
     const engine = createEngine({ root });
     const outcome = await engine.run(request("q", "how are widgets built for the registry?"));
     expect(outcome.exitCode).toBe(0);
-    expect(outcome.text).toContain("no embedding backend — BM25 only");
+    expect(outcome.text).toContain("no embedding backend, BM25 only");
     expect(outcome.result.groups.some((group) => group.path === "notes.md")).toBe(true);
     expect(outcome.result.groups.flatMap((group) => group.hits).some((hit) => hit.tags.some((tag) => tag.kind === "bm25"))).toBe(true);
 });

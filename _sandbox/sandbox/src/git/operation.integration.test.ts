@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import { abortOperation, operationInProgress } from "./operation.js";
 
-/* Against real halted repositories, because the whole module is a reading of git's own on-disk bookkeeping —
+/* Against real halted repositories, because the whole module is a reading of git's own on-disk bookkeeping:
  * which marker file each verb writes, and which of them lie. A fixture built from what this code expects would
  * only ever confirm itself. */
 
@@ -71,7 +71,7 @@ test("a conflicted revert is reported", async () => {
 });
 
 /* A REBASE THAT STOPS ON A CONFLICT WRITES MERGE_HEAD TOO. Reading the merge marker first would answer "merge"
- * here and offer `git merge --abort`, which is not what ends a rebase — so the check order is load-bearing and
+ * here and offer `git merge --abort`, which is not what ends a rebase, so the check order is load-bearing and
  * this is the test that holds it in place. */
 test("a conflicted rebase reports rebase, not the merge marker it also writes", async () => {
     const dir = await conflicting();
@@ -110,7 +110,7 @@ test("a sequence with picks still queued is reported after the marker is cleared
 });
 
 /* AN AGENT'S LINKED WORKTREE, which is where most halted operations in this product actually happen. Its
- * `.git` is a POINTER FILE, not a directory, and the markers live in the per-worktree admin dir it names —
+ * `.git` is a POINTER FILE, not a directory, and the markers live in the per-worktree admin dir it names:
  * so a reading that stopped at `<dir>/.git/MERGE_HEAD` would report the worktree clean while git refuses
  * every verb in it. Read off the pointer rather than asked of `rev-parse --git-dir`, which is one spawn per
  * repo per scan for an answer the filesystem holds. */
@@ -120,7 +120,7 @@ test("a linked worktree reports its OWN halted state, through its pointer file",
     dirs.push(linked);
     await git(dir, ["worktree", "add", "-q", linked, "other"]);
 
-    // The main checkout is untouched throughout — the whole point of per-worktree markers.
+    // The main checkout is untouched throughout: the whole point of per-worktree markers.
     await git(linked, ["merge", "main"]).catch(() => undefined);
     expect(await operationInProgress(linked)).toBe("merge");
     expect(await operationInProgress(dir)).toBeUndefined();

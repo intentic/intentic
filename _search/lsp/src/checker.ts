@@ -160,7 +160,7 @@ const unusableReason = (diagnostics: readonly Diagnostic[], tsconfigPath: string
         if (MISSING_TYPE_DEFINITIONS.has(d.code) && typesAbove(projectDir)) {
             return (
                 "the checker could not load type definitions that sit in a parent node_modules/@types " +
-                "(the native compiler does not auto-include those) — run the package's own type-check for a verdict"
+                "(the native compiler does not auto-include those): run the package's own type-check for a verdict"
             );
         }
     }

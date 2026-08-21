@@ -21,7 +21,7 @@ import {
     rejectEnvironment,
 } from "./environment.js";
 
-// A proposal is custom-section content only — the daemon owns the FROM.
+// A proposal is custom-section content only: the daemon owns the FROM.
 const CUSTOM = "RUN apt-get update && apt-get install -y cowsay\n";
 
 // The moving release tag the base falls back to when nothing official is available.
@@ -49,7 +49,7 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
                 previousImage: "",
             },
             extensionsDir: EXTENSIONS_DIR,
-            // Read by the provider-pack fragment source (codexConnected) on every compose — empty: no provider.
+            // Read by the provider-pack fragment source (codexConnected) on every compose, empty: no provider.
             openaiApiKey: "",
         }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "environment-")) }),
@@ -57,7 +57,7 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
         logger: unstubbed<Services["logger"]>("logger", { warn: () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
         // The other two provider-pack predicates: an empty auth dir (no translator subscriptions on disk) and
-        // no xAI sign-in — compose then carries no provider fragments, which is what these tests are shaped for.
+        // no xAI sign-in: compose then carries no provider fragments, which is what these tests are shaped for.
         authRoot: mkdtempSync(join(tmpdir(), "environment-auth-")),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
     });
@@ -83,7 +83,7 @@ test("baseImageOf prefers the runner-named base, else an official running image,
     // Fresh connect.sh run: no base named, and the running image IS the base.
     expect(baseImageOf("", latest)).toBe(latest);
     expect(baseImageOf("", "ghcr.io/intentic/sandbox:sha-abc1234")).toBe("ghcr.io/intentic/sandbox:sha-abc1234");
-    // After a rebuild the running image is the overlay's own tag, which is not a base — the named base wins.
+    // After a rebuild the running image is the overlay's own tag, which is not a base: the named base wins.
     // Getting this wrong is what produced the endless rebuild prompt AND rolled the sandbox back each time.
     expect(baseImageOf(latest, "intentic-sandbox-env-demo:abc123def456")).toBe(latest);
     // The dev loop: an unofficial ref is honoured only because the runner named it explicitly.
@@ -93,12 +93,12 @@ test("baseImageOf prefers the runner-named base, else an official running image,
     expect(baseImageOf("", "intentic-sandbox:dev")).toBe(RELEASE);
     expect(baseImageOf("", "evil.example.com/sandbox:latest")).toBe(RELEASE);
     // BACKWARD COMPATIBILITY: an overlaid sandbox created by a runner that predates SANDBOX_BASE_IMAGE runs an
-    // `intentic-sandbox-env-<slug>:<hash>` image with no base named. It must still resolve to `:stable` — the
-    // exact base the old daemon hardcoded — so upgrading composes byte-identical content and does NOT greet
+    // `intentic-sandbox-env-<slug>:<hash>` image with no base named. It must still resolve to `:stable`: the
+    // exact base the old daemon hardcoded, so upgrading composes byte-identical content and does NOT greet
     // the owner with a spurious "rebuild required".
     expect(baseImageOf("", "intentic-sandbox-env-demo:abc123def456")).toBe(RELEASE);
     expect(baseImageOf("", "intentic-sandbox-env:abc123def456")).toBe(RELEASE);
-    // Unset/blank must never reach the FROM line verbatim — `FROM undefined` is an overlay that cannot build.
+    // Unset/blank must never reach the FROM line verbatim: `FROM undefined` is an overlay that cannot build.
     expect(baseImageOf(undefined, undefined)).toBe(RELEASE);
     expect(baseImageOf("   ", "")).toBe(RELEASE);
 });
@@ -140,7 +140,7 @@ test("propose → approve stores the custom section and recomposes; applied deri
     expect(state.approved!.content).toContain(CUSTOM.trim());
     expect(state.approved!.hash).not.toBe(hash);
 
-    // The executor stamps SANDBOX_ENVIRONMENT_HASH on recreate — the UI reads applied from the hash equality.
+    // The executor stamps SANDBOX_ENVIRONMENT_HASH on recreate: the UI reads applied from the hash equality.
     const applied = await readEnvironment(stubServices(state.approved!.hash));
     expect(applied.appliedHash).toBe(state.approved!.hash);
 });
@@ -214,7 +214,7 @@ test("compose with nothing left removes the overlay on a stock container, keeps 
     expect(await composeEnvironment(stock)).toBeUndefined();
     expect(await stock.files.read(approvedPath(stock))).toBeUndefined();
 
-    // A container built from an overlay keeps a bare FROM overlay — the hash-pinned rebuild path back to stock.
+    // A container built from an overlay keeps a bare FROM overlay: the hash-pinned rebuild path back to stock.
     const overlayBuilt = stubServices("deadbeef");
     const hash = await composeEnvironment(overlayBuilt);
     const bare = await overlayBuilt.files.read(approvedPath(overlayBuilt));
@@ -246,7 +246,7 @@ test("drafts from parallel agents compose into one proposal, in a stable order",
     const { proposal } = await readEnvironment(services);
     expect(proposal?.content).toContain("ffmpeg");
     expect(proposal?.content).toContain("cowsay");
-    // Sorted by filename, so the same set of drafts always hashes the same — an unstable order would ask the
+    // Sorted by filename, so the same set of drafts always hashes the same: an unstable order would ask the
     // owner to re-approve identical content on every read.
     expect(proposal!.content.indexOf("cowsay")).toBeLessThan(proposal!.content.indexOf("ffmpeg"));
 });
@@ -254,7 +254,7 @@ test("drafts from parallel agents compose into one proposal, in a stable order",
 /* Folding drafts in happens on a READ, so it may write only when the fold produces something new.
  *
  * An unconditional write is a change as far as the workspace watcher can tell, and the browser binds
- * `.intentic/environment.` to the `environment` query (WORKSPACE_STATE_FILES) — so GET /environment pushed a
+ * `.intentic/environment.` to the `environment` query (WORKSPACE_STATE_FILES), so GET /environment pushed a
  * frame that invalidated the query that refetched GET /environment, forever, paced by the watcher's 250ms
  * debounce. Four requests a second, each frame also dragging a tree walk and a `git status` behind it. */
 test("re-reading unchanged drafts writes nothing, so the watcher has no change to report", async () => {

@@ -12,7 +12,7 @@ import { createApp } from "../app.js";
 import { clientFor, errorCode, memoryCapabilitiesStore, rejectForbidden, services } from "../route-testing.js";
 
 /* The secrets routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
+ * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
  * one file that two agents working on unrelated features collided in every time. The fakes and the client
  * are shared (route-testing.ts); what lives here is what these routes do. */
 

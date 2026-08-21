@@ -39,8 +39,8 @@ export interface PlatformTunnel {
      * both mean the same thing to a caller: use the platform's own URL. */
     readonly url: () => string | undefined;
     /* Settles once `url()` has its final answer: the listener bound, failed to bind, or was never needed.
-     * For the one caller that WRITES `url()` down rather than reading it fresh per call — the translator's
-     * config render bakes the trial's base URL into a file at boot — awaiting this is what makes the baked
+     * For the one caller that WRITES `url()` down rather than reading it fresh per call: the translator's
+     * config render bakes the trial's base URL into a file at boot: awaiting this is what makes the baked
      * address deterministic instead of a race against a loopback bind that is merely almost always faster. */
     readonly ready: Promise<void>;
     readonly close: () => void;
@@ -94,7 +94,7 @@ export const startPlatformTunnel = (platformUrl: string, logger: Logger): Platfo
     });
     server.on("error", (error: unknown) => {
         bound = undefined;
-        logger.warn({ err: error }, "platform tunnel: could not listen — the trial will use the platform URL directly");
+        logger.warn({ err: error }, "platform tunnel: could not listen, the trial will use the platform URL directly");
         settle();
     });
     // Port 0: the OS picks. Nothing outside this container may reach it, so it is bound to loopback only and

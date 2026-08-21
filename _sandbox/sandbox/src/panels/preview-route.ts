@@ -74,7 +74,7 @@ export const createPreviewRouteEnsurer = (config: Config, logger: Logger): ((lab
                         ensured.add(label);
                         continue;
                     }
-                    logger.warn({ err: error, label }, "preview name not shared — this preview hostname may not resolve");
+                    logger.warn({ err: error, label }, "preview name not shared, this preview hostname may not resolve");
                 }
             }
         });

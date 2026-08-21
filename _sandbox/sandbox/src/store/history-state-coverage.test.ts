@@ -7,12 +7,12 @@ import { expect, test } from "vitest";
 /* THE SAME GUARD AS workspace-state-coverage, pointed at the other volume.
  *
  * `/history` had no manifest at all until an environment export needed one, which is precisely how it came to
- * hold the most load-bearing state in the sandbox — every repo's real git dir, the fleet registry, the
- * checkpoint scopes — with nothing anywhere saying so. A hand-written list would rot the same way the
+ * hold the most load-bearing state in the sandbox: every repo's real git dir, the fleet registry, the
+ * checkpoint scopes: with nothing anywhere saying so. A hand-written list would rot the same way the
  * browser's invalidation table did, so this recognizes violations by their SHAPE: it reads the daemon's own
  * source, finds every path built under `historyRoot`, and fails when one is absent from HISTORY_STATE_FILES.
  *
- * Adding a store on this volume is therefore a change to one visible list — including the question that list
+ * Adding a store on this volume is therefore a change to one visible list: including the question that list
  * exists to force, which is whether the new state travels in a bundle, is a credential, or is regenerated.
  */
 
@@ -38,7 +38,7 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
 
 /* `join(<root>, "a", "b")` → the quoted segments.
  *
- * The trailing lookahead — rather than a literal `)` — is what lets a call with a COMPUTED final segment still
+ * The trailing lookahead (rather than a literal `)`) is what lets a call with a COMPUTED final segment still
  * contribute its literal prefix: `join(historyRoot, "gits", encodeURIComponent(name))` matches up to "gits" and
  * stops, which is the declared entry (the directory), not the generated leaf under it.
  */

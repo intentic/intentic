@@ -4,24 +4,24 @@ import { packageRoot } from "@intentic/constants/node";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
-/* THE GUARD THAT THE PREVIOUS TABLE DIDN'T HAVE — now only half a guard, because the compiler took the other half.
+/* THE GUARD THAT THE PREVIOUS TABLE DIDN'T HAVE: now only half a guard, because the compiler took the other half.
  *
  * `.intentic/config/drafts/` went missing from the browser's invalidation table for one reason: the test that covered
  * that table asserted the entries it already had. A list checked against itself can only ever confirm what
- * someone remembered to write down, which is the failure AGENTS.md names — "a hardcoded file list repeats the
- * miss it exists to prevent" — so this recognizes violations by their SHAPE instead.
+ * someone remembered to write down, which is the failure AGENTS.md names: "a hardcoded file list repeats the
+ * miss it exists to prevent", so this recognizes violations by their SHAPE instead.
  *
  * "Every path the daemon builds is declared" is no longer checked here: `statePath` (workspace/state-paths.ts)
  * takes `WorkspaceStatePath`, the literal union of the table's own paths, so an undeclared path does not compile.
- * That is a stronger statement than a regex sweep can make — it holds for computed call sites, generated leaves
- * and shapes this pattern would never have matched — but it holds only for paths that go THROUGH statePath. So
+ * That is a stronger statement than a regex sweep can make: it holds for computed call sites, generated leaves
+ * and shapes this pattern would never have matched, but it holds only for paths that go THROUGH statePath. So
  * the first test below has changed job: it enforces that they all do.
  *
  * The second direction is still this file's alone. Nothing in the type system notices a table entry whose store
  * was deleted, and that entry would quietly keep invalidating a query for a file that can no longer change.
  *
  * Scope is deliberately the WORKSPACE ROOT's .intentic/. A repo's own `<repo>/.intentic/ui/` (panels.routes) is a
- * different space entirely — it is not what the watcher reports and not what these queries read — so the root
+ * different space entirely: it is not what the watcher reports and not what these queries read, so the root
  * expression is part of the pattern rather than something to filter out afterwards. */
 
 // The identifiers the daemon builds workspace-root paths from. A `join(dir, ".intentic", …)` where `dir` is a
@@ -47,7 +47,7 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
     return found.flat();
 };
 
-/* `join(<root>, ".intentic"|STATE_DIR, …)` — the raw spellings `statePath` replaced. STATE_DIR is in the
+/* `join(<root>, ".intentic"|STATE_DIR, …)`: the raw spellings `statePath` replaced. STATE_DIR is in the
  * pattern because it was the hole: the literal-only regex let `join(root, STATE_DIR, "whisper", …)` and a
  * `${STATE_DIR}/records/chores` template mint undeclared trees for months while this test passed. Segments may be
  * identifiers (`join(root, STATE_DIR, FILE)`), so the tail matches expressions, not just strings. A bare
@@ -55,10 +55,10 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
  * table entry. */
 const RAW_JOIN = /join\(\s*([A-Za-z_.]+)\s*,\s*(?:"\.intentic"|STATE_DIR)\s*((?:,\s*(?:"[^"]+"|[A-Za-z_][\w.]*)\s*)+)(?=[,)])/g;
 // The template spelling of the same bypass: `${STATE_DIR}/<segment>` composes a state path outside the union
-// wherever it appears — a module const later joined, a glob, a prompt. Bare `${STATE_DIR}` (git exclude lines,
+// wherever it appears: a module const later joined, a glob, a prompt. Bare `${STATE_DIR}` (git exclude lines,
 // segment lookups) composes nothing and stays legal.
 const RAW_TEMPLATE = /\$\{STATE_DIR\}\/[\w.-]/g;
-// `statePath(<root>, ".intentic/…")` and `stateRelPath(".intentic/…")` — the declared spellings. Only the
+// `statePath(<root>, ".intentic/…")` and `stateRelPath(".intentic/…")`: the declared spellings. Only the
 // table path matters; any `tail` after it is a leaf beneath a declared directory prefix.
 const STATE_PATH = /statePath\(\s*[A-Za-z_.]+\s*,\s*"(\.intentic\/[^"]+)"|stateRelPath\(\s*"(\.intentic\/[^"]+)"/g;
 

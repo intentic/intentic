@@ -118,7 +118,7 @@ export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: 
     // connection is the only answer that reaches it: the caller then fails in seconds with a real error, instead
     // of holding the watcher's pass open for as long as its own timeout allows.
     const handshake = setTimeout(() => {
-        onError(`the sync transport to ${target.sandboxId} did not open within ${OPEN_TIMEOUT_MS / 1000}s — the sandbox is not answering`);
+        onError(`the sync transport to ${target.sandboxId} did not open within ${OPEN_TIMEOUT_MS / 1000}s: the sandbox is not answering`);
         close();
     }, OPEN_TIMEOUT_MS);
 
@@ -228,7 +228,7 @@ export const createTunnelPool = (log: Log) => {
                     running.delete(sandboxId);
                     // oxlint-disable-next-line eslint/no-await-in-loop -- one listener at a time; the set is tiny and ordering keeps the log readable
                     await stop();
-                    log(`  sync transport for ${sandboxId} stopped — it is no longer paired`);
+                    log(`  sync transport for ${sandboxId} stopped: it is no longer paired`);
                 }
             }
             for (const target of targets) {

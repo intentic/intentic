@@ -166,7 +166,7 @@ export const createPerfTracker = (logger: Logger): PerfTracker => {
                     })),
                 windowMs: SUMMARY_MS,
             },
-            "perf summary — ranked by TOTAL time, which is what a bottleneck actually is",
+            "perf summary: ranked by TOTAL time, which is what a bottleneck actually is",
         );
         // Counts are cumulative for the daemon's life on purpose: a rolling reset would hide the op that is
         // slow once an hour, which is exactly the complaint that is hardest to reproduce on demand.

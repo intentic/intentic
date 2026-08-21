@@ -67,7 +67,7 @@ const invalidProposal = (content: string): boolean =>
     content.split("\n").some((line) => /^\s*from\s/i.test(line)) || content.includes("intentic:runtime");
 
 const HEADER =
-    "# Composed by the intentic sandbox daemon — do not edit by hand.\n" +
+    "# Composed by the intentic sandbox daemon: do not edit by hand.\n" +
     "# Capability fragments are daemon-owned; the custom section mirrors .intentic/config/environment.custom.Dockerfile.";
 const CUSTOM_MARKER = "# ---- custom (owner-approved) ----";
 

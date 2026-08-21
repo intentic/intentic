@@ -47,13 +47,13 @@ test("the VAPID keypair is generated once and reused across store instances", as
     expect(await filePushStore(path).keys()).toEqual(first);
 });
 
-test("the first request cannot mint two keypairs — the browser must subscribe with the key the daemon keeps", async () => {
+test("the first request cannot mint two keypairs: the browser must subscribe with the key the daemon keeps", async () => {
     const path = await storePath();
     const store = filePushStore(path);
 
     // Exactly what /push/config does, on a store nothing has loaded yet: keys() and list() concurrently. If
     // each load generates its own pair, the response carries whichever keys() made while the file keeps
-    // whichever write landed last — so the browser subscribes with a key the daemon does not hold, every send
+    // whichever write landed last, so the browser subscribes with a key the daemon does not hold, every send
     // is refused 403, and the row is pruned as dead. A toggle that enables cleanly and never notifies, on the
     // first attempt of every new sandbox.
     const [keys] = await Promise.all([store.keys(), store.list()]);
@@ -63,7 +63,7 @@ test("the first request cannot mint two keypairs — the browser must subscribe 
     expect(keys.privateKey).toBe(persisted.privateKey);
 });
 
-test("the private key is written 0600 — it can forge notifications to the owner's devices", async () => {
+test("the private key is written 0600: it can forge notifications to the owner's devices", async () => {
     const path = await storePath();
     await filePushStore(path).keys();
     const { mode } = await (await import("node:fs/promises")).stat(path);
@@ -137,13 +137,13 @@ const stubSends = (refusals: Record<string, number>): void => {
 
 const sample = { title: "intentic", body: "done", tag: "t" };
 
-test("a 403 drops the subscription — a recreated sandbox's stale endpoints must not be retried forever", async () => {
+test("a 403 drops the subscription: a recreated sandbox's stale endpoints must not be retried forever", async () => {
     const path = await storePath();
     const store = filePushStore(path);
     await store.add(subscription("https://push.example/stale"));
     await store.add(subscription("https://push.example/live"));
     // 403 is the push service saying "this endpoint was minted for a different VAPID key". Our key never
-    // rotates back, so the row is dead — and keeping it would let the settings toggle keep claiming "on".
+    // rotates back, so the row is dead, and keeping it would let the settings toggle keep claiming "on".
     stubSends({ "https://push.example/stale": 403 });
 
     await createPushSender(store, silentLogger).notify(sample);
@@ -157,13 +157,13 @@ test("a transient 500 keeps the subscription and does not fail the caller", asyn
     await store.add(subscription("https://push.example/flaky"));
     stubSends({ "https://push.example/flaky": 500 });
 
-    // A turn must complete identically whether the push service is up, down, or slow — it resolves, reporting
+    // A turn must complete identically whether the push service is up, down, or slow: it resolves, reporting
     // that nothing landed, rather than throwing at a caller for whom a missed notification is not a failure.
     await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
     expect(await store.list()).toHaveLength(1);
 });
 
-test("a send to nobody is reported as such — the test button's whole job is to catch a silent zero", async () => {
+test("a send to nobody is reported as such: the test button's whole job is to catch a silent zero", async () => {
     const path = await storePath();
     const store = filePushStore(path);
     stubSends({});
@@ -210,7 +210,7 @@ test("a relay channel is posted to its recorded url with the send capability and
     );
 });
 
-test("a relay 410 drops the channel — an uninstalled app must not be retried forever", async () => {
+test("a relay 410 drops the channel: an uninstalled app must not be retried forever", async () => {
     const path = await storePath();
     const store = filePushStore(path);
     await store.add(relayChannel("gone"));
@@ -238,7 +238,7 @@ test("a relay that cannot be reached at all is a transient, not a prune", async 
     await store.add(relayChannel("unreachable"));
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
 
-    // The platform being down says nothing about the DEVICE — the row must survive to be sent to when the
+    // The platform being down says nothing about the DEVICE: the row must survive to be sent to when the
     // relay comes back, unlike a 410 which is the relay itself saying the device is gone.
     await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
     expect(await store.list()).toHaveLength(1);

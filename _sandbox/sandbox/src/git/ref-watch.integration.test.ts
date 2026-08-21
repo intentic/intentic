@@ -38,7 +38,7 @@ const workspace = async (): Promise<string> => {
     return root;
 };
 
-// The watcher debounces, so every expectation here is "eventually" — poll rather than sleep a fixed time, or the
+// The watcher debounces, so every expectation here is "eventually": poll rather than sleep a fixed time, or the
 // test is either flaky or slow.
 const waitFor = async (predicate: () => boolean, timeoutMs = 5000): Promise<void> => {
     const deadline = Date.now() + timeoutMs;
@@ -59,7 +59,7 @@ const watchRoot = (root: string): string[][] => {
     return batches;
 };
 
-// Long enough after a batch that a straggler from the same window has landed too — the watcher debounces at
+// Long enough after a batch that a straggler from the same window has landed too: the watcher debounces at
 // 250ms, and everything here that clears `batches` has to outlast that or it clears them into the next
 // assertion.
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 600));
@@ -68,10 +68,10 @@ const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve,
  * watcher up runs a `git rev-parse` and then chokidar's own initial scan, and on a loaded machine that outruns
  * any number written here. What made it a bad flake rather than a slow test is that a ref moved before the
  * watch exists is reported by NOTHING: the case then waited out its entire budget for a batch that was never
- * coming, and failed as "timed out waiting for a ref batch" — which reads as the watcher being broken.
+ * coming, and failed as "timed out waiting for a ref batch", which reads as the watcher being broken.
  *
  * Which is why the probe REPEATS. One move and a wait is the same bet in a different place: fire it a moment
- * too early and there is nothing left to report it. So keep moving a ref until a move comes back — the batch
+ * too early and there is nothing left to report it. So keep moving a ref until a move comes back: the batch
  * is the proof, and it costs exactly what attaching took. Each `move` puts the repo back as it found it, so
  * the case still starts from the state it was written against. */
 const attached = async (batches: string[][], move: () => Promise<void>): Promise<void> => {
@@ -123,7 +123,7 @@ test("a branch created and then deleted is reported", async () => {
 /* THE CASE THE WATCHER EXISTS FOR. Every agent session runs in a LINKED WORKTREE, where git splits the state
  * this watcher reads across two directories: refs and packed-refs stay in the common dir, while HEAD and the
  * in-progress markers are per worktree. A watcher that resolved only one of them would miss half of what it is
- * for — and would miss it silently, since the other half keeps arriving. */
+ * for, and would miss it silently, since the other half keeps arriving. */
 test("a checkout inside a linked worktree is reported, HEAD being per-worktree", async () => {
     const root = await mkdtemp(join(tmpdir(), "refwatch-wt-"));
     roots.push(root);
@@ -143,7 +143,7 @@ test("a checkout inside a linked worktree is reported, HEAD being per-worktree",
     closers.push(watch.close);
     watch.subscribe((repos) => batches.push(repos));
 
-    /* Attachment is proven on the SAME per-worktree HEAD this case is about, then put back — the branch probe
+    /* Attachment is proven on the SAME per-worktree HEAD this case is about, then put back: the branch probe
      * the other cases use would only have proved the common dir's watch, which is the half this one exists to
      * distrust. */
     const linked = join(root, "linked");
@@ -153,7 +153,7 @@ test("a checkout inside a linked worktree is reported, HEAD being per-worktree",
     });
 
     /* Detaching writes the linked worktree's OWN HEAD in its per-worktree admin dir and touches NO ref in the
-     * common dir — so this passes only if the gitdir is resolved and watched separately from the common dir.
+     * common dir, so this passes only if the gitdir is resolved and watched separately from the common dir.
      * (Checking out a branch would have written a common-dir ref too and let a half-right watcher through.) */
     await git(linked, ["checkout", "--detach"]);
 

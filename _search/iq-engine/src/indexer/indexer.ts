@@ -164,7 +164,7 @@ export const revalidate = async (db: IndexDb, entries: readonly FileEntry[], par
             continue;
         }
         applyRead(item.entry, item.previous, await item.read);
-        item.read = undefined; // release the buffer — memory stays bounded by the window
+        item.read = undefined; // release the buffer: memory stays bounded by the window
     }
     for (const [path, file] of stored) {
         if (!seen.has(path)) {

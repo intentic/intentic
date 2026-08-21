@@ -11,7 +11,7 @@ const body = (value: unknown): string => {
     return match?.[3] ?? "";
 };
 
-describe("outsideSourceOf — what counts as outside", () => {
+describe("outsideSourceOf, what counts as outside", () => {
     test("the web tools always do", () => {
         expect(outsideSourceOf("WebFetch", { url: "https://example.com" })).toBe("web");
         expect(outsideSourceOf("WebSearch", { query: "x" })).toBe("web-search");
@@ -32,16 +32,16 @@ describe("outsideSourceOf — what counts as outside", () => {
     });
 
     // The browser is ours; the page is not. This is the case a name-based allowlist gets wrong.
-    test("browser servers are wrapped — Playwright is ours, the page is the internet", () => {
+    test("browser servers are wrapped: Playwright is ours, the page is the internet", () => {
         expect(outsideSourceOf("mcp__web__browser_snapshot", {})).toBe("web");
         expect(outsideSourceOf("mcp__reddit__browser_read", {})).toBe("reddit");
     });
 
-    test("an unknown server tomorrow is wrapped by default — the list names exceptions, not members", () => {
+    test("an unknown server tomorrow is wrapped by default: the list names exceptions, not members", () => {
         expect(outsideSourceOf("mcp__something-nobody-has-written__tool", {})).toBe("something-nobody-has-written");
     });
 
-    describe("Bash — only when the command actually reached out", () => {
+    describe("Bash, only when the command actually reached out", () => {
         test("a fetch of the open internet is outside", () => {
             for (const command of ["curl https://example.com/api", "wget https://example.com/f.json", "curl -s https://discord.com/api/v10/x"]) {
                 expect(outsideSourceOf("Bash", { command }), command).toBe("shell-fetch");
@@ -62,9 +62,9 @@ describe("outsideSourceOf — what counts as outside", () => {
 
     /* The JS execution backend, under Bash's rule word for word: the script is the agent's own program, the
      * page a fetching one brings back is the internet. The `code` server being INTERNAL is what makes the
-     * explicit branch the only wrapper — without it every `console.log(2+2)` result would arrive wrapped,
+     * explicit branch the only wrapper: without it every `console.log(2+2)` result would arrive wrapped,
      * telling the model its own platform is a stranger and tainting the turn on its own arithmetic. */
-    describe("JS runs — only when the script actually reached out", () => {
+    describe("JS runs: only when the script actually reached out", () => {
         test("a script fetching the open internet is outside", () => {
             expect(outsideSourceOf("mcp__code__run", { code: 'const r = await fetch("https://example.com/api");' })).toBe("code-fetch");
             expect(outsideSourceOf("mcp__code__run", { code: 'child_process.execSync("curl https://example.com")' })).toBe("code-fetch");
@@ -92,7 +92,7 @@ describe("mcpServerOf", () => {
     });
 });
 
-describe("sealResult — the content fields, not the shape", () => {
+describe("sealResult: the content fields, not the shape", () => {
     test("an MCP text part is wrapped and the result stays a result", () => {
         const result = { content: [{ type: "text", text: "issue body from a stranger" }] };
         const sealed = sealResult("mcp__github__get_issue", result, "github") as typeof result;
@@ -100,7 +100,7 @@ describe("sealResult — the content fields, not the shape", () => {
         expect(sealed.content[0]?.type).toBe("text");
     });
 
-    test("an image part rides through untouched — an envelope around base64 helps nobody", () => {
+    test("an image part rides through untouched: an envelope around base64 helps nobody", () => {
         const result = { content: [{ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" }] };
         expect(sealResult("mcp__web__browser_take_screenshot", result, "web")).toBe(result);
     });
@@ -130,7 +130,7 @@ describe("sealResult — the content fields, not the shape", () => {
         expect(inner).toContain("[marker removed]");
     });
 
-    test("nothing to wrap returns the same reference — the hook's unchanged signal", () => {
+    test("nothing to wrap returns the same reference: the hook's unchanged signal", () => {
         for (const result of [{ stdout: "", stderr: "" }, { other: "field" }, 42, null]) {
             expect(sealResult("Bash", result, "shell-fetch")).toBe(result);
         }
@@ -138,7 +138,7 @@ describe("sealResult — the content fields, not the shape", () => {
 });
 
 /* THE CONFORMANCE FLOOR. INTERNAL_SERVERS is an exception list, so the failure it can suffer is silent: a new
- * daemon control server ships, nobody adds it, and its results arrive wrapped — telling the model the platform
+ * daemon control server ships, nobody adds it, and its results arrive wrapped: telling the model the platform
  * is a stranger. This reads the server keys out of the two files that mount them and asserts each is either
  * classified internal or deliberately left to be wrapped. Adding a server without deciding fails here. */
 describe("conformance: every daemon-mounted MCP server is classified", () => {
@@ -147,7 +147,7 @@ describe("conformance: every daemon-mounted MCP server is classified", () => {
     // internet's text back. Keyed by the literal that mounts them.
     const WRAPPED_ON_PURPOSE = new Set(["web"]);
 
-    /* Keys at the TOP level of the mount block — depth-aware rather than indentation-aware, because a server
+    /* Keys at the TOP level of the mount block: depth-aware rather than indentation-aware, because a server
      * is mounted as `name: server(...)` whose arguments carry keys of their own (`conversationId:`), and those
      * are not servers. Strings and comments are skipped so a brace inside either does not move the depth. */
     const mountedIn = (file: string, block: RegExp): string[] => {
@@ -170,18 +170,18 @@ describe("conformance: every daemon-mounted MCP server is classified", () => {
                 depth--;
                 continue;
             }
-            /* Only at depth 0 — a nested call's own arguments (`subagentWaitServer({ conversationId: … })`,
+            /* Only at depth 0, a nested call's own arguments (`subagentWaitServer({ conversationId: … })`,
              * `...(input.agent ? { agent: … })` inside one) sit deeper and are not servers. Both mount forms
              * are read here, where the depth that distinguishes them is known. */
             if (depth === 0) {
                 // The conditionally-mounted form, either polarity: `...(cond ? { name: s } : {})` and
-                // `...(cond ? {} : { name: s })` — up to the first object literal that actually carries a key.
+                // `...(cond ? {} : { name: s })`, up to the first object literal that actually carries a key.
                 const spread = /^\.\.\.\([^;]*?\{\s*([a-z][a-zA-Z0-9-]*)\s*:/.exec(rest);
                 if (spread !== null) {
                     keys.push(spread[1] as string);
                     continue;
                 }
-                // `name: server` — the plain form.
+                // `name: server`, the plain form.
                 const key = /^([a-z][a-zA-Z0-9-]*)\s*:/.exec(rest);
                 if (key !== null && /[\s{]/.test(region[i - 1] ?? "")) {
                     keys.push(key[1] as string);

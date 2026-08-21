@@ -42,7 +42,7 @@ test("files from two projects are grouped, checked apart, and answered together"
     expect(report!.diagnostics.map((d) => d.file)).toEqual([broken]);
 });
 
-/* Agents edit in bursts — six PostToolUse hooks inside a second, all about one package. Concurrent asks about
+/* Agents edit in bursts: six PostToolUse hooks inside a second, all about one package. Concurrent asks about
  * one project must all come back right (each caller sees its own file's slice), however the client pools the
  * underlying compiler runs. */
 test("concurrent asks about one project each get their own file's answer", async () => {

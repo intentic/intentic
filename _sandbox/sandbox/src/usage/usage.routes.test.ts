@@ -7,7 +7,7 @@ import { routesClient } from "../route-testing.js";
 
 /* The usage routes, over the one seam they read.
  *
- * Split out of app.integration.test.ts — 116 tests over every route in the daemon, in one file — and then
+ * Split out of app.integration.test.ts: 116 tests over every route in the daemon, in one file, and then
  * stood up on `UsageRoutesDeps` rather than on the daemon. `Pick<Services, "usage">` is the whole surface these
  * routes can reach, so nothing the daemon grows later lands in this file's blast radius: it is not in the type. */
 

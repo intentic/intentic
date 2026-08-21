@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Bakes the iq models into <dest> at Docker build time, so `iq ask` runs fully offline: the bge embedder
 // (semantic retrieval) and the ms-marco cross-encoder (rerank stage). Downloads go through Hugging Face's Xet
-// protocol (@huggingface/hub) — the CAS bridge denies anonymous plain-HTTP fetches of these artifacts — then
+// protocol (@huggingface/hub) (the CAS bridge denies anonymous plain-HTTP fetches of these artifacts) then
 // Transformers.js re-instantiates everything to validate the exact offline layout the runtime consumes.
 // Usage: node scripts/fetch-model.mjs <dest-dir>
 import { createWriteStream } from "node:fs";
@@ -38,7 +38,7 @@ for (const [repo, revision] of Object.entries(MODELS)) {
     }
 }
 
-// Validate strictly offline — instantiating pulls every artifact the runtime needs, so a gap in FILES fails
+// Validate strictly offline: instantiating pulls every artifact the runtime needs, so a gap in FILES fails
 // here with a clear local-file error instead of at first boot.
 env.cacheDir = dest;
 env.localModelPath = dest;

@@ -25,7 +25,7 @@ const skillNotes = (): string => {
 const shimDir = (): string => {
     const cliPath = join(monorepoRoot, "_search/iq/dist/cli.js");
     if (!existsSync(cliPath)) {
-        throw new Error("iq-bench: _search/iq is not built — run `pnpm build` at the repo root first");
+        throw new Error("iq-bench: _search/iq is not built, run `pnpm build` at the repo root first");
     }
     const dir = join(cacheDir, "bin");
     mkdirSync(dir, { recursive: true });

@@ -3,7 +3,7 @@ import { outputAliases, outputFlagParameters, scopeFlagParameters, type SearchFl
 import { runSearch } from "../lib/run.js";
 
 export const who = buildCommand({
-    docs: { brief: "Blame an anchor — commit, author, date, message for path:line[-line]" },
+    docs: { brief: "Blame an anchor, commit, author, date, message for path:line[-line]" },
     parameters: {
         flags: { ...scopeFlagParameters, ...outputFlagParameters },
         aliases: outputAliases,

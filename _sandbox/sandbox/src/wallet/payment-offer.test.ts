@@ -5,7 +5,7 @@ import { gatedPaidFetch, type PaidFetchRequest, type PaymentGateDeps } from "./p
 import type { PaymentRow, WalletLedgerStore } from "./wallet-ledger.js";
 
 /* The payment gate, driven end to end with a fake endpoint, a fake signer and a fake live turn: what these
- * prove is the ONE property the module exists for — a signature is requested exactly when the owner's
+ * prove is the ONE property the module exists for: a signature is requested exactly when the owner's
  * policy allowed it AND (outside their standing band) a real click approved it, and every other ending
  * spends nothing and answers with a sentence the agent can act on.
  *
@@ -45,7 +45,7 @@ const wallet = (over: Partial<WalletConfig> = {}): WalletConfig => ({
     ...over,
 });
 
-// A ledger in memory with the real store's semantics — open/settle/record, and the same spent-today rule
+// A ledger in memory with the real store's semantics: open/settle/record, and the same spent-today rule
 // (paid plus in-flight), because the cap arithmetic is exactly what these tests are checking.
 const memoryLedger = (seed: readonly PaymentRow[] = []): WalletLedgerStore & { readonly rows: PaymentRow[] } => {
     const rows: PaymentRow[] = [...seed];
@@ -190,7 +190,7 @@ it("refuses a price over the per-payment ceiling without even raising a card", a
 it("refuses when the day's cap is already committed, counting in-flight payments", async () => {
     const ledger = memoryLedger([
         { id: "old", at: Date.now(), url: "https://x", host: "x", payTo: PAY_TO, network: "eip155:8453", amountUsd: "4.50", outcome: "paid" },
-        // A pending row is money whose fate is unknown — it holds against the cap, conservatively.
+        // A pending row is money whose fate is unknown: it holds against the cap, conservatively.
         { id: "flight", at: Date.now(), url: "https://y", host: "y", payTo: PAY_TO, network: "eip155:8453", amountUsd: "0.45", outcome: "pending" },
     ]);
     const { deps, signed, frames } = fake({ ledger });
@@ -214,7 +214,7 @@ it("pays without a card inside the owner's auto-approve band", async () => {
     const answer = await gatedPaidFetch(deps, asked());
     expect(answer.status).toBe(200);
     expect(signed).toHaveLength(1);
-    // No card, and therefore no card frames — the owner's standing delegation covered it.
+    // No card, and therefore no card frames: the owner's standing delegation covered it.
     expect(frames).toEqual([]);
 });
 
@@ -226,7 +226,7 @@ it("suspends the auto-approve band on a turn that has read outside content", asy
     await answerCard(frames, true);
     expect((await pending).status).toBe(200);
     expect(signed).toHaveLength(1);
-    // It asked — the whole point — rather than refusing or paying silently.
+    // It asked (the whole point) rather than refusing or paying silently.
     expect(frames[0]).toMatchObject({ kind: "payment_offer" });
 });
 
@@ -292,7 +292,7 @@ it("refuses when the platform declines to sign, without retrying the endpoint", 
     expect(ledger.rows.at(-1)).toMatchObject({ outcome: "refused" });
 });
 
-it("refuses the payment when the ledger cannot be written — no spend without a record", async () => {
+it("refuses the payment when the ledger cannot be written: no spend without a record", async () => {
     const ledger = memoryLedger();
     const { deps, frames, signed } = fake({
         ledger: { ...ledger, open: async () => { throw new Error("disk full"); } },
@@ -314,7 +314,7 @@ it("refuses without a wallet, and without a live conversation to ask in", async 
     expect(signed).toEqual([]);
 });
 
-it("refuses a plain-http URL — a challenge over http could be anyone's", async () => {
+it("refuses a plain-http URL: a challenge over http could be anyone's", async () => {
     const { deps } = fake();
     expect((await gatedPaidFetch(deps, asked({ url: "http://api.example.com/premium" }))).status).toBe(400);
 });

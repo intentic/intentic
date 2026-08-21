@@ -302,7 +302,7 @@ export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec):
 // overriding a deliberate `intentic-sync pause`.
 export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: Log): Promise<void> => {
     if (pairing.mode !== "sync" || pairing.localDir === undefined) {
-        return; // a mirror-only enrollment has no file sync at all — just port forwards
+        return; // a mirror-only enrollment has no file sync at all: just port forwards
     }
     const held = { ...pairing, localDir: pairing.localDir };
     /* Both sessions, converged in order and independently. Sequential rather than concurrent because they share
@@ -337,7 +337,7 @@ const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log)
             return;
         }
         log(
-            "the running sync session was created by an older agent — recreating it so this version's rules apply (no .git file-syncs anymore; commits arrive via the git bridge instead).",
+            "the running sync session was created by an older agent: recreating it so this version's rules apply (no .git file-syncs anymore; commits arrive via the git bridge instead).",
         );
         spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore", windowsHide: true });
     }
@@ -371,7 +371,7 @@ export const osToken = (): "linux" | "darwin" | "windows" => {
     if (process.platform === "win32") {
         return "windows";
     }
-    throw new Error(`auto-download isn't supported on ${process.platform} — install mutagen and cloudflared manually, then re-run.`);
+    throw new Error(`auto-download isn't supported on ${process.platform}: install mutagen and cloudflared manually, then re-run.`);
 };
 
 export const exe = process.platform === "win32" ? ".exe" : "";
@@ -383,7 +383,7 @@ export const archToken = (): "amd64" | "arm64" => {
     if (process.arch === "arm64") {
         return "arm64";
     }
-    throw new Error(`unsupported CPU arch ${process.arch} — install mutagen and cloudflared manually, then re-run.`);
+    throw new Error(`unsupported CPU arch ${process.arch}: install mutagen and cloudflared manually, then re-run.`);
 };
 
 // The version an installed copy reports, undefined when there is none, or when it is broken or half-extracted.
@@ -429,7 +429,7 @@ const replaceBinary = async (binary: string, write: () => Promise<void> | void):
 const extractTarball = (tarball: string): void => {
     const extract = spawnSync("tar", ["-xzf", tarball, "-C", binDir], { stdio: "inherit", windowsHide: true });
     if (extract.status !== 0) {
-        throw new Error(`failed to extract ${tarball} — tar's own reason is above (no \`tar\` on PATH, or a file it must replace is in use)`);
+        throw new Error(`failed to extract ${tarball}: tar's own reason is above (no \`tar\` on PATH, or a file it must replace is in use)`);
     }
 };
 

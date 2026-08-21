@@ -24,7 +24,7 @@ test("a marker the host wrote is read back whole", async () => {
 
 test("an update staged by an image that would not name its version is still an update that is staged", async () => {
     // The version is a nicety the image may not report. Treating its absence as "nothing is staged" would
-    // throw away the entire benefit — the download HAS happened, and the restart is still the only cost left.
+    // throw away the entire benefit: the download HAS happened, and the restart is still the only cost left.
     const dir = await withMarker(JSON.stringify({ channel: "beta", at: 1 }));
     expect(await stagedUpdate(dir)).toEqual({ channel: "beta", at: 1 });
 });

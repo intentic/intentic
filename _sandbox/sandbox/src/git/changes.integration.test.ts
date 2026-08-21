@@ -35,7 +35,7 @@ const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const author = { name: "intentic", email: "agent@intentic.dev" };
 
-// For assertions that only care whether the tree is dirty at all — which list a change landed in is the
+// For assertions that only care whether the tree is dirty at all, which list a change landed in is the
 // subject of the dedicated tests above, not of every discard/branch case.
 const bothSides = async (dir: string): Promise<unknown[]> => {
     const { conflicted, staged, unstaged } = await changedFiles(dir);
@@ -53,7 +53,7 @@ const conflictedRepo = async (): Promise<string> => {
     await writeFile(join(dir, "a.txt"), "ours\n");
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "ours");
     // `git merge` needs a committer identity even when it stops at a conflict (it validates identity up front),
-    // so it carries the same `-c user.*` the commits do — without it, a machine with no global git identity gets
+    // so it carries the same `-c user.*` the commits do: without it, a machine with no global git identity gets
     // "Committer identity unknown", the merge is a no-op, and `.catch` swallows it into a NON-conflicted repo.
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "side").catch(() => undefined);
     return dir;
@@ -95,7 +95,7 @@ test("changedFiles maps porcelain states, expands untracked dirs, and skips igno
     // Nothing was `git add`ed, so every change is on the worktree side and the index side is empty.
     expect(staged).toEqual([]);
     // Tracked changes carry numstat line counts; an untracked file is in no numstat at all, so its count comes
-    // from the file itself — the whole thing is an addition.
+    // from the file itself: the whole thing is an addition.
     expect(unstaged).toContainEqual({ path: "a.txt", status: "modified", additions: 1, deletions: 1 });
     expect(unstaged).toContainEqual({ path: "old.txt", status: "deleted", additions: 0, deletions: 1 });
     expect(unstaged).toContainEqual({ path: "new/b.txt", status: "added", additions: 1, deletions: 0 });
@@ -104,7 +104,7 @@ test("changedFiles maps porcelain states, expands untracked dirs, and skips igno
 
 /* The status pass already parses HEAD's sha, and the Changes scan hands it to attribution rather than letting
  * it spawn a `rev-parse` for the answer this read just had. Reported for an unborn repo as absent, not as a
- * fabricated empty-tree sha — a caller that reads it as one would attribute against a tree that never was. */
+ * fabricated empty-tree sha: a caller that reads it as one would attribute against a tree that never was. */
 test("changedFiles reports HEAD's sha alongside the branch, and nothing on an unborn repo", async () => {
     const dir = await tempRepo();
     expect(await sh(dir, "rev-parse", "HEAD")).toBe((await changedFiles(dir)).head);
@@ -137,7 +137,7 @@ test("changedFiles puts an added-then-staged file on the staged side only", asyn
 
     const { staged, unstaged } = await changedFiles(dir);
     expect(staged).toEqual([{ path: "fresh.txt", status: "added", additions: 1, deletions: 0 }]);
-    // It is no longer untracked, and the worktree matches the index — nothing left unstaged.
+    // It is no longer untracked, and the worktree matches the index: nothing left unstaged.
     expect(unstaged).toEqual([]);
 });
 
@@ -153,7 +153,7 @@ test("an unmerged path is its own third list, in NEITHER of the two sides", asyn
     expect(unstaged).toEqual([]);
 });
 
-test("`git diff` reports an unmerged path twice — the second record must not overwrite the conflict", async () => {
+test("`git diff` reports an unmerged path twice: the second record must not overwrite the conflict", async () => {
     const dir = await conflictedRepo();
     // Not a synthetic worry: the worktree pass emits `U a.txt` AND `M a.txt` for the same path, so a plain
     // last-record-wins parse downgrades every conflict to a modification.
@@ -163,7 +163,7 @@ test("`git diff` reports an unmerged path twice — the second record must not o
     expect((await changedFiles(dir)).conflicted).toEqual([{ path: "a.txt", status: "conflicted" }]);
 });
 
-test("staging an unmerged path resolves it — it moves out of `conflicted` and into `staged`", async () => {
+test("staging an unmerged path resolves it: it moves out of `conflicted` and into `staged`", async () => {
     const dir = await conflictedRepo();
     await writeFile(join(dir, "a.txt"), "resolved\n");
     // `git add` on an unmerged path IS the resolve gesture; the panel's "Mark resolved" is this request.
@@ -176,7 +176,7 @@ test("staging an unmerged path resolves it — it moves out of `conflicted` and 
     expect(await commitIndex(dir, "resolve the merge", author)).toBe(true);
 });
 
-test("a staged rename that was then edited lands on both sides — renamed on one, modified on the other", async () => {
+test("a staged rename that was then edited lands on both sides: renamed on one, modified on the other", async () => {
     const dir = await tempRepo(); // a.txt = "one"
     await sh(dir, "mv", "a.txt", "b.txt");
     await writeFile(join(dir, "b.txt"), "one\nmore\n"); // the rename is staged; this edit is not
@@ -203,7 +203,7 @@ test("changedFiles costs one status read plus a numstat per non-empty side", asy
     await changedFiles(dir, counting);
     expect(spawns).toHaveLength(2);
     expect(spawns[0]).toContain("--porcelain=v2");
-    // A poller must not take index.lock for a refresh it only wants to read — agents race it for that lock.
+    // A poller must not take index.lock for a refresh it only wants to read: agents race it for that lock.
     expect(spawns[0]).toContain("--no-optional-locks");
     expect(spawns[1]).toContain("--numstat");
 });
@@ -211,7 +211,7 @@ test("changedFiles costs one status read plus a numstat per non-empty side", asy
 test("conflictedFileDiff shows HEAD vs the worktree, because an unmerged path has no stage 0", async () => {
     const dir = await conflictedRepo();
 
-    // `:0:a.txt` does not exist mid-conflict — the index holds stages 1/2/3 — so the index side comes back
+    // `:0:a.txt` does not exist mid-conflict: the index holds stages 1/2/3, so the index side comes back
     // absent and the diff reads as a DELETION: before HEAD's content, after nothing. That is what the panel
     // used to render for a conflict, and it is worse than showing nothing, because it looks like an answer.
     expect(await stagedFileDiff(dir, "a.txt")).toEqual({ before: "ours\n" });
@@ -246,7 +246,7 @@ test("commitLog returns commits newest-first with parents, refs, and the HEAD fl
 });
 
 /* PAGING, and the `hasMore` that makes it honest. Without it the graph cannot tell "this repo has exactly N
- * commits" from "there are thousands and you are looking at the newest N" — and it read the second as the first,
+ * commits" from "there are thousands and you are looking at the newest N", and it read the second as the first,
  * drawing the oldest row of the page as a root commit because its parent was outside the window. */
 test("commitLog pages through a history and says whether more is behind it", async () => {
     const dir = await tempRepo(); // one commit "init"
@@ -258,7 +258,7 @@ test("commitLog pages through a history and says whether more is behind it", asy
 
     const first = await commitLog(dir, 2);
     expect(first.commits.map((commit) => commit.subject)).toEqual(["four", "three"]);
-    // Exactly the page asked for — the probe row git also returned is never shipped.
+    // Exactly the page asked for: the probe row git also returned is never shipped.
     expect(first.commits).toHaveLength(2);
     expect(first.hasMore).toBe(true);
 
@@ -267,7 +267,7 @@ test("commitLog pages through a history and says whether more is behind it", asy
     // The last page ends the history, and says so.
     expect(second.hasMore).toBe(false);
 
-    // A page larger than the history is not "more" — the boundary the probe row exists to get right.
+    // A page larger than the history is not "more": the boundary the probe row exists to get right.
     expect((await commitLog(dir, 4)).hasMore).toBe(false);
 });
 
@@ -416,7 +416,7 @@ test("changedFiles reports a staged rename with its original path", async () => 
     const dir = await tempRepo();
     await sh(dir, "mv", "a.txt", "b.txt");
     const { staged, unstaged } = await changedFiles(dir);
-    // `git mv` stages the rename, so it is an INDEX-side change — git only detects renames against HEAD.
+    // `git mv` stages the rename, so it is an INDEX-side change: git only detects renames against HEAD.
     // A pure rename moves no lines: numstat reports 0/0 (rename detection on).
     expect(staged).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt", additions: 0, deletions: 0 }]);
     expect(unstaged).toEqual([]);
@@ -436,7 +436,7 @@ test("changedFiles treats everything as added on an unborn HEAD", async () => {
     tempDirs.push(dir);
     await sh(dir, "init", "-q");
     await writeFile(join(dir, "a.txt"), "one\n");
-    // Untracked, so it is unstaged — there is no index entry yet.
+    // Untracked, so it is unstaged: there is no index entry yet.
     expect((await changedFiles(dir)).unstaged).toEqual([{ path: "a.txt", status: "added", additions: 1, deletions: 0 }]);
 
     // Staging it on an unborn HEAD must still report it: the index is diffed against the EMPTY TREE, not
@@ -462,7 +462,7 @@ test("commitIndex commits what is staged and leaves unstaged work untouched", as
 
 // The pair the commit route runs for a path-scoped commit, in the order and inside the lock it runs them: the
 // Changes panel's origin filter narrows the list, so Commit stages exactly those paths and then records the
-// whole index. What it must NOT do is reach the rest of the worktree — the other agent's work sitting one row
+// whole index. What it must NOT do is reach the rest of the worktree: the other agent's work sitting one row
 // away is precisely what the filter was drawn around.
 test("stagePaths then commitIndex records only the named paths, leaving the rest of the worktree uncommitted", async () => {
     const dir = await tempRepo();
@@ -498,7 +498,7 @@ test("stagePaths and unstagePaths move a path between the two sides without touc
     const afterUnstage = await changedFiles(dir);
     expect(afterUnstage.staged).toEqual([]);
     expect(afterUnstage.unstaged.map((change) => change.path)).toEqual(["a.txt"]);
-    // The edit itself survived both moves — staging is an index operation, never a worktree one.
+    // The edit itself survived both moves: staging is an index operation, never a worktree one.
     expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("two\n");
 });
 
@@ -516,7 +516,7 @@ test("unstagePaths on an unborn HEAD returns the file to untracked instead of fa
     await writeFile(join(dir, "a.txt"), "one\n");
     await stagePaths(dir, ["a.txt"]);
 
-    // There is no HEAD to `reset` against — the index entry is dropped instead.
+    // There is no HEAD to `reset` against: the index entry is dropped instead.
     await unstagePaths(dir, ["a.txt"]);
     const { staged, unstaged } = await changedFiles(dir);
     expect(staged).toEqual([]);
@@ -574,7 +574,7 @@ test("workingFileDiff ships both sides, one side for added/deleted, and flags bi
     expect(await workingFileDiff(dir, "blob.bin", "HEAD")).toEqual({ binary: true });
 });
 
-test("the two side diffs of a partially staged file are genuinely different — and neither is HEAD↔worktree", async () => {
+test("the two side diffs of a partially staged file are genuinely different, and neither is HEAD↔worktree", async () => {
     const dir = await tempRepo(); // a.txt = "one"
     await writeFile(join(dir, "a.txt"), "two\n");
     await sh(dir, "add", "a.txt"); // index holds "two"
@@ -640,7 +640,7 @@ test("changesAgainstBase folds committed + staged + unstaged + untracked into on
     await writeFile(join(dir, "a.txt"), "unstaged on top\n");
     // Untracked:
     await writeFile(join(dir, "fresh.txt"), "fresh\n");
-    // Ignored — must not appear:
+    // Ignored: must not appear:
     await writeFile(join(dir, ".env"), "SECRET=x\n");
 
     const changes = await changesAgainstBase(dir, base);
@@ -716,7 +716,7 @@ test("changesBetweenRefs reads the same delta from a branch that changesAgainstB
     await sh(dir, "add", "-A");
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "Agent: work");
     const fromCheckout = await changesAgainstBase(dir, base);
-    // Back on the base, as the main repo would be — the branch is all that is left of the agent.
+    // Back on the base, as the main repo would be: the branch is all that is left of the agent.
     await sh(dir, "checkout", "-q", "-");
 
     const fromRefs = await changesBetweenRefs(dir, base, "agent/c1");

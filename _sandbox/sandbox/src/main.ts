@@ -132,7 +132,7 @@ const requireAuthWhenReachable = (config: Config): void => {
     }
     if (config.sandbox.allowUnauthenticated) {
         process.stderr.write(
-            "WARNING: SANDBOX_ALLOW_UNAUTHENTICATED is set — this daemon is reachable (CONNECT_TOKEN / SANDBOX_PUBLIC_URL)\n" +
+            "WARNING: SANDBOX_ALLOW_UNAUTHENTICATED is set, this daemon is reachable (CONNECT_TOKEN / SANDBOX_PUBLIC_URL)\n" +
                 "and authenticates NOBODY: terminals, secrets and the file API answer any caller that reaches this port.\n" +
                 "Only the e2e harnesses set this. If you are not one of them, unset it and set GOOGLE_CLIENT_ID instead.\n",
         );
@@ -141,7 +141,7 @@ const requireAuthWhenReachable = (config: Config): void => {
     // Before the logger: this must be legible in `docker logs` even when log config is part of what went wrong.
     process.stderr.write(
         "FATAL: this sandbox is externally reachable (CONNECT_TOKEN / SANDBOX_PUBLIC_URL is set) but GOOGLE_CLIENT_ID is empty.\n" +
-            "Without it the daemon authenticates nobody and every route — terminals, secrets, the file API — is open to anyone\n" +
+            "Without it the daemon authenticates nobody and every route: terminals, secrets, the file API, is open to anyone\n" +
             "who can reach the tunnel. Set GOOGLE_CLIENT_ID to the platform's Google web client id and restart.\n",
     );
     process.exit(78); // EX_CONFIG
@@ -305,7 +305,7 @@ const main = async (): Promise<void> => {
     // retries its enroll, so nothing here needs to hold the boot.
     if (config.syncPairToken !== "") {
         void seedPairing(config.historyRoot, config.syncPairToken).catch((error: unknown) =>
-            logger.warn({ err: error }, "setup pairing not armed — enable desktop sync from the browser instead"),
+            logger.warn({ err: error }, "setup pairing not armed, enable desktop sync from the browser instead"),
         );
     }
 
@@ -322,12 +322,12 @@ const main = async (): Promise<void> => {
                 if (armed) {
                     logger.info(
                         { host: id },
-                        "setup computer armed — it may manage this machine's sandboxes; widen or revoke on its capability card",
+                        "setup computer armed: it may manage this machine's sandboxes; widen or revoke on its capability card",
                     );
                 }
             })
             .catch((error: unknown) =>
-                logger.warn({ err: error }, "setup computer not connected — add it from Capabilities to manage this machine's sandboxes"),
+                logger.warn({ err: error }, "setup computer not connected, add it from Capabilities to manage this machine's sandboxes"),
             );
     }
 
@@ -494,7 +494,7 @@ const main = async (): Promise<void> => {
             return;
         }
         await restoreAuthorizedKeys(config.historyRoot).catch((error: unknown) =>
-            logger.warn({ err: error }, "authorized_keys not restored — enrolled machines will be refused until they re-enroll"),
+            logger.warn({ err: error }, "authorized_keys not restored, enrolled machines will be refused until they re-enroll"),
         );
     });
 
@@ -507,7 +507,7 @@ const main = async (): Promise<void> => {
             return;
         }
         await linkClaudeState(services.workspace.root).catch((error: unknown) =>
-            logger.warn({ err: error }, "claude session state not persisted — sessions will not survive a rebuild whole"),
+            logger.warn({ err: error }, "claude session state not persisted, sessions will not survive a rebuild whole"),
         );
     });
 
@@ -521,7 +521,7 @@ const main = async (): Promise<void> => {
             return;
         }
         await linkSshHosts(config.historyRoot).catch((error: unknown) =>
-            logger.warn({ err: error }, "ssh hosts dir not persisted — git access and ssh aliases will not survive a rebuild"),
+            logger.warn({ err: error }, "ssh hosts dir not persisted, git access and ssh aliases will not survive a rebuild"),
         );
     });
 
@@ -532,7 +532,7 @@ const main = async (): Promise<void> => {
      * Best-effort: a manifest this daemon cannot rewrite is a warning, never a boot failure. */
     await boot.step("vaultSecrets", async () => {
         const moved = await services.vaultManifestSecrets().catch((error: unknown) => {
-            logger.warn({ err: error }, "capability credentials: could not be moved out of the manifest — they stay readable to the agent");
+            logger.warn({ err: error }, "capability credentials: could not be moved out of the manifest, they stay readable to the agent");
             return [];
         });
         if (moved.length > 0) {
@@ -543,7 +543,7 @@ const main = async (): Promise<void> => {
          * that is why it runs before the gate rather than lazily, the settings file is TRACKED, so an unswept
          * token would not merely be readable, it would be committed. */
         const settings = await services.vaultExtensionSettingSecrets().catch((error: unknown) => {
-            logger.warn({ err: error }, "extension setting secrets: could not be moved out of the tracked file — they stay readable to the agent");
+            logger.warn({ err: error }, "extension setting secrets: could not be moved out of the tracked file, they stay readable to the agent");
             return [];
         });
         if (settings.length > 0) {
@@ -560,7 +560,7 @@ const main = async (): Promise<void> => {
             ? false
             : (traits.relocateGitDirs ? ensureRootRepo(services.workspace, config.historyRoot) : ensureLocalRootRepo(services.workspace)).catch(
                   (error: unknown) => {
-                      logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade");
+                      logger.warn({ err: error }, "root workspace repo not ensured, the Changes review will degrade");
                       return false;
                   },
               ),
@@ -576,7 +576,7 @@ const main = async (): Promise<void> => {
         !role.roots || !traits.ownsWorkspaceConfig
             ? undefined
             : mkdir(join(config.workspaceRoot, REFERENCE_DIR), { recursive: true }).catch((error: unknown) =>
-                  logger.warn({ err: error }, "reference shelf not ensured — refs/ drops have no target"),
+                  logger.warn({ err: error }, "reference shelf not ensured, refs/ drops have no target"),
               ),
     );
 
@@ -587,7 +587,7 @@ const main = async (): Promise<void> => {
         !role.roots
             ? undefined
             : sweepStaleExports(config.historyRoot).catch((error: unknown) =>
-                  logger.warn({ err: error }, "stale exports not swept — an interrupted export may still read as packing"),
+                  logger.warn({ err: error }, "stale exports not swept, an interrupted export may still read as packing"),
               ),
     );
 
@@ -605,7 +605,7 @@ const main = async (): Promise<void> => {
     // during boot is already holding an empty fleet). Awaited, the /agents routes assume a loaded registry,
     // but a failure degrades to an empty fleet, never a dead daemon. The worktree sweeps run DETACHED below.
     await boot.step("agentsRegistry", () =>
-        services.agents.init().catch((error: unknown) => logger.warn({ err: error }, "agents registry not initialized — the fleet starts empty")),
+        services.agents.init().catch((error: unknown) => logger.warn({ err: error }, "agents registry not initialized, the fleet starts empty")),
     );
 
     // Converge the daemon-owned /work skill files BEFORE the baseline commit so a fresh sandbox reads clean
@@ -632,7 +632,7 @@ const main = async (): Promise<void> => {
     await boot.step("baseline", async () => {
         if (freshRoot) {
             await commitRootBaseline(services.workspace).catch((error: unknown) =>
-                logger.warn({ err: error }, "root baseline commit failed — the Changes review will start dirty"),
+                logger.warn({ err: error }, "root baseline commit failed, the Changes review will start dirty"),
             );
         }
     });
@@ -705,7 +705,7 @@ const main = async (): Promise<void> => {
             .append({
                 direction: "system",
                 type: "deps.install_started",
-                content: `Installing dependencies for ${named} — ${reason}.`,
+                content: `Installing dependencies for ${named}, ${reason}.`,
                 outcome: "ok",
                 ...(conversationId === undefined ? {} : { conversationId }),
                 ...(title === undefined ? {} : { title }),
@@ -874,7 +874,7 @@ const main = async (): Promise<void> => {
             return;
         }
         if (!(await onPath("cli-proxy-api"))) {
-            logger.info("translator: cli-proxy-api is not in this image — add it by rebuilding from the Environment card");
+            logger.info("translator: cli-proxy-api is not in this image, add it by rebuilding from the Environment card");
             return;
         }
         startTranslator(services);
@@ -989,7 +989,7 @@ const main = async (): Promise<void> => {
     // autoResumeOnRestart (off by default) and bounded by an attempt count so a turn that kills the daemon cannot
     // loop the boot. Detached: an interrupted turn is a whole agent turn and must not hold the daemon's start.
     void resumeInterruptedTurns(services, streamAgent).catch((error: unknown) =>
-        logger.error({ err: error }, "interrupted turns could not be resumed — they stand on the record as interrupted"),
+        logger.error({ err: error }, "interrupted turns could not be resumed, they stand on the record as interrupted"),
     );
 
     // The same restart story for loops and workflow runs, coordinated because every workflow step IS a loop.
@@ -1081,7 +1081,7 @@ const main = async (): Promise<void> => {
     // on the engine's own worker thread: this used to be minutes of parse/chunk/SQLite work on THIS loop, which
     // put every browser request behind it (seconds each, for 0.4 kB reads) for as long as a boot re-index took.
     // Awaiting it is just an observation point; nothing here blocks on it.
-    void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed — search runs on the index as it stands"));
+    void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed, search runs on the index as it stands"));
 
     /* Warm the Grok provider's OpenCode server at boot instead of lazily on the first /grok/oauth/start. The cold
      * `opencode serve` spawn is CPU-heavy; in a constrained container it can deschedule the daemon long enough to
@@ -1098,11 +1098,11 @@ const main = async (): Promise<void> => {
             return;
         }
         if (!(await onPath("opencode"))) {
-            logger.info("opencode: the binary is not in this image — add it by rebuilding from the Environment card");
+            logger.info("opencode: the binary is not in this image, add it by rebuilding from the Environment card");
             return;
         }
         await services.openCode.client();
-    })().catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed — first grok connect boots it lazily"));
+    })().catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed, first grok connect boots it lazily"));
 
     /* Nothing to enumerate: every subsystem registered itself where it was created. The store keeps going past
      * a member that throws and reports the failures together, so one misbehaving stop cannot strand the ports

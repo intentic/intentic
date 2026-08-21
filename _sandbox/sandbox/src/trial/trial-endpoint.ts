@@ -55,14 +55,14 @@ const trialCapability = (config: Config, tunnel: PlatformTunnel): Capability => 
  * cannot race, drift, or need re-syncing.
  *
  * Everything in the entry is known at boot: the platform's address (or the dev tunnel's, see trialCapability),
- * the connect token, and the one synthetic model id the trial publishes (TRIAL_MODEL_ID — the platform picks
+ * the connect token, and the one synthetic model id the trial publishes (TRIAL_MODEL_ID: the platform picks
  * the real model per message). Nothing is discovered, so unlike every user-added endpoint no catalog is
  * fetched to build it.
  *
  * A sandbox whose platform serves no trial carries the entry anyway, and that is harmless by construction:
  * nothing routes to it, because every surface that OFFERS the trial still reads the probe. If something is
  * sent regardless, the platform answers its own 404, which is the honest refusal from the party that owns the
- * decision. `undefined` only for a sandbox with no platform or no token — a loopback or test daemon — where
+ * decision. `undefined` only for a sandbox with no platform or no token: a loopback or test daemon, where
  * there is nothing to point the entry at. */
 export const trialCompatEntry = (config: Config, tunnel: PlatformTunnel): CompatEntry | undefined => {
     if (config.platform.url === "" || config.connectToken === "") {

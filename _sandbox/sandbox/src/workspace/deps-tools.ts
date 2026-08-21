@@ -42,21 +42,21 @@ const where = (status: ProjectSetupStatus): string => (status.dir === "" ? "the 
 const line = (status: ProjectSetupStatus, canInstall: boolean): string => {
     switch (status.state) {
         case "ready":
-            return `${where(status)} — ready. Its type-checks, linters and tests mean what they say.`;
+            return `${where(status)}: ready. Its type-checks, linters and tests mean what they say.`;
         case "installing":
-            return `${where(status)} — installing right now. Its checks will be trustworthy once that finishes.`;
+            return `${where(status)}: installing right now. Its checks will be trustworthy once that finishes.`;
         case "stale":
             return (
-                `${where(status)} — behind: ${missingCount(status)} declared dependencies are not installed ` +
+                `${where(status)}, behind: ${missingCount(status)} declared dependencies are not installed ` +
                 `(${unresolvedSummary(status.unresolved ?? [])}). Unresolved-import errors naming those are the install being ` +
                 `behind, not a mistake in the code. Queued for repair; nothing to request.`
             );
         case "needs-setup":
             return canInstall
-                ? `${where(status)} — never installed. Call \`mcp__deps__install\` for it, or say it is blocked; do not install it yourself.`
-                : `${where(status)} — never installed. This persona cannot change the workspace, so ask the owner to install it.`;
+                ? `${where(status)}: never installed. Call \`mcp__deps__install\` for it, or say it is blocked; do not install it yourself.`
+                : `${where(status)}, never installed. This persona cannot change the workspace, so ask the owner to install it.`;
         case "unsupported":
-            return `${where(status)} — never installed, and \`${status.recipe.manager}\` is not in this sandbox. Nothing here can fix that; say so if it blocks the task.`;
+            return `${where(status)}: never installed, and \`${status.recipe.manager}\` is not in this sandbox. Nothing here can fix that; say so if it blocks the task.`;
     }
 };
 
@@ -72,7 +72,7 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
             tool(
                 "status",
                 "Whether each project under /work actually has its declared dependencies installed. Call this when an import " +
-                    "will not resolve, a test fails on a missing module, or before you trust a type-check — it tells you whether " +
+                    "will not resolve, a test fails on a missing module, or before you trust a type-check: it tells you whether " +
                     "the failure is your code or an install that is behind. " +
                     standingRule(deps.canInstall),
                 {},
@@ -88,7 +88,7 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
                             ...projects.map((project) => line(project, deps.canInstall)),
                             "",
                             behind.length === 0
-                                ? "Everything is installed — a failing import here is a mistake in the code, not the tree."
+                                ? "Everything is installed: a failing import here is a mistake in the code, not the tree."
                                 : stale
                                   ? "Drifted projects are queued for repair between turns. First-time setup still needs the explicit action shown " +
                                     "above. Everything marked ready checks normally in the meantime."
@@ -102,7 +102,7 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
                       tool(
                           "install",
                           "Ask the daemon to install a project's dependencies. It does NOT run now: the install would corrupt the tree " +
-                              "other live conversations are reading, so it is queued and runs once no conversation is mid-turn — meaning " +
+                              "other live conversations are reading, so it is queued and runs once no conversation is mid-turn: meaning " +
                               "after this turn ends, and the tree is ready on a later turn, not this one. Only needed for a project that " +
                               "was never set up; drifted projects are already queued automatically.",
                           {
@@ -125,13 +125,13 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
                                   [
                                       queued.length === 0
                                           ? "Nothing queued."
-                                          : `Queued: ${queued.map(where).join(", ")}. The daemon starts the install once no conversation is mid-turn — ` +
+                                          : `Queued: ${queued.map(where).join(", ")}. The daemon starts the install once no conversation is mid-turn, ` +
                                             "after this turn ends. Do not run it yourself and do not wait for it; finish what else the task needs, say the " +
                                             "verification is deferred, and offer to re-run it next turn.",
                                       ...matched
                                           .filter((project) => !INSTALLABLE.has(project.state))
-                                          .map((project) => `Not queued — ${line(project, deps.canInstall)}`),
-                                      ...unknown.map((dir) => `Not queued — no project at \`${dir}\`. Call \`mcp__deps__status\` for the names.`),
+                                          .map((project) => `Not queued: ${line(project, deps.canInstall)}`),
+                                      ...unknown.map((dir) => `Not queued: no project at \`${dir}\`. Call \`mcp__deps__status\` for the names.`),
                                   ]
                                       .filter((text) => text !== "")
                                       .join("\n"),

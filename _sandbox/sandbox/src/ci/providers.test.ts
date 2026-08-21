@@ -51,7 +51,7 @@ test("status mapping collapses both vendors' vocabularies onto the five buckets"
     expect(gitlabStatus("skipped")).toBe("skipped");
 });
 
-test("githubRun normalizes a workflow_run object — duration only once terminal", () => {
+test("githubRun normalizes a workflow_run object: duration only once terminal", () => {
     const run = githubRun(githubProject, {
         id: 7,
         display_title: "fix: the thing",
@@ -225,7 +225,7 @@ test("gitlab listRuns falls back to the commits join only for pipelines the jobs
         scriptedFetch(
             {
                 "GET /pipelines?": gitlabPipelines,
-                // Only pipeline 42 appears — 43 is older than the jobs page reaches.
+                // Only pipeline 42 appears: 43 is older than the jobs page reaches.
                 "GET /jobs?": [projectJob(42, "sha-a", "feat: draw the job graph")],
                 "GET /repository/commits": [{ id: "sha-b", title: "fix: the build", author_name: "Grace Hopper" }],
             },
@@ -242,7 +242,7 @@ test("gitlab listRuns falls back to the commits join only for pipelines the jobs
 });
 
 test("gitlab listRuns still lists when both enrichments are refused", async () => {
-    // Neither enrichment endpoint is scripted, so both answer 404 — the run list must survive that.
+    // Neither enrichment endpoint is scripted, so both answer 404: the run list must survive that.
     const runs = await ciClientFor("gitlab", scriptedFetch({ "GET /pipelines?": gitlabPipelines }, [])).listRuns(gitlabProject, 15);
     expect(runs).toHaveLength(2);
     expect(runs[0]).toMatchObject({ runId: 42, status: "success", branch: "main" });
@@ -262,7 +262,7 @@ test("gitlab client addresses the project by its url-encoded path", async () => 
 });
 
 /* The job graph's enrichment. `scriptedFetch` answers JSON, and a workflow file is text, so these use their
-   own two-endpoint stub — which also makes the CALL SHAPE visible, since the point of fetching the run first
+   own two-endpoint stub, which also makes the CALL SHAPE visible, since the point of fetching the run first
    is to learn the path and sha the contents call needs. */
 const CI_YAML = `
 jobs:
@@ -327,8 +327,8 @@ test("github allJobs still returns the jobs when the workflow file cannot be rea
     }
 });
 
-/* THE FIX CONVERSATION'S EVIDENCE. A runner prints for a terminal — a coloured verdict, a progress line that
- * rewrites itself — and this log tail is quoted into a prompt the user edits and a model reads, where those
+/* THE FIX CONVERSATION'S EVIDENCE. A runner prints for a terminal: a coloured verdict, a progress line that
+ * rewrites itself, and this log tail is quoted into a prompt the user edits and a model reads, where those
  * bytes are litter with the failure buried in it. Both vendors, because both traces carry them. */
 const logsFetch = (log: string): FetchFn =>
     (async (input: RequestInfo | URL) => {

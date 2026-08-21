@@ -191,7 +191,7 @@ const resolveTarget = (
 ): { ref: string; url: string; path: string | undefined } => {
     const ref = refOverride ?? recorded?.ref;
     if (ref === undefined) {
-        throw new Error("no update is recorded for this extension — pass the commit sha to update to");
+        throw new Error("no update is recorded for this extension: pass the commit sha to update to");
     }
     const fromRecord = recorded !== undefined && recorded.ref === ref;
     return { ref, url: fromRecord ? recorded.url : config.url, path: fromRecord ? (recorded.path ?? undefined) : config.path };
@@ -250,7 +250,7 @@ export const applyExtensionUpdate = async (
         throw new Error("no installed extension with that id");
     }
     if (applying.has(id)) {
-        throw new Error(`"${id}" is already updating — wait for it to finish`);
+        throw new Error(`"${id}" is already updating: wait for it to finish`);
     }
     applying.add(id);
     try {
@@ -313,7 +313,7 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
         throw new Error("no installed extension with that id");
     }
     if (applying.has(id)) {
-        throw new Error(`"${id}" is mid-update — wait for it to finish`);
+        throw new Error(`"${id}" is mid-update: wait for it to finish`);
     }
     applying.add(id);
     try {
@@ -476,7 +476,7 @@ const autoUpdate = async (services: Services, target: InstalledTarget, update: E
     let needsReview: string | undefined;
     try {
         if (update.trust !== "verified") {
-            needsReview = "the listing isn't verified — no human has read this code";
+            needsReview = "the listing isn't verified: no human has read this code";
         } else {
             const preview = await previewExtensionUpdate(services, target.id, update.ref);
             if (!preview.compatible) {
@@ -611,7 +611,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
             await patchRecord(root, target.identity, (record) =>
                 record.advisory === undefined ? record : { ...record, advisory: { ...record.advisory, autoDisabled: true } },
             );
-            services.logger.warn({ extension: target.identity }, "extension advisory: blocked by its registry — disabled");
+            services.logger.warn({ extension: target.identity }, "extension advisory: blocked by its registry, disabled");
         }
         if (advisoriesToEnforce.length > 0) {
             void reconcileListenerProcesses(services);

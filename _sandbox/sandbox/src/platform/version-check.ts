@@ -4,7 +4,7 @@
 //
 // SOURCE IS GITHUB, ONE LANE. A release ships the moment its pipeline goes green: release-images.sh moves the
 // `stable` image tags and ship-stable.sh flips the Release's "latest" flag, both inside the same publish. That
-// leaves exactly ONE authoritative pointer — /releases/latest IS what ghcr.io/intentic/sandbox:stable resolves
+// leaves exactly ONE authoritative pointer: /releases/latest IS what ghcr.io/intentic/sandbox:stable resolves
 // to, so the check needs no channel to decide where to look. This used to be two lanes, `beta` reading the
 // newest release and `stable` reading the promoted one; the soak between them is gone and so is the split.
 // A pinned custom channel reads the same pointer, which is still the honest answer to what it would be offered.

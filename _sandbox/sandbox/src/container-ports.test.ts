@@ -4,13 +4,13 @@ import { packageRoot } from "@intentic/constants/node";
 import { DAEMON_PORT, LOCAL_PORT, PREVIEW_PORT, TRANSLATOR_PORT } from "@intentic/constants";
 import { expect, test } from "vitest";
 
-/* NO TWO FIXED BINDS IN THIS CONTAINER MAY SHARE A PORT — and the Dockerfile does not get to pick one.
+/* NO TWO FIXED BINDS IN THIS CONTAINER MAY SHARE A PORT, and the Dockerfile does not get to pick one.
  *
  * The translator's port lived here as a bare literal inside `ENV TRANSLATOR_URL=http://127.0.0.1:8788`. It was
  * the only fixed bind in the container not declared in @intentic/constants, so when the loopback listener was
  * added and took the number one above the daemon's, nothing compared them: 8788 twice, in two files, in two
- * languages. The daemon boots first and wins the bind, so cli-proxy-api died on arrival on every sandbox —
- * exit 0, its reason on stdout, restarted forever — and every routed (Codex/Grok/Kimi/Gemini) turn had no
+ * languages. The daemon boots first and wins the bind, so cli-proxy-api died on arrival on every sandbox:
+ * exit 0, its reason on stdout, restarted forever, and every routed (Codex/Grok/Kimi/Gemini) turn had no
  * translator to reach. Both halves of that are checked below: the values are distinct, and the image's baked
  * ports are the declared ones rather than literals free to drift back into each other.
  */
@@ -39,8 +39,8 @@ test("the image bakes the declared ports, not its own literals", async () => {
 });
 
 // The discovery half: a FIFTH fixed bind, added to the image the way the translator's was, fails here without
-// anyone remembering this test exists. Both forms the image states a port in — an `ENV *_PORT=` assignment and
-// a loopback URL — must resolve to something declared. sshd's 22 is not matched by either: it is EXPOSEd and
+// anyone remembering this test exists. Both forms the image states a port in: an `ENV *_PORT=` assignment and
+// a loopback URL, must resolve to something declared. sshd's 22 is not matched by either: it is EXPOSEd and
 // bound by the entrypoint, never named as a daemon-family port.
 test("no port literal in the image is undeclared", async () => {
     const dockerfile = await readFile(DOCKERFILE, "utf8");

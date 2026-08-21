@@ -62,7 +62,7 @@ test("merges into existing user settings rather than replacing them", async () =
     expect(await settingsOf(home)).toEqual({ model: "opus", cleanupPeriodDays: 3650 });
 });
 
-// A store we did not take over is someone else's ~/.claude — its retention is not ours to rewrite.
+// A store we did not take over is someone else's ~/.claude: its retention is not ours to rewrite.
 test("leaves retention alone when a store was refused", async () => {
     const { home, work } = await scratch();
     await mkdir(join(home, ".claude", "projects"), { recursive: true });

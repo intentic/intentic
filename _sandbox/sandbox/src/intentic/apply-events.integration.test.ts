@@ -41,7 +41,7 @@ test("replays from the start and closes on the exit line", async () => {
             line({ kind: "result", converged: true }) +
             line({ kind: "exit", code: 0 }),
     );
-    // Not running, but the exit line ends the stream regardless — everything up to and including it replays.
+    // Not running, but the exit line ends the stream regardless: everything up to and including it replays.
     expect(await collect(tailIntenticEvents(path, isTerminalExit, () => false, undefined))).toEqual(["start", "node", "result", "exit"]);
 });
 
@@ -81,7 +81,7 @@ test("clean apply/resolve exits keep the tail open through the chain; adopt's ex
     let running = true;
     const appending = (async () => {
         await delay(150);
-        // The service capability's chain: resolve exits 0, then apply converges and exits 0 — the tail must
+        // The service capability's chain: resolve exits 0, then apply converges and exits 0, the tail must
         // stay open through both, adopt is still to come.
         await appendFile(path, line({ kind: "exit", command: "resolve", code: 0 }));
         await appendFile(path, line({ kind: "result", converged: true }) + line({ kind: "exit", command: "apply", code: 0 }));
@@ -95,7 +95,7 @@ test("clean apply/resolve exits keep the tail open through the chain; adopt's ex
     expect(kinds.filter((kind) => kind !== "heartbeat")).toEqual(["start", "exit", "result", "exit", "exit"]);
 });
 
-test("a failed apply's or resolve's exit is terminal — the && chain stops there", async () => {
+test("a failed apply's or resolve's exit is terminal: the && chain stops there", async () => {
     const path = applyEventsPath(dir);
     await writeFile(path, line({ kind: "start" }) + line({ kind: "exit", command: "apply", code: 1 }));
     expect(await collect(tailIntenticEvents(path, isTerminalExit, () => true, undefined))).toEqual(["start", "exit"]);
@@ -103,7 +103,7 @@ test("a failed apply's or resolve's exit is terminal — the && chain stops ther
     expect(await collect(tailIntenticEvents(path, isTerminalExit, () => true, undefined))).toEqual(["start", "exit"]);
 });
 
-test("a check run's tail ends on any exit — single-command files carry exactly one", async () => {
+test("a check run's tail ends on any exit: single-command files carry exactly one", async () => {
     const path = join(dir, "check.ndjson");
     await writeFile(path, line({ kind: "start" }) + line({ kind: "result", steps: [] }) + line({ kind: "exit", command: "plan", code: 0 }));
     expect(

@@ -190,7 +190,7 @@ export const rgSearch = async (options: RgOptions): Promise<RgResult> => {
     });
     await new Promise<void>((resolve, reject) => {
         child.on("error", (error: Error & { code?: unknown }) => {
-            reject(error.code === "ENOENT" ? new Error("iq: ripgrep (rg) not found on PATH — install ripgrep or set IQ_RG_PATH") : error);
+            reject(error.code === "ENOENT" ? new Error("iq: ripgrep (rg) not found on PATH, install ripgrep or set IQ_RG_PATH") : error);
         });
         child.on("close", (code) => {
             if (carry !== "") {

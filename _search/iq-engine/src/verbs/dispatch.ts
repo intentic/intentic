@@ -196,7 +196,7 @@ const relatedOf = async (db: IndexDb, groups: readonly RankedGroup[], rgBase: Om
                 refs.hits[0];
             const from = caller !== undefined ? ` · called from ${caller.path}:${caller.line}` : "";
             const more = refs.hits.length > 1 ? ` · ${refs.hits.length - 1} more: iq refs ${anchor.name}` : "";
-            return `${anchor.name} — def ${anchor.path}:${anchor.line}${from}${more}`;
+            return `${anchor.name}: def ${anchor.path}:${anchor.line}${from}${more}`;
         }),
     );
     return lines.filter((line) => line !== undefined);
@@ -335,7 +335,7 @@ const NOTE_PATHS = 5;
 // grep escapes metachars that rust regex takes literally, `a\|b` matches the text "a|b", not "a or b". Agents
 // reflexively write this (benchmarked: the single most common wasted query), so it's worth catching proactively.
 const GREP_DIALECT = /\\[|+?(){}]/;
-const GREP_DIALECT_NOTE = "pattern has grep-style escapes — iq uses rust regex: alternation is a|b (no backslash); literal text: --literal";
+const GREP_DIALECT_NOTE = "pattern has grep-style escapes, iq uses rust regex: alternation is a|b (no backslash); literal text: --literal";
 
 // The verbs that match a name or a pattern literally. A question in prose cannot match any of them, only the
 // semantic pipeline behind a bare query reads intent.
@@ -376,18 +376,18 @@ const zeroHitHint = (request: QueryRequest): string | undefined => {
     // sidebar"`, `iq find "capabilities page route view"`), and the generic "rephrase" hint below sent every one
     // of them back to grep: it named the verb they were already misusing and never mentioned the one that works.
     if (EXACT_VERBS.has(request.verb) && isPhrase(request.query)) {
-        return `0 hits — iq ${request.verb} matches ${request.verb === "files" ? "file names" : "text and names"} literally, and that query is a phrase; ask it as a question instead: iq "${request.query}"`;
+        return `0 hits, iq ${request.verb} matches ${request.verb === "files" ? "file names" : "text and names"} literally, and that query is a phrase; ask it as a question instead: iq "${request.query}"`;
     }
     const scope = request.scope;
     if (scope.langs !== undefined || scope.paths !== undefined || scope.globs !== undefined || scope.only !== undefined) {
-        return "0 hits — scope may be too narrow: retry without --lang/--in/--glob/--only";
+        return "0 hits, scope may be too narrow: retry without --lang/--in/--glob/--only";
     }
     if (request.verb === "def" || request.verb === "refs") {
-        return `0 hits — names are exact here; try iq sym '${request.query}*' or iq find ${request.query}`;
+        return `0 hits: names are exact here; try iq sym '${request.query}*' or iq find ${request.query}`;
     }
     // A bare query that reaches zero has already been through both the exact engines and the semantic pipeline
     // (see the escalation in `q`), so there is no other iq verb left to suggest, only different words.
-    return "0 hits — rephrase, or search literal text with iq find 'exact text'";
+    return "0 hits: rephrase, or search literal text with iq find 'exact text'";
 };
 
 const RERANK_TOP = 32;
@@ -486,7 +486,7 @@ const naturalPlan = async (
     }
     const semantic = on("semantic") ? await context.scorer.semantic(request.query, allowed) : undefined;
     if (semantic === undefined) {
-        notes.push(on("semantic") ? "no embedding backend — BM25 only" : "semantic off");
+        notes.push(on("semantic") ? "no embedding backend, BM25 only" : "semantic off");
     } else {
         results.push({ engine: "semantic", hits: semantic.hits });
         if (semantic.pending > 0) {
@@ -556,14 +556,14 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
                 throw error;
             }
             found = await rgSearch({ ...rgBase, pattern: request.query, ...modifiers, literal: true });
-            note = "pattern isn't valid rust regex — ran as literal text (--literal)";
+            note = "pattern isn't valid rust regex: ran as literal text (--literal)";
         }
         if (found.hits.length === 0 && note === undefined && !request.options.literal && GREP_DIALECT.test(request.query)) {
             const rewritten = request.query.replaceAll(/\\([|+?(){}])/g, "$1");
             const retried = await rgSearch({ ...rgBase, pattern: rewritten, ...modifiers }).catch(() => undefined);
             if (retried !== undefined && retried.hits.length > 0) {
                 found = retried;
-                note = `grep-style escapes rewritten to rust regex — matched: ${rewritten}`;
+                note = `grep-style escapes rewritten to rust regex, matched: ${rewritten}`;
             }
         }
         // Warn about grep-dialect escapes up front, even when they accidentally matched something, so the agent
@@ -577,7 +577,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         // the explicit escape hatch for callers that need a true zero from an exact multi-word string.
         if (exactGroups.length === 0 && !request.options.literal && isPhrase(request.query)) {
             const escalated = await naturalPlan(context, request, entries, allowed);
-            return { ...escalated, headerNote: "no exact phrase match — answered semantically" };
+            return { ...escalated, headerNote: "no exact phrase match, answered semantically" };
         }
         return {
             groups: exactGroups,
@@ -612,7 +612,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             style: "hits",
             showTags: true,
             lead: true,
-            ...(groups.length > 0 ? { headerNote: `no exact definition of "${request.query}" — showing fuzzy symbol matches` } : {}),
+            ...(groups.length > 0 ? { headerNote: `no exact definition of "${request.query}", showing fuzzy symbol matches` } : {}),
         };
     }
 
@@ -677,8 +677,8 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             unit: "files",
             style: "paths",
             showTags: false,
-            headerNote: "churn × complexity — commits over all history unless --since narrows it",
-            ...(groups.length === 0 ? { hint: "no file has both commits and branch points in scope — is this a git repo with history?" } : {}),
+            headerNote: "churn × complexity, commits over all history unless --since narrows it",
+            ...(groups.length === 0 ? { hint: "no file has both commits and branch points in scope, is this a git repo with history?" } : {}),
         };
     }
 
@@ -689,7 +689,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         const graph = buildImportGraph(context.db, every, fileHeads(context.db));
         const seeds = request.query === "" ? await changedFiles(context.root, entries) : request.query.split(",").map((path) => path.trim()).filter((path) => path !== "");
         if (seeds.length === 0) {
-            return { groups: [], unit: "files", style: "paths", showTags: false, hint: "no uncommitted change in the sweep — name one or more paths to ask about them instead: iq impact src/app.ts" };
+            return { groups: [], unit: "files", style: "paths", showTags: false, hint: "no uncommitted change in the sweep, name one or more paths to ask about them instead: iq impact src/app.ts" };
         }
         const result = impactOf(graph, seeds, IMPACT_DEFAULTS);
         const untested = seeds.filter((seed) => graph.idByPath.has(seed) && classOf(seed) !== "tests" && testsCovering(graph, seed).length === 0);
@@ -714,8 +714,8 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             unit: "files",
             style: "paths",
             showTags: false,
-            headerNote: `one hop each way over the import graph — ${notes.join(" · ")}`,
-            ...(groups.length === 0 ? { hint: "nothing in the index imports these files or is imported by them — a leaf change, or the imports did not resolve" } : {}),
+            headerNote: `one hop each way over the import graph, ${notes.join(" · ")}`,
+            ...(groups.length === 0 ? { hint: "nothing in the index imports these files or is imported by them, a leaf change, or the imports did not resolve" } : {}),
         };
     }
 
@@ -727,7 +727,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             style: "hits",
             showTags: false,
             headerNote: "files by PageRank over the import graph, exported symbols each",
-            ...(groups.length === 0 ? { hint: "no exported symbols in scope — widen with --in, or check the index with iq index status" } : {}),
+            ...(groups.length === 0 ? { hint: "no exported symbols in scope, widen with --in, or check the index with iq index status" } : {}),
         };
     }
 
@@ -782,7 +782,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         const escalated = await naturalPlan(context, request, entries, allowed);
         // The escalation is a reading of the QUERY, so it rides headerNote and reaches JSON callers; the
         // semantic pipeline's own notes stay provenance and print only in the capsule.
-        return { ...escalated, headerNote: `no exact ${kind} match — answered semantically` };
+        return { ...escalated, headerNote: `no exact ${kind} match, answered semantically` };
     }
 
     throw new Error(`iq: verb not implemented yet: ${request.verb}`);
@@ -858,7 +858,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         if (spool !== undefined && spool.generation === context.generation) {
             plan = { groups: [...spool.groups], unit: spool.unit, style: spool.style, showTags: spool.showTags, lead: spool.lead };
         } else if (list === undefined) {
-            headerNote = "cursor stale — re-ran";
+            headerNote = "cursor stale: re-ran";
         }
     }
 
@@ -879,7 +879,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
                 ),
             ];
             if (present.length > 0) {
-                headerNote = `no ${request.scope.langs.join(",")} files in scope — found: ${present.slice(0, 6).join(", ")}`;
+                headerNote = `no ${request.scope.langs.join(",")} files in scope, found: ${present.slice(0, 6).join(", ")}`;
             }
         }
         plan = await runVerb(context, request, entries);

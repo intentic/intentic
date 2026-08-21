@@ -16,7 +16,7 @@ import { hasManagedEntry, upsertManagedEntry } from "./managed-region.js";
 export const enrollHost = async (services: Services, input: EnrollHostInput): Promise<void> => {
     const desiredState = services.workspace.repos["desired-state"];
     if (!existsSync(desiredState)) {
-        throw new ORPCError("PRECONDITION_FAILED", { message: "DevOps is not active — activate it before enrolling a host." });
+        throw new ORPCError("PRECONDITION_FAILED", { message: "DevOps is not active, activate it before enrolling a host." });
     }
 
     // Secrets → desired-state/.env (mode 0600), the same file `apply` reloads (mirrors secrets.routes).

@@ -8,7 +8,7 @@ import { resolvedBranches } from "./handover-branches.js";
  *
  * Stubbed rather than run against real repositories: what is being asserted is the DECISION each git answer
  * leads to, and the two answers involved are a ref line and a count. A real fixture would spend seconds
- * building trees to reproduce strings this file can simply state — and could not reproduce the throwing cases
+ * building trees to reproduce strings this file can simply state, and could not reproduce the throwing cases
  * at all without breaking a repo on purpose.
  */
 
@@ -23,7 +23,7 @@ interface RepoState {
     readonly throws?: "ref" | "count";
 }
 
-// Answers the two reads the module makes, keyed by the directory it makes them in — which is also how the
+// Answers the two reads the module makes, keyed by the directory it makes them in, which is also how the
 // "root" vs nested mapping gets asserted: a lookup miss means the module computed a directory nobody set up.
 const gitOf = (repos: Record<string, RepoState>): GitRunner => {
     const runner: GitRunner = (dir, args) => {
@@ -52,7 +52,7 @@ const repos = (...names: string[]): readonly RepoBase[] => names.map((repo) => (
 
 /* THE BUG THIS FILE EXISTS FOR. A run's composition is every repository in the workspace, so a step that
  * changed one of them used to hand the reviewer a diff command for all six. Five of those commands resolve to
- * nothing, and a reviewer running them finds nothing wrong — which it then says out loud. */
+ * nothing, and a reviewer running them finds nothing wrong, which it then says out loud. */
 test("a repository the step never committed into is dropped from the handover", async () => {
     const git = gitOf({
         "/work": { tip: "aaa", ahead: 2 },
@@ -63,7 +63,7 @@ test("a repository the step never committed into is dropped from the handover", 
     expect(resolved).toEqual([{ repo: "root", base: "base-root", branch: "agent/abc" }]);
 });
 
-// The ref exists — the turn landed something onto it — but it says exactly what the pinned base says. The diff
+// The ref exists: the turn landed something onto it, but it says exactly what the pinned base says. The diff
 // command would run, succeed, and print nothing, which is the same false all-clear by a different route.
 test("a branch level with the run's base is dropped, even though the ref resolves", async () => {
     const git = gitOf({ "/work": { tip: "aaa", ahead: 0 } });
@@ -79,7 +79,7 @@ test("a step that committed nothing anywhere resolves to an empty list rather th
     expect(resolved).toEqual([]);
 });
 
-// Nested repos are named by their root-relative directory, root by the workspace itself — the mapping every
+// Nested repos are named by their root-relative directory, root by the workspace itself: the mapping every
 // other part of the daemon uses. A stub that only knows the right directories proves it by not throwing.
 test("repositories are read in their own checkouts, and survivors keep the given order", async () => {
     const git = gitOf({

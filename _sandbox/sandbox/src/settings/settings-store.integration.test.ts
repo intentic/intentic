@@ -7,7 +7,7 @@ import { SandboxSettingsSchema, type SandboxSettings } from "@intentic/sandbox-c
 import { expect, test } from "vitest";
 import { fileSandboxSettingsStore } from "./settings-store.js";
 
-// A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
+// A store over a fresh temp path (the .intentic dir doesn't exist yet: the store must create it on write).
 const tempStore = () => {
     const path = join(mkdtempSync(join(tmpdir(), "settings-")), `${STATE_DIR}`, "config", "settings.json");
     return { store: fileSandboxSettingsStore(path), path };
@@ -15,7 +15,7 @@ const tempStore = () => {
 
 /* The store's defaults, taken FROM the schema rather than transcribed next to it. The copy that used to sit
  * here restated all twenty-two fields and their rationale, so every setting the product gained broke this file
- * — never because the store was wrong, only because the list had moved. What these tests are actually about is
+ *: never because the store was wrong, only because the list had moved. What these tests are actually about is
  * the store: absent file ⇒ defaults, and a round trip that changes nothing. */
 const DEFAULTS: SandboxSettings = SandboxSettingsSchema.parse({});
 
@@ -43,7 +43,7 @@ test("a corrupt or schema-invalid manifest reads as the defaults rather than thr
 });
 
 // A manifest written before a flag existed is missing that key, which the schema fills with the flag's own
-// default — so the owner's OTHER picks survive the upgrade instead of the whole object being discarded.
+// default, so the owner's OTHER picks survive the upgrade instead of the whole object being discarded.
 test("an older manifest missing a flag keeps its picks and defaults the new one", async () => {
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });

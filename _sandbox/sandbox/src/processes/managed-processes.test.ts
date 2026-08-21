@@ -4,7 +4,7 @@ import { createManagedProcesses, type ProcessRunner, type ProcessSpec } from "./
 
 // A runner that records launches (with the manager-assigned port) and lets the test drive each session's pane
 // foreground command, mirroring what tmux would report. An absent entry models a destroyed session; a launch
-// starts at the job command ("node") — tests drive it back to "zsh" (the prompt) to simulate completion.
+// starts at the job command ("node"): tests drive it back to "zsh" (the prompt) to simulate completion.
 const fakeRunner = () => {
     const launches: { session: string; spec: ProcessSpec & { port: number } }[] = [];
     const killed: string[] = [];
@@ -120,7 +120,7 @@ test("a oneShot job stays running while its command is in the foreground, even p
     panels.stopAll();
 });
 
-test("a oneShot job completes after two consecutive prompt sightings — the session lingers unkilled", async () => {
+test("a oneShot job completes after two consecutive prompt sightings: the session lingers unkilled", async () => {
     vi.useFakeTimers();
     const { runner, cmd, killed } = fakeRunner();
     const panels = createManagedProcesses(runner);
@@ -128,11 +128,11 @@ test("a oneShot job completes after two consecutive prompt sightings — the ses
     await vi.advanceTimersByTimeAsync(2100);
     cmd.set("panel-job", "zsh");
     await vi.advanceTimersByTimeAsync(2000);
-    // One prompt sighting is not completion — it could be the shell between two chained commands.
+    // One prompt sighting is not completion: it could be the shell between two chained commands.
     expect(panels.running("job")).toBe(true);
     await vi.advanceTimersByTimeAsync(2000);
     expect(panels.running("job")).toBe(false);
-    // The sweep only untracked it — no kill, so the finished job's shell stays attachable.
+    // The sweep only untracked it: no kill, so the finished job's shell stays attachable.
     expect(killed).toEqual([]);
 });
 
@@ -159,7 +159,7 @@ test("a oneShot job never observed running (instant failure) completes only afte
     const { runner, cmd } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
-    // The command failed before the first sweep — the pane shows only the booted shell at its prompt.
+    // The command failed before the first sweep: the pane shows only the booted shell at its prompt.
     cmd.set("panel-job", "zsh");
     await vi.advanceTimersByTimeAsync(8100);
     expect(panels.running("job")).toBe(true);

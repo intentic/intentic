@@ -10,7 +10,7 @@ import { createBackendHostApp } from "./backend-host.js";
 
 const raw = process.env[BACKEND_CONFIG_ENV];
 if (raw === undefined || raw === "") {
-    console.error(`missing ${BACKEND_CONFIG_ENV} — this process is only ever started by the sandbox daemon`);
+    console.error(`missing ${BACKEND_CONFIG_ENV}: this process is only ever started by the sandbox daemon`);
     process.exit(1);
 }
 const config = JSON.parse(raw) as BackendHostConfig;

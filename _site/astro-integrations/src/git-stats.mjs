@@ -2,14 +2,14 @@
 /* How much of this repository its own agents wrote, counted from git at build time.
  *
  * The site makes this claim on the landing page and on /about/, and it is the one number on the site
- * that would rot fastest if it were authored: every land adds to it. So it is measured, never typed —
+ * that would rot fastest if it were authored: every land adds to it. So it is measured, never typed:
  * the same rule the blueprint applies to test counts.
  *
  * Agent-landed commits are identifiable by author email: `land.ts` is the only path from an isolated
  * worktree into the main line, and it is what records attribution.
  *
  * Everything here fails to `null` rather than to a number. A shallow CI clone (`--depth 1`) would
- * otherwise report "1 of 1 commits", and a trust section that renders a wrong number — or a zero — is
+ * otherwise report "1 of 1 commits", and a trust section that renders a wrong number, or a zero: is
  * worse than one that renders a sentence without one.
  */
 import { execSync } from "node:child_process";

@@ -3,7 +3,7 @@ import { outputAliases, outputFlagParameters, scopeFlagParameters, type SearchFl
 import { runSearch } from "../lib/run.js";
 
 export const context = buildCommand({
-    docs: { brief: "Expand around an anchor — the enclosing function/class of path:line" },
+    docs: { brief: "Expand around an anchor, the enclosing function/class of path:line" },
     parameters: {
         flags: { ...scopeFlagParameters, ...outputFlagParameters },
         aliases: outputAliases,

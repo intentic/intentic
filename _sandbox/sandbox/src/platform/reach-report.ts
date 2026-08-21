@@ -73,18 +73,18 @@ export const probeSelf = async (publicUrl: string, expectedId: string | undefine
         return {
             ok: false,
             detail: timedOut
-                ? `${publicUrl} accepted the connection but never answered — its tunnel is up with nothing behind it yet.`
-                : `${publicUrl} could not be reached from inside the sandbox — its tunnel has not come up.`,
+                ? `${publicUrl} accepted the connection but never answered: its tunnel is up with nothing behind it yet.`
+                : `${publicUrl} could not be reached from inside the sandbox, its tunnel has not come up.`,
         };
     }
     if (!response.ok) {
-        return { ok: false, detail: `${publicUrl} answered ${response.status} instead of this sandbox — its tunnel is not routing here yet.` };
+        return { ok: false, detail: `${publicUrl} answered ${response.status} instead of this sandbox, its tunnel is not routing here yet.` };
     }
     const body = (await response.json().catch(() => undefined)) as HealthAnswer | undefined;
     // A 200 from something that is not us is the worst of the failures to leave unnamed: everything looks
     // healthy and the traffic goes somewhere else entirely.
     if (expectedId !== undefined && typeof body?.sandboxId === "string" && body.sandboxId !== expectedId) {
-        return { ok: false, detail: `${publicUrl} is answering for a different sandbox — this address is not (or not yet) ours.` };
+        return { ok: false, detail: `${publicUrl} is answering for a different sandbox, this address is not (or not yet) ours.` };
     }
     return { ok: true };
 };
@@ -115,7 +115,7 @@ export const createReachReporter = (config: Config, logger: Logger): ReachReport
             logger.info({ publicUrl }, "sandbox is reachable at its public address");
             status = { state: "reachable", at: Date.now() };
             await tell("reachable");
-            return; // proved — go quiet, exactly like the announce does on its ack
+            return; // proved: go quiet, exactly like the announce does on its ack
         }
         const spent = Date.now() >= deadline;
         logger.warn({ publicUrl, detail: verdict.detail }, "sandbox is not reachable at its public address yet");

@@ -115,7 +115,7 @@ export const commandGateHooks = (options: CommandGateOptions): Partial<Record<Ho
             }
             if (options.unattended) {
                 return refuse(
-                    `${held.verdict.reason}, and this turn is running unattended — there is nobody to approve it. ` +
+                    `${held.verdict.reason}, and this turn is running unattended: there is nobody to approve it. ` +
                         `Do not retry: carry on with what you can do without this command, and say plainly what you left undone.`,
                 );
             }
@@ -142,7 +142,7 @@ export const commandGateHooks = (options: CommandGateOptions): Partial<Record<Ho
                 // stopping this command, so say that rather than inviting a way around it.
                 return refuse(
                     reply.feedback?.trim() ||
-                        `The user declined this. Do not run it, and do not look for another way to achieve the same thing — wait for them to say how to proceed.`,
+                        `The user declined this. Do not run it, and do not look for another way to achieve the same thing: wait for them to say how to proceed.`,
                 );
             }
             if (reply.decision === "always") {

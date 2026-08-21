@@ -25,11 +25,11 @@ const parseArm = (raw: string): Arm => {
     if (raw.startsWith("c:")) {
         const config = CONFIGS.find((candidate) => candidate.name === raw.slice(2));
         if (config === undefined) {
-            throw new Error(`iq-bench: unknown config in arm "${raw}" — known: ${CONFIGS.map((candidate) => candidate.name).join(", ")}`);
+            throw new Error(`iq-bench: unknown config in arm "${raw}", known: ${CONFIGS.map((candidate) => candidate.name).join(", ")}`);
         }
         return { name: raw, kind: "iq", config };
     }
-    throw new Error(`iq-bench: unknown arm "${raw}" — use a, b, or c:<config>`);
+    throw new Error(`iq-bench: unknown arm "${raw}", use a, b, or c:<config>`);
 };
 
 const loadTasks = (): Task[] =>
@@ -52,7 +52,7 @@ const flagValue = (args: string[], flag: string): string | undefined => {
 export const agents = async (args: string[]): Promise<void> => {
     const dry = args.includes("--dry");
     if (!dry && process.env["IQ_BENCH_AGENTS"] !== "1") {
-        throw new Error("iq-bench agents: spends real tokens — set IQ_BENCH_AGENTS=1 (pnpm bench:agents does) or use --dry");
+        throw new Error("iq-bench agents: spends real tokens, set IQ_BENCH_AGENTS=1 (pnpm bench:agents does) or use --dry");
     }
     const taskFilter = flagValue(args, "--task");
     const vendorFilter = flagValue(args, "--vendor");
@@ -66,7 +66,7 @@ export const agents = async (args: string[]): Promise<void> => {
     const requested = ADAPTERS.filter((adapter) => vendorFilter === undefined || vendorFilter.split(",").includes(adapter.id));
     const adapters = requested.filter((adapter) => adapter.available());
     for (const adapter of requested.filter((candidate) => !candidate.available())) {
-        console.warn(`iq-bench: vendor "${adapter.id}" unavailable (binary or credentials missing) — skipped`);
+        console.warn(`iq-bench: vendor "${adapter.id}" unavailable (binary or credentials missing), skipped`);
     }
     if (adapters.length === 0) {
         throw new Error("iq-bench: no available vendors");
@@ -88,7 +88,7 @@ export const agents = async (args: string[]): Promise<void> => {
     let spent = 0;
     for (const { adapter, task, arm } of plan) {
         if (spent >= maxSpend) {
-            console.warn(`iq-bench: vendor-reported spend $${spent.toFixed(2)} crossed --max-spend $${maxSpend} — aborting remaining runs`);
+            console.warn(`iq-bench: vendor-reported spend $${spent.toFixed(2)} crossed --max-spend $${maxSpend}, aborting remaining runs`);
             break;
         }
         const runId = `${task.id}-${adapter.id}-${arm.name.replaceAll(":", "_")}`;

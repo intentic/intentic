@@ -29,8 +29,8 @@ export const resolveDeclaration = (root: string, file: string, symbol: string): 
     if (found.length !== 1) {
         throw new Error(
             found.length === 0
-                ? `iq-bench: "${symbol}" is not declared in ${file} — the dataset anchor names the wrong file, or the symbol was renamed`
-                : `iq-bench: "${symbol}" is declared ${found.length}× in ${file} (lines ${found.join(", ")}) — the anchor cannot say which one is meant`,
+                ? `iq-bench: "${symbol}" is not declared in ${file}, the dataset anchor names the wrong file, or the symbol was renamed`
+                : `iq-bench: "${symbol}" is declared ${found.length}× in ${file} (lines ${found.join(", ")}), the anchor cannot say which one is meant`,
         );
     }
     return found[0]!;

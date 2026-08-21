@@ -5,7 +5,7 @@ import type { ProviderRefusal } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fileProviderRefusalStore } from "./provider-refusals.js";
 
-// A store over a fresh temp path whose parent dir doesn't exist yet — the store must create it on write.
+// A store over a fresh temp path whose parent dir doesn't exist yet: the store must create it on write.
 const tempStore = () => {
     const path = join(mkdtempSync(join(tmpdir(), "provider-refusals-")), "history", "provider-refusals.json");
     return { store: fileProviderRefusalStore(path), path };
@@ -43,8 +43,8 @@ test("each provider keeps its own last refusal, and the newest one wins", async 
     expect(read[`claude`]?.account).toBe("claude-1");
 });
 
-/* A TURN THAT RAN IS THE ONLY EVIDENCE some refusals will ever get. An entitlement refusal — an organization
- * that switched Claude Code off for a seat — outlives every reading that could contradict it: the token keeps
+/* A TURN THAT RAN IS THE ONLY EVIDENCE some refusals will ever get. An entitlement refusal: an organization
+ * that switched Claude Code off for a seat, outlives every reading that could contradict it: the token keeps
  * authenticating and the plan keeps publishing pools the whole time it refuses everything. So without this, an
  * admin turning access back on would leave the alarm standing for the full week the store remembers it. */
 test("settles the account's refusal when a turn finally runs on it", async () => {
@@ -57,7 +57,7 @@ test("settles the account's refusal when a turn finally runs on it", async () =>
 /* SCOPED TO THE ACCOUNT IT NAMES, which is the whole difficulty: a sandbox holding three Claude accounts runs
  * turns on the healthy ones all day, and letting any of those erase the refused one's record would delete the
  * single fact that stops the picker offering an account that cannot run. The one refusal every success answers
- * is a nameless one — a routed turn, which CLIProxyAPI only refuses once every credential it holds is cooling. */
+ * is a nameless one: a routed turn, which CLIProxyAPI only refuses once every credential it holds is cooling. */
 test("leaves a refusal that names another account alone, and settles one that names nobody", async () => {
     const { store } = tempStore();
     const claude = refusal({ kind: "entitlement", message: "organization has disabled", account: "claude-1" });
@@ -75,7 +75,7 @@ test("leaves a refusal that names another account alone, and settles one that na
 
 /* Past a week a refusal describes a window that has certainly reopened, so serving it would put a stale alarm
  * under a live meter. Forgotten on READ, because a daemon that never refuses again writes nothing that could
- * prune it — the file keeps the row and the store simply stops reporting it. */
+ * prune it: the file keeps the row and the store simply stops reporting it. */
 test("forgets a refusal old enough to describe a window that has since reopened", async () => {
     const { store } = tempStore();
     await store.record("kimi", refusal({ at: Date.now() - 8 * DAY }));

@@ -68,7 +68,7 @@ test("newAccount mints an id and falls back to a default label", () => {
 // The whole reason a second account was indistinguishable from the first: unnamed, both rows said "Claude".
 test("newAccount names an unnamed account after the identity the sign-in reported", () => {
     expect(newAccount({ accessToken: "t", email: "a@example.com" }, "").label).toBe("a@example.com");
-    // A name the user typed outranks the derived one — it is the more specific answer, and theirs.
+    // A name the user typed outranks the derived one: it is the more specific answer, and theirs.
     expect(newAccount({ accessToken: "t", email: "a@example.com" }, "Work").label).toBe("Work");
 });
 
@@ -154,7 +154,7 @@ test("ensureFreshToken returns the (expired) token unchanged when there is no re
 
 /* The incident this file exists for: several turns starting at once (a fleet of agents, plus the model
  * catalog's own timer) all crossed the expiry window together, each POSTed the SAME refresh token, and
- * Anthropic's reuse-detection revoked the whole family — every live session died at once with
+ * Anthropic's reuse-detection revoked the whole family: every live session died at once with
  * "401 OAuth access token has been revoked", including turns holding a token that had just been minted. */
 test("concurrent callers refresh exactly once", async () => {
     const store = memoryStore(stored({ accessToken: "stale", refreshToken: "r1", expiresAt: Date.now() - 1000 }));
@@ -199,7 +199,7 @@ test("an invalid_grant marks the account revoked instead of retrying the dead to
     };
     expect(await ensureFreshToken(store, "a", refresh)).toBeUndefined();
     expect(store.current()?.revokedAt).toBeGreaterThan(0);
-    // The second call must not present the dead token again — that replay is what revokes live sessions.
+    // The second call must not present the dead token again: that replay is what revokes live sessions.
     expect(await ensureFreshToken(store, "a", refresh)).toBeUndefined();
     expect(attempts).toBe(1);
 });
@@ -218,8 +218,8 @@ test("a revoked account surfaces as needsReauth in the list", async () => {
 });
 
 // The catalog persists its discovered models as models.json in the SAME dir the account store scans, so an
-// unparsed read surfaced it as a blank `{}` account: a phantom row in the picker, and — since the list is
-// sorted by connectedAt and `accounts[0]` is the daemon's default — a coin-flip chance of the turn resolving
+// unparsed read surfaced it as a blank `{}` account: a phantom row in the picker, and, since the list is
+// sorted by connectedAt and `accounts[0]` is the daemon's default: a coin-flip chance of the turn resolving
 // no account at all.
 test("fileClaudeStore ignores non-account json in the store dir", async () => {
     const dir = storeDir();
@@ -241,7 +241,7 @@ test("fileClaudeStore round-trips an account through the filesystem", async () =
 });
 
 // A reader must never catch the file mid-write: a torn read parses to nothing, which used to degrade to "no
-// such account" — indistinguishable, to the user, from a credential that disconnected itself.
+// such account": indistinguishable, to the user, from a credential that disconnected itself.
 test("fileClaudeStore writes atomically and leaves no temp files behind", async () => {
     const dir = storeDir();
     const store = fileClaudeStore(dir, silent);
@@ -253,7 +253,7 @@ test("fileClaudeStore writes atomically and leaves no temp files behind", async 
     expect(await store.list()).toEqual([{ id: "acct-1", label: "Work", connectedAt: 7 }]);
 });
 
-// The lock is what covers a SECOND daemon on a shared AGENT_AUTH_DIR — the in-flight map only sees its own
+// The lock is what covers a SECOND daemon on a shared AGENT_AUTH_DIR: the in-flight map only sees its own
 // process. Two stores over one dir stand in for two sandboxes.
 test("withRefreshLock excludes a second holder over the same store dir", async () => {
     const dir = storeDir();
@@ -282,13 +282,13 @@ test("withRefreshLock steals a lock left behind by a dead holder", async () => {
 });
 
 /* ROTATION vs LIVE TURNS. Anthropic retires the previous access token the moment a refresh mints its
- * successor, and a turn's token is a snapshot in a subprocess env that cannot be updated — so a rotation
+ * successor, and a turn's token is a snapshot in a subprocess env that cannot be updated, so a rotation
  * landing mid-turn kills every turn holding the old one. One real refresh did exactly that to three agents at
  * once. While a turn holds the account, the rotation waits. */
 test("a rotation waits while turns are holding the token", async () => {
     const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 10 * 60_000 }));
     const release = holdAccount("a");
-    // Inside REFRESH_AHEAD_MS, so this WOULD rotate — but breaking the turns holding it costs more than
+    // Inside REFRESH_AHEAD_MS, so this WOULD rotate, but breaking the turns holding it costs more than
     // carrying a token that is still ten minutes from expiry.
     expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("held");
     expect(store.current()?.accessToken).toBe("held");
@@ -297,7 +297,7 @@ test("a rotation waits while turns are holding the token", async () => {
     expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("rotated");
 });
 
-test("the wait is bounded — a token about to genuinely expire rotates even under a live turn", async () => {
+test("the wait is bounded: a token about to genuinely expire rotates even under a live turn", async () => {
     const store = memoryStore(stored({ accessToken: "dying", refreshToken: "r", expiresAt: Date.now() + 30_000 }));
     const release = holdAccount("a");
     // Past ROTATE_REGARDLESS_MS: waiting longer would let it lapse, which fails the NEXT turn too. The turns
@@ -306,7 +306,7 @@ test("the wait is bounded — a token about to genuinely expire rotates even und
     release();
 });
 
-test("holds nest and release once — two turns on one account, and the second release is a no-op", async () => {
+test("holds nest and release once: two turns on one account, and the second release is a no-op", async () => {
     const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 10 * 60_000 }));
     const first = holdAccount("a");
     const second = holdAccount("a");
@@ -318,7 +318,7 @@ test("holds nest and release once — two turns on one account, and the second r
 });
 
 /* WAITING FOR A GAP ONLY WORKS IF THE GAP IS TAKEN WHEN IT COMES. Deferring at REFRESH_AHEAD_MS gave a busy
- * fleet half an hour to fall quiet in, and a fleet that never did rotated at the floor instead — into the most
+ * fleet half an hour to fall quiet in, and a fleet that never did rotated at the floor instead: into the most
  * turns it would ever have running. One such rotation refused five agents in twenty seconds. So the hunt starts
  * hours out and, crucially, fires off the RELEASE rather than off a timer that keeps missing the gaps. */
 test("the last turn's release rotates the token there and then", async () => {
@@ -350,7 +350,7 @@ test("a quiet moment does not rotate a token that is nowhere near expiry", async
 
 /* THE GAP IS ALSO WHEN THE NEXT TURN STARTS. A quiet rotation and a turn resolving its credential race over the
  * same instant, and the holder gate cannot separate them: the new turn holds nothing YET. Handing it the store's
- * current token would snapshot into a subprocess the exact token the in-flight mint is about to retire — the
+ * current token would snapshot into a subprocess the exact token the in-flight mint is about to retire: the
  * collision, reintroduced through the door opened to avoid it. So the resolve waits for the mint. */
 test("a turn starting during a rotation gets the new token, not the one being superseded", async () => {
     const store = memoryStore(stored({ accessToken: "doomed", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));

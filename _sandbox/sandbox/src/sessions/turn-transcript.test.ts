@@ -5,12 +5,12 @@ import { withRuntimeHistory } from "../agent/runtime-history.js";
 import { LITERAL_SLASH_NOTE, withTurnPreamble } from "../agent/turn-preamble.js";
 import { restoredTurn, subagentTurn } from "./turn-transcript.js";
 
-// When the turn started — what its user row is stamped with (RestoredMessage.sentAt).
+// When the turn started: what its user row is stamped with (RestoredMessage.sentAt).
 const SENT_AT = 1_767_225_600_000;
 
 describe("restoredTurn", () => {
     it("opens with the user's own words, with the daemon's injections taken back out", () => {
-        const prompt = "fix the build\n\nThe user attached these files — read them with the Read tool as needed:\n- /work/shot.png";
+        const prompt = "fix the build\n\nThe user attached these files: read them with the Read tool as needed:\n- /work/shot.png";
         expect(restoredTurn({ prompt }, [], "/work", SENT_AT)[0]).toEqual({
             role: "user",
             text: "fix the build",
@@ -19,7 +19,7 @@ describe("restoredTurn", () => {
         });
     });
 
-    /* WHEN IT WAS SENT, not when its answer finished — the chat draws this on the bubble, and a stamp taken as
+    /* WHEN IT WAS SENT, not when its answer finished: the chat draws this on the bubble, and a stamp taken as
      * the turn settles would date a twenty-minute answer's question to twenty minutes after it was asked. Only
      * the user's row carries one: nothing in the frame log says when a given assistant block was written. */
     it("stamps the user's row with the turn's start and leaves the answer unstamped", () => {
@@ -28,7 +28,7 @@ describe("restoredTurn", () => {
     });
 
     /* The handoff envelope is one of those injections. The conversation it carries is THIS record's own earlier
-     * rows — the daemon read them out of it to seed the new session — so re-emitting them appended a second,
+     * rows: the daemon read them out of it to seed the new session, so re-emitting them appended a second,
      * budget-truncated copy of the conversation on every provider or account switch, and a reopened chat showed
      * everything before the switch twice. */
     it("keeps only the typed prompt out of a handoff envelope, never the transcript folded into it", () => {
@@ -40,7 +40,7 @@ describe("restoredTurn", () => {
     });
 
     /* A TURN THE DAEMON RE-RAN ITSELF. Its prompt is the user's words again behind a note explaining what killed
-     * the first attempt — and recording that verbatim was two wrongs at once: a paragraph of machine prose filed
+     * the first attempt, and recording that verbatim was two wrongs at once: a paragraph of machine prose filed
      * as something the user typed, directly under the copy of the message they really did type. What the record
      * wants there is the one thing neither copy says, which is why the answer below carries on at all. */
     it("records a re-run as the interruption that caused it, not as the message said twice", () => {
@@ -53,7 +53,7 @@ describe("restoredTurn", () => {
     });
 
     /* The resume that carries NEW words: the daemon came back to a conversation parked on a card and this turn is
-     * the answer. Nothing is dropped — it is the only copy of that answer there is — and the restart rides it as
+     * the answer. Nothing is dropped: it is the only copy of that answer there is, and the restart rides it as
      * the same collapsed note every other thing the daemon told a turn is disclosed as. */
     it("keeps a restored card's answer and carries the restart on it as a note", () => {
         const prompt = withResumeNote("the second option", RESUME_NOTES.answered);
@@ -67,8 +67,8 @@ describe("restoredTurn", () => {
         ]);
     });
 
-    /* The note is the OUTERMOST wrapper — the daemon adds its preamble in front of a prompt that already carries
-     * it — so a strip that runs in the wrong order finds no anchor and hands back the lot. Which it did: a
+    /* The note is the OUTERMOST wrapper: the daemon adds its preamble in front of a prompt that already carries
+     * it, so a strip that runs in the wrong order finds no anchor and hands back the lot. Which it did: a
      * resumed turn recorded the dependency notice and the rebase paragraph as the user's words too. */
     it("still finds the turn's preamble underneath a re-run's note", () => {
         const prompt = withResumeNote(withTurnPreamble([LITERAL_SLASH_NOTE], "/work is where it lives"), RESUME_NOTES.restart);
@@ -77,7 +77,7 @@ describe("restoredTurn", () => {
 
     /* The live bubble boundary, matched to turnReducer's: `text_end` retires the block that WROTE something, so
      * the calls it introduced land in a fresh bubble under it, and the prose that reports them joins that same
-     * bubble. This is Claude Code's interleaving — says what it's about to do → the cards → what it found — and
+     * bubble. This is Claude Code's interleaving: says what it's about to do → the cards → what it found, and
      * it has to come back the way it was watched, not re-grouped. */
     it("retires a prose bubble at text_end so the calls it introduced land beneath it", () => {
         const events: AgentEvent[] = [
@@ -95,7 +95,7 @@ describe("restoredTurn", () => {
         ]);
     });
 
-    /* THE USER SPOKE MID-TURN, and the record holds it — which it did not before the `steer` frame existed. The
+    /* THE USER SPOKE MID-TURN, and the record holds it, which it did not before the `steer` frame existed. The
      * message lived only in the window that sent it, so reopening the chat lost it entirely and the client's row
      * count ran one ahead of this one for the rest of the conversation (the count a fork copies a prefix of, and
      * the index a rewind addresses). It closes the open bubble for the same reason the live client retires its
@@ -118,7 +118,7 @@ describe("restoredTurn", () => {
         ]);
     });
 
-    // A text_end on a bubble holding only cards is not a boundary — retiring there would split a card away from
+    // A text_end on a bubble holding only cards is not a boundary: retiring there would split a card away from
     // the prose that reports it, a shape the live stream never draws.
     it("does not retire a bubble that has written no prose", () => {
         const events: AgentEvent[] = [
@@ -149,7 +149,7 @@ describe("restoredTurn", () => {
         });
     });
 
-    // A card the turn died mid-call keeps `in_progress` — that is what happened, and claiming a completion it
+    // A card the turn died mid-call keeps `in_progress`: that is what happened, and claiming a completion it
     // never reported would be the one thing a restored transcript must not invent.
     it("leaves an unanswered call in progress", () => {
         const events: AgentEvent[] = [{ kind: "tool_call", id: "t1", name: "Bash", category: "execute", status: "in_progress" }];
@@ -157,7 +157,7 @@ describe("restoredTurn", () => {
     });
 
     /* A DELEGATION SURVIVES THE RELOAD. Its calls and its thinking nest under the Agent card that spawned them,
-     * which is where the live client puts them — so a reopened chat redraws the delegation it was showing rather
+     * which is where the live client puts them, so a reopened chat redraws the delegation it was showing rather
      * than a leaf card. Its PROSE stays off the card: that card has nowhere to render prose, and the child's
      * report already arrives as the card's own result content. */
     it("nests a subagent's calls and thinking under the card that spawned them", () => {
@@ -182,7 +182,7 @@ describe("restoredTurn", () => {
     });
 
     // Its Agent card is not in this stream (a malformed log, or one level of a deeper spawn read on its own), so
-    // there is nothing to hang the child off — which is exactly what keeps a nested level out of the level above.
+    // there is nothing to hang the child off, which is exactly what keeps a nested level out of the level above.
     it("drops a subagent's frames when the card that spawned them is absent", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "delegating" },
@@ -191,7 +191,7 @@ describe("restoredTurn", () => {
         expect(restoredTurn({ prompt: "delegate" }, events, "/work", SENT_AT).slice(1)).toEqual([{ role: "assistant", text: "delegating" }]);
     });
 
-    // One subagent's own side of the same log — what the Subagents area renders while it runs. Read at the
+    // One subagent's own side of the same log: what the Subagents area renders while it runs. Read at the
     // child's level its prose IS top-level, and the parent's frames are not its business.
     it("reads one subagent's stream as a transcript of its own", () => {
         const events: AgentEvent[] = [
@@ -215,7 +215,7 @@ describe("restoredTurn", () => {
         expect(restoredTurn({ prompt: "think" }, events, "/work", SENT_AT).at(-1)).toEqual({ role: "assistant", text: "yes", thinking: "hm, maybe" });
     });
 
-    // Frames that are not transcript — usage, todos, the interactive cards, the settle — carry no bubble of
+    // Frames that are not transcript (usage, todos, the interactive cards, the settle) carry no bubble of
     // their own, so a turn that only emitted those restores as the prompt alone rather than an empty reply.
     it("yields nothing but the prompt for a turn that said nothing", () => {
         const events: AgentEvent[] = [{ kind: "init", model: "claude-opus-4" }, { kind: "usage", costUsd: 0.1 }, { kind: "done" }];
@@ -223,7 +223,7 @@ describe("restoredTurn", () => {
     });
 
     /* A REFUSED TURN SAYS SO WHEN IT IS REOPENED. The provider's answer to this one is an error frame and no
-     * prose at all, so folding only the two speakers left a question with no reply under it — which is how a
+     * prose at all, so folding only the two speakers left a question with no reply under it, which is how a
      * workflow step whose model was refused came to read as a broken session on every surface. */
     it("keeps what went wrong, as the notice line the turn ended on", () => {
         const refusal = "Your organization has disabled Claude subscription access for Claude Code";

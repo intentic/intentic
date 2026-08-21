@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, expect, test } from "vitest";
 import { checkProject, findTsconfig } from "./checker.js";
 
-// Real compiler runs against throwaway fixture projects — the checker's whole job is what it relays and what
+// Real compiler runs against throwaway fixture projects: the checker's whole job is what it relays and what
 // it refuses, and only the real compiler can vouch for that.
 
 const made: string[] = [];
@@ -68,7 +68,7 @@ test("a config chain that does not load is a refusal, not a diagnostic", async (
 
 /* The native compiler does not auto-include @types from parent node_modules directories the way the JS one
  * does. A program tripping over missing node globals while an ancestor @types directory exists would send the
- * agent errors its own toolchain never shows it — so it is refused, with the reason. */
+ * agent errors its own toolchain never shows it, so it is refused, with the reason. */
 test("missing node globals with an ancestor @types directory is a refusal", async () => {
     const dir = fixture();
     const realTypes = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "node_modules", "@types");

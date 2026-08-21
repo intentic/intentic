@@ -18,7 +18,7 @@ const manifest = (overrides: object = {}) =>
     });
 
 describe("diffPowers", () => {
-    test("identical manifests ask for nothing new — the one-click case", () => {
+    test("identical manifests ask for nothing new: the one-click case", () => {
         const diff = diffPowers(manifest(), manifest());
         expect(diff.added).toEqual([]);
         expect(diff.removed).toEqual([]);
@@ -40,17 +40,17 @@ describe("diffPowers", () => {
         expect(diff.added).toContain(`may badge the "Board" tile from any screen`);
         expect(diff.added).toContain("puts its shipped tools on the agent's PATH");
         expect(diff.removed).toEqual([]);
-        // The view itself is unchanged — only its badge right is new.
+        // The view itself is unchanged: only its badge right is new.
         expect(diff.unchanged).toContain(`a rail view "Board"`);
     });
 
-    test("a power's internals moving keeps its key — the sha pin answers for code, this answers for reach", () => {
+    test("a power's internals moving keeps its key: the sha pin answers for code, this answers for reach", () => {
         const retuned = manifest({
             contributes: { views: [{ id: "board", label: "Board", surface: "rail" }], processes: [{ name: "worker", command: "node other.js" }] },
         });
         const diff = diffPowers(manifest(), retuned);
         // Same process name, different command and autoStart: not an addition, and the label change surfaces
-        // as the shrunken form only where the SET changed — here it did not.
+        // as the shrunken form only where the SET changed: here it did not.
         expect(diff.added).toEqual([]);
         expect(diff.removed).toEqual([]);
     });
@@ -61,7 +61,7 @@ describe("diffPowers", () => {
         expect(diff.removed).toEqual(["its UI calls the sandbox route GET /panels"]);
     });
 
-    test("no installed manifest means everything is added — the install dialog's own vocabulary", () => {
+    test("no installed manifest means everything is added: the install dialog's own vocabulary", () => {
         const diff = diffPowers(undefined, manifest());
         expect(diff.unchanged).toEqual([]);
         expect(diff.added).toContain(`a rail view "Board"`);

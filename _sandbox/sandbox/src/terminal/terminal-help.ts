@@ -177,7 +177,7 @@ export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWi
         tools: [
             tool(
                 "request_help",
-                "Ask the owner to type into your terminal and clear something only a person can — a one-time password, a security-key touch, a confirmation you cannot answer. Use it when a command you started is SITTING AT A PROMPT (Bash handed the turn back saying it is still running): the command keeps waiting, the owner is shown your message over that very terminal, types, and hands back. This call waits for them and returns what the terminal says afterwards. Say precisely what you need typed.",
+                "Ask the owner to type into your terminal and clear something only a person can, a one-time password, a security-key touch, a confirmation you cannot answer. Use it when a command you started is SITTING AT A PROMPT (Bash handed the turn back saying it is still running): the command keeps waiting, the owner is shown your message over that very terminal, types, and hands back. This call waits for them and returns what the terminal says afterwards. Say precisely what you need typed.",
                 {
                     message: z.string().min(1).describe("What you need the owner to do at the terminal, in one or two sentences"),
                 },
@@ -185,14 +185,14 @@ export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWi
                     const sessionId = deps.shell.sessionId;
                     const session = sessionId === undefined ? undefined : agentSessionName(sessionId);
                     if (session === undefined) {
-                        return fail("this turn has no terminal of its own — run the command with Bash first");
+                        return fail("this turn has no terminal of its own: run the command with Bash first");
                     }
                     // The precondition, checked before anything parks: a session whose every window has exited
                     // has no prompt for the owner to answer, and a banner over it could only mislead.
                     const window = await liveWindow(session);
                     if (window === undefined) {
                         return fail(
-                            `nothing is waiting in your terminal — run the command that needs a person first, and ask once Bash tells you it is still running`,
+                            `nothing is waiting in your terminal: run the command that needs a person first, and ask once Bash tells you it is still running`,
                         );
                     }
                     await selectWindow(window.id);
@@ -208,7 +208,7 @@ export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWi
                     deps.push(resolved);
                     const note = reply.note === undefined || reply.note === "" ? "" : ` They say: ${reply.note}`;
                     if (!reply.helped) {
-                        return ok(`The owner could not help right now — note where you are stuck and continue with what you can.${note}`);
+                        return ok(`The owner could not help right now: note where you are stuck and continue with what you can.${note}`);
                     }
                     /* What the pane says NOW is the whole point of the hand-back: the owner answering the
                      * prompt is the one thing the agent could not watch. Whatever window they ended on, since

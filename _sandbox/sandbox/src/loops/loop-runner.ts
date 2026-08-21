@@ -288,7 +288,7 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                     detail:
                         outcome.failure === undefined
                             ? `${stalls} iterations in a row changed nothing in the tree.`
-                            : `${stalls} iterations in a row changed nothing — the last one failed: ${outcome.failure}`,
+                            : `${stalls} iterations in a row changed nothing, the last one failed: ${outcome.failure}`,
                 };
             }
         }

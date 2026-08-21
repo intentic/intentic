@@ -92,7 +92,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
     const envPath = (): string => join(desiredState(), ENV_FILE);
     const ensureActive = (): void => {
         if (!existsSync(desiredState())) {
-            throw new ORPCError("PRECONDITION_FAILED", { message: "DevOps is not active — activate it before adding secrets." });
+            throw new ORPCError("PRECONDITION_FAILED", { message: "DevOps is not active, activate it before adding secrets." });
         }
     };
     const read = async (): Promise<string> => {

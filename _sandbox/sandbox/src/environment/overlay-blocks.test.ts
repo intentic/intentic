@@ -4,7 +4,7 @@ import { parseVersion } from "./version-probe.js";
 
 // The real shape of a custom-section block, wrapped and continued exactly as the daemon writes one.
 const FFMPEG = `# ---- ffmpeg ----
-# ffmpeg — encoding screen recordings (Playwright records VP8/WebM; its bundled ffmpeg cannot encode H.264,
+# ffmpeg, encoding screen recordings (Playwright records VP8/WebM; its bundled ffmpeg cannot encode H.264,
 # so a promo/demo capture can't be handed over as an editable MP4 without this).
 RUN apt-get update \\
     && apt-get install -y --no-install-recommends ffmpeg \\
@@ -14,8 +14,8 @@ const RUST = `# ---- rust-tauri ----
 # The desktop app is a Tauri 2 shell, so its whole native half is Rust that nothing in this image can compile.
 #
 # Three groups, and each is needed for a different reason:
-#   • build-essential / pkg-config / libssl-dev — what any crate with a C dependency needs to link at all.
-#   • clang / lld — cargo-xwin's cross-link toolchain.
+#   • build-essential / pkg-config / libssl-dev: what any crate with a C dependency needs to link at all.
+#   • clang / lld: cargo-xwin's cross-link toolchain.
 RUN apt-get update \\
     && apt-get install -y --no-install-recommends \\
         build-essential \\
@@ -51,7 +51,7 @@ test("stops at the first instruction, so comments annotating a command are not r
 });
 
 test("the row's line is the first sentence, with the trailing qualification dropped", () => {
-    expect(purposeOf(blockProse(splitBlocks(FFMPEG)[0]?.body ?? ``))).toBe(`ffmpeg — encoding screen recordings.`);
+    expect(purposeOf(blockProse(splitBlocks(FFMPEG)[0]?.body ?? ``))).toBe(`ffmpeg, encoding screen recordings.`);
 });
 
 test("a full stop inside a version, a filename or an abbreviation does not end the sentence", () => {
@@ -59,7 +59,7 @@ test("a full stop inside a version, a filename or an abbreviation does not end t
     expect(purposeOf(`Needed by anything native, e.g. node-pty. More follows.`)).toBe(`Needed by anything native, e.g. node-pty.`);
 });
 
-test("a short sentence keeps its parenthetical — removing it would leave nothing worth reading", () => {
+test("a short sentence keeps its parenthetical: removing it would leave nothing worth reading", () => {
     expect(purposeOf(`Bun (a runtime).`)).toBe(`Bun (a runtime).`);
 });
 
@@ -78,12 +78,12 @@ test("a long sentence with no clause break is left whole rather than butchered",
 });
 
 /* The disclosure is the prose WHOLE, not the prose minus the row's line. Slicing the line off only works while
- * the two are cut at the same place, and they are not — the row's line drops a trailing parenthetical and cuts
- * an over-long sentence back to its claim — so the remainder still opened with the sentence the row was showing
+ * the two are cut at the same place, and they are not: the row's line drops a trailing parenthetical and cuts
+ * an over-long sentence back to its claim, so the remainder still opened with the sentence the row was showing
  * and the view printed it twice. */
 test("the disclosure is the whole explanation, so the row's summary is never printed twice", () => {
-    const prose = `ffmpeg — encoding screen recordings (Playwright records VP8/WebM). More detail follows.`;
-    expect(detailOf(prose, `ffmpeg — encoding screen recordings.`)).toBe(prose);
+    const prose = `ffmpeg, encoding screen recordings (Playwright records VP8/WebM). More detail follows.`;
+    expect(detailOf(prose, `ffmpeg, encoding screen recordings.`)).toBe(prose);
     expect(detailOf(`It does the thing. And here is why that was necessary.`, `It does the thing.`)).toBe(
         `It does the thing. And here is why that was necessary.`,
     );

@@ -5,11 +5,11 @@ import type { SharePayload } from "@intentic/sandbox-contract";
 import { expect, it } from "vitest";
 import { publishShare, shareRoot, unpublishShare } from "./share-publish.js";
 
-/* THE TREE A SHARE IS, against a real directory — because every claim here is about files that end up on the
+/* THE TREE A SHARE IS, against a real directory, because every claim here is about files that end up on the
  * open internet, and the two that matter most are about what is NOT there: a picture that never left the
  * workspace, and a page that is gone after Stop sharing. */
 
-// Stands in for the built page bundle (@intentic/share-view's dist). Small on purpose — what is being tested
+// Stands in for the built page bundle (@intentic/share-view's dist). Small on purpose: what is being tested
 // is the copying and the writing, not the app inside it.
 const viewer = async (): Promise<string> => {
     const dir = await mkdtemp(join(tmpdir(), "share-viewer-"));
@@ -52,7 +52,7 @@ it("publishes a page, its pictures, and one copy of the viewer every share loads
     const share = join(shareRoot(root), "login-redirect-fix-3f9c");
     // The page carries its own conversation, so it needs nothing running to be read.
     expect(await readFile(join(share, "index.html"), "utf8")).toContain(`"title":"Login redirect fix"`);
-    // The picture is a COPY beside the page — the published side names no workspace path.
+    // The picture is a COPY beside the page: the published side names no workspace path.
     expect(await readFile(join(share, "files/1-after.png"), "utf8")).toBe("PNG-BYTES");
     expect(await exists(join(shareRoot(root), "_viewer/assets/index.js"))).toBe(true);
 });
@@ -71,7 +71,7 @@ it("re-sharing replaces what was there, pictures included", async () => {
 
 /* A picture that cannot be copied is skipped rather than failing the share: the card then draws its path as
  * text, which is what an unpublishable picture honestly is. The path that matters here is the one pointing OUT
- * of the workspace — the shape an agent could produce and the outbox would refuse anyway. */
+ * of the workspace: the shape an agent could produce and the outbox would refuse anyway. */
 it("never copies a picture from outside the workspace", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
     await publishShare(root, dist, "chat-2b3c", payload(), [{ source: "../../etc/hosts", published: "files/1-hosts.png" }]);
@@ -85,7 +85,7 @@ it("stop sharing takes the page and its pictures, and switches publishing off be
     ]);
     await unpublishShare(root, "chat-3c4d");
 
-    // Nothing of the share is left — and with no share left, neither the assets nor the outbox itself remain,
+    // Nothing of the share is left, and with no share left, neither the assets nor the outbox itself remain,
     // because the outbox existing IS what "publishing is on" means.
     expect(await exists(join(root, "public"))).toBe(false);
 });

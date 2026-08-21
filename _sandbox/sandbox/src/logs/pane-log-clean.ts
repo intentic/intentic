@@ -45,7 +45,7 @@ class TitleStripper {
                     this.#inTitle = true;
                     continue;
                 }
-                out += "\x1b"; // a real ESC we held across the boundary — keep it, then handle char
+                out += "\x1b"; // a real ESC we held across the boundary: keep it, then handle char
             }
             if (this.#inTitle) {
                 if (char === "\x07")

@@ -12,7 +12,7 @@ import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js"
 import { abandonRun, openRun, resumeWorkflowExecution, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
 
 /* The scheduler's graph behaviour, end to end. Every test here is about the SEAM between steps, because that
- * is the only thing this module owns — a step's own execution is a loop, and loops are tested next door.
+ * is the only thing this module owns: a step's own execution is a loop, and loops are tested next door.
  *
  * The tree is a temp dir with no git in it, so `treeDigest` answers the same empty digest every time and the
  * stall detector is live by default. Each step therefore needs its own reason to stop, which is exactly the
@@ -56,7 +56,7 @@ const tempRoot = (): string => mkdtempSync(join(tmpdir(), "workflows-"));
 const REPOS = [{ repo: "root", base: "1111111111111111111111111111111111111111" }] as const;
 
 /* A turn that writes the verdict its step needs, so the step's loop converges on iteration 1. `claims` decides
- * per step id whether it says done — the lever every failure test below pulls. It reads the step from the
+ * per step id whether it says done: the lever every failure test below pulls. It reads the step from the
  * conversation id (`wf-<run>-<step>`) rather than the prompt, so a `continue` step sharing a conversation is
  * visible to the test as the same id, which is the property those tests are checking.
  */
@@ -91,13 +91,13 @@ test("steps run in dependency order and each is handed what the one before it pr
     expect(prompts[1]).toContain("plan says true");
     // A `json`-shaped document rides across as JSON, not as a paragraph mentioning it.
     expect(prompts[2]).toContain(`"note": "build"`);
-    /* AND NO DIFF IS PROMISED, because in this tree there is nothing to diff — see the header: the temp root
+    /* AND NO DIFF IS PROMISED, because in this tree there is nothing to diff, see the header: the temp root
      * has no git in it, so `agent/<conversation>` does not resolve in the one repository the run declares.
      *
      * This assertion used to be its exact opposite, and the inversion is the fix rather than a relaxation. The
      * branch name is DERIVED from the conversation id, so it can always be written; whether it names anything
      * is a separate question that nothing was asking. A reviewer handed the unresolved name runs the diff, gets
-     * nothing back, and reports that it found no problems — a pass over work it never saw, which is the exact
+     * nothing back, and reports that it found no problems: a pass over work it never saw, which is the exact
      * failure the branch name was introduced to prevent. Resolved first (handover-branches.ts), the empty case
      * becomes a sentence that says so.
      */
@@ -168,7 +168,7 @@ test("a long unstructured response is handed on through a complete shared artifa
     expect(settled?.steps[0]?.report?.length).toBeLessThan(full.length);
 });
 
-/* WHAT THE MODEL ACTUALLY RECEIVES — asserted end to end, through the step brief, the loop brief and the turn,
+/* WHAT THE MODEL ACTUALLY RECEIVES: asserted end to end, through the step brief, the loop brief and the turn,
  * because every one of those layers has at some point added a heading of its own and the reader sees the sum.
  *
  * The complaint this exists for: a step meant to do what the user asked opened with "# Iteration 1 of at most
@@ -177,7 +177,7 @@ test("a long unstructured response is handed on through a complete shared artifa
  * A page of machinery describing machinery, on top of one sentence.
  *
  * `toEqual` rather than a set of `not.toContain`s, deliberately. The property is not "no loop scaffolding" but
- * "nothing at all", and only an exact match keeps it that way — every helpful line anybody adds in future to
+ * "nothing at all", and only an exact match keeps it that way: every helpful line anybody adds in future to
  * any of the three layers fails this.
  */
 test("an ordinary step's turn prompt is the request, byte for byte", async () => {
@@ -194,14 +194,14 @@ test("an ordinary step's turn prompt is the request, byte for byte", async () =>
     await runWorkflow(services, run, capture);
 
     expect(prompts).toEqual(["make the importer handle empty files"]);
-    // And it is DONE after that one turn — nothing was declared, so the turn ending is the whole of finishing.
+    // And it is DONE after that one turn: nothing was declared, so the turn ending is the whole of finishing.
     const settled = await services.workflowRuns.get(run.runId);
     expect(settled?.state).toBe("done");
     expect(settled?.steps[0]?.iterations).toBe(1);
 });
 
 // A step that declares its own job still gets the brief, because for that one the request is context rather
-// than the instruction — the framing is what an ORDINARY step drops, not something the feature lost.
+// than the instruction: the framing is what an ORDINARY step drops, not something the feature lost.
 test("a step with a job of its own still gets told what the run is for", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -242,7 +242,7 @@ test("a failed step skips everything downstream of it and leaves the branch besi
     const settled = await services.workflowRuns.get(run.runId);
     const states = new Map(settled?.steps.map((entry) => [entry.stepId, entry.state]));
     expect(states.get("bad")).toBe("failed");
-    // Skipped, not failed — one broken step must not be reported four times.
+    // Skipped, not failed: one broken step must not be reported four times.
     expect(states.get("after-bad")).toBe("skipped");
     // The independent branch is untouched, which is the reason failure is per-branch at all.
     expect(states.get("sibling")).toBe("done");
@@ -251,7 +251,7 @@ test("a failed step skips everything downstream of it and leaves the branch besi
 });
 
 /* THE RUN THAT USED TO LIE. A step that declares no output and no checks is the ordinary shape a design gets
- * written in, and for that step "the turn finished" is the whole bar — so a turn the provider REFUSED was
+ * written in, and for that step "the turn finished" is the whole bar, so a turn the provider REFUSED was
  * settling `done` with an empty report, the step after it was handed "(this step finished without saying
  * anything)", and the run reported every step complete having run none of them. The refusal is the answer. */
 test("a step whose model was refused fails the run instead of reporting a done step with nothing in it", async () => {
@@ -271,7 +271,7 @@ test("a step whose model was refused fails the run instead of reporting a done s
     expect(states.get("attempt")).toBe("failed");
     expect(states.get("after")).toBe("skipped");
     expect(settled?.state).toBe("failed");
-    // The provider's own sentence, on the step — the only thing anyone can act on.
+    // The provider's own sentence, on the step: the only thing anyone can act on.
     expect(settled?.steps.find((entry) => entry.stepId === "attempt")?.detail).toBe(refusal);
 });
 
@@ -332,7 +332,7 @@ test("the sandbox-wide workflow limit bounds several fan-outs together", async (
     const runs = await Promise.all(Array.from({ length: 5 }, () => services.workflowRuns.start(openRun(design, REPOS, Date.now()))));
     const executions = runs.map((run) => runWorkflow(services, run, blocking));
 
-    /* Wait for the ceiling to be the thing holding the fan-out back — a HANG BOUND, never a latency
+    /* Wait for the ceiling to be the thing holding the fan-out back: a HANG BOUND, never a latency
      * measurement. Five runs each write their opening state before their first turn is in flight, so the
      * hundred 1ms sleeps this used to be were a guess about how loaded the box is: under the repo-wide gate
      * they ran out with `peak` still 0.
@@ -340,7 +340,7 @@ test("the sandbox-wide workflow limit bounds several fan-outs together", async (
      * Releasing in a `finally` because these turns are parked on `held` and the slots they hold are the
      * SANDBOX-WIDE ones (module state, shared by every test in this file). A wait that gave up without
      * releasing left four of the four slots held for the rest of the run, and every later test here failed
-     * waiting for one — which is how one slow moment read as five broken tests.
+     * waiting for one, which is how one slow moment read as five broken tests.
      */
     try {
         await vi.waitFor(() => expect(peak).toBe(4), { timeout: 10_000, interval: 5 });
@@ -387,17 +387,17 @@ test("stopping a run stops the loop in flight and starts nothing further", async
 /* THE STOP RACE A WIDE GRAPH HAS, and the reason the abort is asked about on BOTH sides of the slot.
  *
  * A step past its dependencies but over `maxParallel` waits for a slot, and it waits as long as the steps ahead
- * of it take — an agent turn each. The guard before the queue had long since passed by then, so a run stopped
+ * of it take: an agent turn each. The guard before the queue had long since passed by then, so a run stopped
  * in that window still let the queued step walk into `execute`: it published itself to the fleet card, wrote
- * itself `running` in the ledger, and opened a loop record. No TURN was wasted — runLoop asks its own stop
- * signal before it calls one, and the relay gets there first — which is why the cost of this is bookkeeping
+ * itself `running` in the ledger, and opened a loop record. No TURN was wasted: runLoop asks its own stop
+ * signal before it calls one, and the relay gets there first, which is why the cost of this is bookkeeping
  * rather than money. But it is bookkeeping two surfaces read: a step flickering into `running` after the user
  * pressed Stop, and a row in the loops manifest for a step that never ran an iteration.
  */
 test("a step queued behind maxParallel never opens a loop once the run is stopped", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
-    // One slot and two independent roots, so `queued` is holding the door while `first` runs — and `first` is
+    // One slot and two independent roots, so `queued` is holding the door while `first` runs, and `first` is
     // what presses Stop.
     const design = workflow([step("first"), step("queued")], { maxParallel: 1 });
     const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
@@ -412,11 +412,11 @@ test("a step queued behind maxParallel never opens a loop once the run is stoppe
     const queued = settled?.steps.find((entry) => entry.stepId === "queued");
     expect(queued?.state).toBe("stopped");
     /* THE ASSERTION THAT SEPARATES THE FIX FROM THE BUG. Both spellings settle the step as `stopped` with no
-     * iterations, so the step's own record cannot tell them apart — what can is whether a loop was ever opened
+     * iterations, so the step's own record cannot tell them apart: what can is whether a loop was ever opened
      * on its conversation, and whether the run says the step never started or merely stopped like the rest. */
     expect(await services.loops.get(queued?.conversationId ?? "")).toBeUndefined();
     expect(queued?.detail).toBe("The run was stopped before this step started.");
-    // The step that DID run still opened its loop — the guard must not swallow work that was already going.
+    // The step that DID run still opened its loop: the guard must not swallow work that was already going.
     expect(await services.loops.get(settled?.steps[0]?.conversationId ?? "")).toBeDefined();
 });
 
@@ -438,7 +438,7 @@ test("a resumed run replays the steps that already finished instead of paying fo
     });
     await runWorkflow(services, (await services.workflowRuns.get(run.runId)) ?? run, claiming(root, prompts));
 
-    // Exactly one turn ran, and it was the unfinished step — handed what the finished one had concluded.
+    // Exactly one turn ran, and it was the unfinished step: handed what the finished one had concluded.
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain("settled last time");
     expect((await services.workflowRuns.get(run.runId))?.state).toBe("done");
@@ -490,11 +490,11 @@ test("workflowFaults refuses the graphs the scheduler could not run", () => {
     expect(workflowFaults(workflow([step("a", { needs: ["b"] }), step("b", { needs: ["a"] })])).join(" ")).toContain("in a circle");
     // A dangling dependency.
     expect(workflowFaults(workflow([step("a", { needs: ["ghost"] })])).join(" ")).toContain("not a step");
-    /* Nothing to produce and nothing to check is the ORDINARY step and no fault at all — it is one session with
+    /* Nothing to produce and nothing to check is the ORDINARY step and no fault at all: it is one session with
      * one job, finished when the session is. This was refused, on a rule borrowed from loops where it is right
      * (a loop with no bar has no reason to run twice) and wrong here (a step was never started in order to
      * repeat). The cost of the rule was that every step had to declare something before the graph would save,
-     * and the cheapest something was a `claim` — a verdict file nobody reads, a page of contract in the prompt,
+     * and the cheapest something was a `claim`: a verdict file nobody reads, a page of contract in the prompt,
      * and a way for a step that did the work to fail for not describing it. */
     expect(workflowFaults(workflow([step("a", { output: { kind: "none" }, checks: [] })]))).toEqual([]);
     // A root that continues a session that does not exist.
@@ -509,11 +509,11 @@ test("workflowFaults refuses the graphs the scheduler could not run", () => {
 
 /* THE STUCK RUN, and the only way out of it.
  *
- * A record left `running` by a daemon that is gone — replaced by a sandbox update, or dead between a step
- * settling and the run being settled — has no abort handle for `stopWorkflowRun` to find. Stop used to refuse
+ * A record left `running` by a daemon that is gone: replaced by a sandbox update, or dead between a step
+ * settling and the run being settled: has no abort handle for `stopWorkflowRun` to find. Stop used to refuse
  * such a run outright ("that run is not going"), which made it permanent: a card with a button that could not
  * work, a step count frozen where the daemon died, and no way off the board. Both halves are asserted because
- * both were wrong on screen: the RUN has to end, and so do the steps it left mid-flight — "1 live" is counted
+ * both were wrong on screen: the RUN has to end, and so do the steps it left mid-flight, "1 live" is counted
  * off the steps, so settling only the run leaves the card still claiming a session is working.
  */
 test("a run nothing is driving can still be stopped, steps and all", async () => {
@@ -526,7 +526,7 @@ test("a run nothing is driving can still be stopped, steps and all", async () =>
         steps: opened.steps.map((entry) => (entry.stepId === "cut-off" ? { ...entry, state: "running" as const, iterations: 1 } : entry)),
     });
 
-    // Nothing is in flight — this is the state the scheduler is NOT in.
+    // Nothing is in flight: this is the state the scheduler is NOT in.
     expect(workflowRunning(opened.runId)).toBe(false);
     expect(stopWorkflowRun(opened.runId)).toBe(false);
 

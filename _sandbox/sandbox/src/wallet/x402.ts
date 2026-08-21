@@ -222,7 +222,7 @@ export const parseChallenge = (url: string, headers: Headers, body: string): Cha
     if (authenticate !== null && /^payment[ ,]/i.test(authenticate.trim())) {
         return {
             kind: "unsupported",
-            reason: "this endpoint charges over MPP (the `Payment` HTTP auth scheme), which this wallet does not speak yet — it pays x402 endpoints only",
+            reason: "this endpoint charges over MPP (the `Payment` HTTP auth scheme), which this wallet does not speak yet, it pays x402 endpoints only",
         };
     }
     // v1: the challenge is the 402's JSON body.

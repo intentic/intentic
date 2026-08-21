@@ -10,8 +10,8 @@ import { createPortsRoutes, type PortsRoutesDeps } from "./ports.routes.js";
 
 /* The ports routes, over their own five seams.
  *
- * Split out of app.integration.test.ts — 116 tests over every route in the daemon, in one file that two agents
- * working on unrelated features collided in every time — and then stood up on `PortsRoutesDeps` rather than on
+ * Split out of app.integration.test.ts: 116 tests over every route in the daemon, in one file that two agents
+ * working on unrelated features collided in every time, and then stood up on `PortsRoutesDeps` rather than on
  * the whole daemon. Everything these routes can reach is in `deps` below and the compiler checks all of it, so
  * a service the daemon grows tomorrow cannot land in this file's blast radius: it is not in the type.
  *
@@ -49,7 +49,7 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
     });
     const client = routesClient(portsContract, createPortsRoutes(deps));
 
-    // Every row carries what it IS beside where it runs — the view renders the name and the sentence, not argv.
+    // Every row carries what it IS beside where it runs: the view renders the name and the sentence, not argv.
     const named = {
         title: "Vite dev server",
         purpose: "Running in app, outside any terminal this app can show.",
@@ -110,7 +110,7 @@ test("ports.forward maps a listener onto a slot, mints its route label, and refu
             command: "vite",
             forwarded: false,
             title: "Vite dev server",
-            purpose: "Nothing in the sandbox claims this one — it answers from outside the container.",
+            purpose: "Nothing in the sandbox claims this one, it answers from outside the container.",
             origin: "unknown",
         },
     ]);

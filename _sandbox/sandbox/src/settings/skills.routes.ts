@@ -30,7 +30,7 @@ export const createSkillsRoutes = (services: Services) => {
         read: i.read.handler(async ({ input }) => {
             const found = await readSkillText(services, input.id);
             if (found === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "no skill with that id — it may have been removed since this list was drawn" });
+                throw new ORPCError("NOT_FOUND", { message: "no skill with that id, it may have been removed since this list was drawn" });
             }
             return { id: input.id, name: found.name, body: parseSkillFile(found.text).body };
         }),
@@ -39,7 +39,7 @@ export const createSkillsRoutes = (services: Services) => {
              * so a skill called `lsp` would be whichever of the two the reconciler happened to write last, and
              * the owner's copy would silently claim the switch that belongs to the tool. */
             if (isBakedSkill(input.name)) {
-                throw new ORPCError("CONFLICT", { message: `"${input.name}" is the name of a built-in skill — choose another` });
+                throw new ORPCError("CONFLICT", { message: `"${input.name}" is the name of a built-in skill, choose another` });
             }
             /* Asked BEFORE the write, because the answer stops being available the moment it lands: a skill the
              * owner is meeting for the first time is switched on (you wrote it to use it), while re-saving one
@@ -61,7 +61,7 @@ export const createSkillsRoutes = (services: Services) => {
              * satisfied by a plugin that happens to ship a skill of the same name. */
             const row = (await skillInventory(services)).find((skill) => skill.id === input.name);
             if (row?.removable !== true) {
-                throw new ORPCError("BAD_REQUEST", { message: "that skill belongs to something else — remove what provides it, or switch it off" });
+                throw new ORPCError("BAD_REQUEST", { message: "that skill belongs to something else, remove what provides it, or switch it off" });
             }
             await removeOwnSkill(services, input.name);
             const { skills } = await services.sandboxSettings.get();

@@ -5,8 +5,8 @@ import { testConfig } from "../testing.js";
 import { createSpeechRoute, type SpeechRoutesDeps } from "./speech.routes.js";
 import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";
 
-/* The speech routes over their two seams (perf, speech). The app's own middleware — bearer auth, CORS, the
- * boot gate — is the app's and is tested there (app.integration.test.ts). */
+/* The speech routes over their two seams (perf, speech). The app's own middleware: bearer auth, CORS, the
+ * boot gate: is the app's and is tested there (app.integration.test.ts). */
 
 const speechDeps = (speech: Partial<Speech>): SpeechRoutesDeps => ({
     perf: createPerfTracker(createLogger(testConfig)),
@@ -60,7 +60,7 @@ test("an empty body is a 400, not a whisper run over nothing", async () => {
     expect(response.status).toBe(400);
 });
 
-test("the two refusals with a story get their own statuses — 501 rebuild, 409 wait", async () => {
+test("the two refusals with a story get their own statuses: 501 rebuild, 409 wait", async () => {
     const unprovisioned = createSpeechRoute(
         speechDeps({
             transcribe: async () => {

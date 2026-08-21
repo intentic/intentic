@@ -16,7 +16,7 @@ export const createLoopsRoutes = (services: Services) => {
             // Refused rather than queued: two pumps on one conversation would race the same worktree and the
             // same turn mutex, and the loser would spend a whole turn finding that out.
             if (loopRunning(input.conversationId)) {
-                throw new ORPCError("CONFLICT", { message: "This agent is already looping — stop that loop before starting another." });
+                throw new ORPCError("CONFLICT", { message: "This agent is already looping, stop that loop before starting another." });
             }
             // A loop with nothing to produce and nothing to check cannot succeed; it can only run out of
             // iterations. Refused here rather than left to fail slowly, because failing slowly costs money.
@@ -53,10 +53,10 @@ export const createLoopsRoutes = (services: Services) => {
             }
             const outcome = await services.loopDesigns.save(input.design, input.create);
             if (outcome === "conflict") {
-                throw new ORPCError("CONFLICT", { message: `A saved loop called “${input.design.name}” already exists.` });
+                throw new ORPCError("CONFLICT", { message: `A saved loop called "${input.design.name}" already exists.` });
             }
             if (outcome === "missing") {
-                throw new ORPCError("NOT_FOUND", { message: "That saved loop no longer exists — it may have been deleted in another tab." });
+                throw new ORPCError("NOT_FOUND", { message: "That saved loop no longer exists, it may have been deleted in another tab." });
             }
             return input.design;
         }),

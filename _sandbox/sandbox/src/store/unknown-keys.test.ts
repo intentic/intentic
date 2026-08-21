@@ -69,7 +69,7 @@ describe(`objectParse`, () => {
     });
 
     it(`still parses a file with a typo, and reports the key it dropped`, () => {
-        // The whole point: the parse must NOT get stricter. A stray key costs itself and nothing else — the
+        // The whole point: the parse must NOT get stricter. A stray key costs itself and nothing else, the
         // rest of the file keeps applying, which is also what makes a manifest from a newer build readable.
         const { value, problems } = run({ terseOutput: true, terseOutpt: false });
         expect(value).toEqual({ terseOutput: true, skills: [] });

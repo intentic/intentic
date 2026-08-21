@@ -73,7 +73,7 @@ test("a .git worktree pointer file is junk like a .git dir, and still liftable w
 });
 
 test("the agent plane's byproducts are excluded, its manifests are not", async () => {
-    // The state dir is grouped, so the config folder has to exist before a manifest can be written into it —
+    // The state dir is grouped, so the config folder has to exist before a manifest can be written into it:
     // the fixture only makes the cache tree.
     await mkdir(join(root, `${STATE_DIR}/config`), { recursive: true });
     await writeFile(join(root, `${STATE_DIR}/config/settings.json`), '{ "theme": "dark" }\n');
@@ -84,7 +84,7 @@ test("the agent plane's byproducts are excluded, its manifests are not", async (
         `${STATE_DIR}/local/runtime/extensions/whatsapp/gateway.url`,
         `${STATE_DIR}/local/browser/reddit/Default/Cookies`,
         ...Object.values(RETIRED_WORKSPACE_STATE_DIRS).flatMap((dirs) => dirs.map((dir) => `.intentic/${dir}/retired-state`)),
-        // A workspace can contain checkouts that are themselves intentic workspaces — their byproducts are no
+        // A workspace can contain checkouts that are themselves intentic workspaces: their byproducts are no
         // more searchable than the root's own.
         "alpha/.intentic/local/cache/iq/index.db",
     ];
@@ -125,7 +125,7 @@ test("filterScope narrows by path, lang, glob, and file class", () => {
 
 // A worktree, a submodule, and any --separate-git-dir repo (how the daemon versions the workspace root) carry a
 // `.git` POINTER FILE instead of a directory. Missing that left their files unattributed, and every git-backed
-// verb reads `repo` — churn, hotspots, recent, log, who.
+// verb reads `repo`: churn, hotspots, recent, log, who.
 test("a .git pointer file bounds a repo exactly like a .git directory", async () => {
     await writeFile(join(root, "beta/.git"), "gitdir: /elsewhere/beta.git\n");
     const swept = await sweep(root, false);

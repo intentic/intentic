@@ -21,7 +21,7 @@ const ANNOUNCED_KEPT = 60;
 const ConclusionSchema = z.object({ status: z.enum(["success", "failed"]), at: z.number() });
 const CiStateSchema = z.object({
     secret: z.string().min(1),
-    // Keyed "<repo>\n<branch>" — \n can appear in neither side, so the compound key can't collide.
+    // Keyed "<repo>\n<branch>": \n can appear in neither side, so the compound key can't collide.
     conclusions: z.record(z.string(), ConclusionSchema),
     /* Which runs the POLLER has already turned into `ci` events, per workspace repo, its de-duplication, and
      * the thing that makes a restart quiet. Deliberately run ids rather than a timestamp watermark: a run's

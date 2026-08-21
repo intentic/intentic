@@ -135,7 +135,7 @@ export const createEngineClient = (options: ResidentEngineOptions): EngineClient
                 return;
             }
             const how = signal ?? `code ${String(code)}`;
-            onQueryError?.(new Error(`iq engine process exited (${how}) — a new one starts on the next search`));
+            onQueryError?.(new Error(`iq engine process exited (${how}): a new one starts on the next search`));
             fail(new Error(`iq engine process exited (${how})`));
         });
         // A fork that cannot even start (or a channel that cannot be written) reports here rather than as an

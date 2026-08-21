@@ -127,12 +127,12 @@ export const renderText = (request: RenderRequest): Rendered => {
     const header = (shown: number, note?: string): string => {
         const scope = style === "paths" ? `${totalHits} ${unit}` : `${totalHits} ${unit} in ${totalFiles} files`;
         const noteText = note !== undefined ? ` · ${note}` : "";
-        return `iq: ${request.echo} — ${scope} · ${freshnessText(request.freshness)}${noteText} · showing ${shown}/${totalHits}`;
+        return `iq: ${request.echo}, ${scope} · ${freshnessText(request.freshness)}${noteText} · showing ${shown}/${totalHits}`;
     };
     const moreLine = (remainingHits: number, remainingFiles: number, cursor: string): string =>
         style === "paths"
-            ? `more: ${remainingHits} ${unit} — iq ${request.echo} --after ${cursor}`
-            : `more: ${remainingHits} ${unit} in ${remainingFiles} files — iq ${request.echo} --after ${cursor}`;
+            ? `more: ${remainingHits} ${unit}, iq ${request.echo} --after ${cursor}`
+            : `more: ${remainingHits} ${unit} in ${remainingFiles} files, iq ${request.echo} --after ${cursor}`;
 
     // Reserve with worst-case widths so the final assembly can only shrink: the totals are the widest counts, the
     // cursor the widest offset, and the candidates line the longest paths it could possibly name. The header and
@@ -190,7 +190,7 @@ export const renderText = (request: RenderRequest): Rendered => {
                 const lineTokens = estimateTokens(line);
                 const elided = group.hits.length - i;
                 if (groupTokens + lineTokens > groupCap && i > 0) {
-                    const elision = `     … ${elided} more — iq context ${group.path}:${hit.line}`;
+                    const elision = `     … ${elided} more: iq context ${group.path}:${hit.line}`;
                     lines.push(elision);
                     groupTokens += estimateTokens(elision);
                     break;

@@ -13,7 +13,7 @@ import { createExtensionBackend, type ExtensionBackend } from "./backend-supervi
 
 /* The extension backend system end to end, against a REAL spawned host process: a workspace extension whose
  * server bundle is plain ESM on disk, the supervisor bringing the host up, the daemon's /x proxy carrying a
- * request through it, and the containment rules — a throwing activation is one row, an unproxied caller is
+ * request through it, and the containment rules: a throwing activation is one row, an unproxied caller is
  * refused, a stopped host answers 503 with words. Slow by this suite's standards (a node spawn + health
  * poll), which is exactly what makes it the one test that can catch the seams the unit tests fake. */
 
@@ -24,7 +24,7 @@ afterEach(() => {
     }
 });
 
-// A workspace extension with a BACKEND only: no build step, no imports — the bundle-self-containment rule
+// A workspace extension with a BACKEND only: no build step, no imports, the bundle-self-containment rule
 // satisfied trivially, the way an agent authoring one in place would start.
 const echoServer = `export const activateServer = (api, context) => {
     api.routes.mount(async (request) => {
@@ -60,7 +60,7 @@ const writeExtension = async (root: string, name: string, server: string): Promi
     await writeFile(join(dir, "server.js"), server);
 };
 
-// The real supervisor over the route-testing services — the circular seam production composition solves with
+// The real supervisor over the route-testing services: the circular seam production composition solves with
 // a holder, solved here the same way. extensionsDir is emptied so the repo's own first-party extensions stay
 // out of the host under test.
 const harness = (root: string): { svc: Services; backend: ExtensionBackend } => {
@@ -90,7 +90,7 @@ test("a workspace extension's backend serves its /x namespace through the daemon
     expect(backend.statusOf("acme.echo")).toEqual({ id: "acme.echo", state: "running" });
 
     const app = createApp(svc);
-    // GET with a query — the proxy must carry both the rebased path and the search intact.
+    // GET with a query: the proxy must carry both the rebased path and the search intact.
     const ping = await app.request("http://sandbox.test/x/acme.echo/ping?q=hello");
     expect(ping.status).toBe(200);
     expect(await ping.json()).toEqual({ pong: true, extension: "acme.echo", q: "hello" });
@@ -111,7 +111,7 @@ test("a workspace extension's backend serves its /x namespace through the daemon
     expect((await app.request("http://sandbox.test/x/acme.nobody/ping")).status).toBe(404);
 
     // The host only answers the daemon: the same request straight to the host's port, without the proxy's
-    // header, is refused — loopback is container-shared and the auth gate lives daemon-side.
+    // header, is refused: loopback is container-shared and the auth gate lives daemon-side.
     const target = backend.proxyTarget();
     expect(target).toBeDefined();
     const direct = await fetch(`http://127.0.0.1:${target!.port}/x/acme.echo/ping`);
@@ -123,7 +123,7 @@ test("a workspace extension's backend serves its /x namespace through the daemon
     };
     expect(list.extensions.find((extension) => extension.id === "acme.echo")?.backend).toEqual({ state: "running" });
 
-    // Stopping the host turns the namespace into a 503 that says so — the web's cue to retry, not an error state.
+    // Stopping the host turns the namespace into a 503 that says so: the web's cue to retry, not an error state.
     backend.stop();
     const stopped = await app.request("http://sandbox.test/x/acme.echo/ping");
     expect(stopped.status).toBe(503);

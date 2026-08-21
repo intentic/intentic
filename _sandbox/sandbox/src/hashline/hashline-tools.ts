@@ -25,7 +25,7 @@ export const createHashlineServer = (root: string): McpSdkServerConfigWithInstan
         tools: [
             tool(
                 "read",
-                "Read a text file for editing. Returns an `anchor` for the whole file and a short tag before each line — pass both back to hashline_edit to anchor an edit. Call this before hashline_edit. (For images/PDFs or plain viewing, the normal Read tool still works.)",
+                "Read a text file for editing. Returns an `anchor` for the whole file and a short tag before each line: pass both back to hashline_edit to anchor an edit. Call this before hashline_edit. (For images/PDFs or plain viewing, the normal Read tool still works.)",
                 { path: z.string().describe("Absolute or workspace-relative path to the file") },
                 async ({ path }) => {
                     const abs = resolveWithin(root, path);
@@ -41,7 +41,7 @@ export const createHashlineServer = (root: string): McpSdkServerConfigWithInstan
             ),
             tool(
                 "edit",
-                'Edit a file by anchored ops instead of retyping unchanged lines. Pass the `anchor` from a recent hashline_read of this file plus one or more ops, each anchored to line tags from that read: replace {from,to?,lines}, insert {after,lines} (after "^" = top of file), delete {from,to?}. The edit is rejected if the file changed since you read it — re-read for a fresh anchor. On success it returns the re-tagged file so you can chain further edits.',
+                'Edit a file by anchored ops instead of retyping unchanged lines. Pass the `anchor` from a recent hashline_read of this file plus one or more ops, each anchored to line tags from that read: replace {from,to?,lines}, insert {after,lines} (after "^" = top of file), delete {from,to?}. The edit is rejected if the file changed since you read it, re-read for a fresh anchor. On success it returns the re-tagged file so you can chain further edits.',
                 {
                     path: z.string().describe("Absolute or workspace-relative path to the file"),
                     anchor: z.string().describe("The file anchor from hashline_read"),

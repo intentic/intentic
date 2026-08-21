@@ -269,7 +269,7 @@ const renderAnalytics = (runs: ReadonlyArray<{ record: RunRecord; analytics: Run
         const errTotal = groupRuns.reduce((sum, { analytics }) => sum + analytics.iqUsageErrors, 0);
         if (iqTotal > 0) {
             parts.push(
-                `- **iq failure KPI**: ${zeroTotal}/${iqTotal} zero-hit (${((100 * zeroTotal) / iqTotal).toFixed(0)}%), ${errTotal} usage errors — target <5%`,
+                `- **iq failure KPI**: ${zeroTotal}/${iqTotal} zero-hit (${((100 * zeroTotal) / iqTotal).toFixed(0)}%), ${errTotal} usage errors, target <5%`,
             );
         }
         if (adoptionFailures.length > 0) {

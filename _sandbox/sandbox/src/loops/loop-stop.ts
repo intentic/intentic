@@ -66,7 +66,7 @@ const readDocument = async (services: Services, loop: Loop, iteration: number): 
     try {
         raw = JSON.parse(await readFile(path, "utf8"));
     } catch {
-        return { done: false, detail: `No output file — the iteration ended without writing iteration-${iteration}.json.` };
+        return { done: false, detail: `No output file, the iteration ended without writing iteration-${iteration}.json.` };
     }
     const parsed = LoopDocumentSchema.safeParse(raw);
     if (!parsed.success) {
@@ -104,7 +104,7 @@ const askJudge = async (services: Services, loop: Loop, rubric: string, report: 
         `THE GOAL:`,
         loop.goal,
         ``,
-        `THE RUBRIC — the bar the goal has to clear:`,
+        `THE RUBRIC, the bar the goal has to clear:`,
         rubric,
         ``,
         `WHAT THE AGENT SAYS IT DID, in its own words:`,
@@ -112,7 +112,7 @@ const askJudge = async (services: Services, loop: Loop, rubric: string, report: 
         report.slice(-8_000),
         `---`,
         ``,
-        `Answer with one word — DONE or CONTINUE — then one sentence of why.`,
+        `Answer with one word: DONE or CONTINUE, then one sentence of why.`,
         `Say DONE only if the report shows the rubric is met NOW. Partial work, work described as nearly finished, and work ` +
             `whose verification is not described are all CONTINUE. If the report is too vague to tell, that is CONTINUE.`,
     ].join(`\n`);

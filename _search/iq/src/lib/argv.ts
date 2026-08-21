@@ -76,7 +76,7 @@ export interface NormalizedArgv {
 const BARE_FILENAME = /^[\w-]+\.[a-z]{1,5}$/i;
 const filenameHint = (verb: string | undefined, pattern: string | undefined): string | undefined =>
     verb === "find" && pattern !== undefined && BARE_FILENAME.test(pattern)
-        ? `"${pattern}" looks like a filename — \`iq files ${pattern}\` searches names, \`find\` searches content`
+        ? `"${pattern}" looks like a filename: \`iq files ${pattern}\` searches names, \`find\` searches content`
         : undefined;
 
 export const normalizeArgv = (argv: readonly string[]): NormalizedArgv => {

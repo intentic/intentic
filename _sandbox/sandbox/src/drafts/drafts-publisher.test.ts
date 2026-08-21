@@ -4,7 +4,7 @@ import type { Services } from "../composition.js";
 
 /* The publisher's two jobs, tested where getting them wrong is expensive: WHEN it wakes, and WHICH door each
  * post goes through. Both are decided from the queue on disk rather than from anything held in memory, so the
- * fake below is a real store's worth of behaviour — read, write, read back — and nothing else is stubbed
+ * fake below is a real store's worth of behaviour: read, write, read back, and nothing else is stubbed
  * except the two doors themselves. */
 
 const startTurn = vi.fn(async () => undefined);
@@ -14,7 +14,7 @@ vi.mock("../agent/agent.routes.js", () => ({ streamAgent: vi.fn() }));
 vi.mock("../agent/turn-resume.js", () => ({ startConversationTurn: (...args: unknown[]) => startTurn(...(args as [])) }));
 vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: vi.fn() }));
 vi.mock("./discord-post.js", async (importOriginal) => ({
-    // The real predicate — whether a draft can go the fast way is part of what is under test — with only the
+    // The real predicate, whether a draft can go the fast way is part of what is under test: with only the
     // network call replaced.
     ...(await importOriginal<typeof import("./discord-post.js")>()),
     postToDiscord: (...args: unknown[]) => sendDiscord(...(args as [])),
@@ -25,7 +25,7 @@ const { createDraftsPublisher, nextDueAt } = await import("./drafts-publisher.js
 const NOW = 1_700_000_000_000;
 
 // `actsAs` is on the default because the default platform is a browser one, and a browser draft without a
-// persona is not the ordinary case — it is its own failure, tested on its own below.
+// persona is not the ordinary case: it is its own failure, tested on its own below.
 const draft = (overrides: Partial<DraftSummary> & { id: string }): DraftSummary => ({
     platform: "reddit",
     actsAs: "poster",
@@ -34,7 +34,7 @@ const draft = (overrides: Partial<DraftSummary> & { id: string }): DraftSummary 
     ...overrides,
 });
 
-// The turn a call to startConversationTurn was given — the third argument, which is the whole request.
+// The turn a call to startConversationTurn was given: the third argument, which is the whole request.
 const turnOf = (call: number): { prompt: string; actsAs?: string; conversationId: string } =>
     (startTurn.mock.calls[call] as unknown as [unknown, unknown, { prompt: string; actsAs?: string; conversationId: string }])[2];
 
@@ -48,7 +48,7 @@ const servicesWith = (...seed: DraftSummary[]) => {
             remove: async (id: string) => rows.delete(id),
         },
         capabilities: { get: async () => ({ id: "discord", kind: "cli", config: { provider: "discord", botToken: "t" } }) },
-        // The cast the publisher checks `actsAs` against — the fixture's default face plus the two the
+        // The cast the publisher checks `actsAs` against: the fixture's default face plus the two the
         // multi-persona test uses.
         personas: { list: async () => [{ id: "poster", capabilities: [] }, { id: "alice", capabilities: [] }, { id: "bob", capabilities: [] }] },
         logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
@@ -64,7 +64,7 @@ beforeEach(() => {
 test("the next wake is the soonest approved post, and there is none when nothing is approved", () => {
     expect(nextDueAt([draft({ id: "a" }), draft({ id: "b", status: "posted" })], NOW)).toBeUndefined();
     expect(nextDueAt([draft({ id: "a", status: "approved", scheduledAt: NOW + 5_000 })], NOW)).toBe(NOW + 5_000);
-    // Soonest wins, and anything already past due answers `now` — a queue that came due while the daemon was
+    // Soonest wins, and anything already past due answers `now`: a queue that came due while the daemon was
     // down has to go out on the next arm, not at whatever future time happens to sort first.
     expect(
         nextDueAt(
@@ -93,16 +93,16 @@ test("a browser-only platform gets one turn for the whole batch", async () => {
     expect(turnOf(0).prompt).toContain("r1.json");
     expect(turnOf(0).prompt).toContain("r2.json");
     // And it wakes wearing the face the drafts named. Without this the turn is unattended and unpinned, which
-    // is denied every logged-in account — so it could not reach the Reddit login these posts need.
+    // is denied every logged-in account, so it could not reach the Reddit login these posts need.
     expect(turnOf(0).actsAs).toBe("poster");
-    // Marked before the turn starts — a turn that dies must leave a stuck post, never a due one.
+    // Marked before the turn starts: a turn that dies must leave a stuck post, never a due one.
     expect(services.rows.get("r1")?.status).toBe("posting");
 });
 
 test("a browser post that names no persona is failed unsent, with a reason the owner can act on", async () => {
     const services = servicesWith(draft({ id: "orphan", actsAs: undefined, status: "approved", scheduledAt: NOW - 1 }));
     await createDraftsPublisher(services).publishDue(NOW);
-    // No turn at all. Waking one would wake it without accounts, and it would report the login as missing —
+    // No turn at all. Waking one would wake it without accounts, and it would report the login as missing:
     // which is exactly the wrong sentence to leave in front of the owner.
     expect(startTurn).not.toHaveBeenCalled();
     expect(services.rows.get("orphan")?.status).toBe("failed");
@@ -111,7 +111,7 @@ test("a browser post that names no persona is failed unsent, with a reason the o
 
 test("a persona no card carries is failed unsent too, and named in the reason", async () => {
     // A card renamed on one side only, or a workspace cloned before its personas were committed. The turn would
-    // arrive with no account at all, so this is the same failure as naming nobody — said in the queue instead.
+    // arrive with no account at all, so this is the same failure as naming nobody: said in the queue instead.
     const services = servicesWith(draft({ id: "ghost", actsAs: "deleted-card", status: "approved", scheduledAt: NOW - 1 }));
     await createDraftsPublisher(services).publishDue(NOW);
     expect(startTurn).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ test("two faces are two turns, each carrying only its own posts", async () => {
     expect(startTurn).toHaveBeenCalledTimes(2);
     const byFace = new Map([0, 1].map((call) => [turnOf(call).actsAs, turnOf(call)]));
     expect([...byFace.keys()].toSorted()).toEqual(["alice", "bob"]);
-    // Alice's turn carries both of hers and none of Bob's — a turn wears one face, so a batch that mixed them
+    // Alice's turn carries both of hers and none of Bob's: a turn wears one face, so a batch that mixed them
     // would hand a post to an account that cannot send it.
     expect(byFace.get("alice")?.prompt).toContain("a2.json");
     expect(byFace.get("alice")?.prompt).not.toContain("b1.json");
@@ -138,7 +138,7 @@ test("two faces are two turns, each carrying only its own posts", async () => {
     expect(turnOf(0).conversationId).not.toBe(turnOf(1).conversationId);
 });
 
-test("a Discord post needs no persona — the daemon sends it with a stored key, not a browser", async () => {
+test("a Discord post needs no persona: the daemon sends it with a stored key, not a browser", async () => {
     const services = servicesWith(
         draft({ id: "d", platform: "discord", actsAs: undefined, target: "123456789", status: "approved", scheduledAt: NOW - 1 }),
     );
@@ -149,7 +149,7 @@ test("a Discord post needs no persona — the daemon sends it with a stored key,
 
 test("a Discord draft the fast path cannot carry falls back to the turn instead of failing", async () => {
     const services = servicesWith(
-        // An attachment needs a multipart upload, and a channel named rather than numbered needs a lookup —
+        // An attachment needs a multipart upload, and a channel named rather than numbered needs a lookup:
         // both are work only the turn can do.
         draft({ id: "media", platform: "discord", target: "123456789", media: ["a.png"], status: "approved", scheduledAt: NOW - 1 }),
         draft({ id: "named", platform: "discord", target: "#releases", status: "approved", scheduledAt: NOW - 1 }),

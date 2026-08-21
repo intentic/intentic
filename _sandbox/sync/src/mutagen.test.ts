@@ -22,7 +22,7 @@ describe("parseForwardNames", () => {
         expect(parseForwardNames(`${names.join(" ")} mutagen-something-else`)).toEqual(names);
     });
 
-    // Tearing down ONE pairing must leave every other paired sandbox's forwards holding their ports — the whole
+    // Tearing down ONE pairing must leave every other paired sandbox's forwards holding their ports: the whole
     // reason a machine can now sync a fleet.
     it("narrows to one sandbox when asked", () => {
         const listed = `${forwardSessionName("sandbox-a.example.dev", 5173)} ${forwardSessionName("sandbox-b.example.dev", 5173)} ${forwardSessionName("sandbox-a.example.dev", 6480)}`;
@@ -60,7 +60,7 @@ describe("parseOrphanForwardNames", () => {
     });
 });
 
-/* A file-sync session is retired because NOTHING claims it any more — never because another pairing arrived.
+/* A file-sync session is retired because NOTHING claims it any more: never because another pairing arrived.
  * Retiring on arrival is precisely what evicted a live sandbox: pairing a second one terminated the first's
  * session, so the folder the user was working in silently stopped syncing while `status` still called it healthy. */
 describe("parseOrphanSyncNames", () => {

@@ -5,7 +5,7 @@ import { STATE_DIR } from "@intentic/constants";
 
 // Kept conservative on purpose: dirs that are essentially never browsed as source AND rarely committed, so the
 // static list can't wrongly gray a dir some project actually tracks. Ambiguous ones (build, target, vendor,
-// coverage, out) are intentionally absent — .gitignore catches those accurately. `.tmp` is a scratch dir (e.g.
+// coverage, out) are intentionally absent: .gitignore catches those accurately. `.tmp` is a scratch dir (e.g.
 // .intentic/secrets/auth/codex/.tmp) that can hold thousands of files. `.git` lives here too: a dir you browse as history, not
 // source, so it grays and lazy-loads like node_modules (its contents stay readable on demand).
 export const IGNORED_DIRS = new Set([

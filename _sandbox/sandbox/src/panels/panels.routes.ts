@@ -141,11 +141,11 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
             }
             const key = panelKey(input.repo);
             if (key === undefined) {
-                throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no preview-safe name — only letters, digits, hyphens and / work` });
+                throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no preview-safe name, only letters, digits, hyphens and / work` });
             }
             const runDir = await panelRunDir(services.workspace, input.repo);
             if (runDir === undefined) {
-                throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no runnable panel — add an operator/ dev server or a dev script` });
+                throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no runnable panel, add an operator/ dev server or a dev script` });
             }
             // Kick off the preview-route mint fire-and-forget (never rejects; see preview-route.ts), the tmux
             // session the browser attaches to must not wait on a platform round-trip. The route resolves long

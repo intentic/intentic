@@ -118,7 +118,7 @@ export const abandonRun = async (services: Services, run: WorkflowRun, now: numb
     if (unfinished.length > 0) {
         await services.workflowRuns.markSteps(run.runId, unfinished, "stopped", "Nothing was driving this run when it was stopped.");
     }
-    await services.workflowRuns.settle(run.runId, "stopped", now, "Stopped. Nothing was driving this run — the daemon it started under is gone.");
+    await services.workflowRuns.settle(run.runId, "stopped", now, "Stopped. Nothing was driving this run: the daemon it started under is gone.");
 };
 
 /* Open a run record: every step `pending`, every conversation already named. Written before anything starts,
@@ -454,7 +454,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
         const detail =
             failed === 0
                 ? undefined
-                : `${failed} of ${workflow.steps.length} steps did not finish. Open the ones marked failed — the ones marked skipped were waiting on them.`;
+                : `${failed} of ${workflow.steps.length} steps did not finish. Open the ones marked failed, the ones marked skipped were waiting on them.`;
         await services.workflowRuns.settle(runId, state, Date.now(), detail);
     } catch (error) {
         // Only the scheduler's own machinery reaches here, a store write that could not land. A step's failure

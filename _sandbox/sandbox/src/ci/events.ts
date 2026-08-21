@@ -47,8 +47,8 @@ const headline = (type: string, run: PipelineRun): string => {
 };
 
 const contentOf = (run: PipelineRun, type: string): string => {
-    const jobs = run.failedJobs !== undefined && run.failedJobs.length > 0 ? ` — failed jobs: ${run.failedJobs.join(", ")}` : "";
-    return `${headline(type, run)}: ${run.repo} ${run.branch} @ ${sha7(run.sha)}${jobs} — ${run.url}`;
+    const jobs = run.failedJobs !== undefined && run.failedJobs.length > 0 ? `, failed jobs: ${run.failedJobs.join(", ")}` : "";
+    return `${headline(type, run)}: ${run.repo} ${run.branch} @ ${sha7(run.sha)}${jobs}, ${run.url}`;
 };
 
 // `channelId` is the workspace repo and `branch` the ref, the two axes a `ci` trigger narrows on, so both are

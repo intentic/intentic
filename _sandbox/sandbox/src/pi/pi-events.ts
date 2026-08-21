@@ -195,7 +195,7 @@ export const createPiEventMapper = (cwd: string, holdText = false): PiEventMappe
             case "compaction_end": {
                 const result = event["result"] as Record<string, unknown> | null | undefined;
                 if (result === undefined || result === null) {
-                    return []; // Aborted or failed compaction — nothing the transcript needs to say.
+                    return []; // Aborted or failed compaction: nothing the transcript needs to say.
                 }
                 return [
                     {

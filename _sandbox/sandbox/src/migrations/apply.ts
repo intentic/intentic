@@ -22,7 +22,7 @@ import { mergeFenced } from "./merge.js";
 // the failure as the precondition it is, rather than as breakage.
 export class SecretsInactiveError extends Error {
     constructor() {
-        super("there is no env secret store until DevOps is active — activate it, then run the import again with just the secret items");
+        super("there is no env secret store until DevOps is active: activate it, then run the import again with just the secret items");
     }
 }
 
@@ -87,7 +87,7 @@ export const applyMigration = async (
                 await deps.addCapability(withoutSecrets(step.capability, step.secretFields));
                 needsAction.push({
                     subject: `Enter the key for "${step.capability.id}"`,
-                    detail: "It was imported without secrets, so the connection landed keyless — open its card and add the credential.",
+                    detail: "It was imported without secrets, so the connection landed keyless, open its card and add the credential.",
                 });
                 return;
             }

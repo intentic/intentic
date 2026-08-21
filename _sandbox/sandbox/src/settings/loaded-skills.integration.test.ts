@@ -13,7 +13,7 @@ const FILES: SkillFiles = { write: writeWorkspaceFile, remove: removeWorkspacePa
 /* The three-way contract of one loaded skill: the canonical file under `.agents/skills/` (Codex and Gemini read
  * it there directly), the `.claude/skills/` symlink (Claude Code's loader follows it), and the AGENTS.md index
  * entry (the runtimes with no skill loader). A writer that landed one projection and not another would be a
- * skill only SOME of the agents know they have — the exact split this module exists to close. */
+ * skill only SOME of the agents know they have: the exact split this module exists to close. */
 
 const SKILL = "---\nname: quill\ndescription: Draws quills. Use when asked for quills.\n---\n\nDraw a quill.\n";
 
@@ -26,7 +26,7 @@ test("writing a skill lands the canonical file, the Claude symlink, and the AGEN
     expect((await lstat(link)).isSymbolicLink()).toBe(true);
     expect(await readFile(join(link, "SKILL.md"), "utf8")).toBe(SKILL);
     const index = await readFile(join(root, "AGENTS.md"), "utf8");
-    expect(index).toContain("**quill** — Draws quills. Use when asked for quills.");
+    expect(index).toContain("**quill**, Draws quills. Use when asked for quills.");
     expect(index).toContain("`.agents/skills/quill/SKILL.md`");
 });
 
@@ -40,8 +40,8 @@ test("removing a skill clears all three projections, deleting an AGENTS.md that 
     await expect(stat(join(root, "AGENTS.md"))).rejects.toThrow();
 });
 
-// AGENTS.md is the user's file first: the index is a marked block spliced in place, and everything around it —
-// including their trailing prose when the block goes — must come through every rewrite byte-intact.
+// AGENTS.md is the user's file first: the index is a marked block spliced in place, and everything around it:
+// including their trailing prose when the block goes: must come through every rewrite byte-intact.
 test("the index block leaves the user's own AGENTS.md text alone, coming and going", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
     await writeFile(join(root, "AGENTS.md"), "# My rules\n\nAlways be brief.\n");
@@ -69,7 +69,7 @@ test("the index lists every skill, name-ordered, and re-writing converges rather
     expect(index.match(/## Skills/g)).toHaveLength(1);
 });
 
-// A real directory under .claude/skills is something a person put there for Claude specifically — the projection
+// A real directory under .claude/skills is something a person put there for Claude specifically: the projection
 // must not fight them for the name.
 test("a real directory in .claude/skills is never replaced by the projection", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));

@@ -45,7 +45,7 @@ describe("app-previews", () => {
 
     test("buildAppSpec fills {pkg} with the app's real package name, sibling {previewUrl:*}, and routes {port} to portEnv", () => {
         const apiPreview = MANIFEST.templates["api"]!.previews[0]!;
-        // `pkg` is the real package.json name — scoped to the monorepo's OWN scope, not the template's @app_/.
+        // `pkg` is the real package.json name: scoped to the monorepo's OWN scope, not the template's @app_/.
         const spec = buildAppSpec({
             repo: "shop",
             repoDir: `${WORKSPACE_ROOT}/shop`,
@@ -102,7 +102,7 @@ describe("app-previews", () => {
     });
 
     /* The reason an Astro site sitting in `_apps/` used to be invisible: no manifest template matches it. It is
-     * still a dev server, so it is still an app — and since `astro dev` ignores the daemon-injected PORT and
+     * still a dev server, so it is still an app, and since `astro dev` ignores the daemon-injected PORT and
      * vite 403s an unrecognized preview Host, the derived command has to pass both on the command line. */
     test("discoverApps finds a framework app with no matching template and passes it the port + preview host", async () => {
         const dir = await scaffoldRepo({ site: { name: "@shop/site", scripts: { dev: "astro dev" }, dependencies: { astro: "^6" } } });
@@ -134,7 +134,7 @@ describe("app-previews", () => {
         expect(discoverApps(dir, MANIFEST)[0]?.kind).toBe("astro");
     });
 
-    // A server that reads PORT from the env (bun/node/hono) needs no flags — just the dev script.
+    // A server that reads PORT from the env (bun/node/hono) needs no flags: just the dev script.
     test("discoverApps derives a bare dev command and no kind for an app with no recognized framework", async () => {
         const dir = await scaffoldRepo({ daemon: { name: "@shop/daemon", scripts: { dev: "bun --watch ./src/main.ts" } } });
         expect(discoverApps(dir, MANIFEST)).toEqual([
@@ -142,7 +142,7 @@ describe("app-previews", () => {
         ]);
     });
 
-    // A library in `_apps/` has no dev server, so it is not startable — the apps view lists it under Packages.
+    // A library in `_apps/` has no dev server, so it is not startable: the apps view lists it under Packages.
     test("discoverApps skips a package with no dev script and a dir with no package.json", async () => {
         const dir = await scaffoldRepo({ cli: { name: "@shop/cli", scripts: { build: "tsc" } } });
         await mkdir(join(dir, "_apps", "empty"), { recursive: true });

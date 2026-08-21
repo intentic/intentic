@@ -40,7 +40,7 @@ test("generates an IKEv1 aggressive-mode conn with mode-config and XAuth", () =>
 });
 
 // rightsubnet is what decides whether a tunnel is split or full, and a full one on a gateway without internet
-// egress takes the sandbox's own outbound traffic down with it — the failure this field exists to make fixable.
+// egress takes the sandbox's own outbound traffic down with it: the failure this field exists to make fixable.
 test("the routed networks are what the tunnel asks the gateway to route, not a fixed catch-all", () => {
     expect(ipsecConnConfig("x", systemEg)).toContain("rightsubnet=0.0.0.0/0");
     const split = ipsecConnConfig("x", { ...systemEg, routedNetworks: "192.168.0.0/16" });
@@ -51,7 +51,7 @@ test("the routed networks are what the tunnel asks the gateway to route, not a f
 });
 
 test("a blank routed-networks value still produces a loadable file", () => {
-    // An empty rightsubnet makes charon reject the whole included config — which would take every OTHER tunnel
+    // An empty rightsubnet makes charon reject the whole included config, which would take every OTHER tunnel
     // on this sandbox down too, so the generator falls back rather than emitting it.
     expect(ipsecConnConfig("x", { ...systemEg, routedNetworks: " , " })).toContain("rightsubnet=0.0.0.0/0");
 });
@@ -120,7 +120,7 @@ test("a connecting or absent tunnel reads as not established", () => {
 test("one connection's status is never read from another's lines", () => {
     // Two tunnels in one status dump: asking about the down one must not pick up the up one's SA.
     const both = `${STATUSALL}      other[2]: ESTABLISHED 1 minute ago, 192.168.1.10[x]...198.51.100.9[198.51.100.9]\n`;
-    // `other` has an IKE_SA but no CHILD_SA — phase 1 only, so it is negotiating rather than connected, and it
+    // `other` has an IKE_SA but no CHILD_SA: phase 1 only, so it is negotiating rather than connected, and it
     // must NOT inherit systemeg's child SA.
     expect(parseIpsecStatus("other", both)).toEqual({ established: false, negotiating: true, routes: [] });
     expect(parseIpsecStatus("missing", both)).toEqual({ established: false, negotiating: false, routes: [] });
@@ -128,7 +128,7 @@ test("one connection's status is never read from another's lines", () => {
     expect(parseIpsecStatus("systemeg", both).established).toBe(true);
 });
 
-// The real charon output from a dial-up FortiGate that accepted the proposal but rejected the key — the case
+// The real charon output from a dial-up FortiGate that accepted the proposal but rejected the key: the case
 // that reads as an opaque IKE internal unless it is translated.
 const WRONG_PSK = `initiating Aggressive Mode IKE_SA systemeg[1] to 83.14.172.242
 selected proposal: IKE:AES_CBC_128/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/MODP_1536
@@ -147,7 +147,7 @@ test("distinguishes the failure modes a user can actually act on", () => {
     expect(ipsecFailureHint("received NO_PROPOSAL_CHOSEN error notify")).toContain("aggressive mode");
     expect(ipsecFailureHint("retransmit 5 of request with message ID 0")).toContain("did not answer");
     expect(ipsecFailureHint("XAuth authentication of 'someone' failed")).toContain("XAuth");
-    // A failure with no known signature must not invent an explanation — the raw log is still shown.
+    // A failure with no known signature must not invent an explanation: the raw log is still shown.
     expect(ipsecFailureHint("something entirely new")).toBeUndefined();
 });
 
@@ -160,10 +160,10 @@ test("parseIpsecLoaded distinguishes a loaded connection from its SAs and from n
 Security Associations (0 up, 0 connecting):
   none`;
     expect(parseIpsecLoaded("systemeg", loaded)).toBe(true);
-    // Charon up but the connection not loaded yet — the window that produced "no config named 'systemeg'".
+    // Charon up but the connection not loaded yet: the window that produced "no config named 'systemeg'".
     expect(parseIpsecLoaded("systemeg", "Connections:\nSecurity Associations (0 up, 0 connecting):\n  none")).toBe(false);
     expect(parseIpsecLoaded("systemeg", "")).toBe(false);
-    // An SA line alone must not read as "loaded" — nor may another connection's name.
+    // An SA line alone must not read as "loaded", nor may another connection's name.
     expect(parseIpsecLoaded("systemeg", "      systemeg[1]: ESTABLISHED 5 minutes ago")).toBe(false);
     expect(parseIpsecLoaded("systemeg", "    other:  %any...vpn.example.com  IKEv1 Aggressive")).toBe(false);
 });

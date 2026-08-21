@@ -9,7 +9,7 @@ import { syncAdvisory, syncWorkspaceRepos } from "./sync-repos.js";
 import { workspacePaths } from "./workspace.js";
 
 // Minimal Services for the sync path: it only touches workspace.root and git.sync. The fake git.sync mirrors
-// real git — `git -C <missing> remote` throws — so a regressed (unfiltered) sync would turn a never-scaffolded
+// real git: `git -C <missing> remote` throws, so a regressed (unfiltered) sync would turn a never-scaffolded
 // repo into an "error" outcome, exactly the bug this guards.
 const makeServices = (root: string): Services =>
     unstubbed<Services>("services", {

@@ -11,7 +11,7 @@ import { JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contra
 
 const execFileAsync = promisify(execFile);
 
-// One job session per capability id (ids are manifest-unique and their charset — /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/,
+// One job session per capability id (ids are manifest-unique and their charset: /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/,
 // max 60, is a subset of the session-name guard below, so no sanitizing).
 export const capabilityJobSession = (id: string): string => `${JOB_SESSION_PREFIX}capability-${id}`;
 

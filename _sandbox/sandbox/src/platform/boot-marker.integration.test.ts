@@ -14,7 +14,7 @@ const setup = async (): Promise<{ dir: string; lines: object[]; logger: Logger }
 };
 
 // A pid that is certainly gone: a process that has already exited. A made-up number is a corpse only until the
-// container happens to be running that many processes — a hardcoded 4242 was alive in CI, and every death
+// container happens to be running that many processes: a hardcoded 4242 was alive in CI, and every death
 // certificate here came back as a co-tenant notice instead.
 const deadPid = (): number => spawnSync(process.execPath, ["-e", ""]).pid;
 
@@ -52,7 +52,7 @@ test("a fatal-error report left by the dead pid is named in the death certificat
     expect(JSON.stringify(lines[0])).toContain("died on a fatal error");
 });
 
-test("a marker whose owner is still running is a co-tenant, not a corpse — and its record is left alone", async () => {
+test("a marker whose owner is still running is a co-tenant, not a corpse, and its record is left alone", async () => {
     const { dir, lines, logger } = await setup();
     const owner = JSON.stringify({ state: "running", pid: process.pid, startedAt: 1_000 });
     await writeFile(join(dir, "daemon-exit.json"), owner);

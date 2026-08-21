@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import { undoableAction, undoLastAction } from "./undo.js";
 
-/* Against real repositories, because every claim here is about what GIT writes into a reflog — the subject
+/* Against real repositories, because every claim here is about what GIT writes into a reflog: the subject
  * wording per verb, and which ref gets an entry at all. A fixture would only ever restate this module's own
  * assumptions back to it. */
 
@@ -49,7 +49,7 @@ test("the last commit is undoable, and undoing it moves the branch back without 
 
     const action = await undoableAction(dir);
     expect(action).toMatchObject({ kind: "commit", branch: "main", previousSha: before });
-    // A commit only moved the ref — its content is already in the tree — so undoing it does not need a hard reset.
+    // A commit only moved the ref: its content is already in the tree, so undoing it does not need a hard reset.
     expect(action?.changesWorkingTree).toBe(false);
     // The reflog subject is git's own, so the button names what it will undo in git's words.
     expect(action?.description).toContain("two");
@@ -82,7 +82,7 @@ test("a reset is undoable and reported as rewriting the worktree", async () => {
 });
 
 /* THE TRAP THIS MODULE EXISTS TO AVOID. HEAD's reflog records CHECKOUTS, so after switching branches its
- * previous entry belongs to a different branch entirely — resetting to it would move the branch you are on to a
+ * previous entry belongs to a different branch entirely: resetting to it would move the branch you are on to a
  * position it has never held, silently. Reading the BRANCH's own reflog is what makes this case answer
  * correctly, and this test is what holds that choice in place. */
 test("after a checkout, the undo targets this branch's own history and not HEAD's previous position", async () => {
@@ -91,7 +91,7 @@ test("after a checkout, the undo targets this branch's own history and not HEAD'
     await commit(dir, "feature work");
     const featureTip = await sha(dir);
 
-    // Back to main, whose own reflog has not moved since its first commit — so main has nothing to undo, even
+    // Back to main, whose own reflog has not moved since its first commit, so main has nothing to undo, even
     // though HEAD's previous entry (the feature tip) is sitting right there.
     await git(dir, ["checkout", "main"]);
     expect(await undoableAction(dir)).toBeUndefined();
@@ -112,7 +112,7 @@ test("a detached HEAD has no branch reflog and so offers no undo", async () => {
 });
 
 /* A halted operation ENDS BY BEING ABORTED, not by moving the branch. Offering both would be offering two
- * different recoveries for one state, and the undo is the wrong one — the branch has not moved yet. */
+ * different recoveries for one state, and the undo is the wrong one: the branch has not moved yet. */
 test("a repo halted mid-rebase offers no undo, because aborting is what ends that state", async () => {
     const dir = await repo();
     await git(dir, ["checkout", "-b", "other"]);
@@ -131,7 +131,7 @@ test("an undo prepared against a stale position is refused rather than landing s
     await commit(dir, "two");
     const stale = await undoableAction(dir);
 
-    // The repository moves on — another writer commits.
+    // The repository moves on: another writer commits.
     await commit(dir, "three");
 
     const result = await undoLastAction(dir, stale!.previousSha, false);

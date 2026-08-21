@@ -76,7 +76,7 @@ test("absent account and model stay absent rather than becoming an explicit unde
     expect(row).toBeDefined();
     expect("account" in (row ?? {})).toBe(false);
     expect("model" in (row ?? {})).toBe(false);
-    // Unattributed turns still count toward provider totals — the spend happened.
+    // Unattributed turns still count toward provider totals: the spend happened.
     expect(row).toMatchObject({ provider: "claude", turns: 1, costUsd: 0.25 });
 });
 
@@ -94,7 +94,7 @@ test("the conversation is part of the key, so cost-by-agent is answerable within
     await store.record(turn({ conversationId: "agent-a", costUsd: 1 }));
     await store.record(turn({ conversationId: "agent-a", costUsd: 2 }));
     await store.record(turn({ conversationId: "agent-b", costUsd: 4 }));
-    // A main-tree turn belongs to no agent — it stays its own row rather than pooling under a blank id.
+    // A main-tree turn belongs to no agent: it stays its own row rather than pooling under a blank id.
     await store.record(turn({ costUsd: 8 }));
     clock = DAY_TWO;
     await store.record(turn({ conversationId: "agent-a", costUsd: 16 }));
@@ -123,7 +123,7 @@ test("a corrupt line is skipped, never the ledger", async () => {
     expect(rows[0]).toMatchObject({ turns: 2, costUsd: 3 });
 });
 
-test("the ledger is never pruned — an old day survives an arbitrary number of newer turns", async () => {
+test("the ledger is never pruned: an old day survives an arbitrary number of newer turns", async () => {
     const path = storePath();
     let clock = DAY_ONE;
     const store = fileUsageStore(path, () => clock);

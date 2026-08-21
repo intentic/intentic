@@ -94,11 +94,11 @@ export const workspaceExtensionFragments = async (services: Services): Promise<s
 const readFragment = async (services: Services, id: string, path: string): Promise<string[]> => {
     const content = (await extensionRead(path))?.trim();
     if (content === undefined || content === "") {
-        services.logger.warn({ id }, "extension fragment missing at compose time — skipping");
+        services.logger.warn({ id }, "extension fragment missing at compose time: skipping");
         return [];
     }
     if (invalidExtensionFragment(content) !== undefined) {
-        services.logger.warn({ id }, "extension fragment is not RUN/ENV-only — skipping");
+        services.logger.warn({ id }, "extension fragment is not RUN/ENV-only: skipping");
         return [];
     }
     return [content];

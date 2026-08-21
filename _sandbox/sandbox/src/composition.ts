@@ -345,7 +345,7 @@ export interface Services {
     // left. Answered by the platform, so a sandbox with no platform never has one.
     readonly trial: TrialService;
     // The loopback TLS terminator for a dev platform (platform/local-tunnel.ts). Read wherever the trial's
-    // platform address is written down — the trial capability and the translator's static routing entry — and
+    // platform address is written down: the trial capability and the translator's static routing entry, and
     // awaited (`ready`) by the translator's config render so the baked address is deterministic, not a race
     // against the loopback bind.
     readonly platformTunnel: PlatformTunnel;
@@ -416,7 +416,7 @@ export interface Services {
     // turn, NEVER pruned, unlike the activity log, whose rolling window makes spend totals shrink over time.
     // streamAgent appends at turn end; /usage/rollup and /system/usage project it.
     readonly usage: UsageStore;
-    // Per-sandbox agent settings (.intentic/config/settings.json) — /settings edits it; streamAgent reads it to gate
+    // Per-sandbox agent settings (.intentic/config/settings.json): /settings edits it; streamAgent reads it to gate
     // per-turn agent behavior (iq plugin, hashline tools, output cleaning, prompt stability) and it carries the
     // owner's rule table (rules/rules.ts).
     readonly sandboxSettings: SandboxSettingsStore;
@@ -637,7 +637,7 @@ export interface Services {
     readonly workspaceTree: (root: string) => Promise<WorkspaceTree>;
     readonly workspaceChildren: (root: string, relPath: string) => Promise<WorkspaceChildren>;
     // Resident workspace search: one iq engine instance holding the index DB open with its sweep cached in
-    // memory — /workspace/search runs in-process (no per-query CLI spawn), revalidation rides the workspace
+    // memory: /workspace/search runs in-process (no per-query CLI spawn), revalidation rides the workspace
     // watcher (main.ts) instead of the query path. The agent's Bash `iq` calls share the same on-disk index.
     // Indexing itself runs on the engine's own worker thread; only queries touch this one.
     readonly iq: ResidentEngine;
@@ -891,8 +891,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // resource series, they are the structures whose silent growth was once the daemon's memory leak.
     const agentOrigins = createAgentOrigins({ agents, logger, expiry: landingExpiry });
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
-    /* The free trial is laid OVER the manifest, never into it (trial/trial-endpoint.ts): the OFFER surfaces —
-     * the endpoint catalog, the picker's provider list, the capability card — see the trial as an ordinary
+    /* The free trial is laid OVER the manifest, never into it (trial/trial-endpoint.ts): the OFFER surfaces:
+     * the endpoint catalog, the picker's provider list, the capability card: see the trial as an ordinary
      * endpoint exactly while the platform says one exists, and the file on disk stays what the user put there.
      * The one consumer deliberately NOT fed from this layer is the translator's routing table, which carries
      * the trial's static entry whenever a platform is configured at all (trialCompatEntry): routing must be a
@@ -903,7 +903,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
      * platform cannot satisfy. Opens nothing at all against a deployed platform (platform/local-tunnel.ts). */
     const platformTunnel = startPlatformTunnel(config.platform.url, logger);
     const capabilityManifest = fileCapabilitiesStore(statePath(workspace.root, ".intentic/config/capabilities.json"), (id, reason) =>
-        logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
+        logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}), the rest of the manifest is unaffected`),
     );
     /* The credential values, off /work (secret-vault.ts). Sited beside the AI-provider logins under
      * AGENT_AUTH_DIR, which is already outside the file routes, the tree walk and the search index. */
@@ -921,7 +921,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         });
     const onUnvaultable = (id: string, fields: readonly string[]): void =>
         logger.warn(
-            `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")} — left in the manifest, which the agent can read`,
+            `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")}, left in the manifest, which the agent can read`,
         );
     /* THE EXTENSION-SETTINGS HALF OF THE SAME SPLIT (extensions/extension-settings.ts). A second vault file
      * rather than rows in the capability one: the two are keyed differently, a capability entry id there, a
@@ -948,7 +948,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         return (extensionId) => declared.get(extensionId) ?? new Set<string>();
     };
     const onUnvaultableSetting = (id: string, keys: readonly string[]): void =>
-        logger.warn(`extension settings: "${id}" declares ${keys.join(", ")} secret but stores a non-string — left in the tracked settings file`);
+        logger.warn(`extension settings: "${id}" declares ${keys.join(", ")} secret but stores a non-string, left in the tracked settings file`);
     const capabilities = withTrialEndpoint(
         withSecretVault(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
         config,
@@ -956,7 +956,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         platformTunnel,
     );
     const personas = filePersonasStore(statePath(workspace.root, ".intentic/config/personas.json"), (id, reason) =>
-        logger.warn(`personas: skipping unreadable card "${id}" (${reason}) — the rest are unaffected`),
+        logger.warn(`personas: skipping unreadable card "${id}" (${reason}), the rest are unaffected`),
     );
     const ciStore = fileCiStore(statePath(workspace.root, ".intentic/secrets/ci.json"));
     const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/records/verify.json"));
@@ -999,12 +999,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
         indexDir: statePath(workspace.root, ".intentic/local/cache/", "iq"),
         // An index pass that fails once warm() has settled has no caller to reject, without this the index
         // would stop tracking disk and search would just quietly get older.
-        onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed — search results may be stale"),
+        onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed, search results may be stale"),
         onIndexProgress: (remaining) => {
             if (remaining === 0) {
                 if (backlogActive) {
                     backlogActive = false;
-                    logger.info("iq index embeddings complete — semantic search at full coverage");
+                    logger.info("iq index embeddings complete: semantic search at full coverage");
                 }
                 return;
             }
@@ -1014,11 +1014,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
             }
             backlogActive = true;
             backlogLoggedAt = now;
-            logger.info({ remaining }, "iq index building embeddings — semantic search fills in as it goes");
+            logger.info({ remaining }, "iq index building embeddings: semantic search fills in as it goes");
         },
         // The query worker owns the semantic scan and the cross-encoder. Losing it does not fail a search,
         // it silently narrows one to keyword matching, so it has to be visible here.
-        onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed — search fell back to keyword matching"),
+        onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed, search fell back to keyword matching"),
         ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
         ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
     });

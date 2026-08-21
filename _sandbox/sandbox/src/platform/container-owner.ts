@@ -130,21 +130,21 @@ export const claimContainer = async (
                 ownerHistoryRoot: owner.historyRoot,
                 ...(agentSession === undefined ? {} : { agentSession }),
             },
-            "another live daemon owns this container — running as a guest: claiming nothing, sweeping nothing, and leaving its processes, HOME and singletons alone",
+            "another live daemon owns this container, running as a guest: claiming nothing, sweeping nothing, and leaving its processes, HOME and singletons alone",
         );
         return { container: false, roots: !sameRoots(owner, roots) };
     }
     if (agentSession !== undefined) {
         logger.warn(
             { agentSession, ...roots },
-            "started from inside an agent session — running as a guest: this is a run of the code, not this sandbox's daemon, so it announces nothing and claims no container-wide singleton",
+            "started from inside an agent session, running as a guest: this is a run of the code, not this sandbox's daemon, so it announces nothing and claims no container-wide singleton",
         );
         return { container: false, roots: true };
     }
     try {
         writeFileSync(claimPath(home), JSON.stringify({ pid: process.pid, ...roots }), { mode: 0o600 });
     } catch (error) {
-        logger.warn({ err: error }, "could not claim this container — not converging session state or ssh hosts onto it");
+        logger.warn({ err: error }, "could not claim this container, not converging session state or ssh hosts onto it");
         return { container: false, roots: true };
     }
     return { container: true, roots: true };

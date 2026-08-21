@@ -15,9 +15,9 @@ import { hasValidBase } from "./environment/environment.js";
 
 // The Tier-2 daemon e2e: boot the REAL sandbox image (built from this repo's Dockerfile, the same artifact CI
 // publishes) in loopback mode and drive its HTTP surface exactly as the browser does, asserting only what the
-// in-memory app.test.ts cannot — the real container: bytes on the real /work fs, the real sshd handshake for
+// in-memory app.test.ts cannot, the real container: bytes on the real /work fs, the real sshd handshake for
 // desktop sync, the real entrypoint/boot, and a real `docker build` of the composed environment overlay (the
-// harness plays the outside-executor role of recreate.sh). No Cloudflare, no Google, no Claude — the only
+// harness plays the outside-executor role of recreate.sh). No Cloudflare, no Google, no Claude: the only
 // requirement is a Docker daemon. Gated behind INTENTIC_E2E like cli.e2e.test.ts; `pnpm e2e` sets it.
 //
 // SANDBOX_E2E_IMAGE skips the from-source build and runs a prebuilt image instead (CI's nightly points it at
@@ -66,7 +66,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         }
     }, 120_000);
 
-    // Read a file inside the container — the ground truth the HTTP responses claim to have written.
+    // Read a file inside the container: the ground truth the HTTP responses claim to have written.
     const inContainer = async (...command: string[]): Promise<{ exitCode: number; output: string }> => {
         const { exitCode, output } = await container.exec(command);
         return { exitCode, output };
@@ -125,7 +125,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect((await inContainer("cat", "/work/tree/a.txt")).output).toBe("alpha");
         expect((await inContainer("cat", "/work/tree/sub/b.txt")).output).toBe("beta");
         expect((await inContainer("cat", "/work/tree/.env")).output).toBe("SECRET=1");
-        // Absent (loopback binds no owner) or a real record — either way it is not the one the tar carried.
+        // Absent (loopback binds no owner) or a real record: either way it is not the one the tar carried.
         expect((await inContainer("cat", "/work/.intentic/identity/owner.json")).output).not.toContain("attacker@example.com");
     }, 60_000);
 
@@ -152,7 +152,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             body: JSON.stringify({ key: laptop.public }),
         });
         expect(enroll.status).toBe(200);
-        // The credential the agent presents for everything it does — including the SSH transport it serves on
+        // The credential the agent presents for everything it does: including the SSH transport it serves on
         // loopback. No address comes back: the sandbox is reached at the URL the agent already has.
         expect(((await enroll.json()) as { syncToken?: string }).syncToken).toBeDefined();
         expect((await inContainer("cat", "/root/.ssh/authorized_keys")).output.trim()).toBe(laptop.public.trim());
@@ -162,7 +162,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(status.syncingFrom).toBe("e2e-laptop");
         expect(status.available).toBe(true);
 
-        // The enrolled key really opens the container's sshd — the transport Mutagen rides.
+        // The enrolled key really opens the container's sshd: the transport Mutagen rides.
         await new Promise<void>((resolve, reject) => {
             const connection = new SshClient();
             connection
@@ -205,7 +205,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const fireToken = token?.kind === "event" ? token.token : undefined;
         expect(fireToken).toBeDefined();
 
-        // Wrong token is refused; the real token fires and the wake is HELD, not run — the whole trigger path
+        // Wrong token is refused; the real token fires and the wake is HELD, not run: the whole trigger path
         // asserted without an agent turn.
         expect((await fetch(`${base}/automations/e2e-approval/fire?token=wrong`, { method: "POST" })).status).toBe(401);
         const fired = await fetch(`${base}/automations/e2e-approval/fire?token=${fireToken}`, { method: "POST", body: `{"hello":"e2e"}` });
@@ -250,7 +250,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
     it("run now: a schedule automation nobody has waited for fires by hand, guard and all", async () => {
         // The whole point of Run now is a cron you would otherwise have to wait until 3 a.m. to try. Its guard
-        // still runs — a by-hand fire that skipped it would prove nothing about the real one.
+        // still runs: a by-hand fire that skipped it would prove nothing about the real one.
         await client.automations.upsert({
             id: "e2e-run-now",
             trigger: { kind: "schedule", cron: "0 3 * * *" },
@@ -277,7 +277,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             enabled: true,
         });
         // Refused rather than run: firing this by hand could only wake an agent told to handle events and given
-        // none — and that pointless turn would hold the automation against a real mention arriving behind it.
+        // none, and that pointless turn would hold the automation against a real mention arriving behind it.
         await expect(client.automations.run({ id: "e2e-run-now-listener" })).rejects.toThrow(/real message/);
         const { automations } = await client.automations.list();
         expect(automations.find((automation) => automation.id === "e2e-run-now-listener")?.runs).toEqual([]);
@@ -287,7 +287,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it("capability → composed overlay → a real `docker build` of it against the published base image", async () => {
         // The vpn capability carries a Dockerfile fragment + runtime directives AND supports remove (docker's
         // deliberately doesn't). The stock container carries no VPN client, so the apply reports the rebuild
-        // that installs one rather than dialling — exactly the pre-rebuild path asserted below.
+        // that installs one rather than dialling: exactly the pre-rebuild path asserted below.
         const events: unknown[] = [];
         for await (const event of await client.capabilities.add({
             id: "office",

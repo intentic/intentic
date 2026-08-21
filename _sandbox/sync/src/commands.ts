@@ -79,16 +79,16 @@ export const enrollKey = async (
             });
         } catch (error) {
             if (attempt >= attempts) throw error;
-            process.stderr.write(`enrolling the sync key — sandbox tunnel not reachable yet, retrying (${attempt}/${attempts})…\n`);
+            process.stderr.write(`enrolling the sync key: sandbox tunnel not reachable yet, retrying (${attempt}/${attempts})…\n`);
             await sleep(delayMs);
             continue;
         }
         if (response.status === 401) {
-            throw new Error("pairing expired — click “Enable desktop sync” again in your browser for a fresh command.");
+            throw new Error("pairing expired: click 'Enable desktop sync' again in your browser for a fresh command.");
         }
         if (response.status >= 500 && attempt < attempts) {
             process.stderr.write(
-                `enrolling the sync key — sandbox tunnel warming up (HTTP ${response.status}), retrying (${attempt}/${attempts})…\n`,
+                `enrolling the sync key: sandbox tunnel warming up (HTTP ${response.status}), retrying (${attempt}/${attempts})…\n`,
             );
             await sleep(delayMs);
             continue;
@@ -111,7 +111,7 @@ export const enrollKey = async (
          * enrolled the key and handed back nothing to use it with, which is a broken sync rather than a partial
          * one, so it fails here instead of ten minutes later as a Mutagen session that never connects. */
         if (body.syncToken === undefined) {
-            throw new Error("the sandbox enrolled this machine but returned no sync credential — update the sandbox and enable sync again.");
+            throw new Error("the sandbox enrolled this machine but returned no sync credential: update the sandbox and enable sync again.");
         }
         // `mode` is what the daemon GRANTED (per the pairing's role): "sync" = file sync + mirroring, "mirror" =
         // ports only.
@@ -227,7 +227,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // them, so no live connection drops, and the pairings it was serving are untouched.
     const stoppedPid = await stopWatcher();
     if (stoppedPid !== undefined) {
-        out(`stopped the mirror watcher (pid ${stoppedPid}) — it was running the agent binary this run replaced; restarting it below.`);
+        out(`stopped the mirror watcher (pid ${stoppedPid}): it was running the agent binary this run replaced; restarting it below.`);
     }
     // ADD this pairing to whatever this machine already holds. Pairing a second sandbox used to overwrite the
     // first, dropping its ssh alias, its folder and its file-sync session, which is how installing the
@@ -253,7 +253,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     await enableMirroring(out);
     const port = syncSshPort(sandboxId);
     if (!(await tunnelReady(port, TUNNEL_READY_MS))) {
-        out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet — syncing starts as soon as it is.`);
+        out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet, syncing starts as soon as it is.`);
     }
 
     // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick, on
@@ -298,7 +298,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         mode === "sync" ? localDir : undefined,
         mode === "sync"
             ? "That folder and your sandbox's /work are now the same files."
-            : `Ports from ${flags.url} now answer on this machine's localhost (mirror-only — no file sync).`,
+            : `Ports from ${flags.url} now answer on this machine's localhost (mirror-only, no file sync).`,
         [
             ["check it", "intentic-sync status"],
             ["its logs", `intentic-sync status --sandbox ${sandboxId}`],
@@ -372,7 +372,7 @@ const portLine = (port: MachinePort): string => {
         return `  localhost:${port.port} ← ${port.sandboxId} (${what})`;
     }
     const reason = port.heldBy === undefined ? "something else on this machine has the port" : `${port.heldBy} has it`;
-    return `  localhost:${port.port} — NOT mirrored from ${port.sandboxId}: ${reason} (${what})`;
+    return `  localhost:${port.port}, NOT mirrored from ${port.sandboxId}: ${reason} (${what})`;
 };
 
 /* ONE PAIRING'S LINE. Pure, and exported, because every word of it has been wrong at least once and the only way
@@ -396,7 +396,7 @@ export const pairingLine = (pairing: MachineReport["pairings"][number]): string 
             : [
                   // Mutagen's own word, and the conflict count beside it: a two-way-safe session flags conflicts
                   // rather than clobbering, and nothing else in the product has ever said one was waiting.
-                  pairing.paused === true ? "paused" : (pairing.mutagenStatus ?? "NO FILE-SYNC SESSION — this folder is not syncing"),
+                  pairing.paused === true ? "paused" : (pairing.mutagenStatus ?? "NO FILE-SYNC SESSION, this folder is not syncing"),
                   pairing.conflicts === undefined || pairing.conflicts === 0 ? undefined : `${pairing.conflicts} conflict(s)`,
                   /* The backup's own word, and it is SHOUTED when missing for the same reason the line above is:
                    * the whole value of this session is being there on the day the sandbox is not, and a silent
@@ -405,7 +405,7 @@ export const pairingLine = (pairing: MachineReport["pairings"][number]): string 
                    * is not repeated here. */
                   pairing.paused === true
                       ? undefined
-                      : `backup ${pairing.backupStatus ?? "NOT RUNNING — this sandbox's own state is not being copied here"}`,
+                      : `backup ${pairing.backupStatus ?? "NOT RUNNING, this sandbox's own state is not being copied here"}`,
               ].filter((part) => part !== undefined);
     return `  ${pairing.sandboxId}  ${where}${state.length === 0 ? "" : `  [${state.join(", ")}]`}`;
 };
@@ -421,17 +421,17 @@ export const pairingLine = (pairing: MachineReport["pairings"][number]): string 
  * `now` is a parameter so the sentence can be tested without a clock. */
 export const watcherLine = (watcher: MachineReport["watcher"], now: number): string => {
     if (!watcher.running) {
-        return "Mirror watcher: NOT running — file syncing and port mirroring are both stopped. Run `intentic-sync mirror` to restart it.";
+        return "Mirror watcher: NOT running, file syncing and port mirroring are both stopped. Run `intentic-sync mirror` to restart it.";
     }
     const since = watcher.lastTickAt === undefined ? undefined : now - watcher.lastTickAt;
     if (watcherStalled(watcher, now) && since !== undefined) {
-        return `Mirror watcher: STALLED (pid ${watcher.pid}) — the process is alive but its last full pass finished ${Math.round(since / 60_000)} minute(s) ago, so port mirroring, the git bridge and any file sync it has not created are stopped. Restart it with \`intentic-sync mirror --stop\` then \`intentic-sync mirror\`, and check ${mirrorLogPath}.`;
+        return `Mirror watcher: STALLED (pid ${watcher.pid}), the process is alive but its last full pass finished ${Math.round(since / 60_000)} minute(s) ago, so port mirroring, the git bridge and any file sync it has not created are stopped. Restart it with \`intentic-sync mirror --stop\` then \`intentic-sync mirror\`, and check ${mirrorLogPath}.`;
     }
     /* An agent too old to stamp reports no lastTickAt at all, and so does one whose first pass has not finished.
      * Neither is a stall, and neither is a clean bill of health, so the line says which of the two it is rather
      * than picking one, the alternative is the same silent green this field was added to end. */
     return since === undefined
-        ? `Mirror watcher: running (pid ${watcher.pid}) — no completed pass reported yet (a pass finishes within seconds of startup; an agent older than this one never reports them).`
+        ? `Mirror watcher: running (pid ${watcher.pid}), no completed pass reported yet (a pass finishes within seconds of startup; an agent older than this one never reports them).`
         : `Mirror watcher: running (pid ${watcher.pid}), last pass ${Math.round(since / 1000)}s ago`;
 };
 
@@ -499,7 +499,7 @@ const status = buildCommand<StatusFlags>({
             }
             for (const pairing of syncing.filter((held) => !syncSessionNames(held.sandboxId).every((name) => live.has(name)))) {
                 out(
-                    `  ${pairing.sandboxId}: no file-sync session exists on this machine — ${pairing.localDir ?? "its folder"} is NOT syncing. The mirror watcher retries every few minutes; if it stays this way the sandbox is unreachable (check ${mirrorLogPath}).`,
+                    `  ${pairing.sandboxId}: no file-sync session exists on this machine, ${pairing.localDir ?? "its folder"} is NOT syncing. The mirror watcher retries every few minutes; if it stays this way the sandbox is unreachable (check ${mirrorLogPath}).`,
                 );
             }
         }
@@ -532,12 +532,12 @@ const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
             const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
             const selected = selectPairings(await readState(), flags.sandbox);
             if (selected.length === 0) {
-                out(`no sandboxes are paired on this machine — nothing to ${verb}. Enable sync from a sandbox's Desktop sync card.`);
+                out(`no sandboxes are paired on this machine: nothing to ${verb}. Enable sync from a sandbox's Desktop sync card.`);
                 return;
             }
             const syncing = selected.filter((pairing) => pairing.mode === "sync");
             if (syncing.length === 0) {
-                out(`mirror-only enrollment${selected.length > 1 ? "s" : ""} — no file sync to ${verb}.`);
+                out(`mirror-only enrollment${selected.length > 1 ? "s" : ""}, no file sync to ${verb}.`);
                 return;
             }
             const mutagen = await ensureMutagen();
@@ -671,7 +671,7 @@ const uninstall = buildCommand<SandboxFlags>({
         this.process.stdout.write(
             ownCopy
                 ? "Sync terminated; ssh-config include removed; Mutagen daemon stopped and unregistered. Nothing intentic stays resident on this machine.\n"
-                : "Sync terminated; ssh-config include removed. (Your own Mutagen install is untouched — `mutagen daemon unregister` if you no longer want its daemon at login.)\n",
+                : "Sync terminated; ssh-config include removed. (Your own Mutagen install is untouched, `mutagen daemon unregister` if you no longer want its daemon at login.)\n",
         );
     },
 });

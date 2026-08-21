@@ -4,7 +4,7 @@
 // It is deliberately not a general-purpose converter. The input is Astro's emitted markup for a known
 // set of components, so the parser only has to handle well-formed HTML, and the renderer only has to
 // know the tags those components actually produce. Anything it does not recognise is treated as a
-// transparent container and its children are rendered — which is what makes the diagram-heavy pages
+// transparent container and its children are rendered: which is what makes the diagram-heavy pages
 // (rows of labelled cards) come out as readable lines instead of disappearing.
 
 const VOID_TAGS = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
@@ -182,7 +182,7 @@ export function parseHtml(html) {
     return root;
 }
 
-/** All descendant text, entities decoded, whitespace untouched — for <pre>. */
+/** All descendant text, entities decoded, whitespace untouched: for <pre>. */
 function rawText(nodes) {
     let out = "";
     for (const node of nodes) {

@@ -30,7 +30,7 @@ describe("fileTranscriptRecord", () => {
 
     /* The opening adoption. A conversation that ran before the record existed keeps its history: without this,
      * its FIRST turn under the record would become its whole transcript and everything before it would vanish
-     * from the chat — the very failure this store exists to end, reintroduced by the store itself. */
+     * from the chat: the very failure this store exists to end, reintroduced by the store itself. */
     it("adopts the history a conversation already had, once, when the record opens", async () => {
         const record = fileTranscriptRecord(await dir());
         let adoptions = 0;
@@ -48,8 +48,8 @@ describe("fileTranscriptRecord", () => {
 
     /* An adoption that comes back EMPTY is ambiguous: a conversation with genuinely nothing behind it looks
      * exactly like one whose provider store could not be read (an id the registry never learned, a swept
-     * session file, a runtime with no store at all). Writing the empty file made the second case permanent —
-     * every later open saw a file and returned early — and a conversation frozen that way then seeds every
+     * session file, a runtime with no store at all). Writing the empty file made the second case permanent:
+     * every later open saw a file and returned early, and a conversation frozen that way then seeds every
      * runtime handoff for the rest of its life with nothing. */
     it("re-adopts while adoption is empty, and stops as soon as there is something to open with", async () => {
         const record = fileTranscriptRecord(await dir());
@@ -90,7 +90,7 @@ describe("fileTranscriptRecord", () => {
         expect(adoptions).toBe(1);
     });
 
-    /* A BRANCH opens as a copy of the conversation it was cut from — the one opening history no provider store
+    /* A BRANCH opens as a copy of the conversation it was cut from: the one opening history no provider store
      * and no adoption could supply, since the branch is a conversation nothing else knows about yet. Copying it
      * is what lets a branch seed a switched session and read back in full, instead of appearing to begin at the
      * edit. */
@@ -140,12 +140,12 @@ describe("fileTranscriptRecord", () => {
  *
  * "The chat opens empty" kept coming back because the transcript was re-derived from whatever store the
  * PROVIDER kept, so every provider/harness pair was its own chance to have no reader, no key, or no store at
- * all — and codex/grok native and ACP never had one. The fix is that a turn's own frames are the transcript, and
+ * all, and codex/grok native and ACP never had one. The fix is that a turn's own frames are the transcript, and
  * this is the test that keeps it true: it drives every pair the catalog can produce through the same reduction
  * the daemon uses at settle, and demands a readable conversation out the other end.
  *
  * By SHAPE, not by a list: PROVIDERS × HARNESSES is read from the catalog, so a provider added tomorrow is
- * covered the day it is added. If this fails for a new pair, that pair's turns are not reaching the record — the
+ * covered the day it is added. If this fails for a new pair, that pair's turns are not reaching the record: the
  * answer is to make them, never to special-case the read. */
 describe("every provider records a readable transcript", () => {
     const turn = { prompt: "do the thing" };

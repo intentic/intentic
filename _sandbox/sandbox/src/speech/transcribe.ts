@@ -98,7 +98,7 @@ export interface Speech {
 // The refusals the route answers with a status of their own, anything else is a plain 500.
 export class SpeechUnprovisionedError extends Error {
     constructor() {
-        super("whisper-cli is not in this sandbox image — a one-time rebuild adds it");
+        super("whisper-cli is not in this sandbox image: a one-time rebuild adds it");
     }
 }
 export class SpeechModelNotReadyError extends Error {
@@ -117,7 +117,7 @@ export interface SpeechDeps {
 }
 
 export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchModel }: SpeechDeps): Speech => {
-    // Under cache/ because that is what the model IS — 1.6 GB re-downloadable by content, exactly what the
+    // Under cache/ because that is what the model IS: 1.6 GB re-downloadable by content, exactly what the
     // cache entry's `derived` promises exports and the watcher. Its old top-level home is a retired dir.
     const modelPath = statePath(workspaceRoot, ".intentic/local/cache/", "whisper", MODEL_FILE);
     const download = fetchModel ?? ((file: string) => downloadFile({ repo: MODEL_REPO, path: file }));

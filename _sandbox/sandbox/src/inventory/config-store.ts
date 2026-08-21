@@ -25,7 +25,7 @@ export const createConfigStore = (services: ConfigStoreDeps): ConfigStore => {
             // deploy.config.ts lives in the intent repo, which exists only once DevOps is active. Refuse to write
             // (which would silently re-create the repo) on an empty sandbox.
             if (!existsSync(services.workspace.repos.intent)) {
-                throw new ORPCError("PRECONDITION_FAILED", { message: "DevOps is not active — activate it before editing infrastructure." });
+                throw new ORPCError("PRECONDITION_FAILED", { message: "DevOps is not active, activate it before editing infrastructure." });
             }
             await services.files.write(configPath, content);
             await services.git.commitAll(services.workspace.repos.intent, message, AGENT_GIT_AUTHOR);

@@ -245,7 +245,7 @@ export const createEngine = (options: EngineOptions): Engine => {
             // it would leave that process writing into unlinked files, and the workspace with no index at all.
             // Whoever owns the index rebuilds it, say so instead of doing the damage.
             if (indexerAlive(indexDir)) {
-                throw new Error("another process owns this index (the sandbox daemon keeps it current) — it cannot be rebuilt from here");
+                throw new Error("another process owns this index (the sandbox daemon keeps it current): it cannot be rebuilt from here");
             }
             this.indexDrop();
             onProgress?.("rebuilding index from scratch");

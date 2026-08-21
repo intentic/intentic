@@ -7,7 +7,7 @@ import type { ListeningPort } from "../ports/port-scan.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, panelRunDir } from "./panels.js";
 
-// A temp workspace: every repo is a dir with a .git (role and clone alike — discovery is .git-based). A repo
+// A temp workspace: every repo is a dir with a .git (role and clone alike, discovery is .git-based). A repo
 // has a panel when a `dev` script lives at its operator/ (devScript) OR its root (rootDev).
 const setup = (repos: { name: string; devScript?: boolean; operatorNoDev?: boolean; rootDev?: boolean }[]) => {
     const root = mkdtempSync(join(tmpdir(), "discover-"));
@@ -79,7 +79,7 @@ test("operator/ is preferred over the repo root when both are runnable", async (
     expect(await panelRunDir(workspace, "app")).toBe(join(workspace.root, "app", "operator"));
 });
 
-// A procfs listener as the scan reports it — only the fields the attribution reads.
+// A procfs listener as the scan reports it: only the fields the attribution reads.
 const listener = (port: number, cwd?: string, forwardable = true): ListeningPort => ({
     port,
     host: "127.0.0.1",
@@ -87,7 +87,7 @@ const listener = (port: number, cwd?: string, forwardable = true): ListeningPort
     ...(cwd === undefined ? {} : { cwd }),
 });
 
-test("a repo claims the listeners bound from inside it — one per app for a monorepo's fan-out", () => {
+test("a repo claims the listeners bound from inside it: one per app for a monorepo's fan-out", () => {
     const root = WORKSPACE_ROOT;
     const found = listenersByRepo(
         [
@@ -106,7 +106,7 @@ test("a repo claims the listeners bound from inside it — one per app for a mon
 test("listeners nobody can claim are dropped: no cwd, a cwd outside the workspace, an unforwardable bind", () => {
     const found = listenersByRepo(
         [
-            listener(8787), // the daemon's own socket — procfs gave up no cwd
+            listener(8787), // the daemon's own socket, procfs gave up no cwd
             listener(5432, "/var/lib/postgresql"), // outside the workspace entirely
             listener(53, `${WORKSPACE_ROOT}/intentic`, false), // a loopback alias only answering at its own address
         ],
@@ -116,7 +116,7 @@ test("listeners nobody can claim are dropped: no cwd, a cwd outside the workspac
     expect(found.size).toBe(0);
 });
 
-test("a repo cloned inside another keeps its own listeners — the longest matching dir wins", () => {
+test("a repo cloned inside another keeps its own listeners: the longest matching dir wins", () => {
     const found = listenersByRepo([listener(3000, `${WORKSPACE_ROOT}/intentic/vendor/widget/src`)], WORKSPACE_ROOT, [
         "intentic",
         "intentic/vendor/widget",
@@ -149,7 +149,7 @@ test("a package's sidecar sockets collapse into the one server the app is on", (
     ]);
 });
 
-test("servers at the repo root share one slot too — a scaffolded app is its own package", () => {
+test("servers at the repo root share one slot too: a scaffolded app is its own package", () => {
     expect(oneServerPerDir<{ url: string; dir?: string }>([{ url: `http://localhost:3000` }, { url: `http://localhost:3001` }])).toEqual([
         { url: `http://localhost:3000` },
     ]);

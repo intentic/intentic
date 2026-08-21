@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { rename } from "./rename.js";
 
-// Real conversations with the native compiler's language server, against throwaway projects — rename's value
+// Real conversations with the native compiler's language server, against throwaway projects: rename's value
 // is that every usage moves, and only the real server can vouch for that.
 
 const made: string[] = [];
@@ -38,7 +38,7 @@ test("a rename moves the declaration and every cross-file usage, preserving shor
     expect(readFileSync(join(dir, "src", "util.ts"), "utf8")).toContain("export const fetchUser");
     const app = readFileSync(join(dir, "src", "app.ts"), "utf8");
     expect(app).toContain('import { fetchUser } from "./util.js"');
-    // The shorthand keeps its property name — `{ getUser }` becomes `{ getUser: fetchUser }`, not a new key.
+    // The shorthand keeps its property name, `{ getUser }` becomes `{ getUser: fetchUser }`, not a new key.
     expect(app).toContain("{ getUser: fetchUser }");
     expect(app).toContain("box.getUser(2)");
 });

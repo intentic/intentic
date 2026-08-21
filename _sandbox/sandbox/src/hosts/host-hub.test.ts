@@ -3,7 +3,7 @@ import { expect, test, vi } from "vitest";
 import { createHostHub, type HostClient } from "./host-hub.js";
 
 /* What is left of the hub once oRPC owns the wire: the roster, liveness, and what to do when a machine goes.
- * Request/response correlation is not tested here any more because it is not implemented here any more — the
+ * Request/response correlation is not tested here any more because it is not implemented here any more: the
  * link does it, and _computers/host/src/link.test.ts proves it over a real handler.
  *
  * The `mcp` calls below therefore assert PLUMBING (does the right machine get it, what happens when it is gone),
@@ -47,7 +47,7 @@ test("a reconnect replaces the old socket and closes it", () => {
     expect(hub.online("laptop")).toBe(true);
 });
 
-// The stale socket's close arrives AFTER the new one attached — a laptop waking from sleep does this routinely.
+// The stale socket's close arrives AFTER the new one attached: a laptop waking from sleep does this routinely.
 test("a stale socket's detach does not unregister the machine that replaced it", () => {
     const hub = createHostHub(logger);
     const first = fakeMachine();
@@ -112,7 +112,7 @@ test("the tool list survives a machine going offline, so an asleep laptop stays 
     expect(hub.knownTools("laptop")).toEqual({ tools: [{ name: "run_command" }] });
 });
 
-/* A lid closing does not always produce a close frame — the socket can simply stop answering. The card's dot is
+/* A lid closing does not always produce a close frame: the socket can simply stop answering. The card's dot is
  * read as "the agent can work here right now", so liveness has to be a probe rather than a memory. */
 test("a machine that stops answering the heartbeat is dropped", async () => {
     vi.useFakeTimers();

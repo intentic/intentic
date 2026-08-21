@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { bytesOf } from "./sync-ssh.js";
 
 /* Reading a frame off the wire is the one thing on this route that can corrupt an SSH stream silently. Every
- * other failure announces itself — a refused socket, a closed connection — but bytes that are the wrong bytes
+ * other failure announces itself: a refused socket, a closed connection, but bytes that are the wrong bytes
  * arrive as a handshake that fails with no reason given, on a transport that looks perfectly healthy. */
 describe("bytesOf", () => {
-    it("takes a Buffer as it is — what `ws` hands over for a binary frame", () => {
+    it("takes a Buffer as it is: what `ws` hands over for a binary frame", () => {
         expect(bytesOf(Buffer.from("SSH-2.0-OpenSSH_9.6"))?.toString()).toBe("SSH-2.0-OpenSSH_9.6");
     });
 
-    it("takes a whole ArrayBuffer — what a browser-shaped client sends", () => {
+    it("takes a whole ArrayBuffer: what a browser-shaped client sends", () => {
         const bytes = new TextEncoder().encode("hello");
         expect(bytesOf(bytes.buffer)?.toString()).toBe("hello");
     });

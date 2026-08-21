@@ -26,7 +26,7 @@ const attempt = async (
     return output?.permissionDecision === "deny" ? output.permissionDecisionReason : undefined;
 };
 
-/* A workspace that has never set a folder limit must wire no hook at all — the cost of a feature nobody uses
+/* A workspace that has never set a folder limit must wire no hook at all: the cost of a feature nobody uses
  * should be zero, and this is the check that keeps it that way. */
 test("a card with no folder limit and full sandbox access asks for no scope", () => {
     expect(scopeFor({})).toBeUndefined();
@@ -73,12 +73,12 @@ test("a card that may not change the sandbox is refused its config and its publi
     const hooks = personaScopeHooks(scopeFor({ powers: PersonaPowersSchema.parse({ sandbox: false }) })!);
     expect(await attempt(hooks, "Write", { file_path: "/work/.intentic/config/settings.json" })).toContain("sandbox's own configuration");
     expect(await attempt(hooks, "Edit", { file_path: "/work/public/leak.txt" })).toContain("sandbox's own configuration");
-    // Ordinary workspace files are untouched — this switch is about the sandbox, not about editing at all.
+    // Ordinary workspace files are untouched: this switch is about the sandbox, not about editing at all.
     expect(await attempt(hooks, "Write", { file_path: "/work/apps/web/main.ts" })).toBeUndefined();
 });
 
 /* READING the sandbox's own config stays allowed. An agent reads .intentic to answer questions about itself all
- * day, and refusing that would break far more than it protects — the switch is "change", not "know about". */
+ * day, and refusing that would break far more than it protects: the switch is "change", not "know about". */
 test("reading the sandbox's own config is still allowed", async () => {
     const hooks = personaScopeHooks(scopeFor({ powers: PersonaPowersSchema.parse({ sandbox: false }) })!);
     expect(await attempt(hooks, "Read", { file_path: "/work/.intentic/config/settings.json" })).toBeUndefined();

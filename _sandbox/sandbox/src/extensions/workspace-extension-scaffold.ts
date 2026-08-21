@@ -74,7 +74,7 @@ const View = defineComponent({
                     \`This view is drawn by .intentic/config/workspace-extensions/${name}/extension.js.\`,
                 ),
                 h(\`div\`, { class: \`ui-card\`, style: { marginTop: \`1rem\` } }, [
-                    h(\`p\`, { style: { color: \`var(--color-muted)\` } }, \`Nothing here yet — say what you want this to do.\`),
+                    h(\`p\`, { style: { color: \`var(--color-muted)\` } }, \`Nothing here yet, say what you want this to do.\`),
                 ]),
             ]);
     },
@@ -97,14 +97,14 @@ export const activate = (api, context) => {
 
 const readmeOf = (publisher: string, name: string): string => `# ${labelOf(name)}
 
-A workspace extension — it lives in this workspace, runs from these bytes, and is installed nowhere. It is listed
+A workspace extension: it lives in this workspace, runs from these bytes, and is installed nowhere. It is listed
 in the Sandbox hub's Extensions tab as \`${publisher}.${name}\`, where it can be switched off, and it is deleted by
 deleting this directory.
 
 | File | What it is |
 | --- | --- |
 | \`intentic-extension.json\` | What this extension is allowed to do. The host refuses anything it does not declare. |
-| \`extension.js\` | The code, as a single ESM file. No build step — the bytes here are the bytes that run. |
+| \`extension.js\` | The code, as a single ESM file. No build step: the bytes here are the bytes that run. |
 
 ## Changing it
 
@@ -120,13 +120,13 @@ to read from the daemon, add the one route it needs:
 "permissions": { "sandbox": ["GET /workspace/repos"] }
 \`\`\`
 
-Keeping that list to what is actually used is the whole point of it — it is what an owner reads before trusting
+Keeping that list to what is actually used is the whole point of it: it is what an owner reads before trusting
 this extension anywhere else.
 
 ## Publishing it
 
 A workspace extension is a draft. Publishing means putting this directory in a git repository of its own, building
-a bundle if it has grown past one file, and listing the commit in a registry — at which point the sha, not this
+a bundle if it has grown past one file, and listing the commit in a registry: at which point the sha, not this
 directory, is what people run.
 `;
 

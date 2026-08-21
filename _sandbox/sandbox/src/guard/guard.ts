@@ -47,7 +47,7 @@ const minted = new WeakSet<object>();
 
 export function defineGuardedAction<I>(spec: GuardedActionSpec<I>): GuardedAction<I> {
     if (defined.has(spec.action)) {
-        throw new Error(`guarded action "${spec.action}" is already defined — action names are the catalog key`);
+        throw new Error(`guarded action "${spec.action}" is already defined: action names are the catalog key`);
     }
     const def = Object.freeze({ ...spec }) as GuardedAction<I>;
     minted.add(def);

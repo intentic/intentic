@@ -80,7 +80,7 @@ export const listSandboxRepos = async (exec: BridgeExec, alias: string): Promise
 export const bridgeRepo = async (exec: BridgeExec, alias: string, localDir: string, repo: string, log: Log): Promise<void> => {
     const dir = join(localDir, repo);
     if (!exec.exists(dir)) {
-        return; // the worktree hasn't synced down yet — a later pass catches it
+        return; // the worktree hasn't synced down yet: a later pass catches it
     }
     const url = `${alias}:/history/gits/${encodeURIComponent(repo)}`;
     if (!exec.exists(join(dir, ".git"))) {
@@ -89,7 +89,7 @@ export const bridgeRepo = async (exec: BridgeExec, alias: string, localDir: stri
         if ((await exec.run("git", ["init", "-q"], dir)) === undefined) {
             return;
         }
-        log(`  ${repo}: initialized — this repo's history now follows the sandbox`);
+        log(`  ${repo}: initialized, this repo's history now follows the sandbox`);
     }
     // Read the worktree the way the SANDBOX reads it. The daemon runs EVERY git command with
     // core.fileMode=false (scaffold's GIT_GLOBAL_ARGS: workspace files arrive by browser upload, which cannot
@@ -118,7 +118,7 @@ export const bridgeRepo = async (exec: BridgeExec, alias: string, localDir: stri
     // trailing anchor is what keeps it off the `<sha> refs/remotes/origin/HEAD` line further down the output.
     const remoteTip = /^([0-9a-f]+)\s+HEAD\s*$/m.exec(symref)?.[1];
     if (branch === undefined || remoteTip === undefined) {
-        return; // unreachable, or an unborn HEAD in the sandbox — nothing to bridge yet
+        return; // unreachable, or an unborn HEAD in the sandbox: nothing to bridge yet
     }
     // Both local, both free. Read here rather than after the fetch so the quiet case can be decided without one.
     const head = (await exec.run("git", ["rev-parse", "-q", "--verify", "HEAD"], dir))?.trim();
@@ -149,7 +149,7 @@ export const bridgeRepo = async (exec: BridgeExec, alias: string, localDir: stri
         return;
     }
     if ((await exec.run("git", ["fetch", "-q", "sandbox", `+refs/heads/${branch}:refs/remotes/sandbox/${branch}`], dir)) === undefined) {
-        log(`  ${repo}: fetch from the sandbox failed — will retry next pass`);
+        log(`  ${repo}: fetch from the sandbox failed, will retry next pass`);
         return;
     }
     // Re-read the tip from the ref the fetch just wrote instead of trusting the probe's: if the sandbox
@@ -171,10 +171,10 @@ export const bridgeRepo = async (exec: BridgeExec, alias: string, localDir: stri
      * of a hand-run `git reset` to clear them. So follow the rewind; the worktree is untouched either way. */
     if (head !== undefined && head !== tip && (await exec.run("git", ["merge-base", "--is-ancestor", "HEAD", tip], dir)) === undefined) {
         if (head !== installed) {
-            log(`  ${repo}: local commits diverge from the sandbox — leaving it alone`);
+            log(`  ${repo}: local commits diverge from the sandbox, leaving it alone`);
             return;
         }
-        log(`  ${repo}: the sandbox rewound ${branch} — following it back`);
+        log(`  ${repo}: the sandbox rewound ${branch}, following it back`);
     }
     if (localBranch !== branch) {
         // The sandbox checked out a different branch (or this repo was just initialized): follow it by name,
@@ -191,7 +191,7 @@ export const bridgeRepo = async (exec: BridgeExec, alias: string, localDir: stri
             existing !== installed &&
             (await exec.run("git", ["merge-base", "--is-ancestor", existing, tip], dir)) === undefined
         ) {
-            log(`  ${repo}: local branch ${branch} diverges from the sandbox — leaving it alone`);
+            log(`  ${repo}: local branch ${branch} diverges from the sandbox, leaving it alone`);
             return;
         }
         await exec.run("git", ["symbolic-ref", "HEAD", `refs/heads/${branch}`], dir);
@@ -228,7 +228,7 @@ export const runGitBridge = async (
         // Named, because one machine bridges a FLEET and this line repeats every pass: an unnamed "couldn't list
         // the sandbox's repos" every few seconds says nothing about WHICH sandbox is down, so a reader watching a
         // healthy pairing's log cannot tell whether it is the one being reported.
-        log(`  ${pairing.sandboxId}: git bridge couldn't list the sandbox's repos — will retry next pass`);
+        log(`  ${pairing.sandboxId}: git bridge couldn't list the sandbox's repos, will retry next pass`);
         return undefined;
     }
     for (const repo of repos) {

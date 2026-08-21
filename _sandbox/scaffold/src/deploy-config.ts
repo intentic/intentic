@@ -19,7 +19,7 @@ import type { InventoryEntry, InventoryProvider, ServiceKind } from "@intentic/s
 
 const BEGIN_TAG = `// <intentic>`;
 const END_TAG = `// </intentic>`;
-const BEGIN_MARKER = `${BEGIN_TAG} managed — do not edit by hand`;
+const BEGIN_MARKER = `${BEGIN_TAG} managed: do not edit by hand`;
 const INDENT = `    `;
 
 type ServiceEntry = Extract<InventoryEntry, { kind: `service` }>;

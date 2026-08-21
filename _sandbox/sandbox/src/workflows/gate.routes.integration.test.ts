@@ -14,7 +14,7 @@ import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js"
 
 /* The public door, end to end: a pipeline runner with no identity POSTs, waits, and is told whether to ship.
  *
- * EVERY TEST USES ITS OWN WORKFLOW ID. The daily ceiling is a module singleton keyed by workflow — which is
+ * EVERY TEST USES ITS OWN WORKFLOW ID. The daily ceiling is a module singleton keyed by workflow, which is
  * the right shape for a daemon and a trap for a test file, since one shared id would make the ceiling test
  * silently spend the other tests' allowance.
  */
@@ -170,7 +170,7 @@ test("a gate pointed at a field nobody declares is refused at call time", async 
 });
 
 /* The deadline. A pipeline that gave up must not leave a fan-out of sessions burning, so the wait STOPS the
- * run — and the answer is `blocked`, because nothing was learned about the product. */
+ * run, and the answer is `blocked`, because nothing was learned about the product. */
 test("a run that outlasts the deadline is stopped and answers blocked", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -185,6 +185,6 @@ test("a run that outlasts the deadline is stopped and answers blocked", async ()
     const elapsed = Date.now() - startedAt;
 
     expect((await response.json()).outcome).toBe("blocked");
-    // It answered on its own deadline rather than on the run's — the property the whole route exists for.
+    // It answered on its own deadline rather than on the run's: the property the whole route exists for.
     expect(elapsed).toBeLessThan(2_000);
 });

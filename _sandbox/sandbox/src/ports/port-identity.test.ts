@@ -13,7 +13,7 @@ const attribution = (extensions: Record<string, { extensionId: string; processNa
 
 const listener = (over: Partial<ListeningPort>): ListeningPort => ({ port: 3000, host: "127.0.0.1", forwardable: true, ...over });
 
-test("the sandbox's own processes are named, not left as argv — and file under system wherever they run", () => {
+test("the sandbox's own processes are named, not left as argv, and file under system wherever they run", () => {
     // The row that motivated this: the daemon's cwd is the workspace root, so it used to file under the user's
     // own ports carrying a Preview button for the service rendering the page.
     expect(
@@ -23,7 +23,7 @@ test("the sandbox's own processes are named, not left as argv — and file under
         ),
     ).toEqual({
         title: "Sandbox service",
-        purpose: "The sandbox's own service — this app, your agents and the CLI all talk to it.",
+        purpose: "The sandbox's own service, this app, your agents and the CLI all talk to it.",
         origin: "sandbox",
         kind: "system",
     });
@@ -82,7 +82,7 @@ test("an extension's background service is named after the extension, not after 
         origin: "extension",
         kind: "system",
     });
-    // An orphan — the extension was removed while its session lingers — still reads as what it is.
+    // An orphan (the extension was removed while its session lingers) still reads as what it is.
     expect(identifyPort(listener({ command: "node dist/gateway.js", session: "panel-ext-gone-thing" }), attribution()).title).toBe(
         "Extension service",
     );
@@ -105,7 +105,7 @@ test("a dev server is named by its tool and attributed to the terminal it was st
         origin: "terminal",
         kind: "workspace",
     });
-    // An agent's terminal is the other common owner, and the distinction is the point — the user did not do this.
+    // An agent's terminal is the other common owner, and the distinction is the point: the user did not do this.
     expect(identifyPort(listener({ command: "python -m http.server 8000", cwd: "/work", session: "agent-1a2b3c4d" }), attribution())).toEqual({
         title: "Static file server",
         purpose: "Started by an agent in its terminal.",
@@ -121,14 +121,14 @@ test("a dev server is named by its tool and attributed to the terminal it was st
 test("a listener nothing explains says so rather than guessing", () => {
     expect(identifyPort(listener({}), attribution())).toEqual({
         title: "Unclaimed port",
-        purpose: "Something is listening here that no process in this sandbox owns — usually container plumbing.",
+        purpose: "Something is listening here that no process in this sandbox owns, usually container plumbing.",
         origin: "unknown",
         kind: "system",
     });
-    // An unknown binary keeps its own name — still a name, just a less friendly one.
+    // An unknown binary keeps its own name: still a name, just a less friendly one.
     expect(identifyPort(listener({ command: "/usr/local/bin/weird-thing --serve", cwd: "/srv" }), attribution())).toEqual({
         title: "weird-thing",
-        purpose: "Nothing in the sandbox claims this one — it answers from outside the container.",
+        purpose: "Nothing in the sandbox claims this one, it answers from outside the container.",
         origin: "unknown",
         kind: "system",
     });

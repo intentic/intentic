@@ -39,6 +39,6 @@ test("an upsert replaces the same run in place and does NOT extend sweep freshne
     vi.advanceTimersByTime(900);
     cache.upsert(run({ runId: 3, createdAt: 3000 }));
     vi.advanceTimersByTime(200);
-    // The upsert 100ms ago says nothing about the whole picture — the sweep is stale regardless.
+    // The upsert 100ms ago says nothing about the whole picture: the sweep is stale regardless.
     expect(cache.sweep()).toBeUndefined();
 });

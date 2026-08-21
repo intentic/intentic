@@ -215,7 +215,7 @@ button {
 }
 
 /* The one place the accent is painted solid. A wash is what the app uses for controls, but those sit on a
-   surface we own — the launcher sits on the customer's page, where a 14% tint composites over an unknown
+   surface we own: the launcher sits on the customer's page, where a 14% tint composites over an unknown
    colour and can vanish. Conspicuous is the whole job of this button. */
 .launcher {
     display: grid;
@@ -299,8 +299,8 @@ button {
 ::slotted(*) { display: block; }
 
 /* One shell holding the input and the send button, exactly as the app's composer does (ChatPanel's footer):
-   the frame is what takes focus, so the textarea inside it is transparent and borderless. Two nested boxes —
-   a bordered field beside a separate button — is the generic-widget arrangement this replaced, and it drew a
+   the frame is what takes focus, so the textarea inside it is transparent and borderless. Two nested boxes:
+   a bordered field beside a separate button: is the generic-widget arrangement this replaced, and it drew a
    second edge around something that is already inside an edge. */
 .composer { padding: 0.75rem; }
 .composer-shell {
@@ -345,7 +345,7 @@ button {
 .send:disabled { background: var(--overlay); color: var(--subtle); cursor: default; }
 .send svg { width: 1.125rem; height: 1.125rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* The paper plane's ink sits up and to the right of its box, so it reads off-centre in a circle. Nudge it
-   back — the same correction the app makes in chat.css. */
+   back: the same correction the app makes in chat.css. */
 .send svg { translate: -1px 1px; }
 
 .footer { padding: 0 0.75rem 0.625rem; text-align: center; }

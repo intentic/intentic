@@ -19,7 +19,7 @@ test("readModules finds every named package dir, whatever the layout", async () 
     const dir = await scaffold({
         "package.json": pkg("@shop/root"),
         "_apps/web/package.json": pkg("@shop/web"),
-        // Nested inside another module — an app with its own operator UI is a module of its own.
+        // Nested inside another module: an app with its own operator UI is a module of its own.
         "_apps/web/operator/package.json": pkg("@shop/web-operator"),
         "_libs/ui/package.json": pkg("@shop/ui"),
         // Outside any pnpm glob: a package the dependency graph would not list, holding files a reviewer still

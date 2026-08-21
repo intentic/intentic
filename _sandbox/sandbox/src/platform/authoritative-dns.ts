@@ -5,7 +5,7 @@ import { Resolver } from "node:dns/promises";
  *
  * It has to be AUTHORITATIVE rather than an ordinary recursive lookup, and the reason is the whole point of
  * this module. The name being asked about did not exist a moment ago, so the first recursive query for it
- * caches an NXDOMAIN for the zone's SOA minimum — 1800 seconds on a Cloudflare zone. Polling a recursive
+ * caches an NXDOMAIN for the zone's SOA minimum: 1800 seconds on a Cloudflare zone. Polling a recursive
  * resolver to find out whether a record has appeared would therefore prime the very cache that answers "no"
  * for the next half hour. A zone's own nameservers hold no cache: they answer from the zone, and change the
  * instant the zone does.

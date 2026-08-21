@@ -7,7 +7,7 @@ import { createApp } from "../app.js";
 import { clientFor, errorCode, fakeFiles, fakeHistory, services, tempWorkspace } from "../route-testing.js";
 
 /* The git routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
+ * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
  * one file that two agents working on unrelated features collided in every time. The fakes and the client
  * are shared (route-testing.ts); what lives here is what these routes do. */
 
@@ -136,9 +136,9 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
 });
 
 // The graph's own routes, over the scope that has no directory of its own: "root" IS the /work repo, so every
-// verb the graph offers has to resolve it to the workspace root rather than to a dir named "root" — which is
+// verb the graph offers has to resolve it to the workspace root rather than to a dir named "root", which is
 // exactly what the explorer's root git-history icon and the Changes header both open.
-test("the git-history graph resolves the 'root' scope to /work — reads, and a HEAD-mover that checkpoints first", async () => {
+test("the git-history graph resolves the 'root' scope to /work: reads, and a HEAD-mover that checkpoints first", async () => {
     const workspace = tempWorkspace([{ name: "intent" }]);
     const calls: string[] = [];
     const snapshots: string[] = [];
@@ -206,7 +206,7 @@ test("git.commit records the index by default and stages everything first for `a
             }),
         ),
     );
-    // A bare message commits exactly the index — the only thing the panel ever asks for, because staging IS
+    // A bare message commits exactly the index: the only thing the panel ever asks for, because staging IS
     // how the user chose. There is no path-scoped shape to route to any more.
     expect(await client.git.commit({ repo: "root", message: "m1" })).toEqual({ committed: true });
     expect(await client.git.commit({ repo: "intent", message: "m2", all: true })).toEqual({ committed: true });
@@ -214,7 +214,7 @@ test("git.commit records the index by default and stages everything first for `a
 });
 
 /* The commit answers with the repo it just wrote, so the panel replaces one repo's rows instead of firing the
- * workspace-wide rescan it used to — the read that made "I clicked Commit" take seconds while the user watched
+ * workspace-wide rescan it used to: the read that made "I clicked Commit" take seconds while the user watched
  * the rows they had just committed sit there.
  *
  * Both halves of the inclusion rule are the claim. A repo with work LEFT (here an untracked file, which
@@ -258,21 +258,21 @@ test("git.commit answers with the committed repo's post-commit rows, and omits t
             remote: { remote: "origin", branch: "main", upstream: "origin/main", ahead: 1, behind: 0 },
             origins: { "notes.md": ["a1"] },
         },
-        // Only the agents THIS repo names — the panel merges them over what the other repos' rows already
+        // Only the agents THIS repo names: the panel merges them over what the other repos' rows already
         // carry, rather than replacing a map the one-repo answer cannot have covered.
         originAgents: { a1: { title: "Write notes", provider: "claude" } },
     });
-    // Clean tree, no remote work: the row is gone, and saying so is the whole point — the panel drops the group
+    // Clean tree, no remote work: the row is gone, and saying so is the whole point, the panel drops the group
     // on this answer instead of waiting for a scan to stop listing it.
     expect(await client.git.commit({ repo: "spent", message: "m2" })).toEqual({ committed: true });
 });
 
-/* WHO IS COMMITTING, ON THE REVIEW ITSELF — the fact a browser cannot hold on its own.
+/* WHO IS COMMITTING, ON THE REVIEW ITSELF: the fact a browser cannot hold on its own.
  *
  * A commit outlives the tab that fired it. Reload mid-commit and that tab's busy flag went with the page: the
  * button re-armed over rows the commit was already recording, and the rows then changed under the user a second
  * later with nothing having said why. Answering it from the daemon is what makes a reload, a second tab and a
- * phone agree — and the clearing half is as load-bearing as the setting half, since a panel that latched on
+ * phone agree, and the clearing half is as load-bearing as the setting half, since a panel that latched on
  * "Committing…" with no way out would be the worse bug. */
 test("a running commit rides the changes response, and leaves it when it lands", async () => {
     const workspace = tempWorkspace([{ name: "intent" }]);
@@ -303,7 +303,7 @@ test("a running commit rides the changes response, and leaves it when it lands",
     );
     const commit = client.git.commit({ repo: "intent", message: "m" });
     await inCommit;
-    // Asked WHILE git is inside the commit — the exact request a reloaded page makes.
+    // Asked WHILE git is inside the commit: the exact request a reloaded page makes.
     expect((await client.git.changes()).committing).toEqual(["intent"]);
     release?.();
     await commit;
@@ -312,7 +312,7 @@ test("a running commit rides the changes response, and leaves it when it lands",
 });
 
 // The reason the browser no longer refuses to commit while an agent runs: the ONE thing that was genuinely
-// unsafe about it — a commit interleaving with the `git apply` an agent's land performs on the same tree — is
+// unsafe about it (a commit interleaving with the `git apply` an agent's land performs on the same tree) is
 // prevented here instead, on the same per-repo chain `land` already takes. A UI gate could only guess at this
 // race; the terminal commits straight past one anyway.
 test("git writes serialize per repo, so a commit cannot interleave with an agent's land", async () => {
@@ -349,7 +349,7 @@ test("git writes serialize per repo, so a commit cannot interleave with an agent
         ),
     );
     await Promise.all([client.git.commit({ repo: "root", message: "a" }), client.git.commit({ repo: "root", message: "b" })]);
-    /* One repo, one at a time. The shape is the claim — enter/exit/enter/exit, never two enters in a row — and
+    /* One repo, one at a time. The shape is the claim: enter/exit/enter/exit, never two enters in a row, and
      * WHICH of the two won the race to the lock is not something the daemon promises. Pinning a winner here
      * asserted the arrival order of two concurrent round trips, which holds on an idle machine and inverts on
      * a loaded one: a correct serialization failing this was a flake in the test, not in the lock. */
@@ -358,7 +358,7 @@ test("git writes serialize per repo, so a commit cannot interleave with an agent
 
     order.length = 0;
     await Promise.all([client.git.commit({ repo: "root", message: "r" }), client.git.commit({ repo: "intent", message: "i" })]);
-    // Different repos still overlap — both are inside before either leaves. Per-repo is the whole point: a lock
+    // Different repos still overlap, both are inside before either leaves. Per-repo is the whole point: a lock
     // that spanned the workspace would be the daemon reinventing the workspace-wide block this design removed.
     expect(order.map(phase)).toEqual([`enter`, `enter`, `exit`, `exit`]);
     expect(new Set(order)).toEqual(new Set([`enter r`, `enter i`, `exit r`, `exit i`]));
@@ -406,7 +406,7 @@ test("git.fileDiff routes each side to its own diff and BAD_REQUESTs a path esca
 });
 
 /* THE PANEL MUST BE ABLE TO OPEN EVERY ROW IT DRAWS. `changes` lists what git reports, and the root repo tracks
- * `.intentic/config/capabilities.json` (it is `versioned` — connecting this sandbox to a computer or an orchestrator is
+ * `.intentic/config/capabilities.json` (it is `versioned`: connecting this sandbox to a computer or an orchestrator is
  * the largest change made to what it can do, and that belongs in review). The path is also control-plane, so the
  * diff guard used to refuse it and the row 404'd on click: a file deliberately made reviewable, with no way to
  * review it. The lock is about the WRITE, which is why only these two diff routes carve it out. */
@@ -429,7 +429,7 @@ test("git.fileDiff serves the tracked control-plane entry and still refuses the 
         before: "{}\n",
         after: '{"ssh":{}}\n',
     });
-    // The credentials, the identity binding and the private runtime state are untracked and stay unreachable —
+    // The credentials, the identity binding and the private runtime state are untracked and stay unreachable:
     // the carve-out follows `versioned`, so it cannot widen without the flag that puts a file in `git log`.
     for (const path of [".intentic/identity/owner.json", ".intentic/secrets/auth/codex/auth.json", ".intentic/local/browser/Default/Cookies"]) {
         expect([path, await errorCode(client.git.fileDiff({ repo: "root", path, side: "staged" }))]).toEqual([path, "NOT_FOUND"]);
@@ -441,8 +441,8 @@ test("git.fileDiff serves the tracked control-plane entry and still refuses the 
     expect(diffed).toEqual([".intentic/config/capabilities.json"]);
 });
 
-/* THE WAY OUT OF A HALTED REPO. Nothing this daemon starts can leave one — every sequence verb aborts itself on
- * failure — so both of these exist for what a terminal left behind, and both are worth pinning: the read must
+/* THE WAY OUT OF A HALTED REPO. Nothing this daemon starts can leave one: every sequence verb aborts itself on
+ * failure, so both of these exist for what a terminal left behind, and both are worth pinning: the read must
  * not queue behind the repo lock (a stuck repo would become a stuck panel), and the abort must checkpoint before
  * it throws the conflict resolution away. */
 test("git.operation reports a halted repo, and git.abort ends it after checkpointing", async () => {
@@ -485,7 +485,7 @@ test("git.operation reports a halted repo, and git.abort ends it after checkpoin
         `abort ${join(workspace.root, "app")} rebase`,
     ]);
 
-    // Now that it has ended, the repo reports clean and a second Abort is a value rather than a throw — two
+    // Now that it has ended, the repo reports clean and a second Abort is a value rather than a throw: two
     // people on the same repo is ordinary, and the loser of that race should not see a stack trace.
     expect(await client.git.operation({ repo: "app" })).toEqual({ repo: "app" });
     expect(await client.git.abort({ repo: "app" })).toEqual({ ok: false, reason: "nothing in progress" });
@@ -493,7 +493,7 @@ test("git.operation reports a halted repo, and git.abort ends it after checkpoin
 });
 
 /* The undo pair. The read must not queue behind the repo lock (a toolbar renders it), and the write must
- * checkpoint before it moves the branch — a hard undo throws the worktree away, and even a soft one moves a ref
+ * checkpoint before it moves the branch: a hard undo throws the worktree away, and even a soft one moves a ref
  * the user may have to get back to. */
 test("git.undoable reports the last action, and git.undo checkpoints before walking the branch back", async () => {
     const workspace = tempWorkspace([{ name: "app" }]);
@@ -536,7 +536,7 @@ test("git.undoable reports the last action, and git.undo checkpoints before walk
     expect(await client.git.undo({ repo: "app", previousSha: "bbbbbbb", discardChanges: true })).toEqual({ ok: true });
     expect(snapshots).toEqual(["user before undo in app"]);
 
-    // An undo prepared against a position the repo has moved past comes back as a value, not a throw — the user
+    // An undo prepared against a position the repo has moved past comes back as a value, not a throw: the user
     // is told their view was stale rather than shown a fault.
     expect(await client.git.undo({ repo: "app", previousSha: "ccccccc" })).toEqual({ ok: false, reason: "stale" });
     expect(calls).toEqual([

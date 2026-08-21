@@ -74,7 +74,7 @@ export const runRetrieval = async (filter: {
     }
     const configs = CONFIGS.filter((config) => filter.config === undefined || config.name === filter.config);
     if (configs.length === 0) {
-        throw new Error(`iq-bench: unknown config "${filter.config}" — known: ${CONFIGS.map((config) => config.name).join(", ")}`);
+        throw new Error(`iq-bench: unknown config "${filter.config}", known: ${CONFIGS.map((config) => config.name).join(", ")}`);
     }
     const rows: CaseRow[] = [];
     const metas: RepoMeta[] = [];

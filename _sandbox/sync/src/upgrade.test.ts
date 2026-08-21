@@ -45,7 +45,7 @@ describe("runUpgrade", () => {
         const { steps, exec } = scripted();
         const outcome = await runUpgrade(exec, URL, "1.0.0", false, () => undefined);
         expect(outcome).toEqual({ kind: "upgraded", from: "1.0.0", to: "2.0.0" });
-        // The probe comes after the fetch and before the watcher is stopped — so a bad download costs nothing.
+        // The probe comes after the fetch and before the watcher is stopped, so a bad download costs nothing.
         expect(steps.indexOf(`probe ${agentPath}.new`)).toBeLessThan(steps.indexOf("stop"));
         expect(steps.indexOf("stop")).toBeLessThan(steps.findIndex((step) => step.startsWith(`swap ${agentPath}→`)));
     });
@@ -82,7 +82,7 @@ describe("runUpgrade", () => {
 
     /* The one failure no check can front-run: the binary answers `version` and then cannot stay up on THIS
      * machine. Without the rollback an upgrade would turn a merely out-of-date computer into one with no working
-     * sync at all — which is the outcome that would make the whole command not worth running. */
+     * sync at all, which is the outcome that would make the whole command not worth running. */
     it("restores the previous agent and restarts it when the new one won't stay up", async () => {
         const { steps, exec } = scripted({ watcherAlive: () => Promise.resolve(false) });
         const outcome = await runUpgrade(exec, URL, "1.0.0", false, () => undefined);
@@ -96,7 +96,7 @@ describe("runUpgrade", () => {
     });
 
     // A watcher that was deliberately stopped stays stopped. Upgrading is not consent to start a background
-    // process somebody turned off — and with nothing to start, there is nothing to verify or roll back either.
+    // process somebody turned off, and with nothing to start, there is nothing to verify or roll back either.
     it("doesn't start a watcher that wasn't running before", async () => {
         const { steps, exec } = scripted({ stopWatcher: () => Promise.resolve(undefined) });
         expect(await runUpgrade(exec, URL, "1.0.0", false, () => undefined)).toEqual({ kind: "upgraded", from: "1.0.0", to: "2.0.0" });
@@ -105,7 +105,7 @@ describe("runUpgrade", () => {
 });
 
 /* Upgrade is a direction, not just a swap. `latest` is whatever the release channel points at right now, and it
- * can sit BEHIND a given machine — a release pulled, or an agent built from source ahead of it. Installing it
+ * can sit BEHIND a given machine: a release pulled, or an agent built from source ahead of it. Installing it
  * anyway would remove whatever that machine is standing on, up to and including this command. */
 describe("runUpgrade never moves a machine backwards", () => {
     it("declines a published agent older than the one installed", async () => {
@@ -114,7 +114,7 @@ describe("runUpgrade never moves a machine backwards", () => {
         expect(steps).not.toContain("stop");
     });
 
-    // A build made from source carries the dev sentinel, which every release outranks numerically — so the rule
+    // A build made from source carries the dev sentinel, which every release outranks numerically, so the rule
     // above cannot see it, and the first upgrade on a developer's own machine would silently undo their build.
     it("leaves a build made from source alone, and says how to replace it on purpose", async () => {
         const { steps, exec } = scripted({ downloaded: "1.183.0" });

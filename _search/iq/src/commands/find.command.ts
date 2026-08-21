@@ -5,7 +5,7 @@ import { runSearch } from "../lib/run.js";
 type FindFlags = SearchFlags & { readonly literal: boolean; readonly word: boolean; readonly case: boolean };
 
 export const find = buildCommand({
-    docs: { brief: "Lexical content search — regex by default, case-insensitive" },
+    docs: { brief: "Lexical content search, regex by default, case-insensitive" },
     parameters: {
         flags: {
             ...scopeFlagParameters,

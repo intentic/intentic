@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
 import { expect, test } from "vitest";
 
-/* Against the REAL bin/tmux-run, because what is being asserted is what the SCRIPT does with tmux — and the
+/* Against the REAL bin/tmux-run, because what is being asserted is what the SCRIPT does with tmux, and the
  * bug it now prevents was invisible in every TypeScript-side test: the command line the hook composes was
  * always correct, and the damage was done by which namespace the wrapper's own tmux client stood in when it
  * forked the server. tmux and nsenter are stubbed so the assertion is about the calls, not about a live
@@ -21,7 +21,7 @@ const TMUX_RUN = join(packageRoot(import.meta.url), "bin", "tmux-run");
 // a pane id from the window-creating forms, a live pane so the wait loop spins once, and one DEAD pane so the
 // window sweep actually fires (it is the call that used to reach tmux through `xargs`). `nsenter` records its
 // argv the same way and then EXECS the rest, so a hopped call shows up as both a nsenter line and the tmux
-// line it carried — the ordering that proves the hop wrapped the client rather than replacing it.
+// line it carried: the ordering that proves the hop wrapped the client rather than replacing it.
 const stubs = async (): Promise<{ dir: string; calls: () => Promise<string[]> }> => {
     const dir = await mkdtemp(join(tmpdir(), "tmux-run-"));
     const log = join(dir, "calls");
@@ -39,7 +39,7 @@ const stubs = async (): Promise<{ dir: string; calls: () => Promise<string[]> }>
 const run = async (env: Record<string, string>): Promise<string[]> => {
     const { dir, calls } = await stubs();
     // INTENTIC_TMUX_NS is dropped from the inherited environment first: these cases are ABOUT that variable, and
-    // a sandbox that runs its own tmux under a namespace exports it — so "without the var" has to mean absent,
+    // a sandbox that runs its own tmux under a namespace exports it, so "without the var" has to mean absent,
     // not merely unset by the caller.
     const { INTENTIC_TMUX_NS: _inherited, ...base } = process.env;
     await execFileAsync("bash", [TMUX_RUN, "agent-abc", "true", "probe"], {
@@ -48,10 +48,10 @@ const run = async (env: Record<string, string>): Promise<string[]> => {
     return calls();
 };
 
-test("every tmux call is made from the namespace INTENTIC_TMUX_NS names — the server a first call forks must be the daemon's, not the turn's", async () => {
+test("every tmux call is made from the namespace INTENTIC_TMUX_NS names: the server a first call forks must be the daemon's, not the turn's", async () => {
     const calls = await run({ INTENTIC_TMUX_NS: "/proc/9/ns/mnt" });
     expect(calls).toContain("tmux kill-window -t @3");
-    // Every tmux line is immediately preceded by the hop that carried it — including the dead-window sweep,
+    // Every tmux line is immediately preceded by the hop that carried it: including the dead-window sweep,
     // which used to reach tmux through `xargs` and so walked past any wrapper the script put around it.
     for (const [index, call] of calls.entries()) {
         if (call.startsWith("tmux ")) {
@@ -60,7 +60,7 @@ test("every tmux call is made from the namespace INTENTIC_TMUX_NS names — the 
     }
 });
 
-test("without the var the wrapper talks to tmux directly — the daemon's own runner and an unisolated turn are already where the server belongs", async () => {
+test("without the var the wrapper talks to tmux directly: the daemon's own runner and an unisolated turn are already where the server belongs", async () => {
     const calls = await run({});
     expect(calls.filter((call) => call.startsWith("tmux "))).not.toHaveLength(0);
     expect(calls.some((call) => call.startsWith("nsenter"))).toBe(false);

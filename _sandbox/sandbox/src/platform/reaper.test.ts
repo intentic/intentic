@@ -24,7 +24,7 @@ const policy = (overrides: Partial<TerminalPolicy> = {}): TerminalPolicy => ({
     ...overrides,
 });
 
-test("a stopped conversation's session goes once the grace has passed — live panes are not a defence", () => {
+test("a stopped conversation's session goes once the grace has passed: live panes are not a defence", () => {
     expect(reapableAgentSessionNames([session({ name: "agent-a" })], NOW, policy())).toEqual(["agent-a"]);
 });
 
@@ -33,7 +33,7 @@ test("nothing goes while the owner runs, and nothing goes before the grace is up
     expect(reapableAgentSessionNames([session({ name: "agent-a" })], NOW, policy({ ownerStoppedSince: () => NOW - GRACE + MINUTE }))).toEqual([]);
 });
 
-test("attached is absolute — someone is looking at it, whatever its owner's clock says", () => {
+test("attached is absolute: someone is looking at it, whatever its owner's clock says", () => {
     expect(reapableAgentSessionNames([session({ name: "agent-a", attached: true })], NOW, policy())).toEqual([]);
 });
 
@@ -48,7 +48,7 @@ test("an unowned session is judged by its own idle clock against the same grace"
     expect(reapableAgentSessionNames([idle, busy], NOW, policy())).toEqual(["agent-idle"]);
 });
 
-test("only agent-* sessions are parsed — the sweep cannot even see the user's shells", () => {
+test("only agent-* sessions are parsed: the sweep cannot even see the user's shells", () => {
     const stdout = ["agent-a1b2c3d4\tconv-1\t0\t1779996400", "web-1234\t\t1\t1779996400", "panel-app\t\t0\t1779996400", ""].join("\n");
     const sessions = parseAgentSessions(stdout, NOW);
     expect(sessions).toEqual([{ name: "agent-a1b2c3d4", owner: "conv-1", attached: false, activityAt: 1_779_996_400_000 }]);

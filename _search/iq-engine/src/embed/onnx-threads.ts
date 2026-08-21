@@ -1,7 +1,7 @@
 import { availableParallelism } from "node:os";
 
 // onnxruntime sizes its intra-op thread pool to one thread per core by default. Left uncapped, the boot-time
-// index warm-up (embedPending over the whole workspace) pegs EVERY core on a many-core host — 2400% CPU on a
+// index warm-up (embedPending over the whole workspace) pegs EVERY core on a many-core host: 2400% CPU on a
 // 24-core box, which starves the user's own builds and tests running in the same sandbox. Cap it: indexing is
 // a background task, and q8 bge-small / MiniLM-L6 inference throughput plateaus by ~4 threads, so 4 buys full
 // embedding speed without monopolizing the machine. A 1-3 core host just uses what it has. interOp parallelism

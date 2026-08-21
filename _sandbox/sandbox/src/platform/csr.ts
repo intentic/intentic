@@ -13,7 +13,7 @@ import { createPublicKey, type KeyObject, sign } from "node:crypto";
  * deprecated the common name years ago), no attribute machinery beyond the one extensionRequest. Anything this
  * cannot express is something we do not ask for. */
 
-// ——— DER ——————————————————————————————————————————————————————————————————————————————————————————————
+// --- DER ----------------------------------------------------------------------------------------------
 // Tag + length + content. Lengths under 128 are one byte; anything longer is the long form (0x80 | byteCount,
 // then the count big-endian), which a 256-byte-plus SPKI and the request body both need.
 // Preallocated rather than spread: `content` here is a whole SubjectPublicKeyInfo or an entire request body,
@@ -58,7 +58,7 @@ const OID_EXTENSION_REQUEST = Uint8Array.from([0x06, 0x09, 0x2a, 0x86, 0x48, 0x8
 const OID_SUBJECT_ALT_NAME = Uint8Array.from([0x06, 0x03, 0x55, 0x1d, 0x11]); // 2.5.29.17
 const OID_ECDSA_WITH_SHA256 = Uint8Array.from([0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02]); // 1.2.840.10045.4.3.2
 
-// ——— The request ——————————————————————————————————————————————————————————————————————————————————————
+// --- The request --------------------------------------------------------------------------------------
 // subjectAltName as an extensionRequest attribute: Attribute { extensionRequest, SET { SEQUENCE OF Extension } }
 // with the one Extension being SAN over a GeneralNames of dNSNames. Not marked critical, a SAN alongside an
 // empty subject is understood by every CA we would talk to, and Let's Encrypt reads only this.

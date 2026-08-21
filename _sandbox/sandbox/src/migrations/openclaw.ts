@@ -87,7 +87,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         }
         const parsed = asRecord(parseJson5ish(raw));
         if (parsed === undefined) {
-            refused.push("openclaw.json (hand-edited beyond what this reader accepts — items that live in it were skipped)");
+            refused.push("openclaw.json (hand-edited beyond what this reader accepts: items that live in it were skipped)");
             return {};
         }
         return parsed;
@@ -105,7 +105,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
     if (soul !== undefined && soul.trim() !== "") {
         fenced(
             "soul",
-            "Personality — SOUL.md",
+            "Personality: SOUL.md",
             "Imported personality (OpenClaw SOUL.md)",
             soul,
             "Merged into the agent's memory files as standing context. Make it a persona later if the agent should act as this character.",
@@ -113,11 +113,11 @@ export const planOpenclaw = (files: Files): SourcePlan => {
     }
     const identity = text(files, `${WS}IDENTITY.md`);
     if (identity !== undefined && identity.trim() !== "") {
-        fenced("identity", "Identity — IDENTITY.md", "Imported identity (OpenClaw IDENTITY.md)", identity);
+        fenced("identity", "Identity: IDENTITY.md", "Imported identity (OpenClaw IDENTITY.md)", identity);
     }
     const agentsNotes = text(files, `${WS}AGENTS.md`);
     if (agentsNotes !== undefined && agentsNotes.trim() !== "") {
-        fenced("agents", "Operating notes — AGENTS.md", "Imported operating notes (OpenClaw AGENTS.md)", agentsNotes);
+        fenced("agents", "Operating notes: AGENTS.md", "Imported operating notes (OpenClaw AGENTS.md)", agentsNotes);
     }
     /* USER.md and MEMORY.md are the curated stores; the daily logs are an append-only diary that can run to
      * hundreds of files. The memory files every turn reads get the curated stores plus the newest two weeks;
@@ -135,7 +135,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
             item: {
                 id: "memory:memories",
                 target: "memory",
-                label: `Long-term memory — ${curated.length} file${curated.length === 1 ? "" : "s"}`,
+                label: `Long-term memory, ${curated.length} file${curated.length === 1 ? "" : "s"}`,
                 ...(dailies.length > RECENT_DAILIES ? { detail: `The newest ${RECENT_DAILIES} daily notes; the full diary rides along below.` } : {}),
                 recommended: true,
                 secrets: [],
@@ -148,7 +148,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
             item: {
                 id: "file:memory-diary",
                 target: "file",
-                label: `Daily memory notes — ${dailies.length} file${dailies.length === 1 ? "" : "s"}`,
+                label: `Daily memory notes, ${dailies.length} file${dailies.length === 1 ? "" : "s"}`,
                 detail: "Lands in imports/openclaw/memory/ for the agent to search, without loading every turn.",
                 recommended: true,
                 secrets: [],
@@ -223,7 +223,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
                 asString(record?.["refresh_token"]) !== undefined ||
                 record?.["oauth"] !== undefined
             ) {
-                refused.push(`${path}: ${profile} OAuth tokens (bound to that install — sign in fresh here)`);
+                refused.push(`${path}: ${profile} OAuth tokens (bound to that install, sign in fresh here)`);
             }
         }
     }
@@ -266,7 +266,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
             }
             const kind = asString(schedule["kind"]);
             if (kind === "at") {
-                refused.push(`${path}: "${jobName}" (a one-time job — recreate it here if it is still wanted)`);
+                refused.push(`${path}: "${jobName}" (a one-time job, recreate it here if it is still wanted)`);
                 continue;
             }
             const cron = ((): string | undefined => {
@@ -277,7 +277,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
                 return asString(schedule["expr"]) ?? asString(schedule["cron"]);
             })();
             if (cron === undefined) {
-                refused.push(`${path}: "${jobName}" (its interval has no clean cron spelling — recreate it by hand)`);
+                refused.push(`${path}: "${jobName}" (its interval has no clean cron spelling, recreate it by hand)`);
                 continue;
             }
             const tz = asString(schedule["tz"]);
@@ -315,7 +315,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
             item: {
                 id: `file:${name}`,
                 target: "file",
-                label: `Note — ${name}`,
+                label: `Note, ${name}`,
                 detail: `Lands in imports/openclaw/${name}.`,
                 recommended: true,
                 secrets: [],
@@ -334,9 +334,9 @@ export const planOpenclaw = (files: Files): SourcePlan => {
             subject: `Reconnect ${channel}`,
             detail:
                 channel === "whatsapp"
-                    ? "Pair WhatsApp again from its connector — pairing state desynchronizes when copied, which is why none of it travels."
+                    ? "Pair WhatsApp again from its connector: pairing state desynchronizes when copied, which is why none of it travels."
                     : `You had ${channel} wired into OpenClaw's gateway. Add the ${channel} connector from the capabilities grid${
-                          secrets.has(tokenKey) ? ` — its token rides along as the ${tokenKey} secret when you tick it` : ""
+                          secrets.has(tokenKey) ? `, its token rides along as the ${tokenKey} secret when you tick it` : ""
                       }.`,
         });
     }
@@ -345,13 +345,13 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         const provider = primary.split("/")[0] ?? "";
         needsAction.push({
             subject: "Pick your model provider",
-            detail: `OpenClaw ran on ${primary} — ${
+            detail: `OpenClaw ran on ${primary}, ${
                 PROVIDER_HINTS[provider.toLowerCase()] ?? "point a custom model endpoint at it, or pick a native provider"
             }. Provider logins never travel in a migration.`,
         });
     }
     if ((asArray(asRecord(defaults["model"])?.["fallbacks"]) ?? []).length > 0) {
-        refused.push("openclaw.json: model fallbacks (no equivalent here — the chat picker and automations pin models per use instead)");
+        refused.push("openclaw.json: model fallbacks (no equivalent here, the chat picker and automations pin models per use instead)");
     }
     const workspacePath = asString(defaults["workspace"]);
     const workspacePacked = [...files.keys()].some((path) => path.startsWith(WS));
@@ -362,9 +362,9 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         });
     }
     if (config["hooks"] !== undefined) {
-        refused.push("openclaw.json: hooks (webhook endpoints — recreate the ones still wanted as event-trigger automations here)");
+        refused.push("openclaw.json: hooks (webhook endpoints, recreate the ones still wanted as event-trigger automations here)");
     }
-    refused.push("openclaw.json (translated into the items above, not copied — it can hold inline tokens)");
+    refused.push("openclaw.json (translated into the items above, not copied: it can hold inline tokens)");
 
     return { planned, refused: refused.toSorted((left, right) => left.localeCompare(right)), needsAction };
 };

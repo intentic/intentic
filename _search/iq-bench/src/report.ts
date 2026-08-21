@@ -20,7 +20,7 @@ const scoreLine = (name: string, scores: CaseScore[], skipped: number): string =
     }
     const mean = meanScores(scores);
     if (mean === undefined) {
-        return `| ${name} | — | — | — | — | — | — | — |`;
+        return `| ${name} |: |, |, |, |, |, |, |`;
     }
     const p50 = median(scores.map((score) => score.latencyMs));
     return `| ${name} | ${fmt(mean.recallAt1)} | ${fmt(mean.recallAt5)} | ${fmt(mean.recallAt10)} | ${fmt(mean.mrr)} | ${fmt(mean.ndcg)} | ${fmt(mean.tokens, 0)} | ${fmt(p50, 0)} |`;
@@ -171,7 +171,7 @@ const pairedBlock = (label: string, pairs: ReadonlyArray<{ a: RunRecord; b: RunR
         lines.push(`- **${label} Δtokens (iq − baseline)**: mean ${mean.toFixed(0)}${ciText}`);
     }
     if (pairs.length < 6) {
-        lines.push(`- ⚠ N=${pairs.length} is too small for significance — directional only.`);
+        lines.push(`- ⚠ N=${pairs.length} is too small for significance: directional only.`);
     }
     return lines;
 };
@@ -238,7 +238,7 @@ const impactVs = (rows: readonly ImpactRow[], challenger: string, baseline: stri
     // A name that matches no rows used to render 0/0/0, which reads as a measured tie rather than a wiring
     // mistake. It is the same class of bug as a thrown tool call scoring as a win, and it stays loud.
     if (left.size === 0 || right.size === 0) {
-        return `| ${challenger} vs ${baseline} | **no rows — strategy name does not exist** | | | |`;
+        return `| ${challenger} vs ${baseline} | **no rows: strategy name does not exist** | | | |`;
     }
     let wins = 0;
     let losses = 0;
@@ -262,17 +262,17 @@ const impactVs = (rows: readonly ImpactRow[], challenger: string, baseline: stri
 
 export const renderImpactReport = (rows: readonly ImpactRow[], meta: ImpactMeta): string => {
     const parts = [
-        "# iq impact benchmark (tier 1b) — co-change ground truth\n",
+        "# iq impact benchmark (tier 1b): co-change ground truth\n",
         ...(meta.shallow
             ? [
-                  `> ⚠ **${meta.repo} is a shallow clone** — there is no commit history to mine, so every number below is\n` +
+                  `> ⚠ **${meta.repo} is a shallow clone**: there is no commit history to mine, so every number below is\n` +
                       "> computed over whatever tiny sample survived. This benchmark needs a full clone; the lock file's repos\n" +
                       "> are fetched at `--depth 1` and cannot be used for it as they stand.\n",
               ]
             : []),
-        `## ${meta.repo} — ${meta.graphFiles} indexed files, ${meta.graphEdges} resolved import edges\n`,
+        `## ${meta.repo}: ${meta.graphFiles} indexed files, ${meta.graphEdges} resolved import edges\n`,
         `Scanned ${meta.commitsScanned} commits: ${meta.commitsUsable} usable, ${meta.droppedTooSmall} dropped (fewer than two code files), ` +
-            `${meta.droppedNotIndexed} dropped (code files the current index does not know — renamed or deleted since). ` +
+            `${meta.droppedNotIndexed} dropped (code files the current index does not know: renamed or deleted since). ` +
             `${meta.cases} graded cases, each one seed file against the rest of its commit.\n`,
     ];
     const table = ["| strategy | cases | precision | recall | F1 | median F1 | predicted/case | empty | truncated/case |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|"];
@@ -301,7 +301,7 @@ export const renderImpactReport = (rows: readonly ImpactRow[], meta: ImpactMeta)
     }
     parts.push(pairs.join("\n"), "");
     parts.push(
-        `> THE GATE: a strategy ships only if it beats BOTH baselines — ${IMPACT_BASELINES.map((name) => `\`${name}\``).join(" and ")}.\n` +
+        `> THE GATE: a strategy ships only if it beats BOTH baselines, ${IMPACT_BASELINES.map((name) => `\`${name}\``).join(" and ")}.\n` +
             "> The first consults no graph at all; the second is the reach the related line already gives us, so a\n" +
             "> strategy that cannot beat it is not worth building. Co-change is a proxy: batched unrelated edits and\n" +
             "> affected-but-unedited files both push precision down, so read recall as the signal and precision as a\n" +
@@ -313,11 +313,11 @@ export const renderImpactReport = (rows: readonly ImpactRow[], meta: ImpactMeta)
 export const renderRetrievalReport = (rows: readonly CaseRow[], metas: readonly RepoMeta[], skippedModels: boolean): string => {
     const parts = ["# iq retrieval benchmark (tier 1)\n"];
     if (skippedModels) {
-        parts.push("> ⚠ embedding models unavailable — semantic/rerank configs skipped, not degraded.\n");
+        parts.push("> ⚠ embedding models unavailable: semantic/rerank configs skipped, not degraded.\n");
     }
     for (const meta of metas) {
         const build = meta.buildMs === undefined ? "index reused" : `index built in ${(meta.buildMs / 1000).toFixed(1)}s`;
-        parts.push(`## ${meta.id} @ ${meta.sha.slice(0, 10)} — ${meta.files} files, ${meta.chunks} chunks, ${meta.embedded} embedded, ${build}\n`);
+        parts.push(`## ${meta.id} @ ${meta.sha.slice(0, 10)}: ${meta.files} files, ${meta.chunks} chunks, ${meta.embedded} embedded, ${build}\n`);
         parts.push(configTable(rows.filter((row) => row.repo === meta.id)));
         parts.push("");
     }
@@ -327,6 +327,6 @@ export const renderRetrievalReport = (rows: readonly CaseRow[], metas: readonly 
         parts.push("");
     }
     parts.push(configVsFull(rows));
-    parts.push("\n> Latency includes iq's per-run revalidation sweep — the honest CLI-equivalent number.");
+    parts.push("\n> Latency includes iq's per-run revalidation sweep: the honest CLI-equivalent number.");
     return parts.join("\n");
 };

@@ -5,7 +5,7 @@ import { runSearch } from "../lib/run.js";
 type FilesFlags = SearchFlags & { readonly exact: boolean };
 
 export const files = buildCommand({
-    docs: { brief: "Filename search — fuzzy by default, exact globbing with --exact" },
+    docs: { brief: "Filename search, fuzzy by default, exact globbing with --exact" },
     parameters: {
         flags: {
             ...scopeFlagParameters,

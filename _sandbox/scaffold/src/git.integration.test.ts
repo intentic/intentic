@@ -91,7 +91,7 @@ test("gitCommitAll stages, commits with the author identity, and reports a commi
     expect(committed).toBe(true);
     expect(calls).toContainEqual(["/work/app", "add", "-A"]);
     // `--no-verify` is deliberate: this commit is provenance, and the repo's own hooks must not make an agent's
-    // work unlandable — see gitCommitAll.
+    // work unlandable: see gitCommitAll.
     expect(calls).toContainEqual([
         "/work/app",
         "-c",
@@ -106,7 +106,7 @@ test("gitCommitAll stages, commits with the author identity, and reports a commi
 });
 
 // The INDEX decides, so both "clean tree" and "dirty but nothing `add -A` can stage" (modified content inside
-// a nested repo — the case that used to fail the commit outright) are the same no-op path.
+// a nested repo: the case that used to fail the commit outright) are the same no-op path.
 test("gitCommitAll is a no-op (returns false, never commits) when staging leaves the index empty", async () => {
     const { git, calls } = recordingGit({ "status --porcelain": " m nested\n", "diff --cached --name-only -z": "" });
     const committed = await gitCommitAll(`${WORKSPACE_ROOT}/app`, "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);

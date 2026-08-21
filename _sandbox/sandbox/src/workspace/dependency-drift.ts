@@ -22,7 +22,7 @@ import { readWorkspaceManifests } from "./package-graph.js";
  * specifiers against pnpm-lock.yaml's `importers` block. Measured against this repository, it is wrong twice
  * over. It false-positives: `overrides` rewrite a recorded specifier (a manifest saying `catalog:` appears as
  * `4.4.3`), `autoInstallPeers` files peerDependencies under the importer's `dependencies`, and a named catalog
- * resolves differently from the default one — 15 phantom findings on a clean tree, every one of them pnpm lore
+ * resolves differently from the default one: 15 phantom findings on a clean tree, every one of them pnpm lore
  * that would rot. And it false-negatives on the case that actually matters: this workspace has two packages that
  * ARE in the lockfile's importers and have no node_modules directory at all, so a lockfile comparison calls the
  * tree clean while an import from either one cannot resolve.

@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The platform post, mocked the same way announce.test.ts does it — what matters here is WHAT gets reported,
+// The platform post, mocked the same way announce.test.ts does it: what matters here is WHAT gets reported,
 // so every post simply succeeds and is recorded.
 const posted: Array<{ path: string; body: unknown }> = [];
 const requestMock = vi.fn((url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
@@ -25,7 +25,7 @@ const config = {
     connectToken: "tok",
 } as unknown as Parameters<typeof createReachReporter>[0];
 const logger = { info: vi.fn(), warn: vi.fn(), debug: vi.fn() } as unknown as Parameters<typeof createReachReporter>[1];
-// What the reporter expects its own /health to answer with — derived from the token, exactly as the daemon does.
+// What the reporter expects its own /health to answer with: derived from the token, exactly as the daemon does.
 const OWN_ID = sandboxIdFromToken("tok");
 
 // Let the awaited posts and probes resolve without moving the clock. The chain is several awaits deep (post →
@@ -97,7 +97,7 @@ describe("createReachReporter", () => {
         expect(posted.every((post) => post.path === "/sandbox/boot-report")).toBe(true);
         expect(reporter.status().state).toBe("reachable");
 
-        // Proved — nothing further, exactly like the announce after its ack.
+        // Proved: nothing further, exactly like the announce after its ack.
         await vi.advanceTimersByTimeAsync(120_000);
         expect(posted).toHaveLength(2);
     });
@@ -126,12 +126,12 @@ describe("createReachReporter", () => {
 
         expect(reporter.status().state).toBe("unreachable");
         expect(reporter.status().retrying).toBe(false);
-        // A permanently-unreachable box must not report forever — the page has stopped waiting by now too.
+        // A permanently-unreachable box must not report forever: the page has stopped waiting by now too.
         await vi.advanceTimersByTimeAsync(10 * 60_000);
         expect(posted).toHaveLength(settled);
     });
 
-    it("is off until started — a headless run has no address to probe", () => {
+    it("is off until started: a headless run has no address to probe", () => {
         expect(createReachReporter(config, logger).status()).toEqual({ state: "off" });
     });
 });

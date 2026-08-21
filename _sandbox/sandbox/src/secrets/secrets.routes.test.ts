@@ -2,7 +2,7 @@ import { parseEnv } from "node:util";
 import { expect, test } from "vitest";
 import { envKeys, removeEnv, upsertEnv } from "./secrets.routes.js";
 
-/* These assert through parseEnv — the parser that reads these files back — rather than against the exact
+/* These assert through parseEnv (the parser that reads these files back) rather than against the exact
  * bytes. The serialization belongs to envLine, which picks a delimiter the VALUE does not contain, so a test
  * that pins one delimiter is really testing envLine's current preference and fails the day it correctly picks
  * another. What must hold is what the file means when it is read. */

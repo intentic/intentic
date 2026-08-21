@@ -16,8 +16,8 @@ import { writeExtensionSettings } from "./extension-settings.js";
 /* A vault of its own per test, off the workspace root exactly as production sites it (under AGENT_AUTH_DIR).
  *
  * It is what makes these two tests worth more than they used to be. A `secret: true` setting's value no longer
- * sits in the settings file — that file is tracked in the root repo now, which is only safe because the value
- * left it — so the env var these assert on is the whole round trip: written through the split, read back through
+ * sits in the settings file: that file is tracked in the root repo now, which is only safe because the value
+ * left it, so the env var these assert on is the whole round trip: written through the split, read back through
  * the rehydration, and only then handed to the agent's shell. A split that quietly stopped feeding `env` would
  * take a working connector's credential away from its CLI with nothing failing. */
 const newVault = (): SecretVault => fileSecretVault(join(mkdtempSync(join(tmpdir(), "ext-vault-")), "extension-secrets.json"));

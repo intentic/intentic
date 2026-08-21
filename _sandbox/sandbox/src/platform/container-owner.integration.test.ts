@@ -34,7 +34,7 @@ test("a fresh container is claimed quietly, whole", async () => {
     expect(lines).toEqual([]);
 });
 
-test("a live daemon on other roots keeps the container — the guest still owns the roots it was given", async () => {
+test("a live daemon on other roots keeps the container: the guest still owns the roots it was given", async () => {
     const { home, lines, logger } = await setup();
     await heldBy(home, CONTAINER);
 
@@ -45,7 +45,7 @@ test("a live daemon on other roots keeps the container — the guest still owns 
     expect(JSON.stringify(lines[0])).toContain("another live daemon owns this container");
 });
 
-test("a live daemon on THESE roots keeps both — nothing of its state is this run's to converge", async () => {
+test("a live daemon on THESE roots keeps both: nothing of its state is this run's to converge", async () => {
     const { home, logger } = await setup();
     await heldBy(home, CONTAINER);
 
@@ -67,7 +67,7 @@ test("a daemon started from inside an agent session is a guest even with nobody 
 
     const role = await claimContainer(DEV_RUN, logger, { home, env: { [AGENT_SESSION_ENV]: "a1d1e787" } });
 
-    // A run of the code, not a replacement sandbox: it owns its own roots and claims nothing container-wide —
+    // A run of the code, not a replacement sandbox: it owns its own roots and claims nothing container-wide:
     // and takes no claim, so the real daemon's next boot still finds the container free.
     expect(role).toEqual({ container: false, roots: true });
     await expect(claimOf(home)).rejects.toThrow();

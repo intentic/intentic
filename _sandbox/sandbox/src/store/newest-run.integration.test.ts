@@ -23,7 +23,7 @@ test("a release build stamps a fresh workspace, and the stamp survives on disk",
     expect(JSON.parse(await readFile(join(root, ".intentic/local/newest-run.json"), "utf8"))).toEqual({ version: "1.200.0" });
 });
 
-test("the stamp only moves forward — a rollback must not erase the evidence it exists to explain", async () => {
+test("the stamp only moves forward: a rollback must not erase the evidence it exists to explain", async () => {
     const root = await workspace();
     await recordNewestRun(root, "1.200.0");
     // The rolled-back daemon boots older; the stamp keeps naming the newer run.
@@ -41,7 +41,7 @@ test("a dev build records nothing and reads what release builds left", async () 
     expect(newestRunVersion()).toBeUndefined();
     await recordNewestRun(root, "1.200.0");
     await recordNewestRun(root, "0.0.0");
-    // The dev boot still LEARNS the stamp — it must read it to know not to lower it.
+    // The dev boot still LEARNS the stamp: it must read it to know not to lower it.
     expect(newestRunVersion()).toBe("1.200.0");
 });
 

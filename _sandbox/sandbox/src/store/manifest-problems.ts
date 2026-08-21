@@ -78,7 +78,7 @@ export const withSkewHint = (problems: readonly ManifestProblem[], running: stri
             ? {
                   ...problem,
                   detail:
-                      `${SCHEMA_REJECTED} — this workspace has run intentic ${newest}, newer than this sandbox (${running}), ` +
+                      `${SCHEMA_REJECTED}: this workspace has run intentic ${newest}, newer than this sandbox (${running}), ` +
                       `so the file may simply be newer than this build. Updating the sandbox will read it again; ` +
                       `only edit the file if you know it is actually wrong.`,
               }

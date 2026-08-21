@@ -11,7 +11,7 @@ import { answers, detectScheme } from "./port-probe.js";
 
 /* Against real sockets, because the bug this replaced was entirely about what a real socket does: the old probe
  * was `fetch("http://127.0.0.1:<port>/")`, which a TLS listener refuses at the socket and which rejects a
- * self-signed cert even when asked in https — so a Vite dev server serving the repo's own dev cert read as
+ * self-signed cert even when asked in https, so a Vite dev server serving the repo's own dev cert read as
  * DOWN and its panel span "Starting…" for as long as it ran. The cert below is that same one.
  *
  * Minted rather than read straight off disk: the pair lives in this user's data directory rather than the repo,
@@ -44,7 +44,7 @@ test("a dev server on the repo's own self-signed cert is detected as https, not 
     server.close();
 });
 
-test("any status counts as answering — a watch server is up before it has routes", async () => {
+test("any status counts as answering: a watch server is up before it has routes", async () => {
     const server = http.createServer((_request, response) => {
         response.statusCode = 404;
         response.end();
@@ -64,7 +64,7 @@ test("nothing listening is undefined rather than a default scheme", async () => 
 
 test("a socket that accepts and never answers times out instead of hanging the panel list", async () => {
     const silent = net.createServer(() => {
-        // Accept the connection and say nothing at all — neither HTTP nor TLS ever completes.
+        // Accept the connection and say nothing at all: neither HTTP nor TLS ever completes.
     });
     const port = await serve(silent);
     expect(await detectScheme(port)).toBeUndefined();

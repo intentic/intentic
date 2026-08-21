@@ -122,7 +122,7 @@ export const readWorkspaceFile = async (absPath: string): Promise<string | undef
 
 /* Hard cap on ONE text read's window. The whole point of reading a window rather than the file is that neither
  * side has to hold a log: `readFile(abs, "utf8")` allocated the entire file as a string, JSON-serialized a
- * second copy of it, and blocked the daemon's only event loop for both — ~370ms and 455MB of RSS for a 120MB
+ * second copy of it, and blocked the daemon's only event loop for both: ~370ms and 455MB of RSS for a 120MB
  * log, with every SSE stream, terminal and agent on that loop waiting. Past ~512MB it didn't even fail
  * honestly: V8 threw "Invalid string length", which the old catch turned into `undefined` → 404 → the browser
  * closed the tab as if the file had been deleted. A window costs the window. */

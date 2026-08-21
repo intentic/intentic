@@ -17,7 +17,7 @@ afterAll(async () => {
 test("an unclaimed index is unowned, and a claim by THIS process still reads as unowned to itself", () => {
     expect(indexerAlive(dir)).toBe(false);
     claimIndexer(dir);
-    // The owner must keep writing through its own lock — otherwise the daemon would stop indexing the moment it
+    // The owner must keep writing through its own lock: otherwise the daemon would stop indexing the moment it
     // claimed the index.
     expect(indexerAlive(dir)).toBe(false);
     releaseIndexer(dir);

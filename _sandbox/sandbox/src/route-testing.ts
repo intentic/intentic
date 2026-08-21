@@ -403,7 +403,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         info: undefined,
         tools: [],
         capabilities: memoryCapabilitiesStore(),
-        // No dev platform, so no TLS to terminate — the shape of every deployed daemon, already settled. A fake
+        // No dev platform, so no TLS to terminate: the shape of every deployed daemon, already settled. A fake
         // rather than unstubbed because the translator's compat entries read it on every capability write.
         platformTunnel: { url: () => undefined, ready: Promise.resolve(), close: () => {} },
         // Read while composing EVERY turn's environment (extension settings declared `secret` live here), not

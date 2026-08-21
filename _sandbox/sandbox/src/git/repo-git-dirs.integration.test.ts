@@ -9,8 +9,8 @@ import { createLogger } from "../logger.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { ensureRepoGitDirs } from "./repo-git-dirs.js";
 
-/* Against real git, because what is being asserted is what GIT makes of the result — a pointer git resolves,
- * a worktree git still owns — and no stub can answer that. */
+/* Against real git, because what is being asserted is what GIT makes of the result: a pointer git resolves,
+ * a worktree git still owns, and no stub can answer that. */
 
 const exec = promisify(execFile);
 const git = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -53,7 +53,7 @@ test("an in-tree git dir moves onto the history volume and leaves a working poin
     // longer anywhere under the workspace root.
     expect(await git(repo, "rev-parse", "--absolute-git-dir")).toBe(target);
     expect(await git(repo, "log", "--format=%s", "-1")).toBe("first");
-    // Working tree intact — a bare repo would answer differently.
+    // Working tree intact: a bare repo would answer differently.
     expect(await git(repo, "rev-parse", "--is-bare-repository")).toBe("false");
 });
 
@@ -86,7 +86,7 @@ test("the relocated repo pins no working tree, so its path means the caller's tr
     await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
 
     // core.worktree records an ABSOLUTE path in the config every worktree of the repo shares. Pinned to the
-    // workspace path, it names a different directory in every mount namespace — so an isolated turn reaching
+    // workspace path, it names a different directory in every mount namespace, so an isolated turn reaching
     // for the main checkout got redirected into its own worktree instead. Unset, the `.git` file decides, and
     // it decides relative to where the caller stands.
     await expect(git(repo, "config", "--get", "core.worktree")).rejects.toThrow();
@@ -107,7 +107,7 @@ test("a repo converged by an earlier boot still loses a worktree pin left behind
 
 test("an occupied target leaves the repo working rather than clobbering either git dir", async () => {
     const { root, historyRoot, repo } = await workspace();
-    // Something else already parked under this id — the one case where relocation must decline.
+    // Something else already parked under this id: the one case where relocation must decline.
     await mkdir(join(repoGitDir(historyRoot, "app"), "refs"), { recursive: true });
 
     await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);

@@ -12,7 +12,7 @@ import type { Logger } from "pino";
  *    fleet of builds/tests/checkouts. PSI (/proc/pressure/*) screams, and no daemon code is at fault.
  *  - a blocking resolver: the main thread is parked in getaddrinfo. Measured here: a lookup the container's
  *    resolver has to forward and never gets answered costs ~8s per attempt, and the loop is dead for all of
- *    it — 16 back-to-back lookups once froze the daemon for 128s. This one looks exactly like the in-process
+ *    it: 16 back-to-back lookups once froze the daemon for 128s. This one looks exactly like the in-process
  *    case (quiet PSI) but burns NO CPU, which is why `dnsInFlight` is reported: PSI answers "is the machine
  *    the problem", CPU-vs-idle answers "is it my own code", and only this says "it is the resolver".
  *
@@ -151,7 +151,7 @@ export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
                 rssMb: Math.round(memory.rss / 1048576),
                 ...(suppressedCount > 0 ? { earlierStallsSuppressed: suppressedCount } : {}),
             },
-            "event loop stalled — high PSI means the machine (builds/tests/swap), dnsInFlight means a blocking resolver lookup, quiet both means this process",
+            "event loop stalled: high PSI means the machine (builds/tests/swap), dnsInFlight means a blocking resolver lookup, quiet both means this process",
         );
         suppressedSince = Date.now();
         suppressedCount = 0;

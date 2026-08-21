@@ -2,7 +2,7 @@ import type { WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { runConversations } from "./workflow-state.js";
 
-// Which of a run's step records name a chat that actually exists — the question archiving a run is built on,
+// Which of a run's step records name a chat that actually exists: the question archiving a run is built on,
 // and the one the diagram got wrong for a long time (see the note on `ran` in the browser's chatRun.ts).
 
 const step = (stepId: string, state: WorkflowStepRun["state"], conversationId: string): WorkflowStepRun =>
@@ -22,7 +22,7 @@ describe("runConversations", () => {
         expect(runConversations(runOf(step(`a`, `done`, `c1`), step(`b`, `pending`, `c2`), step(`c`, `skipped`, `c3`)))).toEqual([`c1`]);
     });
 
-    // A `continue` step runs on its predecessor's conversation, so a four-step run can own two chats — and the
+    // A `continue` step runs on its predecessor's conversation, so a four-step run can own two chats, and the
     // caller must not be handed the same id twice.
     it("counts a chained pair's shared conversation once", () => {
         expect(runConversations(runOf(step(`a`, `done`, `c1`), step(`b`, `done`, `c1`)))).toEqual([`c1`]);

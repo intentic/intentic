@@ -36,13 +36,13 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         // ordinary case for a public Front Desk.
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         // A held automation notifies the owner (scheduler.ts). Fire-and-forget there, so a missing stub
-        // surfaces only as an unhandled rejection — loud enough to poison a later test, quiet enough to hide.
+        // surfaces only as an unhandled rejection: loud enough to poison a later test, quiet enough to hide.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", {
             notify: async () => ({ delivered: 0, failed: 0 }),
             notifyIfAway: async () => ({ delivered: 0, failed: 0 }),
         }),
         // Real parsed defaults: the admission gate reads them on every fire (all-allow out of the box), and
-        // the spin-loop guard's limit defaults to 0 — which keeps these tests about the Front Desk.
+        // the spin-loop guard's limit defaults to 0, which keeps these tests about the Front Desk.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
     });
 
@@ -101,7 +101,7 @@ test("an allowed visitor message wakes the agent and streams the reply back as S
      * flagged to the guard layer, which does not depend on the model believing it. This is the public
      * entry point, so the two halves are asserted here end-to-end rather than only at their own seams. */
     const sealed = /<untrusted-content source="webchat" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\1">/.exec(turns[0]?.prompt ?? "");
-    // The visitor's whole payload rides inside one envelope — their text, and the name they chose for themselves.
+    // The visitor's whole payload rides inside one envelope: their text, and the name they chose for themselves.
     expect(JSON.parse(sealed?.[2] ?? "{}")).toMatchObject({ content: "fix the bug", author: "visitor" });
     expect(turns[0]?.outsideWake).toBe("webchat");
     expect((await services.automations.get("wc-ok"))?.runs[0]?.outcome).toBe("completed");
@@ -124,16 +124,16 @@ test("a requireApproval automation holds the wake and streams a pending notice i
 });
 
 /* THE HELD WAKE KEEPS THE VISITOR'S THREAD. Without the conversation on the approval the approve route has
- * nothing to resume, so it minted a fresh one — and a chat the owner approves message by message became one
+ * nothing to resume, so it minted a fresh one, and a chat the owner approves message by message became one
  * fleet card and one worktree per message, each with an agent meeting the visitor for the first time. */
 test("a held Front Desk wake snapshots the conversation the visitor's thread already owns", async () => {
     const { services } = await setup(webchat("wc-thread", { requireApproval: true }));
     const app = appFor(services, fakeWake([]));
-    // Draining the SSE body is what waits for the fire — the response resolves as soon as the stream opens.
+    // Draining the SSE body is what waits for the fire: the response resolves as soon as the stream opens.
     await (await post(app, "wc-thread", { conversationId: "visitor-7", content: "hello" })).text();
     const [held] = await services.approvals.list();
     expect(held?.conversationId).toBe("wc-wc-thread-visitor-7");
-    // The same conversation the thread store opened for this visitor — not a second one.
+    // The same conversation the thread store opened for this visitor, not a second one.
     const thread = await services.threadSessions.get("webchat:wc-thread:visitor-7", 60_000, Date.now());
     expect(held?.conversationId).toBe(thread?.conversationId);
 });
@@ -146,13 +146,13 @@ test("a wake that errors tells the visitor so, without leaking the owner's reaso
     const app = appFor(services, fakeWake([], [{ kind: "error", message: "API Error: 401 OAuth access token has been revoked" }]));
     const body = await (await post(app, "wc-broken", { conversationId: "c1", content: "hi" })).text();
     expect(body).toContain("event: error");
-    expect(body).toContain("Sorry — I couldn't answer that just now.");
-    // The provider's sentence is the owner's to read, on the row — never the stranger's.
+    expect(body).toContain("Sorry: I couldn't answer that just now.");
+    // The provider's sentence is the owner's to read, on the row: never the stranger's.
     expect(body).not.toContain("OAuth");
     expect((await services.automations.get("wc-broken"))?.runs[0]).toMatchObject({ outcome: "error", detail: expect.stringContaining("OAuth") });
 });
 
-/* A guard that says no is the automation working as configured, and it is STILL a reply that never comes —
+/* A guard that says no is the automation working as configured, and it is STILL a reply that never comes:
  * the visitor gets the same closed stream an errored wake gives them. */
 test("a guard that skips the run is said out loud rather than closing the stream in silence", async () => {
     const { services } = await setup(webchat("wc-guarded", { guard: "exit 1" }));
@@ -218,7 +218,7 @@ test("two visitors of one Front Desk get two conversations", async () => {
     expect(turns[0]?.conversationId).not.toBe(turns[1]?.conversationId);
 });
 
-test("client history seeds only the first turn — after that the resumed conversation carries its own", async () => {
+test("client history seeds only the first turn: after that the resumed conversation carries its own", async () => {
     const { services } = await setup(webchat("wc-hist"));
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns, [{ kind: "session", sessionId: "sess-1" }, { kind: "done" }]));
@@ -239,7 +239,7 @@ test("the automation's tool allowlist reaches the turn", async () => {
     expect(turns[0]?.allowedTools).toEqual(["Read", "Grep"]);
 });
 
-test("a typed name is never presented as identity — it rides as unverified, and the author is not trusted", async () => {
+test("a typed name is never presented as identity: it rides as unverified, and the author is not trusted", async () => {
     const { services } = await setup(webchat("wc-name"));
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns));
@@ -270,7 +270,7 @@ test("the daily ceiling is per automation, not per conversation", async () => {
     expect((await post(app, "wc-daily", { conversationId: "c", content: "1" })).status).toBe(429);
 });
 
-/* A Front Desk whose owner set no ceiling is the common case — the create dialog leaves the field blank — and
+/* A Front Desk whose owner set no ceiling is the common case: the create dialog leaves the field blank, and
  * every message it answers is an agent turn billed to that owner. The per-minute window caps the rate but not
  * the day, so without a fallback a script could run tens of thousands of turns before anyone looked. */
 test("a Front Desk with no configured ceiling still stops at the default", async () => {
@@ -405,7 +405,7 @@ test("sign-in-only refuses an anonymous message with 401 so the widget knows to 
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns));
     expect((await post(app, "wc-auth", { conversationId: "v", content: "hi" })).status).toBe(401);
-    // An unverifiable token is refused the same way — an expired-vs-forged breakdown only helps someone probing.
+    // An unverifiable token is refused the same way: an expired-vs-forged breakdown only helps someone probing.
     expect((await post(app, "wc-auth", { conversationId: "v", content: "hi", idToken: "not-a-jwt" })).status).toBe(401);
     expect(turns).toEqual([]);
 });
@@ -428,7 +428,7 @@ test("a widget load is recorded against the origin it came from, admitted or ref
     expect(installs.origins.find((probe: { origin: string }) => probe.origin === ORIGIN)).toMatchObject({ allowed: true, loads: 1 });
 });
 
-test("a Front Desk nobody has loaded reports no origins at all — the honest 'not installed' answer", async () => {
+test("a Front Desk nobody has loaded reports no origins at all: the honest 'not installed' answer", async () => {
     const { services } = await setup(webchat("wc-silent"));
     const app = appFor(services, fakeWake([]));
     expect((await (await app.request(`/webchat/wc-silent/installs`)).json()).origins).toEqual([]);

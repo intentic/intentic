@@ -41,7 +41,7 @@ const countingEmbedder = (): { embedder: Embedder; embedded: string[] } => {
     };
 };
 
-// An embedder that must never be reached — reuse means the model stays cold.
+// An embedder that must never be reached: reuse means the model stays cold.
 const refusingEmbedder: Embedder = {
     modelId: "fake",
     embedBatch: () => Promise.reject(new Error("cache miss reached the model")),
@@ -84,7 +84,7 @@ test("vectors survive the index being dropped and refill without touching the mo
     // The schema-drift path: the index dir is dropped wholesale; the sidecar is untouched by design.
     rmSync(indexDir, { recursive: true, force: true });
 
-    // Second life, fresh cache handle (a new process): every vector refills from the sidecar — an embedder
+    // Second life, fresh cache handle (a new process): every vector refills from the sidecar, an embedder
     // that rejects proves the model is never consulted.
     const second = openIndex(indexDir, "write");
     insertChunks(second, texts);

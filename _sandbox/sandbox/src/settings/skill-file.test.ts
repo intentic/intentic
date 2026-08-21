@@ -14,7 +14,7 @@ test("a composed skill round-trips through the parser", () => {
 
 /* The value that would silently change what the frontmatter MEANS. A description reading "Use when: the user asks"
  * is an ordinary sentence and a YAML mapping at the same time, and written bare it makes the whole block
- * unparseable — which reaches the user as a skill the agent never picks, with nothing on screen looking wrong. */
+ * unparseable, which reaches the user as a skill the agent never picks, with nothing on screen looking wrong. */
 test("a description containing a colon survives composing and parsing", () => {
     const description = `Use when: the user asks for a "changelog" #now`;
     const parsed = parseSkillFile(skillDocument("notes", description, "body"));
@@ -39,7 +39,7 @@ test("a quoted value is unquoted, and unknown keys are ignored", () => {
     expect(parsed).toEqual({ name: "kb", description: "Notes", body: "Body" });
 });
 
-/* A file this cannot read still has to be listable — the Skills surface promises to show everything the agent is
+/* A file this cannot read still has to be listable: the Skills surface promises to show everything the agent is
  * carrying, so an unreadable frontmatter degrades to "no description" and the whole file as body, never to a
  * missing row. Three shapes reach here: no frontmatter, an unclosed fence, and an empty declaration. */
 test("a file with no readable frontmatter parses as body-only", () => {
@@ -48,7 +48,7 @@ test("a file with no readable frontmatter parses as body-only", () => {
     expect(parseSkillFile(`---\n---\nBody`)).toEqual({ body: `Body` });
 });
 
-// An indented line before any key belongs to no field — it must not be attached to whatever was parsed last from
+// An indented line before any key belongs to no field: it must not be attached to whatever was parsed last from
 // some earlier call, which is the bug a shared `last` across invocations would produce.
 test("a continuation with nothing above it is dropped", () => {
     expect(parseSkillFile(`---\n  orphan\nname: kb\n---\nBody`)).toEqual({ name: "kb", body: "Body" });

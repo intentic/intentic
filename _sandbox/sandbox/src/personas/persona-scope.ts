@@ -80,7 +80,7 @@ export const personaScopeOf = (persona: TurnPersona, cwd: string): PersonaScope 
 const refusal = (scope: PersonaScope, sandboxPath: boolean): string =>
     sandboxPath
         ? `This persona may not change the sandbox's own configuration or its public outbox. If the task genuinely needs that, stop and say so rather than working around it.`
-        : `This persona works inside ${scope.folders.join(", ")} — that path is outside it. If the task genuinely needs a file elsewhere in the workspace, stop and say so rather than working around it.`;
+        : `This persona works inside ${scope.folders.join(", ")}, that path is outside it. If the task genuinely needs a file elsewhere in the workspace, stop and say so rather than working around it.`;
 
 export const personaScopeHooks = (scope: PersonaScope): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PreToolUse: [

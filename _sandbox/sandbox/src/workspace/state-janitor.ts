@@ -10,7 +10,7 @@ import { statePath } from "./state-paths.js";
  * The state table says what each tree IS; nothing said what happens to the ones whose class means "disposable".
  * So nothing happened: the workspace this module was written against carried 466 MB of abandoned whisper model
  * under a retired name, 1.3 GB of pnpm store no install pointed at, 3 400 screenshots from a browser output
- * dir retired a week earlier, and a tmp/ of build logs from turns long finished — 2 GB of state whose own
+ * dir retired a week earlier, and a tmp/ of build logs from turns long finished: 2 GB of state whose own
  * classification already called it rebuildable, waiting for a manual `rm` nobody would ever run.
  *
  * Every rule here is DERIVED from a class, not from a judgment about content:
@@ -50,7 +50,7 @@ const emptyDir = async (dir: string, log: Logger, what: string): Promise<void> =
     await Promise.all(entries.map((entry) => remove(join(dir, entry), log, what)));
 };
 
-// Age out screenshots: top-level files only, which is the shape both capture dirs actually have — @playwright/mcp
+// Age out screenshots: top-level files only, which is the shape both capture dirs actually have, @playwright/mcp
 // writes flat page-*/console-* files and named shots beside them.
 const sweepAgedCaptures = async (dir: string, now: number, log: Logger): Promise<void> => {
     const entries = await readdir(dir).catch(() => [] as string[]);

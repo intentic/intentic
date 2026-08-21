@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { createPathBatcher, DEBOUNCE_MS, isWatchIgnored, MAX_PATHS, watchIgnoreGlobs } from "./workspace-watch.js";
 
 /* The coalescing rule on its own clock. Its sibling .integration.test.ts drives the real watcher over a real
- * temp tree, which can say that a change is announced and that node_modules never is — but it cannot say how
+ * temp tree, which can say that a change is announced and that node_modules never is, but it cannot say how
  * many batches a burst became, because that answer depends on whether the runner delivered two filesystem
  * events inside the same 250ms window. Everything about the batching itself is decided here, where the timers
  * are the test's. */
@@ -35,7 +35,7 @@ test("the window opens on the first path and is not reset by later ones", () => 
     vi.useFakeTimers();
     const { batches, add } = batchesOf();
     add("a.txt");
-    // A path arriving late in the window joins the batch without pushing the deadline out — that is what bounds
+    // A path arriving late in the window joins the batch without pushing the deadline out: that is what bounds
     // latency to ~250ms while an agent keeps editing, rather than starving the browser until it stops.
     vi.advanceTimersByTime(DEBOUNCE_MS - 10);
     add("b.txt");
@@ -70,7 +70,7 @@ test("a quiet window announces nothing at all", () => {
     expect(batches).toHaveLength(0);
 });
 
-test("a burst past the path ceiling becomes an empty batch — just refetch the tree", () => {
+test("a burst past the path ceiling becomes an empty batch: just refetch the tree", () => {
     vi.useFakeTimers();
     const { batches, add } = batchesOf();
     for (let index = 0; index <= MAX_PATHS; index += 1) {
@@ -93,7 +93,7 @@ test("a burst exactly at the ceiling still names its paths", () => {
 
 /* THE TWO HALVES OF EVERY SKIP RULE, PINNED TO EACH OTHER. The watcher skips a path twice over: a glob keeps
  * the native backend from ever descending into the directory, and the predicate vets whatever still arrives.
- * Both halves are declared on one line per rule so they cannot drift — and these tests are what make that
+ * Both halves are declared on one line per rule so they cannot drift, and these tests are what make that
  * structural intent enforceable, by failing if a rule ever grows one half without the other.
  *
  * Asserted through the two exported functions rather than the rule table behind them: the table is an

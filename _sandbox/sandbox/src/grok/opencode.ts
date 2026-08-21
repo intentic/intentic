@@ -93,7 +93,7 @@ const BOOT_TIMEOUT_MS = 60_000;
 // providers, so the sentence that named Grok unconditionally told a user who had chosen a Google model to go
 // and rebuild for a product they were not using, see openCodeBackendLabel.
 export const openCodeBinaryMissing = (backend: string): string =>
-    `This sandbox's image doesn't include the OpenCode CLI yet — rebuild it from the Environment card in Sandbox ▸ Environment to run ${backend} here.`;
+    `This sandbox's image doesn't include the OpenCode CLI yet: rebuild it from the Environment card in Sandbox ▸ Environment to run ${backend} here.`;
 
 /* THE TITLE IS THE DELEGATION'S NAME TAG, `intentic-delegation-<spawning tool call id>`.
  *

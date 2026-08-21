@@ -71,7 +71,7 @@ const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; re
  * Deliberately free of the word "rebuild": the trees behind these manifests arrive as a publish-time build
  * context, so the environment overlay, which is what "rebuild" means to this app, and what the web sends a
  * rebuild-worded status to, cannot install them. The only move is a sandbox on the standard image. */
-export const RUNTIME_ABSENT_DETAIL = "not included in this image — ships with the standard sandbox image";
+export const RUNTIME_ABSENT_DETAIL = "not included in this image: ships with the standard sandbox image";
 
 /* IS THE EXTENSION'S CODE IN THIS IMAGE AT ALL, the same promised-paths question pathsCheck asks before
  * publication, asked at runtime, because the image split can now answer it "no" for an extension nobody has
@@ -104,7 +104,7 @@ const bundleCheck = async (dir: string, manifest: ExtensionManifest): Promise<Re
     const id = "bundle";
     const label = "The bundle imports only what the host publishes";
     if (manifest.entry === undefined) {
-        return { id, label, status: "pass", detail: "No UI bundle — nothing is loaded in the browser." };
+        return { id, label, status: "pass", detail: "No UI bundle, nothing is loaded in the browser." };
     }
     const source = await extensionRead(join(dir, manifest.entry));
     if (source === undefined) {
@@ -151,7 +151,7 @@ const enginesCheck = (manifest: ExtensionManifest, satisfies: boolean): Readines
     // reported incompatible by every app that installs it, which is a listing nobody can use.
     detail: satisfies
         ? `Asks for ${manifest.engines.intentic}; this app is ${extensionApiVersion}.`
-        : `Asks for ${manifest.engines.intentic}, but this app is ${extensionApiVersion} — it would not activate anywhere it was installed today.`,
+        : `Asks for ${manifest.engines.intentic}, but this app is ${extensionApiVersion}, it would not activate anywhere it was installed today.`,
 });
 
 const permissionsCheck = (manifest: ExtensionManifest, usage: Record<string, { calls: number }> | undefined): ReadinessCheck => {
@@ -168,7 +168,7 @@ const permissionsCheck = (manifest: ExtensionManifest, usage: Record<string, { c
             id,
             label,
             status: "warn",
-            detail: `Declares ${declared.length}, and none has been observed being called yet — use it, then check again.`,
+            detail: `Declares ${declared.length}, and none has been observed being called yet, use it, then check again.`,
         };
     }
     const unused = declared.filter((route) => (usage[route]?.calls ?? 0) === 0);

@@ -18,20 +18,20 @@ test("with a translator baked, the config selects the translator provider on the
     expect(toml).toContain(`enabled = false`);
 });
 
-test("with no translator (dev), the config selects no provider — Codex uses its OPENAI_API_KEY default", () => {
+test("with no translator (dev), the config selects no provider: Codex uses its OPENAI_API_KEY default", () => {
     const toml = codexConfigToml("");
     expect(toml).not.toContain(`model_provider`);
     expect(toml).not.toContain(`model_providers`);
     expect(toml).toContain(`check_for_update_on_startup = false`);
 });
 
-test("the hook engine's feature flag is on with and without a translator — the trust bypass gates actual runs", () => {
+test("the hook engine's feature flag is on with and without a translator: the trust bypass gates actual runs", () => {
     expect(codexConfigToml("http://127.0.0.1:8788")).toContain(`[features]\nhooks = true`);
     expect(codexConfigToml("")).toContain(`[features]\nhooks = true`);
 });
 
 /* The shape codex 0.146 actually parses, pinned by a live probe: PascalCase event keys under a top-level
- * `hooks` object (snake_case keys are silently ignored — the failure mode is no events, not an error), and an
+ * `hooks` object (snake_case keys are silently ignored: the failure mode is no events, not an error), and an
  * unknown top-level key is a parse failure. A regression here is invisible at runtime, so the test is the
  * guard. */
 test("hooks.json carries the roster's five events in codex's own shape", () => {
@@ -46,7 +46,7 @@ test("hooks.json carries the roster's five events in codex's own shape", () => {
 
 test("the signal script reports only delegations, into the given spool, and can never fail its caller", () => {
     const script = codexSignalScript("/tmp/intentic/agent-signals");
-    // The first exit: no delegation stamp, nothing to report — the native adapter's and the user's own runs.
+    // The first exit: no delegation stamp, nothing to report, the native adapter's and the user's own runs.
     expect(script).toContain(`[ -n "\${INTENTIC_DELEGATION_ID:-}" ] || exit 0`);
     expect(script).toContain(`dir='/tmp/intentic/agent-signals'`);
     // Write-then-rename, so the watcher never reads a half-written file.

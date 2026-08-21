@@ -78,7 +78,7 @@ test("state returns the provider's enabled listener automations and its connecto
     expect(res.status).toBe(200);
     const body = (await res.json()) as { automations: Automation[]; connectors: Array<{ id: string; config: unknown }> };
     expect(body.automations.map((automation) => automation.id)).toEqual(["st-live"]);
-    // The gateway needs the bot token to connect — /state hands it the full config (panel-token route, in-container).
+    // The gateway needs the bot token to connect: /state hands it the full config (panel-token route, in-container).
     expect(body.connectors).toEqual([{ id: "discord", config: { provider: "discord", botToken: "SECRET" } }]);
 });
 

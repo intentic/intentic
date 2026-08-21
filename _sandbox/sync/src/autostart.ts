@@ -21,5 +21,5 @@ export const MIRROR_AUTOSTART: AutostartSpec = {
     detachedArgs: ["mirror"],
     foregroundArgs: ["mirror", "--watch"],
     failureNote: (reason) =>
-        `note: couldn't register port mirroring to resume on login (${reason}); it runs until this machine restarts — then re-run \`intentic-sync mirror\`.`,
+        `note: couldn't register port mirroring to resume on login (${reason}); it runs until this machine restarts, then re-run \`intentic-sync mirror\`.`,
 };

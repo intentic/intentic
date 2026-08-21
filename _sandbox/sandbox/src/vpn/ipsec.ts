@@ -85,7 +85,7 @@ charon {
 export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
     const xauth = raw.username !== undefined && raw.password !== undefined;
     const lines = [
-        `# Written by the intentic sandbox daemon for the "${id}" vpn capability — do not edit by hand.`,
+        `# Written by the intentic sandbox daemon for the "${id}" vpn capability: do not edit by hand.`,
         `conn ${connName(id)}`,
         `    keyexchange=ikev${raw.ikeVersion}`,
         ...(raw.ikeVersion === "1" && raw.aggressive === "on" ? ["    aggressive=yes"] : []),
@@ -127,14 +127,14 @@ export const ipsecSecretsConfig = (raw: IpsecVpnConfig): string => {
 
 // The daemon owns both top-level files: strongSwan has no drop-in directory of its own for connections, so the
 // include line is what makes per-connection files work at all.
-const IPSEC_CONF = `# Written by the intentic sandbox daemon — do not edit by hand.
+const IPSEC_CONF = `# Written by the intentic sandbox daemon: do not edit by hand.
 # One file per vpn capability lives in the included directory.
 config setup
     charondebug="ike 1, knl 1, cfg 0"
 
 include ${IPSEC_INCLUDE_DIR}/*.conf
 `;
-const IPSEC_SECRETS = `# Written by the intentic sandbox daemon — do not edit by hand.
+const IPSEC_SECRETS = `# Written by the intentic sandbox daemon: do not edit by hand.
 include ${IPSEC_INCLUDE_DIR}/*.secrets
 `;
 
@@ -215,10 +215,10 @@ export const parseIpsecStatus = (conn: string, output: string): IpsecStatus => {
 // nothing in it points at the pre-shared key.
 export const ipsecFailureHint = (log: string): string | undefined => {
     if (/calculated HASH does not match/i.test(log)) {
-        return "The gateway rejected the pre-shared key. In aggressive mode this is what a wrong PSK looks like — phase 1 gets as far as hashing, then fails. Check the Pre-shared key (and the Local ID, which is what selects the key on a dial-up gateway).";
+        return "The gateway rejected the pre-shared key. In aggressive mode this is what a wrong PSK looks like: phase 1 gets as far as hashing, then fails. Check the Pre-shared key (and the Local ID, which is what selects the key on a dial-up gateway).";
     }
     if (/XAUTH.*failed|authentication of '.*' with XAuth|xauth.*(rejected|failed)/i.test(log)) {
-        return "The pre-shared key was accepted but the XAuth sign-in failed — check the XAuth username and password.";
+        return "The pre-shared key was accepted but the XAuth sign-in failed: check the XAuth username and password.";
     }
     if (/no shared key found|no private key found/i.test(log)) {
         return "strongSwan found no key for this peer. The Local ID has to match what the gateway expects, since that is what it looks the key up by.";
@@ -300,7 +300,7 @@ export const ipsecDriver: VpnDriver = {
             kind: "log",
             message:
                 networks === "0.0.0.0/0"
-                    ? `Connected ${id}. ALL traffic now rides the IPsec tunnel. If this sandbox goes quiet from here, the gateway is not routing the internet — set the capability's routed networks to the ones behind it (10.0.0.0/8,192.168.0.0/16) and only those ride the tunnel.`
+                    ? `Connected ${id}. ALL traffic now rides the IPsec tunnel. If this sandbox goes quiet from here, the gateway is not routing the internet: set the capability's routed networks to the ones behind it (10.0.0.0/8,192.168.0.0/16) and only those ride the tunnel.`
                     : `Connected ${id}. ${networks} now rides the IPsec tunnel; everything else keeps going out directly.`,
         };
     },

@@ -6,7 +6,7 @@ import { expect, test } from "vitest";
 import { parentPid, scanListeningPorts, withOwningSessions } from "./port-scan.js";
 
 // A procfs fixture tree: net/tcp{,6} tables plus /proc/<pid>/{fd,cmdline,cwd}. The fd entries are dangling
-// symlinks whose TARGET STRING is the socket marker — exactly what readlink returns on the real thing.
+// symlinks whose TARGET STRING is the socket marker: exactly what readlink returns on the real thing.
 const HEADER = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode";
 const row = (local: string, st: string, inode: string): string =>
     `   0: ${local} 00000000:0000 ${st} 00000000:00000000 00:00000000 00000000  1000        0 ${inode} 1 0000000000000000 100 0 0 10 0`;
@@ -22,8 +22,8 @@ const fixture = (): string => {
             HEADER,
             row("0100007F:B26E", "0A", "1001"), // 127.0.0.1:45678 LISTEN — owned by pid 123
             row("00000000:0BB8", "0A", "1002"), // 0.0.0.0:3000 LISTEN — no owning fd anywhere
-            row("0100007F:1F40", "01", "1009"), // ESTABLISHED — not a listener
-            row("010011AC:1538", "0A", "1010"), // 172.17.0.1:5432 LISTEN — not reachable at 127.0.0.1
+            row("0100007F:1F40", "01", "1009"), // ESTABLISHED, not a listener
+            row("010011AC:1538", "0A", "1010"), // 172.17.0.1:5432 LISTEN, not reachable at 127.0.0.1
         ].join("\n"),
     );
     writeFileSync(
@@ -59,8 +59,8 @@ test("an unreadable proc tree yields an empty scan, not a rejection", async () =
 test("names the Docker embedded DNS bind (127.0.0.11) it can't attribute to any process", async () => {
     const root = mkdtempSync(join(tmpdir(), "port-scan-"));
     mkdirSync(join(root, "net"), { recursive: true });
-    // 127.0.0.11:45661 LISTEN — libnetwork's embedded resolver. dockerd answers it from outside this PID
-    // namespace, so no /proc/*/fd owns inode 1005 and the pid walk comes up empty — but the address names it.
+    // 127.0.0.11:45661 LISTEN: libnetwork's embedded resolver. dockerd answers it from outside this PID
+    // namespace, so no /proc/*/fd owns inode 1005 and the pid walk comes up empty, but the address names it.
     writeFileSync(join(root, "net", "tcp"), [HEADER, row("0B00007F:B25D", "0A", "1005")].join("\n"));
     writeFileSync(join(root, "net", "tcp6"), HEADER);
     // Named, but flagged not-forwardable: 127.0.0.11 only answers at its own address, not the dialed 127.0.0.1.
@@ -70,7 +70,7 @@ test("names the Docker embedded DNS bind (127.0.0.11) it can't attribute to any 
 test("lists an un-nameable 127/8 alias but flags it not-forwardable", async () => {
     const root = mkdtempSync(join(tmpdir(), "port-scan-"));
     mkdirSync(join(root, "net"), { recursive: true });
-    // 127.0.0.5:9500 LISTEN, no owning fd — a loopback alias we can neither name nor reach at 127.0.0.1.
+    // 127.0.0.5:9500 LISTEN, no owning fd: a loopback alias we can neither name nor reach at 127.0.0.1.
     writeFileSync(join(root, "net", "tcp"), [HEADER, row("0500007F:251C", "0A", "1007")].join("\n"));
     writeFileSync(join(root, "net", "tcp6"), HEADER);
     await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 9500, host: "127.0.0.1", forwardable: false }]);
@@ -88,7 +88,7 @@ test("falls back to /proc/<pid>/comm when a listening process has an empty cmdli
     await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 8081, host: "127.0.0.1", forwardable: true, pid: 200, command: "cloudflared" }]);
 });
 
-/* WHO IS OCCUPYING THE PORT — traced to the terminal, not to the process.
+/* WHO IS OCCUPYING THE PORT: traced to the terminal, not to the process.
  *
  * The pid holding the socket is three generations below anything a person launched (`pnpm dev` → turbo → vite),
  * so the pane is found by walking parents. `/proc/<pid>/stat`'s comm field is deliberately hostile here: it is
@@ -111,7 +111,7 @@ test("traces a listener up its ancestry to the tmux pane it is running in", asyn
         { port: 4321, host: "127.0.0.1" as const, forwardable: true, pid: 400 },
         // Nothing in ITS ancestry is a pane: the daemon's own runtime, which no terminal can show or stop.
         { port: 8787, host: "127.0.0.1" as const, forwardable: true, pid: 397_000 },
-        // Unattributable to any process at all — nothing to walk.
+        // Unattributable to any process at all: nothing to walk.
         { port: 5440, host: "127.0.0.1" as const, forwardable: true },
     ];
     await expect(withOwningSessions(listeners, new Map([[397, "web-3f2a"]]), root)).resolves.toEqual([

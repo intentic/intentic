@@ -3,10 +3,10 @@ import { resolveNeeds } from "./workflowGraph.js";
 
 /* The translation this module exists for: `needs` is written in workflow job IDs, the jobs API answers in
  * display names, and matrices and reusable workflows mean those are not the same alphabet. Every test below
- * is a shape that appears in the workflow that prompted this — and the last few are the ways a matcher that
+ * is a shape that appears in the workflow that prompted this, and the last few are the ways a matcher that
  * merely looks right quietly wires the graph to the wrong node. */
 
-test("plain jobs — needs in both the string and the list spelling", () => {
+test("plain jobs: needs in both the string and the list spelling", () => {
     const yaml = `
 jobs:
   changes: {}
@@ -31,7 +31,7 @@ test("a matched job with no needs is a ROOT, not an unknown", () => {
     expect(resolved.has("preflight")).toBe(true);
 });
 
-test("a reusable workflow call — one declared job, several reported jobs, all of them dependents", () => {
+test("a reusable workflow call: one declared job, several reported jobs, all of them dependents", () => {
     const yaml = `
 jobs:
   preflight: {}
@@ -49,7 +49,7 @@ jobs:
     expect(resolved.get("release")).toEqual(["verify-site / verify", "verify-site / e2e-hermetic"]);
 });
 
-test("a matrix — one declared job, one reported job per leg", () => {
+test("a matrix, one declared job, one reported job per leg", () => {
     const yaml = `
 jobs:
   build: {}
@@ -63,7 +63,7 @@ jobs:
     expect(resolved.get("report")).toEqual(["e2e (chromium)", "e2e (firefox)"]);
 });
 
-test("the LONGEST label wins — `verify` must not claim `verify-core / verify`", () => {
+test("the LONGEST label wins: `verify` must not claim `verify-core / verify`", () => {
     // Both are declared, and a plain startsWith would let the shorter id swallow the longer one's jobs,
     // hanging the whole verify-core branch off the wrong parent.
     const yaml = `
@@ -108,7 +108,7 @@ jobs:
     expect(resolveNeeds(yaml, ["build", "ship"]).get("ship")).toEqual(["build"]);
 });
 
-test("a reported name nothing declares is left out entirely — no invented parent", () => {
+test("a reported name nothing declares is left out entirely: no invented parent", () => {
     const resolved = resolveNeeds(`jobs:\n  build: {}\n`, ["build", "something-else-entirely"]);
     expect(resolved.has("something-else-entirely")).toBe(false);
 });

@@ -31,8 +31,8 @@ test("isChatModel drops the image/audio/embedding endpoints the channel ships be
 
 test("keeps every model the Google channel vends, Claude and GPT-OSS included", async () => {
     // The point of the `owned_by` rule: Antigravity serves Claude Opus and GPT-OSS on the same plain Google
-    // sign-in as Gemini, and an id-prefix filter dropped exactly those — the strongest models a free account can
-    // reach — while another subscription's models, on a different channel, must still stay out.
+    // sign-in as Gemini, and an id-prefix filter dropped exactly those: the strongest models a free account can
+    // reach, while another subscription's models, on a different channel, must still stay out.
     const fake = translator([
         { id: "gemini-pro-agent", owned_by: "antigravity" },
         { id: "claude-opus-4-6-thinking", owned_by: "antigravity" },
@@ -50,7 +50,7 @@ test("keeps every model the Google channel vends, Claude and GPT-OSS included", 
 });
 
 test("labels a model as its vendor publishes it, since no rule recovers that name from the id", async () => {
-    // `gemini-pro-agent` humanizes to "Gemini Pro Agent" — a model that does not exist. The translator publishes
+    // `gemini-pro-agent` humanizes to "Gemini Pro Agent": a model that does not exist. The translator publishes
     // "Gemini 3.1 Pro (High)", which is what the picker must show.
     const fake = translator(
         [

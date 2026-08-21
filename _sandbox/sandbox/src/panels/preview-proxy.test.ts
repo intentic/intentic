@@ -65,7 +65,7 @@ test("a repo whose panel isn't running is a 502 pointing at the sidebar", async 
     expect(response.body).toContain(`panel "desired-state" is not running`);
 });
 
-// Forwarded-port slots: `port-<slot>` routes through the slot table, and — unlike panels — Host and Origin are
+// Forwarded-port slots: `port-<slot>` routes through the slot table, and (unlike panels) Host and Origin are
 // rewritten to localhost:<port>, because arbitrary dev servers' host checks only allow localhost.
 test("a port- host resolves through the slot table and rewrites Host to localhost:<port>", async () => {
     const { proxyPort, appPort } = await setup((port) => (slot) => (slot === "a" ? { port, host: "127.0.0.1", scheme: "http" } : undefined));
@@ -74,7 +74,7 @@ test("a port- host resolves through the slot table and rewrites Host to localhos
     expect(response.body).toBe(`hello from localhost:${appPort}/page`);
 });
 
-// The field failure behind this test: Vite binds `localhost`, which can land on IPv6 loopback ONLY — a
+// The field failure behind this test: Vite binds `localhost`, which can land on IPv6 loopback ONLY, a
 // 127.0.0.1 dial gets connection-refused. The forward table records the dialable host; the proxy must honor it.
 test("a ::1-only upstream (a `localhost`-bound dev server) is dialed at ::1, not 127.0.0.1", async () => {
     const v6Server = http.createServer((req, res) => {
@@ -95,7 +95,7 @@ test("a ::1-only upstream (a `localhost`-bound dev server) is dialed at ::1, not
     expect(response.body).toBe(`v6 hello from localhost:${v6Port}`);
 });
 
-test("an unmapped slot is a 502, not a 404 — the hostname is ours, the forward just lapsed", async () => {
+test("an unmapped slot is a 502, not a 404: the hostname is ours, the forward just lapsed", async () => {
     const { proxyPort } = await setup((port) => (slot) => (slot === "a" ? { port, host: "127.0.0.1", scheme: "http" } : undefined));
     const response = await get(proxyPort, "port-b.example.com");
     expect(response.status).toBe(502);
@@ -119,7 +119,7 @@ test("a port target rewrites Origin alongside Host", async () => {
     expect(response.body).toBe(`origin=http://localhost:${echoPort}`);
 });
 
-// The vite in a scaffolded app serves https with a self-signed cert on its random port — the proxy must dial
+// The vite in a scaffolded app serves https with a self-signed cert on its random port: the proxy must dial
 // TLS (verification off) when the forward probe detected https. Static throwaway cert, generated for this test.
 const TLS_KEY = `-----BEGIN PRIVATE KEY-----
 MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCY2dCWIBg49fK7
@@ -183,7 +183,7 @@ test("an https-scheme slot target is dialed over TLS with verification off (self
     expect(response.body).toBe(`secure hello from localhost:${tlsPort}`);
 });
 
-// A proxy configured with the sandbox id: hosts must carry the exact `-<id>` suffix (the shared-zone scheme —
+// A proxy configured with the sandbox id: hosts must carry the exact `-<id>` suffix (the shared-zone scheme:
 // see hostnames.ts); the suffix is stripped before the lookup and (for panels) Host is forwarded unchanged.
 const ID = "abc123def456";
 const idSetup = async (): Promise<{ proxyPort: number; appPort: number }> => {

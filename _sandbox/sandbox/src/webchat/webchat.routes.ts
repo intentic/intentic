@@ -198,7 +198,7 @@ export const createWebchatRoutes = (
                 return c.json({ error: "this conversation has reached its message limit" }, 429);
             }
             if (daily.spend(automation.id, config.dailyMessageMax ?? WEBCHAT_DAILY_MAX_DEFAULT, now)) {
-                return c.json({ error: "this chat has reached today's limit — try again tomorrow" }, 429);
+                return c.json({ error: "this chat has reached today's limit, try again tomorrow" }, 429);
             }
 
             const session = await store.open(thread, () => mintConversationId(automation.id, body.conversationId), ttlMs, now);
@@ -242,7 +242,7 @@ export const createWebchatRoutes = (
                  * the time they approve, so the reply reaches the fleet and not the widget. Delivering it needs a
                  * channel the widget holds open across page loads, v2. */
                 if (automation.requireApproval === true) {
-                    await sse.writeSSE({ event: "pending", data: "Thanks — your request was received and a human will review it shortly." });
+                    await sse.writeSSE({ event: "pending", data: "Thanks, your request was received and a human will review it shortly." });
                 }
                 await enqueue(automation.id, async () => {
                     const settled = await fireAutomation(services, automation, wake, {

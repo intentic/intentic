@@ -108,7 +108,7 @@ describe("network.outbound", () => {
     });
 
     // The JS execution backend feeds this classifier its scripts (command-gate's EXECUTION_SOURCES), so a
-    // fetching script must land in the same class a fetching curl does — and a loopback fetch must not.
+    // fetching script must land in the same class a fetching curl does, and a loopback fetch must not.
     test("a script's literal fetch of the open internet is outbound; loopback and URL-less fetches are not", () => {
         expect(classifyCommand('const r = await fetch("https://api.github.com/user");')).toContain("network.outbound");
         expect(classifyCommand("await fetch(`http://example.com/${path}`)")).toContain("network.outbound");

@@ -39,7 +39,7 @@ test("maps every ChatGPT limit window to utilized percentages and reset instants
 });
 
 // The shape a spent team plan really returns (captured from the live endpoint): one window, `limit_reached`,
-// and a null secondary. The null is the point — it must be skipped, not read as a second pool at 0%.
+// and a null secondary. The null is the point: it must be skipped, not read as a second pool at 0%.
 test("reads a fully spent ChatGPT plan from its single live window", () => {
     const measuredAt = 1_800_000_000_000;
     expect(
@@ -95,7 +95,7 @@ test("inverts Google's remaining fractions and preserves each named quota bucket
     });
 });
 
-/* A bucket at `remainingFraction: 0` is the whole reason this feature exists — it is what an exhausted free
+/* A bucket at `remainingFraction: 0` is the whole reason this feature exists, it is what an exhausted free
  * Google account reports, and reading that 0 as "no data" instead of "100% used" is precisely how a spent
  * account keeps rendering as a healthy green dot. Guarded because `0` is falsy and every `??`/`||` in the parse
  * path is one keystroke away from discarding it. */
@@ -114,7 +114,7 @@ test("treats an exhausted Google bucket as fully utilized rather than unmeasured
 });
 
 /* The live Kimi Code payload, captured from `/coding/v1/usages` on the account whose 5-hour window had just
- * refused a turn — the exact reading the "You've reached your usage limit for this billing cycle" 403 is the
+ * refused a turn: the exact reading the "You've reached your usage limit for this billing cycle" 403 is the
  * prose version of. Counts, not percentages, and decimal STRINGS at that, so the division is the mapping's job:
  * 100/100 is the spent throttle and 40/100 the plan pool it sits inside, and reporting either as the other is
  * how a spent account keeps its green dot. */
@@ -144,7 +144,7 @@ test("maps a Kimi Code reading to its plan pool and its throttle", () => {
 });
 
 // A throttle whose length is neither of the two shared kinds keeps its own namespaced kind and says how long it
-// is — an unnamed pool is still one this account will be gated by.
+// is: an unnamed pool is still one this account will be gated by.
 test("names a Kimi throttle this vocabulary has no shared kind for", () => {
     expect(
         kimiUsageFromPayload({
@@ -153,7 +153,7 @@ test("names a Kimi throttle this vocabulary has no shared kind for", () => {
     ).toEqual([{ kind: "kimi:43200s", label: "12-hour window", utilization: 20 }]);
 });
 
-// No quota in the payload is not a reading of zero — the account must come back unmeasured so the row keeps its
+// No quota in the payload is not a reading of zero: the account must come back unmeasured so the row keeps its
 // dot instead of claiming headroom nobody measured. A Kimi pool with a ZERO limit is the same claim: the plan
 // does not meter it, and dividing by it would report every such account as permanently spent.
 test("returns nothing when a payload carries no usable window", () => {

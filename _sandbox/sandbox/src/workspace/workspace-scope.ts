@@ -94,7 +94,7 @@ export const workspaceRootFor = async (deps: WorkspaceScopeDeps, agent: string |
     const dir = deps.worktreeDir(agent);
     if (!(await present(dir))) {
         throw new ORPCError("PRECONDITION_FAILED", {
-            message: "this agent's files were cleaned up when it was archived — its work is kept on its branch, in its changes",
+            message: "this agent's files were cleaned up when it was archived, its work is kept on its branch, in its changes",
         });
     }
     return dir;

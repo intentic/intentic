@@ -6,7 +6,7 @@ import type { SecretAccess, SecretUseReport } from "../agent/agent-secrets.js";
 import type { JsExecutionPlan } from "./js-runtime.js";
 import { type JsToolDeps, runJsTool } from "./js-tool.js";
 
-/* The handler end to end — real scripts through the bare handler, because the server wrapper is registration
+/* The handler end to end: real scripts through the bare handler, because the server wrapper is registration
  * and the SDK's to test. What the model is told, and the answer's shape, are pinned in js-tool.test.ts. */
 
 const dirPlan = (dir: string, overrides: Partial<JsExecutionPlan> = {}): JsExecutionPlan => ({
@@ -42,7 +42,7 @@ test("a secret reference resolves on the way into the process and the use is fil
     const answer = await runJsTool(deps(dirPlan(dir), stored(uses)), {
         code: 'console.log("token is", "{{secret:API_TOKEN}}".length);',
     });
-    // The VALUE reached the script (11 chars; the unresolved reference would be 20) — measured, never echoed.
+    // The VALUE reached the script (11 chars; the unresolved reference would be 20): measured, never echoed.
     expect(answer).toContain("token is 11");
     expect(uses).toEqual([{ name: "API_TOKEN", lane: "code", detail: expect.stringContaining("token is") }]);
 });

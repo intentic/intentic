@@ -48,14 +48,14 @@ test("one account's refusal says nothing about the others", async () => {
     expect(Object.keys(await seats.read())).toEqual(["personal"]);
 });
 
-/* THE INCIDENT THIS FILE EXISTS FOR — the mark used to live on the account's own record, which is the one place
+/* THE INCIDENT THIS FILE EXISTS FOR: the mark used to live on the account's own record, which is the one place
  * it could not survive.
  *
  * That record is a CREDENTIAL, rewritten whole every time a token rotates, and the auth dir is shared between
  * sandboxes: the writer is often another daemon, on another build, whose idea of an account has never included
  * this mark. One such rotation wrote the account back without it four hours after a seat was benched, the
  * account rejoined the rotation looking like the freest one on the list (nothing can spend on it), and the next
- * unpinned turn — a CI fix nobody was watching — went straight to it and died on the organization's refusal.
+ * unpinned turn (a CI fix nobody was watching) went straight to it and died on the organization's refusal.
  *
  * So: rotate the token, exactly as that daemon did, and the seat must still be refused afterwards. */
 test("a token rotation cannot erase a refused seat", async () => {
@@ -74,13 +74,13 @@ test("a writer that rewrites the whole account record leaves the seats file alon
     const dir = storeDir();
     const seats = seatsIn(dir);
     await seats.refuse("a", REFUSAL);
-    // Whole-record write, no read first — the shape a daemon of another vintage would produce.
+    // Whole-record write, no read first: the shape a daemon of another vintage would produce.
     await writeFile(join(dir, "a.json"), JSON.stringify({ id: "a", label: "Work", connectedAt: 1, accessToken: "rotated" }));
     expect((await seats.read())["a"]?.reason).toBe(REFUSAL);
 });
 
 // The account store scans this directory for accounts, and a stray file it cannot parse used to surface as a
-// blank row in the picker — the same hazard models.json is already held to.
+// blank row in the picker: the same hazard models.json is already held to.
 test("the seats file is not mistaken for an account", async () => {
     const dir = storeDir();
     const [accounts, seats] = [fileClaudeStore(dir, silent), seatsIn(dir)];

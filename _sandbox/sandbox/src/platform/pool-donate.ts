@@ -25,7 +25,7 @@ export const donateForExtension = async (config: Config, extensionId: string): P
     try {
         response = await postToPlatform(config, "/pool/donate", { extensionId });
     } catch {
-        return { ok: false, donated: 0, detail: "the platform could not be reached to support the creator — nothing was charged" };
+        return { ok: false, donated: 0, detail: "the platform could not be reached to support the creator, nothing was charged" };
     }
     if (response.status === 200) {
         const donated = (response.json as { donated?: unknown } | undefined)?.donated;

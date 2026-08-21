@@ -31,7 +31,7 @@ test("the packageManager field wins over the lockfile on disk too", async () => 
     expect((await discoverProjects(root))[0]?.recipe.manager).toBe("yarn");
 });
 
-test("a monorepo is ONE project — the walk stops at the first manifest, so members aren't installed separately", async () => {
+test("a monorepo is ONE project: the walk stops at the first manifest, so members aren't installed separately", async () => {
     const root = await workspace();
     await write(root, "repo/package.json");
     await write(root, "repo/pnpm-lock.yaml", "");
@@ -40,14 +40,14 @@ test("a monorepo is ONE project — the walk stops at the first manifest, so mem
     expect(await discoverProjects(root)).toEqual([{ dir: "repo", recipe: expect.anything() }]);
 });
 
-test("junk dirs are never descended into — a vendored manifest is not a project", async () => {
+test("junk dirs are never descended into: a vendored manifest is not a project", async () => {
     const root = await workspace();
     await write(root, "app/node_modules/left-pad/package.json");
     await write(root, "app/dist/package.json");
     expect(await discoverProjects(root)).toEqual([]);
 });
 
-test("the reference shelf is never descended into — a cloned reference repo must not nag for an install", async () => {
+test("the reference shelf is never descended into: a cloned reference repo must not nag for an install", async () => {
     const root = await workspace();
     await write(root, "refs/react/package.json");
     await write(root, "refs/react/yarn.lock", "");
@@ -108,7 +108,7 @@ test("a manager that isn't in this sandbox is `unsupported`, not an install that
 });
 
 /* The state the marker alone could never see: installed once, and since outgrown. This is what an agent leaves
- * behind when it adds a dependency and does not install it — and what every turn after it inherits, because an
+ * behind when it adds a dependency and does not install it, and what every turn after it inherits, because an
  * isolated turn overlays the main checkout's node_modules rather than making its own. */
 test("a project whose manifest has outgrown its installed tree is stale, not ready", async () => {
     const root = await workspace();
@@ -119,12 +119,12 @@ test("a project whose manifest has outgrown its installed tree is stale, not rea
     const status = await setupStateOf(root, project!, processes(), installed);
     expect(status.state).toBe("stale");
     expect(status.unresolved).toEqual([{ dir: "", names: ["left-pad"] }]);
-    // Installing it is what clears the state — the same command that would have served a fresh import.
+    // Installing it is what clears the state: the same command that would have served a fresh import.
     await write(root, "app/node_modules/left-pad/package.json");
     expect(await stateOf(root, project!, processes(), installed)).toBe("ready");
 });
 
-test("a non-node project is never called stale — nothing here can read what a .venv was supposed to contain", async () => {
+test("a non-node project is never called stale: nothing here can read what a .venv was supposed to contain", async () => {
     const root = await workspace();
     await write(root, "app/requirements.txt", "requests==2.32.0");
     await mkdir(join(root, "app/.venv"), { recursive: true });
@@ -164,8 +164,8 @@ test("a fully-installed workspace adds nothing to the turn", () => {
     expect(setupNoticeFor([])).toBeUndefined();
 });
 
-/* The stale notice asks the turn for nothing. It exists to stop one specific waste — the model reading an
- * unresolved import as a mistake in code that is fine, and editing working source to satisfy it — so it names
+/* The stale notice asks the turn for nothing. It exists to stop one specific waste: the model reading an
+ * unresolved import as a mistake in code that is fine, and editing working source to satisfy it, so it names
  * the cause and explicitly takes the install off the table.
  *
  * It must also say WHEN the tree is fixed, and the answer is next turn. "Once it is idle" was true and useless:

@@ -23,7 +23,7 @@ vi.mock("@opencode-ai/sdk", () => ({
                 stream: {
                     async *[Symbol.asyncIterator]() {
                         yield* streamEvents;
-                        // Then stay open, like the real subscription — a stream that ended would send the
+                        // Then stay open, like the real subscription: a stream that ended would send the
                         // watcher round its retry ladder and spawn a second reader mid-assertion.
                         await new Promise(() => {});
                     },
@@ -83,7 +83,7 @@ test("connected('xai') reflects a persisted OAuth token in auth.json, not OpenCo
 test("connected('xai') is false for a non-oauth entry or a different provider", async () => {
     const xdg = await scratch();
     const service = createOpenCodeService(xdg);
-    // An api-key entry has no OAuth access token — and xaiModels() couldn't resolve one either, so "connected"
+    // An api-key entry has no OAuth access token, and xaiModels() couldn't resolve one either, so "connected"
     // must stay false to keep the UI consistent with what a turn can actually use.
     await writeAuth(xdg, { xai: { type: "api", key: "sk-xxx" } });
     expect(await service.connected("xai")).toBe(false);
@@ -103,7 +103,7 @@ test("disconnect clears the auth store AND the persisted catalog so connected fl
     expect(await fileExists(modelsPath(xdg))).toBe(false);
 });
 
-test("xaiModels() returns the seed catalog (non-empty, with a default) when not connected — never blank", async () => {
+test("xaiModels() returns the seed catalog (non-empty, with a default) when not connected: never blank", async () => {
     const xdg = await scratch();
     // No auth ⇒ no token ⇒ discovery is skipped entirely (forbiddenFetch proves it), and the seed floor is served.
     const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
@@ -156,7 +156,7 @@ test("client() spawns the server with store:false for every known xai model (see
     await service.recordModels(["grok-4-latest"]);
     await service.client();
 
-    // xAI stores conversations server-side for 30 days unless each model call opts out — the per-model config
+    // xAI stores conversations server-side for 30 days unless each model call opts out: the per-model config
     // options are the only seam OpenCode forwards to the call, so every known id must carry store:false.
     const spawn = serverSpawns.at(-1) as { config: { provider: { xai: { models: Record<string, { options: unknown }> } } } };
     const models = spawn.config.provider.xai.models;
@@ -166,11 +166,11 @@ test("client() spawns the server with store:false for every known xai model (see
     }
 });
 
-/* THE PERMISSION BLOCK, IN FULL — the three-key version of this cost a conversation five turns in half an hour.
+/* THE PERMISSION BLOCK, IN FULL: the three-key version of this cost a conversation five turns in half an hour.
  *
  * OpenCode defaults every key the config omits to `ask`, and an ask on this runtime reaches nobody: no TUI, no
  * permission channel, no user. The session just stops emitting, and two minutes later the adapter's watchdog
- * calls it a timeout. `external_directory` is the one that found it — an isolated conversation runs in a
+ * calls it a timeout. `external_directory` is the one that found it: an isolated conversation runs in a
  * worktree while its attachments stay on /work, so reading the image the user attached is a read outside the
  * session's own directory. */
 test("client() spawns the server with EVERY permission allowed, not merely the ones anyone thought of", async () => {
@@ -188,7 +188,7 @@ test("client() spawns the server with EVERY permission allowed, not merely the o
 
 /* ...and the same answer given live, for a permission kind this build has never heard of. A future OpenCode's
  * new key is `ask` by default and absent from the config we spawned with, which puts it exactly where
- * external_directory was — so an ask that reaches a watched directory is answered on the spot instead. */
+ * external_directory was, so an ask that reaches a watched directory is answered on the spot instead. */
 test("a permission ask on a watched directory is answered with a standing yes", async () => {
     const xdg = await scratch();
     streamEvents.push({ type: "permission.updated", properties: { id: "per_1", sessionID: "ses_1", type: "some_future_gate" } });

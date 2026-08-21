@@ -14,7 +14,7 @@ import { codexInstructionConfig, instructionsPath } from "./codex-instructions.j
 
 test("nothing to say sends no config at all", async () => {
     // The ordinary turn: no custom prompt, nothing to add. Codex must be left exactly as it was, which means an
-    // EMPTY object rather than keys carrying undefined — those would reach thread/start as real overrides.
+    // EMPTY object rather than keys carrying undefined: those would reach thread/start as real overrides.
     expect(await codexInstructionConfig({}, mkdtempSync(join(tmpdir(), "codex-instr-")))).toEqual({});
 });
 
@@ -26,7 +26,7 @@ test("a replacement is written to disk and named by path; an addition rides as t
     const path = config["model_instructions_file"];
     expect(typeof path).toBe("string");
     expect(await readFile(path as string, "utf8")).toBe("You write release notes.");
-    // The append is a string key — Codex takes it as an extra developer message, no file involved.
+    // The append is a string key: Codex takes it as an extra developer message, no file involved.
     expect(config["developer_instructions"]).toBe("Be brief.");
 });
 
@@ -46,7 +46,7 @@ test("the same prompt is the same file, a different prompt a different one", asy
     expect(first["model_instructions_file"]).toBe(instructionsPath(home, "One."));
 });
 
-// "" is a legal custom prompt — the owner emptied the box, and it means no base prompt at all. That is a
+// "" is a legal custom prompt: the owner emptied the box, and it means no base prompt at all. That is a
 // different turn from one that never asked for a replacement, so it is written and sent like any other.
 test("an emptied prompt still replaces, with nothing", async () => {
     const home = mkdtempSync(join(tmpdir(), "codex-instr-"));

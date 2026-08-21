@@ -64,7 +64,7 @@ export const runRuleCommand = async (deps: RuleCommandDeps, request: RuleCommand
     // promises. Unref'd: a rule's watchdog must never be the thing keeping a daemon alive.
     const watchdog = setTimeout(() => {
         timedOut = true;
-        logger.warn({ command, timeoutMs }, "rule: command timed out — killing");
+        logger.warn({ command, timeoutMs }, "rule: command timed out, killing");
         abort.abort();
     }, timeoutMs);
     watchdog.unref();

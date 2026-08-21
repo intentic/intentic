@@ -1,7 +1,7 @@
 {
     "name": "@intentic/workspace-setup",
     "version": "0.0.0",
-    "description": "Which dependency manager a project needs, from its manifest/lockfile names — pure, browser-safe, shared by the drop UI and the daemon",
+    "description": "Which dependency manager a project needs, from its manifest/lockfile names, pure, browser-safe, shared by the drop UI and the daemon",
     "license": "MIT",
     "type": "module",
     "repository": {

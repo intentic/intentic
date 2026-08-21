@@ -10,7 +10,7 @@ const repoRoot = findRepoRoot(import.meta.url);
 const sandboxRoot = join(repoRoot, "_sandbox/sandbox");
 
 // What the mechanism trusts about the shipped pack set: every profile name resolves, and the two
-// content-inferred properties land exactly where the image layout needs them — a wrong inference either
+// content-inferred properties land exactly where the image layout needs them: a wrong inference either
 // splices a tree-dependent pack above the trees or offers a COPY pack to an overlay that cannot build it.
 test("profiles name real packs, and placement/overlayability inference matches each pack's content", async () => {
     const packs = await listPacks();
@@ -28,7 +28,7 @@ test("profiles name real packs, and placement/overlayability inference matches e
         expect(byName.get(name)?.overlayable, `${name} is bake-only (COPYs from the trees context)`).toBe(false);
         expect(byName.get(name)?.postTrees, `${name} must splice below the tree COPYs`).toBe(true);
     }
-    // Privileges belong to capability HANDLERS, never packs — and the rebuild executors grep for the runtime
+    // Privileges belong to capability HANDLERS, never packs, and the rebuild executors grep for the runtime
     // directive token comments included, so a pack must not contain it even in prose.
     for (const pack of packs) {
         expect(pack.content.includes("intentic:" + "runtime"), `${pack.name} must not carry the runtime-directive token`).toBe(false);
@@ -36,7 +36,7 @@ test("profiles name real packs, and placement/overlayability inference matches e
 });
 
 // The stamp protocol end to end: no stamp → the fragment rides the overlay (a core image); the exact hash
-// stamped → nothing to compose (the standard image — and the reason a rebuild converges instead of
+// stamped → nothing to compose (the standard image, and the reason a rebuild converges instead of
 // re-prompting); a stale hash → the newer pack rides the overlay again (the upgrade path).
 test("packFragment answers by base stamp: absent → content, current → nothing, stale → content", async () => {
     const stamps = mkdtempSync(join(tmpdir(), "packs-"));
@@ -50,7 +50,7 @@ test("packFragment answers by base stamp: absent → content, current → nothin
 });
 
 // Bake-only packs never reach an overlay whatever the stamps say, and unknown names resolve to nothing
-// rather than a throw — a capability referencing a pack that a newer daemon dropped must degrade, not crash.
+// rather than a throw: a capability referencing a pack that a newer daemon dropped must degrade, not crash.
 test("bake-only and unknown packs compose no overlay fragment", async () => {
     const stamps = mkdtempSync(join(tmpdir(), "packs-"));
     expect(await packFragment("messaging", stamps)).toBeUndefined();
@@ -60,11 +60,11 @@ test("bake-only and unknown packs compose no overlay fragment", async () => {
 
 /* The pin-lockstep contracts each pack file states in its ponytail comment. These are the tests those
  * comments point at: a bump on one side without the other fails here, not as a runtime skew.
- *   browser  — the packed playwright version IS the daemon's, or chromium.executablePath() resolves a
+ *   browser : the packed playwright version IS the daemon's, or chromium.executablePath() resolves a
  *              revision the pack never installed.
- *   codex    — the packed CLI IS @openai/codex-sdk's exact dependency, or native app-server turns and
+ *   codex   : the packed CLI IS @openai/codex-sdk's exact dependency, or native app-server turns and
  *              delegated `codex exec` can drive a different engine than the version anchor names.
- *   opencode — the packed CLI matches @opencode-ai/sdk, or the client/server wire API skews. */
+ *   opencode: the packed CLI matches @opencode-ai/sdk, or the client/server wire API skews. */
 test("pack pins are in lockstep with the daemon's own dependency versions", async () => {
     const pin = (content: string, pattern: RegExp): string => {
         const match = pattern.exec(content);
@@ -81,7 +81,7 @@ test("pack pins are in lockstep with the daemon's own dependency versions", asyn
     expect(pin(opencode.content, /opencode-ai@(\S+) /)).toBe(version("@opencode-ai/sdk"));
 });
 
-/* The image-compose splice and the daemon must agree on the stamp hash byte for byte — they are two
+/* The image-compose splice and the daemon must agree on the stamp hash byte for byte: they are two
  * implementations (mjs script / this module) of one protocol, and a divergence makes every standard image
  * read as "not baked", re-proposing packs it already carries. Also pins the placement the layer-cache
  * argument depends on: pre-trees packs above the daemon tree COPY, post-trees packs below it. */
@@ -97,7 +97,7 @@ test("compose-image-dockerfile.mjs stamps the hashes this module computes, in th
     expect(composed.indexOf("# ---- pack: browser ----")).toBeLessThan(treesCopy);
     expect(composed.indexOf("# ---- pack: messaging ----")).toBeGreaterThan(treesCopy);
     expect(composed.indexOf("# ---- pack: semantic ----")).toBeGreaterThan(treesCopy);
-    // The core profile is the Dockerfile untouched — the minimal image is not a variant, it IS the file.
+    // The core profile is the Dockerfile untouched: the minimal image is not a variant, it IS the file.
     const core = execFileSync("node", ["_tools/scripts/compose-image-dockerfile.mjs", "core"], { cwd: repoRoot, encoding: "utf8" });
     expect(core).toBe(readFileSync(join(sandboxRoot, "Dockerfile"), "utf8"));
 });

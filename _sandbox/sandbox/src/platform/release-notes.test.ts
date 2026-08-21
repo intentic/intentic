@@ -26,7 +26,7 @@ const RELEASE_BODY = [
 const releasesResponse = (releases: unknown): Response => new Response(JSON.stringify(releases), { status: 200 });
 
 test("reads the user-facing section and stops at the commit list under it", () => {
-    // The three "### Features" bullets are subjects, not notes — taking them would put "audit rail icons" in
+    // The three "### Features" bullets are subjects, not notes: taking them would put "audit rail icons" in
     // front of a user, which is the whole thing this section exists to keep out.
     expect(parseReleaseNotes(RELEASE_BODY)).toEqual(["Your models stay in the order you set them.", "The commit box keeps a full message."]);
 });
@@ -41,7 +41,7 @@ const BREAKING_BODY = ["## Breaking changes", "", "- The old picker layout is go
 
 test("reads the breaking section apart from the notes", () => {
     expect(parseBreakingNotes(BREAKING_BODY)).toEqual(["The old picker layout is gone — use the new list."]);
-    // Each parser sees only its own section — a break is not a note, and a note is not a warning.
+    // Each parser sees only its own section: a break is not a note, and a note is not a warning.
     expect(parseReleaseNotes(BREAKING_BODY)).toEqual(["Your models stay in the order you set them.", "The commit box keeps a full message."]);
     expect(parseBreakingNotes(RELEASE_BODY)).toEqual([]);
 });
@@ -54,7 +54,7 @@ test("collects every breaking sentence in the gap, and a release that only break
         ]),
     );
     await refreshReleaseNotes();
-    // v1.188.0 carries no What's new at all — it must still be cached, or the warning never reaches the card.
+    // v1.188.0 carries no What's new at all: it must still be cached, or the warning never reaches the card.
     expect(breakingNotes("1.186.0")).toEqual(["The export command is gone."]);
     expect(updateNotes("1.186.0")).toEqual(["Middle thing."]);
     // Past the break, nothing to warn about.
@@ -71,7 +71,7 @@ test("collects the notes for every release newer than this sandbox, and none of 
     );
     await refreshReleaseNotes();
     expect(updateNotes("1.186.0")).toEqual(["Newest thing.", "Middle thing."]);
-    // Nothing newer than the newest — the card shows no notes rather than repeating the last release's.
+    // Nothing newer than the newest: the card shows no notes rather than repeating the last release's.
     expect(updateNotes("1.188.0")).toEqual([]);
 });
 
@@ -87,7 +87,7 @@ test("says one change once, however many releases carried it", async () => {
     expect(updateNotes("1.186.0")).toEqual(["The same thing."]);
 });
 
-test("an unknown installed version asks for nothing — that is the dev build", async () => {
+test("an unknown installed version asks for nothing: that is the dev build", async () => {
     vi.stubGlobal("fetch", async () => releasesResponse([{ tag_name: "v1.188.0", body: "## What's new\n\n- Newest thing.\n" }]));
     await refreshReleaseNotes();
     expect(updateNotes(undefined)).toEqual([]);

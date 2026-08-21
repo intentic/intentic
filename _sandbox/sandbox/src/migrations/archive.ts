@@ -82,12 +82,12 @@ export const readForeignArchive = async (body: ReadableStream<Uint8Array>, limit
             return;
         }
         if (files.size >= MAX_FILES) {
-            throw new MigrationFormatError(`the archive holds more than ${MAX_FILES} files — pack just the tool's home directory`);
+            throw new MigrationFormatError(`the archive holds more than ${MAX_FILES} files: pack just the tool's home directory`);
         }
         const content = await readEntry(stream);
         remaining -= content.byteLength;
         if (remaining < 0) {
-            throw new MigrationFormatError("the archive is too large — pack just the tool's home directory, without sessions or logs");
+            throw new MigrationFormatError("the archive is too large: pack just the tool's home directory, without sessions or logs");
         }
         files.set(relPath, content);
     };
@@ -105,7 +105,7 @@ export const readForeignArchive = async (body: ReadableStream<Uint8Array>, limit
             reject(error instanceof Error ? error : new Error(String(error)));
         };
         const failDecode = (error: unknown): void =>
-            fail(new MigrationFormatError(`the upload could not be read — it is not a gzipped tar archive (${String(error)})`));
+            fail(new MigrationFormatError(`the upload could not be read: it is not a gzipped tar archive (${String(error)})`));
         ex.on("entry", (header, stream, next) => {
             handleEntry(header, stream).then(() => next(), fail);
         });

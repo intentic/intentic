@@ -11,7 +11,7 @@ import { exportsDir } from "./exports.js";
 /* The bundle ROUTES, driven over the daemon's HTTP surface.
  *
  * Two properties live here rather than in the round-trip suite next door. The GATE, because both directions
- * read or overwrite everything the sandbox holds. And the fact that starting an export ANSWERS IMMEDIATELY —
+ * read or overwrite everything the sandbox holds. And the fact that starting an export ANSWERS IMMEDIATELY:
  * the whole point of making it an artifact is that the request does not wait for the pack, so a browser is free
  * to navigate away the moment it has the name.
  */
@@ -24,7 +24,7 @@ type ExportRow = { name: string; status: string };
 
 const dirs: string[] = [];
 // Each app hands back its OWN history root. Looking it up by index instead made one failing test cascade into
-// the next two — the failure skipped the cleanup, so the following test read the previous test's directory.
+// the next two: the failure skipped the cleanup, so the following test read the previous test's directory.
 const appOn = async (options: { readonly authed?: true } = {}): Promise<{ app: ReturnType<typeof createApp>; history: string }> => {
     const dir = await mkdtemp(join(tmpdir(), "bundle-routes-"));
     dirs.push(dir);
@@ -33,12 +33,12 @@ const appOn = async (options: { readonly authed?: true } = {}): Promise<{ app: R
             workspace: workspacePaths(join(dir, "work")),
             config: { ...testConfig, workspaceRoot: join(dir, "work"), historyRoot: join(dir, "history") },
             /* Most tests run in loopback shape (no auth at all); the ticket test needs a daemon that actually
-             * checks one, because the download route skips the check when there is no auth — same as
+             * checks one, because the download route skips the check when there is no auth: same as
              * /workspace/media, and for the same reason.
              *
              * The bearer is checked the way the real one is: no header, no caller. A stub that authorized the
-             * headerless request too made the download test pass while the browser's own navigation — which
-             * cannot send a header — was being refused by the bearer middleware before the route ever ran.
+             * headerless request too made the download test pass while the browser's own navigation, which
+             * cannot send a header: was being refused by the bearer middleware before the route ever ran.
              */
             ...(options.authed === true
                 ? {
@@ -66,7 +66,7 @@ afterEach(async () => {
     }
 });
 
-test("a member may not list, start, delete or restore — every direction is owner-gated", async () => {
+test("a member may not list, start, delete or restore: every direction is owner-gated", async () => {
     // The member's exact position: the bearer verifies, the owner check refuses. A verified non-owner is 403.
     const app = createApp(
         services({
@@ -93,7 +93,7 @@ test("starting an export answers with its name at once, and the list carries it 
     const { name } = await jsonOf<{ name: string }>(started);
     expect(name).toMatch(/\.tar\.gz$/);
 
-    // The row is visible immediately — this is what a browser that navigates away and comes back will read.
+    // The row is visible immediately: this is what a browser that navigates away and comes back will read.
     const listed = await jsonOf<{ exports: ExportRow[] }>(await app.request("/bundles"));
     expect(listed.exports.map((entry) => entry.name)).toContain(name);
 
@@ -124,7 +124,7 @@ test("download needs a ticket for THAT bundle, and serves it with a real length"
         expect(now.exports.find((entry) => entry.name === name)?.status).toBe("ready");
     });
 
-    // No ticket, or one minted for a different bundle, buys nothing — the credential is scoped to one file.
+    // No ticket, or one minted for a different bundle, buys nothing: the credential is scoped to one file.
     expect((await app.request(`/bundles/download?name=${encodeURIComponent(name)}`)).status).toBe(401);
     const { ticket } = await jsonOf<{ ticket: string }>(
         await app.request(`/bundles/ticket?name=${encodeURIComponent(name)}`, { method: "POST", headers: owner }),
@@ -136,7 +136,7 @@ test("download needs a ticket for THAT bundle, and serves it with a real length"
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/gzip");
     expect(response.headers.get("content-disposition")).toBe(`attachment; filename="${name}"`);
-    // A length the browser's download manager can show progress against — impossible while the bundle was
+    // A length the browser's download manager can show progress against: impossible while the bundle was
     // packed straight into the response.
     expect(Number(response.headers.get("content-length"))).toBeGreaterThan(0);
     await response.arrayBuffer();

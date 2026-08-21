@@ -3,8 +3,8 @@ import { expect, test } from "vitest";
 import { MIN_ARM_TURNS, readTurnExperiments } from "./turn-experiments.js";
 import type { UsageStore } from "./usage-store.js";
 
-// The turn-level mechanisms' effects are the savings figures that cannot be observed — a turn can't be re-run
-// unsteered — so these pin the rules that keep the reported numbers honest: only turns the experiment applied
+// The turn-level mechanisms' effects are the savings figures that cannot be observed: a turn can't be re-run
+// unsteered, so these pin the rules that keep the reported numbers honest: only turns the experiment applied
 // to are counted, no delta is reported until both arms are large enough to support one, the saving is claimed
 // over the turns that actually ran treated, and each experiment is read as its own two populations even when a
 // turn sits in both.
@@ -58,7 +58,7 @@ test("reports both arms but withholds the delta until each clears the threshold"
     const { output } = await readTurnExperiments(storeOf(terseArms(MIN_ARM_TURNS, MIN_ARM_TURNS - 1, 800, 1200)), {});
     expect(output?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
     expect(output?.metrics[0].off.turns).toBe(MIN_ARM_TURNS - 1);
-    // A delta over an under-powered control is noise wearing a percentage sign — the schema can't express one.
+    // A delta over an under-powered control is noise wearing a percentage sign: the schema can't express one.
     expect(output?.metrics[0].deltaPct).toBeUndefined();
     expect(output?.metrics[0].marginPct).toBeUndefined();
     expect(output?.metrics[0].saved).toBeUndefined();
@@ -68,7 +68,7 @@ test("reports the delta, its margin and what it was worth once both arms are big
     const { output } = await readTurnExperiments(storeOf(terseArms(40, 30, 800, 1200)), {});
     expect(output?.metrics[0].metric).toBe("proseChars");
     expect(output?.metrics[0].deltaPct).toBeCloseTo(-33.3, 0);
-    // The arms are nearly constant here, so the margin is tiny — but it is always reported alongside.
+    // The arms are nearly constant here, so the margin is tiny, but it is always reported alongside.
     expect(output?.metrics[0].marginPct).toBeLessThan(1);
     // Claimed over the turns that actually ran steered, not extrapolated across turns that never were.
     expect(output?.metrics[0].saved).toBe(Math.round((1200.5 - 800.5) * 40));
@@ -147,10 +147,10 @@ test("each experiment reads its own arms, so a turn in both counts in both", asy
 });
 
 /* THE SECOND WITHHOLD. Clearing MIN_ARM_TURNS says the normal approximation holds, not that anything has been
- * resolved: the terse steer crossed its thirtieth control turn and published +31.2% ± 35.1pp — an interval from
+ * resolved: the terse steer crossed its thirtieth control turn and published +31.2% ± 35.1pp, an interval from
  * −3.4% to +66.7%, which is no measurement at all, printed as an alarming number pointing the wrong way. The
  * margin still goes out, because "smaller than ±35 points" is the true reading and the one that says to wait. */
-test("a delta whose margin spans zero is not a delta — only its resolution is reported", async () => {
+test("a delta whose margin spans zero is not a delta: only its resolution is reported", async () => {
     // Arms drawn wide apart per turn but with means a hair apart: big n, big spread, no resolvable effect.
     const noisy = [
         ...Array.from({ length: 40 }, (_, index) => turn({ terse: true, proseChars: index % 2 === 0 ? 200 : 1800 })),
@@ -166,7 +166,7 @@ test("a delta whose margin spans zero is not a delta — only its resolution is 
 /* "Keep collecting" is only advice if the reader can tell three more days from three more years.
  *
  * AIMED AT A FIXED RESOLUTION, which is the whole correctness of the thing. Sized against the delta currently
- * observed, a real nine-day-old unresolved experiment once asked for fourteen more turns — an estimate divided
+ * observed, a real nine-day-old unresolved experiment once asked for fourteen more turns: an estimate divided
  * by noise inherits it and promises an answer next week forever. Against a fixed target the same data asks for
  * hundreds, which is the fact worth printing. */
 test("a withheld delta says how many more control turns would settle it", async () => {
@@ -176,7 +176,7 @@ test("a withheld delta says how many more control turns would settle it", async 
     ];
     const { output } = await readTurnExperiments(storeOf(noisy), {});
     expect(output?.metrics[0].deltaPct).toBeUndefined();
-    // A margin many times the target asks for many times the arm — the reading that says this holdout will not
+    // A margin many times the target asks for many times the arm: the reading that says this holdout will not
     // get there, rather than that it is nearly done.
     expect(output?.metrics[0].controlTurnsNeeded).toBeGreaterThan(40);
 });
@@ -198,7 +198,7 @@ test("a delta sitting just under its margin still asks for a multiple of the arm
     expect(output?.metrics[0].controlTurnsNeeded).toBeGreaterThan(3 * 40);
 });
 
-// Nothing to ask for once the resolution is already tight enough — then the effect is simply smaller than the
+// Nothing to ask for once the resolution is already tight enough: then the effect is simply smaller than the
 // width worth acting on, which is an answer rather than a shortfall.
 test("no waiting estimate once the resolution is already good enough", async () => {
     const tight = [
@@ -210,7 +210,7 @@ test("no waiting estimate once the resolution is already good enough", async () 
     expect(output?.metrics[0].controlTurnsNeeded).toBeUndefined();
 });
 
-// Nothing to wait for once the delta is published — the field is the withheld state's own explanation.
+// Nothing to wait for once the delta is published: the field is the withheld state's own explanation.
 test("a resolved delta carries no waiting estimate", async () => {
     const { output } = await readTurnExperiments(storeOf(terseArms(40, 40, 800, 1200)), {});
     expect(output?.metrics[0].deltaPct).toBeDefined();

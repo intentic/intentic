@@ -12,7 +12,7 @@ const SCHEMA_VERSION = "7";
 // quantizing needs, and the ranking it produces is the same ranking the float vectors produced: measured over
 // this workspace's index and 30 natural-language queries, 97.4% of the top 24 and 100% of the top hit are
 // identical, with scores differing by at most 0.005 (a displayed score is rounded to 0.01). What it buys is
-// the four-fold shrink — 98 MB of vectors become 27 MB, and a search that no longer reads them all.
+// the four-fold shrink: 98 MB of vectors become 27 MB, and a search that no longer reads them all.
 const EMBEDDING_DIM = 384;
 
 // Reclaim only when fragmentation is material. Incremental auto-vacuum moves live pages and truncates the file,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS files (
     mtime_ms INTEGER NOT NULL,
     size INTEGER NOT NULL,
     hash TEXT NOT NULL,
-    -- Branch-point count from indexer/complexity.ts — the structural half of the hotspots verb.
+    -- Branch-point count from indexer/complexity.ts: the structural half of the hotspots verb.
     complexity INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS symbols (
@@ -74,7 +74,7 @@ CREATE INDEX IF NOT EXISTS chunks_file ON chunks(file_id);
 CREATE INDEX IF NOT EXISTS chunks_hash ON chunks(hash);
 CREATE INDEX IF NOT EXISTS chunks_unembedded ON chunks(id) WHERE embedded = 0;
 -- BM25 over chunk text (the sparse tier of hybrid retrieval). External-content: rows live in chunks; the
--- triggers keep the FTS index in sync — verified to fire on FK-cascade deletes too. tokenchars keeps
+-- triggers keep the FTS index in sync: verified to fire on FK-cascade deletes too. tokenchars keeps
 -- snake_case/$identifiers whole.
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(text, content='chunks', content_rowid='id', tokenize="unicode61 tokenchars '_$'");
 CREATE TRIGGER IF NOT EXISTS chunks_fts_ai AFTER INSERT ON chunks BEGIN
@@ -86,7 +86,7 @@ END;
 -- The dense tier, and the counterpart to chunks_fts above: sqlite-vec ranks the whole corpus inside SQLite and
 -- returns only the k rows asked for, where this used to hand every vector to JavaScript and score them there.
 -- file_id is a metadata column rather than an auxiliary (+) one specifically so a scoped query can filter on it
--- DURING the ranking pass — filtering afterwards would return the top k of the workspace and then discard the
+-- DURING the ranking pass: filtering afterwards would return the top k of the workspace and then discard the
 -- ones out of scope, which is a different (and wrong) answer.
 CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0(
     chunk_id INTEGER PRIMARY KEY,

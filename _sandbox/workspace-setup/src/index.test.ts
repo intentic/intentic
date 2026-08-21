@@ -16,12 +16,12 @@ test("a package.json with no lockfile falls back to npm and SAYS so, so the gues
     expect(recipe?.evidence).toBe("package.json (no lockfile)");
 });
 
-test("the packageManager field beats the lockfile — it's what the project declares, not what someone last ran", () => {
+test("the packageManager field beats the lockfile: it's what the project declares, not what someone last ran", () => {
     expect(recipeFor(["package.json", "package-lock.json"], "pnpm")?.manager).toBe("pnpm");
     expect(recipeFor(["package.json", "package-lock.json"], "pnpm")?.evidence).toBe("the packageManager field");
 });
 
-test("an unrecognized packageManager is ignored, not trusted — its name becomes a shell command", () => {
+test("an unrecognized packageManager is ignored, not trusted: its name becomes a shell command", () => {
     expect(managerFromPackageJson(`{"packageManager":"pnpm@11.13.1+sha512.abc"}`)).toBe("pnpm");
     expect(managerFromPackageJson(`{"packageManager":"yarn@4.0.0"}`)).toBe("yarn");
     expect(managerFromPackageJson(`{"packageManager":"rm -rf /"}`)).toBeUndefined();
@@ -29,7 +29,7 @@ test("an unrecognized packageManager is ignored, not trusted — its name become
     expect(managerFromPackageJson(`{"packageManager":42}`)).toBeUndefined();
     expect(managerFromPackageJson(`{}`)).toBeUndefined();
     expect(managerFromPackageJson(`not json`)).toBeUndefined();
-    // A lockfile-detected repo whose field is junk still installs — the field is an override, never a gate.
+    // A lockfile-detected repo whose field is junk still installs: the field is an override, never a gate.
     expect(recipeFor(["package.json", "pnpm-lock.yaml"], undefined)?.manager).toBe("pnpm");
 });
 
@@ -40,7 +40,7 @@ test("python is detected by lockfile, and requirements.txt gets the portable std
     expect(recipeFor(["pyproject.toml"])?.manager).toBe("uv");
 });
 
-test("node wins over python when a repo carries both — package.json is the one the sandbox can act on", () => {
+test("node wins over python when a repo carries both: package.json is the one the sandbox can act on", () => {
     expect(recipeFor(["package.json", "pnpm-lock.yaml", "requirements.txt"])?.ecosystem).toBe("node");
 });
 
@@ -49,7 +49,7 @@ test("a directory with no manifest has no recipe", () => {
     expect(recipeFor([])).toBeUndefined();
 });
 
-test("a monorepo installs ONCE from its root — descending would propose N redundant installs of one tree", () => {
+test("a monorepo installs ONCE from its root: descending would propose N redundant installs of one tree", () => {
     const projects = detectProjects([
         "app/package.json",
         "app/pnpm-lock.yaml",

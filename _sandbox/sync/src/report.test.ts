@@ -12,8 +12,8 @@ const pairing = (overrides: Partial<Pairing> & Pick<Pairing, "sandboxId">): Pair
     ...overrides,
 });
 
-// No Mutagen passed anywhere here: the session reads spawn a binary, and everything these assert about — which
-// folder, which ports, who is withheld from whom — is decided before one is consulted.
+// No Mutagen passed anywhere here: the session reads spawn a binary, and everything these assert about, which
+// folder, which ports, who is withheld from whom: is decided before one is consulted.
 const report = (state: SyncState) => buildReport(state, undefined, WATCHER, 1_700_000_000_000);
 
 describe("buildReport", () => {
@@ -45,7 +45,7 @@ describe("buildReport", () => {
         ]);
     });
 
-    /* The docker half is never the agent's to report — a sync agent enumerating a machine's containers is the
+    /* The docker half is never the agent's to report: a sync agent enumerating a machine's containers is the
      * disclosure this design rules out by construction. Readers fill it; asserted here so nothing quietly starts. */
     it("never reports containers", () => {
         expect(report({ pairings: [pairing({ sandboxId: "work" })] }).sandboxes).toEqual([]);
@@ -65,7 +65,7 @@ describe("scopedReport", () => {
         ],
     };
 
-    // A sandbox is told about its own pairing and nothing else — the one rule that lets a report cross the
+    // A sandbox is told about its own pairing and nothing else: the one rule that lets a report cross the
     // network at all.
     it("gives a sandbox its own pairing and none of its siblings'", () => {
         const scoped = scopedReport(report(machine), "mine");
@@ -74,7 +74,7 @@ describe("scopedReport", () => {
     });
 
     /* A collaborator mirroring one dev-server port must not hand the sandbox's owner a map of their machine. A
-     * "mirror" pairing has no localDir to begin with, so scoping IS the withholding — asserted because the day
+     * "mirror" pairing has no localDir to begin with, so scoping IS the withholding: asserted because the day
      * that stops being true, this is the test that says so. */
     it("carries no local folder to a sandbox that only mirrors ports", () => {
         const scoped = scopedReport(report(machine), "theirs");

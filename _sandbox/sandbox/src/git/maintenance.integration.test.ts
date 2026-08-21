@@ -15,7 +15,7 @@ afterEach(async () => {
     }
 });
 
-// A workspace root with one nested repo — enough to prove the pass reaches BOTH, which is the whole of its job.
+// A workspace root with one nested repo: enough to prove the pass reaches BOTH, which is the whole of its job.
 const setup = async (): Promise<string> => {
     const work = await mkdtemp(join(tmpdir(), "intentic-maintenance-"));
     tempDirs.push(work);
@@ -42,7 +42,7 @@ test("maintenance runs the incremental task set over the root repo and every nes
     expect([...new Set(maintenance.map((call) => call.dir))]).toEqual([work, join(work, "intent")]);
     // ONE TASK PER INVOCATION, in this order: git runs a multi-`--task` command in REVERSE of the order given,
     // which put incremental-repack ahead of the loose-objects pass that gives it a pack to index at all. The
-    // list itself is a decision too — `gc` is deliberately absent (it is the one task that can stall a live
+    // list itself is a decision too: `gc` is deliberately absent (it is the one task that can stall a live
     // turn), and every task named here is one --auto would have skipped or under-run.
     expect(maintenance.filter((call) => call.dir === work).map((call) => call.args)).toEqual(
         ALL_TASKS.map((task) => ["maintenance", "run", "--quiet", task]),

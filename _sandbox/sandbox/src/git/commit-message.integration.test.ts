@@ -50,7 +50,7 @@ const tempRepo = async (): Promise<string> => {
     return dir;
 };
 
-test("describes the INDEX for an ordinary commit — the unstaged edit beside it is not what git will record", async () => {
+test("describes the INDEX for an ordinary commit: the unstaged edit beside it is not what git will record", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "staged\n");
     await sh(dir, "add", "a.txt");
@@ -64,7 +64,7 @@ test("describes the INDEX for an ordinary commit — the unstaged edit beside it
     expect(patchOf(diff)).not.toContain("not part of this commit");
 });
 
-test("describes the WORKTREE for Commit all, new files included — `git add -A` sweeps them, so the message must too", async () => {
+test("describes the WORKTREE for Commit all, new files included: `git add -A` sweeps them, so the message must too", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "edited in place\n");
     await writeFile(join(dir, "fresh.txt"), "brand new content\n");
@@ -73,7 +73,7 @@ test("describes the WORKTREE for Commit all, new files included — `git add -A`
 
     expect(patchOf(diff)).toContain("edited in place");
     // `git diff HEAD` cannot see an untracked file at all, so a commit that is ENTIRELY new files would
-    // otherwise reach the model as an empty diff — the most common case there is.
+    // otherwise reach the model as an empty diff: the most common case there is.
     expect(diff.summary).toContain("fresh.txt");
     expect(patchOf(diff)).toContain("brand new content");
 });
@@ -88,7 +88,7 @@ test("leaves ignored files out of the Commit all draft, exactly as `git add -A` 
     expect(patchOf(diff)).not.toContain("SECRET=leaked");
 });
 
-test("describes ONLY the paths a filtered commit will stage — the worktree beside them is another agent's work", async () => {
+test("describes ONLY the paths a filtered commit will stage: the worktree beside them is another agent's work", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "the filtered agent's edit\n");
     await writeFile(join(dir, "b.txt"), "somebody else's edit\n");
@@ -101,26 +101,26 @@ test("describes ONLY the paths a filtered commit will stage — the worktree bes
     // The whole point of the shape: this commit stages a subset, so a message describing the rest would be
     // confidently about changes it is not going to record.
     expect(patchOf(diff)).not.toContain("somebody else's edit");
-    // Untracked files are listed and read from disk rather than diffed, so they need the SAME narrowing —
+    // Untracked files are listed and read from disk rather than diffed, so they need the SAME narrowing:
     // separately, and this is the assertion that catches it going missing.
     expect(diff.summary).toContain("mine.txt");
     expect(patchOf(diff)).toContain("an untracked file inside the subset");
     expect(diff.summary).not.toContain("theirs.txt");
 });
 
-test("keeps the diff flags out of the pathspec — `--` ends the option list, so `--stat` after it is a filename", async () => {
+test("keeps the diff flags out of the pathspec: `--` ends the option list, so `--stat` after it is a filename", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "edited\n");
 
     const diff = await collectRepoDiff("root", dir, { paths: ["a.txt"] });
 
-    // A misordered `diff HEAD -- a.txt --stat` exits non-zero, and tryGit swallows that into an empty string —
+    // A misordered `diff HEAD -- a.txt --stat` exits non-zero, and tryGit swallows that into an empty string:
     // so the failure mode is a silently blank summary, not an error anyone would see.
     expect(diff.summary).toContain("a.txt");
     expect(diff.summary).toContain("M\ta.txt");
 });
 
-test("reads no untracked files for a staged commit — they are not in the index", async () => {
+test("reads no untracked files for a staged commit: they are not in the index", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "staged\n");
     await sh(dir, "add", "a.txt");
@@ -144,7 +144,7 @@ test("cuts the patch into one block per file, named by where the file ENDED", as
     expect(diff.blocks.find((block) => block.path === "a.txt")?.text).toContain("edited");
 });
 
-test("carries the repo's own recent subjects, newest first — its vocabulary, even though the type is dictated", async () => {
+test("carries the repo's own recent subjects, newest first: its vocabulary, even though the type is dictated", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "x\n");
     await sh(dir, "add", "-A");
@@ -157,7 +157,7 @@ test("carries the repo's own recent subjects, newest first — its vocabulary, e
 
 test("survives an unborn repo instead of failing the whole draft", async () => {
     // Every git command here exits non-zero with no HEAD. The other repos in a multi-repo commit still describe
-    // themselves, so this repo contributing nothing is the right outcome — not a 500.
+    // themselves, so this repo contributing nothing is the right outcome, not a 500.
     const dir = await mkdtemp(join(tmpdir(), "intentic-commit-message-"));
     tempDirs.push(dir);
     await sh(dir, "init", "-q");
@@ -191,7 +191,7 @@ test("prescribes the Conventional Commits type and demands real identifiers", as
 
     const prompt = commitMessagePrompt([await collectRepoDiff("root", dir, {})]);
 
-    // The type is the one convention this file imposes rather than infers — a repo with a messy log used to get
+    // The type is the one convention this file imposes rather than infers: a repo with a messy log used to get
     // its mess faithfully reproduced.
     expect(prompt).toContain("feat, fix, refactor, perf, docs, test, build, ci, chore, style, revert");
     // The instruction that makes the history searchable: without it the cheap rung writes "improve error
@@ -201,7 +201,7 @@ test("prescribes the Conventional Commits type and demands real identifiers", as
     expect(prompt).toContain("Never list the files that changed");
 });
 
-test("tells nothing about the session that asked for the work — the diff is the only witness", async () => {
+test("tells nothing about the session that asked for the work: the diff is the only witness", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "x\n");
     await sh(dir, "add", "-A");
@@ -209,7 +209,7 @@ test("tells nothing about the session that asked for the work — the diff is th
     const prompt = commitMessagePrompt([await collectRepoDiff("root", dir, {})]);
 
     /* The regression this pins. The prompt used to carry the session's title as context "to be overruled by the
-     * diff", and the cheap rung wrote it back as the answer instead — so a conversation named for the question
+     * diff", and the cheap rung wrote it back as the answer instead, so a conversation named for the question
      * that opened it committed under that question. Worse, the title is model-written: a naming pass that failed
      * and asked for more context put its own request into the commit message. */
     expect(prompt).not.toContain("tasked with");
@@ -218,7 +218,7 @@ test("tells nothing about the session that asked for the work — the diff is th
 
 test("spends the budget per file, so a small meaningful change survives a huge one beside it", async () => {
     const dir = await tempRepo();
-    // Alphabetically first, and far larger than the whole prompt's allowance — under one shared clip it ate
+    // Alphabetically first, and far larger than the whole prompt's allowance: under one shared clip it ate
     // every file after it, and the model confidently described the least interesting change in the commit.
     await writeFile(join(dir, "aaa-huge.txt"), `${"line of noise\n".repeat(20_000)}`);
     await writeFile(join(dir, "zzz-small.txt"), "the change this commit is actually about\n");
@@ -227,7 +227,7 @@ test("spends the budget per file, so a small meaningful change survives a huge o
     const prompt = commitMessagePrompt([await collectRepoDiff("root", dir, {})]);
 
     expect(prompt).toContain("the change this commit is actually about");
-    // The big one is still there, still clipped, and still says so — a hunk that stops with no marker reads as
+    // The big one is still there, still clipped, and still says so: a hunk that stops with no marker reads as
     // a complete edit that simply ends.
     expect(prompt).toContain("line of noise");
     expect(prompt).toContain("truncated");
@@ -255,7 +255,7 @@ test("marks a clipped diff as clipped, so a truncated hunk does not read as the 
     const prompt = commitMessagePrompt([await collectRepoDiff("root", dir, {})]);
 
     expect(prompt).toContain("truncated");
-    // The file list is assembled before the budget is applied, so it survives whole — the model still knows
+    // The file list is assembled before the budget is applied, so it survives whole: the model still knows
     // every path that moved even when it cannot read every line.
     expect(prompt).toContain("big.txt");
 });
@@ -271,7 +271,7 @@ test("unwraps the packaging a cheap model adds even when told not to", () => {
 });
 
 test("skips a preamble to the line that is actually the message", () => {
-    // The failure this prevents is a commit whose subject is "Here's the commit message:" — the cheap rung
+    // The failure this prevents is a commit whose subject is "Here's the commit message:": the cheap rung
     // ignores "no preamble" often enough that anchoring on the type prefix is the only reliable start.
     const reply = "Sure! Here's the commit message:\nfix: stop the picker reordering on refresh\n\n- drops the sort in resolveQuickModels";
     expect(cleanCommitSubject(reply)).toBe("fix: stop the picker reordering on refresh");
@@ -279,7 +279,7 @@ test("skips a preamble to the line that is actually the message", () => {
 
 test("a model that writes a body anyway has it dropped, not filed", () => {
     // The prompt asks for one line; this is what happens when the cheap rung answers with the shape it has seen
-    // ten thousand times instead. There is no body reader to hold those lines, so they fall on the floor — the
+    // ten thousand times instead. There is no body reader to hold those lines, so they fall on the floor: the
     // subject is what the box gets, and a model ignoring the format cannot lengthen a commit message by it.
     const reply = ["feat: name sessions from the opening prompt", "", "- adds nameAgentTitle", "- rejects a reply that asks a question"].join("\n");
     expect(cleanCommitSubject(reply)).toBe("feat: name sessions from the opening prompt");
@@ -339,7 +339,7 @@ test("fallbackBreakingNote names the shrunk schemas once each and respects the n
     const note = fallbackBreakingNote([`OriginAgentSchema.properties.body`, `OriginAgentSchema.properties.title`, `AgentEventSchema.oneOf[3]`]);
     expect(note).toContain("OriginAgentSchema");
     expect(note).toContain("AgentEventSchema");
-    // Two removals under one schema name it once — the sentence is for a human, not a path listing.
+    // Two removals under one schema name it once: the sentence is for a human, not a path listing.
     expect(note.split("OriginAgentSchema").length).toBe(2);
     const flooded = fallbackBreakingNote(Array.from({ length: 40 }, (_, index) => `Schema${index}.properties.x`));
     expect(flooded.length).toBeLessThanOrEqual(MAX_NOTE_LENGTH);

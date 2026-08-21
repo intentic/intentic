@@ -29,7 +29,7 @@ test("topic query surfaces the session's files; ubiquitous files are idf-zeroed 
     const paths = files.map((file) => file.path);
     expect(paths).toContain("src/auth/token.ts");
     expect(paths).toContain("src/auth/login.ts");
-    // package.json was touched in every session — ln((2+1)/(1+2)) = 0 kills it.
+    // package.json was touched in every session: ln((2+1)/(1+2)) = 0 kills it.
     expect(paths).not.toContain("package.json");
     expect(paths).not.toContain("src/web/file-tabs.ts");
 });
@@ -54,7 +54,7 @@ test("matchSessions finds the related session and marks it strong", () => {
     expect(matches[0]?.title).toBe("Fix JWT refresh rotation");
 });
 
-test("the current session is excluded — a session must never suggest forking itself", () => {
+test("the current session is excluded: a session must never suggest forking itself", () => {
     const matches = matchSessions(db, "fix the JWT refresh token rotation in the auth service", { excludeSessionId: SESSION_A });
     expect(matches.every((match) => match.sessionId !== SESSION_A)).toBe(true);
 });
@@ -108,7 +108,7 @@ test("grab tolerates empty and operator-only queries", () => {
 });
 
 /* Bookends: a hit in the middle of a session carries what that session opened and closed on. Session A has two
- * turns, so its first and last differ — which is the case the field exists for. */
+ * turns, so its first and last differ, which is the case the field exists for. */
 test("grab carries the session's bookends so a mid-session hit has provenance", () => {
     const top = grabExcerpts(db, "JWT refresh token rotation")[0]!;
     expect(top.bookends?.turns).toBe(2);
@@ -117,7 +117,7 @@ test("grab carries the session's bookends so a mid-session hit has provenance", 
 });
 
 /* Repeat collapse: the starvation guard. Five sessions running the same nightly prompt must not take five of
- * the ten slots — they collapse to their best instance, which carries the count. Rows are inserted directly
+ * the ten slots: they collapse to their best instance, which carries the count. Rows are inserted directly
  * (the FTS triggers index them) with a vocabulary no other test queries, so the shared fixture is undisturbed. */
 test("near-identical prompts across sessions collapse to one row carrying the repeat count", () => {
     const base = Date.now() - 60 * 60 * 1000;
@@ -138,7 +138,7 @@ test("near-identical prompts across sessions collapse to one row carrying the re
             sessionRowId,
             `b-u${i}`,
             base + i,
-            // The date is what differs between fires — exactly what the digit-flattening key ignores.
+            // The date is what differs between fires: exactly what the digit-flattening key ignores.
             `Run the nightly zzquux audit for 2026-08-0${i}`,
             "zzquux audit complete",
         );

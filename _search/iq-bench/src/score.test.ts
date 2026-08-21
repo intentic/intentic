@@ -16,7 +16,7 @@ const result = (groups: Array<{ path: string; lines: number[] }>, related?: stri
 
 describe("rankedAnchors", () => {
     it("flattens groups in rank order and appends related definition anchors", () => {
-        const anchors = rankedAnchors(result([{ path: "a.ts", lines: [3, 9] }], ["createWidget — def b.ts:42 · refs: iq refs createWidget"]));
+        const anchors = rankedAnchors(result([{ path: "a.ts", lines: [3, 9] }], ["createWidget, def b.ts:42 · refs: iq refs createWidget"]));
         expect(anchors).toEqual([
             { file: "a.ts", lines: [3, 9] },
             { file: "b.ts", lines: [42] },

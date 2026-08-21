@@ -4,7 +4,7 @@
  *
  * Same rule as git-stats.mjs, scorecard.mjs and latest-release.mjs: a number a person types is a number that
  * quietly stops being true. This one moves every day, and it is the whole reason /about/ lists these
- * libraries at all — "shipped and got used on their own" is a claim, and a download count is the evidence.
+ * libraries at all: "shipped and got used on their own" is a claim, and a download count is the evidence.
  * So it is read from the registry or it is not rendered, and the cards fall back to their sentences.
  *
  * A month rather than a week: weekly counts swing hard around weekends and holidays, and a reader comparing
@@ -48,7 +48,7 @@ async function downloadsFor(name) {
             }
         }
     } catch {
-        // Left at null — see the header.
+        // Left at null: see the header.
     }
 
     cache.set(name, value);

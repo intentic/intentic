@@ -49,7 +49,7 @@ export interface CompatEntry {
 // wire, so it is pointed at directly (harness-credentials.ts) and has no business in this list. The trial is
 // excluded here because its entry is STATIC (trialCompatEntry, appended below): deriving it from the capability
 // list would tie the routing table back to the availability probe's timing, which is the fresh-install race this
-// split exists to end — and when the probe HAS answered, the layered capability would mint a second entry on the
+// split exists to end, and when the probe HAS answered, the layered capability would mint a second entry on the
 // same prefix.
 export const translatedEndpoints = (capabilities: readonly Capability[]): { id: string; config: EndpointConfig }[] =>
     capabilities.flatMap((capability) =>
@@ -83,7 +83,7 @@ export const endpointCompatEntries = async (services: Services): Promise<CompatE
             };
         }),
     );
-    /* The trial's entry, ALWAYS, on any platform-connected sandbox — never derived from the probe-gated
+    /* The trial's entry, ALWAYS, on any platform-connected sandbox: never derived from the probe-gated
      * capability the picker reads. Routability is a constant of the sandbox's configuration; whether the trial
      * is OFFERED stays the probe's business (trial-endpoint.ts has the whole argument). */
     const trial = trialCompatEntry(services.config, services.platformTunnel);

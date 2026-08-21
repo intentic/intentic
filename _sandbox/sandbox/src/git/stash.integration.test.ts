@@ -45,7 +45,7 @@ test("stashing sets the tree aside, and the entry carries the message and the br
 
     const [entry, ...rest] = await stashList(dir);
     expect(rest).toEqual([]);
-    // git writes "On main: my wip" for a named stash — the scaffolding is stripped, the message is not.
+    // git writes "On main: my wip" for a named stash, the scaffolding is stripped, the message is not.
     expect(entry).toMatchObject({ ref: "stash@{0}", subject: "my wip", branch: "main" });
     expect(entry?.sha).toMatch(/^[0-9a-f]{40}$/);
     // A stash commit's first parent is the commit it was taken on, which is the edge the graph draws back into
@@ -70,7 +70,7 @@ test("stashing a clean tree reports nothing to stash rather than failing", async
     expect(await stashList(dir)).toEqual([]);
 });
 
-// Untracked files are the usual reason a stash "did not stash everything" — git leaves them behind by default.
+// Untracked files are the usual reason a stash "did not stash everything": git leaves them behind by default.
 test("includeUntracked sweeps up files git has never seen", async () => {
     const dir = await repo();
     await writeFile(join(dir, "new.txt"), "brand new\n");
@@ -91,7 +91,7 @@ test("a stash's files read like a commit's, with statuses and line counts", asyn
     expect(change?.additions).toBeGreaterThan(0);
 });
 
-test("apply keeps the entry and pop drops it — git's own distinction, both offered", async () => {
+test("apply keeps the entry and pop drops it: git's own distinction, both offered", async () => {
     const dir = await repo();
     await writeFile(join(dir, "a.txt"), "wip\n");
     await stashPush(dir, { message: "wip" });
@@ -109,7 +109,7 @@ test("apply keeps the entry and pop drops it — git's own distinction, both off
 });
 
 /* A CONFLICTING APPLY IS NOT A LOST STASH. Git leaves markers in the tree and keeps the entry, which is the
- * right behaviour — the work is still recoverable — so this reports a value rather than throwing. */
+ * right behaviour: the work is still recoverable, so this reports a value rather than throwing. */
 test("an apply that conflicts reports it and leaves the entry in place", async () => {
     const dir = await repo();
     await writeFile(join(dir, "a.txt"), "stashed line\n");
@@ -135,7 +135,7 @@ test("dropping removes one entry and renumbers the rest", async () => {
 
     await stashDrop(dir, "stash@{0}");
     const remaining = await stashList(dir);
-    // The survivor is renumbered to stash@{0} — which is why a caller must re-read rather than hold an index.
+    // The survivor is renumbered to stash@{0}, which is why a caller must re-read rather than hold an index.
     expect(remaining).toHaveLength(1);
     expect(remaining[0]).toMatchObject({ ref: "stash@{0}", subject: "first" });
 });

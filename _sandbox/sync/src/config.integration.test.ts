@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 // config.ts derives its paths from homedir() at import time, so point HOME at a throwaway dir BEFORE importing
-// (dynamic import, after the env is set) — then the state file lands in temp, not the real ~/.intentic/sync.
+// (dynamic import, after the env is set): then the state file lands in temp, not the real ~/.intentic/sync.
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-config-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { readState, removePairing, updateState, upsertPairing } = await import("./config.js");
@@ -29,7 +29,7 @@ beforeEach(async () => {
 });
 
 /* THE regression this whole shape exists for. Pairing a second sandbox used to overwrite the one and only config
- * entry, so the first sandbox's folder, ssh alias and file-sync session all went — which is what happened when the
+ * entry, so the first sandbox's folder, ssh alias and file-sync session all went, which is what happened when the
  * desktop installer ran `setup` on a machine already syncing a CLI-started sandbox. */
 describe("upsertPairing", () => {
     it("adds a second sandbox without disturbing the first", async () => {
@@ -50,7 +50,7 @@ describe("upsertPairing", () => {
     });
 
     it("starts from empty on a machine that has never paired anything", async () => {
-        // No state file reads as no pairings — `status` prints none and `uninstall` still strips the agent's
+        // No state file reads as no pairings: `status` prints none and `uninstall` still strips the agent's
         // residency, rather than either of them dying on an ENOENT.
         await rm(agentHome("sync").configPath, { force: true });
         expect((await readState()).pairings).toEqual([]);
@@ -67,7 +67,7 @@ describe("upsertPairing", () => {
         expect((await readState()).pairings).toEqual([local]);
     });
 
-    // A file that EXISTS and is malformed is a real fault, not an empty machine — silently starting from scratch
+    // A file that EXISTS and is malformed is a real fault, not an empty machine: silently starting from scratch
     // there would overwrite whatever the user still had paired.
     it("propagates a state file that won't parse instead of treating it as empty", async () => {
         await writeFile(agentHome("sync").configPath, "{ not json", "utf8");
@@ -91,7 +91,7 @@ describe("removePairing", () => {
     });
 });
 
-/* Every mutation is TARGETED — it maps over the pairings it isn't changing rather than writing a whole state the
+/* Every mutation is TARGETED: it maps over the pairings it isn't changing rather than writing a whole state the
  * caller built earlier. That is what bounds the damage of the read-modify-write this file still is: the watcher
  * stamping one pairing's ports names only that pairing, so the worst a lost update costs is one tick's port
  * baseline, not a sibling's whole pairing. (Cross-process exclusion is not attempted here; `setup` stops the

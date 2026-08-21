@@ -87,7 +87,7 @@ const skillDirNames = async (dir: string): Promise<string[]> => {
 /* THE AGENTS.md INDEX, the always-on half of progressive disclosure, for runtimes that have no skill loader.
  * Markers rather than whole-file ownership because AGENTS.md is the user's file first: everything outside the
  * block is theirs, and the block regenerates in place wherever they left it. */
-const INDEX_START = "<!-- intentic:skills — managed by the sandbox; edits between these markers are overwritten -->";
+const INDEX_START = "<!-- intentic:skills: managed by the sandbox; edits between these markers are overwritten -->";
 const INDEX_END = "<!-- /intentic:skills -->";
 
 const indexSection = (skills: readonly { name: string; description: string }[]): string =>
@@ -95,11 +95,11 @@ const indexSection = (skills: readonly { name: string; description: string }[]):
         "## Skills",
         "",
         "One folder per connected tool, account, or workflow under `.agents/skills/`. When a task matches a",
-        "description below, read that skill's SKILL.md before improvising — it carries the exact commands,",
+        "description below, read that skill's SKILL.md before improvising: it carries the exact commands,",
         "endpoints, and rules. (A harness that loads Agent Skills natively already surfaces these same files.)",
         "",
         ...skills.map(
-            (skill) => `- **${skill.name}**${skill.description === "" ? "" : ` — ${skill.description}`} → \`.agents/skills/${skill.name}/SKILL.md\``,
+            (skill) => `- **${skill.name}**${skill.description === "" ? "" : `, ${skill.description}`} → \`.agents/skills/${skill.name}/SKILL.md\``,
         ),
     ].join("\n");
 

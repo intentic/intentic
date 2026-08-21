@@ -172,7 +172,7 @@ async function* runPiTurn(
                 // session file survives it, so the next send resumes the conversation.
                 sendAbort();
                 proc.kill();
-                yield { kind: "error", message: "Pi timed out — no activity from the agent. It was stopped; send again to retry." };
+                yield { kind: "error", message: "Pi timed out, no activity from the agent. It was stopped; send again to retry." };
                 return settled(true);
             }
             let timer: ReturnType<typeof setTimeout> | undefined;

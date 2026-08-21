@@ -34,7 +34,7 @@ test("every occurrence on a line comes back, not just the first", async () => {
     ]);
 });
 
-test("spans index the string, not its bytes — a match after an em dash lands on the word", async () => {
+test("spans index the string, not its bytes: a match after an em dash lands on the word", async () => {
     const hits = await search("hardware", { literal: true });
     const line = hits.find((hit) => hit.line === 2);
     const span = line?.spans?.[0];
@@ -42,7 +42,7 @@ test("spans index the string, not its bytes — a match after an em dash lands o
     expect(line?.text.slice(span?.start, span?.end)).toBe("hardware");
 });
 
-test("case-insensitive by default — a capital in the pattern does not narrow the search", async () => {
+test("case-insensitive by default: a capital in the pattern does not narrow the search", async () => {
     // ripgrep's smart case would have made this pattern case-SENSITIVE, which is the documented default's
     // opposite and not what a search box's Aa switch off means.
     const hits = await search("Own", { literal: true });
@@ -84,7 +84,7 @@ test("a file that stops exactly at the cap is not reported as capped", async () 
 
 test("offsets convert in one pass however many of them a line carries", async () => {
     // Regression: the conversion decoded the whole byte prefix per span, so a match-dense non-ASCII line was
-    // quadratic — and rg is allowed to hand us a 1 MB one. Every span still has to land on the word.
+    // quadratic, and rg is allowed to hand us a 1 MB one. Every span still has to land on the word.
     const dense = "dense.md";
     await writeFile(join(root, dense), `— ${Array.from({ length: 4_000 }, () => "ä needle").join(" ")}`);
     const started = Date.now();

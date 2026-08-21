@@ -10,7 +10,7 @@ import type { InstalledExtension } from "./installed-extensions.js";
 
 /* The image-split absence probe, against the REAL messaging manifests: the core image bakes exactly
  * /opt/extensions/<name>/intentic-extension.json (see the Dockerfile's manifest-only COPYs), so a fixture that
- * copies just the manifest into an empty dir IS the core image's layout — if a gateway's manifest ever stops
+ * copies just the manifest into an empty dir IS the core image's layout: if a gateway's manifest ever stops
  * promising any on-disk path, this is the test that says the probe went blind for it. */
 
 const EXTENSIONS_SRC = join(repoRoot(import.meta.url), "_extensions");
@@ -27,7 +27,7 @@ const baked = (dir: string, manifest: ExtensionManifest): InstalledExtension => 
     enabled: true,
 });
 
-test("a manifest-only gateway dir — the core image's layout — reads as runtime-absent, for every gateway", async () => {
+test("a manifest-only gateway dir: the core image's layout, reads as runtime-absent, for every gateway", async () => {
     for (const name of GATEWAYS) {
         const dir = mkdtempSync(join(tmpdir(), `readiness-${name}-`));
         cpSync(join(EXTENSIONS_SRC, name, "intentic-extension.json"), join(dir, "intentic-extension.json"));
@@ -52,7 +52,7 @@ test("a dir carrying everything its manifest promises reads as present", async (
     expect(await extensionRuntimeAbsent(baked(dir, withSkill))).toBe(false);
 });
 
-// Only an image-baked extension can be complete, correct and still absent — a checkout or workspace dir with
+// Only an image-baked extension can be complete, correct and still absent: a checkout or workspace dir with
 // missing files is a rotted install or work in progress, which pathsCheck reports in the author's terms.
 test("non-builtin sources never read as runtime-absent, whatever is missing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "readiness-src-"));

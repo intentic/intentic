@@ -61,7 +61,7 @@ export const planHermes = (files: Files): SourcePlan => {
         try {
             return asRecord(parseYaml(raw)) ?? {};
         } catch {
-            refused.push("config.yaml (not readable as YAML — items that live in it were skipped)");
+            refused.push("config.yaml (not readable as YAML: items that live in it were skipped)");
             return {};
         }
     })();
@@ -77,7 +77,7 @@ export const planHermes = (files: Files): SourcePlan => {
             item: {
                 id: "memory:soul",
                 target: "memory",
-                label: "Personality — SOUL.md",
+                label: "Personality, SOUL.md",
                 detail: "Merged into the agent's memory files as standing context. Make it a persona later if the agent should act as this character.",
                 recommended: true,
                 secrets: [],
@@ -92,7 +92,7 @@ export const planHermes = (files: Files): SourcePlan => {
     const agentsNotes = text(files, "AGENTS.md");
     if (agentsNotes !== undefined && agentsNotes.trim() !== "") {
         planned.push({
-            item: { id: "memory:agents", target: "memory", label: "Operating notes — AGENTS.md", recommended: true, secrets: [] },
+            item: { id: "memory:agents", target: "memory", label: "Operating notes, AGENTS.md", recommended: true, secrets: [] },
             apply: {
                 target: "memory",
                 fence: "intentic:imported-hermes:agents",
@@ -112,7 +112,7 @@ export const planHermes = (files: Files): SourcePlan => {
             item: {
                 id: "memory:memories",
                 target: "memory",
-                label: `Long-term memory — ${sections.length} file${sections.length === 1 ? "" : "s"}`,
+                label: `Long-term memory, ${sections.length} file${sections.length === 1 ? "" : "s"}`,
                 recommended: true,
                 secrets: [],
             },
@@ -145,7 +145,7 @@ export const planHermes = (files: Files): SourcePlan => {
                 secrets.plan(`${provider.toUpperCase().replaceAll(/[^A-Z0-9]+/g, "_")}_API_KEY`, apiKey, "auth.json");
             }
             if (asString(record?.["access_token"]) !== undefined || asString(record?.["refresh_token"]) !== undefined) {
-                refused.push(`auth.json: ${provider} OAuth tokens (bound to that install — sign in fresh here)`);
+                refused.push(`auth.json: ${provider} OAuth tokens (bound to that install, sign in fresh here)`);
             }
         }
     }
@@ -161,7 +161,7 @@ export const planHermes = (files: Files): SourcePlan => {
         const provider = asRecord(entry);
         const baseUrl = asString(provider?.["base_url"]);
         if (baseUrl === undefined) {
-            refused.push(`config.yaml: providers.${name} (no base_url — a built-in provider, matched under "Pick your model provider")`);
+            refused.push(`config.yaml: providers.${name} (no base_url, a built-in provider, matched under "Pick your model provider")`);
             continue;
         }
         const keyEnv = asString(provider?.["api_key_env"]);
@@ -185,8 +185,8 @@ export const planHermes = (files: Files): SourcePlan => {
             item: {
                 id: `capability:endpoint:${id}`,
                 target: "capability",
-                label: `Model endpoint — ${name}`,
-                detail: local ? `${baseUrl} — that address points at your old machine, not here.` : baseUrl,
+                label: `Model endpoint, ${name}`,
+                detail: local ? `${baseUrl}, that address points at your old machine, not here.` : baseUrl,
                 recommended: !local,
                 secrets: apiKey === undefined || apiKey === "" ? [] : [`${id}/apiKey`],
             },
@@ -237,7 +237,7 @@ export const planHermes = (files: Files): SourcePlan => {
             item: {
                 id: `file:${path}`,
                 target: "file",
-                label: `Note — ${path}`,
+                label: `Note, ${path}`,
                 detail: `Lands in imports/hermes/${path}.`,
                 recommended: true,
                 secrets: [],
@@ -261,7 +261,7 @@ export const planHermes = (files: Files): SourcePlan => {
         needsAction.push({
             subject: `Reconnect ${name}`,
             detail: `You had ${name} wired into Hermes' gateway. Add the ${name} connector from the capabilities grid${
-                tokenKey !== undefined && secrets.has(tokenKey) ? ` — its token rides along as the ${tokenKey} secret when you tick it` : ""
+                tokenKey !== undefined && secrets.has(tokenKey) ? `, its token rides along as the ${tokenKey} secret when you tick it` : ""
             }.`,
         });
     }
@@ -272,13 +272,13 @@ export const planHermes = (files: Files): SourcePlan => {
             subject: "Pick your model provider",
             detail: `Hermes ran on ${provider === "" ? "an unnamed provider" : provider}${
                 asString(model["model"]) === undefined ? "" : ` (${asString(model["model"])})`
-            } — ${PROVIDER_HINTS[provider.toLowerCase()] ?? "point a custom model endpoint at it, or pick a native provider"}. Provider logins never travel in a migration.`,
+            }: ${PROVIDER_HINTS[provider.toLowerCase()] ?? "point a custom model endpoint at it, or pick a native provider"}. Provider logins never travel in a migration.`,
         });
     }
     if ((asArray(config["fallback_providers"]) ?? []).length > 0) {
-        refused.push("config.yaml: fallback_providers (no equivalent here — the chat picker and automations pin models per use instead)");
+        refused.push("config.yaml: fallback_providers (no equivalent here, the chat picker and automations pin models per use instead)");
     }
-    refused.push("config.yaml (translated into the items above, not copied — it can hold inline tokens)");
+    refused.push("config.yaml (translated into the items above, not copied: it can hold inline tokens)");
 
     return { planned, refused: refused.toSorted((left, right) => left.localeCompare(right)), needsAction };
 };

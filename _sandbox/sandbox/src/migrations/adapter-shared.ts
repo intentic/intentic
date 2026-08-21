@@ -92,7 +92,7 @@ export const MEMORY_FILE_CHAR_LIMIT = 20000;
 export const clipped = (body: string): string =>
     body.length <= MEMORY_FILE_CHAR_LIMIT
         ? body
-        : `${body.slice(0, MEMORY_FILE_CHAR_LIMIT)}\n\n*(truncated on import — the rest was ${body.length - MEMORY_FILE_CHAR_LIMIT} characters)*`;
+        : `${body.slice(0, MEMORY_FILE_CHAR_LIMIT)}\n\n*(truncated on import, the rest was ${body.length - MEMORY_FILE_CHAR_LIMIT} characters)*`;
 
 /* Every SKILL.md under a prefix, flattened into skill items, the one mapping both ecosystems share verbatim,
  * agent-skills format on both sides. Baked-tool collisions are renamed rather than shadowed (a skill called
@@ -133,7 +133,7 @@ export const planSkillFiles = (files: Files, prefix: string, sourceLabel: string
             item: {
                 id: `skill:${name}`,
                 target: "skill",
-                label: `Skill — ${name}`,
+                label: `Skill, ${name}`,
                 ...(siblings.length > 0
                     ? { detail: `Only the skill text moves; ${siblings.length} other file${siblings.length === 1 ? "" : "s"} in its folder did not.` }
                     : {}),
@@ -175,10 +175,10 @@ export const secretPlanner = (
                 item: {
                     id: `secret:${key}`,
                     target: "secret",
-                    label: `Secret — ${key}`,
+                    label: `Secret, ${key}`,
                     ...(credential(key, noise)
                         ? {}
-                        : { detail: "Looks like tuning rather than a credential — take it only if something here will read it." }),
+                        : { detail: "Looks like tuning rather than a credential, take it only if something here will read it." }),
                     recommended: credential(key, noise),
                     secrets: [key],
                 },
@@ -229,7 +229,7 @@ export const automationPlanner = (
             item: {
                 id: `automation:${id}`,
                 target: "automation",
-                label: `Automation — ${id} (${cron})`,
+                label: `Automation, ${id} (${cron})`,
                 detail: "Fires are held for your approval until you relax that on its card.",
                 recommended: true,
                 secrets: [],
@@ -253,7 +253,7 @@ export const planMcpEntry = (
         if (asString(server?.["command"]) !== undefined) {
             out.needsAction.push({
                 subject: `MCP server "${name}"`,
-                detail: "It ran as a local command on your old machine. Intentic reaches MCP servers over a URL — host it behind HTTP, or skip it.",
+                detail: "It ran as a local command on your old machine. Intentic reaches MCP servers over a URL, host it behind HTTP, or skip it.",
             });
         } else {
             out.refused.push(`${origin} (no usable URL)`);
@@ -272,8 +272,8 @@ export const planMcpEntry = (
         item: {
             id: `capability:mcp:${id}`,
             target: "capability",
-            label: `MCP server — ${name}`,
-            detail: local ? `${url} — that address points at your old machine, not here.` : url,
+            label: `MCP server, ${name}`,
+            detail: local ? `${url}, that address points at your old machine, not here.` : url,
             recommended: !local,
             secrets: bearer === undefined ? [] : [`${id}/token`],
         },

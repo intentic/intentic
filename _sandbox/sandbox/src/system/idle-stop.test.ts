@@ -38,7 +38,7 @@ describe("startIdleStop", () => {
         dispose();
     });
 
-    it("a connected tab resets the streak — even an idle one counts as a person", async () => {
+    it("a connected tab resets the streak: even an idle one counts as a person", async () => {
         const stop = vi.fn();
         let connected = 1;
         const dispose = startIdleStop({ minutes: 3, logger }, probesOf({ connected: () => connected }), stop);
@@ -64,7 +64,7 @@ describe("startIdleStop", () => {
         dispose();
     });
 
-    it("an armed condition watch keeps the machine up — stopping it is how a watch never fires", async () => {
+    it("an armed condition watch keeps the machine up: stopping it is how a watch never fires", async () => {
         const stop = vi.fn();
         let watchers = 1;
         const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ watchers: () => watchers }), stop);
@@ -76,7 +76,7 @@ describe("startIdleStop", () => {
         dispose();
     });
 
-    it("terminal output advances the streak's start — one window after the last line, not two", async () => {
+    it("terminal output advances the streak's start, one window after the last line, not two", async () => {
         const stop = vi.fn();
         let lastOutput = 0;
         const dispose = startIdleStop({ minutes: 3, logger }, probesOf({ terminalActivityAt: () => Promise.resolve(lastOutput) }), stop);

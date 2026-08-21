@@ -146,14 +146,14 @@ export const classifyWorkspace = async (root: string, tree: WorkspaceTree): Prom
     const visit = async (entries: readonly TreeNode[]): Promise<void> => {
         for (const entry of entries) {
             if (entry.ignored) {
-                continue; // grayed (node_modules, .git, .gitignore'd) — not part of the dropped workspace
+                continue; // grayed (node_modules, .git, .gitignore'd), not part of the dropped workspace
             }
             if (entry.type === "dir") {
                 const children = entry.children ?? [];
                 const marker = repoMarker(children);
                 if (marker) {
                     classifications.push({ path: entry.path, bucket: "repositories", reason: `repository:${marker}` });
-                    continue; // one repo unit — do not descend
+                    continue; // one repo unit: do not descend
                 }
                 // oxlint-disable-next-line eslint/no-await-in-loop -- sequential I/O over an in-memory tree; parallelizing a drop buys nothing and risks fd exhaustion
                 await visit(children);

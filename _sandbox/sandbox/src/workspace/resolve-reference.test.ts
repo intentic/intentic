@@ -18,7 +18,7 @@ const resolve = (reference: string, files: readonly string[] = WORKSPACE, seen: 
         async (glob) => {
             seen.push(glob);
             const tail = glob.slice(3);
-            // The engine's glob is anchored at the string level only — the boundary check is the ranker's job.
+            // The engine's glob is anchored at the string level only: the boundary check is the ranker's job.
             return files.filter((file) => file.endsWith(tail));
         },
     );
@@ -42,7 +42,7 @@ test("takes the shallowest match when a reference is ambiguous", async () => {
     expect(await resolve("pages/index.md", files)).toEqual({ path: "a/pages/index.md" });
 });
 
-test("stops at the first tail that matches — a longer tail is the more specific answer", async () => {
+test("stops at the first tail that matches: a longer tail is the more specific answer", async () => {
     const seen: string[] = [];
     await resolve("web/src/pages/sandbox/SandboxSync.vue", WORKSPACE, seen);
     expect(seen).toEqual(["**/web/src/pages/sandbox/SandboxSync.vue"]);

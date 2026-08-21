@@ -74,7 +74,7 @@ export const publishFile = async (
     // index for nothing (see changes.ts commitIndex, which was rewritten for the same reason).
     const operation = await operationInProgress(dir);
     if (operation !== undefined) {
-        return { ...idle, reason: `this repo is part-way through a ${operation} — finish or abort that first` };
+        return { ...idle, reason: `this repo is part-way through a ${operation}, finish or abort that first` };
     }
 
     const state = await remoteState(dir, {}, git);
@@ -94,7 +94,7 @@ export const publishFile = async (
             ...idle,
             branch: state.branch,
             defaultBranch,
-            reason: `you're on ${state.branch} and this has to land on ${defaultBranch} — switch branch and try again`,
+            reason: `you're on ${state.branch} and this has to land on ${defaultBranch}, switch branch and try again`,
         };
     }
 

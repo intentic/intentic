@@ -36,7 +36,7 @@ import { connectedCount } from "./presence.js";
 
 const exec = promisify(execFile);
 
-// The freshest tmux session_activity across all panes, ms epoch — 0 when tmux has no server (nothing ever
+// The freshest tmux session_activity across all panes, ms epoch: 0 when tmux has no server (nothing ever
 // ran) or the listing fails, both of which read as "no terminal activity" rather than as an error.
 const lastTerminalActivity = async (): Promise<number> => {
     try {
@@ -90,7 +90,7 @@ export const startIdleStop = (
         }
         quietSince = Math.max(quietSince, await probes.terminalActivityAt());
         if (now - quietSince >= windowMs) {
-            args.logger.info({ minutes: args.minutes }, "idle-stop: nobody connected and nothing running for the whole window — stopping");
+            args.logger.info({ minutes: args.minutes }, "idle-stop: nobody connected and nothing running for the whole window, stopping");
             stop();
         }
     };

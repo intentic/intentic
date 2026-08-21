@@ -10,7 +10,7 @@ type QFlags = SearchFlags & { readonly mode?: (typeof MODES)[number] };
 // The default route: bare `iq "query"` lands here, classifies the query, and fuses engines. --mode pins one
 // engine for flat-flag harnesses.
 export const q = buildCommand({
-    docs: { brief: "Auto mode (default) — classify the query and fuse engines" },
+    docs: { brief: "Auto mode (default), classify the query and fuse engines" },
     parameters: {
         flags: {
             ...scopeFlagParameters,

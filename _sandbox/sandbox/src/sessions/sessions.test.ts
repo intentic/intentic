@@ -45,7 +45,7 @@ test("a prompt match is found and reports the line it hit, and whose it was", as
 });
 
 // The scan used to read transcripts for the ten most recent sessions only, because each read rebuilt the whole
-// transcript. It reads the spoken text alone now, and holds it — so recall no longer falls off a cliff at the
+// transcript. It reads the spoken text alone now, and holds it, so recall no longer falls off a cliff at the
 // tenth chat, which is precisely where "the one I'm looking for" tends to live.
 test("a prompt match past the tenth-newest session is still found", async () => {
     seed("w", 12);
@@ -54,8 +54,8 @@ test("a prompt match past the tenth-newest session is still found", async () => 
 });
 
 /* WHERE THE LINE IS: both sides SPEAK, and everything else in a transcript does not. The agent's prose is
- * matchable and reports itself as the agent's; its thinking and its tool output — which between them name most
- * of the workspace's identifiers, and would hand back nearly every chat — are not searchable text at all. */
+ * matchable and reports itself as the agent's; its thinking and its tool output, which between them name most
+ * of the workspace's identifiers, and would hand back nearly every chat: are not searchable text at all. */
 test("assistant prose matches as the agent's; thinking and tool output never match", async () => {
     listSessions.mockResolvedValue([{ sessionId: "r0", customTitle: "chat", lastModified: 1 }]);
     getSessionMessages.mockResolvedValue([
@@ -80,7 +80,7 @@ test("assistant prose matches as the agent's; thinking and tool output never mat
     expect(await searchWorkspaceSessions("/work", "214 times", false)).toEqual([]);
 });
 
-// Both sides can hold the term, and only one line is shown. It is the USER's — a query is typed from memory,
+// Both sides can hold the term, and only one line is shown. It is the USER's: a query is typed from memory,
 // and what a person remembers is their own phrasing (transcript-search's matchLines).
 test("the user's own words are the snippet when both sides said the term", async () => {
     listSessions.mockResolvedValue([{ sessionId: "b0", customTitle: "chat", lastModified: 1 }]);
@@ -92,7 +92,7 @@ test("the user's own words are the snippet when both sides said the term", async
 });
 
 // The daemon staples a readiness/delegation preamble on the front of a prompt and an attachment note on the
-// end (agent.routes.ts). Both are stored verbatim, and both are protocol — matching them would make
+// end (agent.routes.ts). Both are stored verbatim, and both are protocol: matching them would make
 // "dependencies" or "attached" hit every agent that ever ran with a setup notice.
 test("the injected preamble and attachment note are not searchable text", async () => {
     const notice = "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet";
@@ -101,7 +101,7 @@ test("the injected preamble and attachment note are not searchable text", async 
         {
             type: "user",
             message: {
-                content: `${notice}\n\n---\n\nrename the lane\n\nThe user attached these files — read them with the Read tool as needed:\n- /work/shot.png`,
+                content: `${notice}\n\n---\n\nrename the lane\n\nThe user attached these files: read them with the Read tool as needed:\n- /work/shot.png`,
             },
         },
     ]);
@@ -110,7 +110,7 @@ test("the injected preamble and attachment note are not searchable text", async 
     expect((await searchWorkspaceSessions("/work", "rename the lane", false)).map((s) => s.id)).toEqual(["i0"]);
 });
 
-/* THE FIELD'S Aa SWITCH reaches these rows too — they are listed under the board's own cards, so a query
+/* THE FIELD'S Aa SWITCH reaches these rows too: they are listed under the board's own cards, so a query
  * answered case-insensitively here while the cards were matched case-sensitively would be one field showing
  * two rules. Both halves of the rule: the title, and what was said in the transcript. */
 test("match case narrows both the title and the transcript", async () => {
@@ -126,7 +126,7 @@ test("match case narrows both the title and the transcript", async () => {
     });
 });
 
-// A snippet is EVIDENCE, so it has to carry the hit and enough around it to read — windowed, not truncated
+// A snippet is EVIDENCE, so it has to carry the hit and enough around it to read: windowed, not truncated
 // from the front, and with the newlines collapsed so one match can't push the rest of a lane off screen.
 test("a long prompt is windowed around the hit rather than cut from the start", async () => {
     const long = `${"filler ".repeat(40)}\n\nthe landAgent bug\n\n${"more ".repeat(40)}`;
@@ -170,10 +170,10 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
 
     const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
 
-    // The tool_result-only user message is plumbing, not something the user said — four stored messages, three bubbles.
+    // The tool_result-only user message is plumbing, not something the user said: four stored messages, three bubbles.
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "assistant"]);
     expect(messages[0]).toEqual({ role: "user", text: "fix the config" });
-    // The prose block closed its bubble, so the calls it introduced sit in the one below — the live arrangement
+    // The prose block closed its bubble, so the calls it introduced sit in the one below: the live arrangement
     // (turnReducer's text_end split), where the sentence stands above the cards it announced.
     expect(messages[1]).toEqual({ role: "assistant", text: "Reading the config.", thinking: "check it first" });
     expect(messages[2]?.text).toBe("Done.");
@@ -187,7 +187,7 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
 /* THE SHAPE THE STORE ACTUALLY WRITES, and the regression this is here for: the SDK files a fresh assistant
  * message around every CONTENT block, so a turn that made three calls between two sentences is stored as three
  * lone tool_use messages with a tool_result message between each pair. Folded per stored message that reopened
- * as three separate one-call runs — a ladder of hairlines where the tab had shown a single run of three. */
+ * as three separate one-call runs: a ladder of hairlines where the tab had shown a single run of three. */
 test("calls stored one per assistant message restore as one run, not one bubble each", async () => {
     getSessionMessages.mockResolvedValue([
         { type: "user", message: { content: "plan the work" } },
@@ -207,7 +207,7 @@ test("calls stored one per assistant message restore as one run, not one bubble 
     expect(messages[1]?.thinking).toBe("look around first");
 });
 
-/* The provider's own store keeps the prompt the daemon SENT, note and all — so a conversation the daemon
+/* The provider's own store keeps the prompt the daemon SENT, note and all, so a conversation the daemon
  * re-ran read back here as the user saying the same thing twice, the second time behind a paragraph of machine
  * prose. It has to read exactly as the daemon's own record does (turn-transcript.ts): the repeat drops out and
  * the interruption stands in its place, because a conversation cannot mean two different things depending on
@@ -233,7 +233,7 @@ test("a call whose result never arrived stays in progress rather than claiming i
 });
 
 // An archived agent's transcript is keyed by its retired worktree path, which the dir-scoped search (workspace
-// root + registered worktrees) no longer reaches — the read falls back to the all-projects search rather than
+// root + registered worktrees) no longer reaches: the read falls back to the all-projects search rather than
 // reporting a transcript that exists on disk as empty.
 test("a session outside the dir scope is found by the all-projects fallback", async () => {
     getSessionMessages.mockImplementation(async (_id: string, options?: { dir?: string }) =>
@@ -270,7 +270,7 @@ test("a successful edit keeps its call-time diff instead of the result snippet",
 });
 
 // The daemon prepends readiness/delegation notes to the prompt it files (agent.routes.ts); a redrawn tab must
-// show what the user typed, not the protocol around it — the original complaint was the "Dependencies are NOT
+// show what the user typed, not the protocol around it: the original complaint was the "Dependencies are NOT
 // installed" note stapled onto old messages after every refresh. Out of their WORDS, not out of the transcript:
 // the note is what the agent was told, so it comes back on the message as a row the reader can open.
 test("restore takes an injected turn preamble off the user's words and keeps it on the message", async () => {

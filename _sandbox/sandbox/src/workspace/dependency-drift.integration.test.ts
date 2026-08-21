@@ -33,13 +33,13 @@ test("a dependency added to the manifest and never installed is the drift this e
     expect(await unresolvedDependencies(root)).toEqual([{ dir: "", names: ["right-pad"] }]);
 });
 
-test("devDependencies count — a missing test runner breaks the suite as surely as a missing import", async () => {
+test("devDependencies count: a missing test runner breaks the suite as surely as a missing import", async () => {
     const root = await project();
     await write(root, "package.json", `{"name":"app","devDependencies":{"vitest":"^4.0.0"}}`);
     expect(await unresolvedDependencies(root)).toEqual([{ dir: "", names: ["vitest"] }]);
 });
 
-test("optional and peer dependencies are never drift — absent is what optional means, and a peer is the consumer's", async () => {
+test("optional and peer dependencies are never drift: absent is what optional means, and a peer is the consumer's", async () => {
     const root = await project();
     await write(root, "package.json", `{"name":"app","optionalDependencies":{"fsevents":"*"},"peerDependencies":{"vue":"^3"}}`);
     expect(await unresolvedDependencies(root)).toEqual([]);
@@ -55,7 +55,7 @@ test("workspace members are checked against their OWN node_modules, which is whe
     expect(await unresolvedDependencies(root)).toEqual([{ dir: "packages/api", names: ["hono"] }]);
 });
 
-test("a hoisted tree satisfies a member too — npm and yarn put almost everything at the install root", async () => {
+test("a hoisted tree satisfies a member too: npm and yarn put almost everything at the install root", async () => {
     const root = await project();
     await write(root, "package.json", `{"name":"root"}`);
     await workspaceFile(root, ["packages/*"]);
@@ -65,7 +65,7 @@ test("a hoisted tree satisfies a member too — npm and yarn put almost everythi
 });
 
 /* The case a lockfile comparison gets wrong, and the reason this module reads the tree instead. A package that
- * IS an importer in the lockfile — so manifest and lockfile agree perfectly — can still have no installed tree
+ * IS an importer in the lockfile, so manifest and lockfile agree perfectly: can still have no installed tree
  * at all, which is exactly the state two packages of this workspace were found in. */
 test("a member with no node_modules at all is drift, however well its manifest agrees with the lockfile", async () => {
     const root = await project();
@@ -75,7 +75,7 @@ test("a member with no node_modules at all is drift, however well its manifest a
     expect(await unresolvedDependencies(root)).toEqual([{ dir: "packages/fresh", names: ["vue", "zod"] }]);
 });
 
-test("resolution never walks intermediate directories — an ancestor's tree is not this project's install", async () => {
+test("resolution never walks intermediate directories: an ancestor's tree is not this project's install", async () => {
     const root = await project();
     await write(root, "package.json", `{"name":"root"}`);
     await workspaceFile(root, ["packages/*"]);
@@ -105,7 +105,7 @@ test("modulesNear separates a tree that was never installed from one that is mer
 // The shape an isolated turn presents to the daemon: the overlay is mounted inside the turn's namespace, so
 // from outside every node_modules on the path is present and empty. Read as an install root it made a fully
 // installed package look like one missing every dependency it declares.
-test("an EMPTY node_modules is a mount point, not an install — the walk goes past it", async () => {
+test("an EMPTY node_modules is a mount point, not an install: the walk goes past it", async () => {
     const root = await project();
     await write(root, "package.json", `{"name":"app","dependencies":{"vue":"^3"}}`);
     await write(root, "src/main.ts", "");
@@ -127,7 +127,7 @@ test("modulesNear answers for the package that OWNS the file, not the install ro
     expect(await modulesNear(join(root, "packages/web/src/main.ts"))).toEqual({ kind: "installed", missing: [] });
 });
 
-test("the summary names a few and counts the rest — the decision is made by the third name", async () => {
+test("the summary names a few and counts the rest: the decision is made by the third name", async () => {
     expect(unresolvedSummary([{ dir: "", names: ["a", "b"] }])).toBe("a, b");
     expect(
         unresolvedSummary([
@@ -135,7 +135,7 @@ test("the summary names a few and counts the rest — the decision is made by th
             { dir: "x", names: ["d", "e", "f"] },
         ]),
     ).toBe("a, b, c, d and 2 more");
-    // One shared workspace library missing from six packages is six entries and ONE thing to say — without this
+    // One shared workspace library missing from six packages is six entries and ONE thing to say: without this
     // the sample spends its slots repeating a name the reader already read.
     expect(
         unresolvedSummary([

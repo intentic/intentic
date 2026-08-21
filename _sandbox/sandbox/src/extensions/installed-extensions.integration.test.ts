@@ -72,11 +72,11 @@ test("a workspace directory that is not an extension is reported, not silently s
     expect(result.invalid[1]?.error).toContain("no intentic-extension.json");
 });
 
-test("a workspace extension can never shadow a pinned source — the collision is reported instead", async () => {
+test("a workspace extension can never shadow a pinned source: the collision is reported instead", async () => {
     const root = mkdtempSync(join(tmpdir(), "installed-work-"));
     const baked = mkdtempSync(join(tmpdir(), "installed-baked-"));
     await writeManifest(join(baked, "intentic.discord"), manifest("intentic", "discord"));
-    // Colliding on the MANIFEST identity of a git-installed extension, not its capability entry id — the
+    // Colliding on the MANIFEST identity of a git-installed extension, not its capability entry id: the
     // switch and the settings are keyed by publisher.name, so that is the identity that must stay unique.
     await writeManifest(extensionDir(root, "my-ext"), manifest("acme", "tool"));
     await writeManifest(join(workspaceExtensionsRoot(root), "impostor"), manifest("intentic", "discord"));
@@ -115,7 +115,7 @@ test("extensionBinDirsOf resolves each contributes.bin to an absolute dir on the
     expect(dirs).toEqual([join(baked, "intentic.discord", "bin")]);
 });
 
-// Write the owner's switch file the way the enablement store does — by publisher.name, not the capability id.
+// Write the owner's switch file the way the enablement store does: by publisher.name, not the capability id.
 const writeEnablement = async (root: string, values: Record<string, boolean>): Promise<void> => {
     await mkdir(join(root, STATE_DIR, "config"), { recursive: true });
     await writeFile(join(root, STATE_DIR, "config", "extension-enablement.json"), JSON.stringify(values));
@@ -151,7 +151,7 @@ test("a disabled extension contributes no listener provider and no PATH entry", 
     expect([...(await listenerProvidersOf(host)).keys()]).toEqual([]);
 });
 
-test("an absent enablement entry means enabled — a fresh sandbox switches nothing off", async () => {
+test("an absent enablement entry means enabled: a fresh sandbox switches nothing off", async () => {
     const root = mkdtempSync(join(tmpdir(), "installed-work-"));
     const baked = mkdtempSync(join(tmpdir(), "installed-baked-"));
     await writeManifest(join(baked, "intentic.discord"), manifest("intentic", "discord"));

@@ -4,7 +4,7 @@ import { gateVerdictOf } from "./workflow-gate.js";
 
 /* THE ONE ASYMMETRY THESE TESTS EXIST TO PIN DOWN: exactly one path reaches `fail`, and every other way a run
  * can end reaches `blocked`. A regression that let a failed step, a stopped run or a deadline report `fail`
- * would turn the gate's own outages into red builds — which is the failure mode that gets a release gate
+ * would turn the gate's own outages into red builds, which is the failure mode that gets a release gate
  * switched off, and it would not show up in any test that only checked the happy path.
  */
 
@@ -74,7 +74,7 @@ test("a non-string field is compared as the string a form would have authored", 
     );
 });
 
-test("a step that failed is blocked, not failed — the check broke, not the product", () => {
+test("a step that failed is blocked, not failed: the check broke, not the product", () => {
     const verdict = gateVerdictOf(runWith(stepRun({ state: "failed", detail: "ran out of iterations" })));
     expect(verdict.outcome).toBe("blocked");
     expect(verdict.reason).toBe(`"Judge" failed (ran out of iterations).`);

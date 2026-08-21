@@ -73,7 +73,7 @@ test("reads every SSL-VPN connection with its endpoint split into host and port"
 
 test("drops FortiClient-encrypted usernames and asks for them, but keeps a plaintext one", () => {
     const ssl = parseForticlientConfig(XML).filter((connection) => connection.provider === "fortinet");
-    // EncX is not reversible — reporting it as a needed field beats importing an unusable value.
+    // EncX is not reversible: reporting it as a needed field beats importing an unusable value.
     expect(ssl[0]?.username).toBeUndefined();
     expect(ssl[0]?.needs).toEqual(["username", "password"]);
     // An empty <username /> is equally "not supplied".
@@ -93,7 +93,7 @@ test("reads the IPsec connection's phase-1 endpoint, local id and aggressive mod
         port: 500,
         localId: "extNET",
         aggressive: true,
-        // Phase 2, from <ipsec_settings> — the pair that decides whether quick mode can succeed at all. The
+        // Phase 2, from <ipsec_settings>: the pair that decides whether quick mode can succeed at all. The
         // group must NOT come from <ike_settings>, which lists "5;14;" and says nothing about phase 2.
         pfs: true,
         dhGroup: "14",

@@ -7,7 +7,7 @@ import { SteeringQueue } from "../agent/agent-steering.js";
 import { createPiAgent, type PiTimeouts } from "./pi-agent.js";
 import type { PiEvent, PiProcessHandlers, PiResponse, PiSpawn } from "./pi-rpc.js";
 
-/* The Pi adapter over a scripted process — no spawn, no binary (the QueryFn/CodexRunner/fake-acp-agent
+/* The Pi adapter over a scripted process: no spawn, no binary (the QueryFn/CodexRunner/fake-acp-agent
  * pattern for Pi RPC). The fake answers commands from a response table and scripts what streams after each
  * accepted prompt, so the tests exercise the adapter's real loop: setup, framing, steering, plan phases,
  * watchdogs, and the frames the client actually renders. */
@@ -26,7 +26,7 @@ interface FakePi {
 }
 
 // `prompts` scripts the event burst that follows each accepted prompt, one entry per prompt in send order
-// (the last entry repeats — plan revisions loop). `responses` overrides the defaults per command type.
+// (the last entry repeats: plan revisions loop). `responses` overrides the defaults per command type.
 const fakePi = (prompts: PiEvent[][] = [[{ type: "agent_settled" }]], responses: Record<string, Responder> = {}): FakePi => {
     const sent: Record<string, unknown>[] = [];
     let handlers: PiProcessHandlers | undefined;
@@ -141,7 +141,7 @@ test("a turn reports its session file, publishes commands, streams deltas, and s
         { kind: "context_usage", tokens: 12_000, contextWindow: 200_000 },
         { kind: "done" },
     ]);
-    // The turn's process never outlives it — sessions are files, so there is nothing to keep warm.
+    // The turn's process never outlives it: sessions are files, so there is nothing to keep warm.
     expect(pi.killed()).toBe(true);
 });
 
@@ -181,7 +181,7 @@ test("steering messages are forwarded onto Pi's steer queue mid-turn", async () 
     const pi = fakePi([[]], {
         steer: (command) => {
             expect(command["message"]).toBe("also add a test");
-            // The steer is in — let the turn settle.
+            // The steer is in: let the turn settle.
             setTimeout(() => pi.emit({ type: "agent_settled" }), 0);
             return { success: true };
         },

@@ -57,7 +57,7 @@ test("writeWorkspaceFileStream concatenates offset parts, and a re-sent part ove
     await writeWorkspaceFileStream(target, streamOf(new Uint8Array([1, 2, 3])), 1024);
     await writeWorkspaceFileStream(target, streamOf(new Uint8Array([4, 5, 6])), 1024, 3);
     expect(new Uint8Array(await readFile(target))).toEqual(new Uint8Array([1, 2, 3, 4, 5, 6]));
-    // A retried part re-sends the same bytes at the same offset — idempotent.
+    // A retried part re-sends the same bytes at the same offset: idempotent.
     await writeWorkspaceFileStream(target, streamOf(new Uint8Array([9, 9, 9])), 1024, 3);
     expect(new Uint8Array(await readFile(target))).toEqual(new Uint8Array([1, 2, 3, 9, 9, 9]));
     await rm(dir, { recursive: true, force: true });
@@ -87,13 +87,13 @@ test("readWorkspaceFileWindow bounds the read to `limit` and reports the file's 
     const head = await readWorkspaceFileWindow(path, 0, 25);
     expect(head?.size).toBe(900);
     expect(head?.offset).toBe(0);
-    // Cut on a line boundary, not at byte 25 — a viewer that opens mid-line reads as corrupt.
+    // Cut on a line boundary, not at byte 25: a viewer that opens mid-line reads as corrupt.
     expect(head?.content).toBe("line-000\nline-001\n");
     expect(head?.bytes).toBe(18);
     await rm(dir, { recursive: true, force: true });
 });
 
-test("readWorkspaceFileWindow reads the TAIL for a negative offset — how following a growing log starts", async () => {
+test("readWorkspaceFileWindow reads the TAIL for a negative offset: how following a growing log starts", async () => {
     const lines = Array.from({ length: 100 }, (_, i) => `line-${String(i).padStart(3, "0")}`).join("\n");
     const { dir, path } = await fileWith("big.log", `${lines}\n`);
     const tail = await readWorkspaceFileWindow(path, -30);
@@ -134,7 +134,7 @@ test("readWorkspaceFileWindow keeps a single long line rather than serving nothi
     await rm(dir, { recursive: true, force: true });
 });
 
-test("readWorkspaceFileWindow clamps `limit` to the daemon's cap — the ceiling is not the caller's to raise", async () => {
+test("readWorkspaceFileWindow clamps `limit` to the daemon's cap, the ceiling is not the caller's to raise", async () => {
     const { dir, path } = await fileWith("small.ts", "ok\n");
     const window = await readWorkspaceFileWindow(path, 0, MAX_TEXT_BYTES * 4);
     expect(window?.content).toBe("ok\n");

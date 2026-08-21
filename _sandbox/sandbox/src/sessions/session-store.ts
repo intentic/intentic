@@ -67,7 +67,7 @@ export const linkClaudeState = async (workspaceRoot: string, home = homedir()): 
         await symlink(target, link);
     }
     if (refused.length > 0) {
-        throw new Error(`${refused.join(", ")} under ${claudeHome} exist and are not symlinks — leaving those local stores alone`);
+        throw new Error(`${refused.join(", ")} under ${claudeHome} exist and are not symlinks: leaving those local stores alone`);
     }
     // Only once every store IS ours. A refusal means someone else's ~/.claude (a dev-host run), and rewriting
     // the retention of a store we didn't take over would be editing the developer's own settings.

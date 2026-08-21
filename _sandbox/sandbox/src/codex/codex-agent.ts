@@ -149,7 +149,7 @@ const askQuestion = (question: CodexQuestion): AskQuestion => ({
 
 const SECRET_REFUSED =
     "This client does not collect secrets on a question card, because a card's answers are recorded. " +
-    "A credential the owner has connected is already in this turn's environment — read it from there, " +
+    "A credential the owner has connected is already in this turn's environment: read it from there, " +
     "or say which connection is missing and stop rather than asking anyone to paste one.";
 
 const QUESTIONS_DISMISSED = "The user dismissed the questions without answering and stopped the turn.";
@@ -541,7 +541,7 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
 
 // Codex's preamble adds the read-only truth of its planning phase to the shared skeleton's wording.
 const CODEX_PLAN_PREAMBLE =
-    "Before making any changes, propose a clear, concise plan for the request below and stop — do not execute it yet. " +
+    "Before making any changes, propose a clear, concise plan for the request below and stop: do not execute it yet. " +
     "You are in a read-only sandbox for this turn; end your reply with the plan itself.\n\n";
 
 // Always-plan flow over the shared skeleton (this client does not wire app-server's collaboration modes): a

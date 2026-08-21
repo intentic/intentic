@@ -88,14 +88,14 @@ export const runUpgrade = async (exec: UpgradeExec, url: string, installed: stri
         await exec.fetchTo(url, staged);
     } catch (error) {
         await exec.discard(staged);
-        return { kind: "failed", reason: `the download failed (${error instanceof Error ? error.message : String(error)}) — nothing was changed.` };
+        return { kind: "failed", reason: `the download failed (${error instanceof Error ? error.message : String(error)}), nothing was changed.` };
     }
     const probed = exec.probe(staged);
     if (probed.kind === "unusable") {
         // The most valuable refusal in the whole command: whatever landed is not a working agent, and the machine
         // still has one that is.
         await exec.discard(staged);
-        return { kind: "failed", reason: `what downloaded doesn't run as an agent — keeping the one you have.` };
+        return { kind: "failed", reason: `what downloaded doesn't run as an agent, keeping the one you have.` };
     }
     /* An agent too old to state its version, which places it before every build that can, so installing it is a
      * downgrade by definition. Declined even with --force: that flag exists to override a judgement about a build
@@ -105,7 +105,7 @@ export const runUpgrade = async (exec: UpgradeExec, url: string, installed: stri
         return {
             kind: "current",
             version: installed,
-            note: `the published agent predates \`intentic-sync version\`, so it is older than the one on this machine — yours is kept.`,
+            note: `the published agent predates \`intentic-sync version\`, so it is older than the one on this machine, yours is kept.`,
         };
     }
     const candidate = probed.version;
@@ -149,7 +149,7 @@ export const runUpgrade = async (exec: UpgradeExec, url: string, installed: stri
      * because it is about this machine (a config it cannot read, a port it cannot bind) rather than about the
      * binary. Leaving it installed would trade a machine that was merely OUT OF DATE for one that has no working
      * sync at all, which is the one outcome that would make an update command not worth running. */
-    log(`The new agent didn't stay running — putting the previous one back.`);
+    log(`The new agent didn't stay running: putting the previous one back.`);
     await exec.swap(previous, agentPath);
     await exec.startWatcher();
     return { kind: "failed", reason: `the new agent (${candidate}) wouldn't start, so ${installed} was restored and is running again.` };

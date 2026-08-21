@@ -28,7 +28,7 @@ describe("presence registry", () => {
         updatePresence({ email: "a@x.com" }, { clientId: "c2", idle: false, view: "workspace", path: "src/app.ts" });
         expect(frames.at(-1)?.find((user) => user.clientId === "c2")).toMatchObject({ view: "workspace", path: "src/app.ts" });
 
-        // Absent fields clear — the tab left the file.
+        // Absent fields clear: the tab left the file.
         updatePresence({ email: "a@x.com" }, { clientId: "c2", idle: true, view: "automations" });
         expect(frames.at(-1)?.find((user) => user.clientId === "c2")).toEqual({
             clientId: "c2",
@@ -48,7 +48,7 @@ describe("presence registry", () => {
 
         updatePresence({ email: "a@x.com" }, { clientId: "ghost", idle: false, view: "workspace" });
         updatePresence({ email: "b@x.com" }, { clientId: "c3", idle: false, view: "workspace" });
-        // Only the subscribe snapshot — neither bogus update broadcast, and c3 is untouched.
+        // Only the subscribe snapshot: neither bogus update broadcast, and c3 is untouched.
         expect(frames).toHaveLength(1);
         expect(frames.at(-1)?.find((user) => user.clientId === "c3")?.view).toBeUndefined();
         unsubscribe();

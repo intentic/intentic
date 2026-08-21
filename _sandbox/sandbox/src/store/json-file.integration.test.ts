@@ -33,15 +33,15 @@ test("an absent, unparseable, or schema-rejected file all read as the fallback",
     await writeFile(path, `[1, 2`);
     expect(await file.read()).toEqual([]);
 
-    // Well-formed JSON of the wrong shape — a file from a build whose schema has moved on.
+    // Well-formed JSON of the wrong shape: a file from a build whose schema has moved on.
     await writeFile(path, `{"not":"an array"}`);
     expect(await file.read()).toEqual([]);
 });
 
-test("an update never overwrites content it could not read — the bytes move aside first", async () => {
+test("an update never overwrites content it could not read: the bytes move aside first", async () => {
     /* The downgrade sequence: a newer build wrote a shape this build's schema rejects, the user rolled back,
      * and the first write after that used to replace the only copy of the newer state with fallback-derived
-     * emptiness — the store "reset", unrecoverably, exactly when a bad update had already cost the user once. */
+     * emptiness: the store "reset", unrecoverably, exactly when a bad update had already cost the user once. */
     const path = await tempFile();
     const file = numbers(path);
     await file.update(() => [0]);
@@ -61,7 +61,7 @@ test("an update never overwrites content it could not read — the bytes move as
     expect(await readFile(`${path}.corrupt`, "utf8")).toBe(`[1, 2`);
 });
 
-test("an absent file has nothing to protect — a first write sets nothing aside", async () => {
+test("an absent file has nothing to protect: a first write sets nothing aside", async () => {
     const path = await tempFile();
     await numbers(path).update(() => [1]);
     expect(await readdir(join(path, ".."))).toEqual([`state.json`]);

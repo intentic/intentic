@@ -263,7 +263,7 @@ export async function* manageMachineSandbox(services: Services, id: string, inpu
     const client = services.hostHub.client(id);
     if (client === undefined) {
         throw new ORPCError("CONFLICT", {
-            message: `"${id}" is not connected right now — the computer is asleep, offline, or its agent isn't running.`,
+            message: `"${id}" is not connected right now, the computer is asleep, offline, or its agent isn't running.`,
         });
     }
     try {

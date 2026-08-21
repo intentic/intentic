@@ -48,7 +48,7 @@ const resolveRequest = (req: http.IncomingMessage, deps: PreviewProxyDeps): Reso
                 kind: "refused",
                 status: 502,
                 title: "Preview isn't running",
-                message: `panel "${name}" is not running — start it from the ${name} entry in the sidebar`,
+                message: `panel "${name}" is not running, start it from the ${name} entry in the sidebar`,
             };
         }
         return { kind: "proxy", dial: "127.0.0.1", port, scheme: "http", headers: req.headers };
@@ -61,7 +61,7 @@ const resolveRequest = (req: http.IncomingMessage, deps: PreviewProxyDeps): Reso
                 kind: "refused",
                 status: 502,
                 title: "Nothing forwarded here",
-                message: `nothing is forwarded here — re-open the preview from the Ports view or the terminal link`,
+                message: `nothing is forwarded here, re-open the preview from the Ports view or the terminal link`,
             };
         }
         const localhost = `localhost:${target.port}`;
@@ -124,7 +124,7 @@ export const createPreviewProxy = (deps: PreviewProxyDeps): http.Server => {
                 return;
             }
             res.writeHead(502, { "content-type": "text/html; charset=utf-8" });
-            res.end(interstitial("Preview unavailable", `nothing is answering on port ${resolved.port} — the server may have stopped`));
+            res.end(interstitial("Preview unavailable", `nothing is answering on port ${resolved.port}: the server may have stopped`));
         });
         req.pipe(proxyReq);
     });

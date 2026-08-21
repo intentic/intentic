@@ -83,7 +83,7 @@ const VENDORS = ["claude", "codex", "grok"] as const;
 export type Vendor = (typeof VENDORS)[number];
 
 // One agent run = (task × vendor × arm). Optional metrics stay absent when a vendor doesn't report them,
-// the report renders "—", never fabricates.
+// the report renders "-", never fabricates.
 export const RunRecordSchema = z.object({
     runId: z.string(),
     taskId: z.string(),

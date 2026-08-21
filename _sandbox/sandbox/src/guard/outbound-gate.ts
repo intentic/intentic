@@ -22,7 +22,7 @@ import { guard } from "./guard.js";
 
 const DRAFT_REDIRECT =
     "Instead of sending directly, write the message as a draft into .intentic/config/drafts/ (the drafts skill has the " +
-    "format) — the owner approves drafts before they post, and that approval is what this rule asks for.";
+    "format): the owner approves drafts before they post, and that approval is what this rule asks for.";
 
 export const outboundGateHooks = (rules: Readonly<Record<string, AdmissionRule>>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PreToolUse: [

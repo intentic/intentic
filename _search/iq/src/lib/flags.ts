@@ -8,7 +8,7 @@ export const parseLangs = (value: string): string[] => {
     const tokens = value.split(",").map((token) => token.trim());
     for (const token of tokens) {
         if (canonicalLang(token) === undefined) {
-            throw new Error(`unknown --lang "${token}" — known: ts, tsx, js, py, go, rs, java (extensions or names)`);
+            throw new Error(`unknown --lang "${token}", known: ts, tsx, js, py, go, rs, java (extensions or names)`);
         }
     }
     return tokens;
@@ -84,7 +84,7 @@ export const rootRelativePath = (raw: string, root: string): string => {
         }
     }
     throw new Error(
-        `path not found in the workspace: "${raw}" — tried root-relative (root: ${root}) and cwd-relative; locate it with: iq files ${basename(trimmed)}`,
+        `path not found in the workspace: "${raw}", tried root-relative (root: ${root}) and cwd-relative; locate it with: iq files ${basename(trimmed)}`,
     );
 };
 

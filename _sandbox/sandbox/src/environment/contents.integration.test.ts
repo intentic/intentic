@@ -14,7 +14,7 @@ import { clearVersionCache } from "./version-probe.js";
 /* The contents view end to end: real files on disk, real capability fragments, real probes.
  *
  * The probes are the reason this is an integration test rather than a unit one, and the reason it asserts on
- * `node` — this suite runs ON node, so `node --version` is the one command every machine that can run these
+ * `node`: this suite runs ON node, so `node --version` is the one command every machine that can run these
  * tests is guaranteed to have. Everything else is asserted on its NAME and its grouping, never on a version
  * number, because a version is by definition whatever the machine happens to have. */
 
@@ -72,13 +72,13 @@ test("groups what the owner approved, names it, and reads its version off the to
     expect(present?.tools.map((tool) => tool.name)).toContain("node");
     expect(present?.tools.find((tool) => tool.name === "node")?.version).toBe(process.version.slice(1));
     expect(present?.purpose).toBe("Reads the workspace's package manifests.");
-    // The disclosure carries the comment whole rather than the comment minus the row's line — the view shows one
+    // The disclosure carries the comment whole rather than the comment minus the row's line: the view shows one
     // of the two, so a remainder is what made every long entry open on its own opening sentence twice.
     expect(present?.detail).toBe("Reads the workspace's package manifests. Needed because the release script parses them before it tags.");
     expect(present?.commands).toBe("RUN echo pretend-install && node --version");
 
     /* Absent: the recipe has it and the container does not, which is exactly "arrives with the next rebuild".
-     * Derived from the PROBE, not from comparing hashes — which is what makes it per-item rather than per-card. */
+     * Derived from the PROBE, not from comparing hashes, which is what makes it per-item rather than per-card. */
     expect(custom[1]?.state).toBe("after-rebuild");
     expect(custom[1]?.tools).toEqual([]);
 });

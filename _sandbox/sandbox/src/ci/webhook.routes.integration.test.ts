@@ -21,7 +21,7 @@ import { createRunsCache } from "./runs-cache.js";
 import { createCiWebhookRoute } from "./webhook.routes.js";
 
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
-// (automations/activity/logger); `unstubbed` keeps the fake that small — the listeners.integration.test.ts convention.
+// (automations/activity/logger); `unstubbed` keeps the fake that small: the listeners.integration.test.ts convention.
 const harness = async (automationId: string, narrow: { eventType?: string; branch?: string; channelId?: string } = {}) => {
     const root = mkdtempSync(join(tmpdir(), "ci-webhook-"));
     const dir = join(root, "web");
@@ -150,7 +150,7 @@ test("a failure after a recorded success dispatches pipeline_failed AND pipeline
 test("a branch-narrowed trigger ignores a run on another branch", async () => {
     const { app, services, prompts } = await harness("wh-branch", { branch: "release" });
     expect((await deliver(app, await services.ciStore.secret(), workflowRun("failure"))).status).toBe(200);
-    // The conclusion is still recorded — the memory is about the repo's branches, not about who was listening.
+    // The conclusion is still recorded: the memory is about the repo's branches, not about who was listening.
     expect(await services.ciStore.lastConclusion("web", "main")).toBe("failed");
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(prompts).toEqual([]);

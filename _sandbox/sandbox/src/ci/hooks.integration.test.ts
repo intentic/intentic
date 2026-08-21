@@ -67,7 +67,7 @@ test("a refusal degrades to a warning carrying the scope hint and the manual rec
     expect(warning).toContain(await services.ciStore.secret());
 });
 
-test("no public URL means no registration attempt — just the warning", async () => {
+test("no public URL means no registration attempt: just the warning", async () => {
     const root = await workspaceWith("https://github.com/acme/web.git");
     const services = await servicesFor(root, "");
     const calls: string[] = [];

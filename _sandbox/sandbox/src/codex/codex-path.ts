@@ -18,7 +18,7 @@ import { resolveOnPath } from "../platform/on-path.js";
 // The rebuild-fixable state, in the user's terms. "rebuild" is required, it is the word the UI reads to
 // route a state to the Environment card, so it has to survive any rewording of this sentence.
 export const CODEX_BINARY_MISSING =
-    "This sandbox's image doesn't include the Codex CLI yet — rebuild it from the Environment card in Sandbox ▸ Environment to run Codex here.";
+    "This sandbox's image doesn't include the Codex CLI yet: rebuild it from the Environment card in Sandbox ▸ Environment to run Codex here.";
 
 /* The tree's own copy, resolved through Node from the SDK's location, not this module's. @openai/codex is the
  * SDK's dependency and not ours, so under pnpm's non-hoisted layout it is only

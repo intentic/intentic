@@ -9,7 +9,7 @@ import { commands } from "./commands.js";
 export const app = buildApplication(
     buildRouteMap({
         routes: commands,
-        docs: { brief: "intentic-sync — mirror a remote sandbox to a local directory" },
+        docs: { brief: "intentic-sync, mirror a remote sandbox to a local directory" },
     }),
     {
         name: "intentic-sync",

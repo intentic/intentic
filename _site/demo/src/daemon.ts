@@ -228,7 +228,7 @@ const startTurn = async (request: Request): Promise<Response> => {
     const body = (await request.json()) as { conversationId?: string; prompt?: string };
     const conversationId = body.conversationId ?? FEATURED_AGENT_ID;
     if (EXTENSION_RUN_PREFIXES.some((prefix) => conversationId.startsWith(prefix))) {
-        return refuse(`This is the demo workspace — a run needs your repositories and a sandbox to walk them in. Start one and this button works.`);
+        return refuse(`This is the demo workspace: a run needs your repositories and a sandbox to walk them in. Start one and this button works.`);
     }
     runs.get(conversationId)?.stop();
     const run = visitorRun(conversationId, body.prompt ?? ``, Date.now());
@@ -322,7 +322,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [
         `DELETE`,
         `/system/browsers/{name}`,
-        () => refuse(`This is the demo workspace — the browser you are watching is a recording, so there is nothing to close.`),
+        () => refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`),
     ],
     // `sessions`, not `subagents`. SubagentsListSchema's field, which the client parses and the rail counts.
     // Under the wrong key every read threw and vue-query retried it, so the one roster the demo has nothing to
@@ -344,7 +344,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/agents/{id}/seen`, ({ param }) => agentResponse(patchAgent(param(`id`), { seenAt: Date.now() }))],
     [`POST`, `/agents/{id}/auto-land`, ({ param }) => agentResponse(patchAgent(param(`id`), {}))],
     [`POST`, `/agents/{id}/land`, ({ param }) => land(param(`id`))],
-    [`POST`, `/agents/{id}/discard`, () => refuse(`This is the demo workspace — there is no worktree to discard.`)],
+    [`POST`, `/agents/{id}/discard`, () => refuse(`This is the demo workspace: there is no worktree to discard.`)],
     [`POST`, `/agents/archive`, archiveAgents],
     [`POST`, `/agents/unarchive`, () => json({ agents: [], rev: roster.rev })],
 
@@ -397,8 +397,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/git/changes`, () => json(gitChanges())],
     [`GET`, `/git/{repo}/file-diff`, ({ url, param }) => json(fileDiff(param(`repo`), url.searchParams.get(`path`) ?? ``))],
     [`GET`, `/git/{repo}/branches`, ({ param }) => json({ branches: [{ name: `main`, current: true }], repo: param(`repo`) })],
-    [`POST`, `/git/{repo}/commit`, () => refuse(`This is the demo workspace — commits need a real repository.`)],
-    [`POST`, `/git/{repo}/push`, () => refuse(`This is the demo workspace — there is no remote to push to.`)],
+    [`POST`, `/git/{repo}/commit`, () => refuse(`This is the demo workspace: commits need a real repository.`)],
+    [`POST`, `/git/{repo}/push`, () => refuse(`This is the demo workspace: there is no remote to push to.`)],
     /* Where each repo lives online. This is what the publisher-claim step matches against the registry's list,
      * so `web` being an `acme/…` project is what makes the demo show the one-click path rather than the
      * paste-a-line fallback, the more interesting of the two, and the one worth having on screen. */
@@ -432,12 +432,12 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/ci/runs`, () => json(ciRunsResponse(Date.now(), ciSeenAt))],
     [`POST`, `/ci/runs/jobs`, ciJobsRoute],
     [`POST`, `/ci/seen`, () => json({ seenAt: (ciSeenAt = Date.now()) } satisfies CiSeenResponse)],
-    [`POST`, `/ci/runs/rerun`, () => refuse(`This is the demo workspace — rerunning would start a pipeline on a repo that isn't yours.`)],
-    [`POST`, `/ci/runs/cancel`, () => refuse(`This is the demo workspace — there is no live pipeline to cancel.`)],
+    [`POST`, `/ci/runs/rerun`, () => refuse(`This is the demo workspace: rerunning would start a pipeline on a repo that isn't yours.`)],
+    [`POST`, `/ci/runs/cancel`, () => refuse(`This is the demo workspace: there is no live pipeline to cancel.`)],
     [
         `POST`,
         `/ci/fix`,
-        () => refuse(`This is the demo workspace — a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`),
+        () => refuse(`This is the demo workspace: a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`),
     ],
 
     /* MAINTENANCE. `GET /chores` carries measurements, never verdicts, the chore book that decides what is due
@@ -446,7 +446,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
      * refuses is re-running a probe, because that is a subprocess in a box this recording does not have. */
     [`GET`, `/chores`, () => json(choresReport(Date.now()))],
     [`POST`, `/chores/ledger`, choresLedger],
-    [`POST`, `/chores/probe`, () => refuse(`This is the demo workspace — a probe runs pnpm audit or knip against a real checkout.`)],
+    [`POST`, `/chores/probe`, () => refuse(`This is the demo workspace: a probe runs pnpm audit or knip against a real checkout.`)],
 
     /* Automations, the sandbox working while nobody watches. Enabling, editing and deleting a row are real
      * (the fixture is the store), and so is clearing a held wake; what refuses is FIRING one, because a wake is
@@ -455,11 +455,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/automations/pending`, () => json({ approvals: automationApprovals(Date.now()) })],
     [`POST`, `/automations`, saveAutomationRoute],
     [`DELETE`, `/automations/{id}`, ({ param }) => okAfter(() => deleteAutomation(Date.now(), param(`id`)))],
-    [`POST`, `/automations/{id}/run`, () => refuse(`This is the demo workspace — firing an automation runs a real turn against real systems.`)],
+    [`POST`, `/automations/{id}/run`, () => refuse(`This is the demo workspace: firing an automation runs a real turn against real systems.`)],
     [
         `POST`,
         `/automations/pending/{id}/approve`,
-        () => refuse(`This is the demo workspace — approving a held wake would start the turn it is holding.`),
+        () => refuse(`This is the demo workspace: approving a held wake would start the turn it is holding.`),
     ],
     [`POST`, `/automations/pending/{id}/reject`, ({ param }) => okAfter(() => resolveApproval(Date.now(), param(`id`)))],
 
@@ -470,19 +470,19 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
      * silently vanishes on reload, which teaches worse than a clear no. */
     [`GET`, `/workflows`, () => json({ workflows: demoWorkflows(runsOnBoard(Date.now())) })],
     [`GET`, `/workflows/runs`, () => json({ runs: runsOnBoard(Date.now()) })],
-    [`POST`, `/workflows`, () => refuse(`This is the demo workspace — designs are read-only here.`)],
-    [`DELETE`, `/workflows/{id}`, () => refuse(`This is the demo workspace — designs are read-only here.`)],
-    [`POST`, `/workflows/{id}/run`, () => refuse(`This is the demo workspace — running a workflow starts several agent sessions on a real tree.`)],
-    [`POST`, `/workflows/runs/{runId}/stop`, () => refuse(`This is the demo workspace — nothing is really running to stop.`)],
+    [`POST`, `/workflows`, () => refuse(`This is the demo workspace: designs are read-only here.`)],
+    [`DELETE`, `/workflows/{id}`, () => refuse(`This is the demo workspace: designs are read-only here.`)],
+    [`POST`, `/workflows/{id}/run`, () => refuse(`This is the demo workspace: running a workflow starts several agent sessions on a real tree.`)],
+    [`POST`, `/workflows/runs/{runId}/stop`, () => refuse(`This is the demo workspace: nothing is really running to stop.`)],
     // Archiving a run takes its step SESSIONS off the board with it, and this fixture's archive is a one-way
     // disappearance rather than a list you can open, so it refuses, in the demo's own voice, instead of
     // swallowing four conversations the visitor could never get back.
     [
         `POST`,
         `/workflows/runs/{runId}/archive`,
-        () => refuse(`This is the demo workspace — the archive here has no way back, so a run stays on the board.`),
+        () => refuse(`This is the demo workspace: the archive here has no way back, so a run stays on the board.`),
     ],
-    [`POST`, `/workflows/runs/{runId}/unarchive`, () => refuse(`This is the demo workspace — nothing has been archived to restore.`)],
+    [`POST`, `/workflows/runs/{runId}/unarchive`, () => refuse(`This is the demo workspace: nothing has been archived to restore.`)],
 
     /* Saved loops, the workflows page's second kind of design, and the other half of the composer's
      * run-through picker. Reading is real, so the picker shows what it is actually for: two ways for a message
@@ -490,8 +490,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
      * design here refuses, a loop the demo let you keep would vanish on reload, which teaches worse than a
      * clear no. */
     [`GET`, `/loops/designs`, () => json({ designs: demoLoops() })],
-    [`POST`, `/loops/designs`, () => refuse(`This is the demo workspace — saved loops are read-only here.`)],
-    [`DELETE`, `/loops/designs/{id}`, () => refuse(`This is the demo workspace — saved loops are read-only here.`)],
+    [`POST`, `/loops/designs`, () => refuse(`This is the demo workspace: saved loops are read-only here.`)],
+    [`DELETE`, `/loops/designs/{id}`, () => refuse(`This is the demo workspace: saved loops are read-only here.`)],
 
     /* Memory: what the agent carries between sessions, readable and, the point of the surface, editable. The
      * red pen writes into the fixture, so an edit and a forget both hold until the tab is reloaded.
@@ -548,8 +548,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // What each repository IS, the facts every extension's detect() runs over, and therefore which tiles the
     // rail carries. Starting a dev server refuses: there is no checkout here to run one from.
     [`GET`, `/panels`, () => json({ panels: demoPanels() })],
-    [`POST`, `/panels/{repo}/start`, () => refuse(`This is the demo workspace — a dev server needs the repository on your own machine.`)],
-    [`POST`, `/panels/{repo}/stop`, () => refuse(`This is the demo workspace — nothing is running to stop.`)],
+    [`POST`, `/panels/{repo}/start`, () => refuse(`This is the demo workspace: a dev server needs the repository on your own machine.`)],
+    [`POST`, `/panels/{repo}/stop`, () => refuse(`This is the demo workspace: nothing is running to stop.`)],
     // `invalid` is not optional in the contract, and answering without it fails the whole list to parse, which
     // reads as "couldn't list this sandbox's extensions" over an empty tab. Nothing here is unreadable: every
     // extension is compiled into this build.

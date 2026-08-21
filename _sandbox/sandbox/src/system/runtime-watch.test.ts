@@ -2,7 +2,7 @@ import type { RuntimeDomain } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import { createRuntimeSampler, publishRuntimeChange, type RuntimeProbes, subscribeRuntimeChanges } from "./runtime-watch.js";
 
-/* The bus is module-level state (one daemon, one feed), so every test takes a subscription and gives it back —
+/* The bus is module-level state (one daemon, one feed), so every test takes a subscription and gives it back:
  * the last unsubscribe resets the pending set, the rate-limit stamps and the sampler together, which is what
  * keeps these order-independent. */
 
@@ -42,7 +42,7 @@ test("a publish reaches the stream on the next tick, and a burst arrives as one 
 });
 
 test("nothing is queued while no browser is connected", async () => {
-    // No subscriber, so no one to be stale — a new connection re-asks every runtime-bound key anyway.
+    // No subscriber, so no one to be stale: a new connection re-asks every runtime-bound key anyway.
     publishRuntimeChange("browsers");
     const unsubscribe = listen();
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -76,7 +76,7 @@ test("a discrete domain is not held up behind a chatty one's window", async () =
     await vi.advanceTimersByTimeAsync(1);
     frames.length = 0;
 
-    // subagents is now inside its 2s window. A panel starting must NOT wait it out — a click that feels as slow
+    // subagents is now inside its 2s window. A panel starting must NOT wait it out: a click that feels as slow
     // as the chattiest thing in the sandbox is the failure this pull-the-timer-earlier rule exists to prevent.
     publishRuntimeChange("subagents", "panels");
     await vi.advanceTimersByTimeAsync(1);
@@ -97,7 +97,7 @@ test("the sampler publishes only what changed, and never on its first reading", 
     await sampler.sample();
     await vi.waitFor(() => expect(frames).toEqual([["terminals"]]));
 
-    // A second identical reading says nothing — an idle sandbox with a tab open pushes nothing at all.
+    // A second identical reading says nothing: an idle sandbox with a tab open pushes nothing at all.
     await sampler.sample();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(frames).toEqual([["terminals"]]);
@@ -110,7 +110,7 @@ test("a new listening port refreshes the panels above it as well as the ports vi
     const sampler = createRuntimeSampler(probes, 60_000);
     await sampler.sample();
 
-    // A dev server binding its port IS the panel turning healthy — panel health is read off the sockets.
+    // A dev server binding its port IS the panel turning healthy: panel health is read off the sockets.
     probes.set("ports", "1F90");
     await sampler.sample();
     await vi.waitFor(() => expect(frames).toHaveLength(1));

@@ -93,7 +93,7 @@ const migrationDeps = (services: Services): MigrationDeps => {
         // frames. Existing ids are refused, a migration lands beside nothing, never over something.
         addCapability: async (capability) => {
             if ((await services.capabilities.get(capability.id)) !== undefined) {
-                throw new Error(`a "${capability.id}" connection already exists — rename or remove it first`);
+                throw new Error(`a "${capability.id}" connection already exists: rename or remove it first`);
             }
             for await (const line of registry[capability.kind].apply(ctx, capability.id, capability.config)) {
                 void line;
@@ -184,7 +184,7 @@ export const createMigrations = (services: Services): Migrations => {
             }
             const facts = services.hostHub.state(hostId).facts;
             if (!services.hostHub.online(hostId) || facts === undefined) {
-                throw new MigrationFormatError(`${hostId} is not connected right now — wake it, or pack the folder by hand instead`);
+                throw new MigrationFormatError(`${hostId} is not connected right now: wake it, or pack the folder by hand instead`);
             }
             const found = await probeHost(services.hostHub, hostId, facts.home);
             if (found === undefined) {
@@ -195,7 +195,7 @@ export const createMigrations = (services: Services): Migrations => {
         },
         apply: async (input) => {
             if (pending === undefined || pending.token !== input.token) {
-                throw new MigrationFormatError("no held upload matches that plan — upload the archive again and re-review");
+                throw new MigrationFormatError("no held upload matches that plan: upload the archive again and re-review");
             }
             const held = pending;
             const report = await applyMigration(migrationDeps(services), planOf(held.source, held.files), {

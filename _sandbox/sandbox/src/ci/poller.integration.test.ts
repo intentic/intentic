@@ -101,7 +101,7 @@ test("a run that appears after the first pass wakes the ci automation", async ()
     expect(services.ciRuns.sweep()).toMatchObject([{ repo: "web", runId: 2, status: "failed", failedJobs: ["lint"] }]);
 });
 
-test("a repo whose webhook IS registered is never polled — the webhook owns it", async () => {
+test("a repo whose webhook IS registered is never polled: the webhook owns it", async () => {
     const { services, prompts, poller, publish } = await harness(false);
     await poller.poll();
     publish([run(2, "failure"), run(1, "success")]);

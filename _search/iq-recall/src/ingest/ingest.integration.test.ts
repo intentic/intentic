@@ -67,7 +67,7 @@ test("full ingest indexes sessions, turns, touches, and titles", async () => {
         { path: "src/auth/token.test.ts", modified: 0 },
         { path: "src/auth/token.ts", modified: 1 },
     ]);
-    // The turn's closing assistant message is the stored response — the dead branch is superseded by append
+    // The turn's closing assistant message is the stored response: the dead branch is superseded by append
     // order, and an oversized answer is head-capped.
     expect(responseOf(SESSION_A, 0)).toBe("The rotation bug is in token refresh.");
     expect(responseOf(SESSION_A, 1)).toMatch(/^Rotation fixed and tests added\./);

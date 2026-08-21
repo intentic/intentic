@@ -30,7 +30,7 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
         list: i.list.handler(async () => {
             const listeners = await services.scanPorts();
             /* One index for the whole list (it reads every installed manifest), the same way the scan itself is
-             * taken once — a per-row lookup would re-read the extensions directory once per listening port.
+             * taken once: a per-row lookup would re-read the extensions directory once per listening port.
              *
              * Its failure costs a NAME, never the list: this route is also what the desktop mirror reconciles
              * against on a loop, and a route that answered 500 because one manifest was unreadable would stop

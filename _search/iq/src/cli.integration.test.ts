@@ -15,7 +15,7 @@ let repoCwd: string;
 beforeAll(async () => {
     ({ root, cleanup } = await makeFixtureWorkspace());
     process.env["WORKSPACE_ROOT"] = root;
-    // Run FROM the fixture, like an agent working in it — a cwd outside the pinned root deliberately re-roots
+    // Run FROM the fixture, like an agent working in it: a cwd outside the pinned root deliberately re-roots
     // (see workspaceRoot), which is its own test below.
     repoCwd = process.cwd();
     process.chdir(root);
@@ -49,7 +49,7 @@ const invoke = async (argv: string[]): Promise<{ out: string; err: string; exitC
 test("bare query routes to q (defaultCommand)", async () => {
     const { out, exitCode } = await invoke(["createWidget"]);
     expect(exitCode).toBe(0);
-    expect(out).toContain("iq: createWidget —");
+    expect(out).toContain("iq: createWidget,");
     expect(out).toContain("alpha/src/widget.ts");
 });
 
@@ -90,11 +90,11 @@ test("scope flags pass through (--lang)", async () => {
 
 test("a natural-language query degrades to the lexical fallback; usage errors exit 2 with one line", async () => {
     const natural = await invoke(["q", "how are widgets built?"]);
-    expect(natural.out).toContain("no embedding backend — BM25 only");
+    expect(natural.out).toContain("no embedding backend, BM25 only");
     // The retired `ask` verb is absorbed rather than rejected, and reaches the same pipeline.
     expect(normalizeArgv(["ask", "how are widgets built?"]).argv).toEqual(["q", "how are widgets built?"]);
     const absorbed = await invoke(normalizeArgv(["ask", "how are widgets built?"]).argv);
-    expect(absorbed.out).toContain("no embedding backend — BM25 only");
+    expect(absorbed.out).toContain("no embedding backend, BM25 only");
 
     const usage = await invoke(["ast", "createWidget($A)"]);
     expect(usage.exitCode).toBe(2);
@@ -117,7 +117,7 @@ test("normalizeArgv absorbs common inferred verbs and result-limit flags", () =>
     expect(normalizeArgv(["find", "x", "--include=*.ts"]).argv).toEqual(["find", "x", "--glob=*.ts"]);
     expect(normalizeArgv(["skeleton", "src/app.ts"]).argv).toEqual(["outline", "src/app.ts"]);
     expect(normalizeArgv(["find", "x", "--max", "5", "--top=4", "-k", "3"]).argv).toEqual(["find", "x", "--limit", "5", "--limit=4", "--limit", "3"]);
-    // log's --path is a real git pathspec — never rewritten.
+    // log's --path is a real git pathspec: never rewritten.
     expect(normalizeArgv(["log", "MAX", "--path", "src"]).argv).toEqual(["log", "MAX", "--path", "src"]);
     expect(normalizeArgv(["find", "createWidget"]).notes).toEqual([]);
 });
@@ -139,14 +139,14 @@ test("a glob-only file search reaches the engine with that glob as its exact pat
     expect(result.out).toContain("alpha/src/widget.ts");
 });
 
-// Shell `find` means filenames, iq `find` means content — the collision cost a session a turn.
+// Shell `find` means filenames, iq `find` means content: the collision cost a session a turn.
 test("normalizeArgv hints at `files` when `find` is handed a bare filename, without rewriting the verb", () => {
     expect(normalizeArgv(["find", "Row.vue"])).toEqual({
         argv: ["find", "Row.vue"],
         notes: [],
         hints: [expect.stringContaining("iq files Row.vue")],
     });
-    // A pattern, a path, or another verb is not a filename — no hint.
+    // A pattern, a path, or another verb is not a filename: no hint.
     expect(normalizeArgv(["find", "createServer\\("]).hints).toEqual([]);
     expect(normalizeArgv(["find", "src/Row.vue"]).hints).toEqual([]);
     expect(normalizeArgv(["files", "Row.vue"]).hints).toEqual([]);
@@ -267,7 +267,7 @@ test("parseMultiLine: quoted query and per-line flags parse instead of being sea
     expect(parsed.scope).toEqual({ lang: ["ts"], in: ["alpha"] });
 });
 
-test("parseMultiLine: errors on unknown flags, unknown langs, and bad kinds — never literal-searches them", () => {
+test("parseMultiLine: errors on unknown flags, unknown langs, and bad kinds: never literal-searches them", () => {
     expect(parseMultiLine("find foo -i -A 2").error).toContain("unknown flag");
     expect(parseMultiLine("find foo --lang klingon").error).toContain('unknown --lang "klingon"');
     expect(parseMultiLine("refs foo --kind banana").error).toContain("--kind for refs");
@@ -297,9 +297,9 @@ test("multi: flagged sub-lines hit, error lines report without aborting the batc
         [],
         'find "createWidget" --lang ts\nfind foo --bogus\ndef zz_nope',
     );
-    expect(out).toContain("[1/3] iq: find createWidget --lang ts —");
+    expect(out).toContain("[1/3] iq: find createWidget --lang ts,");
     expect(out).toContain("widget.ts");
-    expect(out).toContain("[2/3] iq: find foo --bogus — error: unknown flag --bogus");
+    expect(out).toContain("[2/3] iq: find foo --bogus, error: unknown flag --bogus");
     expect(out).toContain("[3/3]");
     expect(context.process.exitCode).toBe(0);
 });
@@ -319,7 +319,7 @@ test("multi: queries given as arguments need no stdin", async () => {
         'find "createWidget" --lang ts',
         "def createWidget",
     ]);
-    expect(out).toContain("[1/2] iq: find createWidget --lang ts —");
-    expect(out).toContain("[2/2] iq: def createWidget —");
+    expect(out).toContain("[1/2] iq: find createWidget --lang ts,");
+    expect(out).toContain("[2/2] iq: def createWidget,");
     expect(context.process.exitCode).toBe(0);
 });

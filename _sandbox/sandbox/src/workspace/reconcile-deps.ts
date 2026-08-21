@@ -147,7 +147,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
         }
         const timedOut = keys.filter((key) => deps.processes.running(key));
         for (const key of timedOut) {
-            deps.logger.warn({ key }, "dependency install exceeded its watch window — stopping it");
+            deps.logger.warn({ key }, "dependency install exceeded its watch window: stopping it");
             await deps.processes.stop(key);
         }
     };

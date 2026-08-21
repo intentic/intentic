@@ -7,7 +7,7 @@ import { bridgeConnection, createTunnelPool, sshSocketUrl, startSshTunnel, syncS
  *
  * What these cover is the contract Mutagen depends on and nothing about how it is framed: ssh's bytes reach the
  * socket, the sandbox's bytes reach ssh, either side closing closes the other, and the enrolled machine's
- * credential is on the request. The one thing worth stubbing is the WebSocket itself — a real one needs a
+ * credential is on the request. The one thing worth stubbing is the WebSocket itself: a real one needs a
  * server, and what is being tested here is this side of it.
  */
 
@@ -96,14 +96,14 @@ afterEach(() => {
 
 describe("syncSshPort", () => {
     // Stable, because the ssh config written at setup names the port and the watcher binds it in a different
-    // process, at a different time — they agree only by deriving the same number from the same id.
+    // process, at a different time: they agree only by deriving the same number from the same id.
     it("is stable for one sandbox and different for another", () => {
         expect(syncSshPort("sandbox-0738cd6b5027")).toBe(syncSshPort("sandbox-0738cd6b5027"));
         expect(syncSshPort("sandbox-0738cd6b5027")).not.toBe(syncSshPort("sandbox-bce57bb9fe3b"));
     });
 
     // Above the range dev servers claim and below Linux's ephemeral floor, so the kernel never hands the same
-    // number out from under us — and clear of the band the sandbox's own loopback listener derives.
+    // number out from under us, and clear of the band the sandbox's own loopback listener derives.
     it("lands in its own quiet band", () => {
         for (const id of ["sandbox-0738cd6b5027", "sandbox-bce57bb9fe3b", "ffffff", "000000"]) {
             expect(syncSshPort(id)).toBeGreaterThanOrEqual(24000);
@@ -145,7 +145,7 @@ describe("bridgeConnection", () => {
             throw new Error("the bridge opened no socket");
         }
 
-        // ssh speaks first, before the socket is open — its version banner must be held, not dropped.
+        // ssh speaks first, before the socket is open: its version banner must be held, not dropped.
         ssh.write("SSH-2.0-OpenSSH_9.6\r\n");
         await sleep(50);
         expect(ws.sent).toHaveLength(0);
@@ -166,7 +166,7 @@ describe("bridgeConnection", () => {
     });
 
     // The credential is the whole of what authorizes this stream, and it belongs on the request rather than in
-    // the URL — a query string is the half of a request that gets logged.
+    // the URL: a query string is the half of a request that gets logged.
     it("presents the enrolled machine's sync token as a header", () => {
         vi.stubGlobal("WebSocket", FakeSocket);
         const socket = connect({ port: 1, host: "127.0.0.1" });
@@ -180,7 +180,7 @@ describe("bridgeConnection", () => {
     });
 
     // Mutagen treats a dropped transport as a reconnect, so the honest thing on a failed socket is to end the
-    // TCP connection — leaving ssh hanging on a socket nothing will answer is what looks like a wedged sync.
+    // TCP connection: leaving ssh hanging on a socket nothing will answer is what looks like a wedged sync.
     it("closes ssh's connection when the socket fails", async () => {
         vi.stubGlobal("WebSocket", FakeSocket);
         const { ssh, accepted, server } = await socketPair();
@@ -194,7 +194,7 @@ describe("bridgeConnection", () => {
     });
 
     /* THE FAILURE SSH CANNOT SEE. The listener is local, so the TCP connect always succeeds and a sandbox that is
-     * asleep, 502-ing or retired shows up only as a WebSocket that never opens — and never errors either. ssh
+     * asleep, 502-ing or retired shows up only as a WebSocket that never opens, and never errors either. ssh
      * then sits in banner exchange, and everything waiting on ssh sits with it: the git bridge's own cap is two
      * MINUTES, which one unreachable pairing was adding to every watcher pass, serially, ahead of every healthy
      * pairing's ports and commits. Ending the connection here is what turns that back into seconds. */
@@ -206,7 +206,7 @@ describe("bridgeConnection", () => {
         const ended = new Promise<void>((resolve) => ssh.once("close", () => resolve()));
         const said: string[] = [];
 
-        // Neither open nor failed — exactly what a sandbox behind a hung tunnel looks like from this end.
+        // Neither open nor failed: exactly what a sandbox behind a hung tunnel looks like from this end.
         bridgeConnection(accepted, target, (message) => said.push(message));
         await vi.advanceTimersByTimeAsync(10_000);
         vi.useRealTimers();

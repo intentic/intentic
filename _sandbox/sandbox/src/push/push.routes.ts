@@ -46,7 +46,7 @@ export const createPushRoutes = (services: PushRoutesDeps) => {
                 throw new ORPCError("PRECONDITION_FAILED", {
                     message:
                         failed === 0
-                            ? "No device is registered with this sandbox — turn the toggle off and on again to register this one."
+                            ? "No device is registered with this sandbox: turn the toggle off and on again to register this one."
                             : "Every registered device refused the send, so their registrations were dropped. Turn the toggle off and on again to re-register this device.",
                 });
             }

@@ -26,7 +26,7 @@ const pollDeviceApproval = async (client: OpencodeClient, method: number, signal
         try {
             await sleep(5_000, undefined, { signal });
         } catch {
-            return; // superseded by a newer sign-in — stop polling the now-expired code
+            return; // superseded by a newer sign-in: stop polling the now-expired code
         }
         try {
             if ((await client.provider.oauth.callback({ path: { id: XAI }, body: { method } })).data === true) {

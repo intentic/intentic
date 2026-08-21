@@ -50,9 +50,9 @@ description: Create post drafts for owner approval by writing JSON files into ${
 
 # Post drafts (approval queue)
 
-Proposed or scheduled posts are NEVER posted directly — write a draft file instead; the owner approves it in
+Proposed or scheduled posts are NEVER posted directly: write a draft file instead; the owner approves it in
 the app and the daemon sends it when it comes due. One JSON file per draft: ${DRAFTS_DIR}/<id>.json
-(id: letters, digits, dashes — it names the draft in the UI). Example:
+(id: letters, digits, dashes, it names the draft in the UI). Example:
 
 {
   "platform": "x",
@@ -66,23 +66,23 @@ the app and the daemon sends it when it comes due. One JSON file per draft: ${DR
   "createdAt": 1767800000000
 }
 
-Only "platform" and "content" are required; everything else is optional — except "actsAs", which every
+Only "platform" and "content" are required; everything else is optional: except "actsAs", which every
 platform that posts through a logged-in browser needs (see below).
-- platform: the skill that will post it — "x", "reddit", "youtube", "discord", …
-- actsAs: WHOSE NAME THIS GOES OUT UNDER — the id of a persona in .intentic/config/personas.json, one that holds an
+- platform: the skill that will post it, "x", "reddit", "youtube", "discord", …
+- actsAs: WHOSE NAME THIS GOES OUT UNDER, the id of a persona in .intentic/config/personas.json, one that holds an
   account for this platform. Read that file and pick; if none of them fits, say so to the owner rather than
   guessing. Sending happens with nobody watching, and a turn that names no persona is given NO logged-in
-  account at all — so a browser-published draft without this is failed unsent, with that reason written into
+  account at all, so a browser-published draft without this is failed unsent, with that reason written into
   it. Discord and anything else the daemon posts through a stored key needs no persona and ignores this.
-- title (a new reddit post or a YouTube upload needs one) and target — where on the platform this goes.
+- title (a new reddit post or a YouTube upload needs one) and target, where on the platform this goes.
 - A target that is a URL makes the draft a REPLY to whatever is at it: a thread, a video, a tweet, or ONE
   PERSON'S COMMENT (on reddit that is the comment's own permalink, .../comments/<post>/<slug>/<comment>/). The
   publisher opens exactly this URL and replies where it lands, so the difference between the thread's address
   and a comment's decides whether the reply nests under that person or arrives addressed to nobody.
 - A reply publishes no title on any platform, so "title" on one is your note to the OWNER about why this
-  reply — the app shows it as a note under the post rather than as a headline.
+  reply: the app shows it as a note under the post rather than as a headline.
 - media: workspace-relative files; put them under ${DRAFTS_DIR}/media/.
-- scheduledAt: your SUGGESTED post time in epoch ms — \`date -d "2026-07-10 09:00 +02:00" +%s%3N\` (always give an
+- scheduledAt: your SUGGESTED post time in epoch ms, \`date -d "2026-07-10 09:00 +02:00" +%s%3N\` (always give an
   explicit UTC offset; the sandbox clock is UTC). Omit it to let the owner pick the date at approval.
 - status: defaults to "proposed" if omitted, and PROPOSED IS THE ONLY ONE YOU MAY WRITE. The owner approves in
   the app, which starts a short countdown they can still stop; the daemon then either sends the post itself or

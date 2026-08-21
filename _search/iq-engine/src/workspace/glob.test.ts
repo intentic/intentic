@@ -14,7 +14,7 @@ test("globToRegExp matches like ripgrep -g", () => {
     expect(globToRegExp("*.{ts,py}").test("x/app.rb")).toBe(false);
 });
 
-// `**` crosses whole directories, never half a name — the difference between "an api anywhere" and "anything
+// `**` crosses whole directories, never half a name: the difference between "an api anywhere" and "anything
 // ending in api", which is what the search box's file filter leans on for every name it is given.
 test("a globstar spans complete directories only", () => {
     expect(globToRegExp("**/api").test("_apps/api")).toBe(true);

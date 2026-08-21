@@ -126,7 +126,7 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
                     status: `failed`,
                     error:
                         draft.actsAs === undefined
-                            ? `Nobody is named to post this. ${draft.platform} publishes through a logged-in browser, and this draft does not say which persona's account to use — so nothing was sent. Set "actsAs" to a persona that holds the right ${draft.platform} account, then approve it again.`
+                            ? `Nobody is named to post this. ${draft.platform} publishes through a logged-in browser, and this draft does not say which persona's account to use, so nothing was sent. Set "actsAs" to a persona that holds the right ${draft.platform} account, then approve it again.`
                             : `No persona called "${draft.actsAs}" exists, so nothing was sent. A turn wearing a card nobody carries reaches no account at all. Point "actsAs" at a persona that holds the right ${draft.platform} account, then approve it again.`,
                 });
             }
@@ -194,7 +194,7 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
             if (draft.status === `posting` && now - (draft.postingAt ?? now) > POSTING_STALE_MS) {
                 await mark(draft, {
                     status: `failed`,
-                    error: `The run that was posting this stopped before it said what happened. Check the platform before retrying — it may already be up.`,
+                    error: `The run that was posting this stopped before it said what happened. Check the platform before retrying, it may already be up.`,
                 });
             }
         }

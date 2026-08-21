@@ -5,16 +5,16 @@ import { describe, expect, it } from "vitest";
 import { classifyWorkspace } from "./classify.js";
 import { walkWorkspaceTree } from "./workspace-tree.js";
 
-// Minimal byte signatures — enough for file-type to recognize the format at Stage 2.
+// Minimal byte signatures: enough for file-type to recognize the format at Stage 2.
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 const ZIP = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
 const PDF = Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\n");
 
 describe("classifyWorkspace", () => {
-    it("runs the cascade over a walked tree: repo markers, magic bytes, ext, text fallback — and inherits the walk's ignore filtering", async () => {
+    it("runs the cascade over a walked tree: repo markers, magic bytes, ext, text fallback, and inherits the walk's ignore filtering", async () => {
         const root = await mkdtemp(join(tmpdir(), "classify-"));
 
-        // Stage 1: a repo dir — classified as one unit, contents not descended.
+        // Stage 1: a repo dir, classified as one unit, contents not descended.
         await mkdir(join(root, "myrepo", "src"), { recursive: true });
         await writeFile(join(root, "myrepo", "package.json"), "{}");
         await writeFile(join(root, "myrepo", "src", "index.ts"), "export {};");
@@ -45,7 +45,7 @@ describe("classifyWorkspace", () => {
         expect(classifications.some((c) => c.path.startsWith("node_modules"))).toBe(false);
     });
 
-    it("skips the tree's grayed `ignored` entries — a .gitignore'd loose file is never classified", async () => {
+    it("skips the tree's grayed `ignored` entries, a .gitignore'd loose file is never classified", async () => {
         const root = await mkdtemp(join(tmpdir(), "classify-ignored-"));
         await writeFile(join(root, ".gitignore"), "*.log\n");
         await writeFile(join(root, "notes.md"), "# real doc");

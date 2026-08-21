@@ -16,7 +16,7 @@ import { readExtensionEnablement } from "./extension-enablement.js";
 import { checkExtensionUpdates, readExtensionUpdateState, writeUpdatePolicy } from "./extension-updates.js";
 
 /* THE UPDATE LIFECYCLE, end to end: an author publishes, a registry lists the new sha, the sandbox notices,
- * previews, applies, and can walk back — driven over the daemon's HTTP surface exactly as the browser drives
+ * previews, applies, and can walk back: driven over the daemon's HTTP surface exactly as the browser drives
  * it, against real git fixtures standing in for the author's repo and the registry. */
 
 const exec = promisify(execFile);
@@ -35,7 +35,7 @@ const MANIFEST_V1 = {
     entry: "dist/extension.js",
     permissions: { sandbox: ["GET /panels"] },
 };
-// The update grows the manifest by one declared route — the powers diff's whole subject.
+// The update grows the manifest by one declared route: the powers diff's whole subject.
 const MANIFEST_V2 = { ...MANIFEST_V1, version: "1.1.0", permissions: { sandbox: ["GET /panels", "POST /panels/*/start"] } };
 
 // The author's repository with two releases on it.
@@ -51,7 +51,7 @@ const authorRepo = async (): Promise<{ url: string; v1: string; v2: string }> =>
     return { url: dir, v1, v2 };
 };
 
-// A registry repo whose one row points at the author's repo — `entry` overrides let a test bless or block it.
+// A registry repo whose one row points at the author's repo: `entry` overrides let a test bless or block it.
 const registryRepo = async (author: { url: string }, sha: string, entry: object = {}): Promise<string> => {
     const dir = mkdtempSync(join(tmpdir(), "ext-registry-"));
     await git(dir, "init", "-q");
@@ -131,7 +131,7 @@ test("discover → preview → apply → revert: the whole update lifecycle over
     expect((await svc.capabilities.get("demo"))?.config).toMatchObject({ ref: author.v1 });
 });
 
-test("a blocked listing raises an advisory and pulls the switch — the fail-safe direction", async () => {
+test("a blocked listing raises an advisory and pulls the switch: the fail-safe direction", async () => {
     const author = await authorRepo();
     const registry = await registryRepo(author, author.v2, { trust: "blocked", trustReason: "exfiltrates the panel token" });
     const { workspace, svc, client } = await installedWorkspace(author, registry);
@@ -140,7 +140,7 @@ test("a blocked listing raises an advisory and pulls the switch — the fail-saf
 
     const state = await readExtensionUpdateState(workspace.root);
     expect(state.extensions["acme.demo"]?.advisory).toMatchObject({ reason: "exfiltrates the panel token", autoDisabled: true });
-    // The switch is off, honestly persisted — reversible from the row like any other flip.
+    // The switch is off, honestly persisted: reversible from the row like any other flip.
     expect((await readExtensionEnablement(workspace.root))["acme.demo"]).toBe(false);
     const row = (await client.extensions.list()).extensions.find((extension) => extension.id === "demo");
     expect(row?.enabled).toBe(false);
@@ -149,7 +149,7 @@ test("a blocked listing raises an advisory and pulls the switch — the fail-saf
     expect(row?.update).toBeUndefined();
 });
 
-test("the auto rung refuses an unverified listing and says so — the click stays the owner's", async () => {
+test("the auto rung refuses an unverified listing and says so: the click stays the owner's", async () => {
     const author = await authorRepo();
     const registry = await registryRepo(author, author.v2);
     const { workspace, svc } = await installedWorkspace(author, registry);
@@ -157,7 +157,7 @@ test("the auto rung refuses an unverified listing and says so — the click stay
 
     await checkExtensionUpdates(svc);
 
-    // Still on v1 — nothing applied — and the record leads with why.
+    // Still on v1: nothing applied, and the record leads with why.
     expect(await installedVersion(workspace.root)).toBe("1.0.0");
     const state = await readExtensionUpdateState(workspace.root);
     expect(state.extensions["acme.demo"]?.update?.needsReview).toContain("isn't verified");
@@ -188,7 +188,7 @@ test("a verified release whose powers grew still falls back to notify, naming th
     expect(state.extensions["acme.demo"]?.update?.needsReview).toContain("POST /panels/*/start");
 });
 
-test("an unreachable registry keeps the previous records — offline never reads as all-clear", async () => {
+test("an unreachable registry keeps the previous records: offline never reads as all-clear", async () => {
     const author = await authorRepo();
     const registry = await registryRepo(author, author.v2);
     const { workspace, svc } = await installedWorkspace(author, registry);
@@ -196,7 +196,7 @@ test("an unreachable registry keeps the previous records — offline never reads
     await checkExtensionUpdates(svc);
     expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.update?.ref).toBe(author.v2);
 
-    // The registry vanishes (the author deleted it, the network is down — same read).
+    // The registry vanishes (the author deleted it, the network is down: same read).
     await exec("rm", ["-rf", registry]);
     await checkExtensionUpdates(svc);
     expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.update?.ref).toBe(author.v2);

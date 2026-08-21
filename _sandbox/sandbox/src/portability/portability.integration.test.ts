@@ -11,7 +11,7 @@ import { workspacePaths } from "../workspace/workspace.js";
 import { packBundle } from "./bundle.js";
 import { BundleFormatError, restoreBundle } from "./restore.js";
 
-/* THE ROUND TRIP — export a sandbox's two volumes, restore them into empty ones, and check that what came out
+/* THE ROUND TRIP: export a sandbox's two volumes, restore them into empty ones, and check that what came out
  * is what went in. The claim this suite exists to hold is the one the feature was asked for: "export and then
  * import result in the same environment". Anything the bundle deliberately does NOT carry is asserted just as
  * hard as what it does, because a silent omission is the failure mode that made this feature necessary.
@@ -117,7 +117,7 @@ test("every repo's real git dir travels, and its in-tree pointer is rewritten fo
     // a pile of files answering `fatal: not a git repository` to every command.
     expect(await readFile(join(target.work, ".git"), "utf8")).toBe(`gitdir: ${join(target.history, "gits/root")}\n`);
     expect(await readFile(join(target.work, "nested/.git"), "utf8")).toBe(`gitdir: ${join(target.history, "gits/nested")}\n`);
-    // Root first, then the discovered repos — the order healGitPointers walks, so a failure names the repo.
+    // Root first, then the discovered repos: the order healGitPointers walks, so a failure names the repo.
     expect(report.restored.repos).toEqual(["root", "nested"]);
     await cleanup();
 });
@@ -162,13 +162,13 @@ test("secrets obey the owner's export choice, in both directions", async () => {
  *
  * It used to be asserted beside ci.json above: classed `secret`, dropped wholesale from a no-secrets bundle. It
  * now travels in every bundle, because the credential VALUES are no longer in it (capabilities-store.ts's vault)
- * and what is left is the shape of each connection — which is the difference between a target that arrives
+ * and what is left is the shape of each connection, which is the difference between a target that arrives
  * listing its connections unauthenticated and one that arrives blank with a list of homework.
  *
  * That is only true of the BYTES while nothing has hand-written a real token back in, which is why the export
  * sweeps first and why the second half of this test is about ordering rather than about classification. The
  * stubbed sweep stands in for the vault: if it runs before the walk, the packed file holds the marker; if it
- * runs after — or not at all — the packed file holds the token, and a bundle the owner was told carried no
+ * runs after, or not at all: the packed file holds the token, and a bundle the owner was told carried no
  * secrets carries one. */
 test("the capability manifest travels without its credentials, swept before the walk", async () => {
     const source = await makeRoots();
@@ -192,7 +192,7 @@ test("the capability manifest travels without its credentials, swept before the 
     );
 
     const restored = await readFile(join(target.work, ".intentic/config/capabilities.json"), "utf8");
-    // The shape arrived — the id, the kind and the address the owner would otherwise have to remember.
+    // The shape arrived: the id, the kind and the address the owner would otherwise have to remember.
     expect(restored).toContain("mcp1");
     expect(restored).toContain("https://mcp.example.com");
     // The credential did not, and it is the sweep's ordering that decided that.
@@ -249,14 +249,14 @@ test("the composed overlay is left for the target to recompose; its source secti
     await mkdir(join(source.work, `${STATE_DIR}/local`), { recursive: true });
     await writeFile(join(source.work, `${STATE_DIR}/config/environment.custom.Dockerfile`), "RUN apt-get install -y ffmpeg\n");
     await writeFile(join(source.work, `${STATE_DIR}/config/environment.d/rust.Dockerfile`), "RUN rustup default stable\n");
-    // Composed from a base image the target may not even be on — restoring it would pin the wrong FROM.
+    // Composed from a base image the target may not even be on: restoring it would pin the wrong FROM.
     await writeFile(join(source.work, `${STATE_DIR}/local/environment.approved.Dockerfile`), "FROM registry.example/sandbox:old\n");
 
     const target = await makeRoots();
     const report = await restoreBundle(await bundleOf(source, false), { workspaceRoot: target.work, historyRoot: target.history }, LIMIT);
 
     expect(await readFile(join(target.work, ".intentic/config/environment.custom.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
-    // A pending agent request survives the move — the owner still has a question to answer on the other side.
+    // A pending agent request survives the move: the owner still has a question to answer on the other side.
     expect(await readFile(join(target.work, ".intentic/config/environment.d/rust.Dockerfile"), "utf8")).toBe("RUN rustup default stable\n");
     await expect(readFile(join(target.work, ".intentic/local/environment.approved.Dockerfile"), "utf8")).rejects.toThrow();
     // And the owner is told the one thing the container cannot do for itself.

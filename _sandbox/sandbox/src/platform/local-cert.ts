@@ -164,7 +164,7 @@ export const startLocalCertificateRenewal = (config: Config, logger: Logger): { 
         void ensureLocalCertificate(config, logger)
             .then(() => schedule(CHECK_INTERVAL_MS))
             .catch((error: unknown) => {
-                logger.warn({ err: error }, "the loopback certificate is unavailable — this sandbox serves its shortcut over plain http");
+                logger.warn({ err: error }, "the loopback certificate is unavailable, this sandbox serves its shortcut over plain http");
                 schedule(RETRY_INTERVAL_MS);
             });
     }

@@ -18,13 +18,13 @@ import { clientFor, fakeFiles, fakeProcesses, rejectAuth, rejectForbidden, servi
 import { publishRuntimeChange } from "./runtime-watch.js";
 
 /* The system routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
+ * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
  * one file that two agents working on unrelated features collided in every time. The fakes and the client
  * are shared (route-testing.ts); what lives here is what these routes do. */
 
 test("system.terminals reports an empty list, not an error, when there is no tmux server to ask", async () => {
     // Pointed at a socket directory that holds no server: `list-panes` exits non-zero and that is an empty list.
-    // Both vars matter — TMUX_TMPDIR picks the socket, and $TMUX (set whenever the suite itself runs inside tmux)
+    // Both vars matter: TMUX_TMPDIR picks the socket, and $TMUX (set whenever the suite itself runs inside tmux)
     // would otherwise send the query to the REAL server, where this machine's own agent-* sessions live.
     vi.stubEnv("TMUX_TMPDIR", mkdtempSync(join(tmpdir(), "terminals-empty-")));
     vi.stubEnv("TMUX", undefined);
@@ -183,7 +183,7 @@ test("system.info reports the sandbox image tag and exact bundled version", asyn
 });
 
 test("presence: an /events connection joins the roster and a /system/presence report fans back out", async () => {
-    // Fake auth resolving a full identity — exercises the whole seam: middleware → context → handler →
+    // Fake auth resolving a full identity, exercises the whole seam: middleware → context → handler →
     // registry → stream.
     const app = createApp(
         services({
@@ -231,7 +231,7 @@ test("presence: an /events connection joins the roster and a /system/presence re
 
 test("events: the first frame is the workspace-identity hello, stable across connections", async () => {
     // An in-memory files seam so the id minted by the first connection persists to the second (the default
-    // fake forgets writes) — the browser relies on this stability to tell a surviving workspace from a wiped one.
+    // fake forgets writes): the browser relies on this stability to tell a surviving workspace from a wiped one.
     const disk = new Map<string, string>();
     const app = createApp(
         services({
@@ -301,7 +301,7 @@ test("events: the hello names the daemon's build and where its boot is, then str
 
 test("POST /system/authorized-key authorizes via the pairing token alone (no bearer)", async () => {
     const app = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
-    // Empty body: a valid pairing must get past auth and fail on key validation (400), never on auth (401) —
+    // Empty body: a valid pairing must get past auth and fail on key validation (400), never on auth (401):
     // the regression was the global bearer middleware 401ing before the route's own pairing check ran.
     const post = (headers: Record<string, string> = {}) =>
         app.request("/system/authorized-key", {
@@ -314,7 +314,7 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
     expect((await post({ "x-intentic-pair": "bogus" })).status).toBe(401);
 });
 
-/* A sandbox on the platform's own reachability fabric — the default, and the one that could not sync at all.
+/* A sandbox on the platform's own reachability fabric: the default, and the one that could not sync at all.
  * Its shares are HTTP, so there was no `ssh-<id>` name to hand Mutagen and the enroll answered 409 on the ONE
  * path the setup wizard offers. The transport is the daemon's own HTTPS surface now, so this sandbox enrolls
  * like any other and the card reads `available`. */
@@ -345,7 +345,7 @@ test("a sandbox on intentic's own fabric enrolls for sync like every other one",
 });
 
 test("POST /system/authorized-key is single-holder: a rival machine needs takeover (423), which replaces the key", async () => {
-    // Enrollment writes the store under historyRoot and derives ~/.ssh/authorized_keys from it — point both at
+    // Enrollment writes the store under historyRoot and derives ~/.ssh/authorized_keys from it: point both at
     // temp dirs so neither lands on the real /history nor in the real home.
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-enroll-home-"));
     // connectToken + publicUrl make syncSshHostname resolve, so enrollment gets past the tunnel-configured check.
@@ -370,7 +370,7 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
     const KEY_B = "ssh-ed25519 BBBBB machine-b";
 
     expect((await enroll(KEY_A)).status).toBe(200);
-    // The same machine re-enrolling (its cached key) is idempotent — no takeover needed.
+    // The same machine re-enrolling (its cached key) is idempotent: no takeover needed.
     expect((await enroll(KEY_A)).status).toBe(200);
     // A different machine is refused and told who currently holds sync.
     const blocked = await enroll(KEY_B);
@@ -381,7 +381,7 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
     expect(await (await app.request("/system/sync")).json()).toMatchObject({ enrolled: true, syncingFrom: "machine-b" });
 });
 
-test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll — no single-holder lock", async () => {
+test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll: no single-holder lock", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-multi-"));
     const app = createApp(
         services({
@@ -399,7 +399,7 @@ test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll �
             headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("mirror").token },
             body: JSON.stringify({ key }),
         });
-    // Three collaborators mirror the same sandbox concurrently — every enroll succeeds, none locks.
+    // Three collaborators mirror the same sandbox concurrently: every enroll succeeds, none locks.
     expect((await enrollMirror("ssh-ed25519 AAA laptop-a")).status).toBe(200);
     expect((await enrollMirror("ssh-ed25519 BBB laptop-b")).status).toBe(200);
     const c = await enrollMirror("ssh-ed25519 CCC laptop-c");
@@ -456,7 +456,7 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
     /* THE FEED THAT REPLACED THE POLLS, over the wire the browser actually reads.
      *
      * Terminals, panels, ports, browsers and subagents each used to carry their own timer because none of them
-     * has a file for the watcher to see. They have no timer now, so this frame is their whole live feed — which
+     * has a file for the watcher to see. They have no timer now, so this frame is their whole live feed, which
      * makes "the frame arrives" the property the whole change rests on. */
     const client = clientFor(createApp(services()));
     const controller = new AbortController();
@@ -464,7 +464,7 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
 
     /* Read until the wanted domains have all been seen. Deliberately not "the next frame carries both": the bus
      * rate-limits PER DOMAIN, so a domain still inside its window rides the following frame instead of holding
-     * the other one back — which is the property that keeps a panel starting from feeling as slow as the
+     * the other one back, which is the property that keeps a panel starting from feeling as slow as the
      * chattiest thing in the sandbox, and would make a single-frame assertion flaky against the sampler running
      * beside it. What must hold is that everything published arrives. */
     const awaitDomains = async (wanted: readonly string[]): Promise<void> => {
@@ -484,7 +484,7 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
 
     /* Wait for the stream to be LIVE before publishing anything. The route sends its hello frame before it
      * subscribes to any feed, and a change published with nobody subscribed is dropped rather than queued
-     * (runtime-watch.ts) — so a publish issued between the two waits forever for a frame nobody made. A browser
+     * (runtime-watch.ts), so a publish issued between the two waits forever for a frame nobody made. A browser
      * is never in that gap; it holds a pull open. The presence frame is the proof of arrival: the route enqueues
      * it from inside the same block that registers the runtime listener. */
     let live = false;

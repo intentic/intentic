@@ -64,7 +64,7 @@ test("def boost outranks equal-rank text hits", () => {
 });
 
 // The three multipliers are separate features: each one alone must be able to reorder, and turning it off must
-// leave pure RRF order. Benchmarking depends on that independence — a bundled toggle could not attribute a delta.
+// leave pure RRF order. Benchmarking depends on that independence: a bundled toggle could not attribute a delta.
 const alone = (multiplier: "defBoost" | "pathBoost" | "recency"): FuseContext => ({
     ...context,
     defBoost: multiplier === "defBoost",
@@ -98,7 +98,7 @@ test("path boost matches path words, not substrings of them", () => {
             { path: "src/_textwrap.py", line: 1, text: "wrap()", tags: [{ kind: "text" }] },
         ],
     };
-    // "wrap" is inside "textwrap" but names nothing in that path — the file that wraps help output keeps rank 1.
+    // "wrap" is inside "textwrap" but names nothing in that path: the file that wraps help output keeps rank 1.
     expect(fuse([infix], { ...alone("pathBoost"), queryTokens: ["wrap"] })[0]?.path).toBe("src/formatting.py");
     // A query token that starts a path word still boosts: "index" is what `indexer.ts` is named after.
     const stem: EngineResult = {
@@ -120,7 +120,7 @@ test("recency alone reorders toward the newer file", () => {
     expect(fuse([rrfOrder], { ...context, defBoost: false, pathBoost: false, recency: false, queryTokens: [], mtimes })[0]?.path).toBe("plain.ts");
 });
 
-/* The 200k is the point — it is past the argument limit that made the old spread-based fuse throw — so the
+/* The 200k is the point: it is past the argument limit that made the old spread-based fuse throw, so the
  * work is real CPU rather than the object-shuffling the 5s unit budget assumes, and on a runner building three
  * verify jobs at once it ran 25x its 203ms local time and tripped the hang detector. Stated at the test, per
  * the budget's own escape hatch: this bounds a hang, it does not measure the runner. */

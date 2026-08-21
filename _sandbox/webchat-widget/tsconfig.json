@@ -1,6 +1,6 @@
 /* A browser bundle, not a node lib: DOM types, bundler resolution, and no declaration/composite emit (Vite
  * emits the artifact, tsgo never runs on this package). The deviations sit inline rather than in
- * @intentic/tsconfig because this is the only non-Vue browser package — tsconfig.vue.json carries the same
+ * @intentic/tsconfig because this is the only non-Vue browser package: tsconfig.vue.json carries the same
  * shape for web/ui, and extending it here would claim a Vue toolchain this package does not have. */
 {
     "compilerOptions": {

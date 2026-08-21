@@ -10,7 +10,7 @@ import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
 
 /* The whole crossing, minus the HTTP framing: a packed `~/.hermes` through the archive reader, the adapter and
  * the apply loop, against deps that record every write. What the daemon composition adds on top (real stores,
- * the capability registry) is covered by its own suites; this one proves the migration pipeline's promises —
+ * the capability registry) is covered by its own suites; this one proves the migration pipeline's promises:
  * bounded reading, re-derivation, per-item failure, idempotent memory. */
 
 const packHome = (entries: Record<string, string>): ReadableStream<Uint8Array> => {
@@ -156,7 +156,7 @@ test("an openclaw home crosses the same pipeline: pairing state never held, the 
         }),
         10 * 1024 * 1024,
     );
-    // The ratchet was skipped at the reader, before any adapter saw it — copying it would desync the source.
+    // The ratchet was skipped at the reader, before any adapter saw it: copying it would desync the source.
     expect(archive.skipped.some((entry) => entry.includes("credentials"))).toBe(true);
     const files = rebaseArchive(archive.files, "openclaw.json") ?? new Map();
     expect(detectOpenclaw(files)).toBe(true);
@@ -180,10 +180,10 @@ test("one item failing is one failed row, not a dead migration", async () => {
     const recorded = recordingDeps();
     const deps: MigrationDeps = {
         ...recorded.deps,
-        addCapability: () => Promise.reject(new Error('a "linear" connection already exists — rename or remove it first')),
+        addCapability: () => Promise.reject(new Error('a "linear" connection already exists: rename or remove it first')),
     };
 
     const report = await applyMigration(deps, plan, { items: ["memory:soul", "capability:mcp:linear"], includeSecrets: true });
     expect(report.applied.map((entry) => entry.id)).toEqual(["memory:soul"]);
-    expect(report.failed).toEqual([{ id: "capability:mcp:linear", label: "MCP server — linear", error: expect.stringContaining("already exists") }]);
+    expect(report.failed).toEqual([{ id: "capability:mcp:linear", label: "MCP server, linear", error: expect.stringContaining("already exists") }]);
 });

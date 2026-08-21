@@ -54,7 +54,7 @@ export const ensureModels = (): string | undefined => {
         execSync(`node ${script} ${dir}`, { stdio: "inherit" });
         return dir;
     } catch {
-        console.warn("iq-bench: model fetch failed — semantic/rerank configs will be skipped");
+        console.warn("iq-bench: model fetch failed, semantic/rerank configs will be skipped");
         return undefined;
     }
 };

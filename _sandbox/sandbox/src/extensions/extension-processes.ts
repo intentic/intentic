@@ -97,7 +97,7 @@ const pokeListenerGateway = async (services: Services, key: string): Promise<voi
         return;
     }
     await fetch(`http://127.0.0.1:${port}/reconcile`, { method: "POST", signal: AbortSignal.timeout(GATEWAY_POKE_TIMEOUT_MS) }).catch(
-        (error: unknown) => services.logger.debug({ err: error, key }, "listener gateway poke failed — its own poll will converge"),
+        (error: unknown) => services.logger.debug({ err: error, key }, "listener gateway poke failed, its own poll will converge"),
     );
 };
 

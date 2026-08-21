@@ -1,7 +1,7 @@
 {
     "name": "@intentic/iq-recall",
     "version": "0.0.0",
-    "description": "Session recall behind the iq CLI — indexes Claude Code transcripts (node:sqlite) for topic→file amplification and session forking",
+    "description": "Session recall behind the iq CLI, indexes Claude Code transcripts (node:sqlite) for topic→file amplification and session forking",
     "license": "MIT",
     "type": "module",
     "repository": {

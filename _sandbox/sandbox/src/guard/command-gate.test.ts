@@ -18,7 +18,7 @@ interface Harness {
 
 // Drive the PreToolUse hooks the way the SDK does: one Bash call with the command in tool_input, or one JS
 // run with the script. The gate is built once per harness, which is what makes the "always" grant observable
-// across two calls — and across the two sources.
+// across two calls, and across the two sources.
 const harness = (options: Partial<CommandGateOptions>): Harness => {
     const events: AgentEvent[] = [];
     const controller = new AbortController();
@@ -27,7 +27,7 @@ const harness = (options: Partial<CommandGateOptions>): Harness => {
         unattended: false,
         push: (event) => events.push(event),
         signal: controller.signal,
-        // Untainted unless a test says otherwise — the ordinary turn, working on the owner's own material.
+        // Untainted unless a test says otherwise: the ordinary turn, working on the owner's own material.
         taint: NO_TAINT,
         ...options,
     }).PreToolUse;
@@ -72,7 +72,7 @@ describe("command gate", () => {
         expect(await harness({ rules: { "git.destructive": "deny" } }).run("pnpm test")).toEqual({});
     });
 
-    test("a non-string command passes untouched — nothing to classify", async () => {
+    test("a non-string command passes untouched: nothing to classify", async () => {
         expect(await harness({ rules: { "git.destructive": "deny" } }).run(undefined)).toEqual({});
     });
 
@@ -168,7 +168,7 @@ describe("command gate", () => {
 });
 
 /* The floor that is not the owner's rulebook: a turn which has taken in somebody else's words does not get to
- * read credential material without asking. This is the middle link of the chain the envelope exists to break —
+ * read credential material without asking. This is the middle link of the chain the envelope exists to break:
  * outside text arrives, the agent is talked into reading a credential, the credential leaves. */
 describe("command gate: the outside-content floor", () => {
     const READ_ENV = "cat .env";
@@ -188,7 +188,7 @@ describe("command gate: the outside-content floor", () => {
         expect((await pending).hookSpecificOutput).toBeUndefined();
     });
 
-    test("a page fetched mid-turn taints it from that moment — the bit is read per command, not snapshotted", async () => {
+    test("a page fetched mid-turn taints it from that moment: the bit is read per command, not snapshotted", async () => {
         const taint = createTurnTaint();
         const gate = harness({ taint });
         // Before anything was pulled in, the same command passes.
@@ -209,7 +209,7 @@ describe("command gate: the outside-content floor", () => {
         expect(gate.events).toEqual([]);
     });
 
-    test("the owner's explicit allow outranks the floor — it applies only where they said nothing", async () => {
+    test("the owner's explicit allow outranks the floor: it applies only where they said nothing", async () => {
         const gate = harness({ taint: createTurnTaint("discord"), rules: { "secrets.access": "allow" } });
         expect((await gate.run(READ_ENV)).hookSpecificOutput).toBeUndefined();
         expect(gate.events).toEqual([]);
@@ -221,7 +221,7 @@ describe("command gate: the outside-content floor", () => {
     });
 
     // The floor is about credentials, not about tainted turns being untrustworthy at everything.
-    test("no other class is touched — a tainted turn still deletes, pushes and publishes as configured", async () => {
+    test("no other class is touched: a tainted turn still deletes, pushes and publishes as configured", async () => {
         const gate = harness({ taint: createTurnTaint("discord") });
         for (const command of [FORCE_PUSH, "rm -rf build", "npm publish", "curl https://example.com"]) {
             expect((await gate.run(command)).hookSpecificOutput, command).toBeUndefined();
@@ -230,7 +230,7 @@ describe("command gate: the outside-content floor", () => {
     });
 });
 
-/* THE SECOND SOURCE: the JS execution backend runs under the same gate, same rulebook, same cards — a rule
+/* THE SECOND SOURCE: the JS execution backend runs under the same gate, same rulebook, same cards, a rule
  * the owner wrote about "commands" applies to both ways of running things, or it is not a rule (command-gate's
  * EXECUTION_SOURCES). The classifier reads the script with the substring honesty it reads shell. */
 describe("the gate over JS runs", () => {

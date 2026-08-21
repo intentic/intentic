@@ -30,7 +30,7 @@ export const createPersonasRoutes = (services: Services) => {
     const card = async (id: string) => {
         const found = await services.personas.get(id);
         if (found === undefined) {
-            throw new ORPCError("NOT_FOUND", { message: "no persona with that id — it may have been removed since this page was drawn" });
+            throw new ORPCError("NOT_FOUND", { message: "no persona with that id, it may have been removed since this page was drawn" });
         }
         return found;
     };
@@ -78,7 +78,7 @@ export const createPersonasRoutes = (services: Services) => {
         readSkill: i.readSkill.handler(async ({ input }) => {
             const skill = await readPersonaSkill(root, input.id, input.name);
             if (skill === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "no such skill on that persona — it may have been removed since this list was drawn" });
+                throw new ORPCError("NOT_FOUND", { message: "no such skill on that persona, it may have been removed since this list was drawn" });
             }
             return skill;
         }),

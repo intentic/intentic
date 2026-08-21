@@ -50,7 +50,7 @@ describe("the free-trial endpoint", () => {
 
         expect(entries).toHaveLength(2);
         expect(trial?.kind).toBe(`endpoint`);
-        // openai protocol, so it rides the translator's compat list like any user-configured endpoint — which is
+        // openai protocol, so it rides the translator's compat list like any user-configured endpoint, which is
         // what buys the trial the whole existing turn path.
         expect(trial?.config).toMatchObject({ baseUrl: `https://platform.test/trial/v1`, protocol: `openai`, apiKey: `tok` });
         expect(await store.get(TRIAL_ENDPOINT_ID)).toBeDefined();
@@ -74,7 +74,7 @@ describe("the free-trial endpoint", () => {
         expect(trial?.config).toMatchObject({ baseUrl: `http://127.0.0.1:41234/trial/v1`, protocol: `openai`, apiKey: `tok` });
     });
 
-    it("is absent when the platform serves none — the ordinary case", async () => {
+    it("is absent when the platform serves none: the ordinary case", async () => {
         const store = withTrialEndpoint(memoryStore([ollama]), config, trialService(false), noTunnel);
 
         expect(await store.list()).toEqual([ollama]);
@@ -89,7 +89,7 @@ describe("the free-trial endpoint", () => {
             store.upsert({ id: TRIAL_ENDPOINT_ID, kind: `endpoint`, config: { baseUrl: `http://evil.test/v1`, protocol: `openai` } }),
         ).rejects.toThrow(/cannot be edited/);
         // A remove answers like any absent id rather than throwing, so the capabilities route above needs no
-        // special case — and the underlying file is untouched either way.
+        // special case, and the underlying file is untouched either way.
         expect(await store.remove(TRIAL_ENDPOINT_ID)).toBe(false);
         expect(await file.list()).toEqual([]);
     });
@@ -116,12 +116,12 @@ describe("the free-trial endpoint", () => {
 });
 
 /* The routing entry is the OTHER half of the trial, and the property worth pinning is its independence: it
- * takes no TrialService at all, so it CANNOT be built from probe state. That is the fresh-install fix — the
+ * takes no TrialService at all, so it CANNOT be built from probe state. That is the fresh-install fix: the
  * translator writes its routing table when it spawns, before the availability probe has answered, and an entry
  * derived from the probe was therefore missing exactly on the boot that mattered, refusing every first message
  * with "unknown provider for model free-trial/auto" until an unrelated rewrite healed it. */
 describe("the free-trial routing entry", () => {
-    it("is a constant of configuration — platform address, connect token, the one synthetic model", () => {
+    it("is a constant of configuration: platform address, connect token, the one synthetic model", () => {
         const entry = trialCompatEntry(config, noTunnel);
 
         expect(entry).toEqual({
@@ -140,7 +140,7 @@ describe("the free-trial routing entry", () => {
         expect(trialCompatEntry(config, tunnel)?.["base-url"]).toBe(`http://127.0.0.1:41234/trial/v1`);
     });
 
-    it("is absent only where there is nothing to point it at — no platform, or no token", () => {
+    it("is absent only where there is nothing to point it at: no platform, or no token", () => {
         expect(trialCompatEntry({ platform: { url: `` }, connectToken: `tok` } as Config, noTunnel)).toBeUndefined();
         expect(trialCompatEntry({ platform: { url: `https://platform.test/` }, connectToken: `` } as Config, noTunnel)).toBeUndefined();
     });

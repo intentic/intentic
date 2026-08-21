@@ -14,9 +14,9 @@ remain ordinary visible files rather than being mistaken for profile churn.
 
 ## Key files
 
-- [src/index.ts](src/index.ts) — the scope, and the layered decision.
-- [src/constants.ts](src/constants.ts) — the floor and the denylist, spelled out.
-- [src/index.test.ts](src/index.test.ts) — the layer-precedence cases, which are the whole correctness story.
+- [src/index.ts](src/index.ts): the scope, and the layered decision.
+- [src/constants.ts](src/constants.ts): the floor and the denylist, spelled out.
+- [src/index.test.ts](src/index.test.ts): the layer-precedence cases, which are the whole correctness story.
 
 ## How it fits
 

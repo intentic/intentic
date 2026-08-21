@@ -2,13 +2,13 @@
 /* This repository's OpenSSF Scorecard score, read from the public API at build time.
  *
  * Same rule as git-stats.mjs, and for the same reason: a security score is exactly the kind of number that
- * gets typed into a page once and then quietly stops being true. This one is not ours to type at all — it is
+ * gets typed into a page once and then quietly stops being true. This one is not ours to type at all: it is
  * computed by a workflow we do not control, from checks we do not choose, and published on an API anyone can
  * query. The page renders whatever that API says, or it renders nothing.
  *
  * Fails to null on every path: no network in the build sandbox, the workflow has not published yet, the API
  * is down, the shape changed. A trust section that renders a wrong number is worse than one that renders a
- * sentence without one — and a *security* number that is wrong in our favour is worse still.
+ * sentence without one, and a *security* number that is wrong in our favour is worse still.
  */
 
 const API = `https://api.scorecard.dev/projects/github.com/intentic/intentic`;
@@ -53,7 +53,7 @@ export async function scorecard() {
             url: `https://scorecard.dev/viewer/?uri=github.com/intentic/intentic`,
         };
     } catch {
-        // Left at null — see the header.
+        // Left at null: see the header.
     }
     return cached;
 }

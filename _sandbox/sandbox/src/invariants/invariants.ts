@@ -166,7 +166,7 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
     return {
         register: (owner, checks) => {
             if (registered.has(owner)) {
-                throw new Error(`invariants: '${owner}' is already registered — one companion per subsystem`);
+                throw new Error(`invariants: '${owner}' is already registered, one companion per subsystem`);
             }
             const names = new Set<string>();
             for (const check of checks) {

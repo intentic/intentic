@@ -79,13 +79,13 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             // (or, publishing a directory, on top of them) and be invisible in the list above, and the /share
             // routes would then be maintaining a tree somebody else is writing into.
             if (name === SHARE_DIR) {
-                throw new ORPCError("BAD_REQUEST", { message: `"${SHARE_DIR}" is where shared conversations are published — rename it first` });
+                throw new ORPCError("BAD_REQUEST", { message: `"${SHARE_DIR}" is where shared conversations are published, rename it first` });
             }
             // Refuse the shapes the serve path would refuse anyway, at the gesture, where there is someone to
             // read the reason, instead of silently later when a recipient reports a dead link.
             const blocked = blockByName(name);
             if (blocked !== undefined) {
-                throw new ORPCError("BAD_REQUEST", { message: `"${name}" can't be published — ${BLOCK_REASON[blocked]}` });
+                throw new ORPCError("BAD_REQUEST", { message: `"${name}" can't be published, ${BLOCK_REASON[blocked]}` });
             }
             await mkdir(root, { recursive: true });
             await cp(source, join(root, name), { recursive: true, force: true });

@@ -42,7 +42,7 @@ export const vpnLink = async (entry: VpnEntry): Promise<VpnLink> => {
         state: probe.state,
         autoConnect: entry.config.autoConnect === "on",
         routes: [...(probe.routes ?? [])],
-        // Only a connected link's resolvers are its own — /etc/resolv.conf is global, so attributing it to a
+        // Only a connected link's resolvers are its own: /etc/resolv.conf is global, so attributing it to a
         // tunnel that is down would be a lie.
         dns: probe.state === "connected" ? [...(probe.dns ?? [])] : [],
         ...(gateway === undefined ? {} : { gateway }),
@@ -64,7 +64,7 @@ export async function* connectVpn(entry: VpnEntry, options: { readonly otp?: str
     const missing = await driver.missingTool();
     if (missing !== undefined) {
         throw new Error(
-            `This sandbox doesn't carry ${missing} yet. Rebuild it from the Sandbox ▸ Environment card — the VPN capability's image fragment installs it, and an auto-connect tunnel dials itself once the sandbox restarts.`,
+            `This sandbox doesn't carry ${missing} yet. Rebuild it from the Sandbox ▸ Environment card: the VPN capability's image fragment installs it, and an auto-connect tunnel dials itself once the sandbox restarts.`,
         );
     }
     yield* driver.connect(entry.id, entry.config, options);

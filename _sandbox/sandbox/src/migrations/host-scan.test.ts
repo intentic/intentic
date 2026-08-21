@@ -6,7 +6,7 @@ import { planHermes } from "./hermes.js";
 import { detectHermes } from "./hermes.js";
 
 /* The direct read, against a fake machine that answers the two tools it needs. The point of these is that a
- * connected computer produces the SAME map an archive does — so the adapters, and everything after them, are
+ * connected computer produces the SAME map an archive does, so the adapters, and everything after them, are
  * untouched by which door the setup came through. */
 
 // A pretend home directory, keyed by absolute path the way the machine's own tools are addressed.
@@ -70,7 +70,7 @@ test("probe finds a setup by its settings file, and answers nothing for a machin
     expect(await probeHost(hub, "laptop", "/home/me")).toBe("hermes");
 
     const empty = machine({ "/home/me": null, "/home/me/.openclaw": null });
-    // The folder exists but holds no settings file — an uninstall leftover is not an importable setup.
+    // The folder exists but holds no settings file: an uninstall leftover is not an importable setup.
     expect(await probeHost(empty.hub, "laptop", "/home/me")).toBeUndefined();
 });
 
@@ -91,7 +91,7 @@ test("the scan produces the same map an archive would, and the adapters recogniz
 test("session logs are never even read, and non-text files are skipped rather than mangled", async () => {
     const { hub, calls } = machine(HERMES_TREE);
     const scan = await scanHost(hub, "laptop", "/home/me", "hermes");
-    // Not merely absent from the map — no call was ever made for them.
+    // Not merely absent from the map: no call was ever made for them.
     expect(calls.some((call) => call.includes("sessions"))).toBe(false);
     expect(calls.some((call) => call.startsWith("read_file") && call.includes("avatar.png"))).toBe(false);
     expect(scan.skipped.some((entry) => entry.startsWith("sessions/"))).toBe(true);
@@ -110,7 +110,7 @@ test("a Windows machine's backslash paths are addressed the way that machine spe
     const { hub } = machine(tree, "\\");
     expect(await probeHost(hub, "desktop", "C:\\Users\\me")).toBe("openclaw");
     const scan = await scanHost(hub, "desktop", "C:\\Users\\me", "openclaw");
-    // The MAP is still forward-slash and relative — the separator is a fact about the machine, not the plan.
+    // The MAP is still forward-slash and relative: the separator is a fact about the machine, not the plan.
     expect([...scan.files.keys()].toSorted()).toEqual(["openclaw.json", "workspace/SOUL.md"]);
     expect(detectOpenclaw(scan.files)).toBe(true);
 });
@@ -118,7 +118,7 @@ test("a Windows machine's backslash paths are addressed the way that machine spe
 test("one unreadable file is recorded and the rest of the walk still lands", async () => {
     const { hub } = machine({ ...HERMES_TREE, "/home/me/.hermes/SOUL.md": null as unknown as string });
     const scan = await scanHost(hub, "laptop", "/home/me", "hermes");
-    // SOUL.md answers as a directory here (a symlink, a permission oddity) — the import is not lost over it.
+    // SOUL.md answers as a directory here (a symlink, a permission oddity): the import is not lost over it.
     expect(scan.files.has("config.yaml")).toBe(true);
     expect(scan.files.has("skills/weather/SKILL.md")).toBe(true);
 });

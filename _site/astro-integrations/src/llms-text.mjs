@@ -1,7 +1,7 @@
 // @ts-check
 // Markdown mirrors for machine readers, generated from the pages that were just built.
 //
-// Three artefacts, all derived — none hand-maintained, so none can drift from the site:
+// Three artefacts, all derived: none hand-maintained, so none can drift from the site:
 //   /llms.txt        the llmstxt.org index: what this site is, and every page as a titled link
 //   /llms-full.txt   the same pages inlined, so one fetch is the whole site
 //   /<page>.md       a Markdown mirror of each page, linked from its HTML as rel="alternate"
@@ -116,7 +116,7 @@ export default function llmsText(options) {
                 }
                 writeFileSync(path.join(distDir, "llms.txt"), `${index.join("\n")}\n`);
 
-                // Landing page first, then the sections in reading order — the order a human would read them.
+                // Landing page first, then the sections in reading order: the order a human would read them.
                 const order = [...new Set(["/", ...sections.flatMap((section) => section.paths), ...unlisted])];
                 const full = [`# ${options.name}`, "", `> ${options.summary}`, ""];
                 for (const pathname of order) {

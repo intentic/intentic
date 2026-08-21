@@ -26,7 +26,7 @@ const temp = async (): Promise<string> => {
     return dir;
 };
 
-// A clone with a real (local, bare) origin — enough to exercise the actual push path without a network.
+// A clone with a real (local, bare) origin: enough to exercise the actual push path without a network.
 const cloned = async (): Promise<{ clone: string; origin: string }> => {
     const source = await temp();
     await sh(source, "init", "-q", "-b", "main");
@@ -60,7 +60,7 @@ test("writes, commits and pushes the file to the default branch", async () => {
     const result = await publish(clone);
 
     expect(result).toMatchObject({ ok: true, wrote: true, committed: true, pushed: true, branch: "main", defaultBranch: "main" });
-    // The proof is on the remote's default branch — the only place a public HEAD read would find it.
+    // The proof is on the remote's default branch: the only place a public HEAD read would find it.
     expect(await sh(origin, "show", "main:.intentic-claim")).toBe("intentic-claim-abc");
 });
 
@@ -83,7 +83,7 @@ test("commits that file alone, leaving staged and unstaged work exactly where it
 });
 
 /* A push to a side branch produces a real commit that can never verify, and leaves the creator a file to clean
- * up. Refused before anything is written — which is why `wrote` is false here. */
+ * up. Refused before anything is written, which is why `wrote` is false here. */
 test("refuses to publish from a branch that is not the default one, without touching the worktree", async () => {
     const { clone } = await cloned();
     await sh(clone, "checkout", "-q", "-b", "fix/thing");
@@ -135,7 +135,7 @@ test("a repo with no remote is refused rather than half-published", async () => 
 });
 
 /* Mid-merge is checked FIRST and refused: git rejects a partial commit while MERGE_HEAD exists, and it rejects
- * it only after staging — so attempting it would cost the creator a moved index for nothing. */
+ * it only after staging, so attempting it would cost the creator a moved index for nothing. */
 test("refuses while the repo is part-way through a merge", async () => {
     const { clone } = await cloned();
     await sh(clone, "checkout", "-q", "-b", "side");

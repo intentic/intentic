@@ -26,7 +26,7 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "action">): Rule => ({
 });
 
 // Drive a hook set the way the SDK does. Each helper fires one event at the set built for a single turn, so a
-// test can interleave edits, commands and stops against ONE ledger — which is the whole thing under test.
+// test can interleave edits, commands and stops against ONE ledger, which is the whole thing under test.
 const edit = async (hooks: ReturnType<typeof turnEndingHooks>, file_path: string) => {
     const matcher = hooks.PostToolUse![0]!;
     const input = { hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path }, tool_use_id: "t" } as unknown as HookInput;
@@ -92,7 +92,7 @@ describe("the verify-edits built-in", () => {
         expect(nudge).toContain("/work/src/a.ts");
         expect(nudge).toContain("`pnpm test`");
         expect(nudge).toContain("`pnpm lint`");
-        // `dev` is a script but not a check — offering it would be worse than offering nothing.
+        // `dev` is a script but not a check: offering it would be worse than offering nothing.
         expect(nudge).not.toContain("pnpm dev");
     });
 
@@ -137,7 +137,7 @@ describe("the verify-edits built-in", () => {
 });
 
 describe("the follow-up budget", () => {
-    test("at most two asks per turn — the third stop is silent", async () => {
+    test("at most two asks per turn: the third stop is silent", async () => {
         const hooks = armed([VERIFY]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         expect(await stop(hooks)).toBeDefined();

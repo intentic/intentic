@@ -125,7 +125,7 @@ test("a subscription turn uses the translator bearer and the actor marker that u
     });
 });
 
-test("a native (account) turn carries no provider config — Codex uses its own credential resolution", async () => {
+test("a native (account) turn carries no provider config: Codex uses its own credential resolution", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), { ...request, model: "gpt-5-codex" });
     // The question tool is the one key every turn carries; nothing here names a provider or a credential.
@@ -189,7 +189,7 @@ test("attached images ride as native inputs while other files are referenced in 
     expect(calls[0]!.prompt).not.toContain("shot.png");
 });
 
-test("a plan turn sends attached images on the first planning turn only — the resumed thread keeps them", async () => {
+test("a plan turn sends attached images on the first planning turn only: the resumed thread keeps them", async () => {
     const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-6" },
@@ -218,7 +218,7 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-2" },
         { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
-        // The card's release, carrying the id it went up with — what tells the fleet the turn stopped waiting,
+        // The card's release, carrying the id it went up with: what tells the fleet the turn stopped waiting,
         // and the approval itself, which is what stops a client replaying this run from rebuilding the plan
         // card and asking to have it approved all over again.
         {
@@ -262,7 +262,7 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
 
 test("a plan turn that fails after holding a message emits the error and NO plan frame", async () => {
     // The plan phase held an agent_message, then the turn failed (e.g. out of credits). A failed turn must surface
-    // only the error — never a "plan" built from the pre-error message — and must not run the execute turn.
+    // only the error: never a "plan" built from the pre-error message, and must not run the execute turn.
     const { runner, calls } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-7" },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Partial plan." } },
@@ -297,7 +297,7 @@ test("a non-fatal advisory is tagged rather than surfaced as a failure, and the 
 
 test("a plan turn survives an advisory and still proposes its plan", async () => {
     // The regression this covers: the advisory marked the planning phase errored, so plan-emulation abandoned the
-    // turn — picking any gpt-5.6 model in Plan mode produced a red line, no plan card, and no execution.
+    // turn: picking any gpt-5.6 model in Plan mode produced a red line, no plan card, and no execution.
     const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-10" },
@@ -331,7 +331,7 @@ test("a plan turn survives an advisory and still proposes its plan", async () =>
 const STREAM_RETRY = "Reconnecting... 1/5 (stream disconnected before completion: stream closed before response.completed)";
 const PROCESS_EXIT = "Codex app-server exited (1): connection closed";
 
-test("an in-turn stream retry is a wait, not a failure — the turn's answer still lands", async () => {
+test("an in-turn stream retry is a wait, not a failure: the turn's answer still lands", async () => {
     // The incident: this frame put a red error line under a turn that then answered normally four minutes later.
     const { runner } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-11" },
@@ -393,7 +393,7 @@ test("a stream retry doesn't stand in for the real failure when the retries run 
 
 test("an advisory doesn't stand in for the real failure when the turn then dies", async () => {
     // surfacedError exists to stop the process transport's generic exit wrapper from clobbering an actionable message.
-    // An advisory is not that message — counting it as one would leave a genuinely failed turn silent.
+    // An advisory is not that message: counting it as one would leave a genuinely failed turn silent.
     const runner: CodexRunner = async function* () {
         yield { type: "error", message: ADVISORY } as CodexEvent;
         throw new Error(PROCESS_EXIT);
@@ -407,7 +407,7 @@ test("an advisory doesn't stand in for the real failure when the turn then dies"
 
 test("a context-compaction item is the compact lifecycle frame, and the turn's answer still lands", async () => {
     // The incident: every long Sol turn ended with the red error line, directly under the answer it had just
-    // produced — a thread that auto-compacts at ~90% of the window earns one of these for each compaction.
+    // produced: a thread that auto-compacts at ~90% of the window earns one of these for each compaction.
     const { runner } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-13" },
         { type: "item.completed", item: { id: "compact-1", type: "context_compaction" } },
@@ -425,7 +425,7 @@ test("a context-compaction item is the compact lifecycle frame, and the turn's a
 });
 
 test("a plan turn survives a compaction and still proposes its plan", async () => {
-    // A compaction that marked the phase errored would have plan-emulation drop a plan the turn really produced —
+    // A compaction that marked the phase errored would have plan-emulation drop a plan the turn really produced:
     // and a plan turn is exactly the long, tool-heavy kind that reaches the compaction threshold.
     const { runner, calls } = fakeCodexRunner(
         [
@@ -583,7 +583,7 @@ test("a dismissed question tells Codex so rather than leaving it holding the req
     expect(answered).toEqual([{ q1: ["The user dismissed the questions without answering and stopped the turn."] }]);
 });
 
-test("an unattended turn is given no way to ask — a card nobody will answer is a deadlock", async () => {
+test("an unattended turn is given no way to ask: a card nobody will answer is a deadlock", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner), { ...request, unattended: true });
     expect(calls[0]!.config).toBeUndefined();

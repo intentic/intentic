@@ -2,7 +2,7 @@ import type { SharePayload } from "@intentic/sandbox-contract";
 import { expect, it } from "vitest";
 import { sharePage } from "./share-page.js";
 
-/* The step where a conversation becomes markup — and the step where getting it wrong is an injection into a
+/* The step where a conversation becomes markup, and the step where getting it wrong is an injection into a
  * page served on the open internet with no auth in front of it. A prompt can contain any characters at all,
  * and the prompts in this product routinely contain markup, because people paste HTML into them. */
 
@@ -24,7 +24,7 @@ it("writes the conversation into the page's data block, where the app finds it",
     expect(JSON.parse(body ?? "")).toMatchObject({ messages: [{ text: "hello" }] });
 });
 
-/* THE ONE ESCAPE THAT MATTERS. An HTML parser does not read a JSON script block as markup — with one
+/* THE ONE ESCAPE THAT MATTERS. An HTML parser does not read a JSON script block as markup: with one
  * exception: it ends the block at the first `</script`. So a prompt containing one would close the block early
  * and everything after it would be parsed as the document. */
 it("cannot be closed early by a conversation that contains a closing script tag", () => {

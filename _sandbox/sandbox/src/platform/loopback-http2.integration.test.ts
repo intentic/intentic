@@ -9,12 +9,12 @@ import { Hono } from "hono";
 import { afterAll, expect, test } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
 
-/* THE LOOPBACK LISTENER'S PROTOCOL — pinned here because getting it wrong does not fail, it FREEZES the app.
+/* THE LOOPBACK LISTENER'S PROTOCOL: pinned here because getting it wrong does not fail, it FREEZES the app.
  *
  * A browser allows six concurrent HTTP/1.1 connections per origin, and this app holds long-lived ones: `/events`
  * for the life of the tab, plus an `/agent/attach` per conversation with a live turn. Four or five running
  * agents used to consume every slot, after which the next ordinary read simply queued in the browser until a
- * stream ended — a workspace that looks frozen while the daemon's log stays silent and healthy, because the
+ * stream ended: a workspace that looks frozen while the daemon's log stays silent and healthy, because the
  * requests never reached it. h2 multiplexes them onto one connection instead.
  *
  * These assertions are exactly the three ways main.ts's serve() options can regress: dropping back to
@@ -22,7 +22,7 @@ import { WebSocket, WebSocketServer } from "ws";
  * `upgrade` on an http2 server. Each is silent until someone has five agents running. */
 
 const dir = mkdtempSync(join(tmpdir(), "h2-"));
-// A throwaway self-signed pair — h2 in browsers (and in node's client) exists only over TLS. openssl is already
+// A throwaway self-signed pair: h2 in browsers (and in node's client) exists only over TLS. openssl is already
 // a test dependency here; csr.integration.test.ts shells out to it the same way.
 execFileSync(
     "openssl",
@@ -116,7 +116,7 @@ const frames = (path: string): Promise<number> =>
         request.end();
     });
 
-test("the loopback listener negotiates h2 — the whole point of it being an http2 server", () => {
+test("the loopback listener negotiates h2: the whole point of it being an http2 server", () => {
     expect(session.alpnProtocol).toBe("h2");
 });
 

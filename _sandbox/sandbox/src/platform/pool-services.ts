@@ -76,7 +76,7 @@ export const relayPlatform = (config: Config, method: "GET" | "POST", path: stri
         req.on("error", () =>
             resolve({
                 status: 502,
-                body: JSON.stringify({ error: "the platform could not be reached — nothing was charged" }),
+                body: JSON.stringify({ error: "the platform could not be reached, nothing was charged" }),
                 contentType: "application/json",
             }),
         );
@@ -195,7 +195,7 @@ export const relayServiceRun = (config: Config, slug: string, body: string, onSt
                             body: JSON.stringify({
                                 error: {
                                     type: "service_unavailable",
-                                    message: "The service did not answer — nothing was charged. Please try again shortly.",
+                                    message: "The service did not answer, nothing was charged. Please try again shortly.",
                                 },
                             }),
                             contentType: "application/json",
@@ -225,7 +225,7 @@ export const relayServiceRun = (config: Config, slug: string, body: string, onSt
         req.on("error", () =>
             resolve({
                 status: 502,
-                body: JSON.stringify({ error: "the platform could not be reached — nothing was charged" }),
+                body: JSON.stringify({ error: "the platform could not be reached, nothing was charged" }),
                 contentType: "application/json",
             }),
         );

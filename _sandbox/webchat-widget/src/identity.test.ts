@@ -7,7 +7,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-test(`the thread id is minted once and reused — this is what threads a follow-up into one conversation`, () => {
+test(`the thread id is minted once and reused: this is what threads a follow-up into one conversation`, () => {
     const first = visitorConversationId(`support`);
     expect(visitorConversationId(`support`)).toBe(first);
 });
@@ -25,7 +25,7 @@ test(`"New chat" mints a fresh thread and leaves the name alone`, () => {
     expect(storedDisplayName(`support`)).toBe(`Ada`);
 });
 
-test(`a browser that refuses storage still chats — it just gets a fresh thread each time`, () => {
+test(`a browser that refuses storage still chats: it just gets a fresh thread each time`, () => {
     vi.spyOn(Storage.prototype, `getItem`).mockImplementation(() => {
         throw new Error(`SecurityError`);
     });

@@ -80,7 +80,7 @@ test("scope flags narrow search", async () => {
 });
 
 test("the index dir never surfaces; former-secret/.git paths follow the ignore model (no floor)", async () => {
-    // The iq index dir self-excludes in every mode — it must never index or surface itself.
+    // The iq index dir self-excludes in every mode: it must never index or surface itself.
     for (const scope of [{}, { ignored: true }] as const) {
         const indexDir = await engine.run(request({ verb: "find", query: "never be surfaced", scope }));
         expect(indexDir.result.total).toBe(0);
@@ -101,7 +101,7 @@ test("--ignored lifts .gitignore but keeps ranking honest", async () => {
     expect(without.result.total).toBe(0);
 });
 
-test("the sweep — not ripgrep's own ignore handling — decides what find can match", async () => {
+test("the sweep, not ripgrep's own ignore handling: decides what find can match", async () => {
     // git's repo-local excludes are a source rg reads and the sweep does not. A workspace whose code sits under
     // such an exclude answered files/ask normally while every find returned zero; the sweep is the authority.
     const alphaExclude = join(root, "alpha/.git/info/exclude");

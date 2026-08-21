@@ -89,7 +89,7 @@ test("Vue SFC extraction: script-block symbols land on their real file lines", (
     const symbols = extractSymbols("_extensions/repo-apps/src/DependenciesView.vue", "vue", VUE);
     const byName = new Map(symbols.map((symbol) => [symbol.name, symbol]));
     expect(byName.get("barOf")?.kind).toBe("fn");
-    // `computed(...)` is a call, so the declarator reads as a value — same as it would in a .ts file.
+    // `computed(...)` is a call, so the declarator reads as a value: same as it would in a .ts file.
     expect(byName.get("legend")?.kind).toBe("const");
     expect(byName.get("props")?.kind).toBe("const");
     expect(symbols.every((symbol) => !symbol.heuristic)).toBe(true);
@@ -132,8 +132,8 @@ const local = 1;
 });
 
 /* A DESTRUCTURING DECLARATOR IS NOT A DEFINITION, and reading its name field as a name is how 481 pattern-shaped
- * rows reached a real index: `{ app }`, `[logPath, pattern]`, and — from every `.vue` written in this repo's own
- * style — the whole multi-line `defineProps` destructure. Each one then surfaced as an `iq def` candidate and
+ * rows reached a real index: `{ app }`, `[logPath, pattern]`, and, from every `.vue` written in this repo's own
+ * style: the whole multi-line `defineProps` destructure. Each one then surfaced as an `iq def` candidate and
  * annotated ordinary hits `⟨in { app } (const)⟩`, and the 31 that spanned lines went further: the graph stage
  * hands an anchor name to ripgrep as a search pattern, which rejects a newline and takes the entire query with
  * it. Two natural-language searches a day died that way, after the embedder and reranker had already been paid.
@@ -148,7 +148,7 @@ test("declarators: a destructuring pattern is not indexed as a symbol", () => {
     expect(names(`const { app } = start();\nexport const widgetCount = 3;`)).toEqual(["widgetCount"]);
 });
 
-// Whatever the extractors do next, a name the graph stage cannot search for must not reach it — every symbol
+// Whatever the extractors do next, a name the graph stage cannot search for must not reach it: every symbol
 // the table offers as an anchor has to be a single token.
 test("declarators: every extracted name is a single searchable token", () => {
     const sfc = `<script setup lang="ts">

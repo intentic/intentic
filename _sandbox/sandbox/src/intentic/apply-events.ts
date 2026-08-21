@@ -38,7 +38,7 @@ export const applyRunLive = async (path: string): Promise<boolean> => {
     try {
         content = await readFile(path, "utf8");
     } catch {
-        return false; // never ran (or cleaned up) — nothing to protect.
+        return false; // never ran (or cleaned up): nothing to protect.
     }
     let started = false;
     for (const raw of content.split("\n")) {
@@ -74,7 +74,7 @@ export async function* tailIntenticEvents(
     try {
         handle = await open(path, "r");
     } catch {
-        return; // ENOENT — no apply has ever run (or the file was cleaned up); nothing to tail.
+        return; // ENOENT: no apply has ever run (or the file was cleaned up); nothing to tail.
     }
     try {
         let offset = 0;
@@ -82,7 +82,7 @@ export async function* tailIntenticEvents(
         while (!abort.aborted) {
             const { size } = await handle.stat();
             if (size < offset) {
-                return; // a newer apply reset the file — end so the client reconnects to the new run's start.
+                return; // a newer apply reset the file: end so the client reconnects to the new run's start.
             }
             if (size > offset) {
                 const length = size - offset;
@@ -97,7 +97,7 @@ export async function* tailIntenticEvents(
                     if (line !== undefined) {
                         yield line;
                         if (isTerminal(line)) {
-                            return; // the whole run finished (success or failure) — nothing more will be written.
+                            return; // the whole run finished (success or failure): nothing more will be written.
                         }
                     }
                     index = buffer.indexOf("\n");
@@ -116,7 +116,7 @@ export async function* tailIntenticEvents(
             try {
                 await sleep(1000, undefined, { signal: abort });
             } catch {
-                return; // aborted mid-wait — stop tailing (same outcome as the while (!abort.aborted) guard)
+                return; // aborted mid-wait: stop tailing (same outcome as the while (!abort.aborted) guard)
             }
         }
     } finally {

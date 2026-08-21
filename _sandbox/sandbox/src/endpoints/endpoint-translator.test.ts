@@ -18,7 +18,7 @@ const ollama = { id: `ollama`, kind: `endpoint`, config: { baseUrl: `http://host
 
 const trialService = (available: boolean) => ({ available: () => available, status: () => undefined, refresh: async () => undefined });
 
-test("the trial is in the routing table before the availability probe has answered — the fresh-boot render", async () => {
+test("the trial is in the routing table before the availability probe has answered: the fresh-boot render", async () => {
     const sandbox = services({ config: platformConfig });
     // The layered store exactly as composition builds it, with the probe still unanswered: reads hide the trial.
     const capabilities = withTrialEndpoint(memoryCapabilitiesStore([ollama]), platformConfig, trialService(false), sandbox.platformTunnel);
@@ -35,13 +35,13 @@ test("the trial is in the routing table before the availability probe has answer
     expect(entries.find((entry) => entry.prefix === `ollama`)?.models).toEqual([{ name: `qwen3`, alias: `qwen3` }]);
 });
 
-test("one entry per prefix once the probe HAS answered — the layered capability must not mint a second", async () => {
+test("one entry per prefix once the probe HAS answered: the layered capability must not mint a second", async () => {
     const sandbox = services({ config: platformConfig });
     const capabilities = withTrialEndpoint(memoryCapabilitiesStore(), platformConfig, trialService(true), sandbox.platformTunnel);
     const entries = await endpointCompatEntries({
         ...sandbox,
         capabilities,
-        // Reached only if the trial were treated as a discovered endpoint again — its model is a constant, and a
+        // Reached only if the trial were treated as a discovered endpoint again: its model is a constant, and a
         // routing entry that waits on a catalog fetch is the failure mode this split removed.
         endpointModels: {
             models: async () => {
@@ -54,7 +54,7 @@ test("one entry per prefix once the probe HAS answered — the layered capabilit
     expect(entries.filter((entry) => entry.prefix === TRIAL_ENDPOINT_ID)).toHaveLength(1);
 });
 
-test("a sandbox with no platform carries no trial entry — there is nothing to point it at", async () => {
+test("a sandbox with no platform carries no trial entry: there is nothing to point it at", async () => {
     const sandbox = services({ config: withTranslator });
     const entries = await endpointCompatEntries({
         ...sandbox,

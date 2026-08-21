@@ -128,7 +128,7 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
             try {
                 parsed = JSON.parse(line);
             } catch {
-                return; // Not protocol output — Pi promises JSONL, so a stray line is noise, not a frame.
+                return; // Not protocol output: Pi promises JSONL, so a stray line is noise, not a frame.
             }
             const record = parsed as { type?: unknown; id?: unknown } & Record<string, unknown>;
             if (record.type === "response") {

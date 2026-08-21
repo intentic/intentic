@@ -285,7 +285,7 @@ export const createExtensionsRoutes = (services: Services) => {
              * tab draws these switches as fixed, so this refusal is the backstop for a caller that skipped it. */
             if (!input.enabled && ESSENTIAL_EXTENSIONS.has(extensionIdOf(extension.manifest))) {
                 throw new ORPCError("BAD_REQUEST", {
-                    message: `${extensionIdOf(extension.manifest)} is the control surface for an engine that runs regardless — it cannot be switched off`,
+                    message: `${extensionIdOf(extension.manifest)} is the control surface for an engine that runs regardless, it cannot be switched off`,
                 });
             }
             /* The premium gate's second door: an installed premium extension that was later disabled (or

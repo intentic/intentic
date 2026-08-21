@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createPortForwards } from "./port-forwards.js";
 
-// The table is indifferent to what its slots are CALLED — production salts them with the connect token
+// The table is indifferent to what its slots are CALLED: production salts them with the connect token
 // (portSlotsFromToken), which would make every expectation below a digest. Eight readable names instead: this
 // suite is about allocation order, idempotence and LRU eviction, and the derivation has its own test.
 const SLOTS = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -30,13 +30,13 @@ test("forwarding maps ports onto slots in order and is idempotent per port", asy
     expect(forwards.targetOf("a")).toEqual({ port: 3000, host: "127.0.0.1", scheme: "http" });
 });
 
-test("the probe's scheme lands on the slot — an https dev server is dialed as https", async () => {
+test("the probe's scheme lands on the slot: an https dev server is dialed as https", async () => {
     const forwards = createPortForwards(SLOTS, async () => "https");
     const slot = await forwards.forward(47145, "::1");
     expect(forwards.targetOf(slot)).toEqual({ port: 47145, host: "::1", scheme: "https" });
 });
 
-test("a full table evicts the least-recently-used slot — and proxy traffic counts as use", async () => {
+test("a full table evicts the least-recently-used slot, and proxy traffic counts as use", async () => {
     const forwards = createPortForwards(SLOTS, httpProbe);
     for (const [index] of SLOTS.entries()) {
         await forwards.forward(3000 + index, "127.0.0.1");

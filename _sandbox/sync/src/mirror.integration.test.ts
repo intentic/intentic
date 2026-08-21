@@ -9,7 +9,7 @@ import type { MirroredPort } from "./config.js";
 import type { ForwardExecutor } from "./mirror.js";
 
 // config.ts derives its paths from homedir() at import time, so point HOME at a throwaway dir BEFORE importing
-// (dynamic import, after the env is set) — then mirror.pid lands in temp, not the real ~/.intentic/sync.
+// (dynamic import, after the env is set): then mirror.pid lands in temp, not the real ~/.intentic/sync.
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { mirrorPidPath } = await import("./config.js");
@@ -38,7 +38,7 @@ const ws = (port: number, host: "127.0.0.1" | "::1" = "127.0.0.1", command = "vi
     forwarded: false,
 });
 
-// A recording executor so the reconcile logic tests without Mutagen — `free` decides the local-bind check.
+// A recording executor so the reconcile logic tests without Mutagen: `free` decides the local-bind check.
 const fakeExecutor = (free: (port: number) => boolean = () => true): { executor: ForwardExecutor; created: number[]; terminated: number[] } => {
     const created: number[] = [];
     const terminated: number[] = [];
@@ -55,7 +55,7 @@ const fakeExecutor = (free: (port: number) => boolean = () => true): { executor:
 
 const log = (): void => {};
 
-// Nothing else on this machine is mirroring — the single-pairing case, and the default for these tests.
+// Nothing else on this machine is mirroring: the single-pairing case, and the default for these tests.
 const unclaimed = new Map<number, string>();
 
 // Every row on the wire now carries what it IS as well as where it runs; the mirror ignores all three, but
@@ -69,7 +69,7 @@ describe("fetchWorkspacePorts", () => {
                 ports: [
                     { port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false, ...named },
                     { port: 4096, host: "127.0.0.1", forwardable: true, kind: "system", command: "opencode serve", forwarded: false, ...named },
-                    // A workspace bind on a loopback alias — Mutagen would dial 127.0.0.1 and never reach it, so it's dropped.
+                    // A workspace bind on a loopback alias: Mutagen would dial 127.0.0.1 and never reach it, so it's dropped.
                     { port: 9500, host: "127.0.0.1", forwardable: false, kind: "workspace", command: "alias-bound", forwarded: false, ...named },
                 ],
             }),
@@ -91,12 +91,12 @@ describe("fetchWorkspacePorts", () => {
         await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toThrow(/re-run setup/);
     });
 
-    it("types 401/403 as SyncAuthError — what the watcher counts toward revocation self-teardown", async () => {
+    it("types 401/403 as SyncAuthError: what the watcher counts toward revocation self-teardown", async () => {
         vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("unauthorized", { status: 401 })));
         await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toBeInstanceOf(SyncAuthError);
         vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("forbidden", { status: 403 })));
         await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toBeInstanceOf(SyncAuthError);
-        // A 5xx (tunnel blip) must NOT read as revocation — the watcher retries those forever.
+        // A 5xx (tunnel blip) must NOT read as revocation: the watcher retries those forever.
         vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("bad gateway", { status: 502 })));
         const blip = await fetchWorkspacePorts("https://s.example.dev", "ist_old").catch((error: unknown) => error);
         expect(blip).toBeInstanceOf(Error);
@@ -147,7 +147,7 @@ describe("reconcileForwards (minimal-touch)", () => {
     });
 
     /* Two sandboxes on one machine routinely serve the same dev-server port, and only one can own localhost:6480.
-     * The contest is decided here rather than by the OS probe, so the loser is told WHICH sandbox holds it — and
+     * The contest is decided here rather than by the OS probe, so the loser is told WHICH sandbox holds it, and
      * critically, the winner's live forward is never terminated by the loser's pass. */
     it("yields a port another pairing already mirrors, without disturbing it", async () => {
         const { executor, created, terminated } = fakeExecutor();
@@ -159,7 +159,7 @@ describe("reconcileForwards (minimal-touch)", () => {
         expect(terminated).toEqual([7000]);
     });
 
-    // A port THIS pairing already mirrors is its own — a claim map naming it would otherwise make a pairing
+    // A port THIS pairing already mirrors is its own: a claim map naming it would otherwise make a pairing
     // release the port it is already serving on the very next tick.
     it("keeps its own established forward even if the port is claimed", async () => {
         const { executor, created, terminated } = fakeExecutor();
@@ -182,8 +182,8 @@ describe("readLiveWatcherPid", () => {
 
 /* Two watchers do real damage, not merely waste a process: each reconciles the same forwards from its own
  * baseline, so they take turns tearing down and recreating each other's sessions and drop live connections on a
- * loop. Only `startMirrorWatcher` used to check the pidfile, so every path that runs the loop DIRECTLY — a systemd
- * unit, a LaunchAgent, a hand-run `mirror --watch` — could stack one on top of a resident copy. */
+ * loop. Only `startMirrorWatcher` used to check the pidfile, so every path that runs the loop DIRECTLY: a systemd
+ * unit, a LaunchAgent, a hand-run `mirror --watch`: could stack one on top of a resident copy. */
 describe("runMirrorWatch single-holder guard", () => {
     it("refuses when a live watcher already holds the pidfile, before touching Mutagen", async () => {
         const other = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
@@ -200,7 +200,7 @@ describe("runMirrorWatch single-holder guard", () => {
             await runMirrorWatch((message) => said.push(message));
 
             expect(said.join("\n")).toContain(`already running (pid ${pid})`);
-            // The incumbent keeps the pidfile — a refusing watcher must not stamp its own pid over it.
+            // The incumbent keeps the pidfile: a refusing watcher must not stamp its own pid over it.
             expect((await readFile(mirrorPidPath, "utf8")).trim()).toBe(String(pid));
         } finally {
             other.kill("SIGKILL");
@@ -212,7 +212,7 @@ describe("stopWatcher", () => {
     it("returns only once the watcher is GONE, not merely signalled", async () => {
         // A watcher shaped like the real one: it handles SIGTERM and takes a moment to wind down (the real one
         // removes its pidfile first). An instantly-dying stand-in cannot tell "waited for it" from "signalled
-        // it and moved on" — which is the whole property under test.
+        // it and moved on", which is the whole property under test.
         const watcher = spawn(
             process.execPath,
             ["-e", 'process.on("SIGTERM", () => setTimeout(() => process.exit(0), 300)); setInterval(() => {}, 1000); console.log("ready")'],
@@ -223,7 +223,7 @@ describe("stopWatcher", () => {
             throw new Error("the stand-in watcher didn't start");
         }
         // Wait for its handler to be INSTALLED. Signalling a node process still booting kills it outright, which
-        // silently turns this into a test of an instantly-dying watcher — one that passes either way.
+        // silently turns this into a test of an instantly-dying watcher: one that passes either way.
         await new Promise((ready) => watcher.stdout?.once("data", ready));
         await writeFile(mirrorPidPath, String(pid));
 
@@ -243,7 +243,7 @@ describe("stopWatcher", () => {
  * forwards on every setup is half of what broke a live pairing: the forwards were named for the other sandbox, the
  * config that replaced it named none of them, and Mutagen holds a released port's listener for good. */
 describe("retirePairingMirror", () => {
-    it("terminates only the named sandbox's forwards — not a sibling pairing's, not a stranger's", async () => {
+    it("terminates only the named sandbox's forwards, not a sibling pairing's, not a stranger's", async () => {
         const record = join(dirname(mirrorPidPath), "terminated.txt");
         const fakeMutagen = join(dirname(mirrorPidPath), "fake-mutagen.sh");
         await writeFile(

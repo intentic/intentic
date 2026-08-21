@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { fileSecretUses, lastUseByName } from "./secret-uses.js";
 
-/* The use ledger: append-only rows on disk, capped, newest-last — what the inventory joins as "last used".
+/* The use ledger: append-only rows on disk, capped, newest-last, what the inventory joins as "last used".
  * Driven against the real file store because the cap and the round-trip ARE the behaviour. */
 
 const store = () => fileSecretUses(join(mkdtempSync(join(tmpdir(), "secret-uses-")), "secret-uses.json"));
@@ -21,7 +21,7 @@ test("rows round-trip in order and the newest per name wins the join", async () 
     expect(last.get("GRAFANA_ADMIN_PASSWORD")?.lane).toBe("browser");
 });
 
-test("the ledger is capped — a what-happened-recently surface, not an archive", async () => {
+test("the ledger is capped: a what-happened-recently surface, not an archive", async () => {
     const uses = store();
     for (let index = 0; index < 230; index += 1) {
         await uses.record({ name: `K${index}`, lane: "shell", at: index });

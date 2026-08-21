@@ -117,7 +117,7 @@ test("hook mode emits additionalContext JSON only on a strong first-prompt match
 test("hook mode stays silent on non-first prompts, weak matches, and garbage input", async () => {
     let out = "";
     const write = (chunk: string): void => void (out += chunk);
-    // The fixture transcript has two typed prompts — not a session start.
+    // The fixture transcript has two typed prompts, not a session start.
     await runHookMatch(
         JSON.stringify({
             session_id: "x",

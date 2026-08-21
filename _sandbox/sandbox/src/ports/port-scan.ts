@@ -8,7 +8,7 @@ import { join } from "node:path";
 // and this scan is the only way to see them.
 
 // The loopback address the proxy must DIAL to reach a listener. Not always 127.0.0.1: a server that binds
-// `localhost` can land on IPv6 loopback only (Vite does exactly this — [::1]:<port> refuses IPv4), so the
+// `localhost` can land on IPv6 loopback only (Vite does exactly this: [::1]:<port> refuses IPv4), so the
 // dialable family is a per-listener fact the scan records and the forward/proxy honor.
 export type LoopbackHost = "127.0.0.1" | "::1";
 

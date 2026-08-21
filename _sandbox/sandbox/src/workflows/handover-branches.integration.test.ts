@@ -9,7 +9,7 @@ import { resolvedBranches } from "./handover-branches.js";
 /* THE SAME THREE DECISIONS, AGAINST REAL GIT.
  *
  * The unit tests beside this one assert what the module does with a given answer; this one asserts that the
- * answers are what it thinks they are. That is not a formality here — the whole check rests on two exact
+ * answers are what it thinks they are. That is not a formality here: the whole check rests on two exact
  * behaviours of the porcelain: `for-each-ref` prints NOTHING (not an error) for a pattern that matches no ref,
  * and `rev-list --count base..tip` prints `0` for a branch that has not moved. A stub can only ever agree with
  * whoever wrote it, and both of those are the kind of thing that reads as obvious and is worth one temp repo.
@@ -18,7 +18,7 @@ import { resolvedBranches } from "./handover-branches.js";
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 
-// One repo at the workspace root with a single commit — the run's pinned base — and whatever branch the test
+// One repo at the workspace root with a single commit: the run's pinned base, and whatever branch the test
 // wants off it.
 const repoWithBase = async (): Promise<{ root: string; base: string }> => {
     const root = await mkdtemp(join(tmpdir(), "handover-"));
@@ -43,7 +43,7 @@ test("a branch carrying a commit over the pinned base is handed on", async () =>
 });
 
 // The turn ran, the branch was cut, and nothing was committed onto it. `git diff base...agent/abc` succeeds
-// here and prints nothing — the quietest way to get a review of no work.
+// here and prints nothing: the quietest way to get a review of no work.
 test("a branch that never moved off the base is dropped", async () => {
     const { root, base } = await repoWithBase();
     await sh(root, "branch", "agent/abc");
@@ -59,7 +59,7 @@ test("a branch that does not exist is dropped rather than named", async () => {
 });
 
 /* The parked spelling counts as much as the live one. Archiving a conversation moves its branch from
- * `refs/heads/agent/<id>` to `refs/agent/<id>` (agents/agent-refs.ts) without moving a commit — a handover
+ * `refs/heads/agent/<id>` to `refs/agent/<id>` (agents/agent-refs.ts) without moving a commit: a handover
  * that stopped resolving because of that would call an archived predecessor's real work missing. */
 test("a parked branch still resolves, because archiving moves the ref and not the work", async () => {
     const { root, base } = await repoWithBase();

@@ -3,7 +3,7 @@ import { outputAliases, outputFlagParameters, scopeFlagParameters, type SearchFl
 import { runMulti } from "../lib/run.js";
 
 export const multi = buildCommand({
-    docs: { brief: "Batch queries in one spawn — one query per argument (or per stdin line), shared --budget" },
+    docs: { brief: "Batch queries in one spawn, one query per argument (or per stdin line), shared --budget" },
     parameters: {
         flags: { ...scopeFlagParameters, ...outputFlagParameters },
         aliases: outputAliases,

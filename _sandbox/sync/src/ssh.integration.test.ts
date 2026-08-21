@@ -45,15 +45,15 @@ describe("sshConfigBlock", () => {
         expect(block).toContain('UserKnownHostsFile "/home/u/.intentic/sync/known_hosts"');
     });
     // Every sandbox's transport answers on 127.0.0.1, so without an alias the host key of the second sandbox
-    // paired reads as the first one's key having changed — which ssh refuses, loudly, in a log nobody reads.
+    // paired reads as the first one's key having changed, which ssh refuses, loudly, in a log nobody reads.
     it("keys known_hosts by the alias, so two sandboxes on one loopback address never collide", () => {
         expect(block).toContain("HostKeyAlias intentic-sync-x");
     });
-    /* The alias must be LITERAL. ssh expands no %-tokens in HostKeyAlias, so a `%h` here is the name "%h" — one
+    /* The alias must be LITERAL. ssh expands no %-tokens in HostKeyAlias, so a `%h` here is the name "%h": one
      * entry shared by every sandbox, which is the collision this option exists to prevent. It shipped that way:
      * with a single pairing nothing looks wrong, and the second sandbox onwards is refused with REMOTE HOST
      * IDENTIFICATION HAS CHANGED for good, since `accept-new` never accepts a CHANGED key. */
-    it("writes the alias literally — a %-token would silently collapse every sandbox onto one known_hosts entry", () => {
+    it("writes the alias literally: a %-token would silently collapse every sandbox onto one known_hosts entry", () => {
         expect(block).not.toContain("%");
         const other = sshConfigBlock({
             alias: "intentic-sync-y",
@@ -63,7 +63,7 @@ describe("sshConfigBlock", () => {
         });
         expect(other).toContain("HostKeyAlias intentic-sync-y");
     });
-    it("no longer routes through a tunnel client — the transport is local", () => {
+    it("no longer routes through a tunnel client: the transport is local", () => {
         expect(block).not.toContain("ProxyCommand");
     });
     it("quotes Windows paths with spaces and converts backslashes (OpenSSH globs paths POSIX-style)", () => {
@@ -79,14 +79,14 @@ describe("sshConfigBlock", () => {
 });
 
 // The include line is the whole feature on Windows. Mutagen ignores PATH there and takes the first ssh.exe from
-// its own hardcoded list — Git for Windows' Cygwin build long before Microsoft's — and a Cygwin ssh does not
+// its own hardcoded list: Git for Windows' Cygwin build long before Microsoft's, and a Cygwin ssh does not
 // consider "C:/Users/…" absolute: it anchors it under ~/.ssh, matches no file, and (a no-match include being
 // silent) reads no config at all. Every Windows setup then died at "unable to receive server magic number: EOF"
 // with the alias echoed back as an unresolvable hostname. A relative name is the one spelling every build
 // anchors identically.
 /* The fragment is regenerated from the pairing LIST. Writing a single block was the first thing that broke a live
  * pairing: pairing a second sandbox overwrote the file, the first sandbox's alias stopped resolving, and Mutagen's
- * ssh then dialled the alias as a literal hostname — surfacing, if at all, as "unable to receive server magic
+ * ssh then dialled the alias as a literal hostname: surfacing, if at all, as "unable to receive server magic
  * number: EOF" in a log nobody was reading. */
 describe("pairingSshConfig", () => {
     const pairings = [{ sandboxId: "sandbox-0738cd6b5027.intentic.dev" }, { sandboxId: "sandbox-bce57bb9fe3b.intentic.dev" }];
@@ -100,7 +100,7 @@ describe("pairingSshConfig", () => {
         expect(fragment.match(/^Host /gm)).toHaveLength(2);
     });
 
-    // Two sandboxes sharing one port would give each other's ssh the wrong sandbox — silently, since both ends
+    // Two sandboxes sharing one port would give each other's ssh the wrong sandbox: silently, since both ends
     // authenticate fine. The derivation is per-id for exactly this reason.
     it("gives two sandboxes two different ports", () => {
         expect(syncSshPort("sandbox-0738cd6b5027.intentic.dev")).not.toBe(syncSshPort("sandbox-bce57bb9fe3b.intentic.dev"));
@@ -148,7 +148,7 @@ describe("mutagenSshPath", () => {
     });
 });
 
-// `ssh -G` prints the fully expanded config, so it is ground truth for whether THAT client read our block —
+// `ssh -G` prints the fully expanded config, so it is ground truth for whether THAT client read our block:
 // one that never saw the include echoes the alias back as the hostname, which is the failure we now catch.
 describe("resolvedEndpoint", () => {
     it("reads the resolved HostName and Port out of `ssh -G`", () => {
@@ -184,7 +184,7 @@ const spec: SyncSessionSpec = {
 
 /* The state backup, as the same shape with the three fields that differ. Every assertion about it below is really
  * one assertion: this session runs DOWNHILL. Mutagen's one-way modes propagate alpha → beta and nothing warns
- * about the order, so an endpoint pair the wrong way round would not fail — it would replicate the laptop's copy
+ * about the order, so an endpoint pair the wrong way round would not fail: it would replicate the laptop's copy
  * over the sandbox's live state, which is the single worst thing this feature could do. */
 const backup: SyncSessionSpec = {
     name: "intentic-x-state",
@@ -212,7 +212,7 @@ describe("mutagenCreateArgs", () => {
     });
 
     // --ignore-vcs covers .git DIRECTORIES only and misses the daemon's pointer FILES; the bare `.git` pattern
-    // covers every shape at every level — no git state file-syncs (the bridge carries it by git protocol).
+    // covers every shape at every level: no git state file-syncs (the bridge carries it by git protocol).
     it("does not pass --ignore-vcs, and ignores .git at every level so no git state ever file-syncs", () => {
         expect(args).not.toContain("--ignore-vcs");
         expect(IGNORES).toContain(".git");
@@ -227,7 +227,7 @@ describe("mutagenCreateArgs", () => {
     });
 });
 
-describe("mutagenCreateArgs — the state backup", () => {
+describe("mutagenCreateArgs: the state backup", () => {
     const args = mutagenCreateArgs(backup, false);
 
     it("runs one-way from the SANDBOX, so the sandbox's state can never be overwritten by the laptop's copy", () => {
@@ -244,21 +244,21 @@ describe("mutagenCreateArgs — the state backup", () => {
         for (const pattern of BACKUP_IGNORES) {
             expect(args[args.indexOf(pattern) - 1]).toBe("--ignore");
         }
-        // The workspace list excludes the state dir wholesale — passing it here would sync nothing at all.
+        // The workspace list excludes the state dir wholesale: passing it here would sync nothing at all.
         expect(args).not.toContain(STATE_DIR);
     });
 
     /* The two halves of the classification, checked as sentences rather than as a list: the rebuildable bulk and
      * every credential stay in the sandbox, and everything a person wrote or that happened here comes down.
      *
-     * Whole groups are excluded by FOLDER, which is the readable payoff of the regrouping — three patterns
+     * Whole groups are excluded by FOLDER, which is the readable payoff of the regrouping: three patterns
      * instead of thirteen, and each one a word rather than an inventory. */
     it("leaves credentials and rebuildable bulk behind, a folder at a time", () => {
         expect([...BACKUP_IGNORES].toSorted()).toEqual(["/identity/control-tokens.json", "/local", "/secrets"]);
     });
 
-    /* The partial group is the one worth pinning. `identity` is split — the ownership records come down so the
-     * owner keeps a copy of their own access, the control tokens do not — so collapsing it to a folder like the
+    /* The partial group is the one worth pinning. `identity` is split: the ownership records come down so the
+     * owner keeps a copy of their own access, the control tokens do not, so collapsing it to a folder like the
      * two beside it would silently stop backing up the records. */
     it("excludes the tokens from identity without excluding identity", () => {
         expect(BACKUP_IGNORES).not.toContain("/identity");
@@ -266,14 +266,14 @@ describe("mutagenCreateArgs — the state backup", () => {
     });
 
     it("copies down what the sandbox going away would otherwise take with it", () => {
-        // Nothing under the two authored/record folders may be excluded — those ARE the backup.
+        // Nothing under the two authored/record folders may be excluded: those ARE the backup.
         for (const pattern of BACKUP_IGNORES) {
             expect([pattern, pattern.startsWith("/config") || pattern.startsWith("/records")]).toEqual([pattern, false]);
         }
     });
 });
 
-// Mutagen freezes a session's configuration at `sync create` — no verb edits a live one — so an agent upgrade
+// Mutagen freezes a session's configuration at `sync create`: no verb edits a live one, so an agent upgrade
 // only reaches an existing pairing if the drift is noticed and the session recreated. This predicate is what
 // notices. `--ignore-vcs` (vcs: true) is the exact drift that kept every project's .git out of the sandbox.
 describe("sessionMatchesSpec", () => {

@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS turns (
     ordinal INTEGER NOT NULL,
     ts INTEGER NOT NULL,
     prompt TEXT NOT NULL,
-    -- The turn's closing assistant text message (head-capped at ingest) — the answer, for excerpt recall.
+    -- The turn's closing assistant text message (head-capped at ingest): the answer, for excerpt recall.
     response TEXT NOT NULL DEFAULT '',
     start_byte INTEGER NOT NULL
 );
@@ -49,7 +49,7 @@ CREATE INDEX IF NOT EXISTS turn_files_path ON turn_files(path);
 -- BM25 over typed prompts, closing assistant responses, and session titles. External-content: rows live in
 -- turns/sessions; the triggers keep the FTS index in sync (they fire on FK-cascade deletes too, and on the
 -- response overwrite an incremental ingest applies to a still-open turn). tokenchars keeps
--- snake_case/$identifiers whole — same setup as iq-engine's chunks_fts.
+-- snake_case/$identifiers whole: same setup as iq-engine's chunks_fts.
 CREATE VIRTUAL TABLE IF NOT EXISTS turns_fts USING fts5(prompt, response, content='turns', content_rowid='id', tokenize="unicode61 tokenchars '_$'");
 CREATE TRIGGER IF NOT EXISTS turns_fts_ai AFTER INSERT ON turns BEGIN
     INSERT INTO turns_fts(rowid, prompt, response) VALUES (new.id, new.prompt, new.response);

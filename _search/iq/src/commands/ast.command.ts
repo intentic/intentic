@@ -3,7 +3,7 @@ import { outputAliases, outputFlagParameters, scopeFlagParameters, type SearchFl
 import { runSearch } from "../lib/run.js";
 
 export const ast = buildCommand({
-    docs: { brief: "Structural AST pattern search — $X one node, $$$ any nodes (e.g. 'await $FN($$$)')" },
+    docs: { brief: "Structural AST pattern search, $X one node, $$$ any nodes (e.g. 'await $FN($$$)')" },
     parameters: {
         flags: { ...scopeFlagParameters, ...outputFlagParameters },
         aliases: outputAliases,

@@ -7,17 +7,17 @@ import { discoverRepos, isValidRepoId, isValidRepoName } from "./repo-discovery.
 
 const setup = (): string => mkdtempSync(join(tmpdir(), "repo-discovery-"));
 
-test("a repo is any dir owning a .git — dir or pointer file — at any depth, sorted by id", async () => {
+test("a repo is any dir owning a .git (dir or pointer file) at any depth, sorted by id", async () => {
     const root = setup();
     mkdirSync(join(root, "intent", ".git"), { recursive: true });
-    // A daemon-created repo keeps a .git pointer FILE (--separate-git-dir) — it must count too.
+    // A daemon-created repo keeps a .git pointer FILE (--separate-git-dir): it must count too.
     mkdirSync(join(root, "shop"), { recursive: true });
     writeFileSync(join(root, "shop", ".git"), "gitdir: /history/gits/shop\n");
     mkdirSync(join(root, "clients", "foo", ".git"), { recursive: true });
     expect(await discoverRepos(root)).toEqual(["clients/foo", "intent", "shop"]);
 });
 
-test("the walk stops at the first .git boundary — a nested repo belongs to its parent", async () => {
+test("the walk stops at the first .git boundary, a nested repo belongs to its parent", async () => {
     const root = setup();
     mkdirSync(join(root, "app", ".git"), { recursive: true });
     mkdirSync(join(root, "app", "vendor", "lib", ".git"), { recursive: true });

@@ -3,12 +3,12 @@ import { isIqDenied } from "./floor.js";
 
 test("the floor denies the agent plane by default, at any depth", () => {
     expect(isIqDenied(".intentic/local/cache/iq/index.db")).toBe(true);
-    // The vector sidecar sits BESIDE cache/iq — the miss that showed a deny-list can't hold the line.
+    // The vector sidecar sits BESIDE cache/iq: the miss that showed a deny-list can't hold the line.
     expect(isIqDenied(".intentic/local/cache/iq-vectors.db")).toBe(true);
     expect(isIqDenied(".intentic/secrets/auth/token.json")).toBe(true);
     expect(isIqDenied(".intentic/records/sessions/claude/projects/-work/a.jsonl")).toBe(true);
     expect(isIqDenied("refs/nested-workspace/.intentic/local/cache/iq/index.db")).toBe(true); // a checkout that is itself a workspace
-    // Machine ledgers and clones the old deny-list never named — denied by construction now.
+    // Machine ledgers and clones the old deny-list never named: denied by construction now.
     expect(isIqDenied(".intentic/records/loops.json")).toBe(true);
     expect(isIqDenied(".intentic/records/chores/runs/2026-01-01.json")).toBe(true);
     expect(isIqDenied(".intentic/local/extensions/some-extension/src/index.ts")).toBe(true);
@@ -17,7 +17,7 @@ test("the floor denies the agent plane by default, at any depth", () => {
     expect(isIqDenied(".intentic/undeclared-tomorrow.json")).toBe(true);
 });
 
-test("the authored and versioned slice stays searchable — excluding all of .intentic/ would trade one blind spot for another", () => {
+test("the authored and versioned slice stays searchable: excluding all of .intentic/ would trade one blind spot for another", () => {
     expect(isIqDenied(".intentic")).toBe(false); // the walk must descend to reach the slice below
     expect(isIqDenied(".intentic/config/settings.json")).toBe(false);
     expect(isIqDenied(".intentic/config/environment.Dockerfile")).toBe(false);
@@ -29,7 +29,7 @@ test("the authored and versioned slice stays searchable — excluding all of .in
     expect(isIqDenied(".intentic/config/automations.json")).toBe(false);
     /* THE ONE THAT CHANGED SIDES, and the assertion that says the guarantee did not. This used to be asserted in
      * the denied block above, on the grounds that the index must not copy capability tokens into search text. The
-     * tokens left the file for the vault, so it is `versioned` now — searchable, findable, and reviewable — while
+     * tokens left the file for the vault, so it is `versioned` now: searchable, findable, and reviewable, while
      * `auth/` (asserted denied above, and where both vaults live) is what actually holds the line. The floor moved
      * from hiding the file that held credentials to the file holding none. */
     expect(isIqDenied(".intentic/config/capabilities.json")).toBe(false);

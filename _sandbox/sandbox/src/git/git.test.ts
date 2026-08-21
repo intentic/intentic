@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
 import { gitFailureReason } from "./git.js";
 
-// Verbatim stderr from real git failures — the shapes the panel actually has to render.
+// Verbatim stderr from real git failures: the shapes the panel actually has to render.
 test("gitFailureReason keeps git's verdict rather than the advice paragraph trailing it", () => {
     // The one that shipped a sentence fragment to the panel: git's advice couplet wraps across two lines, so
-    // the LAST line is "and the repository exists." — a clause, with the diagnosis two lines above it.
+    // the LAST line is "and the repository exists.": a clause, with the diagnosis two lines above it.
     const unreachable = {
         stderr: "ERROR: Repository not found.\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.\n",
     };
@@ -25,7 +25,7 @@ test("gitFailureReason keeps a hint block out of the panel", () => {
     expect(gitFailureReason(diverged, "git failed")).toBe("fatal: Not possible to fast-forward, aborting.");
 });
 
-// A commit-msg hook's output, relayed by git with no verdict of its own — the shape that reached the panel as
+// A commit-msg hook's output, relayed by git with no verdict of its own: the shape that reached the panel as
 // commitlint's help link and nothing else.
 test("gitFailureReason names the rules a commit message broke rather than the help link under them", () => {
     const rejected = {
@@ -40,7 +40,7 @@ test("gitFailureReason reads a single-line failure and an execFile rejection wit
     expect(gitFailureReason({ stderr: "fatal: could not read Username for 'https://github.com': terminal prompts disabled\n" }, "git failed")).toBe(
         "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
     );
-    // A spawn failure carries no stderr and no git prefix — the message's last line is all there is.
+    // A spawn failure carries no stderr and no git prefix: the message's last line is all there is.
     expect(gitFailureReason(new Error("Command failed: git fetch --prune\nspawn git ENOENT"), "git failed")).toBe("spawn git ENOENT");
     expect(gitFailureReason(new Error(""), "git failed")).toBe("git failed");
 });

@@ -24,7 +24,7 @@ test("listenHost keeps the configured host for the container profile", () => {
 });
 
 // The schema default says "the operator chose nothing", which for a process on someone's own machine must
-// mean loopback — the collapse is the local profile's safety default, not a preference.
+// mean loopback: the collapse is the local profile's safety default, not a preference.
 test("listenHost collapses the container default onto loopback for the local profile", () => {
     expect(listenHost(withSandbox({ profile: "local", host: "0.0.0.0" }))).toBe("127.0.0.1");
     expect(listenHost(withSandbox({ profile: "local", host: "::1" }))).toBe("::1");

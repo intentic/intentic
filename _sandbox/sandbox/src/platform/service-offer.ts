@@ -104,7 +104,7 @@ export const gatedServiceRun = async (deps: OfferDeps, offered: OfferedRun): Pro
     const parsed = JSON.parse(catalog.body) as CatalogAnswer;
     const service = parsed.services?.find((entry) => entry.slug === offered.slug);
     if (service === undefined) {
-        return refusal(404, "unknown_service", `No service is listed as "${offered.slug}" — \`services list\` names what exists.`);
+        return refusal(404, "unknown_service", `No service is listed as "${offered.slug}": \`services list\` names what exists.`);
     }
     /* The member gate, answered BEFORE a card goes up: a non-member's card could only offer a button that does
      * not work, and the platform's refusal sentence (with its door to Settings → Membership) is the useful
@@ -138,9 +138,9 @@ export const gatedServiceRun = async (deps: OfferDeps, offered: OfferedRun): Pro
             ? refusal(
                   408,
                   "unanswered",
-                  "The offer went unanswered and expired — nothing was charged. Continue without the service; offer again only if the owner shows up.",
+                  "The offer went unanswered and expired: nothing was charged. Continue without the service; offer again only if the owner shows up.",
               )
-            : refusal(403, "declined", "The owner skipped this run — nothing was charged. Continue without the service.");
+            : refusal(403, "declined", "The owner skipped this run, nothing was charged. Continue without the service.");
     }
     /* The approved run, relayed live: every `status` line off the provider's stream becomes a transcript
      * frame under the settled card the moment it arrives, so the owner watches the run they just paid for

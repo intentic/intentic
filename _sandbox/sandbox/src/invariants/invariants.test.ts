@@ -112,7 +112,7 @@ test("disposal removes an owner's checks", async () => {
     expect(await registry.run("sweep")).toEqual([]);
 });
 
-test("the violation list is bounded — it is a live signal, not a ledger", async () => {
+test("the violation list is bounded: it is a live signal, not a ledger", async () => {
     const registry = createInvariantRegistry(silent());
     registry.register("platform", [check("claim", ({ fail }) => fail("still broken"))]);
 

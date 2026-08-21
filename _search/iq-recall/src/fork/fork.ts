@@ -72,7 +72,7 @@ export const materializeFork = async (options: ForkOptions): Promise<ForkResult>
         lastLeaf = leafUuidOf(line) ?? lastLeaf;
     }
     if (turns.length === 0) {
-        throw new Error(`no user turns in ${options.transcriptPath} — nothing to fork`);
+        throw new Error(`no user turns in ${options.transcriptPath}: nothing to fork`);
     }
     let leaf: string;
     let lastPrompt: string;
@@ -89,7 +89,7 @@ export const materializeFork = async (options: ForkOptions): Promise<ForkResult>
             leaf = lastLeaf ?? lastUuid!;
         } else {
             if (next.parentUuid === undefined) {
-                throw new Error(`turn after ${options.atTurnUuid} has no parent — cannot resolve the fork leaf`);
+                throw new Error(`turn after ${options.atTurnUuid} has no parent: cannot resolve the fork leaf`);
             }
             leaf = next.parentUuid;
         }
@@ -99,7 +99,7 @@ export const materializeFork = async (options: ForkOptions): Promise<ForkResult>
     for (let current: string | undefined = leaf; current !== undefined;) {
         const entry = byUuid.get(current);
         if (entry === undefined) {
-            throw new Error(`fork chain broken at ${current} — transcript line missing or oversized`);
+            throw new Error(`fork chain broken at ${current}: transcript line missing or oversized`);
         }
         chain.add(current);
         current = parentUuidOf(entry.line);

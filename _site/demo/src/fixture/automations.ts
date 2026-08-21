@@ -31,9 +31,9 @@ const seed = (now: number): AutomationSummary[] => [
         nextRun: now + hours(9),
         runs: [
             { at: now - hours(7), outcome: `completed`, detail: `3 advisories, 2 patched`, conversationId: `cnv_dep_audit` },
-            { at: now - hours(31), outcome: `skipped`, detail: `guard exited 1 — no high advisories` },
+            { at: now - hours(31), outcome: `skipped`, detail: `guard exited 1, no high advisories` },
             { at: now - hours(55), outcome: `completed`, detail: `1 advisory, patched`, conversationId: `cnv_dep_audit_prev` },
-            { at: now - hours(79), outcome: `skipped`, detail: `guard exited 1 — no high advisories` },
+            { at: now - hours(79), outcome: `skipped`, detail: `guard exited 1, no high advisories` },
         ],
     },
     {
@@ -53,7 +53,7 @@ const seed = (now: number): AutomationSummary[] => [
         prompt: `A visitor is asking on the marketing site. Answer from the docs in this workspace only; if the answer isn't there, say so and offer to pass it on.`,
         webchat: {
             title: `Ask acme`,
-            greeting: `Ask anything about the product — a real agent answers.`,
+            greeting: `Ask anything about the product, a real agent answers.`,
             accent: `#f0662a`,
             position: `bottom-right`,
             access: `public`,
@@ -66,7 +66,7 @@ const seed = (now: number): AutomationSummary[] => [
     {
         id: `aut_docs_after_land`,
         trigger: { kind: `workspace`, event: `agent.landed`, repo: `api` },
-        prompt: `Something landed in api. Check whether the docs still describe it — the route table, the schema notes and the README — and fix what drifted.`,
+        prompt: `Something landed in api. Check whether the docs still describe it, the route table, the schema notes and the README, and fix what drifted.`,
         chore: true,
         enabled: true,
         runs: [

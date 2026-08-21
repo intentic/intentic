@@ -51,7 +51,7 @@ const dialFailureHint = (log: string): string | undefined => {
         return `The gateway's certificate is not signed by a trusted CA. Re-add this VPN with "Trusted certificate" set to ${pin} to pin it.`;
     }
     if (/failed to obtain WebVPN cookie|Login failed|authentication failed|Invalid username or password/i.test(log)) {
-        return "The gateway rejected the sign-in. Check the username and password — and if this gateway uses a token, supply the one-time code with the connect.";
+        return "The gateway rejected the sign-in. Check the username and password, and if this gateway uses a token, supply the one-time code with the connect.";
     }
     if (/token|two[- ]factor|challenge/i.test(log)) {
         return "The gateway asked for a one-time code. Connect again with a current 2FA code.";

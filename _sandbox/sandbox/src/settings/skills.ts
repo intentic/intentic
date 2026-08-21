@@ -28,22 +28,22 @@ name: lsp
 description: Rename a TypeScript/JavaScript symbol across the project and read compiler diagnostics with the \`lsp\` CLI. Use whenever renaming a symbol, refactoring code other files import, or checking a file for type errors without a full build.
 ---
 
-# lsp — TypeScript rename & diagnostics
+# lsp: TypeScript rename & diagnostics
 
-The \`lsp\` CLI (on PATH) drives the native TypeScript compiler. Prefer it over hand-editing imports or eyeballing types — it updates every usage and reports real compiler errors.
+The \`lsp\` CLI (on PATH) drives the native TypeScript compiler. Prefer it over hand-editing imports or eyeballing types: it updates every usage and reports real compiler errors.
 
 ## Rename a symbol (updates every usage)
 \`lsp rename <file> <symbolName> <newName>\`
-- Renames the declaration and every reference across the file's TypeScript project — imports, exports, and call sites all move together, so you never leave a dangling old name or introduce an alias.
+- Renames the declaration and every reference across the file's TypeScript project: imports, exports, and call sites all move together, so you never leave a dangling old name or introduce an alias.
 - \`<file>\` is the file that DECLARES the symbol; \`<symbolName>\` is its current name.
 - Example: \`lsp rename src/user.ts getUser fetchUser\`
 - Scope: the invoked file's own tsconfig project. For a symbol also used in OTHER packages of a monorepo, run \`lsp rename\` in each package that declares/re-exports it, then \`lsp diag\` the consumers to catch any stragglers.
 
 ## Check files for errors
 \`lsp diag <file...>\`
-- Prints syntactic + semantic diagnostics as \`path:line:col: error TS<code>: message\`; "no diagnostics" means the file type-checks. Faster than a full build for confirming an edit is sound — run it after edits to verify you updated all usages.
+- Prints syntactic + semantic diagnostics as \`path:line:col: error TS<code>: message\`; "no diagnostics" means the file type-checks. Faster than a full build for confirming an edit is sound, run it after edits to verify you updated all usages.
 
-Both verbs refuse rather than guess: when a file's tsconfig or type foundations cannot be loaded (say the dependencies are not installed where the checker runs), they print an \`unavailable\` message and exit 2 instead of answering from a half-loaded project. Treat that as "not checked" — use the package's own typecheck or tests — never as a verdict on the code.
+Both verbs refuse rather than guess: when a file's tsconfig or type foundations cannot be loaded (say the dependencies are not installed where the checker runs), they print an \`unavailable\` message and exit 2 instead of answering from a half-loaded project. Treat that as "not checked", use the package's own typecheck or tests, never as a verdict on the code.
 
 Notes: TypeScript/JavaScript only. Pass workspace paths.
 `;

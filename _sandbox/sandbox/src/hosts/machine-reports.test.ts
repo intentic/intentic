@@ -23,7 +23,7 @@ const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => 
     ...overrides,
 });
 
-/* `run_command` answers in PROSE — it is written for the agent, which is its only other caller — so a machine
+/* `run_command` answers in PROSE: it is written for the agent, which is its only other caller, so a machine
  * reader has to find its JSON inside a human answer. These pin that extraction, because it is the one place this
  * feature depends on the shape of somebody else's output. */
 test("finds the report inside run_command's prose answer", () => {
@@ -49,7 +49,7 @@ test("finds nothing when the command printed no report", () => {
     expect(reportFrom("Exit code 127 (failed).\n--- stderr ---\nintentic-sync: command not found")).toBeUndefined();
     // JSON that is not a report is not a report.
     expect(reportFrom(`--- stdout ---\n{"hostname":"laptop"}`)).toBeUndefined();
-    // Brace-shaped but not JSON: a candidate line that will not parse must be skipped, not thrown on — this runs
+    // Brace-shaped but not JSON: a candidate line that will not parse must be skipped, not thrown on, this runs
     // over whatever somebody's login shell decided to print.
     expect(reportFrom(`--- stdout ---\n{ not json at all }`)).toBeUndefined();
 });
@@ -60,7 +60,7 @@ test("keeps looking past a line that only looked like JSON", () => {
     expect(reportFrom(answer)?.hostname).toBe("laptop");
 });
 
-/* Unlike run_command, list_sandboxes answers its JSON bare — the machine's own tool produced it for this exact
+/* Unlike run_command, list_sandboxes answers its JSON bare: the machine's own tool produced it for this exact
  * reader. What still needs pinning is the skew: a machine running an agent from before the tool refuses it, and
  * that must read as a machine with no listable sandboxes, never as a failed pull. */
 test("reads the fleet the machine's own tool answered", () => {
@@ -81,7 +81,7 @@ test("keeps an enrolled machine that has never reported, and says why it is empt
 
 /* WHAT THE MACHINE IS has to survive having no report, because that is the row it matters on: a connected
  * computer with no sync agent had nothing on it but a name, so a Windows PC and a Linux desktop rendered as the
- * same line twice. None of this comes from an agent — the card names the platform and the machine described
+ * same line twice. None of this comes from an agent: the card names the platform and the machine described
  * itself when it connected. */
 test("says what a connected computer is even when it reported nothing", () => {
     const facts = { os: "Windows 11 Pro (build 10.0.26100)", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\ada", roots: ["C:\\Users\\ada"] };
@@ -104,7 +104,7 @@ test("says what a connected computer is even when it reported nothing", () => {
     });
 });
 
-// A sync-only machine has no capability card to name its platform, so the report's own token is read — in the
+// A sync-only machine has no capability card to name its platform, so the report's own token is read: in the
 // spelling `os.platform()` uses, which is not one anybody should have to recognise on screen.
 test("reads a sync-only machine's platform off its report", () => {
     const merged = mergeComputers(
@@ -119,7 +119,7 @@ test("reads a sync-only machine's platform off its report", () => {
 });
 
 /* The conservative half of the reconciliation. Both doors onto the SAME box collapse into one row only because
- * the two reports agree on a hostname — the sandbox knows the machine as "laptop" (the ssh key's comment) and the
+ * the two reports agree on a hostname: the sandbox knows the machine as "laptop" (the ssh key's comment) and the
  * capability calls it "my-pc", and neither name could have told us they were the same computer. */
 test("folds a sync enrollment and a host capability into one row when the hostname agrees", () => {
     const pulled: PullResult = {

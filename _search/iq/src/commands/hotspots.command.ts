@@ -5,7 +5,7 @@ import { runSearch } from "../lib/run.js";
 type HotspotsFlags = SearchFlags & { readonly since?: string; readonly author?: string };
 
 export const hotspots = buildCommand({
-    docs: { brief: "Files that are both changed often and structurally complex — where risk concentrates" },
+    docs: { brief: "Files that are both changed often and structurally complex, where risk concentrates" },
     parameters: {
         flags: {
             ...scopeFlagParameters,

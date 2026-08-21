@@ -3,7 +3,7 @@ import { outputAliases, outputFlagParameters, scopeFlagParameters, type SearchFl
 import { runSearch } from "../lib/run.js";
 
 export const outline = buildCommand({
-    docs: { brief: "A file's skeleton — signatures + doc first-lines, without reading the file" },
+    docs: { brief: "A file's skeleton, signatures + doc first-lines, without reading the file" },
     parameters: {
         flags: { ...scopeFlagParameters, ...outputFlagParameters },
         aliases: outputAliases,

@@ -4,13 +4,13 @@ import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";
 
 /* THE RESIDENT ENGINE'S SEMANTIC TIER NOW LIVES ON ANOTHER THREAD, and what these cover is that it still
- * ANSWERS — the worker path is the one that can break silently. A broken worker does not throw: the query
+ * ANSWERS, the worker path is the one that can break silently. A broken worker does not throw: the query
  * degrades to BM25 and returns a slightly worse answer, which is indistinguishable from a good day unless
  * something asserts on the tags.
  *
  * What is NOT asserted here is the latency property the worker exists for. Proving work happened off-thread
- * needs a side effect visible from this one — resident-thread.integration.test.ts has that, rows appearing in
- * SQLite while the host spins — and a request/response worker leaves none behind. Timing it instead would be a
+ * needs a side effect visible from this one: resident-thread.integration.test.ts has that, rows appearing in
+ * SQLite while the host spins, and a request/response worker leaves none behind. Timing it instead would be a
  * throughput claim wearing a regression test's clothes, and it would breach on a loaded CI box. Those numbers
  * live in query-worker.ts's own header, measured against a real workspace index.
  *
@@ -51,7 +51,7 @@ test("without a model dir the worker reports no backend and the query answers fr
     const engine = await resident();
     const outcome = await engine.run(request("how are widgets built for the registry?"));
     expect(outcome.exitCode).toBe(0);
-    expect(outcome.text).toContain("no embedding backend — BM25 only");
+    expect(outcome.text).toContain("no embedding backend, BM25 only");
     expect(outcome.result.groups.flatMap((group) => group.hits).some((hit) => hit.tags.some((tag) => tag.kind === "bm25"))).toBe(true);
 });
 
@@ -71,7 +71,7 @@ test.skipIf(process.env["IQ_MODEL_DIR"] === undefined)(
     120_000,
 );
 
-// Concurrent turns are the daemon's normal state — several agents searching at once — and one thread answering
+// Concurrent turns are the daemon's normal state: several agents searching at once, and one thread answering
 // all of them must not hand an answer to the wrong caller.
 test.skipIf(process.env["IQ_MODEL_DIR"] === undefined)(
     "queries in flight together each get their own answer",

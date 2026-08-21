@@ -19,7 +19,7 @@ import type { WorkspacePaths } from "../workspace/workspace.js";
  * behind every review) and on every command the USER runs, which is what a slow commit actually feels like.
  *
  * WHICH TASKS. The four incremental ones, and deliberately NOT `gc`:
- *   · pack-refs           — 133 loose ref files become one packed-refs read
+ *   · pack-refs          : 133 loose ref files become one packed-refs read
  *   · commit-graph       , the daemon's merge-base/ancestry work (anchorOf, per-repo standings) is exactly what
  *                           a commit-graph accelerates, and it is the cheapest of the four to keep current
  *   · loose-objects      , sweeps the loose store into a pack, bounded at 50k objects per run

@@ -3,7 +3,7 @@
 The starter files a new intentic workspace gets, shared by the two programs that create one.
 
 Both the CLI's `init` and the sandbox daemon bring workspaces into existence, and they must produce the same
-skeleton. This package is that skeleton, plus the render-and-parse of `deploy.config.ts`'s managed region — the
+skeleton. This package is that skeleton, plus the render-and-parse of `deploy.config.ts`'s managed region: the
 block the tooling owns inside a file the user also edits.
 
 ## Responsibilities
@@ -16,13 +16,13 @@ block the tooling owns inside a file the user also edits.
 
 ## Key files
 
-- [src/intent-repo.ts](src/intent-repo.ts) — the skeleton itself.
-- [src/deploy-config.ts](src/deploy-config.ts) — the managed region: rendering it, and reading it back out of a
+- [src/intent-repo.ts](src/intent-repo.ts): the skeleton itself.
+- [src/deploy-config.ts](src/deploy-config.ts), the managed region: rendering it, and reading it back out of a
   file someone has edited around.
-- [src/workspace-layout.ts](src/workspace-layout.ts) — where things go.
-- [src/inject-template.ts](src/inject-template.ts) / [src/template-manifest.ts](src/template-manifest.ts) — what a
+- [src/workspace-layout.ts](src/workspace-layout.ts): where things go.
+- [src/inject-template.ts](src/inject-template.ts) / [src/template-manifest.ts](src/template-manifest.ts): what a
   template is, and applying one.
-- [src/secret-inventory.ts](src/secret-inventory.ts) — which secrets a workspace will be asked for.
+- [src/secret-inventory.ts](src/secret-inventory.ts): which secrets a workspace will be asked for.
 
 ## How it fits
 

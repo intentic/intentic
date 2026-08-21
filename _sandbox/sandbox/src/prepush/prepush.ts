@@ -176,7 +176,7 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
                             .append({
                                 direction: "system",
                                 type: "rule.blocked_push",
-                                content: `"${rule.label}" ran \`${command}\` before your push and it ${run.timedOut === true ? "timed out" : `exited ${run.exitCode ?? "abnormally"}`} — the push did not go.`,
+                                content: `"${rule.label}" ran \`${command}\` before your push and it ${run.timedOut === true ? "timed out" : `exited ${run.exitCode ?? "abnormally"}`}, the push did not go.`,
                                 outcome: "error",
                             })
                             .catch((error: unknown) => logger.warn({ err: error, rule: rule.id }, "prepush: activity append failed"));

@@ -15,20 +15,20 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { hasValidBase } from "./environment/environment.js";
 
 // The Tier-3 real Discord + Whisper e2e: the ext-discord gateway process on a REAL bot token receives a REAL
-// message (sent by a second, harness-owned bot — the listener deliberately dispatches third-party bot posts, see
-// _extensions/discord/src/listener.ts) and the matched automation's wake lands in the approvals queue — the whole
+// message (sent by a second, harness-owned bot: the listener deliberately dispatches third-party bot posts, see
+// _extensions/discord/src/listener.ts) and the matched automation's wake lands in the approvals queue: the whole
 // trigger path proven without spending an agent turn. Requires the baked ext-discord dist in the image (the
 // gateway is an autoStart extension process). Whisper is proven by building the discord capability's composed
 // overlay (whisper.cpp from source) and running the real whisper-cli + tiny.en model on the canonical whisper.cpp
 // speech sample, pinned to the same tag the fragment builds.
 //
-// What the tier below names, and what each one has to BE — the declaration says they are required, this says
+// What the tier below names, and what each one has to BE: the declaration says they are required, this says
 // how to make one that works:
-//   DISCORD_E2E_BOT_TOKEN    — the daemon's capability bot. Must be in the test server with the MESSAGE
+//   DISCORD_E2E_BOT_TOKEN   : the daemon's capability bot. Must be in the test server with the MESSAGE
 //                              CONTENT intent enabled (Developer Portal → Bot → Privileged Gateway Intents).
-//   DISCORD_E2E_SENDER_TOKEN — the harness bot that posts the trigger message. Same server + channel.
-//   DISCORD_E2E_CHANNEL_ID   — a text channel both bots can read/write.
-// Manual checklist (not automated): a live voice-channel session (`discord-voice join` with real speakers) — the
+//   DISCORD_E2E_SENDER_TOKEN: the harness bot that posts the trigger message. Same server + channel.
+//   DISCORD_E2E_CHANNEL_ID  : a text channel both bots can read/write.
+// Manual checklist (not automated): a live voice-channel session (`discord-voice join` with real speakers), the
 // capture path is covered by _extensions/discord/src/audio.test.ts with an injected exec; binary + model here.
 const tier = e2eTier("discord + whisper end-to-end (real gateway, real binary)", {
     enabledBy: "INTENTIC_E2E",
@@ -46,7 +46,7 @@ const CLAUDE_CREDS = {
 };
 
 // The whisper model + speech fixture, cached across runs (the model is ~75 MB; the fixture is whisper.cpp's own
-// smoke sample — public-domain JFK speech — fetched from the same v1.9.1 tag the overlay fragment builds).
+// smoke sample (public-domain JFK speech) fetched from the same v1.9.1 tag the overlay fragment builds).
 const CACHE_DIR = join(homedir(), ".cache", "intentic-e2e", "whisper");
 const SAMPLE_URL = "https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.9.1/samples/jfk.wav";
 
@@ -65,7 +65,7 @@ const ensureCached = async (file: string, fetchBlob: () => Promise<Blob>): Promi
     return path;
 };
 
-// Post a message to the test channel as the harness bot — Discord's plain REST, the same API the daemon's
+// Post a message to the test channel as the harness bot: Discord's plain REST, the same API the daemon's
 // skill teaches the agent to call.
 const sendAsHarnessBot = async (content: string): Promise<void> => {
     const response = await fetch(`https://discord.com/api/v10/channels/${tier.secrets.DISCORD_E2E_CHANNEL_ID}/messages`, {
@@ -153,11 +153,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(approved.content).toContain("whisper-cli");
         expect(approved.hash).toBe(sha256Hex(approved.content));
 
-        // The outside-executor role: build the overlay (compiles whisper.cpp v1.9.1 from source — docker layer
+        // The outside-executor role: build the overlay (compiles whisper.cpp v1.9.1 from source, docker layer
         // cache makes reruns cheap) and run the REAL binary on real speech, with the exact flags voice.ts uses.
         overlayBuilt = true;
         await dockerBuild(approved.content, overlayTag);
-        // HF's CAS bridge 403s anonymous plain-HTTP fetches — downloadFile speaks the Xet protocol instead.
+        // HF's CAS bridge 403s anonymous plain-HTTP fetches: downloadFile speaks the Xet protocol instead.
         const model = await ensureCached("ggml-tiny.en.bin", async () => {
             const blob = await downloadFile({ repo: "ggerganov/whisper.cpp", path: "ggml-tiny.en.bin" });
             if (blob === null) {

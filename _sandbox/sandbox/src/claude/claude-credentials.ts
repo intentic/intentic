@@ -190,7 +190,7 @@ export const toAccount = (stored: StoredAccount): OauthAccount => ({
     ...(stored.email !== undefined ? { email: stored.email } : {}),
     ...(stored.organization !== undefined ? { organization: stored.organization } : {}),
     ...(stored.scope !== undefined ? { scope: stored.scope } : {}),
-    ...(stored.revokedAt !== undefined ? { needsReauth: true, detail: stored.revokedReason ?? "Signed out — reconnect to keep using it." } : {}),
+    ...(stored.revokedAt !== undefined ? { needsReauth: true, detail: stored.revokedReason ?? "Signed out, reconnect to keep using it." } : {}),
 });
 
 // Anthropic's token endpoint answers with the identity the grant belongs to beside the tokens themselves.
@@ -340,14 +340,14 @@ export const fileClaudeStore = (dir: string, logger: Logger): ClaudeStore => {
                     .then((info) => Date.now() - info.mtimeMs)
                     .catch(() => 0);
                 if (age > LOCK_STALE_MS) {
-                    logger.warn({ account: id, ageMs: age }, "claude refresh lock is stale — stealing it");
+                    logger.warn({ account: id, ageMs: age }, "claude refresh lock is stale, stealing it");
                     await rm(lockPath(id), { force: true });
                     continue;
                 }
                 if (Date.now() >= deadline) {
                     // Refusing to refresh means the turn fails outright, which is worse than the (now unlikely)
                     // race we are guarding. Proceed, loudly.
-                    logger.error({ account: id }, "claude refresh lock not obtained within the wait — refreshing unlocked");
+                    logger.error({ account: id }, "claude refresh lock not obtained within the wait, refreshing unlocked");
                     return false;
                 }
                 await delay(LOCK_POLL_MS);
@@ -413,7 +413,7 @@ const rotate = async (store: ClaudeStore, id: string, spent: string | undefined,
                 return undefined;
             }
             if (current.accessToken !== spent) {
-                store.logger.debug({ account: id }, "claude token already rotated by another holder — adopting it");
+                store.logger.debug({ account: id }, "claude token already rotated by another holder, adopting it");
                 return current.accessToken;
             }
             if (current.refreshToken === undefined) {
@@ -434,9 +434,9 @@ const rotate = async (store: ClaudeStore, id: string, spent: string | undefined,
                 await store.write({
                     ...current,
                     revokedAt: Date.now(),
-                    revokedReason: "Claude sign-in was revoked — reconnect to keep using this account.",
+                    revokedReason: "Claude sign-in was revoked, reconnect to keep using this account.",
                 });
-                store.logger.warn({ account: id }, "claude refresh token rejected (invalid_grant) — marked revoked");
+                store.logger.warn({ account: id }, "claude refresh token rejected (invalid_grant), marked revoked");
                 return undefined;
             }
         }),
@@ -469,7 +469,7 @@ export const ensureFreshToken = async (store: ClaudeStore, id: string, refresh: 
     // The token it gets instead is the one in the store: past REFRESH_AHEAD_MS, but valid, and the turn that
     // outlives even that is the case the auth resume exists for.
     if (deferrable(account, Date.now())) {
-        store.logger.debug({ account: id }, "claude token rotation deferred — turns are holding it");
+        store.logger.debug({ account: id }, "claude token rotation deferred, turns are holding it");
         return account.accessToken;
     }
     // Past the floor with turns still holding it: this rotation is about to 401 every one of them. They are
@@ -480,7 +480,7 @@ export const ensureFreshToken = async (store: ClaudeStore, id: string, refresh: 
     if (breaking > 0) {
         store.logger.warn(
             { account: id, turns: breaking, expiresAt: account.expiresAt },
-            "claude token rotating with turns still holding it — they will be refused and resumed",
+            "claude token rotating with turns still holding it: they will be refused and resumed",
         );
     }
     return rotate(store, id, account.accessToken, refresh);
@@ -516,7 +516,7 @@ const rotateWhileQuiet = async (store: ClaudeStore, id: string, refresh: Refresh
         return;
     }
     await rotate(store, id, account.accessToken, refresh).catch((error: unknown) =>
-        store.logger.warn({ err: error, account: id }, "claude quiet-moment refresh failed — the next gap retries"),
+        store.logger.warn({ err: error, account: id }, "claude quiet-moment refresh failed, the next gap retries"),
     );
 };
 
@@ -540,7 +540,7 @@ export const startClaudeRefresh = (store: ClaudeStore, intervalMs = 5 * 60_000, 
             }
             await rotateWhileQuiet(store, account.id, refresh);
             await ensureFreshToken(store, account.id, refresh).catch((error: unknown) =>
-                store.logger.warn({ err: error, account: account.id }, "claude proactive refresh failed — the next turn retries"),
+                store.logger.warn({ err: error, account: account.id }, "claude proactive refresh failed, the next turn retries"),
             );
         }
     };

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { listPublicFiles, resolvePublicFile } from "./public-files.js";
 
-/* The outbox's guards, against a real directory — every one of these is a way a file that should not have been
+/* The outbox's guards, against a real directory: every one of these is a way a file that should not have been
  * on the public internet could have got there.
  *
  * `resolvePublicFile` takes its root as an argument rather than deriving it, which is what lets these run
@@ -35,7 +35,7 @@ test("a directory serves its index.html and never a listing", async () => {
     const root = await outbox({ "site/index.html": "<h1>hi</h1>", "bare/note.txt": "no index here" });
     expect(await served(root, "/site")).toBe(true);
     expect(await served(root, "/site/")).toBe(true);
-    // The directory exists and has a file in it — listing it would be the leak.
+    // The directory exists and has a file in it: listing it would be the leak.
     expect(await resolvePublicFile(root, "/bare")).toMatchObject({ kind: "refused", status: 404 });
     expect(await resolvePublicFile(root, "/")).toMatchObject({ kind: "refused", status: 404 });
 });
@@ -49,7 +49,7 @@ test("traversal out of the outbox is refused however it is spelled", async () =>
 });
 
 // The one way a path INSIDE the outbox addresses bytes outside it. Caught by re-checking the realpath, not the
-// requested path — which is why containment is checked twice in resolvePublicFile.
+// requested path, which is why containment is checked twice in resolvePublicFile.
 test("a symlink pointing outside the outbox is refused", async () => {
     const root = await outbox({ "ok.txt": "fine" });
     const secret = join(root, "..", `escape-${process.pid}.txt`);
@@ -59,7 +59,7 @@ test("a symlink pointing outside the outbox is refused", async () => {
     expect(await served(root, "/ok.txt")).toBe(true);
 });
 
-test("hidden paths are refused at any depth — .env, .git and .ssh in one rule", async () => {
+test("hidden paths are refused at any depth: .env, .git and .ssh in one rule", async () => {
     const root = await outbox({ ".env": "TOKEN=abc", "site/.git/config": "[core]", ".ssh/id_rsa": "key" });
     expect(await served(root, "/.env")).toBe(false);
     expect(await served(root, "/site/.git/config")).toBe(false);
@@ -102,12 +102,12 @@ test("prose and public config that merely mention secrets are served", async () 
     expect(await served(root, "/firebase.json")).toBe(true);
 });
 
-test("binary types are not sniffed — a PNG whose bytes happen to match is still served", async () => {
+test("binary types are not sniffed: a PNG whose bytes happen to match is still served", async () => {
     const root = await outbox({ "shot.png": "AKIAIOSFODNN7EXAMPLE" });
     expect(await served(root, "/shot.png")).toBe(true);
 });
 
-test("an absent outbox answers exactly like a missing file — publishing is simply off", async () => {
+test("an absent outbox answers exactly like a missing file: publishing is simply off", async () => {
     expect(await resolvePublicFile(join(tmpdir(), "no-such-outbox-dir"), "/anything.txt")).toMatchObject({ kind: "refused", status: 404 });
 });
 

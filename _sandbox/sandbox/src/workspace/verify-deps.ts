@@ -154,7 +154,7 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         activity(
             deps,
             "deps.verify_lost",
-            `Checks for ${whereOf(dir)} (${command}) outran the daemon's watch window — verdict not recorded; see the ${key} terminal.`,
+            `Checks for ${whereOf(dir)} (${command}) outran the daemon's watch window: verdict not recorded; see the ${key} terminal.`,
             "error",
             origin,
         );
@@ -180,7 +180,7 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         activity(
             deps,
             "deps.verify_red",
-            `Checks failed for ${whereOf(dir)} (${command}, exit ${exitCode}, attempt ${verdict.attempt}) — full output in the ${key} terminal.`,
+            `Checks failed for ${whereOf(dir)} (${command}, exit ${exitCode}, attempt ${verdict.attempt}): full output in the ${key} terminal.`,
             "error",
             origin,
         );
@@ -213,7 +213,7 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
             activity(
                 deps,
                 "deps.install_lost",
-                `Install for ${whereOf(dir)} outran the daemon's watch window — checks not run; see the ${installPanelKey(dir)} terminal.`,
+                `Install for ${whereOf(dir)} outran the daemon's watch window: checks not run; see the ${installPanelKey(dir)} terminal.`,
                 "error",
                 origin,
             );
@@ -232,7 +232,7 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
             activity(
                 deps,
                 "deps.install_failed",
-                `Install for ${whereOf(dir)} finished but the project is still ${status.state} — checks not run; see the ${installPanelKey(dir)} terminal.`,
+                `Install for ${whereOf(dir)} finished but the project is still ${status.state}: checks not run; see the ${installPanelKey(dir)} terminal.`,
                 "error",
                 origin,
             );
@@ -243,7 +243,7 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
             activity(
                 deps,
                 "deps.verify_skipped",
-                `Dependencies installed for ${whereOf(dir)}, but it defines no verify or test script — nothing to check.`,
+                `Dependencies installed for ${whereOf(dir)}, but it defines no verify or test script: nothing to check.`,
                 "ok",
                 origin,
             );

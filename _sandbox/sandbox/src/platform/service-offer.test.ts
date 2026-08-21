@@ -5,7 +5,7 @@ import { gatedServiceRun, type OfferDeps, type OfferedRun } from "./service-offe
 import type { RelayedAnswer } from "./pool-services.js";
 
 /* The spend gate, driven end to end with a fake platform and a fake live turn: what these prove is the ONE
- * property the module exists for — the platform relay is called exactly when a real reply approved the card,
+ * property the module exists for: the platform relay is called exactly when a real reply approved the card,
  * and every other ending (skip, expiry, a dead caller, a non-member, an unknown slug) charges nothing and
  * answers with a sentence the agent can act on. */
 
@@ -52,7 +52,7 @@ const offered = (over: Partial<OfferedRun> = {}): OfferedRun => ({
     ...over,
 });
 
-// The card's requestId exists only inside the frame the gate pushed — wait for it, then answer as the route
+// The card's requestId exists only inside the frame the gate pushed: wait for it, then answer as the route
 // handler would (resolveRequest is the same registry POST /agent/reply resolves).
 const answerCard = async (frames: AgentEvent[], approve: boolean): Promise<void> => {
     while (frames.length === 0) {
@@ -99,7 +99,7 @@ it("a skip spends nothing and tells the agent to continue without it", async () 
     expect(ran).toEqual([]);
     expect(answer.status).toBe(403);
     expect(JSON.parse(answer.body)).toMatchObject({ error: { type: "declined" } });
-    // No receipt — nothing happened; the resolved frame already says how it ended.
+    // No receipt: nothing happened; the resolved frame already says how it ended.
     expect(frames.map((frame) => frame.kind)).toEqual(["service_offer", "resolved"]);
 });
 
@@ -237,7 +237,7 @@ it("a streamed run's status lines land under the card as frames, and the trailer
     expect(frames.map((frame) => frame.kind)).toEqual(["service_offer", "resolved", "service_event", "service_event", "service_receipt"]);
     expect(frames[2]).toMatchObject({ kind: "service_event", event: { event: "status", text: "Searching 240 communities…" } });
     expect(frames[4]).toMatchObject({ kind: "service_receipt", outcome: "ok", credits: 40, remaining: 920 });
-    // Progress is not attention: the registry sees the card raised, settled and receipted — not every line.
+    // Progress is not attention: the registry sees the card raised, settled and receipted, not every line.
     expect(observed.map((frame) => frame.kind)).toEqual(["service_offer", "resolved", "service_receipt"]);
     // Every stream frame answers to the card that raised it.
     const requestId = (frames[0] as { requestId: string }).requestId;
@@ -261,7 +261,7 @@ it("a refunded trailer receipts as refunded, off the platform's own word", async
     expect((frames[2] as { remaining?: number }).remaining).toBeUndefined();
 });
 
-it("a stream that broke before its trailer pushes no receipt — the charge is not this side's to state", async () => {
+it("a stream that broke before its trailer pushes no receipt: the charge is not this side's to state", async () => {
     const { deps, frames } = fake({
         run: async (_slug, _body, onStatus) => {
             onStatus("Searching…");

@@ -200,7 +200,7 @@ export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: str
  * write is append-only, a file the user also edits is grown by a marked block once, never rewritten (the
  * full-rewrite convergence syncRootExcludes does is for git dirs the daemon owns). `--git-common-dir` rather
  * than `.git` because the opened folder may itself be a worktree, where `.git` is a pointer file. */
-const LOCAL_EXCLUDE_BLOCK = `# intentic — local workspace state, not project files\n/${STATE_DIR}/\n/${REFERENCE_DIR}/\n`;
+const LOCAL_EXCLUDE_BLOCK = `# intentic: local workspace state, not project files\n/${STATE_DIR}/\n/${REFERENCE_DIR}/\n`;
 const ensureLocalStateExcluded = async (root: string, git: GitRunner): Promise<void> => {
     const printed = (await git(root, ["rev-parse", "--git-common-dir"])).stdout.trim();
     const gitDir = isAbsolute(printed) ? printed : join(root, printed);

@@ -28,7 +28,7 @@ test("a oneOf variant that lost a field reads as removed even when the collectio
     expect(shrunkSurfaces(base, head)).toEqual([`A.oneOf[1]`]);
 });
 
-test("a type that changed reads as removed — the same verdict either way", () => {
+test("a type that changed reads as removed: the same verdict either way", () => {
     expect(shrunkSurfaces({ A: { type: `string` } }, { A: { type: `number` } })).toEqual([`A.type`]);
 });
 
@@ -42,7 +42,7 @@ test("re-worded prose is not a shrink: a description that changed, or went entir
     expect(shrunkSurfaces({ A: { properties: { body: { description: `old` } } } }, { A: { properties: { body: { description: `new` } } } })).toEqual([]);
 });
 
-test("a FIELD named description is still a surface — prose is skipped only where a key is a keyword", () => {
+test("a FIELD named description is still a surface: prose is skipped only where a key is a keyword", () => {
     const base = { A: { properties: { description: { type: `string` }, title: { type: `string` } }, type: `object` } };
     const head = { A: { properties: { title: { type: `string` } }, type: `object` } };
     expect(shrunkSurfaces(base, head)).toEqual([`A.properties.description`]);
@@ -52,7 +52,7 @@ test("a FIELD named description is still a surface — prose is skipped only whe
     ]);
 });
 
-test("a top-level schema named description is a surface too — the lock's root is a name map", () => {
+test("a top-level schema named description is a surface too: the lock's root is a name map", () => {
     expect(shrunkSurfaces({ description: { type: `string` } }, {})).toEqual([`description`]);
 });
 
@@ -67,7 +67,7 @@ afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-// A fake runner standing in for `git show HEAD:<path>` — the only call the detector makes.
+// A fake runner standing in for `git show HEAD:<path>`: the only call the detector makes.
 const gitShowing =
     (locks: Record<string, string>): GitRunner =>
     (_dir, args) => {

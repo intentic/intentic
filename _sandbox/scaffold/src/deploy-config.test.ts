@@ -87,7 +87,7 @@ describe("deploy-config managed region", () => {
             `import { defineIntent } from "@intentic/sdk";`,
             ``,
             `export const intent = defineIntent((i) => {`,
-            `    // <intentic> managed — do not edit by hand`,
+            `    // <intentic> managed: do not edit by hand`,
             `    const self = i.have.host("self", { address: "1.2.3.4", user: "deploy", port: 22, sshKey: env("HOST_SSH_KEY") });`,
             `    // </intentic>`,
             `    i.want.app("web", { on: self, expose: cf, environments: {} });`,

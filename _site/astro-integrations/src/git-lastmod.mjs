@@ -1,6 +1,6 @@
 // @ts-check
 // Resolve a public URL to its source page and return the ISO date of the last
-// git commit touching it — used to populate <lastmod> in the sitemap and the
+// git commit touching it: used to populate <lastmod> in the sitemap and the
 // dateModified of article schemas. Paths resolve relative to `process.cwd()`
 // (the Astro app being built).
 import { execSync } from "node:child_process";

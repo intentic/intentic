@@ -23,7 +23,7 @@ export const extensionEnvOf = async (services: Services): Promise<Record<string,
                 continue;
             }
             if (env[setting.env] !== undefined) {
-                services.logger.warn({ env: setting.env, id: extension.id }, "extension env var collision — last wins");
+                services.logger.warn({ env: setting.env, id: extension.id }, "extension env var collision, last wins");
             }
             env[setting.env] = String(value);
         }

@@ -31,7 +31,7 @@ const runRename = async (args: readonly string[]): Promise<number> => {
     const report = await checkProject(findTsconfig(path), [path], undefined);
     const [unavailable] = report.unavailable;
     if (unavailable !== undefined) {
-        process.stderr.write(`rename unavailable — the project cannot be loaded well enough to find every usage: ${unavailable.reason}\n`);
+        process.stderr.write(`rename unavailable, the project cannot be loaded well enough to find every usage: ${unavailable.reason}\n`);
         return 2;
     }
     const result = await rename(path, symbol, newName);
@@ -66,14 +66,14 @@ const runDiag = async (args: readonly string[]): Promise<number> => {
         const alone = await Promise.all(paths.map((path) => checkProject(undefined, [path], undefined)));
         const [refused] = alone.flatMap((r) => r.unavailable);
         if (refused !== undefined) {
-            process.stderr.write(`diagnostics unavailable — ${refused.reason}\n`);
+            process.stderr.write(`diagnostics unavailable: ${refused.reason}\n`);
             return 2;
         }
         return printDiagnostics(alone.flatMap((r) => r.diagnostics));
     }
     const [unavailable] = report.unavailable;
     if (unavailable !== undefined) {
-        process.stderr.write(`diagnostics unavailable — the project cannot be loaded well enough to answer: ${unavailable.reason}\n`);
+        process.stderr.write(`diagnostics unavailable, the project cannot be loaded well enough to answer: ${unavailable.reason}\n`);
         return 2;
     }
     return printDiagnostics(report.diagnostics);

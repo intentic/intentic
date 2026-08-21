@@ -23,7 +23,7 @@ afterEach(async () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-/* The runner's contract is that EVERY outcome is a recorded result — the panel showing "jscpd failed: out of
+/* The runner's contract is that EVERY outcome is a recorded result, the panel showing "jscpd failed: out of
  * memory" is strictly better than a probe that vanishes and leaves a chore reading "not measured yet" forever.
  * The three states are tested against real commands rather than mocks, because the thing being verified is
  * exactly the shell behaviour: what an absent tool does, what a non-zero exit does, and what unrecognisable
@@ -32,7 +32,7 @@ describe(`runProbe`, () => {
     // A spec whose shape is real but whose commands are trivial, so the test measures the runner rather than pnpm.
     const fakeSpec = (over: Partial<ReturnType<typeof probeSpec>>) => ({ ...probeSpec(`outdated`), ...over });
 
-    test(`a tool this repository does not have is unavailable — not a clean result`, async () => {
+    test(`a tool this repository does not have is unavailable, not a clean result`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
         const result = await runProbe(fakeSpec({ available: `exit 1` }), dir, 1000);
         expect(result).toMatchObject({ id: `outdated`, state: `unavailable`, ranAt: 1000 });
@@ -40,8 +40,8 @@ describe(`runProbe`, () => {
     });
 
     /* And it names what is MISSING rather than describing itself. The reason a probe could not run is the only
-     * sentence the panel has for that repository, and one built from the probe's own title — "this repository has
-     * no security advisories to measure" — says the exact thing an unmeasured probe is never allowed to say. */
+     * sentence the panel has for that repository, and one built from the probe's own title: "this repository has
+     * no security advisories to measure": says the exact thing an unmeasured probe is never allowed to say. */
     test(`an unavailable probe's reason is what is missing, never a restatement of the probe`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
         const result = await runProbe(fakeSpec({ available: `exit 1` }), dir, 1000);
@@ -65,7 +65,7 @@ describe(`runProbe`, () => {
     });
 
     /* And it quotes the FRONT of what it got. These tools print JSON by the megabyte, so the last 400 characters
-     * are a fragment from the middle of an array — near-identical whatever went wrong — while the first line is
+     * are a fragment from the middle of an array: near-identical whatever went wrong, while the first line is
      * the tool's own error message. Bounded either way, because the reason renders in a one-line strip. */
     test(`an unrecognisable output is quoted from its start, and bounded`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
@@ -76,7 +76,7 @@ describe(`runProbe`, () => {
         expect(result.reason?.length).toBeLessThan(200);
     });
 
-    test(`a command that exits non-zero WITH usable output still succeeds — pnpm exits 1 when it has findings`, async () => {
+    test(`a command that exits non-zero WITH usable output still succeeds: pnpm exits 1 when it has findings`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
         const result = await runProbe(
             fakeSpec({ available: `true`, command: `echo '{"vue":{"current":"1.0.0","latest":"2.0.0"}}'; exit 0` }),
@@ -98,16 +98,16 @@ describe(`runProbe`, () => {
     });
 });
 
-/* THE LANE — one measurement at a time, and every request eventually served.
+/* THE LANE: one measurement at a time, and every request eventually served.
  *
  * The bug these cover is the one a reader meets rather than reads: `refresh` used to return immediately when the
  * runner was busy, while the route above it still answered `{ ok: true }`. So pressing Re-measure during a
- * background sweep — which is the likeliest moment to press it, since a sweep is what makes the numbers look
- * stale — acknowledged the request and then dropped it on the floor, forever.
+ * background sweep, which is the likeliest moment to press it, since a sweep is what makes the numbers look
+ * stale: acknowledged the request and then dropped it on the floor, forever.
  *
  * The probes here resolve as `unavailable` in milliseconds: the temp repo has no package.json and no lockfile, so
  * each spec's `available` gate fails at once. That is a REAL run through the real code path, which is what makes
- * these worth having — the alternative is asserting against a fake and learning nothing about the queue. */
+ * these worth having: the alternative is asserting against a fake and learning nothing about the queue. */
 describe(`the runner's lane`, () => {
     const runner = async () => {
         const dir = await scaffold({});
@@ -126,7 +126,7 @@ describe(`the runner's lane`, () => {
     };
 
     // THE REGRESSION. Both calls are made before either resolves, which is exactly the collision that used to
-    // lose one — and losing it silently, with the panel told the measurement had been asked for.
+    // lose one, and losing it silently, with the panel told the measurement had been asked for.
     test(`a second request made while one is running is queued, not dropped`, async () => {
         const { chores, runner: probes } = await runner();
         await Promise.all([probes.refresh(``, `outdated`), probes.refresh(``, `audit`)]);
@@ -134,7 +134,7 @@ describe(`the runner's lane`, () => {
     });
 
     // What the panel draws its spinner on. Read synchronously after the call, because the entry has to be visible
-    // from the moment it is asked for — a lane that only admits work once it starts cannot explain a queue.
+    // from the moment it is asked for: a lane that only admits work once it starts cannot explain a queue.
     test(`what is waiting is visible before it runs, and gone once it has`, async () => {
         const { runner: probes } = await runner();
         const running = probes.refresh(``, `outdated`);
@@ -143,8 +143,8 @@ describe(`the runner's lane`, () => {
         expect(probes.running()).toEqual([]);
     });
 
-    // Pressing twice is one measurement. The row's button disables itself, but a second panel — or a sweep that
-    // already queued this probe — is the same work under a different name.
+    // Pressing twice is one measurement. The row's button disables itself, but a second panel, or a sweep that
+    // already queued this probe: is the same work under a different name.
     test(`the same probe asked for twice joins the request already in the lane`, async () => {
         const { runner: probes } = await runner();
         const first = probes.refresh(``, `outdated`);
@@ -202,7 +202,7 @@ describe(`the store`, () => {
         expect(await chores.probesFor(`never-existed`)).toEqual([]);
     });
 
-    // A deleted clone's measurements must not outlive it — they would render as a repository nobody can open.
+    // A deleted clone's measurements must not outlive it: they would render as a repository nobody can open.
     test(`prune drops repos that no longer exist and leaves the rest`, async () => {
         const chores = await store();
         await chores.recordProbe(`app`, result({ id: `outdated` }));
@@ -253,7 +253,7 @@ describe(`package signals`, () => {
         ]);
     });
 
-    /* A repo that is not a pnpm workspace has no packages, and that is a true answer rather than a gap — the root
+    /* A repo that is not a pnpm workspace has no packages, and that is a true answer rather than a gap: the root
      * manifest is deliberately NOT folded in as a pseudo-package, which would make every ordinary repo report
      * exactly one undocumented "package": a finding about our modelling rather than about the code. */
     test(`a repo that is not a workspace reports no packages at all`, async () => {
@@ -262,7 +262,7 @@ describe(`package signals`, () => {
     });
 });
 
-/* WHAT THE REPOSITORY IS MADE OF — the facts the applicability gates read. Presence of a FILE, deliberately:
+/* WHAT THE REPOSITORY IS MADE OF: the facts the applicability gates read. Presence of a FILE, deliberately:
  * checkable, cheap, and not arguable, which is the same evidence-over-identity rule extension activation follows.
  * Every case below decides whether a whole chore appears, so a false negative here is a chore that silently never
  * shows up and a false positive is one that can never be acted on. */
@@ -292,7 +292,7 @@ describe(`repo shape`, () => {
     });
 
     /* THE CASE THE FRONT-END GATES LIVE OR DIE ON. `packages` comes from pnpm-workspace.yaml, so it is empty for
-     * a repository that is not a monorepo — which every Vite, Next and Angular CLI project is. Reading the root
+     * a repository that is not a monorepo, which every Vite, Next and Angular CLI project is. Reading the root
      * manifest here is what stops a framework gate being permanently and silently dark in exactly the
      * repositories it exists for. */
     test(`a single-package app declares its dependencies even though it has no workspace packages`, async () => {

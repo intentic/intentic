@@ -4,7 +4,7 @@
 // WHY NOT FROM THE SOURCE. The index used to be scraped out of each page's .astro source with regexes, and it
 // could not see a table. Every long reference table on the site is written as `{rows.map(...)}` over an array in
 // the frontmatter, and a source scraper reads that as one unreadable expression: 90 of the docs' 235 table rows
-// were absent from the index — the access tiers, the supported model providers, 14 of the 16 rows of the
+// were absent from the index: the access tiers, the supported model providers, 14 of the 16 rows of the
 // integrations catalog, the automation triggers, the board lanes. Tables are exactly what people search for.
 // The same regexes could not match nested braces either, so fragments of page source leaked into 16 sections'
 // search previews and a reader could be shown `{ roles.map((role) => ()) }` as the answer to their question.
@@ -15,7 +15,7 @@
 //
 // WHERE THE HTML COMES FROM. Two places, one extractor. In a build, the pages have just been written to dist and
 // this integration reads them there. Under `astro dev` there is no dist, so the search.json route asks the dev
-// server for the pages over HTTP — the same rendered HTML by a different road. Both call blocksFromPage below, so
+// server for the pages over HTTP: the same rendered HTML by a different road. Both call blocksFromPage below, so
 // search behaves the same in the browser you are developing in as it does in production.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -68,7 +68,7 @@ function decodeEntities(text) {
     });
 }
 
-/** Readable text for one subtree — no markup, cells delimited, code kept because route and field names are searched. */
+/** Readable text for one subtree: no markup, cells delimited, code kept because route and field names are searched. */
 function textOf(node) {
     if (node.type === "text") return decodeEntities(node.value).replace(/\s+/g, " ");
     if (DROPPED_TAGS.has(node.tag) || node.attrs["aria-hidden"] === "true" || node.attrs.hidden !== undefined) return "";
@@ -85,7 +85,7 @@ function tidy(text) {
             .replace(/\s+/g, " ")
             .replace(/(?: ·)+ ·/g, " ·")
             .replace(/ · $/, "")
-            /* Tags render with a trailing space, so `<strong>Automations</strong>:` leaves "Automations :" — close that
+            /* Tags render with a trailing space, so `<strong>Automations</strong>:` leaves "Automations :": close that
              * gap back up. The lookahead spares a leading ellipsis: `execute(command, ...args)` is a signature people
              * search for, and "command,...args" is not what they would type. */
             .replace(/\s+([,;:!?)\]]|\.(?!\.))/g, "$1")
@@ -118,7 +118,7 @@ function findByClass(nodes, className) {
  * Split a page's prose into heading-led blocks.
  *
  * SECTIONS, NOT PAGES, are the unit: a hit on a nine-screen reference page is nearly useless if it can only say
- * "HTTP API" — it has to say "Failures", and land there.
+ * "HTTP API": it has to say "Failures", and land there.
  *
  * @param {string} html one rendered docs page
  * @returns {SearchBlock[]}
@@ -175,7 +175,7 @@ export function docsSearchIndex(pages, htmlFor) {
  * At the site root rather than under one book, because there is one index across both of them: a reader
  * searching for a word should not have to know whether it is documented for users or for authors.
  *
- * @param {{ pages: DocsSearchPage[] }} options every page of every book, from the trees — so a page a rail
+ * @param {{ pages: DocsSearchPage[] }} options every page of every book, from the trees, so a page a rail
  * cannot reach is never indexed, and the shelf label a result shows is the one the reader navigates by.
  * @returns {import('astro').AstroIntegration}
  */

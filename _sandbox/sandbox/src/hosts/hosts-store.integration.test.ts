@@ -30,7 +30,7 @@ test("an unknown pairing enrolls nothing", async () => {
     expect(await store.enroll("not-a-token")).toBeUndefined();
 });
 
-test("re-enrolling a machine rotates its token — the old one stops verifying", async () => {
+test("re-enrolling a machine rotates its token: the old one stops verifying", async () => {
     const { store } = tempStore();
     const first = await store.enroll(store.mintPairing("laptop").token);
     const second = await store.enroll(store.mintPairing("laptop").token);
@@ -48,13 +48,13 @@ test("revoke drops the machine; verify and enrolled both stop reporting it", asy
     expect(await store.verify(enrolled?.hostToken ?? "")).toBeUndefined();
 });
 
-test("an empty token never verifies — a missing credential must not read as a match", async () => {
+test("an empty token never verifies: a missing credential must not read as a match", async () => {
     const { store } = tempStore();
     await store.enroll(store.mintPairing("laptop").token);
     expect(await store.verify("")).toBeUndefined();
 });
 
-// The file is a key to somebody's computer if it holds tokens — it must hold only digests.
+// The file is a key to somebody's computer if it holds tokens: it must hold only digests.
 test("the enrollment file stores no usable credential", async () => {
     const { store, root } = tempStore();
     const enrolled = await store.enroll(store.mintPairing("laptop").token);
@@ -73,7 +73,7 @@ test("a seeded pairing enrolls the machine the setup named", async () => {
 });
 
 /* THE REPLAY, which is the whole reason this token is treated differently from a browser-minted one. A seeded
- * token lives in the container's environment — in `docker inspect`, in the installer's shell history, and it is
+ * token lives in the container's environment: in `docker inspect`, in the installer's shell history, and it is
  * replayed verbatim into every rebuilt container. Re-arming it on each boot would turn a setup-time token into a
  * permanent key to an enrollment route that has no bearer check, whose reward is a socket onto somebody's
  * laptop. The burn lives on /history, which outlives the container. */
@@ -91,14 +91,14 @@ test("a spent seed never arms again, not even for a fresh daemon on the same his
 test("an unspent seed survives a restart, because the machine may not have got to it yet", async () => {
     const { store, root } = tempStore();
     await store.seedPairing("ada-laptop", "from-the-claim");
-    // Nothing redeemed it — a laptop that was still installing when the daemon bounced.
+    // Nothing redeemed it: a laptop that was still installing when the daemon bounced.
     const rebooted = fileHostsStore(root);
     expect(await rebooted.seedPairing("ada-laptop", "from-the-claim")).toBe(true);
     expect((await rebooted.enroll("from-the-claim"))?.id).toBe("ada-laptop");
 });
 
 // Re-running the installer mints a FRESH token per claim, so the ordinary "set it up again" path is unaffected
-// by the burn — what stops working is replaying one that was already spent.
+// by the burn: what stops working is replaying one that was already spent.
 test("a second setup's token arms even though the first one is burned", async () => {
     const { store, root } = tempStore();
     await store.seedPairing("ada-laptop", "first-claim");
@@ -112,7 +112,7 @@ test("an empty seed is not a pairing", async () => {
     expect(await store.enroll("")).toBeUndefined();
 });
 
-// A browser-minted pairing is already unreplayable — nothing outside memory ever held it — so it must not be
+// A browser-minted pairing is already unreplayable: nothing outside memory ever held it, so it must not be
 // written to the burn list, which would grow a file of digests for no security it does not already have.
 test("only a seeded redemption is recorded; a browser-minted one leaves no trace", async () => {
     const { store, root } = tempStore();

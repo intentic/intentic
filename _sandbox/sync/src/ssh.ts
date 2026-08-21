@@ -199,7 +199,7 @@ export const ensureSshKey = async (): Promise<string> => {
     const comment = hostname().replace(/\s+/g, "-") || "intentic-sync";
     const result = spawnSync("ssh-keygen", ["-t", "ed25519", "-N", "", "-C", comment, "-f", sshKeyPath], { stdio: "inherit" });
     if (result.status !== 0) {
-        throw new Error("ssh-keygen failed — is an OpenSSH client installed?");
+        throw new Error("ssh-keygen failed: is an OpenSSH client installed?");
     }
     return (await readFile(pub, "utf8")).trim();
 };
@@ -297,7 +297,7 @@ export const assertSshConfigVisible = (ssh: string, alias: string, expectedPort:
     const expected = `127.0.0.1:${expectedPort}`;
     throw new Error(
         [
-            `"${ssh}" — the SSH client Mutagen uses — resolves ${alias} to "${resolved.hostname ?? "nothing"}:${resolved.port ?? "?"}" instead of ${expected},`,
+            `"${ssh}": the SSH client Mutagen uses, resolves ${alias} to "${resolved.hostname ?? "nothing"}:${resolved.port ?? "?"}" instead of ${expected},`,
             `so it is not reading ${sshConfigPath}, which ${userSshConfigPath} includes. Most often that client resolves`,
             `~ to a home directory other than ${homedir()}.`,
             ...(result.stderr.trim() === "" ? [] : [result.stderr.trim()]),
@@ -316,7 +316,7 @@ export const probeSshTransport = async (ssh: string, alias: string, log: Log): P
     if (await sshTransportAnswers(ssh, alias)) {
         return;
     }
-    log(`note: a test SSH connection to the sandbox failed — sync may not start:\n${sshProbeReason}`);
+    log(`note: a test SSH connection to the sandbox failed, sync may not start:\n${sshProbeReason}`);
 };
 
 /* The same one connection, as a QUESTION rather than a note, asked before anything destructive is done to a

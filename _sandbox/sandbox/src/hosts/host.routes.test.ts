@@ -4,7 +4,7 @@ import type { Services } from "../composition.js";
 import { createHostMcpRoute } from "./host.routes.js";
 
 /* The agent's door onto a connected computer. Mounted on a bare Hono rather than the whole daemon: the route
- * touches exactly three services, and what is worth pinning here is its DECISIONS — who may knock, what an
+ * touches exactly three services, and what is worth pinning here is its DECISIONS, who may knock, what an
  * offline machine looks like to a model, and that the daemon forwards without interpreting. */
 
 const BRIDGE = "bridge-token";
@@ -68,7 +68,7 @@ test("a notification is delivered and answered 202 with no body", async () => {
 test("an offline machine answers as a readable JSON-RPC error, not an HTTP failure", async () => {
     const app = routeFor({
         mcp: async () => {
-            throw new Error(`"laptop" is not connected right now — the computer is asleep, offline, or its agent isn't running.`);
+            throw new Error(`"laptop" is not connected right now, the computer is asleep, offline, or its agent isn't running.`);
         },
     });
     const response = await post(app, { jsonrpc: "2.0", id: 4, method: "tools/call" });
@@ -76,12 +76,12 @@ test("an offline machine answers as a readable JSON-RPC error, not an HTTP failu
     expect(await response.json()).toEqual({
         jsonrpc: "2.0",
         id: 4,
-        error: { code: -32000, message: `"laptop" is not connected right now — the computer is asleep, offline, or its agent isn't running.` },
+        error: { code: -32000, message: `"laptop" is not connected right now, the computer is asleep, offline, or its agent isn't running.` },
     });
 });
 
 /* A turn loads its MCP servers up front, and personal computers are asleep half the time. If the handshake went
- * to the machine, an asleep laptop would drop out of the turn entirely — the agent would not know it exists. */
+ * to the machine, an asleep laptop would drop out of the turn entirely: the agent would not know it exists. */
 test("an asleep machine still completes the handshake, so it stays in the turn", async () => {
     const mcp = vi.fn();
     const response = await post(routeFor({ online: false, mcp }), { jsonrpc: "2.0", id: 1, method: "initialize" });
@@ -107,7 +107,7 @@ test("a live tools/list is remembered, which is what makes the offline answer po
     expect(app.remembered).toEqual([{ tools: [{ name: "screenshot" }] }]);
 });
 
-// Calling a tool is about the COMPUTER, not the connection — it goes to the machine and comes back as the
+// Calling a tool is about the COMPUTER, not the connection: it goes to the machine and comes back as the
 // readable "asleep" answer, never a locally invented result.
 test("a tool call on an asleep machine is not answered locally", async () => {
     const mcp = vi.fn(async () => {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { type JsExecutionPlan, runJs } from "./js-runtime.js";
 
-/* The RUNNER honouring a plan — real `node` subprocesses on purpose: the permission flags ARE the fence, and
+/* The RUNNER honouring a plan, real `node` subprocesses on purpose: the permission flags ARE the fence, and
  * only the real runtime can vouch for them. A mocked spawn would test our belief about Node, not Node. The
  * pure half (what plan a card yields, what argv a plan means) is js-runtime.test.ts. */
 

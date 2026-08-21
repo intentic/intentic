@@ -193,7 +193,7 @@
             "verb": "q",
             "query": "echo_via_pager",
             "expected": [{ "file": "src/click/termui.py", "line": 323, "tolerance": 5 }],
-            "notes": "bare identifier through `q`: classified as an identifier, so the symbols engine joins the fusion — the only path where the def multiplier can reorder anything"
+            "notes": "bare identifier through `q`: classified as an identifier, so the symbols engine joins the fusion, the only path where the def multiplier can reorder anything"
         }
     ]
 }

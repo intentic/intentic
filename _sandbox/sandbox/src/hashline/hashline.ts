@@ -35,7 +35,7 @@ const tagsOf = (lines: readonly string[]): string[] => lines.map((line, i) => li
 // The read view the model anchors edits against: an anchor header it echoes back, then `<tag> <n>│<text>` per line.
 export const renderForRead = (content: string): string => {
     const { lines } = splitLines(content);
-    const header = `anchor ${fileAnchor(content)} · ${lines.length} line(s) — pass this anchor and the line tags to hashline_edit`;
+    const header = `anchor ${fileAnchor(content)} · ${lines.length} line(s): pass this anchor and the line tags to hashline_edit`;
     if (lines.length === 0) {
         return `${header}\n(empty file)`;
     }
@@ -53,10 +53,10 @@ export type HashlineOp =
 const resolveTag = (tag: string, tags: readonly string[]): number => {
     const matches = tags.flatMap((candidate, index) => (candidate === tag ? [index] : []));
     if (matches[0] === undefined) {
-        throw new Error(`unknown line tag "${tag}" — re-read the file with hashline_read to get current tags`);
+        throw new Error(`unknown line tag "${tag}": re-read the file with hashline_read to get current tags`);
     }
     if (matches.length > 1) {
-        throw new Error(`ambiguous line tag "${tag}" (lines ${matches.map((i) => i + 1).join(", ")}) — anchor a nearby unique line instead`);
+        throw new Error(`ambiguous line tag "${tag}" (lines ${matches.map((i) => i + 1).join(", ")}): anchor a nearby unique line instead`);
     }
     return matches[0];
 };
@@ -73,7 +73,7 @@ export const applyEdit = (content: string, anchor: string, ops: readonly Hashlin
     const actual = fileAnchor(content);
     if (anchor !== actual) {
         throw new Error(
-            `stale edit: file anchor is ${actual}, edit targets ${anchor} — the file changed since you read it; re-read with hashline_read`,
+            `stale edit: file anchor is ${actual}, edit targets ${anchor}, the file changed since you read it; re-read with hashline_read`,
         );
     }
     if (ops.length === 0) {
@@ -88,7 +88,7 @@ export const applyEdit = (content: string, anchor: string, ops: readonly Hashlin
         if (op.op === "insert") {
             const after = op.after === "^" ? -1 : resolveTag(op.after, tags);
             if (insertsAfter.has(after)) {
-                throw new Error(`two inserts anchored after the same line (${op.after}) — combine them into one op`);
+                throw new Error(`two inserts anchored after the same line (${op.after}): combine them into one op`);
             }
             insertsAfter.set(after, op.lines);
             continue;
@@ -104,14 +104,14 @@ export const applyEdit = (content: string, anchor: string, ops: readonly Hashlin
     replacements.sort((a, b) => a.from - b.from);
     for (let i = 1; i < replacements.length; i++) {
         if ((replacements[i - 1] as Replacement).to >= (replacements[i] as Replacement).from) {
-            throw new Error("overlapping replace/delete ranges — anchor them to disjoint line ranges");
+            throw new Error("overlapping replace/delete ranges: anchor them to disjoint line ranges");
         }
     }
     const replacementFrom = new Map(replacements.map((r) => [r.from, r]));
     const replacedIndices = new Set(replacements.flatMap((r) => Array.from({ length: r.to - r.from + 1 }, (_, k) => r.from + k)));
     for (const after of insertsAfter.keys()) {
         if (replacedIndices.has(after)) {
-            throw new Error("an insert is anchored to a line inside a replaced/deleted range — anchor it to a kept line");
+            throw new Error("an insert is anchored to a line inside a replaced/deleted range: anchor it to a kept line");
         }
     }
 

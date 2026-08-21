@@ -35,7 +35,7 @@ test("anything else names what the archive actually held, so the mismatch is vis
     expect(message).toContain("2 files");
 });
 
-test("a nested setup is NOT diagnosed — it is recognized, so this never runs for one", () => {
+test("a nested setup is NOT diagnosed: it is recognized, so this never runs for one", () => {
     // Guard on the guard: the anchor at any depth means the reader rebased and never reached diagnose.
     const message = diagnoseArchive(files("backup/2026/config.yaml", "backup/2026/SOUL.md"));
     expect(message).not.toContain("workspace folder");

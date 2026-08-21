@@ -65,7 +65,7 @@ test("a tracker with no declared chain is converged from birth", async () => {
 
 test("declaring closes the gate, so construction order cannot leak an early answer", async () => {
     const boot = createBootTracker(silent);
-    // The app reads `converged` per request, not once at build time — a chain declared after the listeners
+    // The app reads `converged` per request, not once at build time: a chain declared after the listeners
     // came up still holds the routes that arrive next.
     const early = boot.converged;
     boot.declare([{ key: "links", label: "Linking state" }]);
@@ -81,7 +81,7 @@ test("declaring closes the gate, so construction order cannot leak an early answ
     expect(opened).toBe(true);
 });
 
-test("a snapshot is a copy — a later transition cannot rewrite a frame already sent", async () => {
+test("a snapshot is a copy: a later transition cannot rewrite a frame already sent", async () => {
     const boot = tracker();
     const first = boot.progress();
     await boot.step("links", async () => undefined);

@@ -23,19 +23,19 @@ afterEach(async () => {
 const NoteSchema = z.object({ text: z.string(), at: z.number().optional() });
 const notes = (dir: string) => jsonDir(dir, (raw) => NoteSchema.safeParse(raw).data);
 
-test("the id is the filename and never the body — grafted on read, absent on disk", async () => {
+test("the id is the filename and never the body: grafted on read, absent on disk", async () => {
     const dir = await tempDir();
     const store = notes(dir);
     await store.write("first", { text: "hello" });
 
     expect(await store.read("first")).toEqual({ text: "hello", id: "first" });
     expect(JSON.parse(await readFile(join(dir, "first.json"), "utf8"))).toEqual({ text: "hello" });
-    // Writing the same id again replaces it whole — the upsert every caller's approve/edit path relies on.
+    // Writing the same id again replaces it whole: the upsert every caller's approve/edit path relies on.
     await store.write("first", { text: "edited" });
     expect((await store.list()).entries).toEqual([{ text: "edited", id: "first" }]);
 });
 
-test("an absent directory lists empty rather than throwing — nothing has been written yet", async () => {
+test("an absent directory lists empty rather than throwing, nothing has been written yet", async () => {
     expect(await notes(await tempDir()).list()).toEqual({ entries: [], invalid: [] });
 });
 
@@ -46,7 +46,7 @@ test("a bad name, unparseable bytes, and a schema-rejected body are all reported
     await writeFile(join(dir, "torn.json"), "{ not json");
     await writeFile(join(dir, "wrong-shape.json"), JSON.stringify({ nope: 1 }));
     await writeFile(join(dir, "bad.name!.json"), JSON.stringify({ text: "untrusted" }));
-    // Not a .json file at all: ignored outright, not reported — only entries are the directory's business.
+    // Not a .json file at all: ignored outright, not reported, only entries are the directory's business.
     await writeFile(join(dir, "README.md"), "notes");
 
     const { entries, invalid } = await store.list();
@@ -60,7 +60,7 @@ test("a write leaves no temp behind, so a concurrent list never sees a half-writ
     const dir = await tempDir();
     const store = notes(dir);
     await store.write("only", { text: "swapped" });
-    // The rename target is the only entry: a leftover temp would be a write that never completed its swap —
+    // The rename target is the only entry: a leftover temp would be a write that never completed its swap:
     // and one caught mid-swap must not surface as `invalid`, which is why the scan takes `.json` alone.
     expect(await readdir(dir)).toEqual(["only.json"]);
 });

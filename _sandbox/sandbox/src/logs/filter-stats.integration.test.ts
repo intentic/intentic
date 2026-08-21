@@ -37,14 +37,14 @@ test("reads the filter-stats ledger and dates it by the newest row", async () =>
     const savings = await readInputSavings(root, {});
     expect(savings.commands).toBe(2);
     expect(savings.savedPct).toBe(50);
-    // Attribution is in TOKENS and biggest first — which mechanism is worth the most, not which fired most
+    // Attribution is in TOKENS and biggest first, which mechanism is worth the most, not which fired most
     // often. `cap` ran on one command and outranks `pnpm`, which ran on one and saved less.
     expect(savings.perCleaner).toEqual([
         { id: "git", commands: 1, savedTokens: 500 },
         { id: "cap", commands: 1, savedTokens: 250 },
         { id: "pnpm", commands: 1, savedTokens: 250 },
     ]);
-    // The newest row's OWN timestamp — not the file's mtime, which a prune rewrite would bump without a
+    // The newest row's OWN timestamp, not the file's mtime, which a prune rewrite would bump without a
     // command having run.
     expect(savings.updatedAt).toBe(5000);
 });
@@ -85,7 +85,7 @@ test("reports a zeroed, undated report when no command has been recorded", async
 });
 
 /* The un-cleaned list, which is read for one purpose: which command is worth a new handler. That makes it a
- * question about a command across its runs, not about a single big run — so the rows are grouped, and the
+ * question about a command across its runs, not about a single big run, so the rows are grouped, and the
  * ranking is by total. Ungrouped, one 60k outlier outranked a command costing 5k twenty times over. */
 test("groups un-cleaned commands, ranking them by what they cost in total", async () => {
     const root = await ledgerRoot([

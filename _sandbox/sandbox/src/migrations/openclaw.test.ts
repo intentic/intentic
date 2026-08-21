@@ -3,7 +3,7 @@ import type { PlannedItem } from "./adapter-shared.js";
 import { parseJson5ish } from "./json5ish.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
 
-/* The OpenClaw adapter over a lived-in fixture home — the JSON5 config with the edits people actually make
+/* The OpenClaw adapter over a lived-in fixture home: the JSON5 config with the edits people actually make
  * (comments, trailing commas, an inline bot token), the relocatable workspace, the daily-diary memory shape,
  * and the structured cron store with all three schedule kinds. */
 
@@ -100,7 +100,7 @@ test("memory: four bootstrap fences, a curated block with the newest 14 diary da
     const memories = byId(planned, "memory:memories");
     const body = memories?.apply.target === "memory" ? memories.apply.body : "";
     expect(body).toContain("Pretzel");
-    // 16 diary days: the curated block carries the newest 14, so day 2 is in and day 1 and 2 are the cut —
+    // 16 diary days: the curated block carries the newest 14, so day 2 is in and day 1 and 2 are the cut:
     // day 3..16 are in, day 1 and 2 are not.
     expect(body).toContain("2026-07-16");
     expect(body).toContain("2026-07-03");
@@ -118,19 +118,19 @@ test("skills: the workspace copy outranks the managed one, which is refused by n
     expect(refused.some((line) => line.includes("skills/weather/SKILL.md") && line.includes("higher-precedence"))).toBe(true);
 });
 
-test("secrets: .env, the config env section, inline channel tokens and auth-profile keys — pointers skipped", () => {
+test("secrets: .env, the config env section, inline channel tokens and auth-profile keys: pointers skipped", () => {
     const { planned, refused } = planOpenclaw(fixture());
     expect(byId(planned, "secret:BRAVE_API_KEY")?.item.recommended).toBe(true);
     expect(byId(planned, "secret:GITHUB_TOKEN")?.item.recommended).toBe(true);
     expect(byId(planned, "secret:DEBUG_LEVEL")?.item.recommended).toBe(false);
     expect(byId(planned, "secret:TELEGRAM_BOT_TOKEN")?.apply).toMatchObject({ target: "secret", value: "123:abc" });
-    // Discord's token is a ${VAR} pointer — nothing to move.
+    // Discord's token is a ${VAR} pointer: nothing to move.
     expect(byId(planned, "secret:DISCORD_BOT_TOKEN")).toBeUndefined();
     expect(byId(planned, "secret:ANTHROPIC_API_KEY")?.apply).toMatchObject({ target: "secret", value: "sk-ant-2" });
     expect(refused.some((line) => line.includes("openai OAuth"))).toBe(true);
 });
 
-test("the noise prefix demotes the tick without hiding the key — every env-shaped key is offered", () => {
+test("the noise prefix demotes the tick without hiding the key: every env-shaped key is offered", () => {
     const { planned } = planOpenclaw(fixture());
     expect(byId(planned, "secret:OPENCLAW_LOG_LEVEL")?.item.recommended).toBe(false);
 });

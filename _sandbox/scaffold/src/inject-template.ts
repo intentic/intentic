@@ -104,7 +104,7 @@ export const injectApps = async (opts: {
     for (const app of opts.apps) {
         const def = opts.manifest.templates[app.template];
         if (def === undefined) {
-            throw new Error(`unknown app "${app.template}" — known: ${Object.keys(opts.manifest.templates).join(", ")}`);
+            throw new Error(`unknown app "${app.template}", known: ${Object.keys(opts.manifest.templates).join(", ")}`);
         }
 
         for (const item of def.instance) {
@@ -195,7 +195,7 @@ export async function* addAppsToMonorepo(opts: {
             await injectApps({ repoDir: opts.repoDir, sourceDir, manifest, apps: [app] });
         }
         if (opts.install !== false) {
-            yield "Installing dependencies — this can take a few minutes…";
+            yield "Installing dependencies: this can take a few minutes…";
             yield* runStreaming("pnpm", ["install", "--reporter=append-only"], opts.repoDir);
         }
     } finally {

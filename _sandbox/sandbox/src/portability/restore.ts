@@ -91,7 +91,7 @@ const actionsFor = (manifest: BundleManifest): ImportReport["needsAction"] => {
     if (manifest.environment.customDockerfile !== undefined) {
         actions.push({
             subject: "Rebuild the environment image",
-            detail: "The overlay Dockerfile was restored, but the IMAGE it describes is built outside the container. Open the Environment card and run the rebuild command it shows — until then this sandbox is on the stock image and none of the tools the overlay installs are present.",
+            detail: "The overlay Dockerfile was restored, but the IMAGE it describes is built outside the container. Open the Environment card and run the rebuild command it shows, until then this sandbox is on the stock image and none of the tools the overlay installs are present.",
         });
     }
     /* RECONNECT, NOT RE-ADD, and the difference is the credential split. This used to say the capability manifest
@@ -145,7 +145,7 @@ export const restoreBundle = async (
         // The manifest is the first entry a packer writes; anything before it means this is not our format (or
         // it was repacked), and deciding entries without it would mean deciding them blind.
         if (manifest === undefined) {
-            throw new BundleFormatError(`expected ${BUNDLE_MANIFEST_ENTRY} first — this does not look like an intentic environment bundle`);
+            throw new BundleFormatError(`expected ${BUNDLE_MANIFEST_ENTRY} first: this does not look like an intentic environment bundle`);
         }
         const placed = placeEntry(header.name);
         if (placed === undefined) {
@@ -234,7 +234,7 @@ export const restoreBundle = async (
          * disk, a permission error, or the size cap (UploadTooLargeError → 413). Converting those to a format
          * error would blame the bundle for the sandbox's own problem. */
         const failDecode = (error: unknown): void =>
-            fail(new BundleFormatError(`the archive could not be read — it is not a gzipped intentic environment bundle (${String(error)})`));
+            fail(new BundleFormatError(`the archive could not be read: it is not a gzipped intentic environment bundle (${String(error)})`));
         ex.on("entry", (header, stream, next) => {
             handleEntry(header, stream).then(() => next(), fail);
         });

@@ -43,7 +43,7 @@ beforeAll(async () => {
     putVector(db, 1, 1, vec([1, 0]));
     db.run("INSERT INTO chunks (file_id, start_line, end_line, hash, text) VALUES (2, 1, 5, 'c2', 'b/other.ts § other\\nsomething else')");
     putVector(db, 2, 2, vec([0, 1]));
-    // Left unembedded on purpose — embedPending's backlog.
+    // Left unembedded on purpose: embedPending's backlog.
     db.run("INSERT INTO chunks (file_id, start_line, end_line, hash, text) VALUES (2, 6, 9, 'c3', 'b/other.ts § pending widget text')");
 });
 afterAll(async () => {

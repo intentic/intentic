@@ -67,7 +67,7 @@ export const fileClaudeSeatStore = (path: string, logger: Logger): ClaudeSeatSto
                 return { ...current, [id]: { at: Date.now(), reason } };
             });
             if (refused) {
-                logger.warn({ account: id, reason }, "claude account cannot serve Claude Code — taking it out of the rotation");
+                logger.warn({ account: id, reason }, "claude account cannot serve Claude Code, taking it out of the rotation");
             }
         },
         clear: async (id) => {

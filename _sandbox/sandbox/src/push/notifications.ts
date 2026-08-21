@@ -36,7 +36,7 @@ const AWAITING: Record<"plan" | "question" | "permission" | "browser_help" | "te
     plan: { title: "Plan ready for review", body: "The agent proposed a plan and is waiting for your approval." },
     question: { title: "The agent has a question", body: "It stopped to ask you something before continuing." },
     permission: { title: "Permission needed", body: "The agent is waiting for you to allow a tool it wants to run." },
-    browser_help: { title: "The agent's browser needs you", body: "It hit something only a person can clear — a captcha or a sign-in step." },
+    browser_help: { title: "The agent's browser needs you", body: "It hit something only a person can clear, a captcha or a sign-in step." },
     terminal_help: { title: "The agent's terminal needs you", body: "A command it started is waiting at a prompt only you can answer." },
 };
 
@@ -62,7 +62,7 @@ export const turnAwaiting = (
  * question wherever the user lands. */
 export const prepushFailed = (run: PrepushRun): PushNotification => ({
     title: run.timedOut === true ? "Checks timed out" : run.status === "error" ? "Checks couldn't run" : "Checks failed",
-    body: `${run.command} — your push is waiting on you.`,
+    body: `${run.command}, your push is waiting on you.`,
     url: "/workspace",
     // One tag for the check, of which this daemon has exactly one: a second verdict replaces the first rather
     // than stacking a notification per push attempt.

@@ -7,7 +7,7 @@ import { extractTarToWorkspace, PathEscapeError } from "./workspace-archive.js";
 import { UploadTooLargeError } from "./workspace-files.js";
 
 // Build a tar and hand it back as a web ReadableStream (what the route feeds the extractor). Buffering the whole
-// archive is fine in a test — the extractor still streams it back in.
+// archive is fine in a test: the extractor still streams it back in.
 const tarOf = async (
     entries: { name: string; content?: string; type?: "file" | "directory"; mtime?: Date }[],
 ): Promise<ReadableStream<Uint8Array>> => {
@@ -40,7 +40,7 @@ test("extractTarToWorkspace materializes a nested tree under the root", async ()
     await rm(root, { recursive: true, force: true });
 });
 
-test("extractTarToWorkspace writes every contained entry — former secrets, .git, and siblings alike", async () => {
+test("extractTarToWorkspace writes every contained entry: former secrets, .git, and siblings alike", async () => {
     const root = await mkdtemp(join(tmpdir(), "tar-"));
     await extractTarToWorkspace(
         root,
@@ -60,7 +60,7 @@ test("extractTarToWorkspace writes every contained entry — former secrets, .gi
 test("extractTarToWorkspace skips the workspace ROOT's own .git and keeps extracting", async () => {
     const root = await mkdtemp(join(tmpdir(), "tar-"));
     // What dropping a repo's CONTENTS (rather than its folder) at the root produces. /work's .git is the pointer
-    // to the shadow history repo, so these entries are refused — but only these: the rest of the drop still lands.
+    // to the shadow history repo, so these entries are refused, but only these: the rest of the drop still lands.
     await extractTarToWorkspace(
         root,
         await tarOf([

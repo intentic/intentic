@@ -2,7 +2,7 @@ import type { RestoredMessage } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { REDACTED, shareTranscript } from "./share-payload.js";
 
-/* WHAT LEAVES THE MACHINE — the only tests in this feature that are about safety rather than behaviour, and
+/* WHAT LEAVES THE MACHINE: the only tests in this feature that are about safety rather than behaviour, and
  * the reason share-payload.ts is a pure function over plain values: every claim the share dialog makes to the
  * person about to publish a conversation is checked here, against the payload itself. */
 
@@ -46,7 +46,7 @@ describe("a messages-only share", () => {
         expect(JSON.stringify(messages)).not.toContain("auth/guard.ts");
     });
 
-    /* An attached screenshot is part of the PROMPT, not part of the agent's work — leaving it out would cut
+    /* An attached screenshot is part of the PROMPT, not part of the agent's work: leaving it out would cut
      * the user's own message in half, so it rides both levels. */
     it("keeps what the user attached to their own message", () => {
         const { messages, pictures } = shareTranscript(conversation, "messages");
@@ -56,7 +56,7 @@ describe("a messages-only share", () => {
 });
 
 /* The one row-level flag that SURVIVES a share, at every detail level: a line the owner placed wearing the
- * agent's voice must not read as the agent's to a recipient — the share page is a human audience, which is the
+ * agent's voice must not read as the agent's to a recipient: the share page is a human audience, which is the
  * only audience the mark exists for. (The agent-facing handoff stays blind to it; see RestoredMessageSchema.) */
 describe("a placed row", () => {
     it("keeps its mark in the shared payload", () => {
@@ -84,7 +84,7 @@ describe("an everything share", () => {
 });
 
 describe("both levels", () => {
-    /* A conversation is where credentials get pasted — into a prompt, into a diff, into a command's output.
+    /* A conversation is where credentials get pasted: into a prompt, into a diff, into a command's output.
      * The outbox would REFUSE a file containing one (public-files.ts rule 5); a page that was refused reads to
      * its owner as a broken feature, so a share is rewritten to the same rule instead of being blocked by it. */
     it.each(["messages", "everything"] as const)("strips a self-identifying secret from a %s share", (detail) => {

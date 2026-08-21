@@ -5,7 +5,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { cleanTranscription, createSpeech, type ExecFn, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
 
-/* The speech engine over its two injected seams (exec, model fetch) — the same shape the Discord voice
+/* The speech engine over its two injected seams (exec, model fetch): the same shape the Discord voice
  * transcriber proves its whisper conventions with (_extensions/discord/src/audio.test.ts). */
 
 const enoent: ExecFn = () => Promise.reject(Object.assign(new Error("spawn whisper-cli ENOENT"), { code: "ENOENT" }));
@@ -22,7 +22,7 @@ const rootWith = (model: boolean): string => {
 
 const noFetch = (): Promise<Blob | null> => Promise.reject(new Error("must not download"));
 
-// A model whose BYTES arrive under the test's control — the real download's shape, where the fetch resolves in
+// A model whose BYTES arrive under the test's control: the real download's shape, where the fetch resolves in
 // milliseconds and the stream then flows for minutes. A Blob that hands over all its bytes at once cannot show
 // what the browser sees during those minutes.
 const streamingModel = (): { blob: Blob; push: (bytes: number) => void; finish: () => void } => {
@@ -35,7 +35,7 @@ const streamingModel = (): { blob: Blob; push: (bytes: number) => void; finish: 
     };
 };
 
-// What is on disk in the model's directory, by name — the staged download and the model itself are told apart
+// What is on disk in the model's directory, by name: the staged download and the model itself are told apart
 // here exactly the way `stat` tells them apart in the engine.
 const modelDir = (root: string): string => join(root, STATE_DIR, "local", "cache", "whisper");
 const bytesOnDisk = (root: string, name: string): number => {
@@ -79,7 +79,7 @@ test("a status poll on an absent model starts ONE download and reports ready onc
             return gate;
         },
     });
-    // Two polls while the download is in flight — the latch keeps it one download, not one per poll.
+    // Two polls while the download is in flight: the latch keeps it one download, not one per poll.
     expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
     expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
     expect(fetches).toBe(1);
@@ -89,7 +89,7 @@ test("a status poll on an absent model starts ONE download and reports ready onc
     await expect.poll(async () => (await speech.status()).model).toBe("ready");
 });
 
-test("a model still streaming in never reads ready — it takes its place only once whole", async () => {
+test("a model still streaming in never reads ready: it takes its place only once whole", async () => {
     const root = rootWith(false);
     const { blob, push, finish } = streamingModel();
     const speech = createSpeech({
@@ -101,7 +101,7 @@ test("a model still streaming in never reads ready — it takes its place only o
     expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
 
     // Bytes are landing. Grown in place, the model file would exist from the download's first moment and this
-    // poll would answer "ready" — the browser would stop waiting, record, and meet a half-written model
+    // poll would answer "ready": the browser would stop waiting, record, and meet a half-written model
     // (whisper-cli: "failed to initialize whisper context"), which the composer can only word as "try again".
     push(4096);
     await expect.poll(() => bytesOnDisk(root, "staged")).toBeGreaterThan(0);
@@ -116,7 +116,7 @@ test("a model still streaming in never reads ready — it takes its place only o
     expect(bytesOnDisk(root, "staged")).toBe(0);
 });
 
-test("a failed download does not poison later polls — the next status retries it", async () => {
+test("a failed download does not poison later polls: the next status retries it", async () => {
     let fetches = 0;
     const speech = createSpeech({
         workspaceRoot: rootWith(false),
@@ -136,7 +136,7 @@ test("a failed download does not poison later polls — the next status retries 
 
 test("transcribe serializes whisper runs, passes the language explicitly, and answers silence as empty text", async () => {
     /* Keyed by each utterance's OWN bytes rather than by the order whisper happens to be handed them. Both
-     * calls clear their pre-flight checks — an independent `stat` for the model each — before reaching the
+     * calls clear their pre-flight checks (an independent `stat` for the model each) before reaching the
      * queue, so which one enters it first is the scheduler's business; on a loaded box that order flips.
      * Order-keyed outputs turned that into a failure here, pointing at speech rather than at contention.
      * Content-keyed ones also pin what order never could: that each caller gets ITS OWN utterance's text
@@ -151,7 +151,7 @@ test("transcribe serializes whisper runs, passes the language explicitly, and an
             return { stdout: "usage: whisper-cli" };
         }
         expect(command).toBe("whisper-cli");
-        // whisper-cli defaults to -l en — the language must always be passed explicitly.
+        // whisper-cli defaults to -l en: the language must always be passed explicitly.
         expect(args).toContain("-l");
         expect(args[args.indexOf("-l") + 1]).toBe("pl");
         const wavPath = args[args.indexOf("-f") + 1];

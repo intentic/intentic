@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // A platform that accepts the connection but never answers: the response callback is never invoked. The fake
-// mirrors the two ClientRequest behaviors the timeout path relies on — setTimeout arms an idle timer, and
+// mirrors the two ClientRequest behaviors the timeout path relies on: setTimeout arms an idle timer, and
 // destroy(err) surfaces that error via the `error` event.
 const requestMock = vi.fn((_url: URL, _opts: unknown, _cb: (res: unknown) => void) => {
     const req = new EventEmitter() as EventEmitter & {

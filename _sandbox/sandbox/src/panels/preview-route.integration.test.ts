@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacePaths } from "../workspace/workspace.js";
 
 // The names are attached by the box's OWN agent now (a name claimed, then a share bound to it), not by asking
-// the platform to mint DNS — so the seam these tests hold is the pair of agent invocations per label.
+// the platform to mint DNS, so the seam these tests hold is the pair of agent invocations per label.
 const execMock = vi.fn<(file: string, args: readonly string[]) => Promise<{ stdout: string; stderr: string }>>();
 vi.mock("node:child_process", async (importOriginal) => ({
     ...(await importOriginal<typeof import("node:child_process")>()),
@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 describe("createPreviewRouteEnsurer", () => {
-    it("claims and binds each label once, then memoizes it — a re-ensure spawns no agent", async () => {
+    it("claims and binds each label once, then memoizes it: a re-ensure spawns no agent", async () => {
         const ensure = createPreviewRouteEnsurer(config(), logger);
         await ensure(["preview-app", "port-a"]);
         await ensure(["preview-app"]);
@@ -41,7 +41,7 @@ describe("createPreviewRouteEnsurer", () => {
         const [file, claim] = execMock.mock.calls[0]!;
         expect(file).toBe("zrok2");
         expect(claim).toEqual([`create`, `name`, `preview-app`, `--namespace-token`, `ns-1`]);
-        // Every preview name points at the ONE preview proxy — it already routes by Host header.
+        // Every preview name points at the ONE preview proxy: it already routes by Host header.
         expect(execMock.mock.calls[1]![1]).toEqual([
             `share`,
             `public`,
@@ -70,7 +70,7 @@ describe("createPreviewRouteEnsurer", () => {
     });
 
     /* A name the hub already holds for this account, and a share already bound to it, are the steady state
-     * after any restart — both answer 409 and neither is a failure. */
+     * after any restart: both answer 409 and neither is a failure. */
     it("treats an already-claimed name and an already-bound share as done, silently", async () => {
         execMock.mockRejectedValueOnce(new Error("[409] createShareNameConflict"));
         const ensure = createPreviewRouteEnsurer(config(), logger);
@@ -96,7 +96,7 @@ describe("createPreviewRouteEnsurer", () => {
 });
 
 describe("ensureAllPreviewRoutes", () => {
-    it("ensures every discovered repo + the whole port-slot pool + the outbox in one batch — the boot-time pre-mint", async () => {
+    it("ensures every discovered repo + the whole port-slot pool + the outbox in one batch: the boot-time pre-mint", async () => {
         const root = mkdtempSync(join(tmpdir(), "preview-sweep-"));
         mkdirSync(join(root, "intent", ".git"), { recursive: true });
         mkdirSync(join(root, "extra", ".git"), { recursive: true });

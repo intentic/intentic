@@ -14,7 +14,7 @@ test("a runner's colour codes leave the sentence they were wrapped around", () =
     expect(plainText(captured)).toBe("@intentic/sandbox:test: PASS 10 tests");
 });
 
-test("a title set or a hyperlink — OSC, ended either way — goes with them", () => {
+test("a title set or a hyperlink (OSC, ended either way) goes with them", () => {
     expect(plainText(`${ESC}]0;pnpm test${BEL}done`)).toBe("done");
     expect(plainText(`${ESC}]8;;https://ci.example/run/7${ESC}\\run 7${ESC}]8;;${ESC}\\`)).toBe("run 7");
 });
@@ -24,7 +24,7 @@ test("a progress line collapses to the frame that was left showing", () => {
     expect(plainText("Progress: 1/3\rProgress: 2/3\rProgress: 3/3\ndone")).toBe("Progress: 3/3\ndone");
 });
 
-// CRLF, and a writer parking the cursor at the end of a line, are not erases — an empty frame must not win.
+// CRLF, and a writer parking the cursor at the end of a line, are not erases: an empty frame must not win.
 test("a trailing carriage return keeps the line it was on", () => {
     expect(plainText("built in 4s\r\nnext line")).toBe("built in 4s\nnext line");
 });

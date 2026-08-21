@@ -40,7 +40,7 @@ test("new indexes use incremental auto-vacuum and reclaim a materially fragmente
 });
 
 // Opening an index makes the index dir (nothing else would) and NOTHING ELSE. The spool used to be made here
-// too, which left an empty `spool/` sitting in every workspace from its first search onwards — and the explorer,
+// too, which left an empty `spool/` sitting in every workspace from its first search onwards, and the explorer,
 // rightly, offers to sweep folders with nothing in them. writeSpool makes it when it has something to write.
 test("opening an index creates the index dir, and no empty spool beside it", async () => {
     const parent = await mkdtemp(join(tmpdir(), "iq-db-"));

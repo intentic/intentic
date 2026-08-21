@@ -24,7 +24,7 @@ beforeAll(async () => {
     db = openIndex(dir, "write");
     db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('a/ignore-model.ts', 0, 1, 'h1')");
     db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('b/common.ts', 0, 1, 'h2')");
-    // "enforced" is rare (1 chunk), "the"/"model" common — BM25 must rank the rare-term chunk first.
+    // "enforced" is rare (1 chunk), "the"/"model" common: BM25 must rank the rare-term chunk first.
     insertChunk(1, 1, "a/ignore-model.ts § floor\nthe ignore model is enforced during the sweep and every engine");
     insertChunk(2, 1, "b/common.ts § one\nthe model the model the model repeated words");
     insertChunk(2, 10, "b/common.ts § two\nthe ignore comment marker");

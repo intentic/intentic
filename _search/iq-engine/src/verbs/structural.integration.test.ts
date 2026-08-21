@@ -58,7 +58,7 @@ test("sym: fuzzy name search with kind filter", async () => {
 test("ast: structural pattern with metavariables", async () => {
     const outcome = await engine.run(request({ verb: "ast", query: "createWidget($A)", options: { astLang: "ts" } }));
     expect(outcome.exitCode).toBe(0);
-    // Calls only — the parenthesized pattern does not match the def's arrow or bare imports.
+    // Calls only: the parenthesized pattern does not match the def's arrow or bare imports.
     expect(outcome.result.groups.map((group) => group.path).toSorted()).toEqual(["alpha/src/registry.ts", "alpha/src/widget.spec.ts"]);
     await expect(engine.run(request({ verb: "ast", query: "x", options: {} }))).rejects.toThrow("--lang is required");
 });

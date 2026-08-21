@@ -101,7 +101,7 @@ export const fetchWorkspacePorts = async (sandboxUrl: string, syncToken: string)
     });
     if (response.status === 401 || response.status === 403) {
         throw new SyncAuthError(
-            "the sandbox rejected the sync token — click “Enable desktop sync” in your browser and re-run setup to mint a fresh one.",
+            "the sandbox rejected the sync token: click 'Enable desktop sync' in your browser and re-run setup to mint a fresh one.",
         );
     }
     if (!response.ok) {
@@ -171,9 +171,9 @@ export const reconcileForwards = async (
         const match = desiredByPort.get(mirrored.port);
         if (match === undefined) {
             executor.terminate(mirrored.port);
-            log(`  localhost:${mirrored.port} — stopped (no longer listening in the sandbox)`);
+            log(`  localhost:${mirrored.port}: stopped (no longer listening in the sandbox)`);
         } else if (match.host !== mirrored.host) {
-            executor.terminate(mirrored.port); // family moved — the fresh session below dials the new address
+            executor.terminate(mirrored.port); // family moved: the fresh session below dials the new address
         }
     }
     const currentByPort = new Map(current.map((mirrored) => [mirrored.port, mirrored]));
@@ -181,12 +181,12 @@ export const reconcileForwards = async (
     for (const summary of desired) {
         const existing = currentByPort.get(summary.port);
         if (existing !== undefined && existing.host === summary.host) {
-            next.push(existing); // unchanged — the live forward keeps its connections
+            next.push(existing); // unchanged: the live forward keeps its connections
             continue;
         }
         const heldBy = claimedBy.get(summary.port);
         if (heldBy !== undefined) {
-            log(`  localhost:${summary.port} is already mirrored from ${heldBy} — skipped (${summary.command ?? "unknown process"})`);
+            log(`  localhost:${summary.port} is already mirrored from ${heldBy}: skipped (${summary.command ?? "unknown process"})`);
             continue;
         }
         if (existing === undefined) {
@@ -195,7 +195,7 @@ export const reconcileForwards = async (
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of ports; sequenced keeps the log readable
         if (!(await executor.isLocalPortFree(summary.port))) {
-            log(`  localhost:${summary.port} is busy on this machine — skipped (${summary.command ?? "unknown process"})`);
+            log(`  localhost:${summary.port} is busy on this machine: skipped (${summary.command ?? "unknown process"})`);
             continue;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of ports, and each create dials the
@@ -319,7 +319,7 @@ const postReports = async (pairings: readonly Pairing[], mutagen: string, unsupp
             // pairing is otherwise perfectly healthy, so stop asking and say so once.
             if (response.status === 404) {
                 unsupported.add(pairing.sandboxId);
-                log(`  ${pairing.sandboxId}: this sandbox is running a daemon without machine reports — its Computers view will stay empty.`);
+                log(`  ${pairing.sandboxId}: this sandbox is running a daemon without machine reports, its Computers view will stay empty.`);
             }
         } catch (error) {
             log(`  ${pairing.sandboxId}: report skipped: ${error instanceof Error ? error.message : String(error)}`);
@@ -387,7 +387,7 @@ const SESSION_RETRY_EVERY_TICKS = 60;
 export const runMirrorWatch = async (log: Log): Promise<void> => {
     const holder = await readLiveWatcherPid();
     if (holder !== undefined && holder !== process.pid) {
-        log(`a mirror watcher is already running (pid ${holder}) — leaving it alone. Stop it with \`intentic-sync mirror --stop\` first.`);
+        log(`a mirror watcher is already running (pid ${holder}): leaving it alone. Stop it with \`intentic-sync mirror --stop\` first.`);
         return;
     }
     await writeSecretFile(mirrorPidPath, baseDir, String(process.pid));
@@ -404,7 +404,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         await unregisterAutostart(MIRROR_AUTOSTART, log);
         await rm(mirrorPidPath, { force: true });
         await rm(mirrorHeartbeatPath, { force: true });
-        log("no sandboxes are paired — nothing to mirror. Enable it from a sandbox's Desktop sync card.");
+        log("no sandboxes are paired: nothing to mirror. Enable it from a sandbox's Desktop sync card.");
         return;
     }
     /* THE TRANSPORT, BEFORE ANY SESSION, this process is what puts the sandbox's sshd on loopback (tunnel.ts),
@@ -424,7 +424,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     await guard(log, "refreshing the ssh configuration", async () => {
         await writeManagedSshConfig(pairingSshConfig(initial.pairings));
         if (await pruneKnownHosts()) {
-            log("  removed a stale `%h` host-key entry left by an older agent — it was refusing every sandbox but the first.");
+            log("  removed a stale `%h` host-key entry left by an older agent: it was refusing every sandbox but the first.");
         }
     });
     const tunnels = createTunnelPool(log);
@@ -472,7 +472,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                 await unregisterAutostart(MIRROR_AUTOSTART, log);
                 await rm(mirrorPidPath, { force: true });
                 await rm(mirrorHeartbeatPath, { force: true });
-                log("no sandboxes are paired any more — watcher exiting. Re-enable from a sandbox's Desktop sync card.");
+                log("no sandboxes are paired any more: watcher exiting. Re-enable from a sandbox's Desktop sync card.");
                 return;
             }
             // Before the port reconcile, because that reconcile and the git bridge under it both ride this
@@ -515,7 +515,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                         rejectedPolls.set(pairing.sandboxId, rejected);
                         if (rejected >= REVOKED_POLLS) {
                             log(
-                                `${pairing.sandboxId} rejected the sync token ${REVOKED_POLLS} polls in a row — this machine's enrollment was revoked.`,
+                                `${pairing.sandboxId} rejected the sync token ${REVOKED_POLLS} polls in a row: this machine's enrollment was revoked.`,
                             );
                             rejectedPolls.delete(pairing.sandboxId);
                             repos.delete(pairing.sandboxId);

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/workspace-ignore",
     "version": "0.0.0",
-    "description": "Layered workspace attention filter — machine subtrees, junk denylist, and accumulated .gitignore",
+    "description": "Layered workspace attention filter, machine subtrees, junk denylist, and accumulated .gitignore",
     "license": "MIT",
     "type": "module",
     "repository": {

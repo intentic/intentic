@@ -56,7 +56,7 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
     // failure's why, so /health names the problem even after the retries stop.
     const retry = (): void => {
         if (Date.now() >= deadline) {
-            logger.warn("platform registration gave up — restart to retry");
+            logger.warn("platform registration gave up: restart to retry");
             status = { ...status, retrying: false };
             return;
         }
@@ -80,7 +80,7 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
         if (answer.status === 200) {
             logger.info("registered with the platform");
             status = { state: "registered", at: Date.now() };
-            return; // acked — go silent, no reschedule
+            return; // acked: go silent, no reschedule
         }
         logger.warn({ status: answer.status }, "platform registration rejected");
         status = {

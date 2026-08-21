@@ -32,7 +32,7 @@ export const parseFeatures = (spec: string | undefined): ReadonlySet<Feature> =>
     for (const token of tokens) {
         const name = token.replace(/^-/, "");
         if (!(FEATURES as readonly string[]).includes(name)) {
-            throw new Error(`iq: unknown feature "${name}" — known: ${FEATURES.join(", ")}`);
+            throw new Error(`iq: unknown feature "${name}", known: ${FEATURES.join(", ")}`);
         }
     }
     const allowList = tokens.some((token) => !token.startsWith("-"));

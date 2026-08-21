@@ -36,12 +36,12 @@ export const checks = ({ role, roots, home, pid = process.pid }: ContainerClaimD
             if (role.container) {
                 if (held === undefined) {
                     return fail(
-                        `this daemon (pid ${pid}) holds the container role but the claim file is gone — it is converging HOME and sweeping processes with nothing recording that it owns them`,
+                        `this daemon (pid ${pid}) holds the container role but the claim file is gone: it is converging HOME and sweeping processes with nothing recording that it owns them`,
                     );
                 }
                 if (held.pid !== pid) {
                     return fail(
-                        `this daemon (pid ${pid}) holds the container role but the claim now names pid ${held.pid} (workspace ${held.workspaceRoot}, history ${held.historyRoot}) — two daemons are converging one HOME`,
+                        `this daemon (pid ${pid}) holds the container role but the claim now names pid ${held.pid} (workspace ${held.workspaceRoot}, history ${held.historyRoot}): two daemons are converging one HOME`,
                     );
                 }
                 return;
@@ -51,7 +51,7 @@ export const checks = ({ role, roots, home, pid = process.pid }: ContainerClaimD
              * container is taken. A guest whose pid is in that file locks the real sandbox out of its own box. */
             if (held?.pid === pid) {
                 fail(
-                    `this daemon (pid ${pid}) is running as a guest but holds the container claim — the sandbox's own daemon will refuse to converge behind it`,
+                    `this daemon (pid ${pid}) is running as a guest but holds the container claim: the sandbox's own daemon will refuse to converge behind it`,
                 );
             }
             // A guest on OTHER roots is ordinary and expected. A guest on OUR roots that is not the holder is

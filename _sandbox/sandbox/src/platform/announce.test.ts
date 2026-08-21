@@ -35,14 +35,14 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 // The request goes out synchronously; the VERDICT lands a microtask later (the post is awaited). Nothing about
-// the retry schedule changed with that — these just let the resolution happen before reading status().
+// the retry schedule changed with that: these just let the resolution happen before reading status().
 const settle = async (): Promise<void> => {
     await Promise.resolve();
     await Promise.resolve();
 };
 
 describe("createAnnouncer", () => {
-    it("registers once on a 200 and then goes silent — never a heartbeat", () => {
+    it("registers once on a 200 and then goes silent: never a heartbeat", () => {
         outcomes.push({ status: 200 });
         createAnnouncer(config, logger).start();
 
@@ -76,10 +76,10 @@ describe("createAnnouncer", () => {
         expect(requestMock).toHaveBeenCalledTimes(settled);
     });
 
-    /* status() is what /health serves and what ic's postflight/doctor read — the container→platform link is
+    /* status() is what /health serves and what ic's postflight/doctor read: the container→platform link is
      * observable nowhere else, so each verdict below is a sentence a user actually sees. */
     describe("status", () => {
-        it("is off until started — a headless run has nothing to register with", () => {
+        it("is off until started: a headless run has nothing to register with", () => {
             expect(createAnnouncer(config, logger).status()).toEqual({ state: "off" });
         });
 

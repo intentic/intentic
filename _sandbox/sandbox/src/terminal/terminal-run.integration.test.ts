@@ -7,7 +7,7 @@ import { createTerminalRunner, terminalExec } from "./terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // These run the no-tmux fallback (the wrapper isn't baked into dev/test machines): plain bash -c with the
-// same {code, output} contract the tmux path returns — the exact runner capability tests wire into their ctx.
+// same {code, output} contract the tmux path returns: the exact runner capability tests wire into their ctx.
 
 test("tryRun returns output + the real exit code; run throws on non-zero with the tail in the message", async () => {
     const runner = createTerminalRunner();
@@ -18,7 +18,7 @@ test("tryRun returns output + the real exit code; run throws on non-zero with th
 });
 
 // The pane echoes the command line it is about to run, so a flow of quiet commands still looks like a terminal.
-// That echo goes to the pane's tty, never to stdout — the caller's captured output is the command's alone, and
+// That echo goes to the pane's tty, never to stdout: the caller's captured output is the command's alone, and
 // an error tail (or an ACP agent's tool result) must not grow a copy of its own command line. Only bites where
 // the tmux wrapper is baked in (the sandbox image); the fallback never writes the line at all.
 test("the pane's echo of the command line stays out of the captured output", async () => {

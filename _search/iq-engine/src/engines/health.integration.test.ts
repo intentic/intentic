@@ -10,7 +10,7 @@ const exec = promisify(execFile);
 
 // The structured half of `hotspots` + `map`: the numbers the daemon serves to the codebase-health panel.
 //
-// The workspace ROOT is the repo under test here, and it is deliberately created the way the daemon creates it —
+// The workspace ROOT is the repo under test here, and it is deliberately created the way the daemon creates it:
 // `--separate-git-dir`, which leaves a `.git` POINTER FILE in the worktree rather than a directory. That is the
 // shape the sweep used to miss, taking every git-backed verb (churn, hotspots, recent, log, who) with it.
 
@@ -41,7 +41,7 @@ const gate = (arms: number): string =>
 
 beforeAll(async () => {
     ({ root, cleanup } = await makeFixtureWorkspace());
-    // Separate git dir OUTSIDE the workspace — exactly the daemon's layout for /work, and it keeps the objects
+    // Separate git dir OUTSIDE the workspace: exactly the daemon's layout for /work, and it keeps the objects
     // out of the sweep.
     await exec("git", ["-C", root, "init", "-q", "--separate-git-dir", `${root}-gitdir`]);
     await writeFile(join(root, "gate.ts"), gate(3));
@@ -62,7 +62,7 @@ test("a .git pointer file is a repo boundary: the workspace root's own churn rea
     expect(gateFile).toBeDefined();
     expect(gateFile!.commits).toBe(2);
     expect(gateFile!.complexity).toBeGreaterThan(0);
-    // The score IS the product — the panel plots it, so it must not be a rank in disguise.
+    // The score IS the product: the panel plots it, so it must not be a rank in disguise.
     expect(gateFile!.score).toBe(gateFile!.commits * gateFile!.complexity);
     // notes.md is committed in the same repo but has no branch points, so it is not a hotspot.
     expect(health.hotspots.map((file) => file.path)).not.toContain("notes.md");
@@ -75,7 +75,7 @@ test("the churn window narrows the ranking without touching complexity", async (
     expect(gateFile.score).toBe(gateFile.complexity);
 });
 
-test("scope picks ONE repo — a nested repo's hotspots and modules never mix with the root's", async () => {
+test("scope picks ONE repo: a nested repo's hotspots and modules never mix with the root's", async () => {
     const alpha = await engine.health({ scope: { repo: "alpha" }, limit: 10 });
     expect(alpha.hotspots.length).toBeGreaterThan(0);
     expect(alpha.hotspots.every((file) => file.path.startsWith("alpha/"))).toBe(true);

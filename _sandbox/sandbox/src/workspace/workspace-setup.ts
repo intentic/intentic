@@ -240,7 +240,7 @@ export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string 
             ? []
             : [
                   `${STALE_NOTICE_HEADER}, so an unresolved import there is the install being behind rather than a mistake ` +
-                      "in the code. Do not edit working source to satisfy one, and do not run an install — from inside a turn " +
+                      "in the code. Do not edit working source to satisfy one, and do not run an install: from inside a turn " +
                       "it writes to a scratch layer that is discarded, and it rewrites the dependency tree other live " +
                       "conversations are reading. The daemon installs it once the turn ends, so the tree is ready on the NEXT " +
                       "turn, not this one. Nothing else is blocked: every already-installed project type-checks and tests " +

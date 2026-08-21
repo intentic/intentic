@@ -84,7 +84,7 @@ several times. The subscription must be created once regardless.
 const WEB_BRIEF = `Use the seeded account **ada@acme.dev** / \`demo-password\` wherever a story needs someone signed in.
 
 Stripe is in test mode: pay with 4242 4242 4242 4242, any future expiry, any CVC. Never use a real card, and
-never leave a subscription active — cancel it from the dashboard when a story is done with it.
+never leave a subscription active: cancel it from the dashboard when a story is done with it.
 
 The storefront is deliberately slow on first paint (the plans are fetched). Wait for the price to render before
 clicking anything, or you will report a bug that is only a race in the test.
@@ -122,7 +122,7 @@ with the test card and was returned to \`/welcome\` with the subscription listed
 ## What I could not check
 
 The confirmation email is queued rather than sent in this environment, so I verified the job was enqueued once
-and stopped there — I have no mailbox to read.
+and stopped there: I have no mailbox to read.
 `;
 
 const APPLY_A_COUPON_REPORT = `## What I did
@@ -139,7 +139,7 @@ was unchanged at $49.00.
 ## Why it fails
 
 \`POST /api/cart/coupon\` answers \`{"valid": false}\` for SPRING25. The coupon exists in Stripe and is active
-there, so the storefront is checking a local table that was never seeded with the launch codes — every code
+there, so the storefront is checking a local table that was never seeded with the launch codes: every code
 marketing hands out at a conference is refused the same way.
 
 The rest of the story is unreachable behind that: with no discount applied there is nothing to compare against
@@ -151,7 +151,7 @@ const SIGN_UP_REPORT = `## Where I stopped
 \`/signup\` answered **500** on first load, before the form rendered. I reloaded twice and waited out the slow
 first paint the repo's note warns about; it answered 500 each time.
 
-Nothing about the story could be judged — this is the app being down on that route, not the promise being
+Nothing about the story could be judged: this is the app being down on that route, not the promise being
 broken, so I am reporting it as blocked rather than failed.
 
 The server log line, for whoever picks this up:
@@ -233,7 +233,7 @@ export const acceptanceFiles = (now: number): [string, string][] => {
                         {
                             text: `The discounted amount is what Stripe charges`,
                             verdict: `unverified`,
-                            note: `unreachable — no discount is ever applied`,
+                            note: `unreachable, no discount is ever applied`,
                         },
                     ],
                     defects: [

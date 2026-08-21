@@ -226,7 +226,7 @@ export const parseMultiLine = (line: string): MultiLine => {
         } else if (token === "--case") {
             caseSensitive = true;
         } else {
-            return fail(`unknown flag ${token} in a multi line — supported: --lang --in --glob --not-glob --only --kind --literal --word --case`);
+            return fail(`unknown flag ${token} in a multi line, supported: --lang --in --glob --not-glob --only --kind --literal --word --case`);
         }
     }
     const options: VerbOptions = {
@@ -279,7 +279,7 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, quer
     const source = queries.length > 0 ? queries : ((input ?? (await readStdin())).split("\n") as readonly string[]);
     const lines = source.map((line) => line.trim()).filter((line) => line !== "");
     if (lines.length === 0) {
-        throw new Error("iq multi: no queries — pass them as arguments (iq multi 'def foo' 'refs bar') or one per stdin line");
+        throw new Error("iq multi: no queries, pass them as arguments (iq multi 'def foo' 'refs bar') or one per stdin line");
     }
     const engine = engineFromEnv(flags.features);
     const root = workspaceRoot();
@@ -302,7 +302,7 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, quer
             }
         }
         if (parsed.error !== undefined) {
-            const message = `${prefix} iq: ${line} — error: ${parsed.error}\n`;
+            const message = `${prefix} iq: ${line}, error: ${parsed.error}\n`;
             if (mode === "text") {
                 context.process.stdout.write(message);
             } else {

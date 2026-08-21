@@ -9,7 +9,7 @@ import type { QueryRequest } from "./types.js";
 
 /* A one-shot engine in a workspace whose index is OWNED by another live process (in a sandbox: the daemon's
  * resident engine). It used to revalidate anyway and lose the write lock to that process's sweep, which is how
- * every `iq` call in a warm sandbox came back "Exit code 2 — database is locked". */
+ * every `iq` call in a warm sandbox came back "Exit code 2: database is locked". */
 
 let root: string;
 let cleanup: () => Promise<void>;
@@ -28,7 +28,7 @@ beforeAll(async () => {
     ({ root, cleanup } = await makeFixtureWorkspace());
     indexDir = join(root, IQ_DIR);
     engine = createEngine({ root });
-    // Build the index while nothing owns it — this is the unowned path, and it must still write.
+    // Build the index while nothing owns it: this is the unowned path, and it must still write.
     await engine.run(request({ verb: "find", query: "createWidget" }));
 });
 afterAll(() => cleanup());
@@ -43,7 +43,7 @@ test("unowned: the one-shot engine indexes inline and reports the index fresh", 
 });
 
 test("owned by a live process: queries still answer, and the index is left alone", async () => {
-    // pid 1 exists in every process namespace this can run in — a stand-in for the daemon holding the index.
+    // pid 1 exists in every process namespace this can run in: a stand-in for the daemon holding the index.
     await writeFile(join(indexDir, "indexer.pid"), "1");
     // A file the (fake) owner has not indexed yet: the read-only pass must NOT write it, and must not pretend the
     // index is fresh either.

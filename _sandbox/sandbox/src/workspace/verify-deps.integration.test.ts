@@ -27,7 +27,7 @@ const context: DependencyLandOrigin = {
     repos: [{ repo: "app", from: "abc", dir: "app" }],
 };
 
-// An installed project whose manifest declares the given scripts — the state the reconciler's install leaves
+// An installed project whose manifest declares the given scripts: the state the reconciler's install leaves
 // behind when it succeeds.
 const ready = async (root: string, scripts: Record<string, string>): Promise<void> => {
     await write(root, "app/package.json", JSON.stringify({ name: "app", dependencies: { "left-pad": "^1.3.0" }, scripts }));
@@ -156,7 +156,7 @@ test("a project with no verify or test script is reported, not guessed at", asyn
     expect(feed).toEqual(["deps.verify_skipped"]);
 });
 
-test("an install that left the project unready stops at telling the owner — no check, no wake", async () => {
+test("an install that left the project unready stops at telling the owner: no check, no wake", async () => {
     const { queueVerify } = await freshQueue();
     const root = await workspace();
     // Installed marker present but the declared dependency still missing: the install failed.
@@ -185,10 +185,10 @@ test("a pane that dies before reporting reads as red, never green", async () => 
     expect(events[0]?.deps?.exitCode).toBe(-1);
 });
 
-/* THE CAUSELESS RUN — the reconciler's own install, off a pull or a hand-edited manifest rather than a land.
+/* THE CAUSELESS RUN: the reconciler's own install, off a pull or a hand-edited manifest rather than a land.
  *
  * It gets the same checks and the same feed rows, because the feed is the ONLY trace it has: nobody's
- * conversation is going to mention it. What it does not get is the wake, and that is the point of the case — a
+ * conversation is going to mention it. What it does not get is the wake, and that is the point of the case: a
  * chore reads the payload's `repos` as a git span to work, so firing one with a made-up agent and an empty span
  * sends an automation to look at a change that never happened. */
 test("an install nobody caused records its verdict and wakes nobody", async () => {
@@ -205,7 +205,7 @@ test("an install nobody caused records its verdict and wakes nobody", async () =
     expect(events).toEqual([]);
 });
 
-// The daemon has no wake to bind when nothing caused the install, so it is not asked for one — and a chain
+// The daemon has no wake to bind when nothing caused the install, so it is not asked for one, and a chain
 // without a sink must still be a chain that runs rather than one that throws on its way to the verdict.
 test("a chain with no event sink at all still checks and still records", async () => {
     const { queueVerify } = await freshQueue();
@@ -229,7 +229,7 @@ test("the check command is the project's own word for it: verify first, then tes
     expect(await checkCommandFor(root, "absent", "pnpm")).toBeUndefined();
 });
 
-test("the verify store remembers red across restarts — its list is the closure re-check's worklist", async () => {
+test("the verify store remembers red across restarts: its list is the closure re-check's worklist", async () => {
     const root = await workspace();
     const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
     await store.record("app", "red", 1);

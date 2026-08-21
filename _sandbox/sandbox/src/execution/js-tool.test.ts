@@ -14,7 +14,7 @@ const dirPlan = (dir: string, overrides: Partial<JsExecutionPlan> = {}): JsExecu
     ...overrides,
 });
 
-// The three names the mount, the alias and the gate matcher agree on — pinned against each other so a rename
+// The three names the mount, the alias and the gate matcher agree on: pinned against each other so a rename
 // in one place fails here rather than as a tool that silently stops being gated.
 test("the tool name is the server name in the SDK's own spelling", () => {
     expect(JS_TOOL_NAME).toBe(`mcp__${JS_SERVER_NAME}__run`);
@@ -32,7 +32,7 @@ test("a run's answer reads like a shell's: output, then the status", () => {
 
 /* The description is the model's contract with the fence, so its load-bearing sentences are pinned: the scoped
  * roots it names, the no-spawn refusal that closes the bash-through-code road, and the honesty note about the
- * network — the one thing the fence cannot cut. */
+ * network: the one thing the fence cannot cut. */
 test("the description tells the truth the plan enforces", () => {
     const open = jsToolDescription(dirPlan("/work", { allowSpawn: true }));
     expect(open).toContain("Reads are allowed under /work");

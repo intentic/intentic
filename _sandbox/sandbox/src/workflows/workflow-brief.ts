@@ -140,7 +140,7 @@ const handoverFrom = ({ title, document, report, reportPath, branches }: Handove
  * was asked" has nothing to add to the asking.
  *
  * NOTHING IS SAID ABOUT THE WORKFLOW ITSELF, EVER, and that is the rule the rest of this file follows. A step
- * used to open with its own title, then "this is step 2 of 3 in the workflow **Two models, one task** —" and
+ * used to open with its own title, then "this is step 2 of 3 in the workflow **Two models, one task** -" and
  * the design's whole one-line description, then a paragraph explaining which of the two instructions below won
  * where they disagreed. None of it is the job. Which step of what is the SCHEDULER's bookkeeping: the model
  * cannot act on being second, it has already been handed everything the first one concluded, and a session

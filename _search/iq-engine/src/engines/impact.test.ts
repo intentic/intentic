@@ -44,7 +44,7 @@ test("importers: further hops carry their true distance, and the seed never appe
     expect(result.reached.some((file) => file.path === "widget.ts")).toBe(false);
 });
 
-test("imports walks the other way — what the change leans on", () => {
+test("imports walks the other way: what the change leans on", () => {
     const result = impactOf(CHAIN, ["widget.ts"], { maxHops: 1, cap: 50, direction: "imports" });
     expect(result.reached).toEqual([{ path: "util.ts", hops: 1 }]);
 });
@@ -57,7 +57,7 @@ test("both unions the directions at one hop", () => {
 test("the cap truncates by distance and reports what it dropped", () => {
     const result = impactOf(CHAIN, ["widget.ts"], { maxHops: 3, cap: 2, direction: "importers" });
     expect(result.reached.map((file) => file.path)).toEqual(["page.ts", "widget.test.ts"]);
-    // app.ts is two hops out and therefore the one to lose — and the caller is told, never silently shortened.
+    // app.ts is two hops out and therefore the one to lose, and the caller is told, never silently shortened.
     expect(result.truncated).toBe(1);
 });
 

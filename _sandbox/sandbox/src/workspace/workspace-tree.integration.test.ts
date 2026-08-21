@@ -33,10 +33,10 @@ test("walkWorkspaceTree lists everything, graying ignored dirs (node_modules, .g
     expect(all).toContain("app/src/index.ts");
     expect(all).toContain("app/untracked.tmp");
     expect(all).toContain("desired-state/.env.example");
-    // Nothing is hidden anymore — former security-floor files list too.
+    // Nothing is hidden anymore: former security-floor files list too.
     expect(all).toContain(".intentic/claude.json");
     expect(all).toContain("desired-state/.env");
-    // Ignored dirs are listed (grayed) but NOT descended — their children lazy-load via listWorkspaceChildren.
+    // Ignored dirs are listed (grayed) but NOT descended: their children lazy-load via listWorkspaceChildren.
     expect(all).toContain("app/node_modules");
     expect(all).toContain("app/.git");
     expect(all).not.toContain("app/node_modules/dep");
@@ -129,7 +129,7 @@ test("listWorkspaceChildren lazily lists one level under an ignored dir, all gra
     expect((await listWorkspaceChildren(root, "../etc")).entries).toEqual([]);
 });
 
-test("listWorkspaceChildren counts what its own cap cut — the only listing that can be incomplete", async () => {
+test("listWorkspaceChildren counts what its own cap cut: the only listing that can be incomplete", async () => {
     const root = await mkdtemp(join(tmpdir(), "ws-children-cap-"));
     await mkdir(join(root, "huge"), { recursive: true });
     for (let i = 0; i < 5; i++) {
@@ -156,11 +156,11 @@ test("walkWorkspaceTree defers a dir that doesn't fit the remaining budget whole
     for (let i = 0; i < 5; i++) {
         await writeFile(join(root, "a", `file-${i}.txt`), "x");
     }
-    // The root level (just "a") lists first, leaving 2 of the budget — not enough for "a"'s own 5 files.
+    // The root level (just "a") lists first, leaving 2 of the budget, not enough for "a"'s own 5 files.
     const result = await walkWorkspaceTree(root, { maxEntries: 3 });
     expect(result.hidden).toBe(0);
     const dirA = result.tree.find((e) => e.name === "a");
-    // Unlisted, so expanding it lazy-loads all 5 — no partial listing, no "some items are missing" claim.
+    // Unlisted, so expanding it lazy-loads all 5: no partial listing, no "some items are missing" claim.
     expect(dirA?.children).toBeUndefined();
     expect((await listWorkspaceChildren(root, "a")).entries.length).toBe(5);
 });
@@ -189,12 +189,12 @@ test("walkWorkspaceTree leaves a dir it never reached UNLISTED (no children) ins
     await mkdir(join(root, "b"), { recursive: true });
     await writeFile(join(root, "b", "kept.txt"), "x");
 
-    // Budget: "a" + "b" (level 1), then "a/inner" (level 2) — "b" is queued but never listed.
+    // Budget: "a" + "b" (level 1), then "a/inner" (level 2), "b" is queued but never listed.
     const result = await walkWorkspaceTree(root, { maxEntries: 3 });
     const dirA = result.tree.find((entry) => entry.name === "a");
     const dirB = result.tree.find((entry) => entry.name === "b");
     expect(dirA?.children?.map((entry) => entry.name)).toEqual(["inner"]);
-    // Unlisted, NOT truncated: no phantom "more items" claim — the client lazy-loads it on expand. The count
+    // Unlisted, NOT truncated: no phantom "more items" claim, the client lazy-loads it on expand. The count
     // is on the ENVELOPE, so a claim of hidden entries would show up there; both root entries were listed.
     expect(dirB?.children).toBeUndefined();
     expect(result.hidden).toBe(0);
@@ -213,7 +213,7 @@ test("listWorkspaceChildren grades ignore state for a NON-ignored dir the budget
     const { entries, hidden } = await listWorkspaceChildren(root, "repo");
     expect(hidden).toBe(0);
     const byName = new Map(entries.map((entry) => [entry.name, entry]));
-    // A lazily-listed normal dir is NOT blanket-grayed — only what the ignore rules actually cover.
+    // A lazily-listed normal dir is NOT blanket-grayed: only what the ignore rules actually cover.
     expect(byName.get("src")?.ignored).toBeUndefined();
     expect(byName.get("app.ts")?.ignored).toBeUndefined();
     expect(byName.get("out")?.ignored).toBe(true);
@@ -235,8 +235,8 @@ test("walkWorkspaceTree walks arbitrarily deep (no depth cap)", async () => {
 
 test("walkWorkspaceTree lists the daemon's own state entries but never lists what is inside them", async () => {
     // The file API refuses every path under these (isControlPlanePath), so the explorer draws one locked row
-    // for each and stops. Listing their contents would spend the walk's entry budget — a Chromium profile is
-    // thousands of files — on rows that can only ever answer "kept private".
+    // for each and stops. Listing their contents would spend the walk's entry budget: a Chromium profile is
+    // thousands of files: on rows that can only ever answer "kept private".
     const root = await mkdtemp(join(tmpdir(), "ws-tree-locked-"));
     await mkdir(join(root, `${STATE_DIR}`, "local", "browser", "Default"), { recursive: true });
     await mkdir(join(root, `${STATE_DIR}`, "secrets", "auth", "codex"), { recursive: true });
@@ -250,7 +250,7 @@ test("walkWorkspaceTree lists the daemon's own state entries but never lists wha
     const result = await walkWorkspaceTree(root);
     const all = paths(result.tree);
 
-    // The locked entries are LISTED — they exist, and a tree that quietly dropped them would read as files
+    // The locked entries are LISTED: they exist, and a tree that quietly dropped them would read as files
     // having gone missing.
     expect(all).toContain(".intentic/config/capabilities.json");
     expect(all).toContain(".intentic/local/browser");
@@ -264,8 +264,8 @@ test("walkWorkspaceTree lists the daemon's own state entries but never lists wha
     expect(all).toContain(".intentic/config/drafts/post-1.json");
 });
 
-/* SYMLINKS. They were filtered out of every listing, which is how `.claude/skills` — a folder holding thirty
- * links to the skills the sandbox loaded and nothing else — came to draw as an empty folder in the explorer. */
+/* SYMLINKS. They were filtered out of every listing, which is how `.claude/skills`: a folder holding thirty
+ * links to the skills the sandbox loaded and nothing else: came to draw as an empty folder in the explorer. */
 
 test("walkWorkspaceTree lists a symlink as what it points AT, carrying the link's own text", async () => {
     const root = await mkdtemp(join(tmpdir(), "ws-tree-link-"));
@@ -281,13 +281,13 @@ test("walkWorkspaceTree lists a symlink as what it points AT, carrying the link'
     const dirLink = links.find((entry) => entry.name === "to-dir");
     const fileLink = links.find((entry) => entry.name === "to-file");
 
-    // The TARGET's kind, so everything downstream — expanding, opening, the icon — needs no new branch.
+    // The TARGET's kind, so everything downstream (expanding, opening, the icon) needs no new branch.
     expect(dirLink?.type).toBe("dir");
     expect(fileLink?.type).toBe("file");
     // The link's own text, not the resolved path: it is what whoever made the link wrote.
     expect(dirLink?.link).toEqual({ to: "../real" });
     expect(fileLink?.link).toEqual({ to: "../real/a.ts" });
-    // A linked directory is walked through, and its children are addressed through the LINK — the same file is
+    // A linked directory is walked through, and its children are addressed through the LINK: the same file is
     // reachable by both paths and both open, exactly as VSCode's explorer does it.
     expect(paths(result.tree)).toContain("links/to-dir/nested/b.ts");
     expect(paths(result.tree)).toContain("real/nested/b.ts");
@@ -303,7 +303,7 @@ test("walkWorkspaceTree lists a dangling symlink rather than hiding it", async (
 
     const entry = (await walkWorkspaceTree(root)).tree.find((candidate) => candidate.name === "broken");
 
-    // Listed — a link that goes nowhere is a fact about the workspace, and one worth seeing.
+    // Listed: a link that goes nowhere is a fact about the workspace, and one worth seeing.
     expect(entry?.link).toEqual({ to: "./gone", state: "broken" });
     // Nothing to expand into, so it reports as a file and the client draws no chevron.
     expect(entry?.type).toBe("file");
@@ -319,7 +319,7 @@ test("walkWorkspaceTree marks a symlink that leaves the workspace and never foll
     const entry = result.tree.find((candidate) => candidate.name === "escape");
 
     expect(entry?.link).toEqual({ to: elsewhere, state: "outside" });
-    // Shown, so the row can explain itself — but the walk stops dead at it, and so does a later expand.
+    // Shown, so the row can explain itself, but the walk stops dead at it, and so does a later expand.
     expect(paths(result.tree)).not.toContain("escape/token.json");
     expect(await listWorkspaceChildren(root, "escape")).toEqual({ entries: [], hidden: 0 });
 });

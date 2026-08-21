@@ -11,7 +11,7 @@ import { exportsDir, isReadyExport, listExports, openExport, removeExport, start
 /* AN EXPORT OUTLIVES THE CLICK THAT ASKED FOR IT.
  *
  * These cover the property the first cut did not have: the export is a file, so its state is readable by anyone
- * who asks later — a second tab, a reload, the same tab after ten minutes elsewhere. Every assertion below is
+ * who asks later: a second tab, a reload, the same tab after ten minutes elsewhere. Every assertion below is
  * about what the DIRECTORY says, because that is the only thing the UI is allowed to believe.
  */
 
@@ -39,7 +39,7 @@ const exportServices = (work: string, history: string): Services =>
         files: fakeFiles({ read: async (absPath) => readFile(absPath, "utf8").catch(() => undefined) }),
     } as Parameters<typeof services>[0]);
 
-/* The pack is detached by design, so a test waits for the DIRECTORY to settle rather than awaiting a promise —
+/* The pack is detached by design, so a test waits for the DIRECTORY to settle rather than awaiting a promise:
  * exactly the position the browser is in, and the reason the list is the only source of truth.
  *
  * Asserted on the NAMED export rather than over the whole list, because "no export is packing" is trivially
@@ -52,7 +52,7 @@ const settled = async (history: string, name: string): Promise<void> => {
     });
 };
 
-test("an export survives the request that started it — it is named at once and finishes on its own", async () => {
+test("an export survives the request that started it: it is named at once and finishes on its own", async () => {
     const source = await makeRoots();
     await writeFile(join(source.work, "file.txt"), "content");
 
@@ -149,7 +149,7 @@ test("deleting an export takes every trace of it, whatever state it was in", asy
     await cleanup();
 });
 
-test("a finished bundle is a real bundle — the restore side reads what the export side wrote", async () => {
+test("a finished bundle is a real bundle: the restore side reads what the export side wrote", async () => {
     // The end-to-end shape: pack to a file, then open that file and check it is the gzipped tar the restorer
     // expects, rather than trusting that a stream that ended was a stream that worked.
     const source = await makeRoots();

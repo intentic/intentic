@@ -67,10 +67,10 @@ export const syncAdvisory = (results: readonly RepoSync[]): string | undefined =
                 return [`${repo}: updated to latest (+${commits(outcome.behind)}, now at ${outcome.head}).`];
             case "dirty":
                 return [
-                    `${repo}: NOT updated — uncommitted changes, ${outcome.behind} behind origin. Your view here may be stale; commit and sync to integrate.`,
+                    `${repo}: NOT updated, uncommitted changes, ${outcome.behind} behind origin. Your view here may be stale; commit and sync to integrate.`,
                 ];
             case "diverged":
-                return [`${repo}: NOT updated — ${commits(outcome.ahead)} not on origin and ${outcome.behind} behind. Your view here may be stale.`];
+                return [`${repo}: NOT updated, ${commits(outcome.ahead)} not on origin and ${outcome.behind} behind. Your view here may be stale.`];
             case "error":
                 return [`${repo}: sync failed (${outcome.message}).`];
             default:

@@ -15,7 +15,7 @@ import { loopProjection } from "./loop-state.js";
  * risk surface: a loop that never converges and never gives up is the one failure mode that costs real money
  * with nobody watching.
  *
- * The tree is a temp dir with no git in it, so `treeDigest` answers the same empty digest every time — which
+ * The tree is a temp dir with no git in it, so `treeDigest` answers the same empty digest every time, which
  * means "nothing changed" is the default and the stall detector is live in every test unless a test writes into
  * a repo. That is the right default here: it makes the stall test cheap and it keeps the other tests honest
  * about needing their own reason to stop.
@@ -64,16 +64,16 @@ test("a loop that never claims done runs to its iteration ceiling and settles `e
     const settled = await services.loops.get("c1");
     expect(settled?.state).toBe("exhausted");
     expect(settled?.iterations).toHaveLength(3);
-    // The card must end up saying what the record says — the projection is the only thing the fleet reads.
+    // The card must end up saying what the record says: the projection is the only thing the fleet reads.
     expect(loopProjection.of("c1")).toMatchObject({ state: "exhausted", iteration: 3 });
     expect(loopRunning("c1")).toBe(false);
 });
 
 /* WHAT A TURN IS TOLD IS THE JOB, NEVER THE MACHINE RUNNING IT. Every message used to open "# Iteration 2 of
- * at most 3 — you are one iteration of a loop that repeats until a goal is met", which is the pump's own
+ * at most 3: you are one iteration of a loop that repeats until a goal is met", which is the pump's own
  * bookkeeping wearing the clothes of an instruction: the model cannot act on the number, and a workflow step
  * that would only ever run once still announced a ceiling of twenty. What it needs is the goal, the file that
- * is its memory, and the work — asserted here BOTH ways, because the absence is the point.
+ * is its memory, and the work: asserted here BOTH ways, because the absence is the point.
  */
 test("a turn is told the goal and where its memory is, and nothing about being one of several", async () => {
     const root = tempRoot();
@@ -86,18 +86,18 @@ test("a turn is told the goal and where its memory is, and nothing about being o
     for (const prompt of prompts) {
         expect(prompt).toContain("fix the top failure");
         expect(prompt).toContain("the suite is green");
-        // `fresh` mode's memory rule — without it every session repeats the last one's dead end.
+        // `fresh` mode's memory rule: without it every session repeats the last one's dead end.
         expect(prompt).toContain("progress.md");
         expect(prompt).not.toContain("Iteration");
         expect(prompt).not.toContain("at most");
         // The word survives only as a PATH (`.intentic/records/artifacts/loops/…`), which is a file the turn has to write, not a
-        // description of the harness — so the assertion is against the prose, not against the letters.
+        // description of the harness, so the assertion is against the prose, not against the letters.
         expect(prompt).not.toContain("a loop");
         expect(prompt).not.toContain("this loop");
     }
 });
 
-// A goal the prompt already carries would be the same sentence twice — the ordinary shape of a workflow step,
+// A goal the prompt already carries would be the same sentence twice: the ordinary shape of a workflow step,
 // which is measured against the very request it was handed verbatim.
 test("a goal the prompt already contains is not quoted back under it", async () => {
     const root = tempRoot();
@@ -113,7 +113,7 @@ test("a written verdict of done stops the loop on that iteration", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     await mkdir(join(root, LOOP_DIR, "c3"), { recursive: true });
-    // The turn's own side effect is the verdict file, which is exactly how a `claim` iteration reports — and
+    // The turn's own side effect is the verdict file, which is exactly how a `claim` iteration reports, and
     // the path it is asked for is the only place the round's number appears in the message at all.
     const turn: TurnFn = async function* claiming(_services, input: AgentTurn) {
         const n = /iteration-(\d+)\.json/.exec(input.prompt)?.[1] ?? "1";
@@ -129,7 +129,7 @@ test("a written verdict of done stops the loop on that iteration", async () => {
     expect(settled?.iterations.at(-1)).toMatchObject({ outcome: "done", detail: "pass 2" });
 });
 
-test("a missing output file reads as not-done rather than as done — the safe direction", async () => {
+test("a missing output file reads as not-done rather than as done, the safe direction", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     const record = await services.loops.start({ ...baseLoop("c4"), maxIterations: 1 }, 1);
@@ -200,7 +200,7 @@ test("a loop's turn is attachable while it runs, exactly as a composer's is", as
 });
 
 /* The other half of that rule, and the one a workflow rests on: with NOTHING declared to produce and nothing to
- * check, "the turn finished" is the entire completion condition — so a turn the provider refused cannot be
+ * check, "the turn finished" is the entire completion condition, so a turn the provider refused cannot be
  * `done`. It used to be, and a three-step run of them reported 3/3 complete with three empty sessions in it. */
 test("a loop with nothing to verify ends on its turn's failure rather than calling it done", async () => {
     const root = tempRoot();

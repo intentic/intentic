@@ -47,14 +47,14 @@ process.stderr.write = ((chunk: string | Uint8Array, ...rest: unknown[]): boolea
         alias !== undefined
             ? FLAG_REDIRECTS[alias]
             : surplus?.startsWith("-") === true
-              ? `${surplus} is not a flag — ${FLAG_HELP}`
+              ? `${surplus} is not a flag: ${FLAG_HELP}`
               : /Too many arguments/.test(text)
-                ? 'each verb takes ONE query — quote multi-word queries (iq q "…") and scope with --in <dir>'
+                ? 'each verb takes ONE query: quote multi-word queries (iq q "…") and scope with --in <dir>'
                 : /No flag registered for --([\w-]+)/.test(text)
                   ? FLAG_HELP
                   : undefined;
     return (emit as (value: string | Uint8Array, ...args: unknown[]) => boolean)(
-        redirect === undefined ? chunk : `${text.trimEnd()} — ${redirect}\n`,
+        redirect === undefined ? chunk : `${text.trimEnd()}, ${redirect}\n`,
         ...rest,
     );
 }) as typeof process.stderr.write;
@@ -79,8 +79,8 @@ try {
 } catch (error) {
     const detail = error instanceof Error ? error.message.split("\n")[0] : String(error);
     process.stdout.write(
-        `iq: cannot start — ${detail}\n` +
-            `iq: this is a broken install, NOT an empty result — do not read it as 0 hits or fall back to grep silently. Reinstall iq (or rebuild its workspace deps) and report it.\n`,
+        `iq: cannot start, ${detail}\n` +
+            `iq: this is a broken install, NOT an empty result, do not read it as 0 hits or fall back to grep silently. Reinstall iq (or rebuild its workspace deps) and report it.\n`,
     );
     process.exit(2);
 }

@@ -147,7 +147,7 @@ const label = (n: number): string => {
     <span v-else-if="other">x</span>
 </template>
 `;
-    // if + ternary — the template's v-if/v-else-if are markup.
+    // if + ternary: the template's v-if/v-else-if are markup.
     expect(fileComplexity("src/A.vue", "vue", vue)).toBe(2);
 });
 
@@ -159,7 +159,7 @@ fi
     expect(fileComplexity("scripts/run.sh", undefined, shell)).toBe(2);
 });
 
-test("data and markup score zero — their keywords are content, not code paths", () => {
+test("data and markup score zero: their keywords are content, not code paths", () => {
     // `\bfor\b` matches inside hyphenated package names; unfiltered, pnpm-lock.yaml outranked every real file.
     const lock = "packages:\n  /es5-ext-for-each@1.0.0:\n  /param-case@3.0.4:\n  /is-if-when@2.0.0:\n";
     expect(fileComplexity("pnpm-lock.yaml", undefined, lock)).toBe(0);

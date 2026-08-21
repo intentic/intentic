@@ -42,7 +42,7 @@ test("bm25 off: a natural-language query has no [bm25] tags and discloses the di
     expect(outcome.text).toContain("features -bm25,-prf");
 });
 
-/* One engine, one index, several callers — and they do not all want the same trade. The daemon's turn preamble
+/* One engine, one index, several callers, and they do not all want the same trade. The daemon's turn preamble
  * answers under a deadline it would rather meet than rank perfectly, while the CLI call next to it wants every
  * stage; per-call stages are what lets both share the resident engine instead of standing one up each. */
 test("a request's own feature set overrides the engine's, for that call only", async () => {
@@ -51,7 +51,7 @@ test("a request's own feature set overrides the engine's, for that call only", a
     expect(cheap.result.groups.flatMap((group) => group.hits).every((hit) => hit.tags.every((tag) => tag.kind !== "bm25"))).toBe(true);
     expect(cheap.result.features).toEqual(expect.arrayContaining(["bm25", "prf"]));
 
-    // The next call through the same engine is back to everything — the override rode the request, not the engine.
+    // The next call through the same engine is back to everything: the override rode the request, not the engine.
     const full = await engine.run(request("q", "how are widgets built for the registry?"));
     expect(full.result.features).toBeUndefined();
 });
@@ -80,7 +80,7 @@ test("the fusion multipliers toggle one at a time; all three off is deterministi
     // The def-boosted run puts the definition file first.
     expect(boosted.result.groups[0]?.path).toBe("alpha/src/widget.ts");
 
-    // Each multiplier is its own name, so a spec can drop one and keep the others — what `-boosts` could not do.
+    // Each multiplier is its own name, so a spec can drop one and keep the others: what `-boosts` could not do.
     const defOff = await engineWith("-defboost").run(request("q", "createWidget"));
     expect(defOff.result.features).toEqual(expect.arrayContaining(["defboost"]));
     expect(defOff.result.features).not.toContain("pathboost");
@@ -124,7 +124,7 @@ test("packed lines are the file's real lines at their real numbers", async () =>
 
 test("a packed slice cannot spend the whole budget and hide the ranked candidates under it", async () => {
     // Regression: an unbounded slice (a 107-line implementation packed at rank 1) consumed a 1500-token budget by
-    // itself, so the candidates below it never reached the answer at all — the file the reader wanted was one of
+    // itself, so the candidates below it never reached the answer at all: the file the reader wanted was one of
     // them. Packing gets a bounded share; a tighter budget must buy fewer packed lines, never fewer candidates.
     const query = "how are widgets built for the registry?";
     const wide = await engineWith().run({ ...request("q", query), render: { budget: 1500 } });

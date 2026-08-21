@@ -6,7 +6,7 @@ import { JS_TIMEOUT_DEFAULT_S, jsExecutionPlanOf, nodeArgs } from "./js-runtime.
 
 /* The PURE half of the backend: the plan a card yields (every powers combination is a table row) and the argv
  * a plan means. The runner honouring them spawns real `node` subprocesses and lives in
- * js-runtime.integration.test.ts — the permission flags ARE the fence, and only the real runtime can vouch
+ * js-runtime.integration.test.ts: the permission flags ARE the fence, and only the real runtime can vouch
  * for those. */
 
 const personaWith = (powers: Record<string, unknown>, extra: Partial<Persona> = {}) =>
@@ -19,7 +19,7 @@ const personaWith = (powers: Record<string, unknown>, extra: Partial<Persona> = 
 const TREE = { root: "/work", cwd: "/work/app" };
 const ENV = { GITHUB_TOKEN_GITHUB: "t" };
 
-test("a full-powers card gets the whole turn tree, writable, spawn allowed — and tmp readable", () => {
+test("a full-powers card gets the whole turn tree, writable, spawn allowed, and tmp readable", () => {
     const plan = jsExecutionPlanOf(personaWith({}), TREE, ENV);
     expect(plan).toEqual({
         cwd: "/work/app",
@@ -30,7 +30,7 @@ test("a full-powers card gets the whole turn tree, writable, spawn allowed — a
     });
 });
 
-test("the code shelf off means no plan at all — absence, not refusal", () => {
+test("the code shelf off means no plan at all: absence, not refusal", () => {
     expect(jsExecutionPlanOf(personaWith({ code: false }), TREE, ENV)).toBeUndefined();
     // And so does a named-but-missing card, whose resolver answers every shelf shut.
     const missing = turnPersona({ personas: [], actsAs: "gone", unattended: false });
@@ -46,7 +46,7 @@ test("the files answer scopes the filesystem: read loses writes, none loses the 
     expect(none?.writeRoots).toEqual([]);
 });
 
-test("no shell means no spawning — code-without-bash cannot become bash", () => {
+test("no shell means no spawning: code-without-bash cannot become bash", () => {
     expect(jsExecutionPlanOf(personaWith({ shell: false }), TREE, ENV)?.allowSpawn).toBe(false);
 });
 

@@ -6,6 +6,6 @@ export const grokAdapter: AgentAdapter = {
     id: "grok",
     available: () => onPath("grok") && process.env["XAI_API_KEY"] !== undefined,
     run: () => {
-        throw new Error("grok adapter: not implemented — verify the CLI's headless flags and fill in run()");
+        throw new Error("grok adapter: not implemented, verify the CLI's headless flags and fill in run()");
     },
 };

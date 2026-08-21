@@ -3,23 +3,23 @@ import { join } from "node:path";
 import { packageRoot, repoRoot } from "@intentic/constants/node";
 import { expect, test } from "vitest";
 
-/* THE IMAGE'S PRIVACY HARDENING MUST SURVIVE THE TASK RUNNER — a var set in the Dockerfile and dropped before
+/* THE IMAGE'S PRIVACY HARDENING MUST SURVIVE THE TASK RUNNER: a var set in the Dockerfile and dropped before
  * the process that would read it is worth exactly nothing, and says the opposite on inspection.
  *
  * Turborepo 2 defaults to envMode `strict`: a task does NOT inherit the ambient environment, it is handed a
  * reconstructed one holding Turbo's system defaults plus whatever globalEnv/globalPassThroughEnv/env/
- * passThroughEnv name. Both ENV blocks below were correct, and `env` in any sandbox shell showed them set — so
+ * passThroughEnv name. Both ENV blocks below were correct, and `env` in any sandbox shell showed them set, so
  * nothing looked wrong. But `pnpm dev` runs through turbo, and turbo deleted 30 of the 32 on the way in (all
  * except NEXT_ and TURBO_, which Turbo ships itself). `astro dev` therefore ran with telemetry ON, printed its
  * collection notice, and persisted `enabled: true` plus a generated tracking id into ~/.config/astro/
- * config.json — for as long as the hole was open, on every sandbox.
+ * config.json: for as long as the hole was open, on every sandbox.
  *
  * Same shape as the port collision container-ports.test.ts guards: two files, two languages, nothing comparing
  * them. A comment asking the next person to update both is what was there before. This is the comparison.
  */
 
 const DOCKERFILE = join(packageRoot(import.meta.url), "Dockerfile");
-// The root graph, which is what `pnpm dev` / `pnpm build` actually run through — not this package's turbo.json.
+// The root graph, which is what `pnpm dev` / `pnpm build` actually run through, not this package's turbo.json.
 const TURBO_JSON = join(repoRoot(import.meta.url), "turbo.json");
 
 // The two blocks are anchored by their first variable rather than by line number or by "every ENV in the file":
@@ -28,7 +28,7 @@ const TURBO_JSON = join(repoRoot(import.meta.url), "turbo.json");
 const PRIVACY_BLOCK_ANCHORS = ["DO_NOT_TRACK", "DISABLE_OPENCOLLECTIVE"];
 
 // A backslash-continued `ENV A=1 \ <newline> B=2` block, read from its anchor to the first line that does not
-// continue. `ENV` itself is never captured — the pattern requires the `=` that makes a name an assignment.
+// continue. `ENV` itself is never captured: the pattern requires the `=` that makes a name an assignment.
 const envBlockNames = (dockerfile: string, anchor: string): string[] => {
     const lines = dockerfile.split("\n");
     const start = lines.findIndex((line) => line.startsWith(`ENV ${anchor}=`));
@@ -57,7 +57,7 @@ const globalPassThroughEnv = (turboJson: string): string[] => {
 };
 
 // The discovery half, and the reason this is a separate test: every assertion below is vacuously true against
-// an empty list, so a Dockerfile whose blocks were reshaped — or a turbo.json whose key was renamed — would
+// an empty list, so a Dockerfile whose blocks were reshaped, or a turbo.json whose key was renamed: would
 // pass while guarding nothing. container-ports.test.ts learned the same lesson.
 test("both privacy blocks and the passthrough list are actually found", async () => {
     const [dockerfile, turboJson] = await Promise.all([readFile(DOCKERFILE, "utf8"), readFile(TURBO_JSON, "utf8")]);

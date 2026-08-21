@@ -5,7 +5,7 @@ import type { ClaudeStore, StoredAccount } from "../claude/claude-credentials.js
 import type { AccountUsageStore } from "./account-usage.js";
 import { claudeUsageWindows, createClaudeUsageRefresher, readClaudeUsage } from "./claude-usage.js";
 
-/* The Anthropic OAuth usage payload, pinned — a private endpoint rather than a published contract, so what
+/* The Anthropic OAuth usage payload, pinned: a private endpoint rather than a published contract, so what
  * these tests defend is the MAPPING: every pool the account has arrives as its own window, named the way the
  * provider's own usage screen names it, and a shape we don't recognise costs one window rather than the
  * reading. The payloads are captured live rather than invented; the codename keys and the null pools are
@@ -64,7 +64,7 @@ test("names a surface-scoped pool by its surface, and an unrecognised one by its
                     resets_at: null,
                     scope: { model: { display_name: "Opus" }, surface: { display_name: "Cowork" } },
                 },
-                // A pool this daemon has never heard of still draws — under its raw key, never folded into a
+                // A pool this daemon has never heard of still draws: under its raw key, never folded into a
                 // neighbour's meter.
                 { kind: "monthly_all", percent: 12, resets_at: null, scope: null },
                 // No percentage is no reading: skipped, not reported as an empty pool.
@@ -80,7 +80,7 @@ test("names a surface-scoped pool by its surface, and an unrecognised one by its
 
 test("falls back to the flat pool keys when the payload carries no list", () => {
     // Every key that carries a reading, not a hand-written five: `seven_day_cowork` arrived without notice and
-    // is a real allowance. A null pool is one this plan does not meter — dropped rather than drawn at 0%.
+    // is a real allowance. A null pool is one this plan does not meter: dropped rather than drawn at 0%.
     expect(
         claudeUsageWindows({
             five_hour: { utilization: 12.4, resets_at: "2026-07-27T18:00:00.000Z" },
@@ -97,7 +97,7 @@ test("falls back to the flat pool keys when the payload carries no list", () => 
 });
 
 test("never counts purchased credits as a plan pool", () => {
-    // `extra_usage` carries a utilization like a window, but it is credits bought BEYOND the plan — reading it
+    // `extra_usage` carries a utilization like a window, but it is credits bought BEYOND the plan: reading it
     // as a pool would let a spent credit balance decide which account has the least headroom.
     expect(claudeUsageWindows({ extra_usage: { is_enabled: true, utilization: 96 }, five_hour: { utilization: 4, resets_at: null } })).toEqual([
         { kind: "five_hour", utilization: 4 },
@@ -206,7 +206,7 @@ test("a forced sweep queues behind the one in flight rather than joining it", as
 
 test("a refused read leaves the last good snapshot standing", async () => {
     // The failure mode this exists for: an empty window list means "we could not read", never "this account has
-    // no limits" — overwriting a 98% reading with nothing is how a spent account starts looking healthy.
+    // no limits": overwriting a 98% reading with nothing is how a spent account starts looking healthy.
     const known: AccountUsage = { windows: [{ kind: "seven_day", utilization: 98 }], measuredAt: 0 };
     const { store, usage, recorded } = memoryStores([account("a")], { a: known });
     await createClaudeUsageRefresher({ store, usage, fetchFn: endpoint({}, false) }).refresh();
@@ -214,9 +214,9 @@ test("a refused read leaves the last good snapshot standing", async () => {
 });
 
 /* The failure the freshness bound cannot see: inside the endpoint's stay-away every retry is a guaranteed 429
- * that keeps the window alive — which is how pressing the refresh button made a stale reading STALER. So the
+ * that keeps the window alive, which is how pressing the refresh button made a stale reading STALER. So the
  * stay-away binds the forced read too, and the sweep returns only once the endpoint said it would answer. */
-test("a rate-limited account is left alone — even forced — until the endpoint's stay-away has passed", async () => {
+test("a rate-limited account is left alone: even forced, until the endpoint's stay-away has passed", async () => {
     vi.useFakeTimers();
     try {
         let reads = 0;

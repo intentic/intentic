@@ -8,12 +8,12 @@ import { type ClaudeRoutesDeps, createClaudeRoutes } from "./claude.routes.js";
 
 /* The Claude OAuth routes, over the three seams they read.
  *
- * Split out of app.integration.test.ts — 116 tests over every route in the daemon, in one file — and then
+ * Split out of app.integration.test.ts: 116 tests over every route in the daemon, in one file, and then
  * stood up on `ClaudeRoutesDeps` rather than on the daemon. What a test does not name here is not reachable
  * from these routes at all, so the fake cannot drift out of shape with a daemon it no longer describes. */
 
 /* `accountUsage` is real state here, not a stub: /claude/accounts folds the usage snapshot into every row it
- * returns, and disconnect clears it alongside the credential — "the snapshot goes with the account" is part of
+ * returns, and disconnect clears it alongside the credential: "the snapshot goes with the account" is part of
  * what these tests check. Empty by default, which is what a sandbox reports before any turn has run. */
 const claudeClient = (
     claudeStore: ClaudeRoutesDeps["claudeStore"],
@@ -40,7 +40,7 @@ const claudeClient = (
                 // The list waits on a sweep before answering; there is no endpoint to sweep under test, and
                 // what the sweep would have written is exactly what `accountUsage` is standing in for. What it
                 // was ASKED for is recorded, because the freshness the caller demanded is itself a route
-                // decision — see the forced-read test.
+                // decision: see the forced-read test.
                 claudeUsage: {
                     refresh: async (withinMs, force) => {
                         sweeps.push({ withinMs, force });
@@ -93,7 +93,7 @@ test("Claude OAuth: accounts reflect the store, disconnect clears the named one"
 /* THE ROW FOR AN ACCOUNT THAT SIGNS IN AND STILL CANNOT RUN A TURN. Its organization has Claude Code switched
  * off: the credential is in perfect health, so the reconnect badge every other bad-account state raises would
  * send the user through a sign-in that works and changes nothing. The provider's own sentence instead, which is
- * the only text that names what an admin has to switch back on — and a revoked credential outranks it, because
+ * the only text that names what an admin has to switch back on, and a revoked credential outranks it, because
  * that one really is fixed by reconnecting. */
 test("Claude OAuth: an account its organization turned away says so without asking for a reconnect", async () => {
     const refusal = "Your organization has disabled Claude subscription access for Claude Code";
@@ -130,7 +130,7 @@ test("Claude OAuth: an account its organization turned away says so without aski
             { id: "b", label: "Old", connectedAt: 2, needsReauth: true, detail: "Signed out" },
         ],
     });
-    // The rename response REPLACES the row on the card, so it has to carry the note too — renaming an account is
+    // The rename response REPLACES the row on the card, so it has to carry the note too: renaming an account is
     // not the moment to quietly drop the reason it has been benched.
     expect(await client.rename({ id: "a", label: "Job" })).toEqual({ id: "a", label: "Job", connectedAt: 1, detail: refusal });
     // And disconnecting forgets it: a reconnect mints a fresh account id, so an entry left behind is orphaned.
@@ -163,7 +163,7 @@ test("Claude OAuth: rename writes the label through, and 404s on an account that
         connectedAt: 1,
         email: "a@example.com",
     });
-    // The credential is untouched — a rename writes the display name and nothing else.
+    // The credential is untouched: a rename writes the display name and nothing else.
     expect(accounts.get("a")?.accessToken).toBe("tok");
     // Blank means "back to the derived name", not a nameless row.
     expect((await client.rename({ id: "a", label: "" })).label).toBe("a@example.com");
@@ -171,7 +171,7 @@ test("Claude OAuth: rename writes the label through, and 404s on an account that
 });
 
 /* A reading a caller cannot doubt is a reading nobody can act on. Every ordinary read of this list wants the
- * daemon's freshness bound — it is what keeps a page load off the provider's quota endpoint — but the person who
+ * daemon's freshness bound: it is what keeps a page load off the provider's quota endpoint, but the person who
  * has just changed something about the account (a seat downgraded, a plan swapped, a limit spent on another
  * machine) is asking exactly whether the number they can see survived it, and an answer from the last minute
  * cannot tell them. So `force` goes through to the sweep, and it waits longer for it: there is a spinner on the

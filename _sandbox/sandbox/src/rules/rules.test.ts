@@ -31,7 +31,7 @@ describe(`conditions`, () => {
     test(`paths match on the search box's own glob dialect`, () => {
         expect(conditionHolds({ paths: [`docs/**`] }, { paths: [`docs/guide/intro.md`] })).toBe(true);
         expect(conditionHolds({ paths: [`docs/**`] }, { paths: [`src/docs.ts`] })).toBe(false);
-        // One touched path is enough — a change that grazes the guarded area is in scope.
+        // One touched path is enough: a change that grazes the guarded area is in scope.
         expect(conditionHolds({ paths: [`**/*.sql`] }, { paths: [`README.md`, `db/0001.sql`] })).toBe(true);
     });
 
@@ -60,7 +60,7 @@ describe(`matching`, () => {
         expect(matching(rules, `push.starting`).map((r) => r.id)).toEqual([`on`]);
     });
 
-    test(`an empty command is OFF, not a no-op run — the pre-push row has no second switch to disagree with`, () => {
+    test(`an empty command is OFF, not a no-op run: the pre-push row has no second switch to disagree with`, () => {
         const rules = [rule({ id: `blank`, moment: `push.starting`, action: { kind: `command`, command: `   `, timeoutMs: 900_000 } })];
         expect(matching(rules, `push.starting`)).toEqual([]);
     });
@@ -84,7 +84,7 @@ describe(`the landing verdict`, () => {
         expect(landingVerdict([verdict(`hold-all`, `hold`)], {}, true)).toEqual({ land: true });
     });
 
-    test(`conditions narrow landing — docs land by themselves, migrations wait`, () => {
+    test(`conditions narrow landing: docs land by themselves, migrations wait`, () => {
         const rules = [verdict(`hold-migrations`, `hold`, { when: { paths: [`**/migrations/**`] } }), verdict(`land-rest`, `allow`)];
         expect(landingVerdict(rules, { paths: [`db/migrations/0001.sql`] }, undefined).land).toBe(false);
         expect(landingVerdict(rules, { paths: [`docs/intro.md`] }, undefined).land).toBe(true);

@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 
 /* WHAT A STEP IS TOLD. The brief is the only thing standing between a graph of separate sessions and four
- * agents doing four unrelated jobs, and it is pure text assembly — so it is testable here, exactly, rather
+ * agents doing four unrelated jobs, and it is pure text assembly, so it is testable here, exactly, rather
  * than inferred from a run that costs money.
  */
 
@@ -59,7 +59,7 @@ test("the request comes before what the steps before concluded", () => {
 
 /* THE WORKFLOW ITSELF IS NEVER MENTIONED, and this asserts the absence because the sentence was here and was
  * exactly the wrapper the default exists to remove. A step used to open with its own title and "this is step 2
- * of 3 in the workflow **a workflow** — <the design's whole description>", which is the scheduler's bookkeeping:
+ * of 3 in the workflow **a workflow**: <the design's whole description>", which is the scheduler's bookkeeping:
  * the model cannot act on being second, and one told it is an arm of a comparison writes for the comparison.
  */
 test("a step is never told which step of what it is", () => {
@@ -73,7 +73,7 @@ test("a step is never told which step of what it is", () => {
 });
 
 /* A STEP WITH A JOB OF ITS OWN ENDS ON IT, under two words of label. Its words are the instruction and the
- * request is the context, so the request goes above and the step's own prompt is the last thing read — the
+ * request is the context, so the request goes above and the step's own prompt is the last thing read: the
  * position an instruction has in any message somebody writes by hand. The label is there because without it a
  * block of instruction runs straight on from the section above and reads as more of that section; it is the
  * whole of the framing, which is what "no wrapper" meant.
@@ -84,12 +84,12 @@ test("a declared prompt is the last thing the step reads", () => {
 });
 
 // Nothing above it ⇒ nothing to distinguish it from, and a heading over the only thing in a message is
-// furniture — the same rule that hands an inheriting root the bare request.
+// furniture: the same rule that hands an inheriting root the bare request.
 test("a step with a prompt and nothing above it is that prompt alone", () => {
     expect(briefForStep(step("only", { prompt: "merge the two branches" }), [])).toBe("merge the two branches");
 });
 
-/* A ROOT THAT DECLARES NO PROMPT IS HANDED THE REQUEST AND NOTHING ELSE — the default, and `toBe` rather than a
+/* A ROOT THAT DECLARES NO PROMPT IS HANDED THE REQUEST AND NOTHING ELSE: the default, and `toBe` rather than a
  * list of `not.toContain`s because the property is "nothing", not "none of the things we thought of". Every
  * heading stands between the sentence the reader typed and the model that has to act on it, and the only way to
  * keep that true is to assert the whole string.
@@ -101,7 +101,7 @@ test("a root with no prompt of its own is handed the request and nothing else", 
 
 /* An inheriting step that is NOT a root still gets its handovers, and this is the line between "no wrapper" and
  * "no context". A fan-in step handed only the request would re-derive what its predecessors already settled,
- * which is the disagreement the handover section exists to prevent — the framing is what is dropped, not the
+ * which is the disagreement the handover section exists to prevent: the framing is what is dropped, not the
  * facts.
  */
 test("an inheriting step still receives what the steps before it concluded", () => {
@@ -116,21 +116,21 @@ test("an inheriting step still receives what the steps before it concluded", () 
 
 /* NOTHING IS SAID ABOUT THE WORKTREE, and this asserts the absence because the sentence was here and was wrong.
  *
- * A step does run isolated, and the step after it can read its pinned-base-to-branch diff — so telling it to
+ * A step does run isolated, and the step after it can read its pinned-base-to-branch diff, so telling it to
  * commit looked like closing a real hole. It was not one: the daemon commits the worktree onto that branch
  * itself at clean turn completion (agents/land.ts, in both `check` and `measure` modes). The paragraph
  * instructed the model to do something already done for it, and it was the largest single thing standing
  * between the reader's sentence and the model.
  */
-test("nothing is added about the worktree — the daemon commits the branch itself", () => {
+test("nothing is added about the worktree: the daemon commits the branch itself", () => {
     const design = workflow([step("declared"), step("inheriting", { prompt: undefined, goal: undefined })]);
     for (const one of design.steps) {
         expect(briefForStep(one, [], "the ask").toLowerCase(), one.id).not.toContain("worktree");
     }
 });
 
-/* A `continue` step takes its predecessor's conversation — the mechanism behind "same agent, same worktree,
- * next phase" — and every other step gets one of its own. Asserted here because the ids are also branch names
+/* A `continue` step takes its predecessor's conversation: the mechanism behind "same agent, same worktree,
+ * next phase", and every other step gets one of its own. Asserted here because the ids are also branch names
  * and directory names, so a change to this shape is a change to what a user sees in `git branch`.
  */
 test("a continued step shares its predecessor's conversation and a fresh one does not", () => {
@@ -140,7 +140,7 @@ test("a continued step shares its predecessor's conversation and a fresh one doe
     expect(conversations.get("apart")).toBe("wf-r1-apart");
 });
 
-/* WHERE THE PREDECESSOR'S WORK IS, in the three states the handover carries — the distinction that keeps a
+/* WHERE THE PREDECESSOR'S WORK IS, in the three states the handover carries: the distinction that keeps a
  * reviewer from reading an empty diff and calling it a pass. `undefined` is the shared-tree case where the
  * question does not arise; a list is work that has been resolved; and the EMPTY list is the one that has to be
  * said out loud, because a reader told nothing assumes the ordinary case and goes looking for a diff.

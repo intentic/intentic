@@ -1,7 +1,7 @@
 {
     "name": "@intentic/webchat-widget",
     "version": "0.0.0",
-    "description": "Front Desk — the embeddable chat widget a website loads to talk to a sandbox agent",
+    "description": "Front Desk, the embeddable chat widget a website loads to talk to a sandbox agent",
     "license": "MIT",
     "type": "module",
     "repository": {

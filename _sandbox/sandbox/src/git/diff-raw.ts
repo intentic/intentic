@@ -6,7 +6,7 @@ import type { AppEnv } from "../context.js";
 import { isValidRepoId } from "../workspace/repo-discovery.js";
 import { contentTypeForPath, isControlPlanePath, isReviewableStatePath, MAX_RAW_BYTES, resolveWithin } from "../workspace/workspace-files.js";
 
-/* THE BYTES BEHIND A BINARY DIFF — /diff/raw, the sibling of /workspace/raw, and for the same reason: an image
+/* THE BYTES BEHIND A BINARY DIFF, /diff/raw, the sibling of /workspace/raw, and for the same reason: an image
  * is rendered from its bytes, and the JSON diff contract can only carry text. Every file-diff route in this
  * daemon reports `binary: true` and ships nothing for a PNG, which left every review surface in the browser
  * with the same dead end ("Binary file, no text diff to show.") over a file the workspace file view displays

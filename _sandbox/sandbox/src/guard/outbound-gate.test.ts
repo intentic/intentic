@@ -11,7 +11,7 @@ const run = async (rules: Parameters<typeof outboundGateHooks>[0], command: unkn
     if (hook === undefined) {
         throw new Error("gate wired no PreToolUse hook");
     }
-    // The gate only ever answers synchronously — it decides from the command string alone, so it never returns
+    // The gate only ever answers synchronously: it decides from the command string alone, so it never returns
     // the SDK's `{ async: true }` deferral.
     return hook({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } } as Parameters<typeof hook>[0], undefined, {
         signal: new AbortController().signal,
@@ -37,7 +37,7 @@ describe("outbound gate", () => {
         expect((out.hookSpecificOutput as { permissionDecisionReason?: string }).permissionDecisionReason).toContain("discord message.send");
     });
 
-    test("a held call is refused toward the drafts outbox — the held form of a send", async () => {
+    test("a held call is refused toward the drafts outbox: the held form of a send", async () => {
         const out = await run({ "discord.*": "hold" }, DISCORD_SEND);
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
         expect((out.hookSpecificOutput as { permissionDecisionReason?: string }).permissionDecisionReason).toContain(".intentic/config/drafts/");

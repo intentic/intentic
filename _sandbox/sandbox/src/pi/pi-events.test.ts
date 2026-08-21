@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { createPiEventMapper } from "./pi-events.js";
 
-/* The Pi event → AgentEvent mapping, exercised as the pure table it is — one Pi RPC event in, its frames
+/* The Pi event → AgentEvent mapping, exercised as the pure table it is: one Pi RPC event in, its frames
  * out. The adapter's loop (pi-agent.test.ts) trusts these shapes, so drift between Pi's wire vocabulary and
  * the contract's is caught here, next to the mapping that owns it. */
 
@@ -53,8 +53,8 @@ test("a tool call maps start → streamed output → completion, deriving the ed
         }),
     ).toEqual([{ kind: "tool_call_update", id: "c1", status: "completed", content: [{ type: "text", text: "1 passed" }] }]);
 
-    // An edit's completion carries structured diffs derived from its (final) input, one per hunk — Pi's edit
-    // takes `{path, edits: [{oldText, newText}]}` — with the path workspace-relative.
+    // An edit's completion carries structured diffs derived from its (final) input, one per hunk: Pi's edit
+    // takes `{path, edits: [{oldText, newText}]}`, with the path workspace-relative.
     expect(
         mapper.map({
             type: "tool_execution_start",

@@ -265,7 +265,7 @@ export const createClaudeUsageRefresher = (deps: {
         await Promise.all(
             due.map((account) =>
                 readOne(account.id).catch((error: unknown) =>
-                    deps.store.logger.warn({ err: error, account: account.id }, "claude usage read failed — the next sweep retries"),
+                    deps.store.logger.warn({ err: error, account: account.id }, "claude usage read failed, the next sweep retries"),
                 ),
             ),
         );
@@ -276,7 +276,7 @@ export const createClaudeUsageRefresher = (deps: {
     const queue = (force: boolean): Promise<void> => {
         const next: Promise<void> = (sweeping ?? Promise.resolve())
             .then(() => sweep(force))
-            .catch((error: unknown) => deps.store.logger.warn({ err: error }, "claude usage sweep failed — the next one retries"))
+            .catch((error: unknown) => deps.store.logger.warn({ err: error }, "claude usage sweep failed, the next one retries"))
             .finally(() => {
                 // Only while it is still the one in flight: clearing a sweep that has since queued behind this
                 // one would let a third start beside it.

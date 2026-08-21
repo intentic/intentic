@@ -1,7 +1,7 @@
 {
     "name": "@intentic/iq-engine",
     "version": "0.0.0",
-    "description": "Search engine behind the iq CLI — disk index (node:sqlite), lexical/structural/semantic/git engines, rank fusion, budget renderer",
+    "description": "Search engine behind the iq CLI, disk index (node:sqlite), lexical/structural/semantic/git engines, rank fusion, budget renderer",
     "license": "MIT",
     "type": "module",
     "repository": {

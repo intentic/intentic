@@ -7,7 +7,7 @@ import { createGrokAgent, createGrokRunner, type GrokRunner, type GrokTurn } fro
 import type { OpenCodeService } from "./opencode.js";
 
 // A fake runner yielding one canned OpenCode Event list per invocation (plan turns invoke it repeatedly),
-// capturing each turn's prompt/session/agent/model — no server, no network. The production runner does the
+// capturing each turn's prompt/session/agent/model: no server, no network. The production runner does the
 // session filtering; the fake yields one session's events directly.
 const fakeRunner = (...turns: unknown[][]): { runner: GrokRunner; calls: GrokTurn[] } => {
     const calls: GrokTurn[] = [];
@@ -182,7 +182,7 @@ test("a plan turn proposes read-only on the plan agent, then executes on build a
     expect(events).toEqual([
         { kind: "session", sessionId: "s2" },
         { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
-        // The card's release — the id tells the fleet the turn stopped waiting, and the approval riding with it
+        // The card's release: the id tells the fleet the turn stopped waiting, and the approval riding with it
         // is what lets a replayed run freeze the card instead of re-offering it.
         {
             kind: "resolved",
@@ -231,11 +231,11 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
 
 test("a plan turn captures only the assistant's text, never the echoed user prompt", async () => {
     // OpenCode broadcasts the USER message (the echoed prompt) on the SAME session stream as the assistant's, and a
-    // text part carries no role — the plan must be the assistant's text alone (regression: prompt leaking into planText).
+    // text part carries no role, the plan must be the assistant's text alone (regression: prompt leaking into planText).
     const { runner } = fakeRunner(
         [
             { type: "session.created", properties: { info: { id: "s5" } } },
-            // The user message + its text part (the prompt echo) — role recorded, then the part is skipped.
+            // The user message + its text part (the prompt echo): role recorded, then the part is skipped.
             { type: "message.updated", properties: { info: { id: "mu", sessionID: "s5", role: "user" } } },
             {
                 type: "message.part.updated",
@@ -270,7 +270,7 @@ test("a plan turn captures only the assistant's text, never the echoed user prom
 });
 
 test("a plan turn that errors after partial text emits the error and NO plan frame", async () => {
-    // Partial assistant text was captured, then the turn errored (e.g. out of credits) — a failed turn must surface
+    // Partial assistant text was captured, then the turn errored (e.g. out of credits): a failed turn must surface
     // only the error, never a bogus plan built from the partial/echoed text.
     const { runner } = fakeRunner([
         { type: "session.created", properties: { info: { id: "s6" } } },
@@ -323,7 +323,7 @@ test("a session error and a thrown runner become error events followed by done",
     ]);
 });
 
-/* A REFUSAL THAT IS ONLY ABOUT HOW MUCH HAS BEEN ASKED, coded as one. Uncoded it read as a crash — a red line,
+/* A REFUSAL THAT IS ONLY ABOUT HOW MUCH HAS BEEN ASKED, coded as one. Uncoded it read as a crash: a red line,
  * and the chat's offer to Continue, which on a spent weekly allowance re-fails the instant it is pressed. */
 test("a spent allowance is coded rate_limit, whatever wording the provider refuses in", async () => {
     const refusal = (message: string): unknown[][] => [
@@ -344,7 +344,7 @@ test("a spent allowance is coded rate_limit, whatever wording the provider refus
         { kind: "error", code: "rate_limit", message: bare },
         { kind: "done" },
     ]);
-    // An ordinary failure is still uncoded — the code is what stops Continue being offered, so it has to be earned.
+    // An ordinary failure is still uncoded: the code is what stops Continue being offered, so it has to be earned.
     expect(await collect(createGrokAgent(fakeRunner(...refusal("connection reset")).runner), request)).toEqual([
         { kind: "error", message: "connection reset" },
         { kind: "done" },
@@ -352,7 +352,7 @@ test("a spent allowance is coded rate_limit, whatever wording the provider refus
 });
 
 /* THE WAIT THAT USED TO LOOK LIKE A HANG. OpenCode rides out a refused request inside the turn and says so
- * once, with the instant it will try again — and emits nothing else meanwhile, so a chat with no frame for it
+ * once, with the instant it will try again, and emits nothing else meanwhile, so a chat with no frame for it
  * sits on "Thinking…" for the whole backoff while the one move against an apparent hang throws the work away. */
 test("an in-turn retry surfaces as provider_retry, naming a rate limit when that is what it is", async () => {
     const next = Date.now() + 42_000;
@@ -360,7 +360,7 @@ test("an in-turn retry surfaces as provider_retry, naming a rate limit when that
         { type: "session.created", properties: { info: { id: "s1" } } },
         { type: "session.status", properties: { sessionID: "s1", status: { type: "retry", attempt: 2, message: "429 quota exceeded", next } } },
         { type: "session.status", properties: { sessionID: "s1", status: { type: "retry", attempt: 3, message: "socket hang up", next } } },
-        // Every other status is liveness only — the watchdog counts it, the transcript says nothing about it.
+        // Every other status is liveness only: the watchdog counts it, the transcript says nothing about it.
         { type: "session.status", properties: { sessionID: "s1", status: { type: "busy" } } },
         { type: "session.idle", properties: { sessionID: "s1" } },
     ]);
@@ -372,7 +372,7 @@ test("an in-turn retry surfaces as provider_retry, naming a rate limit when that
     ]);
 });
 
-// A fake OpenCode whose SSE stream yields `events` then STAYS OPEN (like the real global subscription) — so
+// A fake OpenCode whose SSE stream yields `events` then STAYS OPEN (like the real global subscription), so
 // these exercise how createGrokRunner terminates against an open stream (idle/error/timeout), which a fake
 // GrokRunner (a finite array) can't reproduce. `return()` releases the hang so the runner's cleanup never blocks.
 const fakeOpenCode = (
@@ -385,20 +385,20 @@ const fakeOpenCode = (
     prompts: (string | undefined)[];
     systems: (string | undefined)[];
     // The directories the turn subscribed and registered a delegation watcher for. Both are scoped, and a
-    // subscription that loses its scope does not fail — it goes silent — so the scope is asserted, not assumed.
+    // subscription that loses its scope does not fail: it goes silent, so the scope is asserted, not assumed.
     scopes: { subscribed: string[]; watched: string[] };
-    // "read" / "create", in the order they happened — see `order` in the body.
+    // "read" / "create", in the order they happened: see `order` in the body.
     order: string[];
 } => {
     let aborted = false;
     let releaseHang: (() => void) | undefined;
     // Captures for the self-heal path: the model ids each promptAsync fired with, and every recordModels payload.
     const prompts: (string | undefined)[] = [];
-    // The standing instructions each message carried, in order — the only proof this runtime is `instructions:
+    // The standing instructions each message carried, in order: the only proof this runtime is `instructions:
     // "append"` rather than one that drops the setting on the floor.
     const systems: (string | undefined)[] = [];
     const recorded: string[][] = [];
-    /* Every real stream opens with `server.connected`, and the runner AWAITS it — that hello is how it knows the
+    /* Every real stream opens with `server.connected`, and the runner AWAITS it: that hello is how it knows the
      * subscription is live before it creates a session whose `session.created` it would otherwise miss. A double
      * that stayed silent would make every turn here pay the connect bound in full, which is a fake being
      * unfaithful rather than a runner being slow. It belongs to no session, so it changes nothing else. */
@@ -436,7 +436,7 @@ const fakeOpenCode = (
                 prompts.push(modelID);
                 systems.push(options.body?.system);
                 // Mimic OpenCode/xAI REJECTING an unknown model id (a thrown ProviderModelNotFoundError, the way
-                // the real server does) instead of emitting a session.error event — the initial-send path.
+                // the real server does) instead of emitting a session.error event: the initial-send path.
                 if (rejectModel !== undefined && modelID === rejectModel.id) {
                     throw new Error(rejectModel.message);
                 }
@@ -450,7 +450,7 @@ const fakeOpenCode = (
     };
     const scopes = { subscribed: [] as string[], watched: [] as string[] };
     // The order that matters: `subscribe()` only opens the HTTP stream when something reads it, so a first read
-    // issued after the session exists misses `session.created` — and with it the id the next message resumes on.
+    // issued after the session exists misses `session.created`, and with it the id the next message resumes on.
     const order: string[] = [];
     const openCode = {
         client: async () => client,
@@ -469,7 +469,7 @@ const runnerTurn: GrokTurn = { prompt: "hi", cwd: WORKSPACE_ROOT, agent: "build"
 /* THE SILENT FAILURE THIS FILE EXISTS TO PREVENT A SECOND TIME.
  *
  * OpenCode's event stream is scoped to one exact directory. Subscribing without one still connects, still
- * answers 200 and still delivers heartbeats — it just carries no session events, so every turn on this runtime
+ * answers 200 and still delivers heartbeats: it just carries no session events, so every turn on this runtime
  * watched a stream its own session would never appear on, rode out the inactivity watchdog and died as "timed
  * out waiting for OpenCode" while the turn itself ran to completion upstream and spent the user's allowance.
  *
@@ -484,7 +484,7 @@ test("createGrokRunner subscribes and watches scoped to the turn's own directory
         void event;
     }
     expect(scopes.subscribed).toEqual([worktree]);
-    // The delegation watcher is scoped the same way, and the boot only knows the workspace root — so an isolated
+    // The delegation watcher is scoped the same way, and the boot only knows the workspace root, so an isolated
     // turn's worktree is watched because the turn itself registered it.
     expect(scopes.watched).toEqual([worktree]);
 });
@@ -562,7 +562,7 @@ test("createGrokRunner aborts and throws when no event arrives within the inacti
     expect(aborted()).toBe(true);
 });
 
-/* A RETRY NAMES WHEN IT WILL SPEAK AGAIN, and the watchdog has to wait that long — OpenCode's backoff outgrows
+/* A RETRY NAMES WHEN IT WILL SPEAK AGAIN, and the watchdog has to wait that long: OpenCode's backoff outgrows
  * two minutes on a provider that keeps refusing, and a turn killed during a wait it announced would be the same
  * false timeout as the one this file already fixed, dressed as a rate limit. */
 test("a retry's announced next attempt pushes the inactivity deadline past it", async () => {
@@ -575,7 +575,7 @@ test("a retry's announced next attempt pushes the inactivity deadline past it", 
     ]);
     const seen: string[] = [];
     const startedAt = Date.now();
-    // The stream goes quiet after the retry and never speaks again, so the turn does die here — the assertion is
+    // The stream goes quiet after the retry and never speaks again, so the turn does die here: the assertion is
     // WHEN. With a 20ms window it would have been aborted almost immediately; the promised instant is 150ms out,
     // so anything past that proves the wait was honoured rather than merely slow.
     await expect(
@@ -624,7 +624,7 @@ test("createGrokRunner's self-heal ignores a stale idle from the failed prompt, 
             type: "session.error",
             properties: { sessionID: "s1", error: { data: { message: "Model not found: xai/grok-4-stale. Did you mean: grok-4-latest?" } } },
         } as unknown as Event,
-        // A lingering idle from the rejected prompt — must NOT end the turn before the retry streams.
+        // A lingering idle from the rejected prompt: must NOT end the turn before the retry streams.
         { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
         {
             type: "message.part.updated",
@@ -657,7 +657,7 @@ test("createGrokRunner surfaces a model error it cannot self-heal (no named alte
 
 test("createGrokRunner self-heals a model-not-found REJECTION from the initial prompt (thrown, not a session.error event)", async () => {
     // The real promptAsync REJECTS on a bad model (a thrown ProviderModelNotFoundError with the SessionPrompt
-    // stack) rather than emitting a session.error — and the initial send is OUTSIDE the event loop, so this is the
+    // stack) rather than emitting a session.error, and the initial send is OUTSIDE the event loop, so this is the
     // path that surfaced raw in production. It must heal identically: record xAI's named models, re-prompt once.
     const { openCode, recorded, prompts } = fakeOpenCode(
         [

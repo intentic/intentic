@@ -12,7 +12,7 @@ import { createEngineClient, type EngineClient } from "./client.js";
  * The child is the built `dist/host/child.js` (see client.ts), which is why this package's `test` script builds
  * before it runs. */
 
-// warm() waits out a whole index pass over the fixture — sweep, hash, parse, chunk. Seconds of real work by
+// warm() waits out a whole index pass over the fixture: sweep, hash, parse, chunk. Seconds of real work by
 // design, and on a loaded CI box well past vitest's default. A hang bound, not a measurement.
 const WARM_TIMEOUT_MS = 120_000;
 
@@ -55,7 +55,7 @@ test("an index built over there is searchable from here", async () => {
     expect(outcome.result.groups.some((group) => group.path === "notes.md")).toBe(true);
 });
 
-/* `features` is a SET, and JSON IPC would have delivered it as `{}` — every stage silently disabled, producing
+/* `features` is a SET, and JSON IPC would have delivered it as `{}`: every stage silently disabled, producing
  * a result that still looks plausible. This is the case that decides the serialization mode, so it is a test
  * rather than a comment: asking for BM25 alone has to arrive as BM25 alone. */
 test("a per-call feature set crosses as a set, not as an empty object", async () => {
@@ -67,7 +67,7 @@ test("a per-call feature set crosses as a set, not as an empty object", async ()
 });
 
 /* The host reads metrics SYNCHRONOUSLY (composition's resource series takes no await), which a process boundary
- * cannot serve — so the child pushes and this returns the last push. The age has to keep MOVING between pushes:
+ * cannot serve, so the child pushes and this returns the last push. The age has to keep MOVING between pushes:
  * an idle engine whose sweep froze at a fixed age would read as one that had stopped sweeping. */
 test("metrics read synchronously, with an age that goes on aging between pushes", async () => {
     const first = engine.metrics();
@@ -78,7 +78,7 @@ test("metrics read synchronously, with an age that goes on aging between pushes"
     expect(engine.metrics().sweepAgeMs ?? 0).toBeGreaterThan(first.sweepAgeMs ?? 0);
 });
 
-test("markDirty crosses the wire — a new file becomes findable without a restart", async () => {
+test("markDirty crosses the wire: a new file becomes findable without a restart", async () => {
     await writeFile(join(root, "alpha/src/gadget_host.ts"), "export const hostGadget = 1;\n");
     engine.markDirty();
 
@@ -87,10 +87,10 @@ test("markDirty crosses the wire — a new file becomes findable without a resta
         .toBeGreaterThan(0);
 });
 
-/* A caller that gave up — the browser superseding a search mid-flight. What the signal has to REACH is the rg
+/* A caller that gave up: the browser superseding a search mid-flight. What the signal has to REACH is the rg
  * child, and that now lives in the other process: the signal itself does not cross, so it is forwarded as a
  * message the child raises on a controller of its own. Proven by the abort actually landing (the run ends as
- * aborted rather than as a result), and by the engine still serving afterwards — the failure the boundary
+ * aborted rather than as a result), and by the engine still serving afterwards: the failure the boundary
  * introduces would be a forwarded abort that strands the call or takes the child down with it. */
 test("an abort reaches across the boundary, and the engine keeps serving after it", async () => {
     const controller = new AbortController();
@@ -102,8 +102,8 @@ test("an abort reaches across the boundary, and the engine keeps serving after i
     expect(after.result.groups[0]?.path).toBe("alpha/src/widget.ts");
 });
 
-/* The child IS the engine; losing it must not wedge the daemon. The next call has to bring a whole new one up —
- * new sweep, new index claim — and answer from it. Its own client, so the kill cannot touch the shared one. */
+/* The child IS the engine; losing it must not wedge the daemon. The next call has to bring a whole new one up:
+ * new sweep, new index claim, and answer from it. Its own client, so the kill cannot touch the shared one. */
 test("a killed child is reported, and the next search brings up a new one", async () => {
     const reported: Error[] = [];
     const doomed = createEngineClient({ root, onQueryError: (error) => reported.push(error) });
@@ -115,7 +115,7 @@ test("a killed child is reported, and the next search brings up a new one", asyn
         const inFlight = doomed.run(request({ verb: "q", query: "widget" }));
         process.kill(first!, "SIGKILL");
         await expect(inFlight).rejects.toThrow(/exited/);
-        // Search going missing has to be VISIBLE — the host's existing channel for a degraded engine.
+        // Search going missing has to be VISIBLE: the host's existing channel for a degraded engine.
         expect(reported.some((error) => /exited/.test(error.message))).toBe(true);
 
         const outcome = await doomed.run(request({ verb: "files", query: "widget" }));

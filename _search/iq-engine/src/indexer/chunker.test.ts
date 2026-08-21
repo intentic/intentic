@@ -44,8 +44,8 @@ test("oversized symbol bodies split into bounded windows", () => {
 });
 
 test("a distinctive line deep inside a long function is present in some chunk's TEXT (no truncation loss)", () => {
-    // Regression: a long body used to become ONE chunk truncated at 1200 chars, silently dropping — and leaving
-    // unindexed — everything past ~25 lines. A marker at line ~60 must survive in an actual chunk body.
+    // Regression: a long body used to become ONE chunk truncated at 1200 chars, silently dropping, and leaving
+    // unindexed: everything past ~25 lines. A marker at line ~60 must survive in an actual chunk body.
     const before = Array.from({ length: 55 }, (_, i) => `    const setup${i} = ${i};`).join("\n");
     const after = Array.from({ length: 40 }, (_, i) => `    const tail${i} = ${i};`).join("\n");
     const body = `export function big(): void {\n${before}\n    const NEEDLE_DEEP_IN_BODY = true;\n${after}\n}`;

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // ssh.ts derives knownHostsPath from homedir() at import time, so HOME is pointed at a throwaway dir BEFORE the
-// dynamic import — the same shape config.integration.test.ts uses, and for the same reason.
+// dynamic import: the same shape config.integration.test.ts uses, and for the same reason.
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-known-hosts-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { pruneKnownHosts } = await import("./ssh.js");
@@ -17,7 +17,7 @@ const write = async (contents: string): Promise<void> => {
 };
 
 /* THE ENTRY AN UPGRADE COULD NOT REACH. An earlier agent wrote `HostKeyAlias %h`, which ssh takes literally, so
- * every sandbox's host key landed under one host named "%h" — and from then on the first sandbox to connect was
+ * every sandbox's host key landed under one host named "%h", and from then on the first sandbox to connect was
  * the only one accepted, every other pairing refused with "Host key for %h has changed" for good. Fixing the
  * config it came from does nothing for the machines that already have the line; only deleting it does. */
 describe("pruneKnownHosts", () => {
@@ -28,7 +28,7 @@ describe("pruneKnownHosts", () => {
         expect(await readFile(knownHostsPath, "utf8")).toBe("intentic-sync-sandbox-abc-dev ssh-ed25519 AAAAreal\n");
     });
 
-    // Every other line is a host key the user's own transports depend on — a prune that took one of those would
+    // Every other line is a host key the user's own transports depend on: a prune that took one of those would
     // trade a locked-out sandbox for a locked-out fleet.
     it("leaves a healthy file exactly as it is, and reports nothing to do", async () => {
         const healthy = ["intentic-sync-sandbox-abc-dev ssh-ed25519 AAAAone", "intentic-sync-sandbox-def-dev ssh-ed25519 AAAAtwo", ""].join("\n");

@@ -9,7 +9,7 @@ import { addAppsToMonorepo, injectApps, injectMonorepoShell } from "./inject-tem
 import { readTemplateManifest, type TemplateManifest } from "./template-manifest.js";
 
 // Runs against the real canonical template repo (the injector's whole job is to copy its packages into a repo),
-// so it only runs where that checkout is present — otherwise there is nothing to inject.
+// so it only runs where that checkout is present: otherwise there is nothing to inject.
 const CANONICAL = process.env["INTENTIC_CANONICAL_DIR"] ?? "/home/radarsu/radarsu/repositories/00-canonical-repo";
 const hasCanonical = existsSync(join(CANONICAL, "templates.json"));
 const readJson = async (path: string): Promise<{ name: string; scripts?: Record<string, string> }> => JSON.parse(await readFile(path, "utf8"));
@@ -35,7 +35,7 @@ describe.skipIf(!hasCanonical)("monorepo scaffold + app injection", () => {
             expect(existsSync(join(repoDir, shared))).toBe(true);
         }
         expect(existsSync(join(repoDir, ".git"))).toBe(true);
-        // Empty until an app is injected — no _apps package lands from the shell alone.
+        // Empty until an app is injected: no _apps package lands from the shell alone.
         expect(existsSync(join(repoDir, "_apps"))).toBe(false);
     });
 
@@ -85,7 +85,7 @@ describe.skipIf(!hasCanonical)("monorepo scaffold + app injection", () => {
         expect((await readJson(join(multi, "_apps/api/package.json"))).name).toBe("@app_/api");
         expect((await readJson(join(multi, "_apps/admin-api/package.json"))).name).toBe("@app_/admin-api");
 
-        // Shared libs land once — they're present but not duplicated.
+        // Shared libs land once: they're present but not duplicated.
         expect(existsSync(join(multi, "_libs/api-contract"))).toBe(true);
         expect(existsSync(join(multi, "_libs/prisma"))).toBe(true);
     });

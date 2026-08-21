@@ -306,7 +306,7 @@ export const personaNote = (persona: TurnPersona): string | undefined => {
     const scope =
         folders === undefined || folders.length === 0
             ? ``
-            : ` You work inside ${folders.join(", ")} — file tools pointed anywhere else in the workspace are refused, so if the task needs a file outside that, say so rather than working around it.`;
+            : ` You work inside ${folders.join(", ")}, file tools pointed anywhere else in the workspace are refused, so if the task needs a file outside that, say so rather than working around it.`;
     const desk = card.id === FRONT_DESK_PERSONA ? `\n\n${FRONT_DESK_GUIDANCE}` : ``;
     return (
         `${PERSONA_NOTE_HEADER}\n\n` +

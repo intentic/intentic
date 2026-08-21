@@ -15,7 +15,7 @@ export interface SseTurnStream {
  * OWNER's billing, credentials or scripts. The audience here is an anonymous stranger on someone else's
  * website, so none of it may cross: the widget says that the answer failed, and the owner reads why on the
  * automation's row and in the activity feed, which is where they can act on it. */
-const VISITOR_FAILURE = "Sorry — I couldn't answer that just now. Please try again in a moment.";
+const VISITOR_FAILURE = "Sorry: I couldn't answer that just now. Please try again in a moment.";
 
 // A TurnStream that forwards the agent's text to a web-chat widget as SSE frames, the SSE analogue of the
 // connector runtime's streaming painter. No rate-limited repaint (SSE appends rather than edits): each delta is one `delta` frame,

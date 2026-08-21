@@ -134,7 +134,7 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
         mcp: async (id, payload) => {
             const host = live.get(id);
             if (host === undefined) {
-                throw new Error(`"${id}" is not connected right now — the computer is asleep, offline, or its agent isn't running.`);
+                throw new Error(`"${id}" is not connected right now: the computer is asleep, offline, or its agent isn't running.`);
             }
             host.lastSeen = Date.now();
             return await host.client.mcp(payload, { signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });

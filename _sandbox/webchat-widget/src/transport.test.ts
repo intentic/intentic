@@ -38,7 +38,7 @@ test(`a data line keeps everything past the single framing space`, () => {
     expect(parseSseBlock(`event: delta\ndata:   indented`)?.data).toBe(`  indented`);
 });
 
-test(`hono splits a multi-line payload into one data line each — rejoining restores it exactly`, () => {
+test(`hono splits a multi-line payload into one data line each: rejoining restores it exactly`, () => {
     // What writeSSE({event: "delta", data: "a\n\nb"}) puts on the wire.
     expect(parseSseBlock(`event: delta\ndata: a\ndata: \ndata: b`)).toEqual({ event: `delta`, data: `a\n\nb` });
 });
@@ -57,7 +57,7 @@ test(`splitting keeps the unterminated tail back for the next chunk`, () => {
     expect(rest).toBe(`event: delta\ndata: tw`);
 });
 
-test(`\\r\\n framing is accepted — some proxies rewrite line endings`, () => {
+test(`\\r\\n framing is accepted: some proxies rewrite line endings`, () => {
     expect(splitSseBlocks(`event: delta\r\ndata: one\r\n\r\n`).blocks).toEqual([`event: delta\ndata: one`]);
 });
 
@@ -72,9 +72,9 @@ test(`a pending frame reaches the sink and no text is invented for it`, async ()
     expect(text).toBe(``);
 });
 
-test(`an error frame reaches the sink — the turn answered with nothing, which is not an empty answer`, async () => {
-    const { text, failed } = await collect([`event: error\ndata: Sorry — I couldn't answer that just now.\n\nevent: done\ndata: \n\n`]);
-    expect(failed).toEqual([`Sorry — I couldn't answer that just now.`]);
+test(`an error frame reaches the sink, the turn answered with nothing, which is not an empty answer`, async () => {
+    const { text, failed } = await collect([`event: error\ndata: Sorry, I couldn't answer that just now.\n\nevent: done\ndata: \n\n`]);
+    expect(failed).toEqual([`Sorry, I couldn't answer that just now.`]);
     expect(text).toBe(``);
 });
 

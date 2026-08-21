@@ -19,13 +19,13 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     expect(watchIgnored(at("app", "node_modules", "dep", "index.js"))).toBe(true);
     expect(watchIgnored(at("app", ".git", "config"))).toBe(true);
     expect(watchIgnored(at("app", "dist", "bundle.js"))).toBe(true);
-    // A connected browser's profile churns credential files constantly — still never watched (event-spam guard).
+    // A connected browser's profile churns credential files constantly: still never watched (event-spam guard).
     expect(watchIgnored(at(".intentic", "local", "browser", "reddit", "Default", "Cookies"))).toBe(true);
-    // Agent worktrees are full checkouts an agent edits at speed — never watched; sibling .claude config is.
+    // Agent worktrees are full checkouts an agent edits at speed: never watched; sibling .claude config is.
     expect(watchIgnored(at("app", ".claude", "worktrees", "fix", "src", "main.ts"))).toBe(true);
     expect(watchIgnored(at("app", ".claude", "settings.json"))).toBe(false);
     // The daemon's own state: the iq index's WAL churns for minutes through a rebuild's re-embed, and the agent
-    // transcripts churn through every turn — watching either feeds the daemon (and every browser) its own noise.
+    // transcripts churn through every turn: watching either feeds the daemon (and every browser) its own noise.
     expect(watchIgnored(at(".intentic", "local", "cache", "iq", "index.db-wal"))).toBe(true);
     expect(watchIgnored(at(".intentic", "records", "sessions", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
     expect(watchIgnored(at(".intentic", "secrets", "auth", "codex", "default", "auth.json"))).toBe(true);
@@ -38,14 +38,14 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     expect(watchIgnored(at("app", ".env"))).toBe(false);
     expect(watchIgnored(at("app", ".env.example"))).toBe(false);
     expect(watchIgnored(at("app", "src", "main.ts"))).toBe(false);
-    // The reference shelf: a clone into it writes thousands of files in one burst — never watched. Only the
+    // The reference shelf: a clone into it writes thousands of files in one burst, never watched. Only the
     // ROOT-level refs/ is the shelf; a repo's own refs dir pushes like any source dir.
     expect(watchIgnored(at("refs", "react", "packages", "scheduler", "index.js"))).toBe(true);
     expect(watchIgnored(at("app", "refs", "notes.md"))).toBe(false);
 });
 
 // What only a real filesystem can answer: that the watcher's descent filter is wired to the ignore rules, and
-// that what comes out the other side is root-relative. How a burst is BATCHED is not asserted here — that
+// that what comes out the other side is root-relative. How a burst is BATCHED is not asserted here: that
 // depends on whether the machine delivered both filesystem events inside one 250ms window, which is a fact
 // about the runner rather than about the watcher. workspace-watch.test.ts settles the batching on its own clock.
 test("createWorkspaceWatch emits visible root-relative paths and never announces node_modules", async () => {
@@ -55,7 +55,7 @@ test("createWorkspaceWatch emits visible root-relative paths and never announces
     const batches: string[][] = [];
     watch.subscribe((paths) => batches.push(paths));
     try {
-        // Let the backend finish arming before we mutate — subscribing is async, and a change that lands first
+        // Let the backend finish arming before we mutate: subscribing is async, and a change that lands first
         // is simply never reported.
         await delay(500);
 
@@ -100,8 +100,8 @@ test("createWorkspaceWatch follows a hosted-style symlink root", async () => {
 
 /* THE SKIP GLOBS ACTUALLY PRUNING, which is the half a unit test cannot reach. workspace-watch.test.ts can say
  * a rule carries a glob and a predicate; only a real watcher over a real tree can say the glob was written in a
- * form the backend understands. A glob that silently matches nothing costs no correctness — the predicate still
- * filters the event — so the symptom would be invisible except as handles on a big checkout. Hence this test.
+ * form the backend understands. A glob that silently matches nothing costs no correctness: the predicate still
+ * filters the event, so the symptom would be invisible except as handles on a big checkout. Hence this test.
  *
  * The two anchoring mistakes it is here to catch: a root-anchored rule written any-depth (which would silence a
  * repo's own refs/ directory) and an any-depth rule written root-anchored (which would leave nested state dirs

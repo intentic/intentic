@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { paneStates } from "./system.routes.js";
 
 // `tmux list-panes -a -F '#{session_name}\t#{pane_dead}\t#{pane_dead_status}\t#{session_activity}\t#{pane_current_command}'`
-// — one line per pane, so a multi-window session (every agent-* one: bin/tmux-run opens a window per Bash
+//, one line per pane, so a multi-window session (every agent-* one: bin/tmux-run opens a window per Bash
 // command and keeps the finished ones under remain-on-exit) reports many. `session_activity` is session-wide,
 // so every line of a session repeats it; `pane_dead_status` is empty while the pane lives.
 const ACTIVITY = 1_780_000_000;
@@ -17,7 +17,7 @@ test("a session is live while ANY of its panes is, and finished once every one i
             ["agent-3f2a9b1c", 1, "0", ""],
             ["agent-3f2a9b1c", 1, "0", ""],
             ["agent-3f2a9b1c", 0, "", "pnpm"],
-            // The turn ended — every window is a finished command's dead pane.
+            // The turn ended: every window is a finished command's dead pane.
             ["agent-7c0e1ad7", 1, "0", ""],
             ["agent-7c0e1ad7", 1, "0", ""],
             ["web-a1b2c3d4", 0, "", "zsh"],
@@ -28,19 +28,19 @@ test("a session is live while ANY of its panes is, and finished once every one i
     expect(states.get("web-a1b2c3d4")?.live).toBe(true);
 });
 
-test("pane order doesn't matter — a live pane after dead ones still counts", () => {
+test("pane order doesn't matter, a live pane after dead ones still counts", () => {
     expect(paneStates(listPanes(["agent-1", 0, "", "vitest"], ["agent-1", 1, "0", ""])).get("agent-1")?.live).toBe(true);
     expect(paneStates(listPanes(["agent-1", 1, "0", ""], ["agent-1", 0, "", "vitest"])).get("agent-1")?.live).toBe(true);
 });
 
-test("the reported command is the session's last pane — single-pane panel-* sessions read their foreground process", () => {
+test("the reported command is the session's last pane: single-pane panel-* sessions read their foreground process", () => {
     const states = paneStates(listPanes(["panel-app", 0, "", "node"], ["panel-docker", 0, "", "zsh"]));
     expect(states.get("panel-app")?.command).toBe("node");
     expect(states.get("panel-docker")?.command).toBe("zsh");
 });
 
 /* `liveCommand` IS THE ONE THE PANEL'S KILL CONFIRM READS, and the case below is exactly why it is not
- * `command`. An agent session mid-turn has the running pane in the MIDDLE of its list — bin/tmux-run keeps the
+ * `command`. An agent session mid-turn has the running pane in the MIDDLE of its list: bin/tmux-run keeps the
  * finished windows so their output stays readable, and tmux lists them after it. `command` takes the last pane
  * whatever state it is in, so it reads the corpse and the session looks idle while a build runs in it. */
 test("the live command skips finished panes, wherever in the list they fall", () => {
@@ -54,14 +54,14 @@ test("a session whose every pane is dead has no live command", () => {
     expect(paneStates(listPanes(["job-checks", 1, "0", "vitest"], ["job-checks", 1, "1", "vitest"])).get("job-checks")?.liveCommand).toBeUndefined();
 });
 
-// An idle shell reports the shell itself — the daemon's `foreground` reads that as "not busy", which is what
+// An idle shell reports the shell itself: the daemon's `foreground` reads that as "not busy", which is what
 // keeps a plain close from asking a question about nothing.
 test("an idle shell's live command is the shell", () => {
     expect(paneStates(listPanes(["web-a1b2c3d4", 0, "", "zsh"])).get("web-a1b2c3d4")?.liveCommand).toBe("zsh");
     expect(paneStates(listPanes(["web-a1b2c3d4", 0, "", "pnpm"])).get("web-a1b2c3d4")?.liveCommand).toBe("pnpm");
 });
 
-// The exit status of the LAST window is the exit status of the last command — which is the one the dead pane's
+// The exit status of the LAST window is the exit status of the last command, which is the one the dead pane's
 // epitaph shows, and the only reason bin/tmux-run exits its runner with the command's own code.
 test("the exit status is the last window's, and absent while that pane still runs", () => {
     const finished = paneStates(listPanes(["job-infra-check", 1, "0", ""], ["job-infra-check", 1, "1", ""]));
@@ -71,7 +71,7 @@ test("the exit status is the last window's, and absent while that pane still run
     expect(running.get("job-infra-check")?.exitCode).toBeUndefined();
 });
 
-test("the activity stamp comes back in epoch MS, and an unreadable one reads as 0 — unknown, never 1970", () => {
+test("the activity stamp comes back in epoch MS, and an unreadable one reads as 0: unknown, never 1970", () => {
     expect(paneStates(listPanes(["web-a1b2c3d4", 0, "", "zsh"])).get("web-a1b2c3d4")?.activityAt).toBe(ACTIVITY * 1000);
     expect(paneStates("web-a1b2c3d4\t0\t\t\tzsh").get("web-a1b2c3d4")?.activityAt).toBe(0);
 });
@@ -81,6 +81,6 @@ test("no tmux server (empty output) and blank lines yield nothing", () => {
     expect(paneStates("\n\n")).toEqual(new Map());
 });
 
-test("an unparseable pane_dead reads as live — the flag gates a destructive sweep", () => {
+test("an unparseable pane_dead reads as live: the flag gates a destructive sweep", () => {
     expect(paneStates("agent-1\t\t\t\tzsh").get("agent-1")?.live).toBe(true);
 });

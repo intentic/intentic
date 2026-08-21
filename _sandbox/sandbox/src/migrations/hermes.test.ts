@@ -85,7 +85,7 @@ test("skills: flattened, baked names renamed, descriptions defaulted", () => {
     expect(byId(planned, "skill:weather")?.apply).toMatchObject({ target: "skill", skill: { name: "weather", description: "Fetch the forecast." } });
     // Nested skill keeps its own directory's name, as Hermes' own migrations flatten.
     expect(byId(planned, "skill:nested")).toBeDefined();
-    // `lsp` is a baked tool here — the import must not claim its switch.
+    // `lsp` is a baked tool here: the import must not claim its switch.
     expect(byId(planned, "skill:lsp")).toBeUndefined();
     expect(byId(planned, "skill:lsp-imported")).toBeDefined();
 });
@@ -96,7 +96,7 @@ test("secrets: every .env key is offered, only credential-shaped ones recommende
     expect(byId(planned, "secret:OPENAI_API_KEY")?.item.recommended).toBe(true);
     expect(byId(planned, "secret:HERMES_STREAM_READ_TIMEOUT")?.item.recommended).toBe(false);
     expect(byId(planned, "secret:ANTHROPIC_API_KEY")?.apply).toMatchObject({ target: "secret", value: "sk-ant-1" });
-    // OAuth blobs are bound to that install — refused, with the reason.
+    // OAuth blobs are bound to that install: refused, with the reason.
     expect(refused.some((line) => line.includes("nous_portal OAuth"))).toBe(true);
 });
 
@@ -142,7 +142,7 @@ test("the known-not-to-move list: enabled channels, the model to pick, fallback 
     const { needsAction, refused } = planHermes(fixture());
     const telegram = needsAction.find((entry) => entry.subject === "Reconnect telegram");
     expect(telegram?.detail).toContain("TELEGRAM_BOT_TOKEN");
-    // Disabled channels say nothing — there is nothing to reconnect.
+    // Disabled channels say nothing: there is nothing to reconnect.
     expect(needsAction.some((entry) => entry.subject === "Reconnect discord")).toBe(false);
     expect(needsAction.find((entry) => entry.subject === "Pick your model provider")?.detail).toContain("Claude");
     expect(refused.some((line) => line.includes("fallback_providers"))).toBe(true);

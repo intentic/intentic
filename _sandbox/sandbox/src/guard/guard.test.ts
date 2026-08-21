@@ -18,13 +18,13 @@ describe("guard mechanism", () => {
         expect(verdict.reason).toContain("failing closed");
     });
 
-    test("fails closed on a hand-rolled action object — only minted values pass", () => {
+    test("fails closed on a hand-rolled action object: only minted values pass", () => {
         const forged = { action: "test.forged", decide: () => HOLD("x") } as unknown as GuardedAction<undefined>;
         expect(isGuardedAction(forged)).toBe(false);
         expect(guard(forged, undefined).effect).toBe("deny");
     });
 
-    test("defining the same action twice throws — names are the catalog key", () => {
+    test("defining the same action twice throws: names are the catalog key", () => {
         defineGuardedAction<undefined>({ action: "test.dup", decide: () => HOLD("x") });
         expect(() => defineGuardedAction<undefined>({ action: "test.dup", decide: () => HOLD("x") })).toThrow(/already defined/);
     });
@@ -48,7 +48,7 @@ describe("session.start", () => {
 
     test("a floor deny refuses, and beats every weaker signal", () => {
         const admission = { ...allowAll, webchat: "deny" as const };
-        // Even alongside a countdown the automation asked for — deny wins.
+        // Even alongside a countdown the automation asked for: deny wins.
         const verdict = guard(sessionStart, { source: "webchat", admission, holdForSeconds: 60 });
         expect(verdict.effect).toBe("deny");
     });
@@ -59,7 +59,7 @@ describe("session.start", () => {
         expect("autoRunAfterS" in verdict && verdict.autoRunAfterS).toBeFalsy();
     });
 
-    test("a floor hold is 'ask me' — no auto-run countdown either", () => {
+    test("a floor hold is 'ask me': no auto-run countdown either", () => {
         const admission = { ...allowAll, listener: "hold" as const };
         const verdict = guard(sessionStart, { source: "listener", admission, holdForSeconds: 30 });
         expect(verdict).toMatchObject({ effect: "hold" });
@@ -83,7 +83,7 @@ describe("outbound.send", () => {
         expect(guard(outboundSend, { provider: "discord", type: "reaction.add", rules }).effect).toBe("deny");
     });
 
-    test("hold and deny come back as themselves — the gate decides how to say them", () => {
+    test("hold and deny come back as themselves: the gate decides how to say them", () => {
         const rules = { "slack.message.send": "hold", "slack.message.edit": "deny" } as const;
         expect(guard(outboundSend, { provider: "slack", type: "message.send", rules }).effect).toBe("hold");
         expect(guard(outboundSend, { provider: "slack", type: "message.edit", rules }).effect).toBe("deny");
@@ -91,12 +91,12 @@ describe("outbound.send", () => {
 });
 
 describe("command.run", () => {
-    test("an unlisted class is allowed — the rulebook names what to stop", () => {
+    test("an unlisted class is allowed: the rulebook names what to stop", () => {
         expect(guard(commandRun, { commandClass: "git.destructive", rules: {} }).effect).toBe("allow");
         expect(guard(commandRun, { commandClass: "git.destructive", rules: { "package.publish": "deny" } }).effect).toBe("allow");
     });
 
-    test("hold and deny come back as themselves — the gate decides how to say them", () => {
+    test("hold and deny come back as themselves: the gate decides how to say them", () => {
         expect(guard(commandRun, { commandClass: "files.destructive", rules: { "files.destructive": "hold" } }).effect).toBe("hold");
         expect(guard(commandRun, { commandClass: "files.destructive", rules: { "files.destructive": "deny" } }).effect).toBe("deny");
     });
@@ -113,7 +113,7 @@ describe("command.run", () => {
         );
     });
 
-    /* The taint floor — the only verdict here the owner did not write. It holds credential reads on a turn that
+    /* The taint floor: the only verdict here the owner did not write. It holds credential reads on a turn that
      * has taken in somebody else's words, and it yields to any rule they DID write. */
     describe("the outside-content floor", () => {
         test("holds a credential read on a tainted turn, and names the source in the reason", () => {
@@ -126,13 +126,13 @@ describe("command.run", () => {
             expect(guard(commandRun, { commandClass: "secrets.access", rules: {} }).effect).toBe("allow");
         });
 
-        test("only the credential class — a tainted turn still deletes and publishes as configured", () => {
+        test("only the credential class: a tainted turn still deletes and publishes as configured", () => {
             for (const commandClass of ["git.destructive", "files.destructive", "package.publish", "network.outbound"] as const) {
                 expect(guard(commandRun, { commandClass, rules: {}, outsideSource: "web" }).effect, commandClass).toBe("allow");
             }
         });
 
-        test("the owner's own rule wins both ways — the floor applies only where they said nothing", () => {
+        test("the owner's own rule wins both ways: the floor applies only where they said nothing", () => {
             expect(guard(commandRun, { commandClass: "secrets.access", rules: { "secrets.access": "allow" }, outsideSource: "web" }).effect).toBe(
                 "allow",
             );

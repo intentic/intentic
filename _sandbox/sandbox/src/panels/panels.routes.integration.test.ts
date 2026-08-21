@@ -11,7 +11,7 @@ import { type PanelsRoutesDeps, createPanelsRoutes } from "./panels.routes.js";
 
 /* The operator-panel routes, over the five seams they read.
  *
- * Split out of app.integration.test.ts — 116 tests over every route in the daemon, in one file — and then
+ * Split out of app.integration.test.ts: 116 tests over every route in the daemon, in one file, and then
  * stood up on `PanelsRoutesDeps` rather than on the daemon. Real repos on disk, because what these routes
  * report IS what is in the workspace: which repo owns an operator/ dir, and which content facts the
  * extensions detect on. The panel TOKEN is the app's middleware and is checked there. */
@@ -25,14 +25,14 @@ const panelsClient = (workspace: WorkspacePaths, overrides: Partial<PanelsRoutes
             panelToken: "panel-secret",
             processes: fakeProcesses(),
             ensurePreviewRoutes: async () => {},
-            // Nothing listening unless a test says otherwise — the scan is a seam here rather than the real
+            // Nothing listening unless a test says otherwise: the scan is a seam here rather than the real
             // machine's sockets, which used to make "no servers" depend on what happened to be up.
             scanPorts: async () => [],
             ...overrides,
         }),
     );
 
-// Listen on an OS-assigned port and hand it back — the probe behind `servers` dials for real.
+// Listen on an OS-assigned port and hand it back: the probe behind `servers` dials for real.
 const serve = async (server: http.Server): Promise<number> => {
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
@@ -43,7 +43,7 @@ test("panels.list enumerates every repo with its operator panel + runtime status
     const workspace = tempWorkspace([{ name: "app", panel: true }, { name: "desired-state" }]);
     const client = panelsClient(workspace, {
         // The zone comes from the public URL, the hostname's sandbox id from the connect token
-        // (sha256("token")[0:12] = 3c469e9d6c58) — both are needed for a previewUrl to be advertised.
+        // (sha256("token")[0:12] = 3c469e9d6c58): both are needed for a previewUrl to be advertised.
         config: { ...testConfig, connectToken: "token", sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
         // "app" is running on a dead port (nothing answers it in either scheme ⇒ no servers ⇒ healthy false);
         // "desired-state" isn't running. Neither repo is a temp dir any real listener was launched from, so the
@@ -110,7 +110,7 @@ test("panels.list reports the content facts extensions detect on", async () => {
     });
 });
 
-test("panels.list advertises no previewUrl without a connect token (loopback — nothing would resolve)", async () => {
+test("panels.list advertises no previewUrl without a connect token (loopback: nothing would resolve)", async () => {
     const workspace = tempWorkspace([{ name: "app", panel: true }]);
     const client = panelsClient(workspace, {
         config: { ...testConfig, sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
@@ -137,7 +137,7 @@ test("panels.list advertises no previewUrl without a connect token (loopback —
 });
 
 /* WHAT IS OCCUPYING THE PORT, AND WHERE. A monorepo serving two apps is two addresses and two answers to "where
- * do I go to stop this" — the terminal the scan traced each listener back to. The second one has none: a dev
+ * do I go to stop this", the terminal the scan traced each listener back to. The second one has none: a dev
  * server outside the sandbox answers just as well, and saying so is the whole point of the field. */
 test("panels.list names the terminal each answering dev server is running in", async () => {
     const workspace = tempWorkspace([{ name: "app", panel: true }]);
@@ -153,7 +153,7 @@ test("panels.list names the terminal each answering dev server is running in", a
 
     const [panel] = (await client.list()).panels;
     expect(panel?.healthy).toBe(true);
-    // Ordered by port, which the OS assigned — so the expectation sorts the same way rather than assuming.
+    // Ordered by port, which the OS assigned, so the expectation sorts the same way rather than assuming.
     expect(panel?.servers).toEqual(
         [
             { port: sitePort, url: `http://localhost:${sitePort}`, dir: join("_site", "site"), session: "web-3f2a" },
@@ -166,7 +166,7 @@ test("panels.list names the terminal each answering dev server is running in", a
     web.close();
 });
 
-// A panel the daemon started answers with ITS terminal even when procfs gave up the cwd — the daemon put the
+// A panel the daemon started answers with ITS terminal even when procfs gave up the cwd: the daemon put the
 // process there, so the session is a fact rather than an attribution.
 test("panels.list gives the panel's own terminal to the assigned port the scan couldn't attribute", async () => {
     const workspace = tempWorkspace([{ name: "app", panel: true }]);

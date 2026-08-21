@@ -30,7 +30,7 @@ export const createVpnRoutes = (services: VpnRoutesDeps) => {
         connect: i.connect.handler(async function* ({ input }) {
             const entry = await entryOf(input.id);
             if (dialling.has(entry.id)) {
-                throw new ORPCError("CONFLICT", { message: `"${entry.id}" is already connecting — wait for it to finish` });
+                throw new ORPCError("CONFLICT", { message: `"${entry.id}" is already connecting, wait for it to finish` });
             }
             dialling.add(entry.id);
             try {

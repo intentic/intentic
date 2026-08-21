@@ -70,7 +70,7 @@ const HOOK_SCRIPT_NAME = "intentic-signals.sh";
 export const codexSignalScript = (spoolDir: string): string =>
     [
         `#!/bin/sh`,
-        `# managed by intentic — overwritten on daemon boot (src/codex/codex-config.ts).`,
+        `# managed by intentic: overwritten on daemon boot (src/codex/codex-config.ts).`,
         `# Reports a delegated codex run's lifecycle into the daemon's signal spool, where it is folded into`,
         `# the subagent roster (src/agent/delegation-signals.ts).`,
         `set -u`,
@@ -108,7 +108,7 @@ const HOOK_EVENTS: readonly { readonly event: string; readonly action: string }[
 export const codexHooksJson = (scriptPath: string): string =>
     `${JSON.stringify(
         {
-            description: "managed by intentic — rebuilding or restarting the daemon overwrites this file",
+            description: "managed by intentic, rebuilding or restarting the daemon overwrites this file",
             hooks: Object.fromEntries(HOOK_EVENTS.map(({ event, action }) => [event, hookEntry(scriptPath, action)])),
         },
         undefined,

@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { styles } from "./styles.js";
 
 /* These pin the widget to intentic's palette with NUMBERS, because that is the only way the claim survives.
- * "Looks like the app" is not checkable, and the values below were not chosen here — they were sampled out of a
+ * "Looks like the app" is not checkable, and the values below were not chosen here: they were sampled out of a
  * screenshot of the running app and re-derived from @intentic/ui's oklch tokens, which agreed. If a token
  * moves in the app, one of these fails and says which. */
 
@@ -11,7 +11,7 @@ const config = (overrides: Partial<WebchatPublicConfig> = {}): WebchatPublicConf
     automationId: `a1`,
     title: `Ask Northwind`,
     greeting: `Hi!`,
-    accent: `#e47100`, // the daemon's default — brand-600
+    accent: `#e47100`, // the daemon's default, brand-600
     position: `bottom-right`,
     access: `public`,
     requireName: false,
@@ -30,7 +30,7 @@ test(`the dark bubbles are the app's two chat surfaces, not a flat panel and a b
     expect(sheet).toContain(`.msg.visitor { align-self: flex-end; background: var(--bubble-visitor); border: 1px solid var(--accent-line); }`);
 });
 
-/* The accent stepped for the scheme — the widget's stand-in for the app's ramp, which uses brand-700 as ink in
+/* The accent stepped for the scheme: the widget's stand-in for the app's ramp, which uses brand-700 as ink in
  * light and brand-400 in dark. Landing within a step of both is the whole point of pulling 15% toward the
  * scheme's extreme, so the numbers are asserted against the ramp they imitate. */
 test(`the accent is stepped per scheme, landing beside the ramp steps the app uses for ink`, () => {
@@ -42,12 +42,12 @@ test(`the accent is stepped per scheme, landing beside the ramp steps the app us
 test(`the label on a solid accent is the one that actually contrasts, not a hardcoded white`, () => {
     // Intentic's orange is light enough that near-black wins: 5.36:1 against white's 3.15:1.
     expect(styles(config())).toContain(`--on-accent: #201c19`);
-    // A dark brand gets the other answer — proof the pick is derived rather than tuned to the default.
+    // A dark brand gets the other answer: proof the pick is derived rather than tuned to the default.
     expect(styles(config({ accent: `#1a3d8f` }))).toContain(`--on-accent: #ffffff`);
 });
 
 /* The reason every value above is a literal. Both features landed in 2023, and here they would be carrying
- * bubble BACKGROUNDS — an unsupported `color-mix()` is invalid at computed-value time, so the bubble paints
+ * bubble BACKGROUNDS: an unsupported `color-mix()` is invalid at computed-value time, so the bubble paints
  * nothing rather than paints slightly wrong. */
 test(`the shipped sheet contains no color-mix() or oklch() for a browser to fail to understand`, () => {
     const sheet = styles(config());

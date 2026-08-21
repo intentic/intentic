@@ -7,7 +7,7 @@ import { afterAll, expect, test } from "vitest";
 import { createPublicHandler } from "./public-serve.js";
 
 /* The outbox over real HTTP: the headers a stranger's browser actually receives, and the two protocol details
- * publishing depends on — conditional requests (a rebuilt file must not be served from a stale cache) and
+ * publishing depends on: conditional requests (a rebuilt file must not be served from a stale cache) and
  * ranges (a published screen recording has to seek). */
 
 const servers: http.Server[] = [];
@@ -51,7 +51,7 @@ test("a published file is served with its type, nosniff, and noindex", async () 
     expect(response.body).toBe("hello");
     expect(response.headers["content-type"]).toBe("text/plain; charset=utf-8");
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
-    // The hostname is unguessable, but a link pasted somewhere public can still be followed — sharing a file
+    // The hostname is unguessable, but a link pasted somewhere public can still be followed: sharing a file
     // with one person must not put it in an index.
     expect(response.headers["x-robots-tag"]).toBe("noindex");
 });
@@ -95,7 +95,7 @@ test("a byte range is a 206 with the requested slice and a content-range", async
     expect(response.headers["content-range"]).toBe("bytes 2-5/10");
 });
 
-// "bytes=-3" is the LAST three bytes — the one part of the grammar that reads backwards, and the one a
+// "bytes=-3" is the LAST three bytes: the one part of the grammar that reads backwards, and the one a
 // hand-rolled parser gets wrong.
 test("a suffix range returns the tail, not the head", async () => {
     const port = await serve({ "clip.txt": "0123456789" });
@@ -117,7 +117,7 @@ test("the outbox is read-only from the internet", async () => {
     expect(response.headers.allow).toBe("GET, HEAD");
 });
 
-// Every miss looks the same from outside, whatever the reason — the branded page the proxy serves, and nothing
+// Every miss looks the same from outside, whatever the reason: the branded page the proxy serves, and nothing
 // that would let the outbox be probed for what it holds.
 test("a blocked file and a missing one are the same 404 page", async () => {
     const port = await serve({ ".env": "TOKEN=abc" });

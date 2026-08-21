@@ -9,7 +9,7 @@ test("parses some+full avg10 from a pressure file", () => {
     expect(parsePressure(text)).toEqual({ some: 1.5, full: 0.75 });
 });
 
-test("cpu pressure has no full line — reported as 0, not absent", () => {
+test("cpu pressure has no full line: reported as 0, not absent", () => {
     expect(parsePressure("some avg10=2.25 avg60=0.00 avg300=0.10 total=3286364632\n")).toEqual({ some: 2.25, full: 0 });
 });
 
@@ -19,7 +19,7 @@ test("unparseable content is undefined, never a throw", () => {
 });
 
 // Real /proc/net/udp rows, captured in the container. The remote column is little-endian hex, so Docker's
-// embedded resolver at 127.0.0.11:53 reads as `0B00007F:0035` — that row is a lookup still awaiting an answer.
+// embedded resolver at 127.0.0.11:53 reads as `0B00007F:0035`: that row is a lookup still awaiting an answer.
 const UDP_TABLE = [
     "   sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode ref pointer drops",
     "12722: 0100007F:EAE0 0B00007F:0035 01 00000000:00000000 00:00000000 00000000     0        0 215512445 2 000000003e3eb337 0",
@@ -32,7 +32,7 @@ test("picks out the inodes of in-flight DNS queries, skipping the header and non
     expect(parseDnsSocketInodes(UDP_TABLE)).toEqual(["215512445", "215512999"]);
 });
 
-test("a table with no lookup open yields nothing — the quiet case must not read as a DNS stall", () => {
+test("a table with no lookup open yields nothing: the quiet case must not read as a DNS stall", () => {
     const idle = UDP_TABLE.split("\n")
         .filter((line) => !line.includes(":0035"))
         .join("\n");

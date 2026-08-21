@@ -47,7 +47,7 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
          * served four turns. Nothing is claimed either: the marker belongs to that run, and overwriting it would
          * lose the only record of how it ends. */
         if (previous.state === "running" && pidAlive(previous.pid)) {
-            logger.warn({ ownerPid: previous.pid, logsDir }, "another live daemon owns this history root — leaving its boot marker alone");
+            logger.warn({ ownerPid: previous.pid, logsDir }, "another live daemon owns this history root, leaving its boot marker alone");
             return { markExited: () => undefined };
         }
         if (previous.state === "running") {
@@ -61,7 +61,7 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
                     ...(reports.length > 0 ? { fatalReports: reports } : {}),
                 },
                 reports.length > 0
-                    ? "the previous daemon run died on a fatal error — read the named report for the cause"
+                    ? "the previous daemon run died on a fatal error: read the named report for the cause"
                     : "the previous daemon run was killed without warning (SIGKILL, an OOM kill, or a forced container stop)",
             );
         }

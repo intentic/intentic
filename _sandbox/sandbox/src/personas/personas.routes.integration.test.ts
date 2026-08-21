@@ -8,11 +8,11 @@ import { clientFor, errorCode, memoryPersonasStore, services, tempWorkspace } fr
 /* THE PERSONA KIT ROUTES over the daemon's real HTTP surface, on a real temp workspace.
  *
  * These write FILES, unlike the three card routes beside them, and the files are read by a loader this repo does
- * not own — so what is worth testing here is the same thing the store's own suite tests one layer down, asked
+ * not own, so what is worth testing here is the same thing the store's own suite tests one layer down, asked
  * through the door the browser actually uses: that a save lands where the loader looks, and that a kit cannot be
  * written for a card that does not exist.
  *
- * That last one is the case with teeth. A kit belonging to no persona is unreachable — nothing can wear it — so a
+ * That last one is the case with teeth. A kit belonging to no persona is unreachable: nothing can wear it, so a
  * route that created one by side effect would put the owner's prose somewhere no list ever shows it. */
 
 const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
@@ -75,7 +75,7 @@ test("a skill that is gone reads as absent rather than as an empty one", async (
 });
 
 /* NO KIT WITHOUT A CARD, on either write. The manifest the loader needs carries the card's own label, so there
- * is nothing to write for a persona that does not exist — and creating one by side effect would let this
+ * is nothing to write for a persona that does not exist, and creating one by side effect would let this
  * surface mint a persona nobody named. */
 test("writing a kit for a card that does not exist is refused, and writes nothing", async () => {
     const { client, root } = withStore([]);

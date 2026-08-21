@@ -9,7 +9,7 @@ import { hostIdFrom, SETUP_HOST_SCOPES } from "./host-seed.js";
  * noticed later: a person who installed a sandbox consented to running a sandbox, not to handing the agent
  * inside it a shell on their laptop.
  *
- * If a switch is ever added to the host scopes, this test fails until someone decides — deliberately — whether a
+ * If a switch is ever added to the host scopes, this test fails until someone decides: deliberately, whether a
  * machine that was connected automatically should have it. That failure is the feature. */
 test("a computer connected by setup may manage sandboxes and do nothing else", () => {
     expect(SETUP_HOST_SCOPES).toEqual({
@@ -28,7 +28,7 @@ test("setup never grants removal", () => {
 });
 
 /* Every switch the card knows about is decided here. A scope added to the contract and forgotten here would be
- * absent from the seeded config, and the schema's own default would quietly answer for it — which is how a
+ * absent from the seeded config, and the schema's own default would quietly answer for it, which is how a
  * default nobody chose ends up on somebody's computer. */
 test("the seeded grant answers for every switch the card has", () => {
     const parsed = HostConfigSchema.parse({ platform: "linux", ...SETUP_HOST_SCOPES });

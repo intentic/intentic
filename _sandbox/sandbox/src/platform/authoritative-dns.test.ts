@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { resolveTxtAuthoritatively } from "./authoritative-dns.js";
 
 /* A fake delegation: a zone apex that has nameservers, names beneath it that do not, and per-nameserver record
- * data — enough to exercise the two things this module actually decides, which zone to ask and what counts as
+ * data: enough to exercise the two things this module actually decides, which zone to ask and what counts as
  * published. */
 
 const dns = vi.hoisted(() => ({

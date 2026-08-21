@@ -39,7 +39,7 @@ test("reports a missing thread and an empty home as not existing", async () => {
 });
 
 /* THE BACKFILL. A native Codex agent that ran before the daemon kept its own record has its whole conversation
- * in this file and had no way to show it — /agents/:id/transcript answered `{messages: []}` for anything the
+ * in this file and had no way to show it, /agents/:id/transcript answered `{messages: []}` for anything the
  * Claude Code SDK's store didn't hold, so the chat opened blank. The rollout is a lower-level format than the
  * frames the client saw, so the cards are coarser than they were live; that is the trade, and it beats nothing.
  *

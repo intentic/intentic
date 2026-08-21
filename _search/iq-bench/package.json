@@ -1,7 +1,7 @@
 {
     "name": "@intentic/iq-bench",
     "version": "0.0.0",
-    "description": "Benchmark harness for iq — tier 1 sweeps retrieval configs in-process against golden datasets; tier 2 runs paired agent-CLI tasks with and without iq",
+    "description": "Benchmark harness for iq, tier 1 sweeps retrieval configs in-process against golden datasets; tier 2 runs paired agent-CLI tasks with and without iq",
     "license": "MIT",
     "private": true,
     "type": "module",

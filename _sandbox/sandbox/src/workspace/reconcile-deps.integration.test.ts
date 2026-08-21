@@ -77,7 +77,7 @@ test("a queued first-time setup survives until a later coordinator starts it", a
     const root = await workspace();
     await write(root, "app/package.json", `{"dependencies":{"left-pad":"^1.0.0"}}`);
     await write(root, "app/pnpm-lock.yaml", "");
-    // The first daemon cannot open a panel at all, so the request outlives it on disk — the case a restart
+    // The first daemon cannot open a panel at all, so the request outlives it on disk: the case a restart
     // mid-setup leaves behind.
     const failing = { start: async () => Promise.reject(new Error("tmux unavailable")), running: () => false } as unknown as ManagedProcesses;
     const stranded = createDependencyCoordinator({
@@ -188,7 +188,7 @@ test("an install that outruns its watch window is stopped rather than left going
  * attempt that succeeds puts the missing dependency on disk so the project reads `ready` afterwards.
  *
  * The repair is the part that makes the case honest. A fake that only reported success left the project as
- * stale as it found it, so every later pass rediscovered the same drift and announced the same install again —
+ * stale as it found it, so every later pass rediscovered the same drift and announced the same install again:
  * and a case that asserted one announcement was really asserting that it got its assertion in before the second
  * pass, which is a race it loses on a loaded machine. */
 const startsOnSecondTry = (root: string, dir = "app", name = "left-pad"): ManagedProcesses => {
@@ -229,7 +229,7 @@ test("the watcher cannot erase the land that caused a deferred install", async (
         repos: [{ repo: "app", from: "abc", dir: "app" }],
     });
     await settle(() => failed.length > 0);
-    // The watcher sees the same manifest a moment later — an ordinary background observation of a project the
+    // The watcher sees the same manifest a moment later: an ordinary background observation of a project the
     // land is still on the hook for.
     const stop = deps.watch(changes.subscribe);
     changes.emit(["app/package.json"]);

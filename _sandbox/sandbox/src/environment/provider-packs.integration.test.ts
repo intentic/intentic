@@ -9,7 +9,7 @@ import { codexConnected, providerPackFragments } from "./provider-packs.js";
 
 /* The provider-side fragment source: a pack rides the overlay exactly when its provider is CONNECTED. The
  * assertions compare against packFragment() through the same default stamp dir the source itself reads, so
- * they hold wherever the suite runs — in a dev checkout every wanted pack is a real fragment; inside a
+ * they hold wherever the suite runs: in a dev checkout every wanted pack is a real fragment; inside a
  * standard image (stamped base) both sides collapse to "nothing to compose", which is itself the contract. */
 
 const services = (openaiApiKey: string, xai: boolean, authRoot: string): Services =>
@@ -22,7 +22,7 @@ const services = (openaiApiKey: string, xai: boolean, authRoot: string): Service
 
 const emptyAuth = (): string => mkdtempSync(join(tmpdir(), "provider-packs-"));
 
-test("nothing connected — no provider fragments ride the overlay", async () => {
+test("nothing connected. no provider fragments ride the overlay", async () => {
     expect(await providerPackFragments(services("", false, emptyAuth()))).toEqual([]);
 });
 
@@ -37,7 +37,7 @@ test("an xAI sign-in wants the opencode pack, and only it", async () => {
 });
 
 // One subscription on disk answers twice: the translator has something to serve (its pack), and a codex-type
-// subscription is how a Codex turn is served (that pack too) — the file is the truth, no proxy asked.
+// subscription is how a Codex turn is served (that pack too): the file is the truth, no proxy asked.
 test("a codex subscription in the translator's auth dir wants the codex AND translator packs", async () => {
     const authRoot = emptyAuth();
     mkdirSync(join(authRoot, "cliproxy"), { recursive: true });
@@ -49,7 +49,7 @@ test("a codex subscription in the translator's auth dir wants the codex AND tran
     expect(fragments).toEqual(expected);
 });
 
-// A half-written auth file (a login still polling) is not a connection — and must not crash the compose.
+// A half-written auth file (a login still polling) is not a connection, and must not crash the compose.
 test("an unparseable auth file counts as no subscription", async () => {
     const authRoot = emptyAuth();
     mkdirSync(join(authRoot, "cliproxy"), { recursive: true });

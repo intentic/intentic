@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { jobSessionLabel, panePidSessions, reapableSessions } from "./terminal-session.js";
 
 /* The retention sweep's policy. What it must never do is take something someone is using or something still
- * working — everything else it takes costs nothing, because the pane's bytes are already in the terminal logs.
+ * working: everything else it takes costs nothing, because the pane's bytes are already in the terminal logs.
  * `tmux list-panes -a -F '#{session_name} #{session_attached} #{session_activity} #{pane_dead}'`. */
 
 const NOW = 1_780_000_000_000;
@@ -21,7 +21,7 @@ test("finished job sessions age out; the ones that just finished stay", () => {
     expect(reap(stdout)).toEqual(["job-capability-demo"]);
 });
 
-test("agent-* sessions are not this sweep's — they retire on their conversation's stop clock (platform/reaper.ts)", () => {
+test("agent-* sessions are not this sweep's, they retire on their conversation's stop clock (platform/reaper.ts)", () => {
     expect(reap(listPanes(["agent-old", 0, 300 * HOUR, 1]))).toEqual([]);
 });
 
@@ -31,7 +31,7 @@ test("a session with ANY live pane is never reaped, however old its stamp", () =
     expect(reap(stdout)).toEqual([]);
 });
 
-test("an attached session is never reaped — a browser is looking at it right now", () => {
+test("an attached session is never reaped: a browser is looking at it right now", () => {
     expect(reap(listPanes(["job-watched", 1, 9 * HOUR, 1]))).toEqual([]);
 });
 
@@ -40,12 +40,12 @@ test("`keep` spares work the panes can't see: a job whose runner has more queued
     expect(reap(stdout, (session) => session === "job-slow")).toEqual(["job-infra-check"]);
 });
 
-test("web-* shells keep their own, far longer clock — they are the user's own places, not records", () => {
+test("web-* shells keep their own, far longer clock: they are the user's own places, not records", () => {
     const stdout = listPanes(["web-yesterday", 0, 20 * HOUR, 1], ["web-abandoned", 0, 60 * HOUR, 1]);
     expect(reap(stdout)).toEqual(["web-abandoned"]);
 });
 
-test("panel-* dev servers are never aged out — they are started and stopped explicitly", () => {
+test("panel-* dev servers are never aged out: they are started and stopped explicitly", () => {
     expect(reap(listPanes(["panel-app", 0, 200 * HOUR, 1], ["panel-docker", 0, 200 * HOUR, 1]))).toEqual([]);
 });
 

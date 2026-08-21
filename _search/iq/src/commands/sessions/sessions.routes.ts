@@ -88,7 +88,7 @@ const files = buildCommand({
             } else {
                 for (const hit of hits) {
                     this.process.stdout.write(
-                        `${hit.path}  (${hit.sessions} session${hit.sessions === 1 ? "" : "s"}, last ${dateOf(hit.lastTouched)})${hit.sampleTitle === undefined ? "" : `  — ${hit.sampleTitle}`}\n`,
+                        `${hit.path}  (${hit.sessions} session${hit.sessions === 1 ? "" : "s"}, last ${dateOf(hit.lastTouched)})${hit.sampleTitle === undefined ? "" : ` , ${hit.sampleTitle}`}\n`,
                     );
                 }
             }
@@ -178,7 +178,7 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
         const context =
             fragments.length === 0
                 ? lead
-                : [lead, "Excerpts from those sessions (statistical recall — verify against the current code before trusting):", ...fragments].join(
+                : [lead, "Excerpts from those sessions (statistical recall, verify against the current code before trusting):", ...fragments].join(
                       "\n",
                   );
         write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: context } })}\n`);
@@ -308,7 +308,7 @@ const fork = buildCommand({
             );
             if (result.staleFiles.length > 0) {
                 this.process.stdout.write(
-                    `stale since then — re-read before trusting:\n${result.staleFiles.map((file) => `    ${file}`).join("\n")}\n`,
+                    `stale since then: re-read before trusting:\n${result.staleFiles.map((file) => `    ${file}`).join("\n")}\n`,
                 );
             }
             if (!flags.dryRun) {
@@ -322,5 +322,5 @@ const fork = buildCommand({
 
 export const sessionsCommand = buildRouteMap({
     routes: { ingest: ingestCommand, list, files, match, grab, fork },
-    docs: { brief: "Session recall — what past sessions touched and said, and forking them mid-point" },
+    docs: { brief: "Session recall, what past sessions touched and said, and forking them mid-point" },
 });

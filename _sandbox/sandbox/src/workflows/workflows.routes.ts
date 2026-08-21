@@ -29,7 +29,7 @@ export const createWorkflowsRoutes = (services: Services) => {
             throw new ORPCError("NOT_FOUND", { message: "No run with that id." });
         }
         if (workflowRunning(runId)) {
-            throw new ORPCError("BAD_REQUEST", { message: "That run is still going — stop it first." });
+            throw new ORPCError("BAD_REQUEST", { message: "That run is still going, stop it first." });
         }
         return run;
     };

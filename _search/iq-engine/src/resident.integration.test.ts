@@ -33,7 +33,7 @@ test("first query self-builds without warm() and serves from the resident index"
 });
 
 test("natural-language q answers from the resident BM25 index (no per-query revalidation)", async () => {
-    // Queries never wait for the index build — so wait for it here before asserting on index-backed results.
+    // Queries never wait for the index build, so wait for it here before asserting on index-backed results.
     await engine.warm();
     const outcome = await engine.run(request({ verb: "q", query: "how are widgets built for the registry?" }));
     expect(outcome.exitCode).toBe(0);
@@ -42,7 +42,7 @@ test("natural-language q answers from the resident BM25 index (no per-query reva
 
 test("a new file surfaces only after markDirty triggers a refresh; staleness is reported meanwhile", async () => {
     await writeFile(join(root, "alpha/src/gadget_resident.ts"), "export const residentGadget = 1;\n");
-    // The sweep is cached — without a change notification the file is invisible (that's the contract: queries
+    // The sweep is cached, without a change notification the file is invisible (that's the contract: queries
     // never pay the walk; the watcher owns freshness).
     const before = await engine.run(request({ verb: "files", query: "gadget_resident" }));
     expect(before.result.total).toBe(0);

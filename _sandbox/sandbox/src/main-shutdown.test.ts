@@ -5,14 +5,14 @@ import { describe, expect, it } from "vitest";
 /* THE INVARIANT THAT REPLACED THE LIST.
  *
  * Shutdown used to be twenty-five `.stop()` calls at the bottom of main.ts, and the failure mode was never that
- * one of them was wrong — it was that the twenty-sixth subsystem never got a line. Nothing tied the list to the
+ * one of them was wrong: it was that the twenty-sixth subsystem never got a line. Nothing tied the list to the
  * things it covered, and a missing stop is invisible in the only place anyone looks: the process was exiting
  * anyway. It surfaced instead as a hanging test suite or a dev sandbox whose timers fired against services that
  * were already gone.
  *
  * Every subsystem now registers its teardown where it is created, and the handler just disposes the store. That
  * only stays true if nobody re-grows the list, which is what these read. By SHAPE, over the file as it stands,
- * rather than against a roster of subsystem names — a roster would need the same edit the code needs, and would
+ * rather than against a roster of subsystem names: a roster would need the same edit the code needs, and would
  * therefore miss exactly the addition it exists to catch. */
 
 const main = readFileSync(fileURLToPath(new URL("./main.ts", import.meta.url)), "utf8");
@@ -30,8 +30,8 @@ describe(`daemon shutdown`, () => {
         const body = shutdownHandler();
         expect(body).toContain(`shutdown.dispose()`);
 
-        /* A subsystem named HERE is one that had to be remembered. Register it next to whatever creates it —
-         * `shutdown.push(() => thing.stop())` — and this handler never has to know it exists. */
+        /* A subsystem named HERE is one that had to be remembered. Register it next to whatever creates it:
+         * `shutdown.push(() => thing.stop())`, and this handler never has to know it exists. */
         const enumerated = [...body.matchAll(/\.stop\(\)|\.stopAll\(\)|\.close\(\)|\.cancel\(\)|clearInterval\(|clearTimeout\(/g)].map(
             (match) => match[0],
         );

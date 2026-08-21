@@ -70,7 +70,7 @@ describe("enrollKey", () => {
     });
 });
 
-/* Which sandbox a command acts on. With a fleet on one machine, `pause`/`resume`/`uninstall` need to name one —
+/* Which sandbox a command acts on. With a fleet on one machine, `pause`/`resume`/`uninstall` need to name one:
  * and a real id is `sandbox-<hex>-<zone>`-shaped, so a human names it by the fragment they recognize. An ambiguous
  * or unknown fragment must refuse rather than guess: guessing here unpairs the wrong sandbox. */
 describe("selectPairings", () => {
@@ -112,13 +112,13 @@ describe("pairingLine", () => {
         mode: "sync",
         localDir: "/home/me/intentic/work",
         mutagenStatus: "watching",
-        // A healthy pairing runs BOTH sessions, so the default fixture has to have both — otherwise every
+        // A healthy pairing runs BOTH sessions, so the default fixture has to have both: otherwise every
         // assertion below would be reading a line that is already shouting about a missing backup.
         backupStatus: "watching",
         ...overrides,
     });
 
-    /* Mutagen omits an empty conflict list, so `conflicts` is absent on every healthy session — and the count was
+    /* Mutagen omits an empty conflict list, so `conflicts` is absent on every healthy session, and the count was
      * interpolated whenever it wasn't zero. Every well-behaved sync on every machine printed
      * "[watching, undefined conflict(s)]", which reads as a fault on the line whose job is to say there is none. */
     it("says nothing about conflicts when Mutagen reported none", () => {
@@ -137,7 +137,7 @@ describe("pairingLine", () => {
     it("shouts when the state backup is not running, even though the folder syncs fine", () => {
         const line = pairingLine(synced({ backupStatus: undefined }));
         expect(line).toContain("watching");
-        expect(line).toContain("backup NOT RUNNING — this sandbox's own state is not being copied here");
+        expect(line).toContain("backup NOT RUNNING, this sandbox's own state is not being copied here");
     });
 
     it("names the backup's own status when it has one of its own", () => {
@@ -147,7 +147,7 @@ describe("pairingLine", () => {
     /* The failure this whole line exists for: a pairing whose session was never created has no status, and an
      * empty bracket put "this folder is not syncing at all" one space away from "this folder is fine". */
     it("shouts when a sync pairing has no session at all", () => {
-        expect(pairingLine(synced({ mutagenStatus: undefined }))).toContain("NO FILE-SYNC SESSION — this folder is not syncing");
+        expect(pairingLine(synced({ mutagenStatus: undefined }))).toContain("NO FILE-SYNC SESSION, this folder is not syncing");
     });
 
     it("says paused when it is paused, over whatever Mutagen last reported", () => {
@@ -155,14 +155,14 @@ describe("pairingLine", () => {
     });
 
     // A mirror-only enrollment has no file sync to have an opinion about, so the absent status is a fact about
-    // the mode — it must not read as a missing session.
+    // the mode: it must not read as a missing session.
     it("leaves a ports-only enrollment alone", () => {
         expect(pairingLine({ sandboxId: "friend", mode: "mirror" })).toBe("  friend  (ports only)");
     });
 });
 
 /* A PID IS NOT A PULSE. The watcher keeps its own tunnel listeners on the event loop, so a rejection that escapes
- * the loop leaves the process alive with mirroring, the git bridge and any not-yet-created file sync stopped —
+ * the loop leaves the process alive with mirroring, the git bridge and any not-yet-created file sync stopped:
  * observed twice, reported as "running" both times, by this line. */
 describe("watcherLine", () => {
     const NOW = 1_700_000_000_000;
@@ -179,7 +179,7 @@ describe("watcherLine", () => {
     });
 
     // Neither a stall nor a clean bill of health: an agent too old to stamp, or one whose first pass hasn't
-    // landed. Saying which is the point — picking either is how a silent stall reads as green.
+    // landed. Saying which is the point: picking either is how a silent stall reads as green.
     it("says so when no pass has been reported yet, rather than assuming either way", () => {
         const line = watcherLine({ running: true, pid: 4242 }, NOW);
         expect(line).toContain("running (pid 4242)");
@@ -187,6 +187,6 @@ describe("watcherLine", () => {
     });
 
     it("tells a stopped watcher's reader that file sync stopped with it", () => {
-        expect(watcherLine({ running: false }, NOW)).toContain("NOT running — file syncing and port mirroring are both stopped");
+        expect(watcherLine({ running: false }, NOW)).toContain("NOT running, file syncing and port mirroring are both stopped");
     });
 });

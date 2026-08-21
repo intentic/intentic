@@ -24,7 +24,7 @@ const request = (verb: QueryRequest["verb"], query: string, scope: QueryRequest[
 
 test("find recovers grep-dialect escapes by rerunning with them stripped, and says so", async () => {
     const outcome = await engine.run(request("find", "create\\|Widget"));
-    expect(outcome.text).toContain("grep-style escapes rewritten to rust regex — matched: create|Widget");
+    expect(outcome.text).toContain("grep-style escapes rewritten to rust regex, matched: create|Widget");
     expect(outcome.result.groups.some((group) => group.path.endsWith("widget.ts"))).toBe(true);
     expect(outcome.exitCode).toBe(0);
 });

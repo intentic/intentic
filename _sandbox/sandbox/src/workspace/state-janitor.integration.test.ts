@@ -37,7 +37,7 @@ test("boot sweep deletes retired DERIVED roots and leaves secret and artifact qu
     await mkdir(join(root, ".intentic/claude"), { recursive: true });
     await mkdir(join(root, ".intentic/attachments"), { recursive: true });
     // The LIVE profile dir, which since the state dir was grouped is a different place entirely from the
-    // retired flat one above — and is the thing that must survive the sweep.
+    // retired flat one above, and is the thing that must survive the sweep.
     await mkdir(join(root, ".intentic/local/browser/reddit"), { recursive: true });
 
     await sweepStateAtBoot(root, log);

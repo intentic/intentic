@@ -34,7 +34,7 @@ test("computeUploadSkip compares mtime at second granularity (sub-second drift s
 
 test("computeUploadSkip never skips an escaping path, but an identical former-secret file now skips", async () => {
     const root = await mkdtemp(join(tmpdir(), "diff-"));
-    // A file already identical on disk is reported skippable so its bytes don't re-upload — former-secret paths
+    // A file already identical on disk is reported skippable so its bytes don't re-upload: former-secret paths
     // included now (no write floor). An escaping path is never skippable (resolveWithin rejects it).
     await writeFile(join(root, ".env"), "SECRET");
     await setWorkspaceMtime(join(root, ".env"), MTIME);
