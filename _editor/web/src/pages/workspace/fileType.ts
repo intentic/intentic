@@ -164,7 +164,7 @@ const BINARY_EXTS = new Set([
     "webp",
     "avif",
     "bmp",
-    "ico", // pictures a browser can paint — the viewers extension's `image`
+    "ico", // pictures a browser can paint: the viewers extension's `image`
     "heic",
     "heif",
     "tiff",
@@ -173,7 +173,7 @@ const BINARY_EXTS = new Set([
     "fig", // pictures it cannot: no viewer claims these, so they stay downloads
     "pdf",
     "docx",
-    "xlsx", // documents — the viewers extension's `pdf` / `docx` / `xlsx`
+    "xlsx", // documents: the viewers extension's `pdf` / `docx` / `xlsx`
     "mp3",
     "wav",
     "flac",
@@ -191,7 +191,7 @@ const BINARY_EXTS = new Set([
     "3gp",
     "mkv",
     "avi",
-    "wmv", // video — both together are the viewers extension's `media`
+    "wmv", // video: both together are the viewers extension's `media`
 ]);
 
 // Exact (lowercased) filenames → Shiki lang id, for well-known config files that carry no usable extension.

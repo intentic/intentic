@@ -46,7 +46,7 @@ export const row = (...fields: (string | undefined)[]): string => fields.filter(
 // A short, greppable count line under a list. Says when a limit is what ended it, because "12 results" and
 // "the first 12 of an unknown number" are different answers and only one of them means stop looking.
 export const tally = (shown: number, limit: number, what: string): string =>
-    shown >= limit ? `${shown} ${what} (the limit — pass -n for more)` : count(shown, what);
+    shown >= limit ? `${shown} ${what} (the limit, pass -n for more)` : count(shown, what);
 
 // The same line where nothing was capped: a whole thread, one message's attachments.
 export const count = (shown: number, what: string): string => (shown === 0 ? `no ${what}` : `${shown} ${what}`);

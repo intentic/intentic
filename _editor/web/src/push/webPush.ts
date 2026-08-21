@@ -47,7 +47,7 @@ const isBrave = async (): Promise<boolean> => {
 const pushServiceAdvice = async (): Promise<string> =>
     (await isBrave())
         ? `Brave ships with push messaging turned off. Enable "Use Google services for push messaging" in brave://settings/privacy, restart Brave, then try again.`
-        : `Your browser's push service refused to register this browser — nothing on the sandbox side can fix it. A VPN or firewall blocking the browser's push connection is the usual cause.`;
+        : `Your browser's push service refused to register this browser, nothing on the sandbox side can fix it. A VPN or firewall blocking the browser's push connection is the usual cause.`;
 
 const registration = async (): Promise<ServiceWorkerRegistration> => navigator.serviceWorker.register(SW_URL);
 

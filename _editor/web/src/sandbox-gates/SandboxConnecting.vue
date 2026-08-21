@@ -10,7 +10,7 @@ import { connectionNotice } from "./connectionNotice";
 
 /* Shown in the workspace outlet whenever the active sandbox's daemon isn't reachable (see SandboxGate). What
  * it says is a pure function of the CLASSIFIED connection failure (connectionNotice) rather than of a boolean
- * "did a probe fail" — so a sandbox that never announced itself, one that stopped answering mid-session, and
+ * "did a probe fail", so a sandbox that never announced itself, one that stopped answering mid-session, and
  * an expired Google session each get their own words and their own offered action instead of sharing one
  * "unreachable" screen. The connection machine flips to `online` the moment the daemon answers, and the real
  * views render. */
@@ -25,7 +25,7 @@ const notice = computed(() => connectionNotice(connection.value.failure, active.
 // Carried as a link rather than pushed, so the one way out of this gate has an address on it like everything
 // else that goes somewhere.
 const setupTo = computed(() => ({ path: `/setup`, query: { sandbox: active.value?.id } }));
-// Drop both credentials so the re-establish goes through a fresh Google proof (with the account chooser —
+// Drop both credentials so the re-establish goes through a fresh Google proof (with the account chooser:
 // clearCredential disables auto-select) instead of replaying whatever the daemon just refused.
 const signIn = (): void => {
     clearCredential();

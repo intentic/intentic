@@ -1,6 +1,6 @@
 ---
 name: documenting
-description: This workspace's architecture-documentation conventions — a package's page is its own README.md, the plain-language house style, which figures are computed rather than written, and the rule that a package's README is updated in the same commit as the change that invalidated it. Use when writing or editing a package README or anything under docs/architecture/, when asked to document a repo or package, and — without being asked — when a change alters what a package is for, how it fits together, or which files matter in it.
+description: This workspace's architecture-documentation conventions, a package's page is its own README.md, the plain-language house style, which figures are computed rather than written, and the rule that a package's README is updated in the same commit as the change that invalidated it. Use when writing or editing a package README or anything under docs/architecture/, when asked to document a repo or package, and (without being asked) when a change alters what a package is for, how it fits together, or which files matter in it.
 ---
 
 # Documenting a repository
@@ -21,8 +21,8 @@ docs/architecture/
                    `intentic-docs check`. Never write this by hand.
 ```
 
-There is no per-package JSON sidecar. Everything the app needs to *read* rather than render — the one-liner, the
-anchors, the size and neighbour facts, whether the page is stale — is derived from the README and from git.
+There is no per-package JSON sidecar. Everything the app needs to *read* rather than render: the one-liner, the
+anchors, the size and neighbour facts, whether the page is stale: is derived from the README and from git.
 
 `intentic-docs` is on your PATH:
 
@@ -35,18 +35,18 @@ intentic-docs check    --repo intentic --from published --write   # rewrite inde
 **`--repo` names a repository under the workspace root, not the directory you are standing in.** It is resolved
 against `--root` (`/work`), so `cd`-ing into a repository changes nothing about how you spell it: from inside
 `/work/intentic` it is still `--repo intentic`. `--repo .` is the tempting shorthand for "this one" and it means
-the workspace itself — which documents nothing, so the run answers about the wrong tree, leaves the repository's
+the workspace itself: which documents nothing, so the run answers about the wrong tree, leaves the repository's
 real index unrefreshed, and drops an empty one at the top of the workspace. Omit the flag entirely only when you
 genuinely mean the workspace root repository.
 
-**`--from published` is not optional.** Without it the tool reads and writes the *draft* tree instead — the one a
-generation run stages for the owner to review — and the app reads that tree to decide whether there is a draft
+**`--from published` is not optional.** Without it the tool reads and writes the *draft* tree instead: the one a
+generation run stages for the owner to review: and the app reads that tree to decide whether there is a draft
 waiting. Point it at the wrong one and you announce a draft nobody wrote.
 
 ## The rule that matters most
 
 **If your change alters what a package is for, how it relates to its neighbours, or which files a newcomer
-should read — update that package's README in the same commit.**
+should read: update that package's README in the same commit.**
 
 This is the whole anti-rot mechanism. A staleness checker can only tell someone later that a page is probably
 wrong; the commit that made it wrong is the only moment when fixing it is cheap and the reason is still in
@@ -54,7 +54,7 @@ someone's head. You are usually that someone.
 
 What does *not* need a documentation edit: renaming a local, adding a test, fixing a bug the page never
 described, changing an implementation detail it deliberately does not mention. A README here explains shape and
-intent, so it should survive most edits untouched. If every change forces one, the page is too detailed — that is
+intent, so it should survive most edits untouched. If every change forces one, the page is too detailed: that is
 a signal to cut it back, not to update it more diligently.
 
 There is nothing to bump when you edit one. Staleness is derived: `intentic-docs check` compares the last commit
@@ -65,7 +65,7 @@ commit *is* the update. Run `intentic-docs check --from published --write` after
 
 Two things are required, because the tool reads them:
 
-**An `# H1` and one lead sentence.** The first paragraph after the heading becomes the package's one-liner —
+**An `# H1` and one lead sentence.** The first paragraph after the heading becomes the package's one-liner:
 in the documentation view's package list, in the workspace tree's row tooltip, everywhere the package is named
 without being opened. Write one sentence that says what the thing *is*. Not a paragraph, and not a restatement
 of the title.
@@ -85,7 +85,7 @@ The shape of "what should exist" — the deployment engine's core data structure
 - [src/compile.ts](src/compile.ts) — `compile`: RawNode map → validated graph.
 ```
 
-Paths are **package-relative**, so the links work on GitHub and in the file tree alike, and they **must exist** —
+Paths are **package-relative**, so the links work on GitHub and in the file tree alike, and they **must exist**:
 `intentic-docs validate` fails on one that does not. A dead anchor is the clearest possible evidence that a page
 is out of date. Keep them pointed at files whose *purpose* is stable, not at whichever file you read last.
 
@@ -97,21 +97,21 @@ common spine and a good default, but a package with a genuinely different story 
 Write for a capable engineer who has never opened this repository and has twenty minutes. They want to know what
 is here, how the pieces relate, and where to start.
 
-- **Not an API reference.** No lists of exports, signatures or options — `iq outline <path>` gives those for
+- **Not an API reference.** No lists of exports, signatures or options: `iq outline <path>` gives those for
   free, and repeating them produces a page that is long, stale within a week, and unread.
 - **Plain language.** Short sentences. Expand an acronym the first time. Prefer the plain word.
 - **Say what is surprising, and why.** That sentence is usually the most valuable one on the page.
 - **Give reasons where they exist**, and where you cannot find one, describe what the code does rather than
   inventing a rationale.
 - **One screen per package.** Length is a budget, not a target.
-- **Use the repo's own vocabulary** — `repo.json`'s glossary is there so every page means the same thing by the
+- **Use the repo's own vocabulary**: `repo.json`'s glossary is there so every page means the same thing by the
   same word. Add a term to it rather than coining a synonym on one page.
 
 ## Figures
 
 **Do not write figures for facts.** Sizes, file counts, whether a package has tests, and which packages it
 depends on are computed by `intentic-docs` and drawn by the app above your prose. Hand-writing them produces
-numbers that are wrong within a week and a diff nobody can read — and they were the single largest source of rot
+numbers that are wrong within a week and a diff nobody can read: and they were the single largest source of rot
 in the previous system.
 
 Write a figure only when it explains something the dependency graph cannot: a request's path through the system,
@@ -128,7 +128,7 @@ valid.
 ```
 ````
 
-- `direction` is `"LR"` (default) or `"TB"`. Edges carry no labels — use `"dashed": true` for a weaker or
+- `direction` is `"LR"` (default) or `"TB"`. Edges carry no labels, use `"dashed": true` for a weaker or
   dev-only relationship.
 - `accent` is `"1"`–`"5"` or `"neutral"`, and belongs to a **component**: reuse the slot `repo.json` gave that
   component, so the diagrams across the repository agree with each other.
@@ -137,7 +137,7 @@ valid.
 `bars` and `stats` fences still render, and `repo.md` uses them for repository-wide measures the package graph
 does not hold. In a package README they are almost always a fact the tool already computes.
 
-A `mermaid` fence renders as a diagram too — the app draws it in the same palette as the figures above, so a
+A `mermaid` fence renders as a diagram too: the app draws it in the same palette as the figures above, so a
 page that arrived with one (or a repository that writes its diagrams that way) reads correctly and nothing has
 to be converted. For a figure you are WRITING here, prefer `dag`: it is data the app lays out, so it cannot
 drift into a hand-positioned picture, and it looks the same on every page in the set.
@@ -149,6 +149,6 @@ reading order. Only then are packages documented, one at a time, each using the 
 component's accent. Writing package pages before the map exists is how a set ends up with a different vocabulary
 per page and no map at all.
 
-A generation run writes into `.intentic/config/docs/<repo>/` first — the same tails, staged — for the owner to review,
+A generation run writes into `.intentic/config/docs/<repo>/` first (the same tails, staged) for the owner to review,
 and publishing copies each tail into place (`<pkg>/README.md`, `docs/architecture/repo.md`). Editing an
 already-published page as part of a code change is different: edit it in place, in the repo, in your own commit.

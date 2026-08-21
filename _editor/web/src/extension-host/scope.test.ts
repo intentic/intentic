@@ -2,7 +2,7 @@ import { resetSandboxScope, sandboxRef, sandboxScopeGuard } from "@intentic/exte
 import { beforeEach, describe, expect, it } from "vitest";
 
 /* The extensions' state scope (extension-api/src/scope.ts), tested from here because the SDK ships no test
- * harness of its own — the same reason surface-guard.test.ts and permissions.conformance.test.ts live in this
+ * harness of its own: the same reason surface-guard.test.ts and permissions.conformance.test.ts live in this
  * directory rather than beside the package they hold to account.
  *
  * The rule under test is the one the reported bug broke: a rail badge filled from module state kept the
@@ -35,7 +35,7 @@ describe(`sandboxRef`, () => {
         expect(documents.value).not.toBe(first);
     });
 
-    it(`hands the outgoing value to its disposer — the door for state that owns something the GC will not take`, () => {
+    it(`hands the outgoing value to its disposer: the door for state that owns something the GC will not take`, () => {
         const revoked: string[] = [];
         const previews = sandboxRef<Record<string, string>>(
             () => ({}),
@@ -69,7 +69,7 @@ describe(`sandboxScopeGuard`, () => {
         expect(current()).toBe(true);
     });
 
-    it(`answers false once the scope has closed — a poll's answer arriving after a switch`, () => {
+    it(`answers false once the scope has closed: a poll's answer arriving after a switch`, () => {
         const current = sandboxScopeGuard();
 
         resetSandboxScope();

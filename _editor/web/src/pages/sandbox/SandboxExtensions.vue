@@ -14,28 +14,28 @@ import ExtensionRow from "./ExtensionRow.vue";
 import { extensionBrief } from "./extensionBrief";
 import NewExtensionDialog from "./NewExtensionDialog.vue";
 
-/* The Sandbox hub's "Extensions" tab: EVERY first-party and installed extension — the ones compiled into this
+/* The Sandbox hub's "Extensions" tab: EVERY first-party and installed extension, the ones compiled into this
  * bundle, the ones baked into the sandbox image, the git-installed capabilities, and the workspace extensions
- * living under .intentic/config/workspace-extensions/ — each with its on/off switch. Install/remove happens on the
+ * living under .intentic/config/workspace-extensions/: each with its on/off switch. Install/remove happens on the
  * Capabilities page like every other capability (a workspace extension is instead created and deleted as files,
  * typically by an agent); this tab is the management surface.
  *
  * IT IS A LIST OF SEVENTEEN THINGS, AND GROWING, so it is built to be scanned rather than read. Four decisions
  * follow from that, and they are the design:
  *
- *  1. The nominal case is silent. An extension that is on and working carries no badge — the switch says it is
+ *  1. The nominal case is silent. An extension that is on and working carries no badge: the switch says it is
  *     on and the absence of anything else says it is fine. What is left in colour is only what deserves the
  *     eye: a load failure, an engines mismatch, an image/app version drift. Those also LEAVE their section,
  *     into a pinned group at the top, so "is anything wrong?" is answered without reading a single row.
  *  2. One line per extension. Version, commit, contribution counts, the consequences of switching it off and
- *     the settings form are all real, and all below the fold — a row expands into its full record. Before, the
+ *     the settings form are all real, and all below the fold: a row expands into its full record. Before, the
  *     tab paid for that detail on every row at all times, which is what made seventeen extensions unreadable.
  *  3. Find beats scroll past a dozen. The filter box matches the id AND everything the extension contributes,
  *     so "github" finds the connectors extension and ".docx" finds viewers; the segmented control answers
  *     "which ones did I switch off?", which is otherwise invisible in an alphabetical list.
  *  4. Sections by PURPOSE, declared in the manifest (see extensionCategories.ts). One alphabetical run of
  *     seventeen names asks the reader to know what each one is before they can find the one they want; five
- *     headings turn the same list into five short ones, and the heading is what a reader arrives with —
+ *     headings turn the same list into five short ones, and the heading is what a reader arrives with:
  *     "the CI thing", "whatever talks to Discord". The filter and the switcher moved OUT of a group header
  *     and above the sections for it: they narrow the whole tab, and each section is now only a part of it. */
 
@@ -52,7 +52,7 @@ const FILTERABLE_FROM = 8;
 
 const query = ref(``);
 const mode = ref<`all` | `on` | `off`>(`all`);
-// One row open at a time — the list must not grow unpredictably under the pointer while it is being scanned.
+// One row open at a time: the list must not grow unpredictably under the pointer while it is being scanned.
 const opened = ref<string | undefined>(undefined);
 const pending = ref<string | undefined>(undefined);
 const toggleError = ref<NoticeModel | undefined>(undefined);
@@ -71,7 +71,7 @@ const attention = computed(() => matches.value.filter((entry) => entry.state.att
 const healthy = computed(() => matches.value.filter((entry) => !entry.state.attention));
 
 /* One list of sections, rendered by one loop. The exception group is a section like the others because it
- * behaves like one — a heading over rows — and pinning it first is the whole of its specialness. It overrides
+ * behaves like one: a heading over rows, and pinning it first is the whole of its specialness. It overrides
  * the purpose taxonomy rather than sitting inside it: a broken extension is not something to find under the
  * heading you'd have looked for it under on a good day. */
 const sections = computed<ExtensionSection[]>(() => [
@@ -88,7 +88,7 @@ const sections = computed<ExtensionSection[]>(() => [
     ...sectionsOf(healthy.value),
 ]);
 
-/* What the tab says when the sections hold no rows of their own — three different facts, and the wrong one is a
+/* What the tab says when the sections hold no rows of their own: three different facts, and the wrong one is a
  * lie the reader can see. An attention row IS a match, so a filter that hits only a broken extension leaves the
  * purpose sections empty while a row sits visibly above them; "nothing matches" there would be flatly
  * contradicted by the screen. */
@@ -102,7 +102,7 @@ const emptyNote = computed<string | undefined>(() => {
         return `Nothing installed yet.`;
     }
     if (attention.value.length > 0) {
-        return `Nothing else to show — see the group above.`;
+        return `Nothing else to show: see the group above.`;
     }
     return `Nothing matches that filter.`;
 });
@@ -128,7 +128,7 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
     }
 };
 
-// The way out of "reload to load" — an extension installed after the host booted has no status until the host
+// The way out of "reload to load": an extension installed after the host booted has no status until the host
 // runs again, and re-running it is cheaper and less destructive than the page reload it used to take.
 const reload = async (): Promise<void> => {
     reloading.value = true;
@@ -142,7 +142,7 @@ const reload = async (): Promise<void> => {
     }
 };
 
-/* An update landed while this browser kept running the old bundle — applied by the auto rung, another member,
+/* An update landed while this browser kept running the old bundle: applied by the auto rung, another member,
  * or another tab. The daemon is already wholly on the new version; the prompt's button is the host reload the
  * tab already owns, which is what finishes the update HERE. A notice rather than an auto-reload: yanking a
  * view out from under someone mid-use is the one part of "seamless" that isn't. */
@@ -155,12 +155,12 @@ const staleNotice = computed<NoticeModel | undefined>(() => {
     return {
         tone: `info`,
         title: `Reload to finish updating.`,
-        detail: `${names} ${plural} updated — this browser is still running the previous code until the extensions reload.`,
+        detail: `${names} ${plural} updated, this browser is still running the previous code until the extensions reload.`,
         action: { label: `Reload now`, run: () => void reload() },
     };
 });
 
-// The comparison's honesty line: when it last ran, and the way to run it now — re-rendered with every refetch,
+// The comparison's honesty line: when it last ran, and the way to run it now, re-rendered with every refetch,
 // which is exactly as fresh as the fact it states.
 const checking = ref(false);
 const checkNow = async (): Promise<void> => {
@@ -177,12 +177,12 @@ const checkNow = async (): Promise<void> => {
 
 const creating = ref(false);
 /* The new extension's row exists the moment the daemon answers, but nothing is RUNNING until the host runs again
- * — so creating it ends in the same reload the tab already offers, and the row opens on arrival, naming the
+ *, so creating it ends in the same reload the tab already offers, and the row opens on arrival, naming the
  * directory its two files are in.
  *
  * If the author said what they wanted, that hands off to an agent as an ordinary chat: a new conversation with
  * the brief enqueued as a user message, so it lands in the transcript to be read, corrected and continued.
- * Deliberately not an isolated unattended run like the acceptance and maintenance surfaces start — those check
+ * Deliberately not an isolated unattended run like the acceptance and maintenance surfaces start: those check
  * something against a rubric and report, while this is the first minute of authoring, where the author's own
  * "no, more like…" is the most valuable input there is and an isolated worktree would put it behind a landing. */
 const created = async (extension: { id: string; dir: string; wish: string }): Promise<void> => {
@@ -200,7 +200,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
 
         <!-- The tab's instrument, not any one section's. This row's layout reasoning became <FilterBar>'s: the
              filter and the state switcher narrow every section below and read as one instrument, while reloading
-             the host does not and stays chromeless beside them. No heading on the left — the hub's own tab
+             the host does not and stays chromeless beside them. No heading on the left: the hub's own tab
              already says "Extensions", and the running total is on the "All" pill.
 
              Below the filterable threshold there is no field to grow, so the lone reload button sits alone on
@@ -220,7 +220,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             </FilterBar>
             <!-- Authoring sits beside reloading rather than in a section header for the same reason the filter
                  does: it acts on the tab, not on any one group. It is a labelled button and not a third icon
-                 because it is the only control here that CREATES something — the others narrow or refresh a list
+                 because it is the only control here that CREATES something: the others narrow or refresh a list
                  that already exists, and none of them leaves a directory behind. -->
             <Button label="New extension" size="small" @click="creating = true">
                 <template #icon><Icon name="plus" /></template>
@@ -267,7 +267,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         </div>
 
         <!-- The registry comparison's honesty line: update badges above are only as fresh as this. Absent
-             until the first check has run — a blank claim is worse than none. -->
+             until the first check has run: a blank claim is worse than none. -->
         <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">
             Updates checked {{ timeAgo(Date.parse(updatesCheckedAt)) }} ·
             <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="checking" @click="checkNow">
@@ -277,7 +277,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
 
         <!-- Workspace-extension directories the daemon could not enumerate: no manifest, one that does not
              parse, or an id something else already owns. Named per directory because nothing install-shaped
-             ever rejected them — this group is where their author (usually an agent, via GET /extensions)
+             ever rejected them: this group is where their author (usually an agent, via GET /extensions)
              learns why the row is missing. -->
         <RowGroup v-if="invalid.length > 0" label="Not loadable" caption="workspace-extension directories the sandbox could not read">
             <div v-for="entry in invalid" :key="entry.dir" class="flex items-start justify-between gap-3 px-3 py-2">

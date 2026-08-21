@@ -31,7 +31,7 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
 });
 
 // The intentic repo as the daemon reports it: one `pnpm dev`, a turbo fan-out, three pinned ports and two
-// schemes. The case that made the panel spin "Starting…" forever — and, in its sessions, the three ways an
+// schemes. The case that made the panel spin "Starting…" forever, and, in its sessions, the three ways an
 // address comes to be occupied: the panel the daemon started, something outside this sandbox's terminals, and a
 // dev server someone launched in a terminal of their own.
 const MONOREPO = [
@@ -100,8 +100,8 @@ describe(`useTargets`, () => {
         expect(localUrl(`app`)).toBe(`http://localhost:5173`);
     });
 
-    /* THE PORT THE DAEMON ASSIGNED IS NOT THE PORT THE APP BOUND. A repo that pins its own ports — a committed
-     * dev cert's origin, a CORS allowlist, an OAuth client's authorized redirect — ignores the injected PORT, so
+    /* THE PORT THE DAEMON ASSIGNED IS NOT THE PORT THE APP BOUND. A repo that pins its own ports: a committed
+     * dev cert's origin, a CORS allowlist, an OAuth client's authorized redirect: ignores the injected PORT, so
      * the address comes from what the daemon FOUND listening, scheme and all. */
     it(`takes the address from what is serving, not from the port the daemon handed out`, async () => {
         const { stateOf, localUrl } = await read([
@@ -122,7 +122,7 @@ describe(`useTargets`, () => {
     });
 
     /* WHICH TERMINAL TO OPEN, which is a different question from "is it up" and used to be answered by guessing
-     * `panel-<repo>` — the session a Start WOULD have made. For a dev server started by hand that session has
+     * `panel-<repo>`: the session a Start WOULD have made. For a dev server started by hand that session has
      * never existed, so the terminals panel opened onto an empty strip. */
     it(`opens the terminal a lone dev server is actually served from, and offers none when it has one`, async () => {
         const byHand = await read([panel({ repo: `app`, running: false, servers: [{ url: `http://localhost:5173`, session: `web-3f2a` }] })]);
@@ -133,13 +133,13 @@ describe(`useTargets`, () => {
         expect(outside.stateOf(`app`)).toBe(`ready`);
         expect(outside.terminalOf(`app`)).toBeUndefined();
 
-        // Several servers have no ONE terminal either — each row in the popover carries its own.
+        // Several servers have no ONE terminal either: each row in the popover carries its own.
         const monorepo = await read([panel({ repo: `intentic`, running: true, healthy: true, servers: MONOREPO })]);
         expect(monorepo.terminalOf(`intentic`)).toBeUndefined();
         expect(monorepo.serversOf(`intentic`).map((server) => server.session)).toEqual([`panel-intentic`, undefined, `web-3f2a`]);
     });
 
-    it(`never falls back to the preview URL — a stopped panel answers it with a 502`, async () => {
+    it(`never falls back to the preview URL: a stopped panel answers it with a 502`, async () => {
         const stopped = await read([panel({ repo: `app`, running: false, previewUrl: `https://preview-app-abc.example.dev` })]);
         expect(stopped.stateOf(`app`)).toBe(`stopped`);
         expect(stopped.localUrl(`app`)).toBeUndefined();
@@ -156,7 +156,7 @@ describe(`useTargets`, () => {
 
         expect(targets.stateOf(`intentic`)).toBe(`ready`);
         expect(targets.serversOf(`intentic`)).toHaveLength(3);
-        // No guess at which of the three a group meant — the gate holds until someone says.
+        // No guess at which of the three a group meant: the gate holds until someone says.
         expect(targets.localUrl(`intentic`)).toBeUndefined();
         expect(targets.addressOf(`intentic`, `01-arrive`)).toBeUndefined();
 
@@ -182,7 +182,7 @@ describe(`useTargets`, () => {
     });
 
     /* THE RUN THIS FIX IS NAMED AFTER. `pnpm dev` fans out and the apps come up seconds apart, so a window exists
-     * in which the intentic repo is serving exactly one thing — the web app — and the marketing group has no
+     * in which the intentic repo is serving exactly one thing: the web app, and the marketing group has no
      * memory yet. Inheriting the only address up made the run legal, and a fan-out walked the landing page's
      * stories through the app's sign-in screen; the manifest then remembered that address as if someone had
      * chosen it. A package's dev server is one app of several however alone it is at that instant. */
@@ -194,7 +194,7 @@ describe(`useTargets`, () => {
         // And the row says so, because the pick that unblocks it lives there.
         expect(booting.needsAddress(`intentic`, `01-arrive`)).toBe(true);
 
-        // The site's own server arriving is what the group was waiting for — still its own choice to state.
+        // The site's own server arriving is what the group was waiting for: still its own choice to state.
         const up = await read([panel({ repo: `intentic`, running: true, healthy: true, servers: MONOREPO })]);
         up.aimAt(`intentic`, `01-arrive`, `http://localhost:4321`);
         expect(up.addressOf(`intentic`, `01-arrive`)).toBe(`http://localhost:4321`);
@@ -203,7 +203,7 @@ describe(`useTargets`, () => {
     it(`reports a repo the daemon runs nothing for as having no dev server at all`, async () => {
         const { stateOf, localUrl } = await read([panel({ repo: `docs`, hasPanel: false })]);
 
-        // This one's groups show an address field rather than a dot — free text is the genuine answer here.
+        // This one's groups show an address field rather than a dot: free text is the genuine answer here.
         expect(stateOf(`docs`)).toBe(`none`);
         expect(localUrl(`docs`)).toBeUndefined();
     });
@@ -216,7 +216,7 @@ describe(`useTargets`, () => {
 
     /* One repository, two applications: a monorepo's marketing site and its web app are two ports behind one
      * `pnpm dev`, and the story GROUP is the only thing in the tree that says which is which. So the dev server
-     * is shared and the addresses are not — which is what the list draws as one chip on the repo's heading and a
+     * is shared and the addresses are not, which is what the list draws as one chip on the repo's heading and a
      * second one on the group's row. */
     it(`aims each of a repo's groups separately while they share its one dev server`, async () => {
         const targets = await read([panel({ repo: `site`, running: true, healthy: true, servers: [{ url: `http://localhost:5173` }] })], {
@@ -271,7 +271,7 @@ describe(`useTargets`, () => {
         targets.aimAt(`app`, ``, `https://preview.example.dev`);
         expect(targets.addressOf(`app`, ``)).toBe(`https://preview.example.dev`);
 
-        // Emptying the field is a real answer — nowhere — and the run says so rather than quietly re-aiming.
+        // Emptying the field is a real answer: nowhere, and the run says so rather than quietly re-aiming.
         targets.aimAt(`app`, ``, ``);
         expect(targets.addressOf(`app`, ``)).toBeUndefined();
 
@@ -280,12 +280,12 @@ describe(`useTargets`, () => {
     });
 });
 
-/* WHERE A GROUP AIMS — the rule the whole surface is built on, and the one that decides whether a run is allowed
+/* WHERE A GROUP AIMS: the rule the whole surface is built on, and the one that decides whether a run is allowed
  * to spend an agent session per story. Tested against the pure function rather than through the query, because
  * every interesting case is a combination of four inputs and none of them is about HTTP. */
 describe(`aimOf`, () => {
     // The ordinary repo: one dev server, bound at the repo root, which is why it carries no package `dir`. That
-    // absence is load-bearing — it is what makes this address the REPO's rather than one app's.
+    // absence is load-bearing: it is what makes this address the REPO's rather than one app's.
     const ONE = [{ url: `http://localhost:5173` }];
     const THREE = MONOREPO;
     // The same monorepo caught mid-boot: `pnpm dev` has brought the web app up and the other two are still
@@ -296,7 +296,7 @@ describe(`aimOf`, () => {
         expect(aimOf({ typed: undefined, remembered: undefined, state: `ready`, servers: ONE })).toBe(`http://localhost:5173`);
     });
 
-    it(`offers nothing while that server is stopped or still starting — the gate the run waits on`, () => {
+    it(`offers nothing while that server is stopped or still starting: the gate the run waits on`, () => {
         expect(aimOf({ typed: undefined, remembered: undefined, state: `stopped`, servers: [] })).toBeUndefined();
         expect(aimOf({ typed: undefined, remembered: undefined, state: `starting`, servers: [] })).toBeUndefined();
     });
@@ -308,7 +308,7 @@ describe(`aimOf`, () => {
     });
 
     /* AND REFUSES JUST AS FLATLY WHEN ONLY ONE OF THEM HAS FINISHED BOOTING, which is the failure this rule was
-     * rewritten for. `_editor/web` answering alone is not "the repo's address" — it is the first app up out of a
+     * rewritten for. `_editor/web` answering alone is not "the repo's address": it is the first app up out of a
      * turbo fan-out, and a marketing group that inherits it walks a sign-in screen looking for a landing page.
      * The package `dir` is the whole difference: a server bound at the repo ROOT is the repo and every group takes
      * it; a server a package bound is one app, and one app is never the answer to "which app". */
@@ -319,7 +319,7 @@ describe(`aimOf`, () => {
     });
 
     /* THE BUG THIS RULE EXISTS TO CLOSE. The old derivation compared the remembered address against the repo's
-     * single address, which is undefined precisely when the server is down — so a remembered
+     * single address, which is undefined precisely when the server is down, so a remembered
      * `http://localhost:5173` "differed from" nothing, was read as a deliberate elsewhere, and let a fan-out be
      * aimed at a dead port. */
     it(`does not resurrect a remembered loopback address once its dev server has stopped`, () => {
@@ -336,7 +336,7 @@ describe(`aimOf`, () => {
     });
 
     /* WHAT A DEAD MEMORY MUST NEVER BECOME: a different app. The marketing group was remembered at the site's own
-     * port, that port went away, and the rule handed it the only address left — the web app's — which reads as a
+     * port, that port went away, and the rule handed it the only address left: the web app's, which reads as a
      * deliberate aim ever after, because the run manifests are the memory. A group that was aimed once is not the
      * repo's to re-aim; with nothing safe to offer, the honest answer is to ask. */
     it(`never substitutes a sibling app for a group's remembered address`, () => {
@@ -351,7 +351,7 @@ describe(`aimOf`, () => {
         expect(aimOf({ typed: undefined, remembered: `https://staging.example.dev`, state: `ready`, servers: ONE })).toBe(
             `https://staging.example.dev`,
         );
-        // And it is still the answer while that repo's dev server is down — nothing about this group needs it.
+        // And it is still the answer while that repo's dev server is down: nothing about this group needs it.
         expect(aimOf({ typed: undefined, remembered: `https://staging.example.dev`, state: `stopped`, servers: [] })).toBe(
             `https://staging.example.dev`,
         );
@@ -367,7 +367,7 @@ describe(`aimOf`, () => {
         expect(aimOf({ typed: `  https://preview.example.dev  `, remembered: `https://old.example.dev`, state: `ready`, servers: ONE })).toBe(
             `https://preview.example.dev`,
         );
-        // An emptied field is "not there", not "surprise me" — it must not snap back to a server or a memory.
+        // An emptied field is "not there", not "surprise me": it must not snap back to a server or a memory.
         expect(aimOf({ typed: ``, remembered: `https://staging.example.dev`, state: `ready`, servers: ONE })).toBeUndefined();
     });
 });

@@ -35,26 +35,26 @@ import { usePlatformCatalog } from "./usePlatformCatalog";
 
 /* Drafts: the approval inbox for posts the agent proposed during its scheduled work. The agent writes one JSON
  * file per draft into .intentic/config/drafts/ (taught by the daemon's drafts skill); this page is the owner's
- * approve / edit / reschedule / reject side. There is no create dialog here — drafts originate with the agent,
+ * approve / edit / reschedule / reject side. There is no create dialog here: drafts originate with the agent,
  * never the UI.
  *
  * AN INDEX BESIDE THE QUEUE (<SplitView>), the shape Capabilities, Pipelines and the hubs already use, and the
- * app's standard page width with it. It was a narrow column with every section stacked down one scroll — fine
+ * app's standard page width with it. It was a narrow column with every section stacked down one scroll: fine
  * for a handful of posts on one platform, and the thing that stops scaling the moment an agent drafts for
  * several: what is waiting on you for one platform sits below everything the others have ever posted. The rail
  * is bounded by how many platforms a workspace posts to, so the body stays finite as the queue behind it grows
- * (see <DraftRail>). It NARROWS rather than selects — every section reads the same whether you came in via All
- * drafts or via one platform — and the slice lives in the URL, so "the Reddit queue" is a link.
+ * (see <DraftRail>). It NARROWS rather than selects: every section reads the same whether you came in via All
+ * drafts or via one platform, and the slice lives in the URL, so "the Reddit queue" is a link.
  *
  * APPROVING DOES NOT SEND IT. It starts a minute (publish-drafts.ts): the daemon dates the draft one hold into
  * the future and sleeps until exactly then, and for that minute the post sits in Going out with a live count
  * and one button that calls it back. A post is public and permanent the instant it lands, and the gap between
- * realising and reaching for the mouse is about two seconds — so the whole design of this page's second half is
+ * realising and reaching for the mouse is about two seconds, so the whole design of this page's second half is
  * that the seconds exist and are visible. A draft carrying a date of its own keeps it and simply waits.
  *
  * THE POST IS THE SUBJECT OF THE ROW, and it is READ rather than glanced at. Everything about where a draft is
- * going lives on one muted line beneath a brand mark; under it the post is set as a post — a capped measure,
- * body type, paragraph rhythm (DraftPost.vue) — because a row as wide as the window runs ~110 characters to
+ * going lives on one muted line beneath a brand mark; under it the post is set as a post: a capped measure,
+ * body type, paragraph rhythm (DraftPost.vue), because a row as wide as the window runs ~110 characters to
  * the line, and past about 75 the eye loses the start of the next one. That is what made the queue unreadable
  * even after the chips came off it: nothing on screen was competing with the text any more, but the text was
  * still typeset like a log line.
@@ -69,10 +69,10 @@ import { usePlatformCatalog } from "./usePlatformCatalog";
  *
  * ONE SECTION PER DECISION, in the order the queue owes them: something broke, something is waiting on you,
  * something is seconds from being public, something is on the calendar, something already went out. A status
- * badge survives only where its section does not already state it (`sending`, inside Going out) — every other
+ * badge survives only where its section does not already state it (`sending`, inside Going out): every other
  * badge was re-labelling its own group. The sections also settle an ordering the flat list never had: the
  * daemon's store is a directory of files, so rows arrived in filesystem order. Each section sorts by the field
- * it is actually read for — soonest first while something can still be changed, newest first once it is
+ * it is actually read for: soonest first while something can still be changed, newest first once it is
  * history.
  *
  * WEIGHT MARKS PRIORITY. Only the section that owes a decision carries labelled buttons; scheduled and posted
@@ -81,14 +81,14 @@ import { usePlatformCatalog } from "./usePlatformCatalog";
  *
  * THE WORDS CAN BE CHANGED, in the two sections where changing them is still worth anything: something waiting
  * on a yes, and something that already went out wrong. Approve/reject alone made every draft a verdict on
- * someone else's sentence — a proposal that was one word off had to be thrown away and re-asked for, and a post
+ * someone else's sentence: a proposal that was one word off had to be thrown away and re-asked for, and a post
  * that failed for being thirty characters long could only be retried at exactly the length that failed. Editing
  * is a plain field on the same upsert every other action here uses (PostEditor.vue). Rows that are already on
  * their way deliberately do NOT get it: their "back to review" is the way in, so nothing can be rewritten on
  * the same row the publisher may already be reading. */
 
 const { drafts, invalid, isLoading, error: listError, save, remove } = useDrafts();
-// Only drawn once the wait has earned it — a warm queue answers well inside the reveal delay.
+// Only drawn once the wait has earned it: a warm queue answers well inside the reveal delay.
 const outline = useLoadingReveal(
     isLoading,
     computed(() => `drafts`),
@@ -97,20 +97,20 @@ const outline = useLoadingReveal(
 const listNotice = computed<NoticeModel | undefined>(() =>
     listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your drafts.`, detail: listError.value },
 );
-// Publishing is the ship tier: below maintainer the queue is a read — the posts, their schedule, their
-// status — with every approve/reject/reschedule affordance absent (the daemon floors the draft mutations
+// Publishing is the ship tier: below maintainer the queue is a read, the posts, their schedule, their
+// status: with every approve/reject/reschedule affordance absent (the daemon floors the draft mutations
 // the same way). Watching what is about to go out is exactly what a viewer is for.
 const canShip = computed(() => roleAtLeast(host().sandbox.role(), `maintainer`));
 const { notice: actionError, run } = useAsyncAction();
 
 /* WHO POSTS IT, from the manifest that owns that fact. `platform` is a bare string by contract (a new platform
- * needs no contract change) and it is the id of the capability whose skill does the posting — so the enabled
+ * needs no contract change) and it is the id of the capability whose skill does the posting, so the enabled
  * extensions' own catalog entries already hold its display name and brand slug, including the detail nothing
  * here could have guessed: X's mark is black, so its entry forces a light one. A platform with no installed
  * connector still renders, because BrandMark falls through to a monogram, and that is the case that has to
  * keep working: a draft can be proposed for somewhere this sandbox cannot yet post. */
 const platformCatalog = usePlatformCatalog();
-/* Keyed by the platform ID as well as by a draft, because the rail's rows ARE platforms — there is no post
+/* Keyed by the platform ID as well as by a draft, because the rail's rows ARE platforms: there is no post
  * beneath them to read the id off. An unnamed platform's fallback is CAPITALISED here rather than in CSS,
  * unlike the queue's own meta line (DraftMeta.vue): the same string is a picker option and a tooltip on a
  * phone, neither of which a text-transform on one row would reach. */
@@ -146,7 +146,7 @@ const platformScopes = computed<DraftScope[]>(() =>
         .toSorted((left, right) => left.label.localeCompare(right.label)),
 );
 
-/* WHICH SLICE LIVES IN THE URL, replaced rather than pushed — Back should leave the page, not walk you through
+/* WHICH SLICE LIVES IN THE URL, replaced rather than pushed: Back should leave the page, not walk you through
  * every platform you clicked on the way. Derived from the query rather than mirrored into a ref, so there is one
  * direction of flow and no watcher pair to fight over what is shown.
  *
@@ -160,12 +160,12 @@ const activeScope = computed<DraftScope>(() => platformScopes.value.find((entry)
 const railScope = computed<string>({ get: () => activeScope.value.key, set: (value) => (scope.value = value) });
 
 // What the sections below are built from. The countdown strip and its clock deliberately read the WHOLE queue
-// instead — see `holding`.
+// instead: see `holding`.
 const visible = computed<DraftSummary[]>(() =>
     activeScope.value.key === `` ? drafts.value : drafts.value.filter((draft) => draft.platform === activeScope.value.key),
 );
 
-// Soonest first, undated last — the queue then reads in the order it will actually go out. A draft with no
+// Soonest first, undated last: the queue then reads in the order it will actually go out. A draft with no
 // date does post as soon as it is picked up, but it is also the one still owed a decision about when, so it
 // belongs at the end of the run rather than jumping the front of it.
 const due = (draft: DraftSummary): number => draft.scheduledAt ?? Number.MAX_SAFE_INTEGER;
@@ -173,7 +173,7 @@ const bySoonest = (left: DraftSummary, right: DraftSummary): number => due(left)
 
 const ofStatus = (...statuses: DraftSummary[`status`][]): DraftSummary[] => visible.value.filter((draft) => statuses.includes(draft.status));
 
-/* GOING OUT vs SCHEDULED — one section became two, because approving stopped meaning "sent" and started
+/* GOING OUT vs SCHEDULED: one section became two, because approving stopped meaning "sent" and started
  * meaning "sending in a minute unless you stop me" (publish-drafts.ts). Those are not the same row. A post
  * dated for Tuesday is a calendar entry: the thing to offer is a date control. A post forty seconds from being
  * public is the only thing on this page with a deadline, and the thing to offer is one obvious way to stop it.
@@ -181,12 +181,12 @@ const ofStatus = (...statuses: DraftSummary[`status`][]): DraftSummary[] => visi
  *
  * THE WINDOW IS WIDER THAN THE HOLD, deliberately. A post someone dated for two minutes' time is every bit as
  * imminent as one that was just approved, and it would be strange for it to sit under a heading that implies
- * there is time. Anything already handed to the publisher (`posting`) is here too — it is the most imminent
+ * there is time. Anything already handed to the publisher (`posting`) is here too: it is the most imminent
  * thing there is. */
 const GOING_OUT_WINDOW = 2 * 60_000;
 const imminent = (draft: DraftSummary, at: number): boolean => draft.status === `posting` || (draft.scheduledAt ?? 0) - at <= GOING_OUT_WINDOW;
 
-/* The clock, armed only while this page has something approved on it — an idle queue costs no tick. Armed off
+/* The clock, armed only while this page has something approved on it: an idle queue costs no tick. Armed off
  * the WHOLE queue rather than the slice on screen, because the strip it drives speaks for the whole queue. The
  * condition is deliberately NOT "is anything counting down", which is a function of `now` and would have this
  * ref arming itself. */
@@ -208,7 +208,7 @@ const scheduled = computed(() =>
 // leaping to the top on a 0.
 const posted = computed(() => ofStatus(`posted`).toSorted((left, right) => (right.postedAt ?? 0) - (left.postedAt ?? 0)));
 
-/* EVERYTHING THAT IS COUNTING DOWN, whichever slice the rail is pointing at — the strip at the top of the page
+/* EVERYTHING THAT IS COUNTING DOWN, whichever slice the rail is pointing at: the strip at the top of the page
  * and the button that stops all of it read this rather than the section below. A post is forty seconds from
  * being public whether or not the reader happens to be filtered to another platform, and a countdown that a
  * filter can hide is the one thing on this page that must never be hideable. */
@@ -270,10 +270,10 @@ const toggleEdit = (draft: DraftSummary): Promise<void> =>
         await (edit.isEditing(draft) ? edit.close() : edit.open(draft));
     }, `Could not save your changes.`);
 
-/* CALLING IT BACK — the other half of a hold, and the reason the hold is worth having. It puts the post back in
+/* CALLING IT BACK: the other half of a hold, and the reason the hold is worth having. It puts the post back in
  * review AND CLEARS THE DATE, which is the part that would be silently wrong if it were left out: the date on a
  * held post is a deadline the daemon wrote, not something the owner chose, and a draft carrying it back into
- * review would be re-approved into a deadline that had already passed — published instantly, with no second
+ * review would be re-approved into a deadline that had already passed: published instantly, with no second
  * minute to stop it. The one gesture on this page whose failure is a post nobody meant to send. */
 const holdBack = (draft: DraftSummary): Promise<void> => patch(draft, { status: `proposed`, scheduledAt: undefined });
 
@@ -287,7 +287,7 @@ const holdBackAll = (): Promise<void> => {
 };
 
 /* THE COUNTDOWN, SAID ONCE AT THE TOP OF THE PAGE. The section below states it per row, which is right when you
- * are looking at that row — and the whole point of a hold is the case where you are NOT: you approved, your eye
+ * are looking at that row, and the whole point of a hold is the case where you are NOT: you approved, your eye
  * moved on, and the thing you want back is already three rows up. So while anything is counting down the page
  * carries one line saying what is about to happen and one button that stops all of it.
  *
@@ -312,17 +312,17 @@ const goingOutNotice = computed<NoticeModel | undefined>(() => {
     };
 });
 
-// What a draft is called where it has to be named in one line — a confirm's list, an action's accessible name.
+// What a draft is called where it has to be named in one line: a confirm's list, an action's accessible name.
 // The title if the platform wanted one, else the post's opening line.
 const headline = (draft: DraftSummary): string => draft.title ?? draft.content.split(`\n`)[0] ?? draft.id;
 
 /* HOW BIG THE POST IS, against the room the platform gives it. The one property of a draft that decides whether
- * it can post at all and that reading it cannot tell you — 30 characters over on X is not a worse post, it is
- * no post — so it sits in the footer of every row that still owes a decision, and turns red when it is the
+ * it can post at all and that reading it cannot tell you: 30 characters over on X is not a worse post, it is
+ * no post, so it sits in the footer of every row that still owes a decision, and turns red when it is the
  * reason the draft will fail. Platforms with no well-known cap (postText.ts) get a plain count, and only once
  * the post is long enough for its size to be a question at all. */
 const OVERSIZED = 280;
-// Counted off the FIELD while one is open (useDraftEdit.ts), so the number moves with the words being typed —
+// Counted off the FIELD while one is open (useDraftEdit.ts), so the number moves with the words being typed:
 // it is the one fact on the row that has to, since going over is the reason a post fails outright, and it
 // updating in place is also what makes a separate editor footer unnecessary.
 const lengthOf = (draft: DraftSummary): string | undefined => {
@@ -336,13 +336,13 @@ const lengthOf = (draft: DraftSummary): string | undefined => {
 const isOver = (draft: DraftSummary): boolean => edit.liveLength(draft) > (limitOf(draft.platform) ?? Infinity);
 
 /* THE AGENT'S OWN NOTE about the draft, which is what `title` holds everywhere the platform doesn't publish one
- * (postText.ts): why this post, which thread, what it is not saying. Worth keeping — it is the reasoning behind
- * the thing being approved — and worth keeping SMALL: rendered as a headline it was a three-line bold block
+ * (postText.ts): why this post, which thread, what it is not saying. Worth keeping, it is the reasoning behind
+ * the thing being approved, and worth keeping SMALL: rendered as a headline it was a three-line bold block
  * above a post it had no business outweighing. One muted line, the rest on hover. */
 const noteOf = (draft: DraftSummary): string | undefined => (postsATitle(draft.platform, draft.target) ? undefined : draft.title);
 
-/* ONE COLUMN PER ROW. The brand mark sits in a gutter and everything else — the platform line, the post, the
- * facts under it — starts at the same left edge, the way every surface that shows a post composes one. The
+/* ONE COLUMN PER ROW. The brand mark sits in a gutter and everything else: the platform line, the post, the
+ * facts under it: starts at the same left edge, the way every surface that shows a post composes one. The
  * indent is the mark plus <Row>'s own gap (28 + 10, and 22 + 10 on the compact tiers), so it tracks the header
  * beside it rather than being a number that happens to look right today. Only from `sm` up: on a phone those
  * 38px are a tenth of the line, and an aligned column costs more than a hanging one is worth. */
@@ -354,18 +354,18 @@ const QUIET_COLUMN = `sm:pl-8`;
 const FACTS = `mt-3 flex max-w-read flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted`;
 
 // And the note under it: two lines at most, the rest on hover. Below the post rather than above it, because it
-// is the agent talking ABOUT the post — a reader who mistakes it for the post has read the wrong thing.
+// is the agent talking ABOUT the post: a reader who mistakes it for the post has read the wrong thing.
 const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtle`;
 
 /* THE PENCIL SITS WITH THE OTHER ACTIONS, which is the fix for where it used to be. It began life as a muted
  * phrase in the row's footer, on the reasoning that rewriting a post is rarer than approving one and should not
  * draw like a rival to Approve. The reasoning was fine and the placement was not: it put one of the row's three
  * actions at the bottom-left while the other two sat at the top-right, so "what can I do to this post" had two
- * answers in two places. Quiet is a matter of WEIGHT, not of distance — a bare icon button beside the trash is
+ * answers in two places. Quiet is a matter of WEIGHT, not of distance: a bare icon button beside the trash is
  * quiet and still findable, and the cluster now answers the question once.
  *
  * IT IS A TOGGLE, AND IT LIGHTS UP. The pressed state is the only thing on the row that changes when editing
- * opens; everything else — the trash, Approve, the schedule, the count — stays exactly where it was. */
+ * opens; everything else (the trash, Approve, the schedule, the count) stays exactly where it was. */
 const EDIT_ACTIVE = `bg-overlay text-content`;
 </script>
 
@@ -382,7 +382,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
             <InfoHint label="How drafts are published">
                 <span class="block text-xs font-semibold text-content">From proposal to post</span>
                 <span class="mt-2 block text-xs text-muted">
-                    Your agent writes drafts while it works and never posts one by itself. Approving one starts a short countdown you can stop — when
+                    Your agent writes drafts while it works and never posts one by itself. Approving one starts a short countdown you can stop, when
                     it runs out the post goes to that platform, or waits for the date you gave it. Rejecting deletes the draft.
                 </span>
             </InfoHint>
@@ -409,7 +409,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
         <template #detail>
             <div class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
                 <!-- Nothing proposed, nothing sent, nothing broken. The rail hides its tile in this state, so the
-                     page is only reached deliberately — and it owes an explanation of what would ever put
+                     page is only reached deliberately, and it owes an explanation of what would ever put
                      something here. -->
                 <!-- Before the queue is read it is indistinguishable from an empty one, and the sentence below
                      is a claim about the reader's agent that nothing has yet checked. Drawn as the rows that
@@ -434,7 +434,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" :acts-as="draft.actsAs" /></template>
                             <template #control>
                                 <!-- A post that failed for being too long can only be retried at the length that failed,
-                                     unless the words themselves can be changed — so the pencil is here too. -->
+                                     unless the words themselves can be changed, so the pencil is here too. -->
                                 <button
                                     v-if="canShip"
                                     type="button"
@@ -451,7 +451,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     type="button"
                                     :class="ui.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                                     :aria-label="`Reject ${headline(draft)}`"
-                                    v-tooltip.top="`Reject — deletes the draft`"
+                                    v-tooltip.top="`Reject: deletes the draft`"
                                     @click="rejecting = draft"
                                 >
                                     <Icon name="trash" />
@@ -478,7 +478,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                         @close="toggleEdit(draft)"
                                     />
                                     <DraftPost v-else :draft="draft" />
-                                    <!-- The reason, in the row. It used to live in a tooltip on the status badge — the
+                                    <!-- The reason, in the row. It used to live in a tooltip on the status badge: the
                                          one state whose entire content is an explanation, hidden behind a hover. -->
                                     <Notice :of="noticeOf(draft.error ?? `The publisher did not say why.`)" class="mt-3 max-w-read" />
                                     <div :class="FACTS">
@@ -513,7 +513,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     :note="draft.createdAt === undefined ? undefined : `proposed ${timeAgo(draft.createdAt)}`"
                                 />
                             </template>
-                            <!-- THE ROW'S THREE ACTIONS, TOGETHER AND FIXED. Edit, reject, approve — in the order they
+                            <!-- THE ROW'S THREE ACTIONS, TOGETHER AND FIXED. Edit, reject, approve: in the order they
                                  escalate, and none of them moves, hides or swaps when the editor opens. Approving with
                                  a field still open is safe because the click writes the pending keystrokes first
                                  (`settled`), which is what let the mid-edit disappearing act go. -->
@@ -534,7 +534,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     type="button"
                                     :class="ui.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                                     :aria-label="`Reject ${headline(draft)}`"
-                                    v-tooltip.top="`Reject — deletes the draft`"
+                                    v-tooltip.top="`Reject: deletes the draft`"
                                     @click="rejecting = draft"
                                 >
                                     <Icon name="trash" />
@@ -545,7 +545,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             </template>
                             <template #below>
                                 <div :class="POST_COLUMN">
-                                    <!-- The post, or the same post with a caret in it — same column, same measure, same
+                                    <!-- The post, or the same post with a caret in it: same column, same measure, same
                                          type. Unclamped up to a screenful either way: this is the section where a
                                          decision is owed, and the post's own words are what the decision is about. -->
                                     <PostEditor
@@ -560,7 +560,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
 
                                     <!-- The facts that DECIDE the post rather than describe it: when it goes, and
                                          whether it fits where it is going. Present in both states and unmoved by the
-                                         switch — the count simply starts following the keystrokes. -->
+                                         switch: the count simply starts following the keystrokes. -->
                                     <div :class="FACTS">
                                         <ScheduleControl
                                             :at="draft.scheduledAt"
@@ -582,7 +582,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                          step along rather than as the page rearranging itself under the click. The strip at the very
                          top is what covers the case where you are no longer looking here at all.
 
-                         ONE LABELLED BUTTON, where the sections around it use bare icons — the page's weight rule
+                         ONE LABELLED BUTTON, where the sections around it use bare icons: the page's weight rule
                          applied to the state it was written for. Stopping a post is urgent, singular, and cannot be
                          something you go hunting for behind a tooltip. -->
                     <RowGroup v-if="goingOut.length > 0" label="Going out" :count="goingOut.length">
@@ -603,7 +603,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     severity="secondary"
                                     :disabled="save.isPending.value"
                                     :aria-label="`Stop ${headline(draft)} and put it back in review`"
-                                    v-tooltip.top="`Back to review — nothing is sent`"
+                                    v-tooltip.top="`Back to review: nothing is sent`"
                                     @click="holdBack(draft)"
                                 >
                                     <template #icon><Icon name="undo" /></template>
@@ -645,7 +645,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     type="button"
                                     :class="ui.iconButton(`hover:bg-danger/10 hover:text-danger`)"
                                     :aria-label="`Reject ${headline(draft)}`"
-                                    v-tooltip.top="`Reject — deletes the draft`"
+                                    v-tooltip.top="`Reject: deletes the draft`"
                                     @click="rejecting = draft"
                                 >
                                     <Icon name="trash" />
@@ -657,7 +657,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                         </Row>
                     </RowGroup>
 
-                    <!-- History. Nothing here can be acted on any more, so it carries no schedule and no approval —
+                    <!-- History. Nothing here can be acted on any more, so it carries no schedule and no approval:
                          only what went out, where, and when. -->
                     <RowGroup v-if="posted.length > 0" label="Posted" :count="posted.length">
                         <Row v-for="draft in posted" :key="draft.id" density="compact">
@@ -674,7 +674,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     type="button"
                                     :class="ui.iconButton()"
                                     :aria-label="`Remove ${headline(draft)} from the list`"
-                                    v-tooltip.top="`Remove from this list — the post itself stays up`"
+                                    v-tooltip.top="`Remove from this list: the post itself stays up`"
                                     @click="rejecting = draft"
                                 >
                                     <Icon name="times" />
@@ -689,7 +689,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
 
                 <!-- Rejecting deletes the file: there is no undo and no trash to fish it back out of, which is exactly
                      what this dialog is for. A posted draft's row asks the same question about a different thing, and
-                     says so — deleting the record does not take the post down. -->
+                     says so: deleting the record does not take the post down. -->
                 <ConfirmDialog
                     :open="rejecting !== undefined"
                     :header="rejecting?.status === `posted` ? `Remove this record?` : `Reject this draft?`"
@@ -701,7 +701,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                 >
                     <p v-if="rejecting" class="text-sm text-muted">
                         <template v-if="rejecting.status === `posted`">
-                            The post stays up on {{ platformName(rejecting) }} — only this record of it is deleted.
+                            The post stays up on {{ platformName(rejecting) }}: only this record of it is deleted.
                         </template>
                         <template v-else>The draft file is deleted. Your agent would have to propose it again.</template>
                     </p>

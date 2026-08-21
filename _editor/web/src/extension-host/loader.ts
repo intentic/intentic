@@ -133,7 +133,7 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn:
             ? {
                   ...status,
                   state: `missing`,
-                  detail: `declares UI but this app build has no module compiled in for it — the sandbox image and the app are on different versions`,
+                  detail: `declares UI but this app build has no module compiled in for it, the sandbox image and the app are on different versions`,
               }
             : { ...status, state: `agent-only` };
     }
@@ -211,8 +211,8 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
             listed,
             host,
             listFailure === undefined
-                ? `this sandbox image doesn't list it — the image and the app are on different versions, so it can't be switched off here`
-                : `the extension list couldn't be loaded (${listFailure}) — activated from this app build alone`,
+                ? `this sandbox image doesn't list it: the image and the app are on different versions, so it can't be switched off here`
+                : `the extension list couldn't be loaded (${listFailure}), activated from this app build alone`,
             startedIn,
         ),
     ]);

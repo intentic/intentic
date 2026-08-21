@@ -9,16 +9,16 @@ import { RAIL_GROUPS, detectActivations, railRank, registerView } from "./regist
 
 // apps + preview are packaged extensions the app activates via loadBuiltins; the registry seeds only the still-
 // static core views (infrastructure/live-status/directory-ui). Register the packaged detects here so the
-// cross-extension rules — apps claims a monorepo, a fallback view is dropped when claimed — are exercised
+// cross-extension rules (apps claims a monorepo, a fallback view is dropped when claimed) are exercised
 // against the same registry the shell composes. (The fallback rule's exemplar is a local registration below:
 // no first-party view ships as a fallback since the dev-server preview moved to the shell's Preview area.)
-// Views are what this file is about; `commands` and `viewers` are here because activate() is one function — an
+// Views are what this file is about; `commands` and `viewers` are here because activate() is one function: an
 // extension that registers a command as well as a view must not fail to register the view.
 const registerApi = {
     views: { register: (view: ViewRegistration) => registerView(`test`, view) },
     viewers: { register: (): Disposable => ({ dispose: () => {} }) },
     // The tree's per-directory documents. Accepted and dropped: this file is about what the RAIL shows, and an
-    // activate() that reaches a registry the stub is missing stops there — taking the views under test with it.
+    // activate() that reaches a registry the stub is missing stops there: taking the views under test with it.
     documents: { register: (): Disposable => ({ dispose: () => {} }) },
     commands: { register: (): Disposable => ({ dispose: () => {} }) },
 } as unknown as IntenticApi;
@@ -26,11 +26,11 @@ apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [
 preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
 acceptance.activate(registerApi, { extensionId: `intentic.acceptance`, subscriptions: [] });
 // Documentation too: the rail-order cases below need a listed rail view whose position was previously an accident
-// of the builtins array. Its activate() also starts a badge poll, which is harmless here — every read inside it is
+// of the builtins array. Its activate() also starts a badge poll, which is harmless here: every read inside it is
 // guarded, so an unreachable host simply yields no badge.
 documentation.activate(registerApi, { extensionId: `intentic.documentation`, subscriptions: [] });
 
-// A PanelSummary with everything false — override only the facts a case exercises.
+// A PanelSummary with everything false: override only the facts a case exercises.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
     hasPanel: false,
     running: false,
@@ -53,7 +53,7 @@ const idsFor = (repo: string, panels: PanelSummary[]): string[] =>
         .map(({ extension }) => extension.id);
 
 describe(`apps extension`, () => {
-    it(`excludes the intent/infrastructure repo — it surfaces as Infrastructure, not as an app monorepo`, () => {
+    it(`excludes the intent/infrastructure repo: it surfaces as Infrastructure, not as an app monorepo`, () => {
         const ids = idsFor(`intentic-app`, [panel({ repo: `intentic-app`, deployConfig: true, monorepo: true })]);
         expect(ids).toContain(`infrastructure`);
         expect(ids).not.toContain(`apps`);
@@ -65,14 +65,14 @@ describe(`apps extension`, () => {
 });
 
 // The `apps` extension's tile for a repo, whether it claims the repo (monorepo) or rides in props (vitest-only)
-// — keyed by the tile key, which is always the repo name. `idsFor` above only sees claiming tiles.
+//: keyed by the tile key, which is always the repo name. `idsFor` above only sees claiming tiles.
 const appsTile = (key: string, panels: PanelSummary[]) =>
     detectActivations(panels, []).find(({ extension, activation }) => extension.id === `apps` && activation.key === key)?.activation;
 const contributes = (id: string, key: string, panels: PanelSummary[]): boolean =>
     detectActivations(panels, []).some(({ extension, activation }) => extension.id === id && activation.key === key);
 
-describe(`apps extension — merged tests view`, () => {
-    it(`a monorepo-with-vitest gets ONE claiming tile (props.monorepo) — no duplicate ⚡ tile`, () => {
+describe(`apps extension, merged tests view`, () => {
+    it(`a monorepo-with-vitest gets ONE claiming tile (props.monorepo): no duplicate ⚡ tile`, () => {
         const panels = [panel({ repo: `mono`, monorepo: true, vitest: true, hasPanel: true })];
         const tile = appsTile(`mono`, panels);
         expect(tile?.repo).toBe(`mono`);
@@ -102,7 +102,7 @@ describe(`apps extension — merged tests view`, () => {
 });
 
 /* THE CLAIM RULE'S THREE POSITIONS, exercised against a local fallback view (no first-party view ships as one
- * any more — the dev-server preview moved to the shell's Preview area — but the rule stays for third-party
+ * any more: the dev-server preview moved to the shell's Preview area, but the rule stays for third-party
  * bundles): a claiming view suppresses a fallback for its repo, and an AUXILIARY view sets `activation.repo`
  * (so the directory panel renders it and the tree marks the dir manageable) yet leaves the fallback standing,
  * because it adds a surface beside the repo's main one instead of subsuming it. */
@@ -140,7 +140,7 @@ describe(`auxiliary views`, () => {
 
 /* ACCEPTANCE is the workspace-scoped shape: ONE rail tile for the whole workspace, rooted at no repo, because a
  * user story is a promise about the product and a product is rarely one repository. That makes its detect a
- * question about the workspace ("is there anything here to test?") rather than about each repo in turn — the
+ * question about the workspace ("is there anything here to test?") rather than about each repo in turn: the
  * opposite of every directory view above. */
 describe(`acceptance extension`, () => {
     const tiles = (panels: PanelSummary[]) => detectActivations(panels, []).filter(({ extension }) => extension.id === `acceptance`);
@@ -211,7 +211,7 @@ describe(`re-activation`, () => {
 
 /* The rail's order is a product decision, and it used to be an accident: whatever order the core views and the
  * `builtins.ts` array happened to register in. That put Acceptance between Automations and Documentation, which
- * is not a sequence a user can infer from anything. RAIL_GROUPS now declares it — checked here rather than in a
+ * is not a sequence a user can infer from anything. RAIL_GROUPS now declares it: checked here rather than in a
  * surface because BOTH the desktop rail and the mobile menu render this list and must agree. */
 describe(`rail order`, () => {
     const railIds = (): string[] =>
@@ -224,7 +224,7 @@ describe(`rail order`, () => {
         const rank = (id: string): number => ids.indexOf(id);
         expect(rank(`acceptance`)).toBeGreaterThanOrEqual(0);
         // Acceptance badges to fetch you; Documentation is read on your own initiative. The old table had this
-        // the other way round, on the theory that you read about a system before verifying it — true of a first
+        // the other way round, on the theory that you read about a system before verifying it: true of a first
         // afternoon, false of every day after.
         expect(rank(`acceptance`)).toBeLessThan(rank(`documentation`));
     });
@@ -251,7 +251,7 @@ describe(`rail order`, () => {
 
     /* THE TOP OF THE COLUMN IS THE SCARCE THING, and both of these were spent badly before. Checked on railRank
      * rather than on a detected run because two of the four ids are core shell tiles, which contribute no
-     * activation — the table ranks them all the same way, which is the whole reason it names them. */
+     * activation: the table ranks them all the same way, which is the whole reason it names them. */
     it(`keeps the busy permanent pair adjacent, with nothing seated between them`, () => {
         // Start a turn, then read what it did: the loop the rail exists to serve. Drafts and Workflows used to
         // sit in between, and both are touched by the week rather than by the minute.
@@ -259,7 +259,7 @@ describe(`rail order`, () => {
     });
 
     it(`seats configuration below everything that lights up`, () => {
-        // Workflows is a permanent tile that never badges — it held the third seat purely by having been filed
+        // Workflows is a permanent tile that never badges: it held the third seat purely by having been filed
         // beside Agents, and it belongs with the other thing you author once and leave alone.
         expect(railRank(`workflows`)).toBe(railRank(`automations`) - 1);
         for (const summons of [`drafts`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {

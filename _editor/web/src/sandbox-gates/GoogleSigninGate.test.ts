@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // THE ONE SCREEN THAT MUST NEVER BE A DEAD END. This gate opens whenever the sandbox needs a Google
-// credential, and inside the desktop app it used to render Google's own button — which appears, is clickable,
+// credential, and inside the desktop app it used to render Google's own button, which appears, is clickable,
 // and does nothing at all: Google refuses OAuth from an embedded webview and Identity Services is FedCM-based,
 // which that webview does not implement. A person who had just installed the app sat on this card clicking a
 // button that could never work, with only "Back to setup" as a way out.
@@ -20,7 +20,7 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
 }));
 
-// The gate is open for every test here — that is the state it exists in.
+// The gate is open for every test here: that is the state it exists in.
 const needsSignIn = ref(true);
 const renderButton = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
 const cancelSignIn = vi.fn();

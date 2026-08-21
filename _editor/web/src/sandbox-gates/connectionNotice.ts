@@ -21,7 +21,7 @@ export const connectionNotice = (failure: ConnectionFailure | undefined, sandbox
     if (failure === undefined) {
         return {
             title: `Connecting to "${name}"…`,
-            body: `Your sandbox reported in — opening a live connection to it. Your workspace appears automatically in a moment.`,
+            body: `Your sandbox reported in, opening a live connection to it. Your workspace appears automatically in a moment.`,
             action: undefined,
         };
     }
@@ -29,13 +29,13 @@ export const connectionNotice = (failure: ConnectionFailure | undefined, sandbox
         case `unaddressed`:
             return {
                 title: `Connect "${name}"`,
-                body: `This sandbox isn't connected yet — finish setup to start its daemon, and your workspace opens automatically.`,
+                body: `This sandbox isn't connected yet, finish setup to start its daemon, and your workspace opens automatically.`,
                 action: `setup`,
             };
         case `unauthenticated`:
             return {
                 title: `Sign in to reach "${name}"`,
-                body: `Your sandbox is up, but the session this browser presents to it has expired. Signing in again reconnects you — nothing on the sandbox is affected.`,
+                body: `Your sandbox is up, but the session this browser presents to it has expired. Signing in again reconnects you, nothing on the sandbox is affected.`,
                 action: `signin`,
             };
         case `timeout`:

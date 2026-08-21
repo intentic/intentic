@@ -173,7 +173,7 @@ export const readingVerdict = (
     // Two states, two shortfalls, and neither is allowed to borrow the other's headline.
     if (reading.marginPct === undefined) {
         const shortfall = Math.max(minTurns - reading.on.turns, minTurns - reading.off.turns);
-        return { value: `Measuring`, unit, tone: `muted`, detail: `needs ${minTurns} ${sampleUnit} per arm — ${shortfall} more on the shorter one` };
+        return { value: `Measuring`, unit, tone: `muted`, detail: `needs ${minTurns} ${sampleUnit} per arm, ${shortfall} more on the shorter one` };
     }
     /* MEASURED, AND THE ANSWER IS "NOT YET DISTINGUISHABLE FROM NOTHING". A separate verdict from "Measuring"
      * because it is a different fact, the arms are big enough, the spread is simply wider than the effect,
@@ -189,7 +189,7 @@ export const readingVerdict = (
                 ? `keep collecting`
                 : `~${formatCompact(reading.controlTurnsNeeded)} more control ${sampleUnit} would settle it`;
         /* SAME GRAMMAR AS THE MEASURED VERDICT'S DETAIL below, margin first, then the one thing that qualifies
-         * it, joined by a middot. It used to read "anything real is inside ±35.1pp (95%) — ~5.8K more control
+         * it, joined by a middot. It used to read "anything real is inside ±35.1pp (95%): ~5.8K more control
          * turns would settle it": a clause, a figure and a second clause in one breath, which is exactly the
          * run-on the settings rows could not lay out. The framing it drops is carried by the headline this
          * detail sits under ("No effect measurable in prose written per turn"), so nothing is lost. */

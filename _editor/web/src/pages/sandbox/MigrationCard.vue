@@ -18,19 +18,19 @@ import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { helpTopics, SOURCE_GUIDES } from "./migrationGuide";
 
-/* ARRIVING FROM ANOTHER ASSISTANT — a Hermes or OpenClaw setup read in, previewed as a ticked checklist, and
+/* ARRIVING FROM ANOTHER ASSISTANT: a Hermes or OpenClaw setup read in, previewed as a ticked checklist, and
  * applied as native pieces (docs/assistant-import-design.md; daemon side in _sandbox/sandbox/src/migrations/).
  *
  * THE CARD'S REAL SUBJECT IS "WHERE IS YOUR SETUP", not "upload a file", and that reordering is the whole
- * design. The first version was one button under a grey line holding both tools' archive commands — which is
+ * design. The first version was one button under a grey line holding both tools' archive commands, which is
  * only an instruction if you already have a shell on the machine the assistant runs on. Most people do not:
  * these tools live on a VPS reached over a tunnel, or in a container, and the browser reading this is
  * somewhere else entirely. So the card asks the question in that order:
  *
- *   1. Is the machine already connected here? Then there is nothing to pack — one click reads it. This is the
+ *   1. Is the machine already connected here? Then there is nothing to pack: one click reads it. This is the
  *      answer the whole flow is built around, and it renders FIRST because it deletes every step below it.
  *   2. Otherwise: which tool? One question with an answer nobody has to look up.
- *   3. Then exactly one command, with what it prints and where the file lands — and the three ways this
+ *   3. Then exactly one command, with what it prints and where the file lands, and the three ways this
  *      actually goes wrong (a server, a container, a moved folder) folded underneath, each answered in place.
  *
  * PREVIEW-FIRST SURVIVES BOTH DOORS. Whichever way the setup arrives it becomes a plan, never a change: every
@@ -48,7 +48,7 @@ const report = ref<MigrationReport | undefined>(undefined);
 const { busy: planning, notice: planError, run: runPlan } = useAsyncAction();
 const { busy: applying, notice: applyError, run: runApply } = useAsyncAction();
 
-/* Probed on mount, and again whenever the owner asks — not polled: enrolling a computer is not something that
+/* Probed on mount, and again whenever the owner asks, not polled: enrolling a computer is not something that
  * happens while this card is open, but WAKING one is. A laptop is asleep more often than not, so the row for
  * an offline machine carries its own re-check rather than making the owner reload the page to use the very
  * shortcut the card just told them about.
@@ -108,7 +108,7 @@ const uploadArchive = (event: Event): Promise<void> =>
         adopt(MigrationPlanSchema.parse(await sandboxJson(`/migrations/plan`, { method: `POST`, body: file, duplex: `half` } as RequestInit)));
     }, `Could not read that archive.`);
 
-// Stable reading order — what the agent will know, then what runs, then what connects, then the keys.
+// Stable reading order: what the agent will know, then what runs, then what connects, then the keys.
 const TARGET_ORDER = [`memory`, `skill`, `automation`, `capability`, `file`, `secret`] as const;
 const orderedItems = computed(() =>
     (plan.value?.items ?? []).toSorted((left, right) => TARGET_ORDER.indexOf(left.target) - TARGET_ORDER.indexOf(right.target)),
@@ -150,7 +150,7 @@ const cancel = (): Promise<void> =>
             :heading="2"
             icon="upload"
             title="Arrive from another assistant"
-            description="Bring a Hermes or OpenClaw setup here: its personality and memory, skills, scheduled jobs and connections land as ordinary pieces of this sandbox — previewed as a checklist before anything is written."
+            description="Bring a Hermes or OpenClaw setup here: its personality and memory, skills, scheduled jobs and connections land as ordinary pieces of this sandbox, previewed as a checklist before anything is written."
         />
 
         <template v-if="isOwner">
@@ -160,7 +160,7 @@ const cancel = (): Promise<void> =>
                      than as a shortcut.
                      EVERY CONNECTED MACHINE GETS A ROW, not only the ones holding a setup, and that is a
                      correction: the first cut rendered nothing unless a setup was found, so an owner whose
-                     laptop was simply ASLEEP — the ordinary state of a laptop — saw a card that had never
+                     laptop was simply ASLEEP (the ordinary state of a laptop) saw a card that had never
                      heard of their computers and no reason to think reading one was possible at all. A row
                      saying "asleep, wake it and check again" is not a dead-end offer; it is the difference
                      between a feature that is missing and one that is waiting. -->
@@ -178,7 +178,7 @@ const cancel = (): Promise<void> =>
                             }}</span></template
                         >
                         <template #description>{{
-                            host.found === undefined ? host.detail : `Nothing to pack — it can be read straight off that computer.`
+                            host.found === undefined ? host.detail : `Nothing to pack, it can be read straight off that computer.`
                         }}</template>
                         <template #control>
                             <Button
@@ -204,7 +204,7 @@ const cancel = (): Promise<void> =>
                 <!-- Said to the owner who has connected no computer at all: the shortcut exists, and knowing
                      it exists is what makes them reach for it next time rather than packing again. -->
                 <p v-else-if="probed" class="text-2xs text-subtle">
-                    If you connect the computer that runs it (Capabilities → your computer), the setup can be read straight off it — no packing at
+                    If you connect the computer that runs it (Capabilities → your computer), the setup can be read straight off it: no packing at
                     all.
                 </p>
 
@@ -219,7 +219,7 @@ const cancel = (): Promise<void> =>
                 </div>
 
                 <!-- Step 2: one command, what it prints, where the file lands, then the picker. Never two
-                     commands — the reader has already told us which one is theirs. -->
+                     commands: the reader has already told us which one is theirs. -->
                 <div v-else-if="guide" class="flex flex-col gap-3">
                     <div class="flex items-center justify-between gap-2">
                         <p class="text-xs text-content">1. Run this where {{ guide.label }} lives:</p>
@@ -333,7 +333,7 @@ const cancel = (): Promise<void> =>
         </template>
         <p v-else class="text-2xs text-subtle">Only the sandbox owner can import a setup.</p>
 
-        <!-- The fidelity report — what landed, what did not and why, and what still needs a person. -->
+        <!-- The fidelity report: what landed, what did not and why, and what still needs a person. -->
         <template v-if="report">
             <div class="flex items-center gap-2">
                 <StatusBadge variant="success" label="Imported" dot />

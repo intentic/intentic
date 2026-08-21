@@ -2,14 +2,14 @@ import type { IntenticApi, ViewerRegistration } from "@intentic/extension-api";
 import * as viewers from "@intentic/ext-viewers";
 import { describe, expect, it } from "vitest";
 
-/* Exercises the ext-viewers package the way loadBuiltins does — activate() against a minimal fake IntenticApi —
+/* Exercises the ext-viewers package the way loadBuiltins does: activate() against a minimal fake IntenticApi:
  * proving it registers every viewer its manifest declares. This is the end-to-end wiring of the
  * contributes.viewers path (manifest → activate → api.viewers.register), minus the browser render.
  *
  * It matters more than a wiring test usually would, because this ONE extension is every file format the app can
  * show that isn't source code. The core resolves a path to text or to opaque bytes and has no branch for a
  * picture, a PDF or a recording (see pages/workspace/fileType.ts): if a registration here silently stopped
- * happening, the workspace would not throw — it would quietly start offering downloads instead of previews. */
+ * happening, the workspace would not throw: it would quietly start offering downloads instead of previews. */
 
 const activateAndCaptureViewers = (): ViewerRegistration[] => {
     const registered: ViewerRegistration[] = [];
@@ -35,7 +35,7 @@ describe(`ext-viewers`, () => {
             extensions: [`png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico`],
             fetch: `blob`,
         });
-        // SVG is fetched as TEXT — it is markup, and one read serves both the picture and the Source toggle.
+        // SVG is fetched as TEXT: it is markup, and one read serves both the picture and the Source toggle.
         expect(declared.get(`svg`)).toEqual({ id: `svg`, extensions: [`svg`], fetch: `text` });
         expect(declared.get(`pdf`)).toEqual({ id: `pdf`, extensions: [`pdf`], fetch: `blob` });
         expect(declared.get(`docx`)).toEqual({ id: `docx`, extensions: [`docx`], fetch: `blob` });
@@ -43,7 +43,7 @@ describe(`ext-viewers`, () => {
     });
 
     /* Media is the ONLY `url` viewer, and has to stay one: a blob fetch means downloading the whole file before
-     * the first frame and refusing anything past the daemon's 25 MiB raw cap — which is most recordings. Audio
+     * the first frame and refusing anything past the daemon's 25 MiB raw cap, which is most recordings. Audio
      * and video share the entry because the player decides which it is from the decoded track, not the
      * extension (an .mp4 is frequently audio-only). */
     it(`declares audio and video as one streaming viewer`, () => {

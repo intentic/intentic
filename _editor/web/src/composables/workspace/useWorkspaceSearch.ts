@@ -133,7 +133,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         note: computed(() =>
             workspaceAgent.value === undefined
                 ? head.value?.note
-                : [head.value?.note, `Searching the shared workspace — an agent's own copy isn't indexed.`].filter(Boolean).join(` `),
+                : [head.value?.note, `Searching the shared workspace, an agent's own copy isn't indexed.`].filter(Boolean).join(` `),
         ),
         // True while what is typed hasn't produced a searchable query yet (too short, or debounce pending),
         // either field, since editing the glob filter re-searches exactly as editing the query does.

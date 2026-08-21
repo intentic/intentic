@@ -56,7 +56,7 @@ test(`reports nothing at all when nothing was called`, async () => {
 });
 
 test(`ignores a call no declared entry covers`, async () => {
-    // Unreachable through the gate, which throws first — so this only happens if the two matchers ever disagree,
+    // Unreachable through the gate, which throws first, so this only happens if the two matchers ever disagree,
     // and an unattributable call is worse than no call: it would credit a permission that did not permit it.
     recordSandboxCall(`repo-apps`, PERMISSIONS, `DELETE`, `/panels`);
     await flushSandboxUsage();

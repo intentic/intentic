@@ -9,25 +9,25 @@ import { useEndpoint } from "../composables/sandbox/useEndpoint";
  * The reasoning for asking at all is in composables/sandbox/localShortcut.ts. What is decided HERE is how it
  * reads, and the whole design is that it must not look like the thing it is about to cause.
  *
- * SO IT IS A RECEIPT, NOT AN ALERT. Same lane, same pill vocabulary as ReceiptBar — because this is an offer,
+ * SO IT IS A RECEIPT, NOT AN ALERT. Same lane, same pill vocabulary as ReceiptBar, because this is an offer,
  * and dressing an offer as a warning is how an app teaches people that yes is the dangerous answer. The push
  * notice next door is red and centred at the top of the viewport; that one is a decision the user already owes
  * about work they already did. This one is a nicety they never asked for, and it is allowed to be missed.
  *
  * IT NAMES THE BENEFIT AND THE COST IN THAT ORDER, in two short lines: why anyone would want this, then what
- * is about to appear on screen if they say yes. The second line exists solely so that the browser's dialog —
- * which will talk about devices on their local network, and will not mention sandboxes, speed, or us — is
+ * is about to appear on screen if they say yes. The second line exists solely so that the browser's dialog:
+ * which will talk about devices on their local network, and will not mention sandboxes, speed, or us: is
  * recognisable as the answer to this card rather than an interruption from nowhere.
  *
  * IT DOES NOT EXPIRE, unlike its neighbours in this lane. A receipt retires because nothing depends on being
  * read; this one is a question, and a question that times out is a decision nobody made. Both answers are
- * remembered, so it is asked at most once — and No costs the user nothing, because the address it declines is
+ * remembered, so it is asked at most once, and No costs the user nothing, because the address it declines is
  * an optimisation on top of one that already works. */
 
 const { question, allow, decline } = useLocalShortcut();
 const { resolve } = useEndpoint();
 
-/* Yes — and probe immediately rather than leaving it to the next reconnect, for two reasons. This is the one
+/* Yes, and probe immediately rather than leaving it to the next reconnect, for two reasons. This is the one
  * moment the user is thinking about the question, so the browser's own dialog lands while the card that
  * explains it is still on screen. And the fetch happens inside their click, which is the friendliest moment
  * there is to ask a browser for anything. */
@@ -46,7 +46,7 @@ const refuse = (): void => {
 
 <template>
     <!-- The wrapper is inert; only the card takes the pointer, so this never eats a click on the workspace
-         underneath. Seated above the receipt lane rather than in it — a receipt raised while this is waiting
+         underneath. Seated above the receipt lane rather than in it: a receipt raised while this is waiting
          must not land on top of the question. -->
     <Transition name="shortcut">
         <div v-if="question !== undefined" class="pointer-events-none fixed inset-x-0 bottom-16 z-50 flex justify-center px-3">

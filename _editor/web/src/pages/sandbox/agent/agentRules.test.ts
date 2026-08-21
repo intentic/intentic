@@ -5,8 +5,8 @@
 // the list below it can never disagree, and a user who outgrows a row can read back exactly what it wrote.
 //
 // It is only true if each row writes the rule it claims to. Mounted rather than projected because what is under
-// test is the round trip a person actually performs — press the switch, read what the settings object now holds
-// — and the write happens in the component's own handler.
+// test is the round trip a person actually performs: press the switch, read what the settings object now holds
+//, and the write happens in the component's own handler.
 import type { Rule, SandboxSettings } from "@intentic-app/api-contract";
 import { SandboxSettingsSchema } from "@intentic-app/api-contract";
 import PrimeVue from "primevue/config";
@@ -43,8 +43,8 @@ const mount = (component: unknown): HTMLElement => {
     document.body.append(host);
     app = createApp({ render: () => h(component as never) });
     // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin
-    // (the PlanLimitsPanel test's convention). PrimeVue itself cannot be stood in for — its inputs and buttons
-    // read the injected config while rendering — so the plugin goes on bare, without the theme the app dresses
+    // (the PlanLimitsPanel test's convention). PrimeVue itself cannot be stood in for: its inputs and buttons
+    // read the injected config while rendering, so the plugin goes on bare, without the theme the app dresses
     // it in, which is styling this test has no opinion about.
     app.use(PrimeVue);
     app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
@@ -124,7 +124,7 @@ test(`the pre-push command box writes a command rule, and emptying it takes the 
     expect(ruleById(`pre-push`)?.moment).toBe(`push.starting`);
     expect(ruleById(`pre-push`)?.action).toMatchObject({ kind: `command`, command: `pnpm test` });
 
-    // Empty has always meant OFF for this row, and off is no rule at all — a disabled rule with a blank command
+    // Empty has always meant OFF for this row, and off is no rule at all: a disabled rule with a blank command
     // would sit in the list below as something nobody wrote on purpose.
     input.value = `   `;
     input.dispatchEvent(new Event(`input`));
@@ -173,7 +173,7 @@ test(`the general list shows every rule EXCEPT the three with a row of their own
 
 /* --- the add flow -------------------------------------------------------------------------------------------
  * Driven on its DEFAULTS (a turn-ending rule that tells the assistant something), which covers the whole
- * assembly path — words to a rule, optional paths to a condition, choice to an action — without reaching into
+ * assembly path (words to a rule, optional paths to a condition, choice to an action) without reaching into
  * the moment picker's overlay. The moment/action pairing those controls enforce is pinned where it is decided,
  * in the daemon's own schema. */
 const typeInto = async (host: HTMLElement, label: string, value: string): Promise<void> => {
@@ -204,7 +204,7 @@ test(`the add flow turns a filled form into a rule, id and all`, async () => {
     await clickText(host, `Add rule`);
 
     const rule = settings.value.rules[0];
-    // The id is derived from the label, so the add flow never asks for one — it is what the activity feed names
+    // The id is derived from the label, so the add flow never asks for one: it is what the activity feed names
     // and what the firing stamps are keyed by.
     expect(rule?.id).toBe(`update-the-changelog`);
     expect(rule?.moment).toBe(`turn.ending`);
@@ -229,7 +229,7 @@ test(`a rule left unnamed names itself from what it was told to do`, async () =>
     expect(rule?.id).toBe(`update-the-changelog-before-you-finish`);
 });
 
-// Both separators, because both are how people write a list of globs — and a space-separated pair used to
+// Both separators, because both are how people write a list of globs, and a space-separated pair used to
 // become ONE glob that matched nothing, silently.
 test(`paths typed with commas or spaces both arrive as separate globs`, async () => {
     const { default: AgentRules } = await import("./AgentRules.vue");
@@ -276,7 +276,7 @@ test(`a form missing the field its action needs cannot be added, and says which 
 
 /* --- editing -------------------------------------------------------------------------------------------------
  * The capability the old form did not have: changing a rule meant deleting it and typing all of it again. What
- * has to survive the round trip is everything the form does not ask about — the id the activity feed and the
+ * has to survive the round trip is everything the form does not ask about: the id the activity feed and the
  * firing stamps are keyed by, and whether the owner had switched the rule off. */
 test(`editing a rule rewrites its words and keeps its id and its switch`, async () => {
     const { default: AgentRules } = await import("./AgentRules.vue");

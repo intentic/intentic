@@ -1,6 +1,6 @@
 // WHAT THE LIST LOOKED LIKE BEFORE: eighteen entries, eighteen identical grey boxes, so telling ffmpeg from Bun
 // meant reading the column rather than glancing at it. What is pinned here is the two ways a mark table quietly
-// stops earning that back — a block whose name is spelled differently from its product falling through to the
+// stops earning that back: a block whose name is spelled differently from its product falling through to the
 // box, and a slug that resolves to somebody ELSE's brand being honoured because it happened to exist.
 import type { EnvironmentItem } from "@intentic-app/api-contract";
 import { expect, it } from "vitest";
@@ -27,7 +27,7 @@ it(`reaches a product's mark however the block that installs it was named`, () =
 
 it(`lets the block's own name beat the commands inside it`, () => {
     // The discord capability installs whisper.cpp and a compiler. Taking the first tool's brand would file it
-    // under C++ — the row would be correct about its contents and useless for finding the capability.
+    // under C++: the row would be correct about its contents and useless for finding the capability.
     expect(environmentVisual(item(`Discord`, `whisper-cli`, `g++`, `make`)).logo).toBe(`discord`);
 });
 
@@ -42,7 +42,7 @@ it(`tells the brandless apart by kind rather than by a shared box`, () => {
 });
 
 it(`never lends GNU make the automation platform's mark`, () => {
-    // `make` IS a slug in that set — Make.com's purple M. A wrong mark reads as a fact, where the glyph reads as
+    // `make` IS a slug in that set: Make.com's purple M. A wrong mark reads as a fact, where the glyph reads as
     // "no brand for this one", so the entry is deliberately left off the brand table.
     expect(environmentVisual(item(`make`)).logo).toBeUndefined();
 });

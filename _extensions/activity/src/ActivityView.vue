@@ -23,9 +23,9 @@ import { useActivity } from "./useActivity";
  *
  * ONE PANE, AND IT IS A SECTION OF THE SANDBOX HUB. This was a page of its own behind a rail tile, laid out as an
  * index of sources beside the feed. It is a hub section now (see extension.ts for why it left the rail), so the
- * page chrome — the title, the description, the index column — is the hub's, and what is left here is the
+ * page chrome (the title, the description, the index column) is the hub's, and what is left here is the
  * instrument and the feed. The three filters are unchanged and now sit in one row: WHO (the source picker), WHEN
- * (the window) and free text. The window is not cosmetic — it decides how far back the feed pages, so picking 7d
+ * (the window) and free text. The window is not cosmetic: it decides how far back the feed pages, so picking 7d
  * fetches until 7 days are actually covered.
  *
  * The timeline is WHAT HAPPENED, one row per thing that happened rather than one per row the daemon appended: a
@@ -37,7 +37,7 @@ import { useActivity } from "./useActivity";
 
 const api = host();
 
-// Derived from the query rather than mirrored into refs — one direction of flow, and Back/Forward work for free.
+// Derived from the query rather than mirrored into refs: one direction of flow, and Back/Forward work for free.
 const query = computed(() => api.route.query());
 const window = computed<TimeWindow>({
     get: () => {
@@ -74,7 +74,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
 </script>
 
 <template>
-    <!-- A HUB SECTION BODY — no page header and no frame of its own: the hub draws both, and a section that drew
+    <!-- A HUB SECTION BODY, no page header and no frame of its own: the hub draws both, and a section that drew
          its own would sit as a page inside a page. -->
     <div class="flex flex-col gap-3">
         <Notice v-if="error" :of="noticeOf(error)" />
@@ -86,11 +86,11 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
             <span class="text-sm font-medium text-content">#{{ status.voice.channelName }}</span>
             <StatusBadge variant="info" label="Transcribing" size="xs" dot />
             <span class="text-xs text-muted">
-                {{ voiceMinutes }} min — {{ status.voice.participants.length > 0 ? status.voice.participants.join(`, `) : `no speakers yet` }}
+                {{ voiceMinutes }} min: {{ status.voice.participants.length > 0 ? status.voice.participants.join(`, `) : `no speakers yet` }}
             </span>
         </div>
 
-        <!-- THE FILTER SITS ON THE THING IT FILTERS, and all three of them narrow the FEED — so all three are in
+        <!-- THE FILTER SITS ON THE THING IT FILTERS, and all three of them narrow the FEED, so all three are in
              its instrument, in the order a question is asked of a log: who, when, and what did it say. The source
              picker was a column beside the feed until this view became a hub section; the hub's own index column
              is where a second one would have gone (see SourceFilter). -->
@@ -105,7 +105,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
                     <span class="block text-sm font-medium text-content">Activity</span>
                     <span class="mt-1 block text-xs text-muted">
                         One entry per thing that happened, grouped by <b>who set it off</b>: a connected provider that woke the agent, a schedule, or
-                        you. A turn's whole lifecycle — start, plan, failure, completion, and every provider call it made — is one entry; expand it
+                        you. A turn's whole lifecycle: start, plan, failure, completion, and every provider call it made, is one entry; expand it
                         for the raw events the daemon recorded.
                     </span>
                 </InfoHint>

@@ -88,7 +88,7 @@ describe(`hotspotAsk`, () => {
     it(`quotes the row's own figures, and the window they were counted over`, () => {
         const ask = hotspotAsk(hotspot({ path: `_editor/web/src/App.vue`, commits: 12 }), context({ rank: 3, window: `30d` }));
         expect(ask.prompt).toContain(`Refactor _editor/web/src/App.vue.`);
-        expect(ask.prompt).toContain(`#3 hotspot in this repository — 12 commits in the last 30 days, +4,120/-1,877 lines, 200 branch points.`);
+        expect(ask.prompt).toContain(`#3 hotspot in this repository: 12 commits in the last 30 days, +4,120/-1,877 lines, 200 branch points.`);
         // The check it ends on names the file, so the agent can recount instead of declaring victory.
         expect(ask.prompt).toContain(`\`iq hotspots --in _editor/web/src/App.vue\``);
     });
@@ -112,12 +112,12 @@ describe(`moduleAsk`, () => {
     it(`asks to narrow a surface that dwarfs the ranking it sits in`, () => {
         const ask = moduleAsk({ path: `_libs/contract/src/schemas.ts`, exports: 428 }, { rank: 2, medianExports: 21 });
         expect(ask?.kind).toBe(`narrow`);
-        expect(ask?.prompt).toContain(`#2 key module by PageRank — 428 exports against a median of 21 across that ranking.`);
+        expect(ask?.prompt).toContain(`#2 key module by PageRank: 428 exports against a median of 21 across that ranking.`);
         expect(ask?.dormant).toBe(false);
     });
 
     it(`keeps the floor above a surface no reader would call wide`, () => {
-        // Three times a median of 5 is 15 — legible in one screen, so the surface is not the finding.
+        // Three times a median of 5 is 15: legible in one screen, so the surface is not the finding.
         expect(moduleAsk({ path: `src/util.ts`, exports: 15 }, { rank: 1, medianExports: 5 })).toBeUndefined();
         expect(moduleAsk({ path: `src/util.ts`, exports: 21 }, { rank: 1, medianExports: 5 })?.kind).toBe(`narrow`);
     });
@@ -144,7 +144,7 @@ describe(`every prompt`, () => {
         }
     });
 
-    it(`prescribes no design and pastes no code — the agent reads the file itself`, () => {
+    it(`prescribes no design and pastes no code: the agent reads the file itself`, () => {
         for (const ask of asks) {
             expect(ask.prompt).toContain(`Read it first.`);
             expect(ask.prompt).not.toContain(`\n\`\`\``);

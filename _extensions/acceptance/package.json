@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-acceptance",
     "version": "1.0.0",
-    "description": "Acceptance — user stories and their acceptance criteria, walked through the running app by agents driving real browsers",
+    "description": "Acceptance, user stories and their acceptance criteria, walked through the running app by agents driving real browsers",
     "license": "MIT",
     "private": true,
     "type": "module",

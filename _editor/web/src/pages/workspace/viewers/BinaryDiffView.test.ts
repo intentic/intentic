@@ -1,24 +1,24 @@
 // @vitest-environment jsdom
 //
 // jsdom because the whole point of this viewer is what it RENDERS. The bug it exists to fix was a review
-// surface that said "Binary file — no text diff to show." over a PNG, so the assertion that matters is that an
-// <img> reaches the DOM with the fetched bytes behind it — which only a mounted render can show.
+// surface that said "Binary file: no text diff to show." over a PNG, so the assertion that matters is that an
+// <img> reaches the DOM with the fetched bytes behind it, which only a mounted render can show.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
 // The component's import chain pulls in app-wide singletons that read browser/runtime globals at import time
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env), stood up for the
-// package by vitest.setup.ts before this file is loaded — what the real page has in place by then.
+// package by vitest.setup.ts before this file is loaded: what the real page has in place by then.
 vi.hoisted(() => {
     // jsdom's own object URLs are opaque uuids, so nothing downstream could tell which blob an <img> is
-    // showing. Named by byte length instead — that is the assertion each pane is holding ITS OWN side's bytes.
+    // showing. Named by byte length instead: that is the assertion each pane is holding ITS OWN side's bytes.
     globalThis.URL.createObjectURL = (blob: Blob) => `blob:fake/${blob.size}`;
     globalThis.URL.revokeObjectURL = () => {};
     // Each pane's ImageView watches its own size to keep a fitted image fitted; jsdom ships no ResizeObserver,
-    // and it never lays anything out to report anyway. A no-op leaves the render — which is what is asserted.
+    // and it never lays anything out to report anyway. A no-op leaves the render, which is what is asserted.
 });
 
-// The daemon fetch, stubbed at the seam the viewer uses — the test is about rendering bytes, not about auth.
+// The daemon fetch, stubbed at the seam the viewer uses: the test is about rendering bytes, not about auth.
 const fetched: string[] = [];
 vi.mock("../../../composables/sandbox/sandboxClient", () => ({
     sandboxBlob: (path: string) => {
@@ -71,7 +71,7 @@ describe(`BinaryDiffView`, () => {
 
         const images = element.querySelectorAll(`img`);
         expect(images).toHaveLength(2);
-        // Each side's own bytes, not the same blob twice — the sizes differ, so the URLs must too.
+        // Each side's own bytes, not the same blob twice: the sizes differ, so the URLs must too.
         expect(images[0]?.getAttribute(`src`)).toBe(`blob:fake/3`);
         expect(images[1]?.getAttribute(`src`)).toBe(`blob:fake/4`);
         expect(element.textContent).toContain(`Before`);
@@ -103,7 +103,7 @@ describe(`BinaryDiffView`, () => {
         await settle();
 
         expect(element.textContent).toContain(`Request failed (404).`);
-        // The half that DID load still renders — one dead side must not blank the comparison.
+        // The half that DID load still renders: one dead side must not blank the comparison.
         expect(element.querySelectorAll(`img`)).toHaveLength(1);
     });
 

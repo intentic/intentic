@@ -1,6 +1,6 @@
-<!-- THE KIT, ON ONE PAGE — every shared part in every state it has, and every scale it is drawn from.
+<!-- THE KIT, ON ONE PAGE: every shared part in every state it has, and every scale it is drawn from.
      Dev-only: the route is registered under `import.meta.env.DEV` (router/index.ts), so it is not in a
-     production bundle and there is no guard to satisfy — it opens signed out, with no sandbox, in any theme.
+     production bundle and there is no guard to satisfy: it opens signed out, with no sandbox, in any theme.
 
      IT EXISTS TO MAKE DRIFT VISIBLE. The design system is documented better than most, and the drift the audit
      found still happened, because the two things that had drifted were never on screen together: thirteen
@@ -71,7 +71,7 @@ const { textSize, setTextSize } = useTextSize();
 
 /* Each band is a `[name, sample]` list rather than prose, so the page reads as a RULER: the name is what a
  * call site types, and the sample is what it gets. A band with one entry is a band with a decision nobody has
- * had to make yet — worth seeing as much as a crowded one. */
+ * had to make yet: worth seeing as much as a crowded one. */
 const TEXT_SIZES = [`text-4xs`, `text-3xs`, `text-2xs`, `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`] as const;
 const RADII = [`rounded-xs`, `rounded-sm`, `rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-2xl`] as const;
 /* SPELLED OUT, both of them, because Tailwind emits a utility only where it can SEE the name: a swatch class
@@ -105,7 +105,7 @@ const MODAL_SIZES = [`sm`, `md`, `lg`, `xl`, `full`] as const;
 const READ_WIDTHS = [`max-w-read-xs`, `max-w-read-sm`, `max-w-read`, `max-w-read-lg`] as const;
 const POP_WIDTHS = [`w-pop-sm`, `w-pop`, `w-pop-lg`] as const;
 /* Heights are drawn as a SHARE OF THE VIEWPORT rather than as a column of that height: `h-panel` is 60dvh, and
- * four honest columns would be two thousand pixels of bar to say four numbers. The share is the fact anyway —
+ * four honest columns would be two thousand pixels of bar to say four numbers. The share is the fact anyway:
  * these exist to stop a panel growing past the window, so how much window it leaves is the whole content. */
 const PANEL_HEIGHTS = [
     { name: `h-panel`, value: `60dvh`, share: 60 },
@@ -115,7 +115,7 @@ const PANEL_HEIGHTS = [
 ] as const;
 const STATUS_VARIANTS: readonly StatusVariant[] = [`success`, `danger`, `warning`, `info`, `neutral`, `primary`];
 
-/* One machine, invented — a healthy sandbox and a stopped one that lost a port to it, which between them show
+/* One machine, invented: a healthy sandbox and a stopped one that lost a port to it, which between them show
  * every state the row has: the running dot and the stopped word, a resting sync and a halted one, a mirrored
  * port and a contested one, and both halves of the power slot. */
 const KIT_SANDBOXES: readonly MachineSandboxRow[] = [
@@ -123,7 +123,7 @@ const KIT_SANDBOXES: readonly MachineSandboxRow[] = [
     { slug: `lab`, name: `lab`, running: false, image: `ghcr.io/intentic/sandbox:2.2.9`, tunnelRunning: false },
 ];
 /* BOTH SESSIONS ON BOTH ROWS, because a pairing now runs two: the workspace sync and the one-way mirror that
- * carries the sandbox's own state down. The healthy row states its backup explicitly rather than omitting it —
+ * carries the sandbox's own state down. The healthy row states its backup explicitly rather than omitting it:
  * an omitted one reads as "not backed up" and would draw a warning on the sample whose whole job is to show
  * what a well pairing looks like, which is how a fixture starts lying about the component it demonstrates. */
 const KIT_PAIRINGS: readonly MachineFolderRow[] = [
@@ -181,7 +181,7 @@ const PICKER_OPTIONS = [
 // The hinted variant, side by side with the annotated one above: a choice whose options are TAUGHT on the row
 // rather than named and left. Access tiers are the case it was built for.
 const PICKER_HINTED = [
-    { value: `viewer`, label: `Viewer`, icon: `eye`, hint: `Can watch everything — agents, chats, files. Can't change anything.` },
+    { value: `viewer`, label: `Viewer`, icon: `eye`, hint: `Can watch everything, agents, chats, files. Can't change anything.` },
     {
         value: `collaborator`,
         label: `Collaborator`,
@@ -300,7 +300,7 @@ const pickedTier = ref(`collaborator`);
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Notice</h2>
                 <p class="text-xs text-muted">
-                    The app's one tinted message box. `:of` when the message is data, the slot when the view wrote it — both wear the same box.
+                    The app's one tinted message box. `:of` when the message is data, the slot when the view wrote it: both wear the same box.
                 </p>
                 <div class="flex max-w-read-lg flex-col gap-2">
                     <Notice :of="{ tone: `danger`, title: `Couldn't reach the sandbox.`, detail: `fetch failed: ECONNREFUSED 127.0.0.1:6480` }" />
@@ -327,12 +327,12 @@ const pickedTier = ref(`collaborator`);
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Containers</h2>
                 <p class="text-xs text-muted">
-                    Card is the box. ScrollFrame is the box that scrolls itself — it owns the contract, so a view never writes one. A docked pane that
+                    Card is the box. ScrollFrame is the box that scrolls itself: it owns the contract, so a view never writes one. A docked pane that
                     fills a region the shell already framed wants neither.
                 </p>
                 <div class="flex flex-wrap items-start gap-4">
                     <Card class="w-64"><p class="text-xs text-content">A card. Padding and radius come from the density tokens.</p></Card>
-                    <Card dashed class="w-64"><p class="text-xs text-muted">A dashed card — the empty state.</p></Card>
+                    <Card dashed class="w-64"><p class="text-xs text-muted">A dashed card: the empty state.</p></Card>
                     <!-- `grow` inside a fixed-height flex parent, which is the whole of how this is used: the frame
                          is sized by its content otherwise, and a wrapper's height constrains nothing. -->
                     <div class="flex h-56 w-72 flex-col">
@@ -368,7 +368,7 @@ const pickedTier = ref(`collaborator`);
             <!-- ── ONE COMPUTER'S SANDBOXES ──────────────────────────────────────────────────────────── -->
             <!-- Here because TWO apps draw this: the Computers tab and the desktop app's manager window. That
                  window cannot be opened in a browser, so this is the only place the two can be compared side by
-                 side — which is exactly how they drifted into different button sets in the first place. -->
+                 side, which is exactly how they drifted into different button sets in the first place. -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">A machine's sandboxes</h2>
                 <div class="rounded-xl border border-line bg-canvas p-4">
@@ -382,7 +382,7 @@ const pickedTier = ref(`collaborator`);
                 <MachineRunLog
                     :lines="[`intentic: pulling ghcr.io/intentic/sandbox:stable`, `intentic: recreating the container`, `ready`]"
                     :running="true"
-                    note="Running on that computer — it keeps going even if you leave this page."
+                    note="Running on that computer: it keeps going even if you leave this page."
                 />
             </section>
 
@@ -410,7 +410,7 @@ const pickedTier = ref(`collaborator`);
                     <BrandMark :size="28" name="GitHub" icon="github" />
                     <CopyButton text="copied from the design kit" label="Copy" />
                     <InfoHint label="What this is">
-                        <span class="block text-xs text-content">A hover card. It holds a couple of sentences — more than that wants a dialog.</span>
+                        <span class="block text-xs text-content">A hover card. It holds a couple of sentences: more than that wants a dialog.</span>
                     </InfoHint>
                     <InfoDialog title="The long version">
                         <p class="text-sm text-content">The click-to-open sibling of the hint: headings, lists, several paragraphs, selectable.</p>
@@ -465,7 +465,7 @@ const pickedTier = ref(`collaborator`);
                         <Picker v-model="picked" :options="PICKER_OPTIONS" aria-label="Model" class="w-full" />
                     </label>
                     <div class="flex flex-col gap-1">
-                        <span class="ui-field-label">Picker — hinted rows, ghost trigger</span>
+                        <span class="ui-field-label">Picker: hinted rows, ghost trigger</span>
                         <div>
                             <Picker v-model="pickedTier" :options="PICKER_HINTED" variant="ghost" aria-label="Access tier" header="Access tier" />
                         </div>
@@ -534,7 +534,7 @@ const pickedTier = ref(`collaborator`);
         <Modal v-model:open="modalOpen" :size="modalSize" header="A modal">
             <p class="text-sm text-content">
                 Size <b>{{ modalSize }}</b
-                >. Narrow the window past it and the clamp takes over — that clamp is the whole reason this component exists.
+                >. Narrow the window past it and the clamp takes over: that clamp is the whole reason this component exists.
             </p>
             <p v-for="line in 14" :key="line" class="mt-2 text-xs text-muted">Body line {{ line }}, so the scroll cap has something to cap.</p>
             <template #footer>

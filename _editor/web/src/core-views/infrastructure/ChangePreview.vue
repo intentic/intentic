@@ -32,8 +32,8 @@ interface ChangeSection {
 }
 
 // Bucket the plan's non-noop steps + orphans (as deletes) by action; empty buckets drop out. Dedupe by id
-// within a bucket — a resource can arrive both as a prune step and in the result frame's orphan list. Orphans
-// are the only authoritative "to remove" — the declared/live rollup can't see a want that was removed but is
+// within a bucket: a resource can arrive both as a prune step and in the result frame's orphan list. Orphans
+// are the only authoritative "to remove": the declared/live rollup can't see a want that was removed but is
 // still running.
 const sections = computed<ChangeSection[]>(() => {
     const all: PlanStep[] = [
@@ -93,7 +93,7 @@ const hasChanges = computed(() => sections.value.length > 0);
 
         <Notice v-else-if="previewNotice" :of="previewNotice" />
 
-        <!-- Live narration of the run (which node is being checked) + a way OUT — never a dead-end spinner. -->
+        <!-- Live narration of the run (which node is being checked) + a way OUT: never a dead-end spinner. -->
         <div v-else-if="running" class="flex items-center justify-between gap-2">
             <p class="flex min-w-0 items-center gap-2 text-sm text-muted">
                 <Icon name="spinner" spin class="shrink-0 text-info" />
@@ -104,7 +104,7 @@ const hasChanges = computed(() => sections.value.length > 0);
 
         <template v-else-if="ran">
             <div v-if="hasChanges" class="flex flex-col gap-2">
-                <!-- One section per verb: the header IS the summary (dot + count + verb), rows are just ids —
+                <!-- One section per verb: the header IS the summary (dot + count + verb), rows are just ids:
                      no per-row badge repetition. Big sections (e.g. a mass remove) start collapsed. -->
                 <details v-for="section in sections" :key="section.action" class="group" :open="section.steps.length <= 8">
                     <summary class="flex cursor-pointer list-none items-center gap-2 py-0.5 [&::-webkit-details-marker]:hidden">
@@ -121,11 +121,11 @@ const hasChanges = computed(() => sections.value.length > 0);
                 </details>
             </div>
             <p v-else class="flex items-center gap-2 text-sm text-success">
-                <Icon name="check-circle" /> Everything is up to date — nothing to apply.
+                <Icon name="check-circle" /> Everything is up to date: nothing to apply.
             </p>
-            <p v-if="stale" class="text-2xs text-warning">Your wants changed since this preview — re-check to see the latest.</p>
+            <p v-if="stale" class="text-2xs text-warning">Your wants changed since this preview: re-check to see the latest.</p>
         </template>
 
-        <p v-else class="text-sm text-muted">Preview to see what applying your wants will create, update or remove — before anything changes.</p>
+        <p v-else class="text-sm text-muted">Preview to see what applying your wants will create, update or remove: before anything changes.</p>
     </Card>
 </template>

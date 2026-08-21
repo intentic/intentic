@@ -82,7 +82,7 @@ const sendOrDraft = async (ctx: CommandContext, mode: "send" | "draft", override
     const from = flag(args, "from");
     const to = overrides?.to ?? list(args, "to");
     if (to.length === 0) {
-        throw new Error("Nobody to send to — pass --to with at least one address.");
+        throw new Error("Nobody to send to: pass --to with at least one address.");
     }
     const draft: Draft = {
         to,
@@ -107,7 +107,7 @@ const sendOrDraft = async (ctx: CommandContext, mode: "send" | "draft", override
         printJson(ctx, sent);
         return;
     }
-    ctx.out(mode === "send" ? `sent ${sent.id}` : `draft ${sent.id} (not sent — it is in Drafts)`);
+    ctx.out(mode === "send" ? `sent ${sent.id}` : `draft ${sent.id} (not sent, it is in Drafts)`);
 };
 
 const search: Command = {
@@ -117,7 +117,7 @@ const search: Command = {
     run: async (ctx) => {
         const query = ctx.args.positional.slice(1).join(" ");
         if (query === "") {
-            throw new Error('A query is required — Gmail search syntax, e.g. "from:ana is:unread newer_than:7d".');
+            throw new Error('A query is required: Gmail search syntax, e.g. "from:ana is:unread newer_than:7d".');
         }
         const wanted = readLimit(ctx.args, 20, 200);
         const messages = await hydrate(ctx.session, await messagesMatching(ctx.session, query, wanted), "metadata");
@@ -239,7 +239,7 @@ const reply: Command = {
 
 const label: Command = {
     name: "label",
-    summary: "Add or remove labels — archiving is removing INBOX",
+    summary: "Add or remove labels, archiving is removing INBOX",
     usage: "gw mail label <messageId> [--add Work,Urgent] [--remove INBOX,UNREAD]",
     writes: true,
     run: async (ctx) => {
@@ -249,7 +249,7 @@ const label: Command = {
             resolveLabels(ctx.session, list(ctx.args, "remove")),
         ]);
         if (addLabelIds.length === 0 && removeLabelIds.length === 0) {
-            throw new Error("Nothing to do — pass --add and/or --remove.");
+            throw new Error("Nothing to do: pass --add and/or --remove.");
         }
         const updated = await call<GmailMessage>(ctx.session, {
             method: "POST",
@@ -326,6 +326,6 @@ const labels: Command = {
 
 export const mailGroup: CommandGroup = {
     name: "mail",
-    summary: "Gmail — search, read, send, reply, label",
+    summary: "Gmail, search, read, send, reply, label",
     commands: [search, read, thread, send, reply, draft, label, trash, attachments, labels],
 };

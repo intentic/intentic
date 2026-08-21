@@ -4,8 +4,8 @@ import { usePushNotifications } from "./usePushNotifications";
 
 /* The two ways enabling notifications fails without saying anything true.
  *
- * Both are invisible from the UI — one leaves a toggle reading "on" for a device that can never be reached
- * again, the other blames the sandbox for a decision the browser made — so they are worth pinning down. */
+ * Both are invisible from the UI: one leaves a toggle reading "on" for a device that can never be reached
+ * again, the other blames the sandbox for a decision the browser made, so they are worth pinning down. */
 
 const reachable = ref(true);
 vi.mock(`./sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
@@ -13,7 +13,7 @@ vi.mock(`./sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
 const sandboxJson = vi.fn();
 vi.mock(`./sandbox/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
 
-// Two valid uncompressed P-256 points (0x04 || X || Y), base64url — only their bytes matter here.
+// Two valid uncompressed P-256 points (0x04 || X || Y), base64url: only their bytes matter here.
 const KEY_A = `B${`A`.repeat(85)}Q`;
 const KEY_B = `B${`B`.repeat(85)}Q`;
 
@@ -38,7 +38,7 @@ const subscription = (endpoint: string, key: string) => ({
 const manager = { getSubscription: vi.fn(), subscribe: vi.fn() };
 
 // Tests run in the node environment, so the browser surface the composable feature-detects has to be stood up
-// by hand — including `window`, which `supported()` probes for PushManager and Notification.
+// by hand: including `window`, which `supported()` probes for PushManager and Notification.
 const stubBrowser = (permission: NotificationPermission, brave: boolean): void => {
     const notification = { permission, requestPermission: async () => permission };
     vi.stubGlobal(`navigator`, {
@@ -61,7 +61,7 @@ beforeEach(() => {
 
 test(`a subscription minted for a key the daemon no longer holds is replaced, not reused`, async () => {
     // A recreated sandbox generates a fresh VAPID pair. The browser still holds the old endpoint, and every
-    // send to it is refused (403) while the toggle claims to be on — so it must be dropped and re-minted.
+    // send to it is refused (403) while the toggle claims to be on, so it must be dropped and re-minted.
     const stale = subscription(`https://push.example/stale`, KEY_B);
     stubBrowser(`granted`, false);
     manager.getSubscription.mockResolvedValue(stale);
@@ -76,7 +76,7 @@ test(`a subscription minted for a key the daemon no longer holds is replaced, no
     expect(push.state.value).toBe(`on`);
 });
 
-test(`a subscription still bound to the daemon's key is reused — re-subscribing would orphan its row`, async () => {
+test(`a subscription still bound to the daemon's key is reused: re-subscribing would orphan its row`, async () => {
     const live = subscription(`https://push.example/live`, KEY_A);
     stubBrowser(`granted`, false);
     manager.getSubscription.mockResolvedValue(live);
@@ -113,8 +113,8 @@ test(`the same failure in a non-Brave browser points at the push connection inst
 });
 
 test(`the state is read again once the daemon comes online, not only on mount`, async () => {
-    // This page can mount before the daemon answers — the shell paints a hydrated workspace rather than the
-    // connecting gate for a sandbox that is merely slow — and a read that lands in that window has nobody to
+    // This page can mount before the daemon answers: the shell paints a hydrated workspace rather than the
+    // connecting gate for a sandbox that is merely slow, and a read that lands in that window has nobody to
     // ask. Mounting was the only trigger, so the toggle stayed at its initial `off` for a browser that was in
     // fact subscribed: every reload looked like the setting had been forgotten.
     stubBrowser(`granted`, false);
@@ -134,7 +134,7 @@ test(`the state is read again once the daemon comes online, not only on mount`, 
 test(`a stale read cannot overwrite the toggle the user just moved`, async () => {
     // The read above now fires exactly when someone is reaching for the toggle. It is the slower of the two
     // (a service-worker lookup plus a daemon round-trip), so without a guard it lands last and reports the
-    // world as it was before the click — the same "it forgot my setting" from the other direction.
+    // world as it was before the click: the same "it forgot my setting" from the other direction.
     stubBrowser(`granted`, false);
     manager.getSubscription.mockResolvedValue(null);
     manager.subscribe.mockResolvedValue(subscription(`https://push.example/fresh`, KEY_A));
@@ -143,7 +143,7 @@ test(`a stale read cannot overwrite the toggle the user just moved`, async () =>
     );
 
     const push = usePushNotifications();
-    // The mount-time read is still in flight — deliberately not awaited — when the user turns it on.
+    // The mount-time read is still in flight: deliberately not awaited, when the user turns it on.
     await push.enable();
     expect(push.state.value).toBe(`on`);
 
@@ -151,7 +151,7 @@ test(`a stale read cannot overwrite the toggle the user just moved`, async () =>
 });
 
 test(`refresh reports "off" for a subscription bound to a superseded key`, async () => {
-    // Both halves exist — the browser has a subscription and the daemon has its row — but the key moved on.
+    // Both halves exist: the browser has a subscription and the daemon has its row, but the key moved on.
     // Reporting that as "on" is the silent failure the whole state machine exists to prevent.
     stubBrowser(`granted`, false);
     manager.getSubscription.mockResolvedValue(subscription(`https://push.example/stale`, KEY_B));

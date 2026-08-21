@@ -48,7 +48,7 @@ const describe = (repos: readonly CiRepo[], repoFilter: string): CiDelivery => {
     }
     const unwired = scoped.filter((repo) => repo.hookWarning !== undefined);
     if (unwired.length === 0) {
-        return { state: `ok`, summary: `Fires within seconds — the provider delivers each finished pipeline straight to this sandbox.` };
+        return { state: `ok`, summary: `Fires within seconds, the provider delivers each finished pipeline straight to this sandbox.` };
     }
     const names = unwired.map((repo) => repo.repo).join(`, `);
     const first = unwired[0]?.hookWarning;
@@ -57,7 +57,7 @@ const describe = (repos: readonly CiRepo[], repoFilter: string): CiDelivery => {
         summary:
             unwired.length === scoped.length
                 ? `Webhooks aren't set up, so pipelines are polled instead: this fires within ${POLL_MINUTES} minutes rather than instantly.`
-                : `Wired for ${scoped.length - unwired.length} of ${scoped.length} repos. ${names} ${unwired.length === 1 ? `is` : `are`} polled instead — those fire within ${POLL_MINUTES} minutes.`,
+                : `Wired for ${scoped.length - unwired.length} of ${scoped.length} repos. ${names} ${unwired.length === 1 ? `is` : `are`} polled instead, those fire within ${POLL_MINUTES} minutes.`,
         ...(first !== undefined ? { detail: first } : {}),
     };
 };

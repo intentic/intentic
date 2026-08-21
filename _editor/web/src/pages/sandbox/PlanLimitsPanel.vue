@@ -21,24 +21,24 @@ import {
     usageTone,
 } from "../../composables/chat/usageStatus";
 
-/* HOW MUCH OF YOUR PLANS IS LEFT — the Usage tab's second subject, and the one that does not scale with a row
+/* HOW MUCH OF YOUR PLANS IS LEFT: the Usage tab's second subject, and the one that does not scale with a row
  * per account. This sandbox holds 36 connections, 31 of them Google, and the flat list this replaced spent
  * 2,300px restating "No reading yet." while the three accounts with real numbers scrolled off the top.
  *
  * The redesign is a hierarchy, and each level exists because a different question is asked at it:
  *
- *   1. CAPACITY — can I start work at all? Counts of accounts by band, never a mean utilization: averaging 31
+ *   1. CAPACITY, can I start work at all? Counts of accounts by band, never a mean utilization: averaging 31
  *      separate pools describes no account and hides the one that is spent. Plus the soonest reopen, which is
  *      the only number that answers "and if not, when".
- *   2. PROVIDERS — where do I run? The provider is the unit because the provider is the CHOICE: the translator
+ *   2. PROVIDERS, where do I run? The provider is the unit because the provider is the CHOICE: the translator
  *      balances turns across a provider's accounts, so "which of my 31 Google accounts" is not a decision a
  *      person makes. Small providers keep their meters inline (three of anything is not worth folding); large
  *      ones show the distribution as bars and hand the detail to the roster.
- *   3. ATTENTION — what is BROKEN, which is narrower than what is unavailable: a credential that can no longer
- *      be refreshed, and nothing else. A spent pool is not broken — it reopens on its own, the translator routes
+ *   3. ATTENTION, what is BROKEN, which is narrower than what is unavailable: a credential that can no longer
+ *      be refreshed, and nothing else. A spent pool is not broken: it reopens on its own, the translator routes
  *      around it meanwhile, and since spend is the steady state of a 36-account fleet, listing it here made this
  *      section longest at the exact moment nothing was wrong. Level 1 already counts it and dates its return.
- *   4. ROSTER — reconcile one account. A filterable table, because 36 near-identical gmail addresses are only
+ *   4. ROSTER: reconcile one account. A filterable table, because 36 near-identical gmail addresses are only
  *      navigable by search, and because a number a reader distrusts must be findable.
  *
  * Encoding note: the distribution is BARS (fill height = utilization), not coloured cells. This design system's
@@ -48,8 +48,8 @@ import {
  * colour agrees with it. */
 
 /* Ask for the readings this panel exists to draw, rather than drawing whichever ones the page happened to load
- * with. A plan's pools are ACCOUNT-wide — the desktop app, another Claude Code and claude.ai itself spend the
- * same allowance — so a percentage is only ever as true as it is recent, and a browser left open all afternoon
+ * with. A plan's pools are ACCOUNT-wide: the desktop app, another Claude Code and claude.ai itself spend the
+ * same allowance, so a percentage is only ever as true as it is recent, and a browser left open all afternoon
  * has an afternoon-old one. The connection read is what refreshes them (the daemon waits on a quota sweep
  * before answering it), so arriving on this tab is exactly the moment to ask. AiAccountSection does the same
  * for the rings it draws. */
@@ -66,7 +66,7 @@ const summary = computed(() => planLimitSummary(rows.value));
 // ---- capacity ------------------------------------------------------------------------------------------------
 
 /* The bar covers every account whose headroom is KNOWABLE. A plan that publishes no limits is not a degree of
- * fullness and gets a sentence instead of a segment — two achromatic segments side by side would read as one
+ * fullness and gets a sentence instead of a segment: two achromatic segments side by side would read as one
  * fact split in half. */
 const CAPACITY_BANDS = PLAN_LIMIT_BANDS.filter((band) => band !== `none`);
 const capacityTotal = computed(() => CAPACITY_BANDS.reduce((sum, band) => sum + summary.value.counts[band], 0));
@@ -82,7 +82,7 @@ const capacity = computed(() =>
 // ---- groups --------------------------------------------------------------------------------------------------
 
 /* Up to three accounts render as the meters themselves. Folding three rows behind a click hides something that
- * already fits, and a "distribution" of three bars is just three bars — the aggregate only starts paying for
+ * already fits, and a "distribution" of three bars is just three bars: the aggregate only starts paying for
  * itself when the list stops fitting on screen. */
 const INLINE_LIMIT = 3;
 const isInline = (group: PlanLimitGroup): boolean => group.rows.length <= INLINE_LIMIT;
@@ -90,8 +90,8 @@ const isInline = (group: PlanLimitGroup): boolean => group.rows.length <= INLINE
 // and the read age itself. Rendering both produced "Kimi Code · 1 account" directly above a lone "kimi".
 const single = (group: PlanLimitGroup): PlanLimitRow | undefined => (group.rows.length === 1 ? group.rows[0] : undefined);
 
-// What the provider line says after the provider's name: the lone account it holds — named, and identified when
-// the name alone doesn't — else how many there are. "1 account" is a fact nobody came here for.
+// What the provider line says after the provider's name: the lone account it holds, named, and identified when
+// the name alone doesn't: else how many there are. "1 account" is a fact nobody came here for.
 const groupNote = (group: PlanLimitGroup): string => {
     const account = single(group);
     if (account === undefined) {
@@ -102,7 +102,7 @@ const groupNote = (group: PlanLimitGroup): string => {
 
 /* WHERE A REFUSAL BELONGS. The daemon names the account it was serving whenever it has one to name (a native
  * turn does; a routed turn is served by whichever auth file CLIProxyAPI picked, so it names nobody), and drawing
- * that on the provider line instead reads as "all of Claude Code is broken" — which is what put a three-hour-old
+ * that on the provider line instead reads as "all of Claude Code is broken", which is what put a three-hour-old
  * 401 above three accounts that had been serving turns all afternoon.
  *
  * So it goes on its own account's block, wherever that block exists. A folded group draws none, and a lone
@@ -111,12 +111,12 @@ const refusedRowId = (group: PlanLimitGroup): string | undefined =>
     isInline(group) && single(group) === undefined ? group.refusedRow?.id : undefined;
 
 // Never all 31: past this the bars are hairlines and the roster is the better answer. Rows arrive tightest-first,
-// so a truncated strip keeps the accounts that gate a turn — and says that it truncated.
+// so a truncated strip keeps the accounts that gate a turn, and says that it truncated.
 const MAX_BARS = 24;
 const barsOf = (group: PlanLimitGroup): readonly PlanLimitRow[] => group.rows.slice(0, MAX_BARS);
 
-/* What a FOLDED group states in place of a percentage of its own: the account that gates it first, or — when
- * nothing in it has been read — which kind of nothing that is. An inline group says nothing here: its meters are
+/* What a FOLDED group states in place of a percentage of its own: the account that gates it first, or, when
+ * nothing in it has been read, which kind of nothing that is. An inline group says nothing here: its meters are
  * directly below, and a summary of three visible rows is the same sentence twice. */
 const groupState = (group: PlanLimitGroup): string => {
     if (group.tightest?.percent !== undefined) {
@@ -136,8 +136,8 @@ const barTooltip = (row: PlanLimitRow): string =>
 
 // ---- attention -------------------------------------------------------------------------------------------------
 
-/* A cap, because "every credential in the fleet expired at once" is a real morning — a laptop that slept through
- * a token rotation, a provider that revoked a batch — and it must not turn the section back into the column this
+/* A cap, because "every credential in the fleet expired at once" is a real morning: a laptop that slept through
+ * a token rotation, a provider that revoked a batch, and it must not turn the section back into the column this
  * redesign removed. Generous enough that the ordinary case (one or two) never trips it. */
 const ATTENTION_SHOWN = 12;
 const attentionExpanded = ref(false);
@@ -175,13 +175,13 @@ const roster = computed(() => {
         id="accounts"
         class="@container"
         label="Plan limits"
-        caption="your whole plan, not this sandbox — every device on the account spends the same pools"
+        caption="your whole plan, not this sandbox: every device on the account spends the same pools"
     >
         <!-- 1 · CAPACITY. The section's headline is a count, not a percentage: "how many accounts can I run
              on" is the question, and it survives having 31 of them. -->
         <div class="flex flex-col gap-2 px-4 py-3">
-            <!-- The headline answers the question the section is opened with — can I start work, and if not,
-                 when — rather than counting connections, which the roster below does anyway. -->
+            <!-- The headline answers the question the section is opened with: can I start work, and if not,
+                 when: rather than counting connections, which the roster below does anyway. -->
             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span class="text-sm text-content">
                     {{ summary.counts.room }} of {{ summary.accounts }} accounts {{ summary.counts.room === 1 ? `has` : `have` }} room
@@ -216,7 +216,7 @@ const roster = computed(() => {
             </div>
         </div>
 
-        <!-- 2 · PROVIDERS. One row per provider — the axis a person actually chooses along. -->
+        <!-- 2 · PROVIDERS. One row per provider: the axis a person actually chooses along. -->
         <div v-for="group in groups" :key="group.provider" class="flex flex-col gap-2.5 px-4 py-3">
             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <ProviderLogo :provider="group.provider" class="shrink-0 self-center text-sm text-muted" />
@@ -230,7 +230,7 @@ const roster = computed(() => {
             </div>
 
             <!-- The last time this provider refused a turn, when it belongs to no block of its own (see
-                 refusedRowId) — named with its account where the daemon knew one, because a bare provider-wide
+                 refusedRowId): named with its account where the daemon knew one, because a bare provider-wide
                  refusal over 24 bars answers "which of these do I go and fix?" with nothing.
                  It sits ABOVE the meters because it OVERRIDES them while it is current: a meter is a poll and
                  this is an observation, so a green bar under a fresh refusal means the poll is stale, not that
@@ -257,7 +257,7 @@ const roster = computed(() => {
                     class="flex flex-col gap-1.5"
                     :class="index > 0 && single(group) === undefined ? `border-t border-line/60 pt-2.5` : ``"
                 >
-                    <!-- THE ACCOUNT IS A TIER OF ITS OWN — one step under the provider heading it, one over the
+                    <!-- THE ACCOUNT IS A TIER OF ITS OWN: one step under the provider heading it, one over the
                          pools it heads. It used to be set exactly like a pool label, same size and same colour,
                          directly above three of them: an email read as a fourth pool that happened to have no
                          meter, and the eye had nothing to group the meters by. -->
@@ -265,7 +265,7 @@ const roster = computed(() => {
                         <span class="min-w-0 truncate text-xs text-content">{{ row.label }}</span>
                         <!-- Whose sign-in this is, when the NAME does not already say it. The label is the
                              user's to rename and starts as whatever the provider offered, so one row reads
-                             "Claude" beside two emails and identifies nothing — the same rule, and the same
+                             "Claude" beside two emails and identifies nothing: the same rule, and the same
                              answer, as the Agent tab's identity note. -->
                         <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ row.identity }}</span>
                         <span v-if="row.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs" :class="row.stale ? `text-muted` : `text-subtle`">
@@ -273,7 +273,7 @@ const roster = computed(() => {
                         </span>
                     </div>
 
-                    <!-- This account's own refusal, under its own name — see refusedRowId. -->
+                    <!-- This account's own refusal, under its own name: see refusedRowId. -->
                     <p
                         v-if="group.refusal !== undefined && refusedRowId(group) === row.id"
                         class="line-clamp-2 text-2xs"
@@ -284,11 +284,11 @@ const roster = computed(() => {
                     </p>
 
                     <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
-                        {{ row.readable ? `No reading yet.` : `This plan publishes no limits — spend is all this sandbox can tell you.` }}
+                        {{ row.readable ? `No reading yet.` : `This plan publishes no limits, spend is all this sandbox can tell you.` }}
                     </p>
 
-                    <!-- A narrow PANEL keeps the reset instead of dropping it — "when does this reopen" is the
-                         number this is opened for — by wrapping the meter onto its own full-width line; with room,
+                    <!-- A narrow PANEL keeps the reset instead of dropping it: "when does this reopen" is the
+                         number this is opened for: by wrapping the meter onto its own full-width line; with room,
                          everything sits on one line in fixed columns so rows align. Measured on the panel, not the
                          window: this is a hub section inside the workspace pane. -->
                     <div v-for="pool in row.pools" :key="pool.kind" class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap">
@@ -313,7 +313,7 @@ const roster = computed(() => {
             </template>
 
             <!-- Large provider: the distribution, as bars. An account with no reading draws an EMPTY track and
-                 never a zero-height bar — "0% used" and "we have no idea" are opposite claims, and the second
+                 never a zero-height bar: "0% used" and "we have no idea" are opposite claims, and the second
                  one is what is true. -->
             <template v-else>
                 <div class="flex h-5 items-end gap-0.5">
@@ -342,9 +342,9 @@ const roster = computed(() => {
         </div>
 
         <!-- 3 · ATTENTION. One condition, so the FIX IS STATED ONCE and the list is nothing but accounts.
-             Every entry used to carry its own copy of "sign-in expired — reconnect it on the Agent tab", which
-             on a fleet meant the same eleven words down the whole column and the only part that varied — which
-             account — wedged between two repetitions of the part that didn't. The heading holds the condition
+             Every entry used to carry its own copy of "sign-in expired: reconnect it on the Agent tab", which
+             on a fleet meant the same eleven words down the whole column and the only part that varied, which
+             account: wedged between two repetitions of the part that didn't. The heading holds the condition
              and the instruction; the rows hold names. -->
         <div v-if="summary.attention.length > 0" class="flex flex-col gap-2 px-4 py-3">
             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -433,7 +433,7 @@ const roster = computed(() => {
              after the numbers it qualifies, if at all. Two readers, one caveat: Claude's pools come off the turn
              that just ended, so an idle sandbox's reading is as old as its last turn, and the routed
              subscriptions' are pulled on the daemon's own cadence. Either way the pools keep draining
-             elsewhere — which is the entire distance between "1%" here and 98% in a terminal on the same
+             elsewhere, which is the entire distance between "1%" here and 98% in a terminal on the same
              account. -->
         <p class="px-4 py-2.5 text-2xs text-subtle">
             A floor, not a reading: other clients spend the same pools without telling this sandbox, and Claude's figure is only as fresh as your last
@@ -443,7 +443,7 @@ const roster = computed(() => {
 
     <!-- An unread state is not an empty one: until the connection read lands, this says nothing about having no
          accounts. It used to say that in words ("Reading your connections…"), which is a sentence where a panel
-         goes — so the wait is drawn as the panel instead: the capacity headline, the band strip under it, and
+         goes, so the wait is drawn as the panel instead: the capacity headline, the band strip under it, and
          its legend, which is the whole of what lands here. -->
     <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
         <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
@@ -454,7 +454,7 @@ const roster = computed(() => {
                 <span class="skeleton ml-auto block h-2.5 w-32" />
             </div>
             <!-- The band strip is a single 1.5px-tall rule of segments, so its outline is one bar of that
-                 height rather than blocks — a placeholder thicker than the thing it stands for is a promise the
+                 height rather than blocks: a placeholder thicker than the thing it stands for is a promise the
                  panel then breaks. -->
             <span class="skeleton block h-1.5 w-full rounded-full" />
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -465,6 +465,6 @@ const roster = computed(() => {
 
     <!-- Said only once it is true, and silent for the beat before the outline earns its place. -->
     <p v-else-if="accountsLoaded" :class="ui.emptyState()">
-        No AI account is connected yet — connect one on the Agent tab and its plan limits appear here.
+        No AI account is connected yet: connect one on the Agent tab and its plan limits appear here.
     </p>
 </template>

@@ -2,7 +2,7 @@
 //
 // CLOSING A TERMINAL THAT IS DOING SOMETHING.
 //
-// Killing a tmux session is final — no undo, and the scrollback goes with it — but the strip is a row of
+// Killing a tmux session is final: no undo, and the scrollback goes with it, but the strip is a row of
 // near-identical pills and the × is a hover target four pixels wide. Aim one pill off and a build half an hour
 // in, a test suite, or an editor holding unsaved buffers ended in silence.
 //
@@ -11,7 +11,7 @@
 // click straight through it. The daemon now reports what the live pane is actually running (`command`), and
 // these cases pin the line that draws: idle closes on one click, busy asks and names the command.
 //
-// The pane is mocked wholesale — every case here is about the dialog, not about a terminal.
+// The pane is mocked wholesale: every case here is about the dialog, not about a terminal.
 import PrimeVue from "primevue/config";
 import Tooltip from "primevue/tooltip";
 import { afterEach, expect, test, vi } from "vitest";
@@ -101,7 +101,7 @@ const openPanel = async (sessions: Listed[]) => {
 };
 
 // The × of a given pill. Every session's kill button carries its own aria-label, which is also where the
-// command has to appear for a screen reader — the pulsing dot beside it says nothing out loud.
+// command has to appear for a screen reader: the pulsing dot beside it says nothing out loud.
 const closeButton = (host: HTMLElement, label: string): HTMLElement => {
     const found = [...host.querySelectorAll(`[aria-label]`)].find((el) => (el.getAttribute(`aria-label`) ?? ``).startsWith(label));
     expect(found, `no close button labelled ${label}`).toBeDefined();
@@ -109,7 +109,7 @@ const closeButton = (host: HTMLElement, label: string): HTMLElement => {
 };
 const dialogText = (): string => document.body.textContent ?? ``;
 
-test(`an idle shell closes on one click — no dialog`, async () => {
+test(`an idle shell closes on one click: no dialog`, async () => {
     const { killed, host } = await openPanel([idle(`web-aaa`)]);
     closeButton(host, `Kill terminal`).click();
     await nextTick();
@@ -119,7 +119,7 @@ test(`an idle shell closes on one click — no dialog`, async () => {
 
 /* THE REPORTED BUG. One click used to end this, and the only account of what was lost was whatever the user
  * happened to remember typing. The dialog names the command because "are you sure?" is a question nobody can
- * answer — the pill says "2", and `pnpm build` is the only thing that identifies the terminal being killed. */
+ * answer: the pill says "2", and `pnpm build` is the only thing that identifies the terminal being killed. */
 test(`a shell with a command running asks first, and names the command`, async () => {
     const { killed, host } = await openPanel([busy(`web-aaa`, `pnpm build`)]);
     closeButton(host, `Kill terminal`).click();
@@ -130,7 +130,7 @@ test(`a shell with a command running asks first, and names the command`, async (
 
 // Cancel is the whole point of the guard: the terminal is still there, still running, and its pill is still on
 // the strip. (The dialog's own node lingers through PrimeVue's leave transition, so what is asserted is the
-// decision — nothing killed — rather than the markup being gone the same tick.)
+// decision (nothing killed) rather than the markup being gone the same tick.)
 test(`cancelling leaves the session alone`, async () => {
     const { killed, host } = await openPanel([busy(`web-aaa`, `vitest`)]);
     closeButton(host, `Kill terminal`).click();
@@ -140,10 +140,10 @@ test(`cancelling leaves the session alone`, async () => {
     cancel?.click();
     await nextTick();
     expect(killed).toEqual([]);
-    expect(closeButton(host, `Kill terminal — running vitest`)).toBeDefined();
+    expect(closeButton(host, `Kill terminal, running vitest`)).toBeDefined();
 });
 
-// And confirming still kills — a guard that made the action hard to complete would just be a worse ×.
+// And confirming still kills: a guard that made the action hard to complete would just be a worse ×.
 test(`confirming kills it`, async () => {
     const { killed, host } = await openPanel([busy(`web-aaa`, `vitest`)]);
     closeButton(host, `Kill terminal`).click();
@@ -159,5 +159,5 @@ test(`confirming kills it`, async () => {
 test(`the strip says what a busy terminal is running`, async () => {
     const { host } = await openPanel([busy(`web-aaa`, `pnpm build`), idle(`web-bbb`)]);
     expect(host.textContent).toContain(`pnpm build`);
-    expect(closeButton(host, `Kill terminal — running pnpm build`)).toBeDefined();
+    expect(closeButton(host, `Kill terminal, running pnpm build`)).toBeDefined();
 });

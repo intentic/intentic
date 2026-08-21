@@ -63,7 +63,7 @@ test(`matches a pinned provider exactly, and everything of a kind that has no di
     expect(instancesOf(ssh, all).map((found) => found.id)).toEqual([`ops-box`, `build-box`]);
 });
 
-/* THE SILENT-OVERWRITE TRAP. Adding a second Reddit account has to suggest a free name — a suggestion that
+/* THE SILENT-OVERWRITE TRAP. Adding a second Reddit account has to suggest a free name: a suggestion that
  * collides upserts the connection the user is looking at, with no warning that it did. */
 test(`suggests the first free name so a repeat add is an add`, () => {
     const reddit = card({ id: `reddit`, kind: `browser` });
@@ -82,7 +82,7 @@ test(`never bumps the name of a one-per-sandbox card`, () => {
 });
 
 /* The identity picker exists because the manifest cannot know instance state. With no identities the field is
- * not an empty picker but no field at all — a free-text id there would only mint a dangling reference. */
+ * not an empty picker but no field at all: a free-text id there would only mint a dangling reference. */
 test(`offers the identities that exist, and drops the field entirely when none do`, () => {
     const reddit = card({
         id: `reddit`,
@@ -107,7 +107,7 @@ test(`offers the identities that exist, and drops the field entirely when none d
     expect(withIdentityPicker(cli, [`ada`])).toBe(cli);
 });
 
-// First declaration of a kind+id wins — the daemon contributionRegistry's precedent. Two extensions shipping a
+// First declaration of a kind+id wins: the daemon contributionRegistry's precedent. Two extensions shipping a
 // `github` connector must not produce two GitHub cards.
 test(`derives one card per kind+id, whichever extension declared it first`, () => {
     const cards = contributedCards([

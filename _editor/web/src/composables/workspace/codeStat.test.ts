@@ -30,7 +30,7 @@ describe(`lineStat`, () => {
         const before = Array.from({ length: 1200 }, (_, i) => `old ${i}`).join(`\n`);
         const after = Array.from({ length: 1200 }, (_, i) => `new ${i}`).join(`\n`);
 
-        // The caller shows git's own numbers instead — the same fallback an unstrippable file takes.
+        // The caller shows git's own numbers instead: the same fallback an unstrippable file takes.
         expect(lineStat(before, after)).toBeUndefined();
     });
 });
@@ -38,7 +38,7 @@ describe(`lineStat`, () => {
 // Against the real TypeScript grammar, for the same reason codeAnalysis is: the whole point of going through
 // Shiki is that the comment spans are the tokenizer's.
 describe(`codeLineStat`, () => {
-    it(`reports nothing at all for a change that is only comments — the row's whole reason to say so`, async () => {
+    it(`reports nothing at all for a change that is only comments: the row's whole reason to say so`, async () => {
         const before = [`// old wording`, `const a = 1;`].join(`\n`);
         const after = [`// new wording, at some length`, `// and a second line of it`, `const a = 1;`].join(`\n`);
 

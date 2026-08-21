@@ -6,7 +6,7 @@ import { ahead, behind, outgoingMark, outgoingSummary, outgoingWork, syncable, u
  * pinned here is the RULE, not the arithmetic: a clean tree is not the same thing as a tree with nothing to do,
  * and the surfaces that say so must say it in one voice. */
 
-// A repo with no changes and no remote — override only the remote facts a case is about.
+// A repo with no changes and no remote: override only the remote facts a case is about.
 const repo = (remote?: RepoChanges["remote"]): RepoChanges => ({
     repo: `intentic`,
     conflicted: [],
@@ -47,7 +47,7 @@ describe(`what a clean tree still owes`, () => {
 
     it(`says nothing about a repo that is only BEHIND`, () => {
         // The rule this module exists for. `behind` is true only as of the last fetch, so it is wrong in both
-        // directions — it would announce work already taken and stay silent about work that just arrived.
+        // directions: it would announce work already taken and stay silent about work that just arrived.
         expect(outgoingWork([repo({ remote: `origin`, upstream: `origin/main`, ahead: 0, behind: 7 })])).toBeUndefined();
     });
 
@@ -65,7 +65,7 @@ describe(`what a clean tree still owes`, () => {
 
     it(`ignores a repo git could not scan`, () => {
         // Its remote state is as unknown as everything else about it, and the panel reports the scan failure
-        // itself — badging the rail off a number we do not have would be inventing one.
+        // itself: badging the rail off a number we do not have would be inventing one.
         const torn: RepoChanges = { ...repo({ remote: `origin`, upstream: `origin/main`, ahead: 4, behind: 0 }), error: `not a git repository` };
         expect(outgoingWork([torn])).toBeUndefined();
     });
@@ -86,7 +86,7 @@ describe(`what the surfaces say about outgoing work`, () => {
     });
 
     it(`describes a mixed publish-and-ahead set by its commits alone`, () => {
-        // The per-repo fan-out publishes untracked branches on the way through, so the user has one click —
+        // The per-repo fan-out publishes untracked branches on the way through, so the user has one click:
         // spelling out both would describe two actions.
         expect(outgoingSummary({ commits: 2, repos: 2, publish: true })).toBe(`2 commits across 2 repos waiting to push`);
     });

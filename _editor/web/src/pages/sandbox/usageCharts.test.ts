@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
-// jsdom because these assertions are about rendered GEOMETRY — the percentages, the stack order, the rounded
-// data-end — which is exactly the class of thing a chart gets wrong silently. A NaN width or an inverted stack
+// jsdom because these assertions are about rendered GEOMETRY: the percentages, the stack order, the rounded
+// data-end, which is exactly the class of thing a chart gets wrong silently. A NaN width or an inverted stack
 // throws nothing and fails no type check; it just draws a lie.
 import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, h } from "vue";
@@ -10,8 +10,8 @@ import UsageColumnChart from "./UsageColumnChart.vue";
 import UsageSparkline from "./UsageSparkline.vue";
 import { type RankedEntry, rankedBars, type SpendBucket, type UsageTotals } from "./usageChart";
 
-// The ranked bars render through the design system's <BarChart>, so importing it brings the barrel — and with
-// it `useDevice`, which reads window.matchMedia at module scope. jsdom ships `window` but not that method —
+// The ranked bars render through the design system's <BarChart>, so importing it brings the barrel, and with
+// it `useDevice`, which reads window.matchMedia at module scope. jsdom ships `window` but not that method:
 // vitest.setup.ts does, for every suite in the package.
 
 const totals = (over: Partial<UsageTotals> = {}): UsageTotals => ({
@@ -40,7 +40,7 @@ const host = (): HTMLElement => {
 };
 
 // The charts carry `v-tooltip` (installed app-wide by installUi). A no-op stand-in
-// keeps these tests off the whole UI plugin — the tooltip's CONTENT is not what is under test here.
+// keeps these tests off the whole UI plugin: the tooltip's CONTENT is not what is under test here.
 const mount = (component: unknown, props: Record<string, unknown>): HTMLElement => {
     const element = host();
     app = createApp({ render: () => h(component as never, props) });
@@ -76,7 +76,7 @@ describe(`UsageColumnChart`, () => {
     it(`scales columns against the axis top, never against the tallest column`, () => {
         const element = mount(UsageColumnChart, { series, providers: [`claude`, `codex`] });
         const columns = [...element.querySelectorAll(`[style*="height"]`)].filter((node) => node.classList.contains(`max-w-6`));
-        // niceMax(8) is 10, so the $8 column is 80% tall — not 100%, which is what scaling to the leader would give.
+        // niceMax(8) is 10, so the $8 column is 80% tall, not 100%, which is what scaling to the leader would give.
         expect(columns.map((node) => percent(node.getAttribute(`style`) ?? ``, `height`))).toEqual([0, 40, 80]);
     });
 
@@ -93,7 +93,7 @@ describe(`UsageColumnChart`, () => {
         expect(segments[1]?.classList.contains(`rounded-t-xs`)).toBe(false);
     });
 
-    it(`draws no segment at all for a period nothing ran — a gap, not a zero-height sliver`, () => {
+    it(`draws no segment at all for a period nothing ran: a gap, not a zero-height sliver`, () => {
         const element = mount(UsageColumnChart, { series, providers: [`claude`, `codex`] });
         expect([...element.querySelectorAll(`.max-w-6`)][0]?.children).toHaveLength(0);
     });
@@ -103,7 +103,7 @@ describe(`UsageColumnChart`, () => {
         expect(element.innerHTML).not.toContain(`NaN`);
     });
 
-    it(`shows a legend for two series and none for one — a single swatch would just restate the title`, () => {
+    it(`shows a legend for two series and none for one: a single swatch would just restate the title`, () => {
         expect(mount(UsageColumnChart, { series, providers: [`claude`, `codex`] }).querySelector(`figcaption`)).not.toBeNull();
         app?.unmount();
         app = undefined;
@@ -121,7 +121,7 @@ describe(`UsageColumnChart`, () => {
 });
 
 // The ranked cost bars render through the design system's shared <BarChart>; what is asserted here is the
-// projection into it (rankedBars) plus the geometry the figure owes — the same four claims the app-local copy
+// projection into it (rankedBars) plus the geometry the figure owes: the same four claims the app-local copy
 // of this chart used to make on its own.
 describe(`ranked cost bars`, () => {
     const entry = (label: string, value: number, providers: string[]): RankedEntry => ({ key: label, kind: `value`, label, value, providers });
@@ -139,7 +139,7 @@ describe(`ranked cost bars`, () => {
         expect(bars[1]?.getAttribute(`style`)).toContain(`--color-series-2`);
     });
 
-    it(`directly labels every bar with its value — the relief the low-contrast fills owe`, () => {
+    it(`directly labels every bar with its value: the relief the low-contrast fills owe`, () => {
         const element = mount(BarChart, { items: rankedBars([entry(`opus-5`, 12.5, [`claude`])]) });
         expect(element.textContent).toContain(`$12.50`);
     });
@@ -164,7 +164,7 @@ describe(`UsageSparkline`, () => {
         expect(path).toBe(`M0.00,19.00 L50.00,19.00 L100.00,19.00`);
     });
 
-    it(`draws nothing from a single point — one dot is not a trend`, () => {
+    it(`draws nothing from a single point: one dot is not a trend`, () => {
         expect(mount(UsageSparkline, { points: [5] }).querySelector(`svg`)).toBeNull();
     });
 });

@@ -3,38 +3,38 @@ import { Button, Checkbox, ui, Icon, Notice, noticeOf, ProseField, StatusBadge, 
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
 
-/* ONE STORY — and the row IS the editor.
+/* ONE STORY, and the row IS the editor.
  *
  * This used to be a modal. A modal is the wrong shape for the thing being done here: writing acceptance criteria
  * is comparative work (does this promise overlap the story above it? did we already say this?), it is done in
  * small increments over weeks, and it is abandoned halfway more often than it is finished. A dialog answers none
- * of that — it hides the list you are writing against, it asks for everything at once, and it makes "add one more
+ * of that: it hides the list you are writing against, it asks for everything at once, and it makes "add one more
  * criterion I just thought of" a four-click errand.
  *
  * So: expand in place, and SAVE AS YOU TYPE. There is no Save button and no Cancel, because the file in the repo
- * is the story — the same as editing it in the workspace tree, which nobody expects to be transactional either.
+ * is the story: the same as editing it in the workspace tree, which nobody expects to be transactional either.
  * A debounce plus a comparison against what was last written means an author who opens a story to READ it never
  * dirties the file, and a fresh, unedited row never triggers a write.
  *
  * IT IS SET AS A DOCUMENT, NOT AS A FORM, and that is a readability decision before it is an aesthetic one. This
  * panel is the only place in the app where someone WRITES paragraphs, and it was the only place typeset below the
- * design system's own floor: the narrative — the one true prose on the surface — was 12px MONO, a typeface the
+ * design system's own floor: the narrative (the one true prose on the surface) was 12px MONO, a typeface the
  * system reserves for code and which reads optically larger, so it was set a step down again to compensate for a
  * job it should not have had. See prose.css: 0.875rem is the floor for text read in paragraphs, ~1.7 is its
- * leading, and a measure is mandatory on a surface that stretches (this page is 72rem — unbounded, a criterion
+ * leading, and a measure is mandatory on a surface that stretches (this page is 72rem: unbounded, a criterion
  * ran past 150 characters a line, well past where the eye loses the start of the next one).
  *
  * So everything read in sentences is sans, at the floor, at 1.7, inside a 68ch column, in full content colour;
  * mono survives only where it is an identifier (the path, the criterion numbers). And the fields are BORDERLESS
- * and as tall as what has been typed into them — <ProseField>, which is the recipe this panel worked out and
+ * and as tall as what has been typed into them: <ProseField>, which is the recipe this panel worked out and
  * which now lives in the kit, because the workflow designer's step prompt is the same job and would otherwise
  * have been a second copy of a thing whose failure mode (a size replica that disagrees with its field) is
  * invisible until it clips somebody's last paragraph. The mirror of the artifact, in the artifact's own order:
  * heading, prose, `## Acceptance criteria`, the list.
  *
  * CRITERIA ARE EDITED AS A LIST, not as a form: Enter opens the next one, Backspace on an empty one removes it,
- * the arrows walk them from the ends. That is what the content actually is — a checklist someone adds to as they
- * think — and every criterion typed without reaching for the mouse is one more promise that gets written down
+ * the arrows walk them from the ends. That is what the content actually is: a checklist someone adds to as they
+ * think, and every criterion typed without reaching for the mouse is one more promise that gets written down
  * instead of being left in someone's head.
  *
  * The title still never moves the file. Editing renames the heading and leaves `docs/user-stories/01-sign-in.md`
@@ -50,7 +50,7 @@ const { story, content, expanded, status, autofocus, selected, save, remove } = 
     status?: { readonly label: string; readonly variant: StatusVariant } | undefined;
     // Just created by the composer: open on the first empty criterion so the author keeps typing.
     autofocus?: boolean;
-    // Ticked for the next run. Note that an untouched list runs ALL of its stories — see RunControls — so an unticked
+    // Ticked for the next run. Note that an untouched list runs ALL of its stories: see RunControls, so an unticked
     // row is not an excluded one until something else in the list is ticked.
     selected: boolean;
     save: (input: { readonly path: string; readonly markdown: string }) => Promise<void>;
@@ -63,12 +63,12 @@ const emit = defineEmits<{ toggle: []; select: [boolean]; run: [] }>();
 const SAVE_AFTER_MS = 700;
 
 /* The hints are constants rather than literals in the template because <ProseField> mirrors whatever the field
- * is DISPLAYING to work out its height, and for an empty field that is its placeholder — one string, read by
+ * is DISPLAYING to work out its height, and for an empty field that is its placeholder: one string, read by
  * the size replica and by the placeholder both. */
 const TITLE_HINT = `Sign in with an email address`;
 const NARRATIVE_HINT =
     `As a returning visitor, I want to sign in with my email and password so that I reach my own workspace.\n\n` +
-    `What the user is trying to do, where they start, and what counts as success. Handed to the agent verbatim — a ` +
+    `What the user is trying to do, where they start, and what counts as success. Handed to the agent verbatim: a ` +
     `test login or a fixture it needs belongs here.`;
 const CRITERION_HINT = `A wrong password shows an error and keeps the email field filled`;
 const NEXT_HINT = `and then…`;
@@ -81,7 +81,7 @@ const state = ref<`clean` | `dirty` | `saving` | `saved`>(`clean`);
 const failure = ref<string | undefined>(undefined);
 const confirmRemove = ref(false);
 
-// The markdown as last written to disk — the baseline every autosave compares against, so nothing is written
+// The markdown as last written to disk: the baseline every autosave compares against, so nothing is written
 // twice and reading is never writing. Not a ref: no template reads it.
 let written = ``;
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -115,7 +115,7 @@ const shrink = (index: number, event: KeyboardEvent): void => {
     focusAt(index - 1);
 };
 
-/* Up and Down walk the list — but only from the ENDS of a criterion, so the arrows still move the caret through
+/* Up and Down walk the list, but only from the ENDS of a criterion, so the arrows still move the caret through
  * one that wrapped onto three lines. Position, not a guess about visual rows: the caret is at 0 or at the last
  * character, or the key belongs to the field. */
 const walk = (index: number, event: KeyboardEvent, step: -1 | 1): void => {
@@ -194,7 +194,7 @@ watch(markdown, (next) => {
     }
 });
 
-// Closing the panel, navigating away, or the whole view unmounting all reach here — the debounce must never be
+// Closing the panel, navigating away, or the whole view unmounting all reach here: the debounce must never be
 // what loses the last sentence someone typed.
 onBeforeUnmount(() => void flush());
 </script>
@@ -203,13 +203,13 @@ onBeforeUnmount(() => void flush());
     <div>
         <!-- The tick sits OUTSIDE the row's button rather than inside it: a checkbox nested in a button is both
              invalid and unusable (every attempt to tick would expand the row instead), and the two gestures are
-             genuinely different — one narrows the next run, the other opens the story to write. The hover tint
+             genuinely different: one narrows the next run, the other opens the story to write. The hover tint
              rides the wrapper so the whole line still lights up as one row. -->
         <div class="group flex w-full items-center gap-3 pl-4 hover:bg-overlay" :class="expanded && `bg-overlay`">
             <!-- SMALL AND QUIET, because this column is as long as the list and almost none of it is ever ticked
-                 (empty means all — see RunControls): at Aura's full size and ring the narrowing control was the
+                 (empty means all, see RunControls): at Aura's full size and ring the narrowing control was the
                  first thing the eye found on a page whose subject is the promises beside it. Pointing at the row
-                 brings its tick back to full contrast — see `ui-checkbox-quiet` for what that state is paying for. -->
+                 brings its tick back to full contrast: see `ui-checkbox-quiet` for what that state is paying for. -->
             <Checkbox
                 :model-value="selected"
                 binary
@@ -227,20 +227,20 @@ onBeforeUnmount(() => void flush());
                 <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
                 <!-- Open, the heading below is the title, so the row identifies the FILE instead of repeating it. -->
                 <span v-if="expanded" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ story.path }}</span>
-                <!-- ONE STEP OFF WHITE, AND FULL WHITE UNDER THE POINTER — the app's own weight for a long list of
+                <!-- ONE STEP OFF WHITE, AND FULL WHITE UNDER THE POINTER: the app's own weight for a long list of
                      rows read by scanning (the file tree, the search results, the commit list all sit here). Twenty
                      rows whose entire ink is one sentence-long title each read as a wall at full content white, and
-                     nothing in them stands out — least of all the row carrying a failed verdict. `muted` is the step
+                     nothing in them stands out: least of all the row carrying a failed verdict. `muted` is the step
                      past this one and it is the wrong one: that is the weight of a FACT ABOUT a row, and a list
                      whose subject is set in it looks switched off. -->
                 <span v-else class="min-w-0 flex-1 truncate text-sm text-content/80 group-hover:text-content">{{ story.title }}</span>
-                <!-- THE VERDICT FIRST, THEN THE COUNT — and the count in a fixed cell, the runs list's own
+                <!-- THE VERDICT FIRST, THEN THE COUNT, and the count in a fixed cell, the runs list's own
                      trailing-column recipe. Ordered the other way round they both moved: the count sat at the
                      right edge on a story nothing had tested and 70px in on one that had, so a list where most
                      rows carry no badge yet had a ragged right margin and no badge column to scan down. -->
                 <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
                 <!-- Criteria are the story's readiness, not its correctness: a story with none still runs, nobody
-                     has just said yet what "done" means for it. Stated quietly for that reason — a fresh workspace
+                     has just said yet what "done" means for it. Stated quietly for that reason: a fresh workspace
                      that shouted a warning on every row would be teaching people to ignore the colour. -->
                 <span class="w-20 shrink-0 text-right text-2xs text-subtle">{{ authored === 0 ? `no criteria` : `${authored} criteria` }}</span>
             </button>
@@ -251,11 +251,11 @@ onBeforeUnmount(() => void flush());
              field draws a box to say it. -->
         <div v-if="expanded" class="cursor-text border-t border-line/60 bg-canvas px-4 py-6 sm:px-6">
             <!-- `text-sm` on the COLUMN, not just on the fields inside it: `ch` resolves against the element's own
-                 font-size, so a cap set here while the div still inherited the 16px root made 68ch mean 686px —
+                 font-size, so a cap set here while the div still inherited the 16px root made 68ch mean 686px:
                  101 characters of 14px prose, past the ~90 where the eye stops finding the next line. Set in the
                  prose's own size it means what it says. -->
             <div class="flex max-w-read flex-col px-2 text-sm">
-                <!-- The `# Heading` this writes, at the size a heading is. It was `text-sm font-medium` — the same
+                <!-- The `# Heading` this writes, at the size a heading is. It was `text-sm font-medium`: the same
                      size as the collapsed row it replaces, so opening a story changed nothing about how it read. -->
                 <ProseField
                     v-model="title"
@@ -266,7 +266,7 @@ onBeforeUnmount(() => void flush());
                     @keydown.esc="emit(`toggle`)"
                 />
 
-                <!-- The story's prose, directly under its heading and unlabelled — in the file it is simply the
+                <!-- The story's prose, directly under its heading and unlabelled: in the file it is simply the
                      body, and a form label over it would be describing what the words already are. -->
                 <ProseField v-model="narrative" :placeholder="NARRATIVE_HINT" class="-mx-2 mt-3 min-h-24" @keydown.esc="emit(`toggle`)" />
 
@@ -278,7 +278,7 @@ onBeforeUnmount(() => void flush());
                 </div>
                 <div class="mt-2 flex flex-col">
                     <div v-for="(text, index) in criteria" :key="index" class="group flex items-start gap-1">
-                        <!-- The same line box as the text it numbers — same size, same leading, same padding — so
+                        <!-- The same line box as the text it numbers: same size, same leading, same padding, so
                              the digit sits ON the first baseline. Smaller, it rendered as a superscript. It
                              recedes by colour instead, which costs no alignment. -->
                         <span class="w-5 shrink-0 py-1 text-right text-sm leading-relaxed tabular-nums text-subtle">{{ index + 1 }}</span>
@@ -311,7 +311,7 @@ onBeforeUnmount(() => void flush());
                 <p class="mt-2 pl-8 text-2xs text-subtle">
                     Enter opens the next one.
                     <template v-if="authored === 0">
-                        With none, the agent reads checkable claims out of your prose instead — which works, but then the report grades itself against
+                        With none, the agent reads checkable claims out of your prose instead, which works, but then the report grades itself against
                         its own reading rather than against what you promised.
                     </template>
                 </p>
@@ -330,7 +330,7 @@ onBeforeUnmount(() => void flush());
                 }}</span>
                 <div class="ml-auto flex items-center gap-2">
                     <!-- Narrows the run to this story; the run pill then says what it will do and does it.
-                         Not a second way to start a run — one gate, one button, and this is how you aim at it. -->
+                         Not a second way to start a run: one gate, one button, and this is how you aim at it. -->
                     <Button label="Run only this" size="small" severity="secondary" @click="emit(`run`)">
                         <template #icon><Icon name="play" /></template>
                     </Button>

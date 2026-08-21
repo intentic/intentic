@@ -16,12 +16,12 @@ const router = useRouter();
 /* Inside the desktop app, the button below CANNOT work: Google refuses OAuth from an embedded webview, and
  * the redirect would dead-end on a `disallowed_useragent` page with no way back. So the app gets a different
  * button that hands the whole sign-in to the user's real browser and receives the result over a deep link
- * (see environments/desktop.ts). Same account, same session — just not in this window. */
+ * (see environments/desktop.ts). Same account, same session: just not in this window. */
 const desktop = computed(() => desktopVersion() !== undefined);
 
 const year = new Date().getFullYear();
 
-// Four pillars laddering to the headline — sandbox, persistence, reach, environment — one line each:
+// Four pillars laddering to the headline (sandbox, persistence, reach, environment) one line each:
 // a sign-in page is read in a glance, so every body is short enough to hold a single line at this panel's
 // measure and never wrap mid-thought.
 const features: readonly { icon: IconName; title: string; description: string }[] = [
@@ -33,7 +33,7 @@ const features: readonly { icon: IconName; title: string; description: string }[
     {
         icon: `wave-pulse`,
         title: `Runs while you're away`,
-        description: `Close the laptop — turns finish and terminals survive.`,
+        description: `Close the laptop, turns finish and terminals survive.`,
     },
     {
         icon: `globe`,
@@ -49,7 +49,7 @@ const features: readonly { icon: IconName; title: string; description: string }[
 
 /* ONE GOOGLE SIGN-IN, NOT TWO.
  *
- * The redirect below proves the user to the platform and leaves this window holding nothing — which is why
+ * The redirect below proves the user to the platform and leaves this window holding nothing, which is why
  * the sandbox then asked for Google all over again: the daemon authenticates people against Google itself and
  * only the browser can hand it a Google-signed token. Minting that token HERE, and spending it on the
  * platform as well, means the second ask never happens.
@@ -60,11 +60,11 @@ const features: readonly { icon: IconName; title: string; description: string }[
  * Google's own button is the control, because it is the one surface that works when One Tap does not. Four
  * things can go wrong. Three are observable and each answers with the redirect rather than a dead page:
  * Google's script never arrives (nothing renders), the user dismisses whatever Google shows, or the platform
- * refuses the token. The fourth — a button that renders but cannot work, behind a blocked frame or a popup
- * policy — is invisible from here, which is why the escape link below it is unconditional. */
+ * refuses the token. The fourth: a button that renders but cannot work, behind a blocked frame or a popup
+ * policy: is invisible from here, which is why the escape link below it is unconditional. */
 const googleButton = ref<HTMLElement>();
 /* Whether Google's own button is standing there. Starts true so the container is in the DOM for the very
- * first render — a button cannot be rendered into an element that does not exist — and flips to false when
+ * first render: a button cannot be rendered into an element that does not exist, and flips to false when
  * the render is refused (Google's script absent, or this being the desktop webview, where the mechanism
  * refuses on every surface's behalf) or when the platform rejects what Google signed. */
 const googleReady = ref(true);
@@ -78,7 +78,7 @@ const redirectSignIn = async (): Promise<void> => {
     await signInWithGoogle();
 };
 
-/* The mint, started on mount so a click has something to resolve — and so a returning user is signed in with
+/* The mint, started on mount so a click has something to resolve, and so a returning user is signed in with
  * no click at all, which is what Google's automatic re-authentication is for. It can only fire for someone
  * who has signed in this way here BEFORE, so a first-ever account still passes a visible Google surface and
  * the consent line under it. */
@@ -89,7 +89,7 @@ const signInWithCredential = async (): Promise<void> => {
         return;
     }
     try {
-        // `gate: false` — this page's own button IS the gate; the shared overlay would be a second one.
+        // `gate: false`, this page's own button IS the gate; the shared overlay would be a second one.
         const idToken = await getIdToken({ gate: false });
         if (idToken === undefined) {
             return; // Dismissed, or Google unavailable. The fallback below is already on screen.
@@ -97,7 +97,7 @@ const signInWithCredential = async (): Promise<void> => {
         await signInWithGoogleCredential(idToken);
         await router.push(`/`);
     } catch {
-        /* The platform would not take a token Google did in fact sign — a build without the endpoint, or a
+        /* The platform would not take a token Google did in fact sign: a build without the endpoint, or a
          * client-id mismatch between this app and that platform. The redirect does not depend on either, so
          * hand the user that rather than a dead end. The Google credential stays cached on purpose: the
          * sandbox may well accept what the platform just refused, and re-minting would be a third ask. */
@@ -124,7 +124,7 @@ watch(
 
 <template>
     <div class="grid min-h-screen w-full bg-canvas text-content lg:grid-cols-2">
-        <!-- Brand showcase — hidden on small screens. -->
+        <!-- Brand showcase: hidden on small screens. -->
         <aside
             class="relative hidden overflow-hidden border-r border-line bg-linear-to-br from-primary-600/15 via-canvas to-canvas lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16"
         >
@@ -189,7 +189,7 @@ watch(
 
                 <Notice v-if="error" :of="error" class="mb-4" />
 
-                <!-- Google's own button, which is also where the credential the sandbox needs comes from — one
+                <!-- Google's own button, which is also where the credential the sandbox needs comes from: one
                      sign-in doing both jobs. color-scheme:light matches Google's light-scheme button iframe so
                      the browser paints no opaque (white) canvas behind it; the button stays dark via its theme
                      param. Kept mounted (hidden) rather than removed when it fails to render, so nothing can
@@ -207,8 +207,8 @@ watch(
                 </Button>
 
                 <!-- The escape hatch, always there while the embedded button is. Some of the ways that button
-                     can fail are invisible from here — an extension that blocks its frame, a policy that lets
-                     it render but not open — and every one of them looks to the visitor like a sign-in page
+                     can fail are invisible from here: an extension that blocks its frame, a policy that lets
+                     it render but not open, and every one of them looks to the visitor like a sign-in page
                      that does nothing. This is the way in that depends on none of it. -->
                 <button
                     v-if="googleReady && !desktop"

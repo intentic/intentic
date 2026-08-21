@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-git-history",
     "version": "1.0.0",
-    "description": "Git history — one repository's commit graph, its branches and the actions on them, as a first-party intentic extension",
+    "description": "Git history, one repository's commit graph, its branches and the actions on them, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

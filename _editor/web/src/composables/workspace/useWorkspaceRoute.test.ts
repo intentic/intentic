@@ -2,9 +2,9 @@ import { createMemoryHistory, createRouter, type RouteRecordRaw } from "vue-rout
 import { describe, expect, it } from "vitest";
 
 /* Guards the load-bearing Vue Router behavior the workspace deep-link scheme relies on (the `workspace/:path(.*)*`
- * record in router/index.ts + useWorkspaceRoute): a file path READS back as split segments — "" when bare — and a
+ * record in router/index.ts + useWorkspaceRoute): a file path READS back as split segments, "" when bare, and a
  * WRITE must pass an ARRAY so real "/" survive instead of being encoded to %2F. If a vue-router upgrade or a
- * "simplification" of the pattern to a single-string param breaks either, the feature silently dies — these fail
+ * "simplification" of the pattern to a single-string param breaks either, the feature silently dies: these fail
  * first. Mirrors the real pattern (no window, so we can't import the createWebHistory() router here). */
 
 const noop = { template: `<div />` };
@@ -31,7 +31,7 @@ describe(`workspace splat route`, () => {
         expect(makeRouter().resolve({ name: `workspace`, params: { path: [`src`, `foo.ts`] } }).href).toBe(`/workspace/src/foo.ts`);
     });
 
-    it(`writing a single string param encodes the slash — why useWorkspaceRoute splits to an array`, () => {
+    it(`writing a single string param encodes the slash: why useWorkspaceRoute splits to an array`, () => {
         expect(makeRouter().resolve({ name: `workspace`, params: { path: `src/foo.ts` } }).href).toBe(`/workspace/src%2Ffoo.ts`);
     });
 

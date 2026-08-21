@@ -6,16 +6,16 @@ import { slugOf, storyPath } from "./stories";
 /* HOW A STORY STARTS: one line, in the list, in the group you are already looking at.
  *
  * A story is a promise someone just thought of, and the cost of writing it down has to be lower than the cost of
- * not bothering. So there is exactly ONE field here — the title — and Enter creates the file. Everything else a
+ * not bothering. So there is exactly ONE field here: the title, and Enter creates the file. Everything else a
  * story can carry (criteria, the narrative, the tester's notes) is added afterwards in the row that appears,
  * where the author can see it against the stories around it.
  *
  * NO REPOSITORY OR GROUP PICKER, because this row lives INSIDE one: the destination is the heading you typed
  * under, not a select you have to notice. That is why there is one composer per group rather than one for the
- * view — and one at the end of each repo, whose group is the top level.
+ * view, and one at the end of each repo, whose group is the top level.
  *
  * A GROUP CAN BE MADE BY NAMING IT. Typing `03-equip/Connect GitHub` writes the story into that subdirectory,
- * creating it if it is new — the one gesture the per-group composers cannot offer, since a group that does not
+ * creating it if it is new: the one gesture the per-group composers cannot offer, since a group that does not
  * exist yet has no row to type in. The path preview below is what teaches it: it shows the file as you type, so
  * the prefix visibly moves the story rather than ending up in its name.
  *
@@ -26,7 +26,7 @@ const { repo, group, taken } = defineProps<{
     repo: string;
     // The subdirectory this composer writes into; "" is the repo's top level.
     group: string;
-    // Every story path in the workspace — a title whose file already exists must not be created over it.
+    // Every story path in the workspace: a title whose file already exists must not be created over it.
     taken: readonly string[];
 }>();
 const emit = defineEmits<{ create: [{ path: string; title: string }] }>();
@@ -56,13 +56,13 @@ const submit = (): void => {
         <div class="flex items-center gap-3">
             <Icon name="plus" class="shrink-0 text-subtle" />
             <!-- `min-h-11`: the field is transparent and borderless, so its own box was the height of one line
-                 of text — 22px — and the row's padding around it belonged to the row, not to the input. On a
+                 of text: 22px, and the row's padding around it belonged to the row, not to the input. On a
                  phone that meant the only way to start typing was to hit a 22px band in the middle of a 48px
                  row. The field now fills the row it sits in, which changes nothing visible (there is no border
                  or fill to grow) and makes the whole row the thing you tap. -->
             <input
                 v-model="title"
-                :placeholder="group === `` ? `New story — a title, or group/title to file it under one` : `New story in ${group}/ — type a title`"
+                :placeholder="group === `` ? `New story, a title, or group/title to file it under one` : `New story in ${group}/, type a title`"
                 class="min-h-11 min-w-0 flex-1 bg-transparent text-sm text-content placeholder:text-subtle focus:outline-none"
                 @keydown.enter.prevent="submit"
                 @keydown.esc="title = ``"
@@ -74,6 +74,6 @@ const submit = (): void => {
                 {{ destination === `` ? `` : `${destination}/` }}{{ path.split(`/`).pop() }}
             </span>
         </div>
-        <p v-if="clash" class="mt-1 pl-7 text-2xs text-warning">That file already exists — open it below, or give this one another name.</p>
+        <p v-if="clash" class="mt-1 pl-7 text-2xs text-warning">That file already exists: open it below, or give this one another name.</p>
     </div>
 </template>

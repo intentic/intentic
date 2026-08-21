@@ -19,18 +19,18 @@ import { previewAddress, previewOpened, previewSelectedId, selectPreviewTarget, 
 import { togglePreviewPopout, usePreviewPopout } from "../composables/preview/usePreviewPopout";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 
-/* THE ONE PREVIEW PANEL — the live, clickable app, full-bleed under one slim strip of chrome. Mounted once per
+/* THE ONE PREVIEW PANEL: the live, clickable app, full-bleed under one slim strip of chrome. Mounted once per
  * page (shell/PoppablePanels) and teleported between the /preview area, its own pop-out window and the parking
- * stage, so the iframe — and the previewed app's own state inside it — survives every move.
+ * stage, so the iframe, and the previewed app's own state inside it: survives every move.
  *
  * DESIGNED FOR ONE SCREEN WITH NO ROOM TO SPARE. The app under preview gets everything below a single h-10
  * bar; nothing floats over it (hover-revealed chrome steals the exact pixels the previewed app's own header
  * sits under, and an overlay that appears on the way to a button in the app is chrome fighting content). The
- * bar holds the whole vocabulary: WHICH app (the switcher), whether it is UP (the badge), and the verbs —
+ * bar holds the whole vocabulary: WHICH app (the switcher), whether it is UP (the badge), and the verbs:
  * start/stop, reload, phone width, its terminal, its public link, a window of its own.
  *
  * A REAL IFRAME, NOT A STREAMED BROWSER. The dev server already answers at a public preview hostname, so the
- * page here is the app itself — clickable at native latency, hot-reloading as the agent edits — where
+ * page here is the app itself: clickable at native latency, hot-reloading as the agent edits, where
  * /browsers shows screenshots of a browser the AGENT is driving. The two surfaces answer different questions
  * ("what is my app like" vs "what is the agent doing"), which is why this is not that view. */
 
@@ -43,7 +43,7 @@ const { poppedOut } = usePreviewPopout();
 const terminal = useTerminalPanel();
 
 // --- The switcher -------------------------------------------------------------------------------
-/* Grouped by where a row comes FROM — one heading per repo (an app wears its own name under its repo's), then
+/* Grouped by where a row comes FROM: one heading per repo (an app wears its own name under its repo's), then
  * the forwarded ports, then the workspace's page, then the address the user typed. The row's annotation is its
  * live state, so the list answers "what is up?" before anything is clicked. */
 const stateOf = (entry: PreviewTarget): string =>
@@ -83,12 +83,12 @@ const selected = computed<string | undefined>({
 
 const statusVariant = computed<StatusVariant>(() => (target.value?.healthy ? `success` : target.value?.running ? `info` : `neutral`));
 // What copying this target's URL actually gets you. Everything the sandbox serves answers at a public preview
-// hostname, so "public link" is the truth there — and a typed address is somebody else's page, where claiming
+// hostname, so "public link" is the truth there, and a typed address is somebody else's page, where claiming
 // anything about who can open it would be a guess.
 const copyHint = computed(() => (target.value?.kind === `address` ? `Copy the address` : `Copy the public link`));
 
 /* --- THE ADDRESS BAR, which is a bar only while it is wanted -----------------------------------------
- * Everything the switcher lists was discovered, and a discovered list is a closed one — so the panel takes a
+ * Everything the switcher lists was discovered, and a discovered list is a closed one, so the panel takes a
  * typed address too (a staging URL, another route of the app, a page on another box). It is a TOGGLE rather
  * than a permanent field because this panel's whole design is that the app under preview owns every pixel
  * below one 40px strip, and an always-open URL box would spend a third of that strip on a control most looks
@@ -139,7 +139,7 @@ const act = async (action: (entry: PreviewTarget) => Promise<void>): Promise<voi
 };
 
 // --- The iframe, probe-gated --------------------------------------------------------------------
-/* Hand the browser the hostname only once a fetch proves it resolves — an iframe that error-pages never
+/* Hand the browser the hostname only once a fetch proves it resolves: an iframe that error-pages never
  * retries, and a freshly-minted DNS record can lag at the user's resolver. The loop and its intervals are the
  * kit's (@intentic/ui portPreview); what is local is the generation counter, which is how a superseded probe
  * stops being allowed to write this panel's state. The public page skips the probe entirely: its address is the
@@ -169,7 +169,7 @@ const probeThenShow = async (url: string): Promise<void> => {
     probeFailed.value = outcome === `gaveUp`;
 };
 
-// Resolved when the target is HEALTHY — on `running` the dev server may still be installing/booting.
+// Resolved when the target is HEALTHY: on `running` the dev server may still be installing/booting.
 const resolvePreview = (): void => {
     const entry = target.value;
     if (entry === undefined || !entry.healthy || entry.url === undefined) {
@@ -180,7 +180,7 @@ const resolvePreview = (): void => {
         return;
     }
     /* Only a freshly minted preview hostname is worth waiting on. A forwarded port, the outbox and a typed
-     * address are all addresses that already exist — probing them would turn a site that simply refuses this
+     * address are all addresses that already exist: probing them would turn a site that simply refuses this
      * browser's fetch into a preview that never appears, and a wrong address into a three-minute spinner
      * instead of the browser's own plain "this didn't load". */
     if (entry.kind !== `repo` && entry.kind !== `app`) {
@@ -191,7 +191,7 @@ const resolvePreview = (): void => {
     void probeThenShow(entry.url);
 };
 
-// (Re)resolve on the facts that matter — primitive deps, so the poll's object churn doesn't re-fire it — and
+// (Re)resolve on the facts that matter: primitive deps, so the poll's object churn doesn't re-fire it, and
 // re-key the iframe when the target changes or turns healthy again (a restarted server keeps its src, and Vue
 // would otherwise leave the stale error frame in place instead of re-navigating).
 const previewEpoch = ref(0);
@@ -199,7 +199,7 @@ watch(
     () => [target.value?.id, target.value?.healthy, target.value?.url] as const,
     (now, was) => {
         actionError.value = undefined;
-        // `was` is absent on the immediate first run, which is also a fresh mount — a fresh key either way.
+        // `was` is absent on the immediate first run, which is also a fresh mount: a fresh key either way.
         if (was === undefined || now[0] !== was[0] || (now[1] === true && was[1] !== true)) {
             previewEpoch.value += 1;
         }
@@ -211,13 +211,13 @@ onUnmounted(() => {
     probeGeneration += 1;
 });
 
-// The bar's own reload — the previewed app navigated somewhere, or the user wants a clean load after an edit
+// The bar's own reload: the previewed app navigated somewhere, or the user wants a clean load after an edit
 // hot reload went wrong. Re-keying is the only reliable cross-origin reload.
 const reload = (): void => {
     previewEpoch.value += 1;
 };
 
-/* Phone width. The one responsive question a builder asks constantly — "does this survive a phone?" — answered
+/* Phone width. The one responsive question a builder asks constantly ("does this survive a phone?") answered
  * in place instead of through devtools on a cross-origin frame. Full is the default and the panel's whole
  * width; phone centres a 390px column (a current iPhone's CSS width) on the canvas. */
 const fit = ref<`full` | `phone`>(`full`);
@@ -225,7 +225,7 @@ const fit = ref<`full` | `phone`>(`full`);
 
 <template>
     <div class="flex h-full min-h-0 w-full flex-col bg-canvas">
-        <!-- The strip. One row, h-10: switcher + status on the left, verbs on the right — or, while an address
+        <!-- The strip. One row, h-10: switcher + status on the left, verbs on the right, or, while an address
              is being typed, the field takes the left half and the verbs stay put. -->
         <div class="flex h-10 shrink-0 items-center gap-1 border-b border-line bg-card px-1.5">
             <template v-if="addressOpen">
@@ -313,7 +313,7 @@ const fit = ref<`full` | `phone`>(`full`);
                 >
                     <Icon name="code" />
                 </button>
-                <!-- A dev server's link is public the moment it answers — a live demo anyone can open — so the
+                <!-- A dev server's link is public the moment it answers: a live demo anyone can open, so the
                      copy says so; a typed address is just an address and must not be described as shareable.
                      Offered only while something is actually up, so a copied link never 502s on arrival.
                      `arrow-up-right` for the new tab, because `external-link` belongs to the pop-out below and
@@ -333,7 +333,7 @@ const fit = ref<`full` | `phone`>(`full`);
                 </template>
             </template>
 
-            <!-- `external-link`, the glyph the chat's own pop-out button wears (ChatTabs.vue) — one gesture,
+            <!-- `external-link`, the glyph the chat's own pop-out button wears (ChatTabs.vue): one gesture,
                  one icon. `window-maximize` was here first and read as fullscreen, which is a different
                  promise entirely: the press opens a separate OS window, it does not grow this one. -->
             <button
@@ -351,13 +351,13 @@ const fit = ref<`full` | `phone`>(`full`);
         <div class="relative flex min-h-0 flex-1 flex-col">
             <Notice v-if="actionError" :of="noticeOf(actionError)" class="absolute inset-x-3 top-3 z-10" />
 
-            <!-- NOTHING TO PREVIEW. Only claimed once the lists have actually answered — and it always offers
+            <!-- NOTHING TO PREVIEW. Only claimed once the lists have actually answered, and it always offers
                  the one preview that needs nothing discovered, which is an address the user knows themselves. -->
             <div v-if="!target && settled" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="eye" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">Nothing to preview yet.</p>
                 <p class="max-w-sm text-2xs text-subtle">
-                    Start a dev server in a repository, or ask the agent to build an app — its live preview appears here the moment it answers.
+                    Start a dev server in a repository, or ask the agent to build an app: its live preview appears here the moment it answers.
                 </p>
                 <Button label="Preview an address" size="small" severity="secondary" @click="openAddress">
                     <template #icon><Icon name="link" /></template>
@@ -368,11 +368,11 @@ const fit = ref<`full` | `phone`>(`full`);
                 <Icon name="spinner" spin class="text-2xl text-subtle" aria-hidden="true" />
             </div>
 
-            <!-- The app itself: the real dev server through the tunnel — hot reload works; apps that forbid
+            <!-- The app itself: the real dev server through the tunnel, hot reload works; apps that forbid
                  framing (X-Frame-Options) stay blank here, and the new-tab link is the escape hatch. Mounted
                  only after the hostname probe succeeds, so the browser's DNS error page can never appear.
 
-                 A SERVER GETS ITS OWN ORIGIN — see frameSandbox, which owns that rule and why the previous
+                 A SERVER GETS ITS OWN ORIGIN: see frameSandbox, which owns that rule and why the previous
                  blanket sandbox left a dev server's own images 403ing inside its own preview. -->
             <div v-else-if="previewSrc" class="flex min-h-0 flex-1 justify-center overflow-hidden">
                 <iframe
@@ -395,7 +395,7 @@ const fit = ref<`full` | `phone`>(`full`);
                     <span class="font-mono">{{ target.label }}</span> is answering, but not from a preview this panel can open.
                 </p>
                 <p class="max-w-sm text-2xs text-subtle">
-                    Something started it outside this panel — a terminal, a container. Forward its port and it appears here as its own entry.
+                    Something started it outside this panel: a terminal, a container. Forward its port and it appears here as its own entry.
                 </p>
                 <RouterLink
                     to="/sandbox/ports"
@@ -407,14 +407,14 @@ const fit = ref<`full` | `phone`>(`full`);
             <div v-else-if="target.running && probeFailed" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
                 <Icon name="exclamation-triangle" class="text-muted" />
                 <p class="text-sm text-muted">The preview address didn't come up.</p>
-                <p class="text-2xs text-subtle">The dev server may still be starting — its terminal shows it live.</p>
+                <p class="text-2xs text-subtle">The dev server may still be starting: its terminal shows it live.</p>
                 <Button label="Retry" size="small" @click="resolvePreview()" />
             </div>
             <div v-else-if="target.running" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
                 <Icon name="spinner" class="text-muted" spin />
                 <p class="text-sm text-muted">Preparing the preview…</p>
                 <p v-if="probeSlow" class="max-w-sm text-2xs text-subtle">
-                    A first start can take a minute while the preview address propagates — the terminal shows the dev server live.
+                    A first start can take a minute while the preview address propagates: the terminal shows the dev server live.
                 </p>
             </div>
             <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 text-center">

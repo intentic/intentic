@@ -4,7 +4,7 @@ import { defineAsyncComponent } from "vue";
 import type { RegisteredDocumentProvider } from "./documentRegistry";
 
 /* Renders one directory's extension-contributed document (documentRegistry) in a Workspace tab, with the
- * directory `path` bound — the document-tab counterpart of ExtensionView, and the same caching reason: one async
+ * directory `path` bound, the document-tab counterpart of ExtensionView, and the same caching reason: one async
  * component per registration, so switching tabs never remounts the document and refetches it. */
 
 const components = new WeakMap<RegisteredDocumentProvider, Component>();
@@ -38,7 +38,7 @@ const view = computed(() => {
     <ExtensionErrorBoundary v-if="view !== undefined && registered !== undefined" :key="`${extension}-${provider}-${path}`" :extension-id="extension">
         <component :is="view" :path="path" />
     </ExtensionErrorBoundary>
-    <!-- The provider is gone — switched off from the Extensions tab, uninstalled, or simply not activated yet on
+    <!-- The provider is gone: switched off from the Extensions tab, uninstalled, or simply not activated yet on
          a cold load. The tab stays put and says so, which is the honest state: closing it for the user would
          throw away a place they were reading, and an empty frame would read as a document that failed. -->
     <div v-else :class="ui.emptyState(`m-6`)">

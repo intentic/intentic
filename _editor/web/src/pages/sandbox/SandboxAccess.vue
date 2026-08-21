@@ -26,22 +26,22 @@ import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { identityHue } from "../../composables/identityHue";
 import { presenceActivity, presenceOthers } from "../../composables/usePresence";
 
-/* The Sandbox hub's "Access" tab. Owner-only invites for the ACTIVE sandbox: inviting is two writes — the
+/* The Sandbox hub's "Access" tab. Owner-only invites for the ACTIVE sandbox: inviting is two writes, the
  * daemon's ENFORCED /members list (pushed first from the owner's browser, since the server can't reach the
  * daemon) then the platform invite record + email. sandboxJson throws on any non-2xx, so a grant the enforcer
  * never got is never recorded (fail closed). Members see a read-only view. "Here now" (live presence) shows for
  * everyone.
  *
  * TWO WRITES, TWO SENTENCES. They used to share one catch, so a platform-side failure read as "is the sandbox
- * online?" — asked about a sandbox that had just answered the write immediately before. Each half now says what
+ * online?": asked about a sandbox that had just answered the write immediately before. Each half now says what
  * it is: the daemon is the one that can be offline, and the platform is the one that records the invite.
  *
  * And the mail is the THIRD thing, which is not a failure at all: by the time it is attempted the invitee is
  * granted on the daemon and recorded here, so a send that was declined (no mail credentials, or a platform
  * whose own address only resolves on this machine) or refused comes back as an outcome plus the link. The owner
- * becomes the courier — which is the only thing that works at all when running the platform locally.
+ * becomes the courier, which is the only thing that works at all when running the platform locally.
  *
- * EVERY GRANT IS A ROLE. The invite form asks which tier it is handing out (collaborator preselected — safe to
+ * EVERY GRANT IS A ROLE. The invite form asks which tier it is handing out (collaborator preselected: safe to
  * give without thinking, useful enough that nobody feels locked out), and each roster row re-grades in place
  * through the same two-write, daemon-first order as the grant itself. The words are deliberately "can…"
  * sentences: the tier model is taught here or nowhere. */
@@ -54,13 +54,13 @@ const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const members = ref<InviteRecord[]>([]);
 const email = ref(``);
 
-/* The three tiers an invite can grant, in the order they nest, each with the sentence that IS the model — ONE
+/* The three tiers an invite can grant, in the order they nest, each with the sentence that IS the model: ONE
  * list, read by both controls that hand a tier out. The form asks with a segmented control (three options, all
  * worth seeing at once, and the sentence for the pending choice sits under it); a roster row asks with the
  * design system's <Picker>, which shows the same sentences ON the options, because there is no room beside a
  * member's address for a paragraph and no reason to re-grade someone blind. */
 const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
-    { label: `Viewer`, value: `viewer`, icon: `eye`, hint: `Can watch everything — agents, chats, files. Can't change anything.` },
+    { label: `Viewer`, value: `viewer`, icon: `eye`, hint: `Can watch everything, agents, chats, files. Can't change anything.` },
     {
         label: `Collaborator`,
         value: `collaborator`,
@@ -102,7 +102,7 @@ const badge = (status: InviteRecord["status"]): { label: string; class: string }
 };
 
 /* THE FIRST READ ONLY, and only the one on mount. Every other call here follows a write whose response IS the
- * new roster, so the list is never blank across them — outlining a re-grade would flash a placeholder over rows
+ * new roster, so the list is never blank across them: outlining a re-grade would flash a placeholder over rows
  * that are already correct. `listing` starts true because the fetch is armed in onMounted: starting it false
  * would paint one frame of "no members" first, which is the whole thing this is here to stop. */
 const listing = ref(true);
@@ -123,11 +123,11 @@ const load = async (): Promise<void> => {
     }
 };
 
-/* An owner's roster is a network read and looked blank until it landed — a page that opens claiming you have
+/* An owner's roster is a network read and looked blank until it landed: a page that opens claiming you have
  * invited nobody, on the tab whose subject is who else is in here. The rows below stand in for it meanwhile. */
 const outline = useSandboxOutline(listing);
 
-// The invite list is owner-only (the API 403s a member) — only load it when the viewer owns this sandbox.
+// The invite list is owner-only (the API 403s a member): only load it when the viewer owns this sandbox.
 onMounted(() => {
     if (isOwner.value) {
         void load();
@@ -138,8 +138,8 @@ onMounted(() => {
     listing.value = false;
 });
 
-/* What to say when the link did not travel by mail. Not an error — the person IS invited, on the daemon and in
- * the record — so the sentence is about the delivery, `detail` carries what the mail provider actually said,
+/* What to say when the link did not travel by mail. Not an error: the person IS invited, on the daemon and in
+ * the record, so the sentence is about the delivery, `detail` carries what the mail provider actually said,
  * and the way out is the link itself: shown below (selectable, and the one thing here that must never be
  * truncated) with a button that copies it. `sent` needs nothing said: the mail is the message. */
 const DELIVERY_NOTE: Record<Exclude<InviteDelivery, "sent">, string> = {
@@ -163,7 +163,7 @@ const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?:
                        * module-global clipboard there belongs to a document that isn't focused (clipboardOf).
                        *
                        * Best-effort on purpose. A platform served without TLS has no clipboard API at all, and
-                       * the copy is a convenience over a link that is already on screen to select — so a refusal
+                       * the copy is a convenience over a link that is already on screen to select, so a refusal
                        * here must not become an error about an invite that succeeded. */
                       run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
                   },
@@ -180,7 +180,7 @@ const invite = async (): Promise<void> => {
     clearNotice();
     try {
         // Push to the daemon first (owner-gated, enforced), then record the invite + send the email. sandboxJson
-        // throws on a non-2xx daemon reply (403/401/offline), so an unenforced grant is never recorded as sent —
+        // throws on a non-2xx daemon reply (403/401/offline), so an unenforced grant is never recorded as sent:
         // and its own catch keeps that failure from being reported as anything else.
         try {
             await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(
@@ -188,7 +188,7 @@ const invite = async (): Promise<void> => {
                 jsonBody(`POST`, { email: value, role: inviteRole.value }),
             );
         } catch (err) {
-            notice.value = noticeFrom(err, `Couldn't grant access on the sandbox — is it online?`);
+            notice.value = noticeFrom(err, `Couldn't grant access on the sandbox: is it online?`);
             return;
         }
         const result = await apiClient.invite.create({ sandboxId: id, email: value, role: inviteRole.value });
@@ -225,7 +225,7 @@ const resend = async (target: string): Promise<void> => {
 };
 
 /* "Sign out everywhere". A sandbox session is a 30-day signed claim living in each browser's localStorage, so
- * a device that walked off keeps working until it expires — and there is no per-device list to revoke from,
+ * a device that walked off keeps working until it expires, and there is no per-device list to revoke from,
  * because nothing is stored per session. Re-keying the daemon's signer is the revocation, and it takes every
  * browser with it including this one: the next call 401s and re-establishes from the Google credential this tab
  * already holds, so the owner sees nothing. Members are signed out too and come back only if still on the list. */
@@ -243,13 +243,13 @@ const revokeSessions = async (): Promise<void> => {
         await sandboxJson<{ ok: boolean }>(`/system/sessions/revoke`, { method: `POST` });
         sessionsRevoked.value = true;
     } catch (err) {
-        notice.value = noticeFrom(err, `Couldn't sign other browsers out — is the sandbox online?`);
+        notice.value = noticeFrom(err, `Couldn't sign other browsers out: is the sandbox online?`);
     } finally {
         revokingSessions.value = false;
     }
 };
 
-// Re-grade a member: the same two-write, daemon-first order as the grant, because it IS one — the daemon's
+// Re-grade a member: the same two-write, daemon-first order as the grant, because it IS one, the daemon's
 // list is what a role change must reach to mean anything, and it applies on the member's next request.
 const setRole = async (target: string, role: GrantedRole): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
@@ -263,7 +263,7 @@ const setRole = async (target: string, role: GrantedRole): Promise<void> => {
         try {
             await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`POST`, { email: target, role }));
         } catch (err) {
-            notice.value = noticeFrom(err, `Couldn't change the role on the sandbox — is it online?`);
+            notice.value = noticeFrom(err, `Couldn't change the role on the sandbox: is it online?`);
             return;
         }
         members.value = (await apiClient.invite.setRole({ sandboxId: id, email: target, role })).members;
@@ -284,11 +284,11 @@ const revoke = async (target: string): Promise<void> => {
     clearNotice();
     try {
         // sandboxJson throws on a non-2xx daemon reply, so revoke reaches the enforcer before the platform row is
-        // dropped — a daemon that rejects/is offline surfaces an error instead of a member who still has access.
+        // dropped: a daemon that rejects/is offline surfaces an error instead of a member who still has access.
         try {
             await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
         } catch (err) {
-            notice.value = noticeFrom(err, `Couldn't take access away on the sandbox — is it online?`);
+            notice.value = noticeFrom(err, `Couldn't take access away on the sandbox: is it online?`);
             return;
         }
         members.value = (await apiClient.invite.revoke({ sandboxId: id, email: target })).members;
@@ -321,7 +321,7 @@ const revoke = async (target: string): Promise<void> => {
                     <Icon name="user" class="text-muted" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ member.email }}</span>
                     <!-- The row's role, changeable in place: a re-grade is routine (that is the whole point of
-                         tiers), so it must not cost a revoke + re-invite. Ghost rather than a bordered box —
+                         tiers), so it must not cost a revoke + re-invite. Ghost rather than a bordered box:
                          the row already has a framed address, a status pill and two buttons on it, and a
                          second box among them read as a form field that had wandered into a list. -->
                     <Picker
@@ -417,7 +417,7 @@ const revoke = async (target: string): Promise<void> => {
         <RowGroup v-if="isOwner" label="Signed-in browsers">
             <div class="flex flex-col gap-2 px-4 py-3">
                 <p class="text-xs text-muted">
-                    Browsers stay signed in to this sandbox for 30 days. Sign them all out if a device was lost or shared — everyone still on the
+                    Browsers stay signed in to this sandbox for 30 days. Sign them all out if a device was lost or shared: everyone still on the
                     access list simply signs in again with Google.
                 </p>
                 <p v-if="sessionsRevoked" class="flex items-center gap-1.5 text-xs font-semibold text-success">

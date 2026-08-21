@@ -38,11 +38,11 @@ import WorkspaceScopeBanner from "./WorkspaceScopeBanner.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import { parentDir } from "@intentic/ui/path";
 
-/* The mobile Workspace: a drill-down file browser — one directory per screen — plus the Changes / Restore Points
+/* The mobile Workspace: a drill-down file browser (one directory per screen) plus the Changes / Restore Points
  * panels, with a full-screen read-only viewer. All navigation state (segment aside) lives in the ROUTE
  * (`?dir=`, `?file=`, `?diff=`), so the OS back gesture is the up/close navigation and deep links work.
  * Desktop affordances (drag-drop, multi-select, tab strip, edit mode) have no mobile equivalents: uploads go
- * through a picker FAB, row actions through a long-press bottom sheet, and files open read-only — editing
+ * through a picker FAB, row actions through a long-press bottom sheet, and files open read-only: editing
  * happens through the agent in chat or on desktop. Same singletons as WorkspaceDesktop underneath. */
 
 const route = useRoute();
@@ -85,7 +85,7 @@ const openPath = computed(() => (activeTab.value?.kind === `file` ? activeTab.va
 const diffId = computed(() => (typeof route.query[`diff`] === `string` ? route.query[`diff`] : undefined));
 
 const openDir = (path: string): void => {
-    // Browsing a folder leaves any open file — clear the path segment along with the query.
+    // Browsing a folder leaves any open file: clear the path segment along with the query.
     void router.push({ name: `workspace`, params: { path: [] }, query: path === `` ? {} : { dir: path } });
 };
 const openDiffNav = (payload: DiffPayload, mode: OpenMode): void => {
@@ -93,13 +93,13 @@ const openDiffNav = (payload: DiffPayload, mode: OpenMode): void => {
     void router.push({ name: `workspace`, params: { path: [] }, query: { ...route.query, diff: activeId.value ?? undefined } });
 };
 
-// A diff is content held in the tabs singleton, not addressable state — a reload lands with `?diff=` and no
+// A diff is content held in the tabs singleton, not addressable state: a reload lands with `?diff=` and no
 // tab to show, so drop the param instead of painting an empty pane.
 const diffTab = computed(() => {
     const tab = tabs.value.find((candidate) => candidate.id === diffId.value);
     return tab?.kind === `diff` ? tab : undefined;
 });
-// What the open diff is showing once its comments are out, for the bar above it — see useDiffStat.
+// What the open diff is showing once its comments are out, for the bar above it: see useDiffStat.
 const { stat: diffStat, onStat: setDiffStat } = useDiffStat(diffId);
 watch(
     [diffId, diffTab],
@@ -111,7 +111,7 @@ watch(
     { immediate: true },
 );
 
-// The gap between clicking a changed file and its content arriving — see the desktop workspace for why it is
+// The gap between clicking a changed file and its content arriving: see the desktop workspace for why it is
 // gated rather than drawn at once.
 const diffOutline = useLoadingReveal(
     computed(() => diffTab.value?.pending === true),
@@ -134,7 +134,7 @@ const fileName = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1)
  * and both lit up at once), and the OS back gesture walked past a segment switch as if it had not happened.
  *
  * Still WRITTEN to the persisted preference, so the choice survives to the next visit and desktop keeps
- * reading one setting — the query is the address of this visit, not a second source of truth. */
+ * reading one setting: the query is the address of this visit, not a second source of truth. */
 const PANELS = [`files`, `changes`, `history`] as const;
 const segment = computed<SidebarPanel>({
     get: () => {
@@ -143,7 +143,7 @@ const segment = computed<SidebarPanel>({
     },
     set: (value) => {
         layout.setSidebarPanel(value);
-        // `files` is the bare address — a query naming the default would show up in every shared link.
+        // `files` is the bare address: a query naming the default would show up in every shared link.
         void router.replace({ query: { ...route.query, panel: value === `files` ? undefined : value } });
     },
 });
@@ -156,7 +156,7 @@ const changesMark = computed(() => {
 });
 const segmentOptions = computed(() => [
     // Files and Changes are the everyday views; restore history is the quieter icon beside this control. Touch
-    // has no hover, so no hint here says anything a finger can reach — see the desktop twin. The mark spread
+    // has no hover, so no hint here says anything a finger can reach: see the desktop twin. The mark spread
     // stays: `markTitle` is inert on this form factor, but the CHIP is what the tab is here for.
     { label: `Files`, value: `files` as const },
     { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
@@ -164,7 +164,7 @@ const segmentOptions = computed(() => [
 
 const filter = ref(``);
 /* Same three scopes as the desktop explorer (WorkspaceDesktop.vue documents what each one means), and the same
- * match switches — they are PERSISTED and shared, so a phone that applied them without showing them was running
+ * match switches: they are PERSISTED and shared, so a phone that applied them without showing them was running
  * a regex search the reader had no way to see, let alone turn off. Their own row rather than inside the field:
  * there is vertical room here and none beside a 16px input, and a row is a touch target. */
 const searchScope = ref<"name" | SearchScope>(`name`);
@@ -191,8 +191,8 @@ const clearFilter = (): void => {
     searchScope.value = `name`;
 };
 
-// Entering a dir the walk left unlisted (ignored, or below its entry budget) — or any path not in the eager
-// tree at all (deep inside a lazy subtree) — fetches its children on demand; the listing repaints on arrival.
+// Entering a dir the walk left unlisted (ignored, or below its entry budget), or any path not in the eager
+// tree at all (deep inside a lazy subtree): fetches its children on demand; the listing repaints on arrival.
 watch(
     dir,
     (path) => {
@@ -216,19 +216,19 @@ const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
     return query === `` ? shown : shown.filter((node) => node.name.toLowerCase().includes(query));
 });
 const dirLoading = computed(() => dir.value !== `` && lazyLoading.value.has(dir.value));
-// How many entries the daemon's cap cut from the open dir's listing — 0 (the common case) shows nothing.
+// How many entries the daemon's cap cut from the open dir's listing: 0 (the common case) shows nothing.
 const dirHidden = computed(() => (dir.value === `` ? rootHidden.value : (lazyHidden.value.get(dir.value) ?? 0)));
 
-// The toolbar funnel's sheet — the desktop filter menu's two rows, thumb-sized. Stays open across a tap: both
+// The toolbar funnel's sheet, the desktop filter menu's two rows, thumb-sized. Stays open across a tap: both
 // switches repaint the listing behind it, so the answer to "did that do what I wanted" is already on screen.
 const filterSheet = ref(false);
 
-// A symlink that goes nowhere, or that leaves the workspace: dimmed, and it offers no drill-in — there is
+// A symlink that goes nowhere, or that leaves the workspace: dimmed, and it offers no drill-in, there is
 // nothing behind it the sandbox will list.
 const deadLink = (node: WorkspaceTreeEntry): boolean => node.link?.state !== undefined;
 
 // --- Long-press row actions (the ContextMenu equivalents) --------------------------------------
-// This view's root — the element a clipboard write is reached through, so it lands in the window the user is
+// This view's root: the element a clipboard write is reached through, so it lands in the window the user is
 // looking at rather than the opener's (see clipboardOf).
 const rootEl = ref<HTMLElement>();
 const sheetEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
@@ -261,7 +261,7 @@ const confirmDelete = (): void => {
 const copyPath = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
     // Reached through this view's root so a popped-out panel writes to the focused window (see clipboardOf).
-    // Clipboard may still be unavailable (insecure context) — swallow, matching CopyButton.
+    // Clipboard may still be unavailable (insecure context): swallow, matching CopyButton.
     void clipboardOf(rootEl.value)
         .writeText(target.path)
         .then(() => say(`Path copied`))
@@ -299,7 +299,7 @@ const onPick = (event: Event): void => {
         <!-- Full-screen viewer: `?file=` (any kind) or `?diff=` (from Changes/History). Back = OS gesture. -->
         <template v-if="openPath !== undefined || diffTab !== undefined">
             <!-- A diff gets the SAME bar the desktop tab and the agent review get, with the phone's back arrow
-                 in its lead slot — one bar, not the generic header plus a second one. It already names the
+                 in its lead slot: one bar, not the generic header plus a second one. It already names the
                  file and marks its status, so the "diff" label this replaces had nothing left to add. -->
             <DiffToolbar
                 v-if="diffTab"
@@ -334,11 +334,11 @@ const onPick = (event: Event): void => {
             </div>
             <div class="min-h-0 flex-1">
                 <template v-if="diffTab">
-                    <!-- Still being read. Nothing below it can be decided yet — whether the file is binary is part
-                         of the answer — so this branch comes first, and the viewer mounts once, with content. -->
+                    <!-- Still being read. Nothing below it can be decided yet, whether the file is binary is part
+                         of the answer, so this branch comes first, and the viewer mounts once, with content. -->
                     <template v-if="diffTab.pending"><DiffSkeleton v-if="diffOutline" /></template>
                     <!-- No text to diff is not the same as nothing to see: an image renders as its two sides
-                         (stacked here — two panes don't fit a phone). -->
+                         (stacked here: two panes don't fit a phone). -->
                     <BinaryDiffView
                         v-else-if="rendersAsBytes(diffTab.path, diffTab.binary)"
                         :key="diffTab.id"
@@ -373,7 +373,7 @@ const onPick = (event: Event): void => {
                 >
                     <Icon name="history" class="text-base" />
                 </button>
-                <!-- What the listing leaves out — the desktop toolbar's funnel, thumb-sized, opening a sheet
+                <!-- What the listing leaves out: the desktop toolbar's funnel, thumb-sized, opening a sheet
                      instead of a menu. Drill-down only: during a content search the row under the field carries
                      its own Ignored chip, and two controls for one idea on one screen is one too many. -->
                 <button
@@ -386,7 +386,7 @@ const onPick = (event: Event): void => {
                 >
                     <Icon name="filter" class="text-base" />
                 </button>
-                <!-- One refresh for the row, refetching whichever segment is showing — the Changes panel below
+                <!-- One refresh for the row, refetching whichever segment is showing: the Changes panel below
                      no longer carries a header row (and its own refresh) of its own. -->
                 <button
                     type="button"
@@ -435,7 +435,7 @@ const onPick = (event: Event): void => {
                         ]"
                     />
                 </div>
-                <!-- Which files to ask, VSCode's files-to-include grammar — the desktop field's twin, full width
+                <!-- Which files to ask, VSCode's files-to-include grammar: the desktop field's twin, full width
                      because a glob is typed and a phone's row is the only place with room for it. -->
                 <div v-if="contentMode" class="shrink-0 px-2 pb-1.5">
                     <div class="relative">
@@ -453,7 +453,7 @@ const onPick = (event: Event): void => {
                         />
                     </div>
                 </div>
-                <!-- Aa / ab / .* + Ignored — the same switches the desktop field carries, and the same rule for
+                <!-- Aa / ab / .* + Ignored: the same switches the desktop field carries, and the same rule for
                      which scope sees which: the three change what a PATTERN means, Ignored changes what is
                      searched at all. -->
                 <div v-if="contentMode" class="flex shrink-0 items-center gap-1.5 px-2 pb-1.5">
@@ -520,7 +520,7 @@ const onPick = (event: Event): void => {
                     />
                 </div>
                 <!-- NO WRAPPER ELEMENT AROUND THESE ROWS. A `<template>` carrying no structural directive is
-                     not compiled away — Vue passes it through as a real HTML `<template>`, which the browser
+                     not compiled away: Vue passes it through as a real HTML `<template>`, which the browser
                      renders `display: none`. One sat here, and it took the entire listing with it: the rows,
                      the empty state, the loading line and the elided-entry notice all had the data they
                      needed and none of them ever painted. The `v-for` belongs on the row itself. -->
@@ -550,20 +550,20 @@ const onPick = (event: Event): void => {
                             >
                             <!-- A symlink. The row wears its TARGET's icon, so this marker is what says the
                                  name is a pointer. No hover on touch, so where it points can't be shown
-                                 here — the long-press sheet is where a row explains itself. -->
+                                 here: the long-press sheet is where a row explains itself. -->
                             <Icon
                                 v-if="node.link !== undefined"
                                 :name="node.link.state === undefined ? 'link' : 'link-broken'"
                                 class="shrink-0 text-xs"
                                 :class="node.link.state === undefined ? 'text-subtle' : 'text-warning'"
                             />
-                            <!-- The reference shelf must not read as junk — no hover on touch, so the badge alone names it. -->
+                            <!-- The reference shelf must not read as junk: no hover on touch, so the badge alone names it. -->
                             <span
                                 v-if="node.path === REFERENCE_DIR"
                                 class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
                                 >reference</span
                             >
-                            <!-- The outbox: a warning, not a label — everything under it is on the internet. -->
+                            <!-- The outbox: a warning, not a label, everything under it is on the internet. -->
                             <span v-if="node.path === PUBLIC_DIR" class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
                                 >public</span
                             >
@@ -578,17 +578,17 @@ const onPick = (event: Event): void => {
                             {{ filter ? "No matching entries." : "This directory is empty." }}
                         </p>
                         <p v-if="dirHidden > 0" class="px-4 py-2 text-center text-2xs text-subtle">
-                            {{ dirHidden.toLocaleString() }} more {{ dirHidden === 1 ? "entry" : "entries" }} in this folder — search to reach them.
+                            {{ dirHidden.toLocaleString() }} more {{ dirHidden === 1 ? "entry" : "entries" }} in this folder, search to reach them.
                         </p>
                     </div>
                 </PullToRefresh>
 
-                <!-- Upload FAB: the picker replacement for desktop's drag-drop; lands in the open directory —
+                <!-- Upload FAB: the picker replacement for desktop's drag-drop; lands in the open directory:
                      so it is gone while a search is showing, which has no open directory to land in and whose
                      rows it would otherwise sit on top of.
 
                      THE POSITIONING LIVES ON A WRAPPER, not on the button. PrimeVue's `.p-button` sets
-                     `position: relative` in its own base layer, which beats the `absolute` utility — so
+                     `position: relative` in its own base layer, which beats the `absolute` utility, so
                      `bottom-4 right-4` were inert and the button laid out in normal flow instead, landing
                      18px off the LEFT edge of the screen at the one corner a right hand never reaches.
                      A plain positioned div can't be overridden by the button's own styling. -->
@@ -632,7 +632,7 @@ const onPick = (event: Event): void => {
             </div>
         </BottomSheet>
 
-        <!-- Long-press row actions — the desktop tree's context menu, thumb-sized. -->
+        <!-- Long-press row actions: the desktop tree's context menu, thumb-sized. -->
         <BottomSheet :model-value="sheetEntry !== undefined" @update:model-value="sheetEntry = undefined" :header="sheetEntry?.name">
             <div v-if="sheetEntry" class="flex flex-col gap-0.5">
                 <button
@@ -643,12 +643,12 @@ const onPick = (event: Event): void => {
                     <Icon name="copy" class="text-base text-muted" /> Copy path
                 </button>
                 <!-- Where a link points. There is no hover on a phone, so this sheet is the only place the row
-                     can say it — and it is the whole reason to tap a link in the first place. -->
+                     can say it, and it is the whole reason to tap a link in the first place. -->
                 <p v-if="sheetEntry.link" class="flex min-h-12 items-start gap-3 px-3 py-3 text-sm text-muted">
                     <Icon :name="sheetEntry.link.state === undefined ? 'link' : 'link-broken'" class="mt-0.5 shrink-0 text-base text-subtle" />
                     <span class="min-w-0 break-all"
-                        >Link to {{ sheetEntry.link.to }}<template v-if="sheetEntry.link.state === 'broken'"> — there is nothing there</template
-                        ><template v-else-if="sheetEntry.link.state === 'outside'"> — outside the workspace, so the sandbox won't open it</template>
+                        >Link to {{ sheetEntry.link.to }}<template v-if="sheetEntry.link.state === 'broken'">: there is nothing there</template
+                        ><template v-else-if="sheetEntry.link.state === 'outside'">: outside the workspace, so the sandbox won't open it</template>
                     </span>
                 </p>
                 <!-- Everything below Copy path is something the sandbox refuses on a locked entry, so a locked

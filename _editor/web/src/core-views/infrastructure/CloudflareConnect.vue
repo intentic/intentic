@@ -21,7 +21,7 @@ const { set: setSecret } = useSecrets();
 const { hasKey } = useSecretKeys();
 const { add } = useInventory();
 
-// The sandbox may already carry a Cloudflare token (own-Cloudflare onboarding seeds it) — then all that's
+// The sandbox may already carry a Cloudflare token (own-Cloudflare onboarding seeds it): then all that's
 // missing is the backend declaration; we can't re-list zones since we only know the key exists, not its value.
 const tokenAlreadySet = computed(() => hasKey(CF_TOKEN_KEY));
 const submitting = ref(false);
@@ -40,7 +40,7 @@ const connect = async (): Promise<void> => {
             await setSecret.mutateAsync({ key: CF_TOKEN_KEY, value: cfToken.value.trim() });
         }
         // The zone rides on the entry (i.have.cloudflare("cf", { zone })), so resolve validates against it
-        // without re-discovering it from the token — and the Add-service dialog can offer `<subdomain>.<zone>`
+        // without re-discovering it from the token, and the Add-service dialog can offer `<subdomain>.<zone>`
         // in every later session. The tokenAlreadySet path can't list zones, so it declares without one.
         await add.mutateAsync({
             kind: `backend`,
@@ -79,7 +79,7 @@ const connect = async (): Promise<void> => {
                 <InfoHint class="ml-auto" label="Why the Cloudflare API token is required">
                     <p class="mb-1 text-sm font-semibold text-content">Why this token?</p>
                     <p class="mb-3 text-2xs leading-relaxed text-muted">
-                        Your service is put on your domain through a Cloudflare tunnel — no open inbound ports.
+                        Your service is put on your domain through a Cloudflare tunnel: no open inbound ports.
                     </p>
                     <ul class="flex flex-col gap-2 text-2xs text-muted">
                         <li class="flex items-start gap-2">
@@ -89,7 +89,7 @@ const connect = async (): Promise<void> => {
                         <li class="flex items-start gap-2">
                             <Icon name="lock" class="mt-0.5 text-success" />
                             <span
-                                ><span class="text-content">Stored only in your sandbox</span> — used once here to list zones, never on the
+                                ><span class="text-content">Stored only in your sandbox</span>: used once here to list zones, never on the
                                 platform</span
                             >
                         </li>
@@ -98,7 +98,7 @@ const connect = async (): Promise<void> => {
             </div>
             <CloudflareTokenField
                 :cf="cf"
-                storage-note="Used once to look up your Cloudflare zones, then stored in your sandbox — never on the platform."
+                storage-note="Used once to look up your Cloudflare zones, then stored in your sandbox: never on the platform."
             >
                 <template #zone-confirmed>
                     <p v-if="cf.zones.value.length === 1 && selectedZone" class="text-xs text-success">

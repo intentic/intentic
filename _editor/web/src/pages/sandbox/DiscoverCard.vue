@@ -5,19 +5,19 @@ import { formatCredits } from "../../composables/membership/creditMeter";
 import { useMembership } from "../../composables/membership/useMembership";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
 
-/* ONE PUBLISHED EXTENSION, as a card in a grid — the same tile the "+" catalog is read as, on purpose.
+/* ONE PUBLISHED EXTENSION, as a card in a grid: the same tile the "+" catalog is read as, on purpose.
  *
  * It used to be a line in a 160px scrolling box: a mark, a name, five glyphs and a truncated description, all
  * on one row. That shape works for a list of things the reader already knows the names of, and these are the
- * opposite — names nobody has seen, written by people nobody has heard of, where the description IS the row's
+ * opposite: names nobody has seen, written by people nobody has heard of, where the description IS the row's
  * content and the marks are the only thing that can be scanned. So: the catalog's tile, at the catalog's
  * density, because "what could I add" is the same question in both places and should not have two answers.
  *
  * THE PUBLISHER IS ON ITS OWN LINE, under the name. `radarsu.paperwork` is one string to the daemon and two
- * facts to a reader — what it is, and whose it is — and the second one is most of how a stranger's extension
+ * facts to a reader: what it is, and whose it is, and the second one is most of how a stranger's extension
  * gets trusted or skipped. Printed as one dotted token it reads as neither.
  *
- * THE BUTTON SAYS THE STATE. Install / Update / Installed / the reason it can't be — never a live-looking
+ * THE BUTTON SAYS THE STATE. Install / Update / Installed / the reason it can't be: never a live-looking
  * control that does nothing, and never a dead one with no explanation. */
 
 const { listing } = defineProps<{ listing: DiscoverListing }>();
@@ -30,15 +30,15 @@ const loads = computed(() => checksOk(listing.entry));
 const dim = computed(() => listing.state.kind === `blocked` || listing.state.kind === `unavailable`);
 
 /* THE PREMIUM CHIP NAMES ITS PRICE. It used to hover as "needs an intentic membership; its use pays its
- * creator from the pool" — true, and silent on the one number a person scanning a grid wants: how much. The
+ * creator from the pool", true, and silent on the one number a person scanning a grid wants: how much. The
  * figure is the platform's own (shared membership read), so a platform that prices installs differently, or
  * gives them away, is described correctly rather than by a sentence somebody typed here. */
 const { donationCredits } = useMembership();
 
 const premiumHint = computed(() =>
     donationCredits.value > 0
-        ? `Premium — installing pays its creator ${formatCredits(donationCredits.value)} credits from your daily allowance, once a month. Using it is always free.`
-        : `Premium — needs an intentic membership; its use pays its creator from the pool`,
+        ? `Premium: installing pays its creator ${formatCredits(donationCredits.value)} credits from your daily allowance, once a month. Using it is always free.`
+        : `Premium, needs an intentic membership; its use pays its creator from the pool`,
 );
 </script>
 
@@ -65,7 +65,7 @@ const premiumHint = computed(() =>
                     <span class="truncate text-sm font-semibold text-content">{{ name.title }}</span>
                     <!-- Verified is the only trust badge that gets said out loud. Badging "listed" too would
                          dress the honest default up as a review, which is the one thing this surface must not
-                         do — see the section captions above the grid. -->
+                         do: see the section captions above the grid. -->
                     <Icon
                         v-if="listing.entry.trust === `verified`"
                         name="shield"
@@ -94,7 +94,7 @@ const premiumHint = computed(() =>
         <p v-else class="text-2xs text-subtle italic">No description published.</p>
 
         <!-- The signal strip: evidence and popularity, glyph-first, each with its sentence on hover. Silent
-             where there is nothing to say — an absent scan is not a warning, and a listing with no stars is
+             where there is nothing to say: an absent scan is not a warning, and a listing with no stars is
              every listing for its first few months. -->
         <div class="mt-auto flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 pt-0.5">
             <span

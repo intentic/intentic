@@ -9,15 +9,15 @@ import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { environment } from "../environments/environment";
 
-/* THE OTHER END OF THE HANDOFF — this page runs INSIDE the desktop app's webview, which has no session yet.
+/* THE OTHER END OF THE HANDOFF: this page runs INSIDE the desktop app's webview, which has no session yet.
  *
  * Three steps, and the middle one is the whole trick:
- *   1. redeem the row the browser parked (single use — the platform deletes it as it answers)
+ *   1. redeem the row the browser parked (single use: the platform deletes it as it answers)
  *   2. spend the Better Auth one-time token at /api/auth/one-time-token/verify. That endpoint replies with a
  *      Set-Cookie, so THIS webview obtains the platform session through an ordinary HTTP round trip; nothing
  *      is injected from Rust and no cookie is forged.
  *   3. adopt the Google ID token into the same cache a local mint would have filled, so the first daemon call
- *      exchanges it for a daemon session — which renews silently from then on, and is why Google does not
+ *      exchanges it for a daemon session, which renews silently from then on, and is why Google does not
  *      come back every hour.
  *
  * A failure here is always terminal for this link (the row is gone either way), so the retry is "sign in

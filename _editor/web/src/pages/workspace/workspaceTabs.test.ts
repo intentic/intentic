@@ -4,7 +4,7 @@ import { closeTabs, placeTab, type WorkspaceTab } from "./workspaceTabs";
 const file = (path: string): WorkspaceTab => ({ kind: `file`, id: path, path });
 const diff = (id: string, path: string): WorkspaceTab => ({ kind: `diff`, id, label: path, status: `modified`, path });
 
-// a.ts, b.ts, then a diff tab whose id is NOT its path — so we can tell forgetPaths uses file paths only.
+// a.ts, b.ts, then a diff tab whose id is NOT its path, so we can tell forgetPaths uses file paths only.
 const tabs: readonly WorkspaceTab[] = [file(`a.ts`), file(`b.ts`), diff(`diff:1:s/c.ts`, `c.ts`)];
 const ids = (list: readonly WorkspaceTab[]): string[] => list.map((tab) => tab.id);
 
@@ -46,7 +46,7 @@ describe(`placeTab`, () => {
         expect(ids(placeTab(tabs, incoming, null))).toEqual([`a.ts`, `b.ts`, `diff:1:s/c.ts`, `diff:2:s/d.ts`]);
     });
 
-    // The preview slot keeps its POSITION as the user reads down a list — a tab that jumped to the end on every
+    // The preview slot keeps its POSITION as the user reads down a list: a tab that jumped to the end on every
     // click would move the thing being looked at out from under the pointer.
     it(`takes the replaced tab's place in the strip`, () => {
         expect(ids(placeTab(tabs, incoming, `b.ts`))).toEqual([`a.ts`, `diff:2:s/d.ts`, `diff:1:s/c.ts`]);

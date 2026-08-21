@@ -61,12 +61,12 @@ const domainCredential = (raw: string): { credential?: Credential; problem?: str
     try {
         parsed = JSON.parse(raw) as Record<string, unknown>;
     } catch {
-        return { problem: "the service account key is not valid JSON — paste the whole downloaded file" };
+        return { problem: "the service account key is not valid JSON, paste the whole downloaded file" };
     }
     const clientEmail = parsed["client_email"];
     const privateKey = parsed["private_key"];
     if (typeof clientEmail !== "string" || typeof privateKey !== "string") {
-        return { problem: "the service account key has no client_email/private_key — that is not a service account JSON key" };
+        return { problem: "the service account key has no client_email/private_key, that is not a service account JSON key" };
     }
     const tokenUri = parsed["token_uri"];
     return { credential: { mode: "domain", clientEmail, privateKey, tokenUri: typeof tokenUri === "string" ? tokenUri : DEFAULT_TOKEN_URI } };
@@ -144,7 +144,7 @@ export const connectionsFrom = (env: Env): Connection[] => {
 };
 
 const NONE_CONNECTED =
-    "No Google account is connected. Add the Google Workspace card under Capabilities — it covers Gmail, Calendar, Drive, Docs, Sheets and Contacts.";
+    "No Google account is connected. Add the Google Workspace card under Capabilities: it covers Gmail, Calendar, Drive, Docs, Sheets and Contacts.";
 
 /* Which connection a command runs against. The single-account case is the one that has to need no flag, and
  * the several-account case is the one that must never guess: picking the first would send mail from whichever
@@ -164,7 +164,7 @@ export const selectConnection = (connections: readonly Connection[], wanted: str
         return found;
     }
     if (connections.length > 1) {
-        throw new Error(`Several Google accounts are connected — pass --account: ${connections.map(describe).join(", ")}.`);
+        throw new Error(`Several Google accounts are connected, pass --account: ${connections.map(describe).join(", ")}.`);
     }
     return connections[0] as Connection;
 };

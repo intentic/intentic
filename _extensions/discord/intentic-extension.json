@@ -20,7 +20,7 @@
                 "label": "Discord",
                 "mentionLabel": "Only when the bot is mentioned (@mention or reply)",
                 "channel": { "label": "Channel ID (optional)", "placeholder": "all channels the bot can read" },
-                "starterPrompt": "Discord events just arrived — each line of the event payload is one JSON event: type `message` (a new message: author, channelId, content; `mentioned: true` when the bot was tagged or replied to), `voice_utterance` (one transcribed utterance from a live voice session), or `voice_transcript` (a finished voice session — read the transcript at its `extra.path`). Handle messages that need attention with your Discord capability; treat utterances as live conversation context; turn finished transcripts into notes and action items in the workspace."
+                "starterPrompt": "Discord events just arrived, each line of the event payload is one JSON event: type `message` (a new message: author, channelId, content; `mentioned: true` when the bot was tagged or replied to), `voice_utterance` (one transcribed utterance from a live voice session), or `voice_transcript` (a finished voice session, read the transcript at its `extra.path`). Handle messages that need attention with your Discord capability; treat utterances as live conversation context; turn finished transcripts into notes and action items in the workspace."
             }
         },
         "processes": [
@@ -49,7 +49,7 @@
                             "`New Application` → `Bot`.",
                             "`Reset Token`, then copy the bot token.",
                             "Enable the `Message Content` and `Server Members` privileged intents.",
-                            "Paste the token here, then ask the agent to “invite yourself to my server” — it makes a one-click invite link."
+                            "Paste the token here, then ask the agent to “invite yourself to my server”: it makes a one-click invite link."
                         ]
                     }
                 },

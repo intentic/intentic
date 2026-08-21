@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-activity",
     "version": "1.0.0",
-    "description": "Activity — the audit feed of the agent's provider interactions, as a first-party intentic extension",
+    "description": "Activity, the audit feed of the agent's provider interactions, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

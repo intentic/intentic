@@ -6,12 +6,12 @@ import { formatElapsed } from "../composables/agents/agentStatus";
 import { bootSteps, bootStartedAt } from "../composables/sandbox/useDaemonBoot";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
-/* Shown while the active daemon is REACHED but not yet READY — the window the sandbox spends listening on
+/* Shown while the active daemon is REACHED but not yet READY: the window the sandbox spends listening on
  * /health and /events while its boot chain converges the state every other route serves.
  *
  * That window was invisible before this screen, and the invisibility was the bug. A browser holding a
  * persisted cache painted the whole workspace over it, so a file opened into a read that never returned and a
- * `pnpm build:sandbox && dev-sandbox.sh` swap read as an app that had broken — the fix people found was
+ * `pnpm build:sandbox && dev-sandbox.sh` swap read as an app that had broken: the fix people found was
  * clearing site data, which only "worked" because an empty cache put the connecting gate up instead.
  *
  * So the wait is a screen, and it says what the daemon is doing. The steps come from the daemon's own declared
@@ -33,7 +33,7 @@ const now = useNow();
 <template>
     <GateCard icon="box" :title="title" spinner>
         <p class="text-sm text-muted">
-            Your sandbox is up and getting its workspace ready. It opens by itself the moment it can serve — nothing to click.
+            Your sandbox is up and getting its workspace ready. It opens by itself the moment it can serve: nothing to click.
         </p>
         <template #below>
             <!-- The declared chain, in the order it runs. A daemon too old to report one leaves this empty and the

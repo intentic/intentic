@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-documentation",
     "version": "1.0.0",
-    "description": "Documentation — AI-generated, human-reviewed orientation docs for every repository and package, as a first-party intentic extension",
+    "description": "Documentation, AI-generated, human-reviewed orientation docs for every repository and package, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

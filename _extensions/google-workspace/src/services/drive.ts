@@ -74,7 +74,7 @@ export const exportMimeFor = (nativeType: string, format: string | undefined): s
     const chosen = format ?? DEFAULT_EXPORT[nativeType];
     const mime = chosen === undefined ? undefined : available[chosen];
     if (mime === undefined) {
-        throw new Error(`Cannot export that as "${chosen}" — available: ${Object.keys(available).join(", ")}.`);
+        throw new Error(`Cannot export that as "${chosen}", available: ${Object.keys(available).join(", ")}.`);
     }
     return mime;
 };
@@ -314,6 +314,6 @@ const permissions: Command = {
 
 export const driveGroup: CommandGroup = {
     name: "drive",
-    summary: "Drive — find, read, upload, organise, share",
+    summary: "Drive, find, read, upload, organise, share",
     commands: [search, ls, get, put, mkdir, mv, rm, share, link, permissions],
 };

@@ -9,7 +9,7 @@ describe(`repoOfPath`, () => {
     });
 
     it(`prefers the deepest repo a path sits under`, () => {
-        // A nested repo inside another repo — `apps/web/x.ts` belongs to the repo that actually holds it, and
+        // A nested repo inside another repo: `apps/web/x.ts` belongs to the repo that actually holds it, and
         // the shorter id must not win just because it also matches.
         expect(repoOfPath(`apps/web/x.ts`, repos)).toBe(`apps/web`);
         expect(repoOfPath(`apps/api/x.ts`, repos)).toBe(`apps`);
@@ -21,7 +21,7 @@ describe(`repoOfPath`, () => {
 
     it(`falls back to root for a path no repo claims`, () => {
         expect(repoOfPath(`README.md`, repos)).toBe(`root`);
-        // A prefix match must be on a directory boundary — `intentic-docs` is not inside `intentic`.
+        // A prefix match must be on a directory boundary: `intentic-docs` is not inside `intentic`.
         expect(repoOfPath(`intentic-docs/x.md`, repos)).toBe(`root`);
     });
 });

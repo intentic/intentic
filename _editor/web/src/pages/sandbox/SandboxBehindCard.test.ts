@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // jsdom because the subject is WORDING, and wording is the whole function of this card. It has no controls and
-// no state of its own: it reads a disagreement between two builds and decides what to tell someone about it —
+// no state of its own: it reads a disagreement between two builds and decides what to tell someone about it:
 // which of the two is old, and what to run. Both of those were wrong before this file existed. The card
 // asserted the sandbox was behind whatever the evidence said, and printed a full image rebuild as the remedy,
 // which in dev cannot be the fix (the container reads its daemon from the working tree, so the image is never
@@ -63,14 +63,14 @@ it(`names the sandbox as behind only when a missing route proves it`, () => {
     const text = mount().textContent ?? ``;
     expect(text).toContain(`Sandbox is behind the app`);
     expect(text).toContain(`VPN won't work until the sandbox is reloaded.`);
-    // Direction is known here, so nothing hedges — a page reload would not bring a route back.
+    // Direction is known here, so nothing hedges: a page reload would not bring a route back.
     expect(text).not.toMatch(/reload this page/i);
 });
 
 it(`refuses to name a side when only the payloads disagree`, () => {
     /* The failure this card was reported for: a sandbox rebuilt minutes earlier, still told it was behind, with
-     * a rebuild as the cure. Drift is symmetric evidence — a tab open since before the change is as likely to
-     * be the stale one — so the heading states the disagreement and the page is offered as the other suspect. */
+     * a rebuild as the cure. Drift is symmetric evidence: a tab open since before the change is as likely to
+     * be the stale one, so the heading states the disagreement and the page is offered as the other suspect. */
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const text = mount().textContent ?? ``;
     expect(text).toContain(`App and sandbox are out of sync`);

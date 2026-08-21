@@ -7,16 +7,16 @@ import { detectActivations } from "../../core-views/registry";
 import ExtensionView from "../../core-views/ExtensionView.vue";
 
 /* The in-tree management surface for one repository directory: renders the directory-surface extension views the
- * repo activates (Apps, its own UI). With more than one, a segmented switch — the same control the sidebar uses
- * for Files/Changes/History — picks which. Empty (the repo lost its markers) renders nothing; the tree only
- * opens this for a manageable directory anyway. The dev-server preview is NOT here — that is the rail's Preview
+ * repo activates (Apps, its own UI). With more than one, a segmented switch: the same control the sidebar uses
+ * for Files/Changes/History: picks which. Empty (the repo lost its markers) renders nothing; the tree only
+ * opens this for a manageable directory anyway. The dev-server preview is NOT here: that is the rail's Preview
  * area, which the row's eye opens. */
 
 const { dir } = defineProps<{ dir: string }>();
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 
-// One activation per directory-surface VIEW for this repo — an extension may register several views (ext-apps
+// One activation per directory-surface VIEW for this repo: an extension may register several views (ext-apps
 // contributes Apps + Dependencies), so the view id uniquely selects among them (activation.key is the repo
 // name and collides across views).
 const activations = computed(() =>
@@ -25,7 +25,7 @@ const activations = computed(() =>
     ),
 );
 
-// The selected extension, falling back to the first — so a directory with one panel needs no interaction, and a
+// The selected extension, falling back to the first, so a directory with one panel needs no interaction, and a
 // selection that vanishes (its marker removed) lands on whatever remains.
 const activeId = ref<string>();
 const active = computed(() => activations.value.find(({ extension }) => extension.id === activeId.value) ?? activations.value[0]);

@@ -291,7 +291,7 @@ export const chipMessageNotice = (state: ChipMessageState): string | undefined =
     if (state.boxIsYours && (state.message !== undefined || running)) {
         return `Keeping your message — clear the box to use ${state.label}'s`;
     }
-    /* The wait, and ONLY the wait. This used to append the walk's newest step ("— Asking claude-haiku-4-5-…
+    /* The wait, and ONLY the wait. This used to append the walk's newest step ("- Asking claude-haiku-4-5-…
      * 2s"), which put the very same words in two places a centimetre apart: here, and as the last row of the
      * report list directly underneath. One of the two had to go, and it is this one, the row below has the
      * status glyph, the aligned clock and the room to say more, while this line has a box's width to share with

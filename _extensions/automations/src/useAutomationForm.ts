@@ -230,10 +230,10 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             return undefined;
         }
         if (originList.value.length === 0) {
-            return `Add at least one site — a Front Desk with no allowed sites admits nobody.`;
+            return `Add at least one site: a Front Desk with no allowed sites admits nobody.`;
         }
         const bad = originList.value.find((origin) => !/^https?:\/\/[^/]+$/.test(origin));
-        return bad === undefined ? undefined : `"${bad}" isn't an origin — use scheme + host only, e.g. https://example.com`;
+        return bad === undefined ? undefined : `"${bad}" isn't an origin, use scheme + host only, e.g. https://example.com`;
     });
 
     const valid = computed(

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 
 /* How a commit redraws the review without re-reading the workspace. What is being pinned here is that the
- * commit's one-repo answer can stand in for a whole scan — it replaces exactly its own repo, drops it on the
+ * commit's one-repo answer can stand in for a whole scan: it replaces exactly its own repo, drops it on the
  * daemon's say-so, and leaves every other repo's rows and attribution untouched. */
 
 const repo = (name: string, unstaged: RepoChanges["unstaged"] = []): RepoChanges => ({
@@ -35,7 +35,7 @@ describe(`folding a commit's answer into the review`, () => {
     });
 
     it(`drops the repo when the commit reports nothing left, and leaves the others alone`, () => {
-        // Absent `changes` is the daemon's own inclusion rule — the same `undefined` the workspace scan filters
+        // Absent `changes` is the daemon's own inclusion rule: the same `undefined` the workspace scan filters
         // on. The panel drops the group on this answer rather than waiting for a scan to stop listing it.
         const before = held([repo(`root`), repo(`intentic`, [{ path: `a.ts`, status: `modified` }])]);
         const after = spliceRepoChanges(before, `intentic`, committed());
@@ -43,7 +43,7 @@ describe(`folding a commit's answer into the review`, () => {
     });
 
     it(`appends a repo the cache was not holding, rather than swallowing it`, () => {
-        // A commit can leave work behind in a repo the last scan had nothing to say about — an untracked file
+        // A commit can leave work behind in a repo the last scan had nothing to say about: an untracked file
         // `commit -a` never sweeps, or a branch that only now has something to push. Dropping that answer would
         // hide real work until some later scan happened to surface it.
         const after = spliceRepoChanges(held([repo(`root`)]), `intentic`, committed(repo(`intentic`, [{ path: `notes.md`, status: `added` }])));
@@ -62,7 +62,7 @@ describe(`folding a commit's answer into the review`, () => {
     });
 
     it(`leaves originAgents absent when neither side names anyone`, () => {
-        // The response shape says the map covers the ids the review names "and only those" — an empty object
+        // The response shape says the map covers the ids the review names "and only those": an empty object
         // would be a third state the panel would have to know not to read anything into.
         expect(spliceRepoChanges(held([repo(`intentic`)]), `intentic`, committed(repo(`intentic`)))).not.toHaveProperty(`originAgents`);
     });

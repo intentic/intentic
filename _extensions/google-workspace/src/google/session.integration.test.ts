@@ -7,7 +7,7 @@ import { runtimeDir } from "./paths.js";
 import { openSession } from "./session.js";
 
 /* THE ACCESS-TOKEN CACHE, on a real filesystem. `gw` is a fresh process per command and an agent runs a lot of
- * them, so the question this suite answers is whether the second command pays for a token round trip — and
+ * them, so the question this suite answers is whether the second command pays for a token round trip, and
  * whether a rotated credential can ever be answered from the cache of the one it replaced.
  *
  * Only `fetch` is stubbed. The cache is a file, its mode is a file's mode, and the whole point of the
@@ -57,7 +57,7 @@ describe("openSession", () => {
     });
 
     /* Rotation with no invalidation step. A cache keyed by account name would hand back a token minted from
-     * the refresh token the owner has just replaced — which looks exactly like the rotation not working. */
+     * the refresh token the owner has just replaced, which looks exactly like the rotation not working. */
     it("ignores the cached token once the credential behind it has changed", async () => {
         await openSession(connection("refresh-1"), env, root, clock).token();
         fetchMock.mockClear();

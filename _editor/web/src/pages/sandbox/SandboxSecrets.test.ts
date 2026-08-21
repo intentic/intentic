@@ -3,7 +3,7 @@
 // jsdom because the whole complaint about this tab was a fact about the rendered page: nineteen credentials one
 // under another, each with the same furniture, burying the three rows that were actually work. What is pinned
 // here is that the page stays short as the account list grows, that what is owed rises to the top of it, and
-// that the accounts are still reachable — folded is not gone, and a filter must reach inside the fold or the
+// that the accounts are still reachable: folded is not gone, and a filter must reach inside the fold or the
 // search box would quietly lie about what this sandbox holds.
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
@@ -34,7 +34,7 @@ vi.mock(`../../composables/extensions/useCapabilities`, () => ({
 const extensions = ref<ExtensionSummary[]>([]);
 vi.mock(`../../composables/extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: extensions }) }));
 
-// Reached only by the CI push, which nothing here presses — mocked because the client has no environment here.
+// Reached only by the CI push, which nothing here presses: mocked because the client has no environment here.
 vi.mock(`../../composables/sandbox/sandboxClient`, () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
 
 // The two "Manage …" buttons navigate; no route is mounted here, and RouterLink is stubbed below.
@@ -94,7 +94,7 @@ const type = async (field: HTMLInputElement, value: string): Promise<void> => {
     field.dispatchEvent(new Event(`input`));
     await nextTick();
 };
-// A row's own disclosure — the button holding the key, which is the only aria-expanded on the page.
+// A row's own disclosure: the button holding the key, which is the only aria-expanded on the page.
 const disclosures = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll<HTMLButtonElement>(`button[aria-expanded]`)];
 
 beforeEach(() => {

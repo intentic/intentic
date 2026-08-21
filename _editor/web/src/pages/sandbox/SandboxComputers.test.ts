@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // jsdom because the subject is WHAT A ROW SAYS. The tab drew a name, a reach and a badge, so a Windows laptop and
-// a Linux desktop with no sync agent on either rendered as two identical lines — and the pair of rows in the
+// a Linux desktop with no sync agent on either rendered as two identical lines, and the pair of rows in the
 // report that prompted this were the same machine twice over. What is worth pinning is therefore not the
 // derivation (computerFacts.test.ts has that) but that the row actually PUTS it on screen, next to the name, for a
 // computer that has nothing else to show.
@@ -11,7 +11,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
-// query (the UI barrel's useDevice). jsdom plus these two is the whole of it — see daemonRestart.test.ts, which
+// query (the UI barrel's useDevice). jsdom plus these two is the whole of it: see daemonRestart.test.ts, which
 // cuts the same edge.
 
 const computers = ref<Computer[]>([]);
@@ -19,7 +19,7 @@ const computers = ref<Computer[]>([]);
 // stays false for them; the pair at the bottom drives it to pin what the tab may say before it has.
 const computersLoading = ref(false);
 vi.mock(`../../composables/sandbox/useComputers`, async () => {
-    // reportStale is a plain function of the row and the clock — real, so a row's staleness line is decided the
+    // reportStale is a plain function of the row and the clock: real, so a row's staleness line is decided the
     // way it is in the app rather than by this file's idea of it.
     const real = await import(`../../composables/sandbox/useComputers`);
     return {
@@ -68,8 +68,8 @@ const mount = (rows: Computer[]): HTMLElement => {
     return el;
 };
 
-/* UNFOLDING A ROW. Both a computer and a sandbox are drawn as one line with a disclosure over the whole of it —
- * the name IS the button — so a test opens one the way a reader does: by pressing the line that says its name. */
+/* UNFOLDING A ROW. Both a computer and a sandbox are drawn as one line with a disclosure over the whole of it:
+ * the name IS the button, so a test opens one the way a reader does: by pressing the line that says its name. */
 const disclosures = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll<HTMLButtonElement>(`button[aria-expanded]`)];
 const openRow = async (el: HTMLElement, name: string): Promise<void> => {
     disclosures(el)
@@ -87,7 +87,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-/* The row from the report: a connected computer, reachable, with no sync agent on it — so no report, and before
+/* The row from the report: a connected computer, reachable, with no sync agent on it, so no report, and before
  * this nothing but its name. Everything asserted here was already known to the daemon while the row said none of
  * it. */
 it(`says what a computer is when it has no report to show`, () => {
@@ -114,14 +114,14 @@ it(`says what a computer is when it has no report to show`, () => {
     expect(text).toContain(`Windows 11 Pro`);
     expect(text).toContain(`x64`);
     expect(text).toContain(`PowerShell 7`);
-    // The door it is reachable through, and the version of the agent answering on it — one chip, two spans.
+    // The door it is reachable through, and the version of the agent answering on it: one chip, two spans.
     expect(text).toContain(`connected computer`);
     expect(text).toContain(`0.5.1`);
     // The gap it had before is still said, because the OS does not answer it: this machine still has no agent.
     expect(text).toContain(`no sync agent`);
 });
 
-// A machine that never described itself still has to answer "Windows or Linux?" — the card it was added with says
+// A machine that never described itself still has to answer "Windows or Linux?": the card it was added with says
 // so, and that is true from the moment it is added and while it is asleep.
 it(`falls back to the platform, and ages a computer that is not here`, () => {
     const el = mount([
@@ -169,8 +169,8 @@ it(`puts the machines worth reading first`, () => {
 });
 
 /* The image is what Update changes, and one sandbox on a machine running something older than its neighbour was
- * invisible on a list that named only the container. It is now BEHIND the fold — the longest string on the row
- * and the least often read — so this pins that opening the row still reaches it. */
+ * invisible on a list that named only the container. It is now BEHIND the fold: the longest string on the row
+ * and the least often read, so this pins that opening the row still reaches it. */
 it(`names the image each sandbox on the machine is running, once the row is open`, async () => {
     const el = mount([
         {
@@ -196,13 +196,13 @@ it(`names the image each sandbox on the machine is running, once the row is open
 });
 
 /* THE VERB ROW, WHICH IS NOW ONE ROW FOR TWO APPS. This tab and the desktop app's manager window drive the same
- * containers on the same machine and had grown different sets of buttons — this one had Restart and no log tail,
+ * containers on the same machine and had grown different sets of buttons: this one had Restart and no log tail,
  * that one a log tail and no Restart, and neither offered the rollback both of their backends could already do.
  * The buttons come from the kit now (<SandboxVerbs>), so what is asserted here is what a reader of EITHER app
  * gets: pinned from this side because it is the side with a test runner, and it is the same component.
  *
  * A manageable row is a machine this sandbox can reach right now (`hostId`, `online`) whose group has a
- * container — the three conditions `manageable` names. */
+ * container: the three conditions `manageable` names. */
 const managed = (running: boolean): Computer => ({
     key: `laptop`,
     label: `laptop`,
@@ -222,19 +222,19 @@ const managed = (running: boolean): Computer => ({
     },
 });
 
-/* Every control a row offers, by its label — anchors as well as buttons, because a control that GOES somewhere
+/* Every control a row offers, by its label: anchors as well as buttons, because a control that GOES somewhere
  * is a link: the fix for a blocked machine is the capability card's own address, so it is hoverable, copyable
  * and Ctrl/⌘-clickable rather than a button that moves this tab. */
 const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button, a`)].map((control) => control.textContent?.trim() ?? ``);
 
-// Every switch granted — the state a row reaches once its computer is connected AND permitted, which is what the
+// Every switch granted: the state a row reaches once its computer is connected AND permitted, which is what the
 // verb tests below are about. Without it the row correctly says which grant is missing instead.
 const granted = (): void => {
     capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } }];
 };
 
 /* ONE BUTTON ON THE ROW, AND THE REST BEHIND A MENU. All six used to sit on the line: four sandboxes on one
- * machine meant twenty-four controls in one weight, and the row's own NAME — the thing anybody scans for — was
+ * machine meant twenty-four controls in one weight, and the row's own NAME (the thing anybody scans for) was
  * the quietest object on the line it titled. The power verb is what people reach for, so it is what stays. */
 it(`puts one verb on the row and everything else behind a menu`, () => {
     granted();
@@ -260,7 +260,7 @@ it(`offers Start, and no Stop, on a sandbox that is not running`, () => {
 
 /* WHAT IS IN THAT MENU, pinned as vocabulary rather than through PrimeVue's teleported overlay: the model is
  * what both apps read, and asserting it here is what stops the desktop window and this tab drifting into two
- * different sets again — the failure the shared kit exists to prevent.
+ * different sets again: the failure the shared kit exists to prevent.
  *
  * Restart is absent on a stopped sandbox for the same reason Stop is; removal is separate from the rest because
  * it is the one thing here that nothing undoes, and the row draws it under a divider. */
@@ -272,7 +272,7 @@ it(`keeps the menu's vocabulary the same for both apps`, () => {
     expect(DESTRUCTIVE_VERB).toBe(`remove`);
 });
 
-// A fully connected and permitted machine says nothing at all about connecting or permissions — the whole point
+// A fully connected and permitted machine says nothing at all about connecting or permissions: the whole point
 // of the three lines below is that they are absent once there is nothing in the way.
 it(`says nothing about connecting a computer that is already managing its sandboxes`, () => {
     granted();
@@ -283,7 +283,7 @@ it(`says nothing about connecting a computer that is already managing its sandbo
 });
 
 /* THE ROW THE PARITY COMPLAINT WAS ABOUT. A machine paired by the desktop app is enrolled for desktop sync
- * alone, and that door never reports containers — so this tab drew folders and ports and an empty sandbox list
+ * alone, and that door never reports containers, so this tab drew folders and ports and an empty sandbox list
  * with no buttons on it, beside a desktop window managing those very containers. It said none of that, and
  * offered nothing. Now it says both, and the button goes to the card that closes the gap. */
 const syncOnly = (): Computer => ({
@@ -295,7 +295,7 @@ const syncOnly = (): Computer => ({
         hostname: `laptop`,
         os: `win32`,
         agents: { sync: `1.183.0` },
-        // Empty because the sync agent never fills it — the fact this whole message exists to explain.
+        // Empty because the sync agent never fills it: the fact this whole message exists to explain.
         sandboxes: [],
         pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `C:\\Users\\ada\\work`, mutagenStatus: `watching` }],
         ports: [],
@@ -309,7 +309,7 @@ it(`explains why a sync-only computer has no sandbox buttons, and offers the fix
     const text = el.textContent ?? ``;
     expect(text).toContain(`Desktop sync carries folders and ports, never containers`);
     expect(labels(el)).toContain(`Connect this computer`);
-    // No verbs, because there is no container to aim one at — the state being explained, not worked around.
+    // No verbs, because there is no container to aim one at: the state being explained, not worked around.
     expect(labels(el)).not.toContain(`Restart`);
 });
 
@@ -322,7 +322,7 @@ it(`explains the gap without a button when there is no card to connect the machi
 });
 
 /* CONNECTED, AND STILL REFUSED. "Run commands" is enough to LIST a machine's containers, so the buttons appeared
- * on a row where every one of them would be turned down by the machine — a no the page could see coming and
+ * on a row where every one of them would be turned down by the machine: a no the page could see coming and
  * said nothing about until it had already been clicked. */
 it(`names the switch a connected computer is missing before anything is clicked`, () => {
     capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on` } }];
@@ -344,7 +344,7 @@ it(`names the removal switch on a machine that may do everything else`, () => {
  *
  * The view drew every fact about every sandbox at once: one laptop with four of them filled the screen, and
  * three machines was a page nobody could scan. Folding is only an improvement if the closed line still answers
- * "is this one fine", so these pin both halves — what disappears, and what must not. */
+ * "is this one fine", so these pin both halves: what disappears, and what must not. */
 const busyMachine = (): Computer => ({
     key: `rog`,
     label: `radarsu-rog`,
@@ -396,7 +396,7 @@ it(`folds a sandbox to a line that still says what is under it`, () => {
     expect(text).not.toContain(`img:a`);
 });
 
-/* WHICH ROWS OPEN THEMSELVES: the ones somebody has to act on. Not merely stopped — plenty of sandboxes are
+/* WHICH ROWS OPEN THEMSELVES: the ones somebody has to act on. Not merely stopped, plenty of sandboxes are
  * stopped on purpose, and unfolding every one of them hands back the wall this is folding away. */
 it(`opens the sandbox that wants something and leaves the rest folded`, () => {
     granted();
@@ -420,7 +420,7 @@ it(`folds a computer to a line that counts what is under it`, async () => {
 });
 
 /* THE FILTER. Twelve rows and no search meant looking for a port number was reading. It narrows MACHINES and
- * unfolds what matched rather than hiding rows inside a machine — a contended port is explained by naming the
+ * unfolds what matched rather than hiding rows inside a machine: a contended port is explained by naming the
  * sandbox that took it, and filtering that sandbox away would cut the link the explanation depends on. */
 it(`finds a machine by a port number and opens what matched`, async () => {
     const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
@@ -448,11 +448,11 @@ it(`says when a filter matched nothing`, async () => {
 });
 
 /* THE SIGNAL THIS ROW WAS MISSING. A machine ran an agent five days behind a fix for the very bug it was hitting,
- * and this row said "desktop sync 0.1.0" throughout — true, and useless without the version it should have been.
+ * and this row said "desktop sync 0.1.0" throughout: true, and useless without the version it should have been.
  * Both halves are asserted: the fact, inside the door chip it is about, and the one command that resolves it.
  *
  * The version and the release that supersedes it are separate spans in that chip, so they are asserted separately
- * rather than as one string — what matters is that both reach the reader, not the whitespace between them. */
+ * rather than as one string: what matters is that both reach the reader, not the whitespace between them. */
 const behind = (): Computer => ({
     key: `laptop`,
     label: `laptop`,
@@ -478,7 +478,7 @@ it(`says when a computer's sync agent is behind, and what to run`, () => {
     expect(text).toContain(`intentic-sync upgrade`);
 });
 
-// A current agent gets neither — a row that nags at a machine with nothing to do is how people learn to read past
+// A current agent gets neither: a row that nags at a machine with nothing to do is how people learn to read past
 // the line entirely.
 it(`says nothing about updating a computer that is already current`, () => {
     const row = behind();
@@ -500,7 +500,7 @@ it(`makes no claim when this sandbox doesn't know the latest release`, () => {
 });
 
 /* THE PAIRING INVITATION IS A CLAIM ABOUT THE READER, and an unread list is not grounds for it. The empty state
- * says "no computer is paired with this sandbox yet" and then tells them how to pair one — so the person it
+ * says "no computer is paired with this sandbox yet" and then tells them how to pair one, so the person it
  * reached first was the person who had already done it, on every cold load, until the list arrived and replaced
  * it with their laptop. An empty `computers` means that only once the read is done. */
 it(`does not offer to pair a first computer while the list is still being read`, () => {

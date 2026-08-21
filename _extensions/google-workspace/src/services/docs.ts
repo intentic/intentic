@@ -107,6 +107,6 @@ const replace: Command = {
 
 export const docsGroup: CommandGroup = {
     name: "docs",
-    summary: "Docs — read, create, append, find-and-replace",
+    summary: "Docs, read, create, append, find-and-replace",
     commands: [read, create, append, replace],
 };

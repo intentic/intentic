@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 //
 // jsdom because the subject is WHICH ROWS ARE DRAWN. The list itself is the daemon's, sorted and filtered
-// nowhere else; what this pins is the narrowing the card's chip asks for — a chip is a claim about one agent
+// nowhere else; what this pins is the narrowing the card's chip asks for: a chip is a claim about one agent
 // ("this one started five"), and following it into every child the sandbox has ever spawned makes the reader
 // redo the filtering the click already expressed.
 //
 // The second case is the one the lifetime count created. A card counts children for the agent's whole life,
-// while this list holds a finished child for minutes — so a chip followed an hour later lands on an empty rail,
+// while this list holds a finished child for minutes, so a chip followed an hour later lands on an empty rail,
 // and "No agents started" would flatly contradict the number that was just clicked.
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
@@ -26,10 +26,10 @@ const child = (over: Partial<SubagentSession>): SubagentSession => ({
 });
 
 const sessions = ref<SubagentSession[]>([]);
-// Which conversations the page pointed the docked chat at — the whole of what "Parent" is supposed to do.
+// Which conversations the page pointed the docked chat at: the whole of what "Parent" is supposed to do.
 const opened: string[] = [];
 
-// The roster and the fleet, which the page reads through their shared caches — stood in for here so the test
+// The roster and the fleet, which the page reads through their shared caches: stood in for here so the test
 // drives the LIST, not the network. `subagentLive` stays real: the lanes' split is the daemon's own rule.
 vi.mock("../composables/subagents/subagentsQuery", async (importOriginal) => ({
     ...(await importOriginal<typeof import("../composables/subagents/subagentsQuery")>()),
@@ -41,7 +41,7 @@ vi.mock("../composables/agents/useAgents", () => ({
         open: (agent: { id: string }) => void opened.push(agent.id),
     }),
 }));
-// The selected child's transcript — a network read with nothing to say about which rows the rail draws. Only
+// The selected child's transcript: a network read with nothing to say about which rows the rail draws. Only
 // useQuery is stood in for: the app's own query client is built from the rest of this module at import time.
 vi.mock("@tanstack/vue-query", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@tanstack/vue-query")>()),
@@ -51,13 +51,13 @@ vi.mock("@tanstack/vue-query", async (importOriginal) => ({
 const { default: Subagents } = await import("./Subagents.vue");
 
 // A router holding just this route: the app's own carries the guards that send an unauthenticated visitor to
-// setup, and a redirected test reads as an unfiltered list — which is precisely the bug it would be pinning.
+// setup, and a redirected test reads as an unfiltered list, which is precisely the bug it would be pinning.
 const routerFor = async (query: Record<string, string>): Promise<Router> => {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
             { path: `/subagents/:id?`, name: `subagents`, component: defineComponent({ render: () => h(`div`) }) },
-            // Where "Parent" falls back to when the roster has never heard of the parent — on a desktop that
+            // Where "Parent" falls back to when the roster has never heard of the parent: on a desktop that
             // knows it, the press points the dock instead and this page stays put.
             { path: `/agents/:id?`, name: `agents`, component: defineComponent({ render: () => h(`div`) }) },
         ],
@@ -124,7 +124,7 @@ it(`lists every child when nothing narrowed it`, async () => {
 });
 
 /* "Parent" asks for the CONVERSATION this child came out of. A plain press used to leave for /agents/:id, which
- * on a desktop is the review page — so it traded the transcript you were reading for a diff you hadn't asked
+ * on a desktop is the review page, so it traded the transcript you were reading for a diff you hadn't asked
  * for. The dock is where a conversation lives there, so that is what it points, and this page stays open.
  *
  * It is still an ANCHOR carrying that address, which is the half a <button> could never offer: hover it and the

@@ -5,8 +5,8 @@ import { commands } from "../../composables/commands/useCommands";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../composables/commands/keybindings";
 import { effectiveKeybinding, keymapOverrides, useKeymap } from "../../composables/commands/useKeymap";
 
-/* Keybindings: the user-facing face of the keymap (useKeymap). Lists every registered command — builtins and
- * extension-contributed alike, since they share one registry — with its EFFECTIVE chord, and lets the user record a
+/* Keybindings: the user-facing face of the keymap (useKeymap). Lists every registered command (builtins and
+ * extension-contributed alike, since they share one registry) with its EFFECTIVE chord, and lets the user record a
  * new shortcut, revert to the command's default, or unbind it. A remap persists to the keymap store and takes
  * effect live everywhere (dispatcher + palette). Recording captures one keystroke in the capture phase with
  * stopPropagation, so the shell's global dispatcher never fires the old shortcut mid-capture. */
@@ -64,7 +64,7 @@ const chordOwners = computed<Record<string, readonly string[]>>(() => {
 });
 const conflicting = (chord: string | undefined): boolean => chord !== undefined && (chordOwners.value[chord]?.length ?? 0) > 1;
 
-// Recording is a two-way pair — the capture handler ends it, and ending it detaches the handler — so the
+// Recording is a two-way pair: the capture handler ends it, and ending it detaches the handler, so the
 // listener rides in a variable both can name and neither has to be declared before the other.
 let capture: ((event: KeyboardEvent) => void) | undefined;
 
@@ -186,7 +186,7 @@ onUnmounted(stopRecording);
                 </template>
             </Row>
 
-            <p v-if="rows.length === 0" class="px-4 py-6 text-center text-xs text-subtle">No commands match “{{ query }}”.</p>
+            <p v-if="rows.length === 0" class="px-4 py-6 text-center text-xs text-subtle">No commands match "{{ query }}".</p>
         </RowGroup>
     </div>
 </template>

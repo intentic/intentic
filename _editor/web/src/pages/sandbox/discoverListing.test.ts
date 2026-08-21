@@ -86,12 +86,12 @@ describe(`what a registry row becomes against this sandbox`, () => {
 });
 
 describe(`what last night's scan is allowed to claim`, () => {
-    test(`no checks at all says nothing — most registries run no scanner`, () => {
+    test(`no checks at all says nothing: most registries run no scanner`, () => {
         expect(checksProblem(entry())).toBeUndefined();
         expect(checksOk(entry())).toBe(false);
     });
 
-    test(`a bundle-less extension loads fine — "none" is a daemon-only pack, not a fault`, () => {
+    test(`a bundle-less extension loads fine: "none" is a daemon-only pack, not a fault`, () => {
         expect(checksOk(entry({ checks: { sha: SHA, manifest: `ok`, bundle: `none` } }))).toBe(true);
     });
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 /* Both halves of "where I was in the workspace" have the same contract: whatever is on disk, what comes back is
- * something the view can actually render — folders that are just paths, tabs that each name a real surface once,
+ * something the view can actually render: folders that are just paths, tabs that each name a real surface once,
  * and a focus that names one of them. Nothing here is checked against the filesystem (see workspaceSnapshot.ts);
  * a folder that has since been deleted restores as a path that matches no row, which renders as nothing. */
 
@@ -163,7 +163,7 @@ describe(`the editor's open tabs`, () => {
         expect(readTabStrip(`sb1`)?.tabs).toHaveLength(1);
     });
 
-    it(`degrades an unparseable or empty strip to none — a clean workspace, not a broken one`, () => {
+    it(`degrades an unparseable or empty strip to none: a clean workspace, not a broken one`, () => {
         session.set(TABS_KEY, `not json`);
         expect(readTabStrip(`sb1`)).toBeUndefined();
 

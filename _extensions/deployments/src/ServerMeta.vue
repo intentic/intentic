@@ -5,8 +5,8 @@ import { computed } from "vue";
 import { gaugeTone, SERVER_TONE } from "./stateVisual";
 
 /* What one host says about itself: its state, its three gauges, and the way through to Komodo's own page for
- * it. One component because it appears twice — above the rows of a host that carries something, and as the
- * whole row of a host that carries nothing — and a host has to read identically in both.
+ * it. One component because it appears twice: above the rows of a host that carries something, and as the
+ * whole row of a host that carries nothing, and a host has to read identically in both.
  *
  * The gauges ride ListServers' own `info.stats`, so they cost nothing extra, and they are here rather than
  * hidden behind a click because a full disk explains a large share of deployment failures and is invisible

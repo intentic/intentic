@@ -1,8 +1,8 @@
 <!-- The Documentation area. One component serves both surfaces: the rail's workspace-wide tile (which picks a
      repo) and the Workspace tree's per-repo panel (which arrives with `repo` already bound by the host).
 
-     The reading experience is the point, so the layout gives the page the room and keeps the machinery — runs,
-     staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
+     The reading experience is the point, so the layout gives the page the room and keeps the machinery: runs,
+     staleness counts, publishing: to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
 import {
@@ -39,23 +39,23 @@ const { repo: pinned } = defineProps<{ repo?: string }>();
 const api = host();
 
 const repos = computed(() => api.workspace.repos().map((facts) => facts.repo));
-// Repo names are paths, so they read as machine names rather than prose — `mono` is what the kit's row uses to say so.
+// Repo names are paths, so they read as machine names rather than prose: `mono` is what the kit's row uses to say so.
 const repoOptions = computed<PickerOption[]>(() => repos.value.map((name) => ({ value: name, label: name, mono: true })));
 
 /* WHICH DOCUMENT IS OPEN LIVES IN THE URL, so a page can be linked to.
  *
  * Derived from the query, never mirrored into a ref: a ref would need one watcher to follow the URL and another
- * to write it, and those two fight — the classic symptom being Back moving the URL while the view stays put. With
+ * to write it, and those two fight: the classic symptom being Back moving the URL while the view stays put. With
  * the URL as the only source, Back and forward work for nothing, and a reload lands where you were.
  *
  * `repo` is here too (a link to another repo's docs is as useful as one to a page), but the published/draft toggle
  * is NOT: a draft is one person's unreviewed work in progress, so a link carrying "show me your draft" would
  * either mislead the recipient or show them nothing. */
 const query = computed(() => api.route.query());
-/* What this browser last opened, honoured only while the workspace still has it — see repoChoice.ts for why the
+/* What this browser last opened, honoured only while the workspace still has it: see repoChoice.ts for why the
  * area remembers at all, and why the fallback prefers a repository that has something to read. Not the mirror the
  * paragraph above warns about: it is written FROM the URL and never back to it, so nothing here can fight the URL
- * over what is open — it only answers when the URL says nothing.
+ * over what is open: it only answers when the URL says nothing.
  *
  * A ref rather than a read at mount because the rail's tile links to this same view without a query: clicking it
  * while already here empties `repo` from the URL without remounting anything, and the answer then has to be the
@@ -66,7 +66,7 @@ const label = computed(() => (repo.value === `` ? `the workspace root` : repo.va
 // undefined ⇒ the repository's own overview page, which is where a reader should land.
 const page = computed(() => query.value[`doc`]);
 
-/* A REPOSITORY IN THE URL IS A CHOICE — the picker below puts it there, and so does a link someone followed to
+/* A REPOSITORY IN THE URL IS A CHOICE: the picker below puts it there, and so does a link someone followed to
  * another repo's documents. A fallback is not a choice and is deliberately not remembered: writing one back would
  * freeze whichever repo happened to be first before the presence map had answered. Pinned means the host bound
  * the repo for a directory panel, which says nothing about where the rail's tile should open. */
@@ -81,8 +81,8 @@ watch(
     { immediate: true },
 );
 
-/* Presence is a sixty-second poll, so when it is what decides the opening repository — no link, nothing
- * remembered — ask for a fresh read instead of opening on a minute-old answer and then moving the page under the
+/* Presence is a sixty-second poll, so when it is what decides the opening repository: no link, nothing
+ * remembered: ask for a fresh read instead of opening on a minute-old answer and then moving the page under the
  * reader when the poll lands. */
 if (pinned === undefined && remembered.value === undefined) {
     refreshDocumentPresence();
@@ -106,7 +106,7 @@ const outline = useLoadingReveal(isLoading, repo);
 const { rows, start, advance, stop } = useRuns(repo);
 const { preflight, publish, discard } = usePublish();
 
-/* A fresh draft is what the rail badged, so opening the area should show it — otherwise the user is told something
+/* A fresh draft is what the rail badged, so opening the area should show it: otherwise the user is told something
  * is waiting and then shown the old version of it. Switching happens once per repo, not on every change of
  * `hasStaged`, so a publish (which clears the draft) does not fight the user back to a tree that no longer exists. */
 const offered = ref<string | undefined>(undefined);
@@ -121,7 +121,7 @@ watch(
     { immediate: true },
 );
 
-// Reviewing IS the acknowledgement — the badge clears when the draft has actually been looked at, not when the
+// Reviewing IS the acknowledgement: the badge clears when the draft has actually been looked at, not when the
 // area was opened for some other repo.
 watch([source, repo, hasStaged], ([which, at, staged]) => {
     if (which === `staged` && staged) {
@@ -135,7 +135,7 @@ const index = computed(() => set.value?.index);
 const entries = computed(() => index.value?.entries ?? []);
 const activeRun = computed(() => rows.value.find((row) => row.running));
 
-// Advancing a run is idempotent and derived, so it is safe to attempt whenever the fleet or the draft moves — see
+// Advancing a run is idempotent and derived, so it is safe to attempt whenever the fleet or the draft moves: see
 // useRuns. This is what carries a run from its map phase into the fan-out without any stored phase to corrupt.
 watch(
     () => [rows.value.map((row) => `${row.manifest.runId}:${row.mapDone}:${row.done}`).join(`|`)],
@@ -213,7 +213,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
                 <Icon name="spinner" spin class="shrink-0 text-link" />
                 <span class="text-content">
                     {{ activeRun.mapDone ? `Documenting packages` : `Reading the repository and drawing its map` }}
-                    — {{ activeRun.done }}<span v-if="activeRun.total !== undefined"> of {{ activeRun.total }}</span> written
+                   : {{ activeRun.done }}<span v-if="activeRun.total !== undefined"> of {{ activeRun.total }}</span> written
                 </span>
                 <div class="ml-auto flex items-center gap-1">
                     <Button
@@ -243,7 +243,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
         </template>
 
         <!-- Coverage, filtering and the grouping all live inside <DocsNav>; this view only says which page is
-             open. The two scrollers — a 54-entry contents list and a long document — are <SplitView>'s doing. -->
+             open. The two scrollers (a 54-entry contents list and a long document) are <SplitView>'s doing. -->
         <template #rail>
             <DocsNav :components="set?.repoDoc?.components ?? []" :index="index" :page="page" @open="openPage" />
         </template>
@@ -275,7 +275,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
                 <div :class="ui.emptyState()">
                     <p class="text-sm">{{ label }} has no documentation yet.</p>
                     <p class="mt-1 text-xs text-muted">
-                        One agent will map the repository — its components, its vocabulary, what to read first — and then a further agent documents
+                        One agent will map the repository: its components, its vocabulary, what to read first, and then a further agent documents
                         each package. You review the result before anything is committed.
                     </p>
                     <Button size="small" label="Generate documentation" class="mt-3" @click="generateOpen = true" />
@@ -284,7 +284,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
 
             <!-- A FRAMED BODY, because this screen is an index and a body: the contents list beside it is chrome
                  and never boxes itself, so the document is what has to say "this is the thing you are reading".
-                 The frame belongs to the SURFACE and is written here rather than inside <DocPage> — the same page
+                 The frame belongs to the SURFACE and is written here rather than inside <DocPage>: the same page
                  in a Workspace tab is the tab's whole content and wants no box at all. The Panel owns the scroll
                  area, independent of the contents menu's own.
 
@@ -330,8 +330,8 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
                     <!-- Not "under docs/architecture/" any more: a package page is written onto the package as its
                          README, and only the map lands in the docs directory. Naming one destination for both
                          would understate what a publish touches. -->
-                    {{ publishState.tails.length }} file{{ publishState.tails.length === 1 ? `` : `s` }} will be written — each package's
-                    <span class="font-mono">README.md</span> and the map under <span class="font-mono">docs/architecture/</span> — and committed<span
+                    {{ publishState.tails.length }} file{{ publishState.tails.length === 1 ? `` : `s` }} will be written, each package's
+                    <span class="font-mono">README.md</span> and the map under <span class="font-mono">docs/architecture/</span>, and committed<span
                         v-if="publishState.branch !== ``"
                     >
                         on {{ publishState.branch }}</span

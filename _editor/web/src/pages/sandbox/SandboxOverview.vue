@@ -13,21 +13,21 @@ import SandboxBehindCard from "./SandboxBehindCard.vue";
 import SandboxManifestCard from "./SandboxManifestCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
 
-/* The Sandbox hub's "Overview" tab — WHAT THIS BOX IS. Sandbox identity (the name, inline-editable by the
+/* The Sandbox hub's "Overview" tab: WHAT THIS BOX IS. Sandbox identity (the name, inline-editable by the
  * owner, and the logo, which is a control in its own right), the self-reported image + version + URL, online
  * status, and the non-blocking update prompt. The platform stores only the binding; the image/version/URL are
  * relayed live via the daemon's /info.
  *
  * IT DOES NOT INDEX THE OTHER TABS. It used to end in an "at a glance" block: five rows deep-linking to Agent,
  * Secrets, Capabilities, Status and Access, each with a status chip. Every one of those was a second way to say
- * something already on screen — four of the five pointed at tabs in the strip directly above them (and named
+ * something already on screen: four of the five pointed at tabs in the strip directly above them (and named
  * them differently: "Running now" for Status), the Status tab already wore the same running count as a pill
  * badge, presence is in the rail, and missing secrets badge the sandbox chip. The fifth left the hub entirely,
- * for a page the rail's "+" opens. What was left on a healthy sandbox read "Ready · Ready · 4 · 0 · —": five
+ * for a page the rail's "+" opens. What was left on a healthy sandbox read "Ready · Ready · 4 · 0 · -": five
  * rows and a chevron
  * each to report that nothing needs doing, which is the exact pattern this app rejects everywhere else (the
  * rail's VPN indicator, the Extensions tab's silent nominal case). The one condition it carried that had no
- * other home — nothing connected to run a turn with — is an attention item now (sandboxAttention), so it rides
+ * other home (nothing connected to run a turn with) is an attention item now (sandboxAttention), so it rides
  * the chip badge with the other four instead of a row that says "Ready" for the rest of the sandbox's life. */
 
 const sandbox = useSandbox();
@@ -39,7 +39,7 @@ const outline = useSandboxOutline(infoLoading);
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
-// A platform-hosted (starter) sandbox — what the ladder card below keys on: the box is deliberately small,
+// A platform-hosted (starter) sandbox, what the ladder card below keys on: the box is deliberately small,
 // so the honest next rung is a bigger machine that costs nothing, and it deserves saying where the owner
 // already is rather than only on a setup page they finished.
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
@@ -49,7 +49,7 @@ const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
 // the text line they operate on, so entering edit mode cannot change the card's height.
 //
 // THE LOGO IS NOT PART OF THIS FORM, and that is the correction. It used to be reachable only from inside
-// name-edit mode — press Edit, then discover that the decorative-looking tile had become a file picker — so the
+// name-edit mode: press Edit, then discover that the decorative-looking tile had become a file picker, so the
 // one question a fresh sandbox actually prompts ("that's a letter, where do I put my logo?") had its answer
 // hidden behind a control that says "rename". A logo is one click and one file, with nothing to validate and
 // nothing to type, so it needs no commit step of its own: the tile is live for owners at all times, picking
@@ -64,7 +64,7 @@ const error = ref<string | undefined>(undefined);
 
 // The menu opens only over a tile that already HAS a logo, because only then are there two answers (replace,
 // remove) to choose between. An empty tile has exactly one thing to do, and a menu with a single row is a click
-// charged for nothing — so it opens the file dialog directly.
+// charged for nothing, so it opens the file dialog directly.
 // Anchored rather than a PrimeVue Popover, so every menu in the app measures its room the one way.
 const logoTrigger = ref<HTMLButtonElement | null>(null);
 const logoMenuOpen = ref(false);
@@ -83,12 +83,12 @@ const canSave = computed(() => {
 });
 
 // The single line under the title, present in every state so nothing can grow or shrink beneath it: the
-// sandbox's status when idle, the rename hint while editing, and errors — from either control — in place of both.
+// sandbox's status when idle, the rename hint while editing, and errors (from either control) in place of both.
 const subline = computed<{ text: string; tone: string }>(() => {
     if (error.value !== undefined) return { text: error.value, tone: `text-danger` };
     if (editing.value && nameTouched.value && nameError.value !== undefined) return { text: nameError.value, tone: `text-danger` };
     if (editing.value) return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
-    if (availability.value === `busy`) return { text: `The sandbox is busy — live actions resume automatically.`, tone: `text-muted` };
+    if (availability.value === `busy`) return { text: `The sandbox is busy, live actions resume automatically.`, tone: `text-muted` };
     if (availability.value === `starting` || availability.value === `warming`) return { text: `Getting the workspace ready…`, tone: `text-muted` };
     return { text: `The workspace Claude Code and your tools operate from.`, tone: `text-muted` };
 });
@@ -107,7 +107,7 @@ const cancelEdit = (): void => {
 };
 
 // The tile's press: choose between replace and remove when there is something to remove, otherwise go straight
-// to the file dialog. Members never get here — the tile is disabled for them.
+// to the file dialog. Members never get here: the tile is disabled for them.
 const pressLogo = (): void => {
     error.value = undefined;
     if (logo.value === undefined) {
@@ -192,11 +192,11 @@ const save = async (): Promise<void> => {
         <Card class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
-                    <!-- The logo IS the control — no "Choose image" row to add, so the card never changes height.
+                    <!-- The logo IS the control: no "Choose image" row to add, so the card never changes height.
                          Live for owners in every state (a logo has nothing to commit), disabled and out of the
                          tab order for members, who cannot change it. The overlay is the affordance: it rests at
                          zero opacity so the tile reads as identity, and appears on hover, on keyboard focus and
-                         for the whole save — the same layer, so the tile's size is fixed in all three. -->
+                         for the whole save: the same layer, so the tile's size is fixed in all three. -->
                     <button
                         ref="logoTrigger"
                         type="button"
@@ -243,7 +243,7 @@ const save = async (): Promise<void> => {
                     <div class="-ml-2 min-w-0 flex-1 @2xl:max-w-md">
                         <div class="flex items-center gap-2">
                             <div class="flex min-w-0 items-center">
-                                <!-- Title and field share one box — same height, padding and type scale — so
+                                <!-- Title and field share one box: same height, padding and type scale, so
                                      switching modes only paints a border; the glyphs never move. The hidden
                                      sizer keeps the field proportional to its text instead of turning rename
                                      into a full-width form. -->
@@ -368,7 +368,7 @@ const save = async (): Promise<void> => {
                 <div v-if="agentUrl" class="flex items-center justify-between gap-3">
                     <dt class="text-subtle">Sandbox URL</dt>
                     <dd class="min-w-0">
-                        <!-- `touch-target`, which a link in flowing prose would not need — WCAG exempts one
+                        <!-- `touch-target`, which a link in flowing prose would not need: WCAG exempts one
                              whose height is set by the line it sits on. This is not that: it is `inline-flex`
                              (it carries an icon), it is the only thing on its row, and it opens the sandbox in
                              a new tab. So it is a control that happens to be made of text, and it was 18px. -->
@@ -385,7 +385,7 @@ const save = async (): Promise<void> => {
             </dl>
         </Card>
 
-        <!-- THE LADDER'S NEXT RUNG, on hosted sandboxes only (owners — a member can't create sandboxes for the
+        <!-- THE LADDER'S NEXT RUNG, on hosted sandboxes only (owners: a member can't create sandboxes for the
              owner). The hosted box is deliberately small; when it starts feeling tight, the honest upgrades
              already exist as setup lanes, and the best one is free. Points at /setup, where every rung lives. -->
         <Card v-if="hosted && isOwner" class="flex flex-col gap-2">
@@ -393,7 +393,7 @@ const save = async (): Promise<void> => {
             <p class="text-xs leading-relaxed text-muted">
                 This sandbox is a small starter machine we host for you. When it feels tight, add a bigger home for your work: a
                 <span class="text-content">free 12&nbsp;GB machine</span> on Oracle's Always-Free tier, a machine in your own cloud, or
-                <span class="text-content">your own computer</span> — the only rung with your GPU on it.
+                <span class="text-content">your own computer</span>: the only rung with your GPU on it.
             </p>
             <RouterLink to="/setup" class="text-xs text-link hover:underline">See the options →</RouterLink>
         </Card>

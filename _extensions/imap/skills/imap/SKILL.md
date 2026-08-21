@@ -1,12 +1,12 @@
 ---
 name: imap
-description: Read an email inbox over IMAP — list folders, search, and fetch messages — with curl. Use when the user asks about their email or inbox.
+description: Read an email inbox over IMAP (list folders, search, and fetch messages) with curl. Use when the user asks about their email or inbox.
 ---
 
 # IMAP inbox (connected)
 
 Server `$IMAP_HOST:$IMAP_PORT`, login `$IMAP_USERNAME` / `$IMAP_PASSWORD`. `curl` speaks IMAP over TLS (imaps://).
-Auth on every command: `--user "$IMAP_USERNAME:$IMAP_PASSWORD"`. curl sends `--user` credentials verbatim —
+Auth on every command: `--user "$IMAP_USERNAME:$IMAP_PASSWORD"`. curl sends `--user` credentials verbatim:
 special characters in the password (`#`, `@`, `&`, spaces) are fine as-is. Never URL-encode them and never
 put credentials inside the imaps:// URL (URL parsing truncates at `#` and percent-decodes the rest).
 
@@ -17,9 +17,9 @@ put credentials inside the imaps:// URL (URL parsing truncates at `#` and percen
 - Fetch a whole message: `curl -s --url "imaps://$IMAP_HOST:$IMAP_PORT/INBOX;UID=<UID>" --user "$IMAP_USERNAME:$IMAP_PASSWORD"`
 
 Notes: SEARCH returns UIDs; then fetch by `;UID=`. Read-oriented. Gmail/Outlook need an app password, not the account password.
-On `[AUTHENTICATIONFAILED]`: the `--user` form above is correct for ANY password — do not switch to URL-embedded
+On `[AUTHENTICATIONFAILED]`: the `--user` form above is correct for ANY password, do not switch to URL-embedded
 credentials or encoding. Confirm the var is set without printing it (`printf %s "$IMAP_PASSWORD" | wc -c`);
 if it is, the stored password itself is wrong (or the provider requires an app password).
 Live reactions: the sandbox also watches the configured mailbox (default INBOX) and can wake automations the
-moment mail arrives — when the user wants to *react* to incoming email, suggest a "Listen (live)" automation
+moment mail arrives: when the user wants to *react* to incoming email, suggest a "Listen (live)" automation
 instead of a polling schedule.

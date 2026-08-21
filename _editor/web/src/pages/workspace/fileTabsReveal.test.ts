@@ -2,7 +2,7 @@
 //
 // The tab strip is a SCROLL BOX, and almost nothing that focuses a tab is inside it: a row in the file tree, a
 // Changes or Checkpoints row, a restored strip on reload. Once enough files are open, the tab those gestures
-// open sits past the strip's right edge — the editor swapped its content while the strip kept showing tabs from
+// open sits past the strip's right edge: the editor swapped its content while the strip kept showing tabs from
 // elsewhere, which reads as a click that did nothing. jsdom lays nothing out, so what is asserted is the CALL:
 // which tab the strip asked to reveal, and that it asked for the cheapest scroll (`nearest`, a no-op on a tab
 // already visible, so clicking a tab never shifts it out from under the pointer).
@@ -65,7 +65,7 @@ it(`scrolls a file focused from outside the strip into view`, async () => {
     expect(reveals.at(-1)).toEqual({ tab: `file7.ts`, inline: `nearest` });
 });
 
-it(`opens already showing the focused file — the reload's first frame`, async () => {
+it(`opens already showing the focused file: the reload's first frame`, async () => {
     active.value = PATHS[6]!;
 
     await mountStrip(); // the strip coming back from its snapshot, focused on a tab far to the right

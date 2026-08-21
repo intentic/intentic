@@ -29,7 +29,7 @@ test(`objects to what the daemon would reject, before the round-trip`, () => {
     expect(fieldError({ key: `url`, label: `URL` }, `github.com/owner/repo`)).toContain(`Enter a valid URL`);
     expect(fieldError({ key: `port`, label: `Port` }, `70000`)).toContain(`1–65535`);
     expect(fieldError({ key: `port`, label: `Port` }, `10443`)).toBeUndefined();
-    // A url field that holds a secret is not a url — a token pasted into `tokenUrl` must not be re-read as one.
+    // A url field that holds a secret is not a url: a token pasted into `tokenUrl` must not be re-read as one.
     expect(fieldError({ key: `tokenUrl`, label: `Token`, secret: true }, `abc123`)).toBeUndefined();
 });
 
@@ -38,7 +38,7 @@ test(`asks for what is required and lets an optional field stay empty`, () => {
     expect(fieldError({ key: `note`, label: `Note`, optional: true }, ``)).toBeUndefined();
 });
 
-/* A `when`-gated field is only on screen — and only asked for — while the mode it hangs off is chosen. This is
+/* A `when`-gated field is only on screen, and only asked for, while the mode it hangs off is chosen. This is
  * what keeps the SSH key field from blocking a submit on the password branch. */
 test(`shows and requires only the fields the chosen mode keeps`, () => {
     const ssh = card(
@@ -76,7 +76,7 @@ test(`drops empty answers rather than sending empty keys`, () => {
 });
 
 /* THE SEED'S ORDER IS THE ARGUMENT. A one-per-sandbox card opens as an edit of what is live, so its echoed
- * config beats the card's defaults — resetting a switch to off every time the card is opened would turn "come
+ * config beats the card's defaults: resetting a switch to off every time the card is opened would turn "come
  * and look" into "turn it back off". */
 test(`seeds from the card, then from what is live, then from what the scan read`, () => {
     const entry = card([
@@ -102,7 +102,7 @@ test(`seeds from the card, then from what is live, then from what the scan read`
     expect(scanned[`nothing`]).toBeUndefined();
 });
 
-/* WHAT AN EMPTY CREDENTIAL BOX MEANS, which is the only thing an edit changes — and the reason changing one
+/* WHAT AN EMPTY CREDENTIAL BOX MEANS, which is the only thing an edit changes, and the reason changing one
  * setting on a connection no longer costs a re-typed key.
  *
  * A connection's credentials never reach the browser, so a form opened over one starts with those boxes blank.
@@ -127,16 +127,16 @@ test(`lets a stored credential be kept, and sends the marker rather than a hole`
     expect(formComplete(entry, values, `office`, stored)).toBe(true);
     expect(buildConfig(entry, values, stored)).toEqual({ server: `vpn.acme.dev`, password: VAULTED });
 
-    // Typing REPLACES it — a value present is a value meant, and it is still checked like any other.
+    // Typing REPLACES it: a value present is a value meant, and it is still checked like any other.
     expect(buildConfig(entry, { ...values, password: ` hunter2 ` }, stored)).toEqual({ server: `vpn.acme.dev`, password: `hunter2` });
     expect(fieldError({ key: `password`, label: `Password`, secret: true }, `EncX 3D2A9F1B7C`, stored)).toContain(`FortiClient encrypted this`);
 
-    // A key the connection does NOT hold is not kept — an optional credential left blank stays absent.
+    // A key the connection does NOT hold is not kept: an optional credential left blank stays absent.
     expect(buildConfig(entry, { server: `vpn.acme.dev`, password: `` }, new Set())).toEqual({ server: `vpn.acme.dev` });
 });
 
 /* An imported connection fills the form, and BLANKS EVERY SECRET first. FortiClient encrypts credentials, so
- * none can be imported — and anything left in those fields belongs to a different connection, which is exactly
+ * none can be imported, and anything left in those fields belongs to a different connection, which is exactly
  * how an EncX blob reached the daemon once. */
 test(`fills the form from an import and leaves no credential of the last connection behind`, () => {
     const fields: CapabilityCatalogEntry["fields"] = [

@@ -54,7 +54,7 @@ describe(`day arithmetic`, () => {
         expect(shiftDay(`2026-02-28`, 1)).toBe(`2026-03-01`);
     });
 
-    it(`counts a span inclusively — one day is 1`, () => {
+    it(`counts a span inclusively: one day is 1`, () => {
         expect(daySpan(`2026-07-20`, `2026-07-20`)).toBe(1);
         expect(daySpan(`2026-07-20`, `2026-07-26`)).toBe(7);
     });
@@ -76,7 +76,7 @@ describe(`windows`, () => {
         expect(previous).toEqual({ from: `2026-07-13`, to: `2026-07-19` });
     });
 
-    it(`has no previous window for All time — there is nothing before everything`, () => {
+    it(`has no previous window for All time: there is nothing before everything`, () => {
         expect(previousWindow(windowFor(`all`, `2026-07-26`))).toBeUndefined();
     });
 
@@ -98,7 +98,7 @@ describe(`totals`, () => {
         expect(totalTokens(totals)).toBe(200 + 100 + 600 + 40);
     });
 
-    it(`is zero — not NaN — over no rows`, () => {
+    it(`is zero, not NaN: over no rows`, () => {
         expect(totalsOf([])).toMatchObject({ costUsd: 0, turns: 0 });
         expect(cacheHitRate(totalsOf([]))).toBeUndefined();
     });
@@ -130,7 +130,7 @@ describe(`series identity`, () => {
 
     /* Every slot the chart can ASK for must exist in the shipped stylesheet, and `@theme static` is what makes
      * that true. Tailwind emits a theme variable only where it can see it used, and these names are assembled at
-     * runtime — so without `static` the bundle kept the three slots whose names happened to appear in some source
+     * runtime, so without `static` the bundle kept the three slots whose names happened to appear in some source
      * file and dropped the rest, leaving Kimi and Grok asking for a variable that wasn't there and painting
      * nothing. Read from the stylesheet rather than a rendered page, because that is where the guarantee lives. */
     it(`declares a colour for every slot, in a block Tailwind cannot tree-shake`, () => {
@@ -280,7 +280,7 @@ describe(`axis and formatting`, () => {
         expect(niceMax(1_100)).toBe(2_000);
     });
 
-    it(`never returns a zero axis top — a flat chart still needs somewhere to draw`, () => {
+    it(`never returns a zero axis top: a flat chart still needs somewhere to draw`, () => {
         expect(niceMax(0)).toBe(1);
         expect(niceMax(-5)).toBe(1);
     });
@@ -292,7 +292,7 @@ describe(`axis and formatting`, () => {
     });
 
     it(`keeps the hero amount inside its tile by stepping precision down with magnitude`, () => {
-        // Cents where they carry meaning, then whole dollars, then compacted — nine glyphs at worst, so the
+        // Cents where they carry meaning, then whole dollars, then compacted: nine glyphs at worst, so the
         // number can't grow out of the card the way a fixed 48px "$1,234.56" does.
         expect(formatUsdHero(36.62)).toBe(`$36.62`);
         expect(formatUsdHero(9_999.99)).toBe(`$9,999.99`);

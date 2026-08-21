@@ -6,22 +6,22 @@ import { describe, expect, it } from "vitest";
 
 /* EVERY BRAND IN THE CATALOG IS LEGIBLE IN BOTH SCHEMES, AND KEEPS AS MUCH OF ITS OWN COLOUR AS THAT ALLOWS.
  *
- * The marks were painted in the theme's text colour for a real reason — honouring a brand hex left most of them
- * unreadable on the dark card — and the fix (brandColor.ts) is arithmetic, which means it can be wrong quietly.
+ * The marks were painted in the theme's text colour for a real reason: honouring a brand hex left most of them
+ * unreadable on the dark card, and the fix (brandColor.ts) is arithmetic, which means it can be wrong quietly.
  * A plate band narrowed, a chroma ceiling raised, an achromatic threshold moved: any of those can put a mark
  * back under the bar, and nothing on screen says so until somebody squints at the one tile that went dim. So the
  * bar is asserted here, over the REAL hexes the CDN serves, in both schemes.
  *
  * THE BAR IS THE PERCEPTUAL ONE, because the WCAG one is what let this go wrong the first time. An earlier cut
  * asked for a WCAG 2.x ratio of 3:1, passed on every brand, and still left PostgreSQL, MySQL, Sentry and Redmine
- * looking like dirt on the dark card — that ratio is not perceptual and not symmetric between schemes, so one
+ * looking like dirt on the dark card: that ratio is not perceptual and not symmetric between schemes, so one
  * number in it does not mean one thing. What is asserted first is therefore the distance brandColor.ts actually
  * places by. The WCAG floor is kept underneath it as an independent check in the metric every external audit
  * tool reports, and it is set at 4 rather than 3 because the placement clears that in both schemes with room to
  * spare: if a change drops it back toward 3, something has drifted even if the separation still just passes.
  *
  * The hexes are pinned rather than fetched, for the reason the sibling suite gives for not checking slugs at
- * all: a test that reaches a CDN fails on a train. What is under test is the arithmetic, not the network — and a
+ * all: a test that reaches a CDN fails on a train. What is under test is the arithmetic, not the network, and a
  * brand that rebrands changes what the CDN sends, not whether this maths clears the bar on what it is given. */
 
 // As served by cdn.simpleicons.org, which bakes each brand's official colour into the mark it returns.
@@ -62,7 +62,7 @@ const MIN_CONTRAST = 4;
 
 describe(`brand mark colours`, () => {
     for (const [slug, hex] of Object.entries(CATALOG)) {
-        it(`clears the separation bar in both schemes — ${slug}`, () => {
+        it(`clears the separation bar in both schemes: ${slug}`, () => {
             const palette = brandPalette(hex);
             expect(palette).toBeDefined();
             expect(lightnessSeparation(palette?.markDark ?? ``, palette?.plateDark ?? ``)).toBeGreaterThanOrEqual(MIN_SEPARATION_DARK);
@@ -80,27 +80,27 @@ describe(`brand mark colours`, () => {
      * Docker's blue, Reddit's orange, Linux's yellow and YouTube's red arrive exactly as their owners set them.
      * The dark brands have it on a near-white plate, so light mode is where PostgreSQL's, npm's, Sentry's and
      * Redmine's exact hexes survive. A brand dropping out of its list means the plate stopped covering for it
-     * and the mark is being repainted instead — which is the change that quietly drains the grid. */
+     * and the mark is being repainted instead, which is the change that quietly drains the grid. */
     const EXACT_IN_DARK = [`docker`, `gitlab`, `googlegemini`, `linux`, `pnpm`, `reddit`, `telegram`, `turborepo`, `whatsapp`, `youtube`] as const;
     for (const slug of EXACT_IN_DARK) {
-        it(`paints the exact official hex on the dark plate — ${slug}`, () => {
+        it(`paints the exact official hex on the dark plate: ${slug}`, () => {
             expect(brandPalette(CATALOG[slug])?.markDark.toLowerCase()).toBe(CATALOG[slug].toLowerCase());
         });
     }
 
     const EXACT_IN_LIGHT = [`mysql`, `npm`, `openproject`, `paperlessngx`, `postgresql`, `redmine`, `sentry`] as const;
     for (const slug of EXACT_IN_LIGHT) {
-        it(`paints the exact official hex on the light plate — ${slug}`, () => {
+        it(`paints the exact official hex on the light plate: ${slug}`, () => {
             expect(brandPalette(CATALOG[slug])?.markLight.toLowerCase()).toBe(CATALOG[slug].toLowerCase());
         });
     }
 
-    /* A hueless brand has no colour to protect, and moving it the minimum distance lands it on mid-grey — the
+    /* A hueless brand has no colour to protect, and moving it the minimum distance lands it on mid-grey: the
      * exact muddy non-colour the whole change exists to remove. It must snap to the ink the brand itself uses:
      * white on dark, black on light. Pinned as a contrast floor far above the bar, because "crisp" is the
      * property and the bar alone would be satisfied by the grey. */
     for (const slug of [`github`, `x`, `outline`, `opencode`, `invoiceninja`] as const) {
-        it(`snaps a hueless brand to the scheme's ink — ${slug}`, () => {
+        it(`snaps a hueless brand to the scheme's ink, ${slug}`, () => {
             const palette = brandPalette(CATALOG[slug]);
             expect(contrastRatio(palette?.markDark ?? ``, palette?.plateDark ?? ``)).toBeGreaterThan(10);
             expect(contrastRatio(palette?.markLight ?? ``, palette?.plateLight ?? ``)).toBeGreaterThan(10);
@@ -120,7 +120,7 @@ describe(`brand mark colours`, () => {
 
     it(`spends chroma, not lightness, when sRGB cannot hold the colour it is asked for`, () => {
         /* YouTube's red on the light plate is the case that catches a per-channel clip. The placement asks for
-         * #FF0000's hue and chroma at a much lower lightness, and sRGB has no such colour — something has to
+         * #FF0000's hue and chroma at a much lower lightness, and sRGB has no such colour: something has to
          * give. Clipping gives up lightness silently, landing short of the separation that was the point; the
          * gamut mapping gives up chroma and keeps the promise. So: the distance is met exactly, the hue is still
          * pure red, and the colour is duller than the official one rather than lighter. */

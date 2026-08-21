@@ -19,14 +19,14 @@ import DiscoverCard from "./DiscoverCard.vue";
 import DiscoverDetail from "./DiscoverDetail.vue";
 import { type DiscoverListing, listingSections, toListing } from "./discoverListing";
 
-/* DISCOVER — what other people have published, in the one place in this app that already means "extensions".
+/* DISCOVER: what other people have published, in the one place in this app that already means "extensions".
  *
  * This is a move, not a new feature: browsing a registry existed, buried five clicks deep inside an optional
  * block on a form on the Capabilities page, presented as a way to PRE-FILL A TEXT FIELD. Three things were
  * wrong with that and all three are what this file is shaped by.
  *
  *  1. A URL FIELD STOOD WHERE A SEARCH BOX BELONGS. The first thing the old surface asked for was the address
- *     of the registry — a reader who wanted to see what exists was asked to supply the thing that would show
+ *     of the registry: a reader who wanted to see what exists was asked to supply the thing that would show
  *     them. Here the list is already on screen (the official registry is the default read, not a default
  *     value in a box), the search box is the first control, and the registry is a source LINE with a way to
  *     change it. "Registries are plural" stays exactly as true; it stops being a toll.
@@ -35,7 +35,7 @@ import { type DiscoverListing, listingSections, toListing } from "./discoverList
  *     the catalogue and is stated without dressing an agent verdict up as human review.
  *  3. THERE WAS NOWHERE TO LEARN ANYTHING. A row was a truncated line and a click filled in a form. A stranger's
  *     extension needs a panel: what it is, whose it is, what is guaranteed and by whom, and the one thing this
- *     product can offer that a marketplace cannot — the reader's own agent, reading that exact commit before a
+ *     product can offer that a marketplace cannot: the reader's own agent, reading that exact commit before a
  *     single line of it runs.
  *
  * WHAT THIS SURFACE DELIBERATELY DOES NOT DO is claim more than it knows. It has no manifest to render: the
@@ -50,7 +50,7 @@ const { entries, registryName, url, token, isOfficial, isLoading, isFetching, er
 const outline = useSandboxOutline(isLoading);
 const { extensions } = useExtensions();
 const { add } = useCapabilities();
-// Re-read the credit balance the moment a premium install has spent from it — see the install handler.
+// Re-read the credit balance the moment a premium install has spent from it: see the install handler.
 const { spent } = useMembership();
 
 const query = ref(``);
@@ -58,7 +58,7 @@ const mode = ref<`all` | `verified`>(`all`);
 const installing = ref<string | undefined>(undefined);
 const failure = ref<NoticeModel | undefined>(undefined);
 
-// Below this many rows a filter box is more chrome than the thing it filters — the Extensions tab's threshold
+// Below this many rows a filter box is more chrome than the thing it filters: the Extensions tab's threshold
 // and its reasoning, applied to a list that will be short for a while yet.
 const FILTERABLE_FROM = 6;
 
@@ -81,13 +81,13 @@ const listNotice = computed<NoticeModel | undefined>(() =>
               title: `Couldn't read that registry.`,
               detail: error.value,
               // A registry that cannot be cloned may simply be a network blip, and re-reading is the whole of
-              // the recovery — so the one way out this notice offers is the one that might work.
+              // the recovery, so the one way out this notice offers is the one that might work.
               action: { label: `Try again`, run: refetch },
           },
 );
 
 /* THE LISTING IN THE URL, so a listing can be linked to. The hub's route carries one param and it is the tab,
- * so the listing rides a query — which is a real address either way: a reload reopens the panel, and the link
+ * so the listing rides a query, which is a real address either way: a reload reopens the panel, and the link
  * an author pastes into a chat lands their reader on their own extension rather than on a grid to search. */
 const openName = computed<string | undefined>(() => (typeof route.query[`ext`] === `string` ? route.query[`ext`] : undefined));
 const opened = computed<DiscoverListing | undefined>(() => listings.value.find((listing) => listing.entry.name === openName.value));
@@ -104,12 +104,12 @@ const openListing = (listing: DiscoverListing): void => {
     void router.replace({ query: { ...route.query, ext: listing.entry.name } });
 };
 
-/* A listing named in the URL that this registry does not carry — a stale link, or a link to somebody else's
+/* A listing named in the URL that this registry does not carry: a stale link, or a link to somebody else's
  * registry. Cleaned up rather than left as a query param that silently does nothing, but only once the read has
  * actually landed: doing it while the list is still empty would eat every deep link on arrival.
  *
  * IMMEDIATE, because the common case is a warm cache. The registry read is cached hard and persisted, so a link
- * opened in a session that has already browsed arrives with `entries` ALREADY full — nothing changes after
+ * opened in a session that has already browsed arrives with `entries` ALREADY full: nothing changes after
  * mount, and a lazy watcher would never run on precisely the navigations most likely to carry a stale name. */
 watch(
     [openName, isLoading, entries],
@@ -122,8 +122,8 @@ watch(
 );
 
 /* INSTALLING FROM HERE IS THE SAME INSTALL, not a shortcut past it. The registry row supplies exactly what the
- * capability form collected — the repository, the commit, the subdirectory, and the tier the daemon's premium
- * gate reads — so nothing is being skipped; there was simply never anything for a person to type that the
+ * capability form collected: the repository, the commit, the subdirectory, and the tier the daemon's premium
+ * gate reads, so nothing is being skipped; there was simply never anything for a person to type that the
  * listing did not already know. The apply streams into a real terminal, which is what the user watches. */
 const install = async (listing: DiscoverListing): Promise<void> => {
     const pointer = listing.entry.install;
@@ -135,7 +135,7 @@ const install = async (listing: DiscoverListing): Promise<void> => {
     try {
         await add(
             {
-                // The capability's id, from the identity the extension is listed under — the same name an
+                // The capability's id, from the identity the extension is listed under: the same name an
                 // update collides with, which is what makes updating an update rather than a second install.
                 id: listing.entry.name.replace(/[^a-zA-Z0-9_-]/gu, `-`),
                 kind: `extension`,
@@ -146,7 +146,7 @@ const install = async (listing: DiscoverListing): Promise<void> => {
                     // Code inside a private registry repo clones with the same token that read the registry.
                     ...(token.value !== `` && pointer.url === url.value.trim() ? { token: token.value } : {}),
                     ...(listing.entry.tier === `premium` ? { tier: `premium` } : {}),
-                    // Where this listing lives — what the daemon's update check compares the pinned sha
+                    // Where this listing lives: what the daemon's update check compares the pinned sha
                     // against afterwards, and where its advisories come from. A hand-typed install on the
                     // Capabilities form records no origin and is rightly compared against the official
                     // registry instead.
@@ -159,14 +159,14 @@ const install = async (listing: DiscoverListing): Promise<void> => {
                 }
             },
         );
-        // Installed, but nothing of it is RUNNING until the host runs again — the same convergence the
+        // Installed, but nothing of it is RUNNING until the host runs again: the same convergence the
         // Extensions tab's reload button performs, done here so the extension works without a page reload.
         await reloadExtensions();
         /* A premium install has just spent credits, so every surface showing a balance is now wrong by exactly
-         * the donation — the account menu, this catalogue's next cost block, the composer's pill. Re-read once
+         * the donation: the account menu, this catalogue's next cost block, the composer's pill. Re-read once
          * here rather than letting each of them discover it on its own timer: the number the reader will look at
          * to check what just happened is the one that must not be the pre-spend figure. Cheap and unconditional
-         * for a premium row, including the reinstall the platform charged nothing for — "nothing changed" is a
+         * for a premium row, including the reinstall the platform charged nothing for: "nothing changed" is a
          * perfectly good answer to arrive at from the platform rather than to assume. */
         if (listing.entry.tier === `premium`) {
             await spent();
@@ -181,8 +181,8 @@ const install = async (listing: DiscoverListing): Promise<void> => {
 
 /* THE READ BEFORE THE RUN. An ordinary chat rather than an isolated unattended turn: the reader is standing
  * here deciding, and the most useful thing about this turn is that they can interrupt it and argue with it.
- * An update asks the sharper question — the installed commit was approved once already, so what is between the
- * two commits is the whole subject — and gets the diff brief instead. */
+ * An update asks the sharper question: the installed commit was approved once already, so what is between the
+ * two commits is the whole subject, and gets the diff brief instead. */
 const audit = (listing: DiscoverListing): void => {
     const pointer = listing.entry.install;
     if (pointer?.ref === undefined) {
@@ -222,7 +222,7 @@ const clearFilters = (): void => {
     mode.value = `all`;
 };
 
-/* What the page says when the sections hold nothing — four different facts, and printing the wrong one is a
+/* What the page says when the sections hold nothing: four different facts, and printing the wrong one is a
  * lie the reader can see. Kept apart from the error notice above: a registry that failed to read has not
  * "listed no extensions", and telling somebody their registry is empty when it is actually unreachable sends
  * them to go and check the wrong thing. */
@@ -232,7 +232,7 @@ const emptyNote = computed<string | undefined>(() => {
     }
     if (listings.value.length === 0) {
         return isOfficial.value
-            ? `Nothing is published yet. Yours could be the first — see below.`
+            ? `Nothing is published yet. Yours could be the first: see below.`
             : `That registry lists no intentic extensions. It may hold Claude plugins, which install from the Capabilities page.`;
     }
     return mode.value === `verified` && query.value.trim() === ``
@@ -245,7 +245,7 @@ const emptyNote = computed<string | undefined>(() => {
     <div class="flex flex-col gap-5">
         <NoticeStack :of="[listNotice]" />
 
-        <!-- SEARCH FIRST. The one control a person arrives wanting, at the top, spanning the grid it narrows —
+        <!-- SEARCH FIRST. The one control a person arrives wanting, at the top, spanning the grid it narrows:
              and the trust switcher beside it, because "show me only what somebody has actually read" is the
              single most useful narrowing this list has. The switcher is suppressed while nothing is verified:
              a filter that can only ever empty the page is a control that lies about the catalogue. -->
@@ -273,7 +273,7 @@ const emptyNote = computed<string | undefined>(() => {
             </button>
         </div>
 
-        <!-- THE SOURCE LINE. Where the list came from, stated rather than asked for — one line, and a way to
+        <!-- THE SOURCE LINE. Where the list came from, stated rather than asked for: one line, and a way to
              point somewhere else that costs a click instead of standing in front of the catalogue. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs">
             <span class="text-subtle">Source</span>
@@ -290,7 +290,7 @@ const emptyNote = computed<string | undefined>(() => {
              taken once, not a field to walk past every visit. -->
         <div v-if="changing" class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
             <p class="text-2xs text-muted">
-                Any git repository holding a <code class="ui-code">.claude-plugin/marketplace.json</code> is a registry — point this at your own and
+                Any git repository holding a <code class="ui-code">.claude-plugin/marketplace.json</code> is a registry: point this at your own and
                 nothing here reads ours.
             </p>
             <div class="flex flex-wrap gap-2">
@@ -310,7 +310,7 @@ const emptyNote = computed<string | undefined>(() => {
 
         <!-- A registry read is a git clone, so this is the longest wait in the hub and the one most worth
              drawing. The outline is the CARD GRID at the same breakpoints, because that is what makes the
-             catalogue recognisable before a single name has landed — a centred sentence in an empty pane made
+             catalogue recognisable before a single name has landed: a centred sentence in an empty pane made
              the slowest tab also look like the emptiest. -->
         <div v-if="isLoading && outline" class="@container" role="status" aria-busy="true">
             <span class="sr-only">Reading the registry…</span>
@@ -335,7 +335,7 @@ const emptyNote = computed<string | undefined>(() => {
             <div class="flex flex-wrap items-baseline gap-x-2">
                 <span :class="ui.sectionLabel()">{{ section.label }}</span>
                 <span class="text-2xs tabular-nums text-subtle">{{ section.listings.length }}</span>
-                <span class="text-2xs text-muted">— {{ section.caption }}</span>
+                <span class="text-2xs text-muted">{{ section.caption }}</span>
             </div>
             <!-- Container queries: how many cards fit is a fact about this pane, which shares the page with the
                  hub's index column and the shell with a chat panel the user drags. -->
@@ -354,7 +354,7 @@ const emptyNote = computed<string | undefined>(() => {
         <!-- THE OTHER HALF OF SURFACING WHAT PEOPLE BUILD. Until now nothing in this app ever said that
              publishing was possible, let alone that it costs a topic on a repository rather than an account,
              a review queue or a cut. It is a footer rather than a banner because it is for the minority of
-             readers who build — but it has to exist SOMEWHERE, and this is the one page where somebody is
+             readers who build, but it has to exist SOMEWHERE, and this is the one page where somebody is
              already thinking about other people's extensions. -->
         <!-- One flowing paragraph rather than a row of flex items: the glyph and the two links belong INSIDE the
              sentence, and as siblings of it they each took a line of their own the moment the pane narrowed. -->

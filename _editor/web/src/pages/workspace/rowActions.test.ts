@@ -3,7 +3,7 @@ import { registerDocumentProvider } from "../../core-views/documentRegistry";
 import { rowActionsFor, type RowActionSources } from "./rowActions";
 
 /* The composition rule for a tree row's icons. Worth a test because it is the one place four unrelated
- * contributors — git repos, directory-surface extensions, document providers, personas — meet on the same row, and
+ * contributors (git repos, directory-surface extensions, document providers, personas) meet on the same row, and
  * the thing that used to go wrong is silent: a row simply renders one icon fewer than it should. */
 
 const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
@@ -51,7 +51,7 @@ describe(`rowActionsFor`, () => {
         expect(actions.map((action) => action.id)).toEqual([`health`, `personas`, `directory`]);
     });
 
-    // The eye is the Preview AREA's door, not another in-tree tab — a runnable repo used to open an iframe tab
+    // The eye is the Preview AREA's door, not another in-tree tab: a runnable repo used to open an iframe tab
     // here, and this is where that gesture went.
     it(`gives a previewable repo its eye, ahead of the cog`, () => {
         const source = sources({
@@ -65,7 +65,7 @@ describe(`rowActionsFor`, () => {
         expect(source.openPreview).toHaveBeenCalledWith(`shop`);
     });
 
-    // The document is what the directory IS, so it leads — the same narrowing the rail's order follows, rather
+    // The document is what the directory IS, so it leads: the same narrowing the rail's order follows, rather
     // than the newcomer joining the end of the queue.
     it(`puts a document ahead of the repo's own affordances`, () => {
         provider(`architecture`, `intentic`);
@@ -91,7 +91,7 @@ describe(`rowActionsFor`, () => {
     });
 
     /* WHICH ICONS SURVIVE THE POINTER BEING SOMEWHERE ELSE. A row's icons are revealed on hover, and an offer
-     * that is evidence ("this package has a page") opts out of that — hiding it hides the fact, which is how a
+     * that is evidence ("this package has a page") opts out of that: hiding it hides the fact, which is how a
      * documented monorepo came to look exactly like an undocumented one. What you can DO to a repo does not. */
     it(`lets an offer stand on the row, and never the repo's own affordances`, () => {
         provider(`architecture`, `intentic/_deploy/graph`, true);
@@ -110,7 +110,7 @@ describe(`rowActionsFor`, () => {
         expect(rowActionsFor(`intentic`, sources()).map((action) => action.standing)).toEqual([false, false]);
     });
 
-    /* THE PERSONA ICON IS EVIDENCE ONCE THERE IS ONE — "which of these packages has its own persona" is a
+    /* THE PERSONA ICON IS EVIDENCE ONCE THERE IS ONE: "which of these packages has its own persona" is a
      * question about the tree, and a hover-only glyph answers it for nobody. An empty folder's stays hidden with
      * the rest of what you can DO. */
     it(`stands on a folder that already has a persona, and hides on one that has none`, () => {
@@ -120,11 +120,11 @@ describe(`rowActionsFor`, () => {
     });
 
     /* A folder holds SEVERAL cards, and the count is the reason to expect a list behind the icon rather than one
-     * card — so the tooltip carries it rather than saying "personas" and leaving the number to the click. */
+     * card, so the tooltip carries it rather than saying "personas" and leaving the number to the click. */
     it(`says how many personas start here`, () => {
         expect(rowActionsFor(`docs`, sources())[0]?.tooltip).toBe(`Choose who works here`);
-        expect(rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 1]]) }))[0]?.tooltip).toBe(`Change who works here — 1 persona`);
-        expect(rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 3]]) }))[0]?.tooltip).toBe(`Change who works here — 3 personas`);
+        expect(rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 1]]) }))[0]?.tooltip).toBe(`Change who works here: 1 persona`);
+        expect(rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 3]]) }))[0]?.tooltip).toBe(`Change who works here, 3 personas`);
     });
 
     it(`opens the panel for the folder that was clicked`, () => {

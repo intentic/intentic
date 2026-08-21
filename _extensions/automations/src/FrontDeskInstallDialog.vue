@@ -5,13 +5,13 @@ import { computed, ref, toRef } from "vue";
 import { since } from "./cronSchedule";
 import { type FrontDeskInstall, embedSnippet, useAutomations, useFrontDeskInstalls } from "./useAutomations";
 
-/* "Did the snippet land?" — the question the app could not answer until the config route started recording who
+/* "Did the snippet land?": the question the app could not answer until the config route started recording who
  * asks for it.
  *
  * This panel exists because copying the snippet is the ONLY act that matters for a Front Desk, and everything
  * about it used to happen once, inside the create dialog, at the moment the user was least able to act on it:
  * they had not opened their site's code yet. So the snippet lives here instead, reachable from the row forever,
- * with the thing that was missing entirely beside it — whether a browser has actually loaded it.
+ * with the thing that was missing entirely beside it, whether a browser has actually loaded it.
  *
  * The refused-origin row is the point of the whole feature. www.example.com and example.com are different
  * origins, a site that redirects one to the other still loads the widget from whichever the browser was on, and

@@ -22,7 +22,7 @@ const ROOT_COMMANDS: readonly RootCommand[] = [accountsCommand];
 const SESSION_COMMANDS: readonly Command[] = [whoamiCommand];
 
 const usage = (out: (line: string) => void): void => {
-    out("gw — Gmail, Calendar, Drive, Docs, Sheets and Contacts for the connected Google accounts.");
+    out("gw: Gmail, Calendar, Drive, Docs, Sheets and Contacts for the connected Google accounts.");
     out("");
     out("  gw [--account <name>] [--as someone@company.com] [--json] <group> <command> [flags]");
     out("");
@@ -36,11 +36,11 @@ const usage = (out: (line: string) => void): void => {
     out("  gw <group>          what that group can do");
     out("  --json              Google's own response instead of the summary lines");
     out("  --account <name>    which connected account, when more than one is (gw accounts)");
-    out("  --as <email>        act as another person — company connections only");
+    out("  --as <email>        act as another person: company connections only");
 };
 
 const groupUsage = (group: CommandGroup, out: (line: string) => void): void => {
-    out(`${group.name} — ${group.summary}`);
+    out(`${group.name}: ${group.summary}`);
     out("");
     for (const command of [...group.commands, ...(group.rootCommands ?? [])]) {
         out(`  ${command.usage}`);

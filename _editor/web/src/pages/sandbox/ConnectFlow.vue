@@ -6,35 +6,35 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { useChat } from "../../composables/chat/useChat";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 
-/* THE sign-in panel — one component for all five providers and both mechanisms (a provider's own account and a
+/* THE sign-in panel: one component for all five providers and both mechanisms (a provider's own account and a
  * translator subscription), because a user signing in does the same three things every time: go to the
  * provider, deal with the one thing it hands back, come back. There were two of these, and they had quietly
  * drifted apart (one waited with a spinner, the other didn't; one could name the account, the other couldn't;
- * the same "Cancel" sat in two different places) — which is exactly the drift a user reads as "these providers
+ * the same "Cancel" sat in two different places), which is exactly the drift a user reads as "these providers
  * work differently" when the only real difference is the shape of the token.
  *
  * That real difference is the ONE branch here: a device flow means the provider polls itself and the panel is
  * read-only; a redirect flow hands the user something to paste back (Anthropic's authorization code or the
  * address Google dead-ends on).
  *
- * `prominent` is the same panel with room to breathe — the first screen of a fresh sandbox, where this is not
+ * `prominent` is the same panel with room to breathe: the first screen of a fresh sandbox, where this is not
  * a row in a settings list but the only thing being asked. It changes size and nothing else, deliberately: the
  * words a first-time user needs are the words the settings row needed too, and a second copy of them written
  * for one surface is the drift above, growing back.
  *
  * Cancel deliberately does NOT live here: it belongs in the single action slot of whatever started this
- * sign-in — see AiAccountSection's row and ConnectOffer's card. useChat is a module singleton, so this reads
+ * sign-in: see AiAccountSection's row and ConnectOffer's card. useChat is a module singleton, so this reads
  * the live handshake with nothing threaded through props but which row it is unfolding under. */
 
 const { kind, provider, prominent = false } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider; prominent?: boolean }>();
 
 const { nativeConnectFlow, translatorConnectFlow, accountBusy, translatorKey, connectLabel, completeConnect, completeTranslator } = useChat();
 
-// This flow's own key in the account-write ledger — the two mechanisms of one provider (Grok's xAI account and
+// This flow's own key in the account-write ledger: the two mechanisms of one provider (Grok's xAI account and
 // its SuperGrok subscription) are separate connections, so "Finish" must spin for one and not the other.
 const busyKey = computed(() => (kind === `native` ? provider : translatorKey(provider)));
 
-// The live handshake belonging to THIS row, or nothing — the flows carry their provider, so a sign-in started
+// The live handshake belonging to THIS row, or nothing: the flows carry their provider, so a sign-in started
 // on one row can never paint itself under another.
 const flow = computed(() =>
     kind === `native`
@@ -46,7 +46,7 @@ const flow = computed(() =>
           : undefined,
 );
 
-// Where the sign-in actually happens — the destination, not the provider's product name: a user about to leave
+// Where the sign-in actually happens, the destination, not the provider's product name: a user about to leave
 // this page wants to recognize the site they land on.
 const DESTINATION: Record<string, string> = {
     claude: `Anthropic`,
@@ -67,9 +67,9 @@ const deviceFlow = computed(() => {
 const hint = computed<string | undefined>(() => {
     if (deviceFlow.value) {
         return kind === `native`
-            ? `Already filled in at x.ai — approve on any device.`
+            ? `Already filled in at x.ai: approve on any device.`
             : flow.value?.code
-              ? `Sign in and approve — enter this code if the page asks for it.`
+              ? `Sign in and approve: enter this code if the page asks for it.`
               : `Approve the sign-in on the page that opens.`;
     }
     return undefined;
@@ -77,7 +77,7 @@ const hint = computed<string | undefined>(() => {
 
 const pastePlaceholder = computed(() => (kind === `routed` ? `Paste the address you landed on…` : `Paste code…`));
 
-// Whether this panel is waiting on something the user has to bring back — the state both helpers below arm on,
+// Whether this panel is waiting on something the user has to bring back: the state both helpers below arm on,
 // and the only one in which a window listener or a clipboard read is any of our business.
 const awaitingPaste = computed(() => flow.value !== undefined && !deviceFlow.value);
 
@@ -90,7 +90,7 @@ const awaitingPaste = computed(() => flow.value !== undefined && !deviceFlow.val
  *     about to meet, with the part that matters ringed. A sentence saying "the page won't load" is read,
  *     believed, and forgotten by the time the browser is actually showing it;
  *   · this, which means most people never have to act on the picture at all. The grant is in the address they
- *     copied, so the moment they come back with it we take it — from a paste anywhere on the panel, or off the
+ *     copied, so the moment they come back with it we take it: from a paste anywhere on the panel, or off the
  *     clipboard by ourselves when the browser lets us read it. */
 
 // The pending handshake's `state`, for the routed flow that has one. Read off the translator flow rather than
@@ -99,11 +99,11 @@ const awaitingPaste = computed(() => flow.value !== undefined && !deviceFlow.val
 const redirectState = computed(() => (kind === `routed` ? (translatorConnectFlow.value?.state ?? ``) : ``));
 
 // Whether a string is the address THIS handshake is waiting for. `code=` is the grant; the state is what makes
-// it ours — the translator matches it to the pending session, so anything else that happens to be in the
+// it ours: the translator matches it to the pending session, so anything else that happens to be in the
 // clipboard (a link, a snippet, another sandbox's sign-in) fails this and is left alone.
 const isOurRedirect = (text: string): boolean => text.includes(`code=`) && (redirectState.value === `` || text.includes(redirectState.value));
 
-// The one field the paste flows share: an authorization code or redirect URL — the panel takes
+// The one field the paste flows share: an authorization code or redirect URL, the panel takes
 // the string and hands it to whichever half of the handshake is live.
 const pasted = ref(``);
 const finish = async (): Promise<void> => {
@@ -121,7 +121,7 @@ const finish = async (): Promise<void> => {
     }
 };
 
-/* THE FIELD FILLING IS THE WHOLE INTERACTION — there is no second press. Watching the value rather than the
+/* THE FIELD FILLING IS THE WHOLE INTERACTION: there is no second press. Watching the value rather than the
  * paste event catches every way it can arrive (a paste into the field, a paste anywhere on the window, the
  * clipboard read below) with one rule instead of three, and it can only fire on an address carrying this
  * handshake's own state, so a half-typed or wrong-tab string just sits there to be looked at. */
@@ -133,7 +133,7 @@ watch(pasted, (value) => {
 
 /* A paste ANYWHERE while this panel is waiting, because "click the field first" is a step that exists only to
  * serve the form. Window-level, so it catches someone who came back to the tab and pressed Ctrl+V at whatever
- * the browser happened to have focused — but never a paste aimed at a field, which includes our own (v-model
+ * the browser happened to have focused, but never a paste aimed at a field, which includes our own (v-model
  * has that one) and every other input on a settings page this panel may be sitting in. */
 const onWindowPaste = (event: ClipboardEvent): void => {
     const target = event.target as HTMLElement | null;
@@ -147,7 +147,7 @@ const onWindowPaste = (event: ClipboardEvent): void => {
     }
 };
 
-/* ONE clipboard read, on the first return after they actually left for the provider — and the narrowness is the
+/* ONE clipboard read, on the first return after they actually left for the provider, and the narrowness is the
  * design, not caution. Reading on every focus would re-ask Chrome for permission each time the user clicked
  * back into the window, which is a prompt storm in exchange for a convenience; reading once, at the only moment
  * the answer could possibly be the address, costs a single prompt at the moment it makes sense of itself.
@@ -172,7 +172,7 @@ const onReturn = (): void => {
         .catch(() => undefined);
 };
 
-// Armed only while there is a handshake to finish — a panel sitting idle in a settings list has no business
+// Armed only while there is a handshake to finish: a panel sitting idle in a settings list has no business
 // watching the window's pastes or anybody's clipboard.
 let armed = false;
 const arm = (on: boolean): void => {
@@ -195,7 +195,7 @@ onUnmounted(() => arm(false));
 
 // The display name is a rename, not a step: the daemon derives one from the sign-in identity when it's blank.
 // Leading the flow with that field made every connect look like a form to fill in before anything would happen,
-// so it stays folded away until asked for — and re-folds with the handshake, never carrying a stale open state
+// so it stays folded away until asked for, and re-folds with the handshake, never carrying a stale open state
 // into the next one. Native only: a translator subscription is named by the account it signs in as.
 const namingAccount = ref(false);
 watch(flow, (live) => {
@@ -236,7 +236,7 @@ watch(flow, (live) => {
             <!-- THE PAGE THEY ARE ABOUT TO MEET, drawn before they meet it. This is the step people abandon on:
                  the provider finishes on an address only the sandbox can serve, so the browser shows a plain
                  error and every instinct says the sign-in broke. A picture rather than a sentence because the
-                 sentence is on the screen they are LEAVING — by the time it matters they are two tabs away
+                 sentence is on the screen they are LEAVING: by the time it matters they are two tabs away
                  looking at the real thing, and what they need then is to RECOGNIZE it. Only for the redirect
                  that actually dead-ends; Anthropic's paste-back lands on a real page and needs none of this. -->
             <template v-if="kind === `routed`">
@@ -264,7 +264,7 @@ watch(flow, (live) => {
                     </div>
                 </div>
                 <p class="flex items-center gap-1.5 text-2xs text-subtle">
-                    <Icon name="sparkles" class="shrink-0 text-link" />Copy the highlighted address — it lands here on its own.
+                    <Icon name="sparkles" class="shrink-0 text-link" />Copy the highlighted address: it lands here on its own.
                 </p>
             </template>
             <div class="flex gap-2">

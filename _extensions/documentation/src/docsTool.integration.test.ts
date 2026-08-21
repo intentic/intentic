@@ -30,7 +30,7 @@ const check = (): {
     }[];
     undocumented: string[];
 } => JSON.parse(execFileSync(`node`, [BIN, `check`, `--root`, root, `--from`, `published`], { encoding: `utf8` }));
-// The bin's exit code and whichever stream carried its answer — a refusal is the point of several of these, so a
+// The bin's exit code and whichever stream carried its answer: a refusal is the point of several of these, so a
 // non-zero exit is a result to assert on rather than a throw.
 const run = (...args: string[]): { status: number; output: string } => {
     try {
@@ -149,7 +149,7 @@ describe(`intentic-docs against a real repository`, () => {
     });
 
     /* `--from` defaults to staging, and `check --write` is what an agent runs after editing a README that is
-     * already in the repository — so the flagless form used to CREATE a staging directory holding nothing but an
+     * already in the repository, so the flagless form used to CREATE a staging directory holding nothing but an
      * index. The app reads that directory to answer "is there a draft to review": a lone index there announced a
      * draft with no map and no pages, and the repository's published documents went behind a toggle. */
     it(`refuses to write a staged index for a draft that does not exist, and says which flag was meant`, () => {
@@ -165,8 +165,8 @@ describe(`intentic-docs against a real repository`, () => {
         expect(existsSync(join(root, `.intentic/config/docs/root/index.json`))).toBe(true);
     });
 
-    /* A REPOSITORY CHECKED OUT INSIDE ANOTHER ONE IS NOT PART OF IT. A workspace root holding clones — a monorepo
-     * beside a shelf of reference checkouts — is the ordinary shape here, and without a boundary the root claimed
+    /* A REPOSITORY CHECKED OUT INSIDE ANOTHER ONE IS NOT PART OF IT. A workspace root holding clones: a monorepo
+     * beside a shelf of reference checkouts: is the ordinary shape here, and without a boundary the root claimed
      * every package in every clone: hundreds of entries duplicating indexes those repos keep themselves, and every
      * reference checkout reported as undocumented work nobody owes. */
     it(`leaves a nested repository's packages to that repository`, () => {
@@ -181,7 +181,7 @@ describe(`intentic-docs against a real repository`, () => {
 
     /* `--repo` is relative to `--root`, and the absolute path is the obvious thing to type. Joining the two used
      * to yield a directory that had never existed (`/work` + `/work/intentic` → `/work/work/intentic`): the run
-     * scanned nothing, found nothing, and left an empty index in a tree it had just invented — which someone then
+     * scanned nothing, found nothing, and left an empty index in a tree it had just invented, which someone then
      * had to notice and delete by hand. */
     it(`refuses an absolute repository path, and names the relative one it wanted`, () => {
         const result = run(`check`, `--root`, root, `--repo`, join(root, `refs/openclaw`), `--from`, `published`);
@@ -191,12 +191,12 @@ describe(`intentic-docs against a real repository`, () => {
         expect(existsSync(join(root, root))).toBe(false);
     });
 
-    /* THE SPELLING THE GUARD ABOVE CANNOT CATCH. `--repo .` is a valid path under the root — it IS the root — so an
+    /* THE SPELLING THE GUARD ABOVE CANNOT CATCH. `--repo .` is a valid path under the root: it IS the root, so an
      * agent standing in a repository and naming it "here" is silently answered about the workspace instead. The
      * workspace documents nothing itself, so the run wrote an all-empty index at the top of it, left the
      * repository's real index unrefreshed, and rode into the next commit: deleted by hand, back the next session,
-     * thirteen times over. An index with no packages, no pages and no orphans is never worth writing — a
-     * single-package repository produces exactly the same nothing — so refusing it closes the spelling for good. */
+     * thirteen times over. An index with no packages, no pages and no orphans is never worth writing: a
+     * single-package repository produces exactly the same nothing, so refusing it closes the spelling for good. */
     it(`refuses to write an index that would say nothing, whichever way it was asked`, () => {
         write(`hollow/README.md`, `# hollow\n\nNot a repository, and nothing under it is a package.\n`);
         const result = run(`check`, `--root`, root, `--repo`, `hollow`, `--from`, `published`, `--write`);

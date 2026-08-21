@@ -3,7 +3,7 @@ import { onErrorCaptured, shallowRef } from "vue";
 import { errorMessage } from "@intentic/ui/async";
 
 /* Contains one extension view's render/lifecycle errors so a broken extension shows an inline card instead of
- * unmounting the shell. Errors stop here (return false) — nothing above this boundary can recover a foreign
+ * unmounting the shell. Errors stop here (return false): nothing above this boundary can recover a foreign
  * view. The host keys this component per activation, so navigating away and back retries a crashed view. */
 
 const { extensionId } = defineProps<{ extensionId: string }>();

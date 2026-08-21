@@ -5,13 +5,13 @@ import { computed } from "vue";
 import { useControlTokens } from "../../composables/sandbox/useControlTokens";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 
-/* The Editor bridge (ACP) card: drive this sandbox's agents from Zed / JetBrains / any ACP editor. Mint an
- * `editor`-scoped control token (shown once), paste the generated agent_servers snippet into the editor, open
- * your synced folder as the project. Sits beside Desktop sync — the two halves of "work from your own
- * machine".
+/* The Editor bridge (ACP) card: run this sandbox's agents from Zed, JetBrains, or any ACP editor. Mint an
+ * `editor`-scoped control token (shown once), paste the generated agent_servers snippet into the editor, then
+ * open your synced folder as the project. Pairs with Desktop sync as the two halves of working from your own
+ * machine.
  *
- * The snippet lives HERE rather than in the composable: it is Zed's settings shape, and the composable is
- * about tokens. The next card that mints one (a CLI, an MCP server) wants its own paste-ready thing. */
+ * The snippet lives here rather than in the composable because it is Zed's settings shape, while the composable
+ * is about tokens. The next card that mints one (a CLI, an MCP server) brings its own paste-ready snippet. */
 
 const { daemonUrl } = useSandbox();
 const { tokens, minted, minting, notice, label, mint, revoke } = useControlTokens(`editor`, `editor bridge`);
@@ -43,11 +43,11 @@ const zedSnippet = computed(() =>
             :heading="2"
             icon="code"
             title="Editor bridge (ACP)"
-            description="Drive this sandbox's agents from Zed, JetBrains, or any ACP editor: mint a token, paste the snippet into your editor's agent settings, and open your synced folder as the project so edits and diffs line up."
+            description="Run this sandbox's agents from Zed, JetBrains, or any ACP editor. Mint a token, paste the snippet into your editor's agent settings, then open your synced folder as the project."
         />
         <p class="text-2xs text-warning">
-            An editor token lets its holder run the agent — which edits files and runs commands in this sandbox. Treat it like a password; revoke it
-            here if it leaks.
+            An editor token lets its holder run the agent, edit files, and run commands in this sandbox. Treat it like a password. Revoke it here if it
+            leaks.
         </p>
 
         <div class="flex items-center gap-2">
@@ -62,13 +62,13 @@ const zedSnippet = computed(() =>
         <Notice v-if="notice" :of="notice" />
 
         <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
-            <p class="text-2xs text-subtle">Shown once — copy it now. The sandbox stores only a hash.</p>
+            <p class="text-2xs text-subtle">Shown once: copy it now. The sandbox stores only a hash.</p>
             <div class="flex items-center gap-2">
                 <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
                 <CopyButton :text="minted.token" label="Copy" />
             </div>
             <!-- The shared code block: it is JSON going into a settings file, so it is coloured as JSON and
-                 carries its own copy button — the snippet's whole purpose is to be pasted elsewhere. -->
+                 carries its own copy button. The snippet's whole purpose is to be pasted elsewhere. -->
             <Code :code="zedSnippet" lang="json" label="Zed → settings.json (JetBrains takes the same command + env)" />
         </div>
 

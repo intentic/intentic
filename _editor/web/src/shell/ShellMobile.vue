@@ -6,7 +6,7 @@ import SandboxGate from "../sandbox-gates/SandboxGate.vue";
 
 /* The mobile chrome: full-screen views over a bottom tab bar. h-dvh (not h-screen) tracks the browser UI
  * chrome; the tab bar yields to the on-screen keyboard so composers keep the room. The desktop grid's rail,
- * chat column, and docked terminal have no mobile equivalents — chat and terminal are full-screen routes,
+ * chat column, and docked terminal have no mobile equivalents: chat and terminal are full-screen routes,
  * the rail's tiles live on /menu. */
 
 const { keyboardInset } = useDevice();

@@ -14,7 +14,7 @@ import SettingsProfile from "./settings/SettingsProfile.vue";
 import SettingsServices from "./settings/SettingsServices.vue";
 
 /* Personal preferences for the signed-in account (cross-sandbox). Reached from the account avatar. Built on the
- * same <HubLayout> as the sandbox hub — the symmetry was the point when both were tab strips, and it is more of
+ * same <HubLayout> as the sandbox hub: the symmetry was the point when both were tab strips, and it is more of
  * one now that the layout is shared code rather than two copies of the same forty lines.
  *
  * ONE UNLABELLED GROUP. Five rows is not a set that needs sorting into piles, and <NavRail> omits the heading
@@ -27,14 +27,14 @@ import SettingsServices from "./settings/SettingsServices.vue";
 
 /* Membership only exists on a platform that sells one (the pool is off by default, and self-hosted platforms
  * keep it off), and the tab appears when the answer is yes. Until the answer lands the tab is simply absent,
- * which is also the right rendering for a platform where it will never land — a failed read costs nothing but
+ * which is also the right rendering for a platform where it will never land: a failed read costs nothing but
  * the row.
  *
  * Payouts ride the SAME answer rather than a second probe: both sides of the pool are switched on by the same
  * platform configuration, so a second round-trip could only ever agree with this one.
  *
- * Read through the app's shared membership entry, so opening Settings from the account menu — which is already
- * showing this account's credit balance from that same entry — costs no further round-trip. */
+ * Read through the app's shared membership entry, so opening Settings from the account menu, which is already
+ * showing this account's credit balance from that same entry: costs no further round-trip. */
 const { offered: membershipOffered } = useMembership();
 
 const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [

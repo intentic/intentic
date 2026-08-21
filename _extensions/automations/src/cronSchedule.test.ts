@@ -97,7 +97,7 @@ describe(`since / nextIn`, () => {
         expect(nextIn(NOW + 5 * MINUTE)).toBe(`in 5m`);
         expect(nextIn(NOW + 3 * 60 * MINUTE)).toBe(`in 3h`);
         expect(nextIn(NOW + 50 * 60 * MINUTE)).toBe(`in 2d`);
-        // The scheduler polls, so a nextRun a moment behind the clock is normal — not a missed run.
+        // The scheduler polls, so a nextRun a moment behind the clock is normal, not a missed run.
         expect(nextIn(NOW)).toBe(`due`);
         expect(nextIn(NOW - 5 * MINUTE)).toBe(`due`);
     });

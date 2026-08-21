@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 //
 // THE SUBJECT IS SPACE, and space is the one thing a projection test cannot see. This tab drew every entry the
-// same way — an icon column that was the same grey box eighteen times, a name line, and a whole second line for
-// a sentence, on a row a thousand pixels wide — which made it two screens long and made the three entries
+// same way: an icon column that was the same grey box eighteen times, a name line, and a whole second line for
+// a sentence, on a row a thousand pixels wide, which made it two screens long and made the three entries
 // somebody actually decided on the quietest thing on it.
 //
 // So what is pinned here is the shape, not the inventory (contents.integration.test.ts has that): that the
@@ -15,7 +15,7 @@ import type { ContentsGroup } from "../../composables/sandbox/useEnvironmentCont
 
 // The import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
 // useDevice reads window.matchMedia; environment.ts reads window.env). The brand CDN is stubbed to refuse, which
-// is also what an offline sandbox does — every mark then paints the tier underneath, and nothing here is waiting
+// is also what an offline sandbox does: every mark then paints the tier underneath, and nothing here is waiting
 // on a network round trip.
 vi.hoisted(() => {
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
@@ -49,9 +49,9 @@ const GROUPS: ContentsGroup[] = [
                 tools: [{ name: `ffmpeg`, version: `5.1.9` }],
                 // The row's line is a TRIMMED version of the paragraph below it (the parenthetical dropped), which
                 // is the shape that used to print the opening sentence twice the moment a row was opened.
-                purpose: `ffmpeg — encoding screen recordings.`,
+                purpose: `ffmpeg, encoding screen recordings.`,
                 detail:
-                    `ffmpeg — encoding screen recordings (Playwright records VP8/WebM). The recordings the machine agents ` +
+                    `ffmpeg, encoding screen recordings (Playwright records VP8/WebM). The recordings the machine agents ` +
                     `produce are raw frames until something encodes them.\n\nThe promo captures go out as MP4, which its ` +
                     `bundled build cannot encode.`,
                 commands: `RUN apt-get install -y ffmpeg`,
@@ -111,7 +111,7 @@ const pills = (el: HTMLElement): HTMLButtonElement[] =>
     [...el.querySelectorAll<HTMLButtonElement>(`button[type="button"]`)].filter((button) => button.ariaLabel !== `Clear filter`);
 
 // A pill's words, in order. Read per child because the mark, the name and the version are siblings with no text
-// between them — the gap is a layout gap, so the concatenated textContent runs "Node.js24.18.0".
+// between them: the gap is a layout gap, so the concatenated textContent runs "Node.js24.18.0".
 const wordsOf = (element: Element): string =>
     [...element.children]
         .map((child) => child.textContent?.trim() ?? ``)
@@ -133,7 +133,7 @@ afterEach(() => {
 
 it(`draws the staples as a strip whose sentences are one click away`, async () => {
     const el = mount();
-    // One pill per staple, name and version on it — the whole question this group is ever asked.
+    // One pill per staple, name and version on it: the whole question this group is ever asked.
     expect(pills(el).map(wordsOf)).toEqual([`Node.js 24.18.0`, `Python 3.11.2`, `ripgrep 13.0.0`]);
     // And thirteen sentences nobody reads are not on screen costing thirteen lines.
     expect(el.textContent).not.toContain(`The runtime everything JavaScript in here runs on.`);
@@ -153,7 +153,7 @@ it(`keeps a closed row to its one line, and opens the comment in place`, async (
     const el = mount();
     const row = el.querySelector<HTMLElement>(`.ui-row-select`);
     // The sentence rides the name; the rationale and the install lines do not exist until asked for.
-    expect(el.textContent).toContain(`ffmpeg — encoding screen recordings.`);
+    expect(el.textContent).toContain(`ffmpeg, encoding screen recordings.`);
     expect(el.textContent).not.toContain(`raw frames until something encodes them`);
 
     row!.click();
@@ -162,8 +162,8 @@ it(`keeps a closed row to its one line, and opens the comment in place`, async (
     expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
 });
 
-/* THE REPEAT THIS TAB SHIPPED WITH. The row's line is a summary of the paragraph — a trailing parenthetical
- * dropped, an over-long sentence cut back to its claim — so a disclosure that stacked "the row's line" above
+/* THE REPEAT THIS TAB SHIPPED WITH. The row's line is a summary of the paragraph: a trailing parenthetical
+ * dropped, an over-long sentence cut back to its claim, so a disclosure that stacked "the row's line" above
  * "the rest of the prose" opened every long entry on its own opening sentence twice, once cut and once whole.
  * One of the two, never both. */
 it(`never shows the opening sentence twice`, async () => {
@@ -175,7 +175,7 @@ it(`never shows the opening sentence twice`, async () => {
 
 /* AND IT DOES NOT LAND FIFTEEN LINES AT ONCE. A rationale runs to bullets and CI history; the reader who
  * clicked a row wants the opening. Cut at the agent's own paragraph break, so the toggle only appears where
- * there genuinely is more — and it does not collapse the row it lives inside. */
+ * there genuinely is more, and it does not collapse the row it lives inside. */
 it(`opens on the first paragraph and keeps the rest one click away`, async () => {
     const el = mount();
     const row = el.querySelector<HTMLElement>(`.ui-row-select`)!;
@@ -193,7 +193,7 @@ it(`opens on the first paragraph and keeps the rest one click away`, async () =>
 
 it(`filters across every group, and drops the ones that match nothing`, async () => {
     const el = mount();
-    // A staple, found from the tab's one filter — the question does not know which group its answer is in.
+    // A staple, found from the tab's one filter: the question does not know which group its answer is in.
     await filterBy(el, `python`);
     expect(el.textContent).toContain(`Comes with every sandbox`);
     expect(el.textContent).not.toContain(`Added for this workspace`);
@@ -225,7 +225,7 @@ it(`only names the source when it is not already saying the row's own name`, () 
  * for its version, one process spawn each, so it is measured in seconds where the other tabs pay a round-trip.
  * It showed a spinner and "Checking installed versions…" over an empty card for all of it.
  *
- * Mounted with `loading` rather than through the parent, because the prop IS the state under test — what the
+ * Mounted with `loading` rather than through the parent, because the prop IS the state under test: what the
  * card does with the query is EnvironmentCard's business. */
 const mountLoading = (): HTMLElement => {
     const el = document.createElement(`div`);
@@ -244,7 +244,7 @@ it(`draws the list's outline while it is checking installed versions`, async () 
         vi.advanceTimersByTime(250);
         await nextTick();
         expect(el.querySelectorAll(`.skeleton`).length).toBeGreaterThan(0);
-        // The sentence is not lost — it is what the wait is announced as, to the readers who need it said.
+        // The sentence is not lost: it is what the wait is announced as, to the readers who need it said.
         expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`Checking installed versions…`);
     } finally {
         vi.useRealTimers();

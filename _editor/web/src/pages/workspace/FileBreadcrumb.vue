@@ -11,7 +11,7 @@ import { formatBytes } from "@intentic/ui";
 const { path, meta } = defineProps<{ path: string; meta?: WorkspaceTreeEntry }>();
 
 const segments = computed(() => path.split(`/`));
-// Empty when there's no size — PrimeVue's tooltip directive unbinds on a falsy value, so no tooltip shows.
+// Empty when there's no size: PrimeVue's tooltip directive unbinds on a falsy value, so no tooltip shows.
 const sizeLabel = computed(() => formatBytes(meta?.size));
 </script>
 

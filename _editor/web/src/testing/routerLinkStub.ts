@@ -2,7 +2,7 @@ import { defineComponent, h, type PropType } from "vue";
 
 /* A <RouterLink> FOR A COMPONENT TEST THAT MOUNTS NO ROUTER.
  *
- * Every navigational row in this app is a real link, which means a lot of components now import RouterLink —
+ * Every navigational row in this app is a real link, which means a lot of components now import RouterLink:
  * and the real one resolves its href out of the router INJECTED by `app.use(router)`. A unit test that mounts
  * one component into a bare app has no such router, so the real link throws on its first render and takes the
  * whole suite's mount with it.
@@ -11,7 +11,7 @@ import { defineComponent, h, type PropType } from "vue";
  * navigation is a spy rather than a real one, and a half-real router beside a mocked one is two answers to
  * "where did that go".
  *
- * So: an anchor that carries the address and nothing else. It keeps the `href` on purpose — WHERE a row goes
+ * So: an anchor that carries the address and nothing else. It keeps the `href` on purpose, WHERE a row goes
  * is the thing worth asserting, and a stub that dropped it would let a link pointing at the wrong page pass.
  *
  * Spread it into the module mock beside the rest:

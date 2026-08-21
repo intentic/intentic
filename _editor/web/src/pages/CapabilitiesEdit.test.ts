@@ -3,7 +3,7 @@
 // CHANGING A CONNECTION YOU ALREADY HAVE. The card's form was only ever an ADD form: it opened pre-filled with
 // the card's defaults and a free name, and the only way to reach a live connection's settings was to notice a
 // line of small print and re-type its name exactly. So in practice a wrong gateway or a wrong routed network
-// meant removing the connection and building it again — which for a signed-in account, a paired machine or a
+// meant removing the connection and building it again, which for a signed-in account, a paired machine or a
 // tunnel throws away the very thing that makes it worth keeping.
 //
 // These mount the vpn card over a LIVE tunnel and pin the three things that make the same form safe to edit
@@ -18,7 +18,7 @@ import { VAULTED } from "@intentic/sandbox-contract";
 // The import-time globals a mounted view needs (see Capabilities.test.ts): ui's useDevice reads matchMedia at
 // module scope, environment.ts reads window.env and throws without it.
 
-/* WHICH CONNECTION THE FORM IS OVER LIVES IN THE URL, next to the card — so a reload lands back on it and Back
+/* WHICH CONNECTION THE FORM IS OVER LIVES IN THE URL, next to the card, so a reload lands back on it and Back
  * leaves the edit rather than the page. The mock is a real query rather than an empty one for that reason: the
  * page reads `edit` off the route exactly as it reads the card off the path. */
 let query: Record<string, string> = {};
@@ -33,7 +33,7 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 
 /* THE TUNNEL AS THE DAEMON REPORTS IT: every dial parameter echoed, the WireGuard conf absent, and `secrets`
  * naming the key that is missing. That last field is the whole difference between an editable form and a
- * destructive one — without it the browser cannot tell "there is a key here I may not show you" from "there is
+ * destructive one: without it the browser cannot tell "there is a key here I may not show you" from "there is
  * no key here", and both render as an empty required box. */
 const capabilities = ref<CapabilitySummary[]>([]);
 const office = (): CapabilitySummary => ({
@@ -112,7 +112,7 @@ const start = (editing: string | undefined): HTMLElement => {
     return mount();
 };
 
-// The card's own form, submitted the way the button submits it — the submit is a PrimeVue component and what
+// The card's own form, submitted the way the button submits it: the submit is a PrimeVue component and what
 // it does is dispatch this.
 const submitForm = async (el: HTMLElement): Promise<void> => {
     el.querySelector(`form`)!.dispatchEvent(new Event(`submit`, { bubbles: true, cancelable: true }));
@@ -130,13 +130,13 @@ it(`opens a live connection's own settings, and says whose they are`, () => {
     // Filled from the connection, not from the card: the switch is where the user left it, not at its default.
     expect(el.textContent).toContain(`Editing`);
     expect(el.textContent).toContain(`office`);
-    // No name box — renaming moves what the name keys (a browser profile, a machine's enrollment), so it is its
+    // No name box: renaming moves what the name keys (a browser profile, a machine's enrollment), so it is its
     // own migration and a second, lossy way to do it here would be a trap wearing a text box.
     expect(nameBox(el)).toBeNull();
     // The word on the button is the one thing a reader checks before pressing it over somebody's live gateway.
     expect(el.textContent).toContain(`Save changes`);
 
-    // The credential is blank, because it was never sent — and the box says so where the eye already is,
+    // The credential is blank, because it was never sent, and the box says so where the eye already is,
     // instead of reading as one more thing to go and find.
     expect(wireguardBox(el).value).toBe(``);
     expect(wireguardBox(el).placeholder).toContain(`already set`);
@@ -148,7 +148,7 @@ it(`saves over the same connection and keeps the credential it was never shown`,
 
     await submitForm(el);
 
-    // The same id — an edit, not a second tunnel — and the marker where the conf goes. An empty string would be
+    // The same id: an edit, not a second tunnel, and the marker where the conf goes. An empty string would be
     // a config that fails to dial; a dropped key would fail the daemon's schema.
     expect(add).toHaveBeenCalledWith(expect.objectContaining({ id: `office`, kind: `vpn` }));
     expect(add.mock.calls[0]?.[0].config).toEqual({ provider: `wireguard`, config: VAULTED, autoConnect: `on` });
@@ -168,7 +168,7 @@ it(`replaces the credential when one is actually typed`, async () => {
     expect(add.mock.calls[0]?.[0].config[`config`]).toBe(`[Interface]\nPrivateKey = NEW`);
 });
 
-/* WITHOUT THE QUERY THE CARD IS ADDING, which is what it always did — and the connection it already holds is
+/* WITHOUT THE QUERY THE CARD IS ADDING, which is what it always did, and the connection it already holds is
  * listed above the form rather than loaded into it. The name is pre-filled with a FREE one (the card's own id
  * here, since the live tunnel took a name of its own), so pressing the button makes a second tunnel instead of
  * writing the card's defaults over the first. */

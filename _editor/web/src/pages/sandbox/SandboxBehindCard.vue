@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "../../composables/sandbox/useDaemonRoutes";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 
-/* "This sandbox predates some features" — the specific companion to SandboxUpdateCard.
+/* "This sandbox predates some features": the specific companion to SandboxUpdateCard.
  *
  * That card compares version strings against the latest published release, which answers "is something newer
  * out?". This one compares the daemon's ADVERTISED route surface against the contract this app was built with,
@@ -13,26 +13,26 @@ import { useEnvironment } from "../../composables/sandbox/useEnvironment";
  * separately rather than folding into the version check:
  *
  *   - In local development every package is version 0.0.0, so there is no release to compare against and the
- *     update card can never fire — which is exactly the case where a developer's daemon is most often behind
+ *     update card can never fire, which is exactly the case where a developer's daemon is most often behind
  *     their working tree, and exactly the confusion this whole mechanism was built to end.
  *   - A version being newer does not tell you whether anything you care about changed. A named route gap does.
  *
  * It reports the two ways that surface can disagree, because they read differently to whoever hit them: a
  * feature the sandbox does not HAVE fails loudly and is merely unexplained, while one it has under a different
- * shape fails QUIETLY — the screen loads, a value is blank, and nothing anywhere says why.
+ * shape fails QUIETLY: the screen loads, a value is blank, and nothing anywhere says why.
  *
  * THEY ALSO DIFFER IN WHAT THEY PROVE, which is why the heading is not fixed. A missing route names the older
  * side: this app has a name the daemon lacks, and a daemon newer than the app would merely advertise extras
- * nobody asks about. A drifted one names nothing — two builds disagreeing about a payload says they differ,
+ * nobody asks about. A drifted one names nothing: two builds disagreeing about a payload says they differ,
  * not which of them moved, and in a dev loop the page has usually been open longer than the daemon has been
  * running. Asserting "the sandbox is behind" over that is a guess, and the half of the time it guesses wrong it
- * sends someone to rebuild a sandbox that was already current — which is how a warning teaches people to
+ * sends someone to rebuild a sandbox that was already current, which is how a warning teaches people to
  * ignore it.
  *
- * Non-blocking on purpose. An older sandbox is a fully supported thing to be running — everything it does
+ * Non-blocking on purpose. An older sandbox is a fully supported thing to be running: everything it does
  * implement keeps working, and nothing here forces an update. It only stops the gap being invisible. */
 
-// The group half of a `<group>.<route>` name — a route name with no dot in it is its own area rather than a
+// The group half of a `<group>.<route>` name: a route name with no dot in it is its own area rather than a
 // hole in the list.
 const areas = (names: readonly string[]): string[] => [...new Set(names.map((name) => name.split(`.`)[0] ?? name))].toSorted();
 // Shown to a person, so the area reads as a name (`Agent`), not a raw route prefix (`agent`).
@@ -43,7 +43,7 @@ const driftedLabel = computed(() => areas(driftedRoutes.value).map(areaLabel).jo
 // The developer's remedy is the one the dev loop already documents; a user's is the update card's path.
 const isDev = import.meta.env.DEV;
 const { slug } = useEnvironment();
-/* A RELOAD, not an image rebuild — the distinction this card used to get wrong, and the reason rebuilding felt
+/* A RELOAD, not an image rebuild: the distinction this card used to get wrong, and the reason rebuilding felt
  * like it never helped. In dev the container does not run the daemon baked into the image: dev-sandbox.sh
  * bind-mounts the compiled output from the working tree, so the image never predates anything. What predates
  * the tree is the RUNNING PROCESS, which read that output once at boot and holds it until it restarts.

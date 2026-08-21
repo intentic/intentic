@@ -5,15 +5,15 @@ import { host } from "./host";
 import type { Incident } from "./incidents";
 import { INCIDENT_TONE } from "./stateVisual";
 
-/* ONE LINE OF THE "NEEDS YOU" PANEL — what moved, when, and the button that puts an agent on it.
+/* ONE LINE OF THE "NEEDS YOU" PANEL: what moved, when, and the button that puts an agent on it.
  *
  * IT IS A COMPONENT FOR ONE REASON: the caret. The strip is a `v-for`, and the model chosen for one incident
- * must not be the model spent on the next one down — so the pick has to be per row, which means per component.
+ * must not be the model spent on the next one down, so the pick has to be per row, which means per component.
  * That is the same reason ResourceRow holds its own, and it is why this line stopped being inline template.
  *
  * The button is the strip's whole point. This panel exists so an operator does not have to find the row for the
- * thing that just broke, and a shortcut that could not do what the row does — including choosing what it
- * spends — would send them back down to the board anyway. */
+ * thing that just broke, and a shortcut that could not do what the row does: including choosing what it
+ * spends: would send them back down to the board anyway. */
 
 const { incident, resource } = defineProps<{
     incident: Incident;

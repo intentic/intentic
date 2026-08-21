@@ -8,7 +8,7 @@ export type ScheduleFreq = `minutes` | `hourly` | `daily` | `weekly` | `monthly`
 export interface ScheduleState {
     freq: ScheduleFreq;
     everyMinutes: number; // minutes: 1-59
-    time: string; // "HH:MM" 24h — daily/weekly/monthly
+    time: string; // "HH:MM" 24h, daily/weekly/monthly
     days: number[]; // weekly: cron dow 0-6, 0 = Sunday
     dayOfMonth: number; // monthly: 1-31
     cron: string; // custom only

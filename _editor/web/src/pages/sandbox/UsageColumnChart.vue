@@ -3,7 +3,7 @@ import { providerLabel } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { formatUsd, niceMax, providerColor, type SpendBucket } from "./usageChart";
 
-/* Spend over time, as columns. One series when a single provider ran in the window (the card title names it —
+/* Spend over time, as columns. One series when a single provider ran in the window (the card title names it:
  * a one-swatch legend box would only restate the title); stacked with a legend the moment there are two.
  *
  * Hand-rolled in HTML rather than SVG or a chart library: percentage heights inside a flex row are already a
@@ -14,7 +14,7 @@ import { formatUsd, niceMax, providerColor, type SpendBucket } from "./usageChar
 const { series, providers } = defineProps<{ series: readonly SpendBucket[]; providers: readonly string[] }>();
 
 // A clean axis top, so the gridline labels read as numbers a person would say. Never derived from the stacked
-// segments — the column's own total is what the axis measures.
+// segments: the column's own total is what the axis measures.
 const max = computed(() => niceMax(Math.max(0, ...series.map((bucket) => bucket.totals.costUsd))));
 
 const stacked = computed(() => providers.length > 1);
@@ -56,7 +56,7 @@ const PLOT_HEIGHT = `10rem`;
                 <div v-for="tick in [0, 50, 100]" :key="tick" class="absolute inset-x-0 border-t border-line" :style="{ top: `${tick}%` }" />
 
                 <div class="absolute inset-0 flex items-end gap-0.5">
-                    <!-- The hit target is the whole column band, not the mark — a $0.02 day is 1px tall and
+                    <!-- The hit target is the whole column band, not the mark: a $0.02 day is 1px tall and
                          would otherwise be unhoverable. The band's tint doubles as the crosshair. -->
                     <div
                         v-for="bucket in series"

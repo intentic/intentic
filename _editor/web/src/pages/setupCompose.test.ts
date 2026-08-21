@@ -33,14 +33,14 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     expect(yaml).toContain(`name: intentic-docker-sandbox-0f00ba4dd12b`);
     expect(yaml).toContain(`aliases: [intentic-sandbox-workspace]`);
     // The capabilities connect.sh's run carries: SYS_ADMIN gives isolated turns their own mount namespace,
-    // while SYS_PTRACE lets production diagnostics inspect a wedged daemon. This drifted once already — a
+    // while SYS_PTRACE lets production diagnostics inspect a wedged daemon. This drifted once already: a
     // capability reached one creation path but not the others, leaving ordinarily-created sandboxes weaker.
     expect(yaml).toContain(`cap_add: [SYS_ADMIN, SYS_PTRACE]`);
     // Secrets come from the claimed .env, with a clear error when the bootstrap was skipped.
     expect(yaml).toContain(`CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`);
     expect(yaml).toContain(`SANDBOX_PUBLIC_URL: https://sandbox-0f00ba4dd12b.intentic.dev`);
     expect(yaml).toContain(`PLATFORM_URL: https://api.intentic.dev`);
-    // The intentic path bakes NO Cloudflare token env — an empty one would shadow the workspace .env later.
+    // The intentic path bakes NO Cloudflare token env: an empty one would shadow the workspace .env later.
     expect(yaml).not.toContain(`CLOUDFLARE_API_TOKEN`);
     expect(yaml).not.toContain(`agent-auth`);
 });
@@ -56,7 +56,7 @@ test("the production registry image is pull_policy: always so it tracks the movi
     expect(yaml).not.toContain(`pull_policy: never`);
 });
 
-test("daemon-defaulted vars are omitted — the environment block stays minimal", () => {
+test("daemon-defaulted vars are omitted: the environment block stays minimal", () => {
     const yaml = composeFile(base);
     for (const noise of [
         `WORKSPACE_ROOT`,
@@ -74,7 +74,7 @@ test("daemon-defaulted vars are omitted — the environment block stays minimal"
 
 test("an SPA served anywhere but the hosted app names itself as the daemon's CORS origin", () => {
     // Without this the daemon allowlists app.intentic.dev alone and the SPA that just created the sandbox is
-    // blocked on its first /health — the failure reads as "sandbox unreachable", never as CORS.
+    // blocked on its first /health: the failure reads as "sandbox unreachable", never as CORS.
     expect(composeFile({ ...base, webOrigin: `https://localhost:47145` })).toContain(`WEB_ORIGIN: https://localhost:47145`);
     expect(composeFile(base)).not.toContain(`WEB_ORIGIN`);
 });

@@ -1,4 +1,4 @@
-<!-- The contents column — the index to a document set, and for a 50-package monorepo the only thing standing
+<!-- The contents column: the index to a document set, and for a 50-package monorepo the only thing standing
      between a reader and a wall of paths.
 
      IT DRAWS NO LINES AT ALL, which is now <NavRail>'s rule rather than this column's choice. An index that
@@ -7,7 +7,7 @@
      groups are spaced apart rather than boxed apart, and the only saturated things in it are the seven
      component accents and the amber of a page that has drifted.
 
-     What the eye gets instead of chrome is rhythm — a sticky component heading, then rows that differ only in
+     What the eye gets instead of chrome is rhythm: a sticky component heading, then rows that differ only in
      the part that is not shared: `_sandbox/` is dimmed, `sandbox-contract` is not, because the prefix is the same
      word on nine rows in a row and the leaf is what anybody is actually reading.
 
@@ -20,7 +20,7 @@ import { computed, nextTick, ref, watch, type ComponentPublicInstance } from "vu
 import type { DocComponent, DocIndex } from "./docModel.js";
 
 const { components, index, page } = defineProps<{
-    // The map's components, in authored order — the grouping the reader thinks in.
+    // The map's components, in authored order: the grouping the reader thinks in.
     components: readonly DocComponent[];
     // The generated index: which pages exist, and the tool's verdict on each. Absent until a set is generated.
     index: DocIndex | undefined;
@@ -35,7 +35,7 @@ const byDir = computed(() => new Map(entries.value.map((entry) => [entry.dir, en
 const staleCount = computed(() => entries.value.filter((entry) => entry.stale).length);
 
 /* A SECTION IS A COMPONENT, including the tail one this builds. A document exists whether or not the map
- * claims it — generating one new package after the map was written leaves an entry no component lists — and
+ * claims it: generating one new package after the map was written leaves an entry no component lists, and
  * grouping strictly by the map would make that page unreachable from the only index there is. */
 const sections = computed<DocComponent[]>(() => {
     const claimed = new Set(components.flatMap((component) => component.packages));
@@ -70,7 +70,7 @@ const rowOf = (dir: string): NavRow => {
         prefix: dir.slice(0, cut + 1),
         leaf: dir.slice(cut + 1),
         stale: entry?.stale === true,
-        title: [dir, entry?.oneLiner, entry?.stale === true ? `May be out of date — ${entry.reason}` : undefined]
+        title: [dir, entry?.oneLiner, entry?.stale === true ? `May be out of date, ${entry.reason}` : undefined]
             .filter((line) => line !== undefined)
             .join(`\n`),
     };
@@ -164,8 +164,8 @@ watch(
                 <template #title>
                     <span class="min-w-0 truncate font-mono">
                         <!-- Dimmed by opacity rather than by a colour token, so the prefix stays one step behind
-                             the leaf in every state the row has — muted at rest, content on hover, link when it
-                             is the open page — instead of only in the one it was picked against. -->
+                             the leaf in every state the row has: muted at rest, content on hover, link when it
+                             is the open page: instead of only in the one it was picked against. -->
                         <span class="opacity-70">{{ row.prefix }}</span
                         >{{ row.leaf }}
                     </span>
@@ -180,11 +180,11 @@ watch(
         </template>
 
         <!-- TWO DIFFERENT EMPTINESSES, and answering with the wrong one accuses the reader of mistyping a filter
-             they never touched. A column with nothing in it is ordinary — a run that has written the map but no
-             pages yet, a repository whose overview is the whole documentation — and it should say so. -->
+             they never touched. A column with nothing in it is ordinary: a run that has written the map but no
+             pages yet, a repository whose overview is the whole documentation, and it should say so. -->
         <template #empty>
             <p class="px-2 py-6 text-center text-2xs text-subtle">
-                {{ query.trim() === `` ? `No package pages here yet.` : `Nothing matches “${query.trim()}”.` }}
+                {{ query.trim() === `` ? `No package pages here yet.` : `Nothing matches "${query.trim()}".` }}
             </p>
         </template>
 

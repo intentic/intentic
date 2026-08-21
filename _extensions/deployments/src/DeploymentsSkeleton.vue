@@ -3,8 +3,8 @@
  * spinner and not the sentence "Reading your deployments…", which is a line of text where a board is about to
  * be and moves everything under it the moment the data lands.
  *
- * The geometry is a deliberate copy of the real thing — tally line, one host group with its meta strip, rows
- * with a state glyph, a name, a status line and two action buttons — so the page settles once. Row widths vary
+ * The geometry is a deliberate copy of the real thing: tally line, one host group with its meta strip, rows
+ * with a state glyph, a name, a status line and two action buttons, so the page settles once. Row widths vary
  * because a column of identical bars reads as a rendering artifact rather than as a list of container names;
  * they are fixed rather than random, since a placeholder that reshuffles on every re-render is worse than one
  * that repeats. */

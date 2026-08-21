@@ -289,7 +289,7 @@ const renderButton = async (parent: HTMLElement, dark: boolean): Promise<boolean
     try {
         await ensureInitialized();
     } catch {
-        return false; // GIS never loaded — the caller decides what to show instead.
+        return false; // GIS never loaded: the caller decides what to show instead.
     }
     const id = window.google?.accounts?.id;
     if (id === undefined) {

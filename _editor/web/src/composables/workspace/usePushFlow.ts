@@ -204,7 +204,7 @@ const send = async (push: PendingPush): Promise<void> => {
         title: `${push.verb} failed`,
         // One repo can say what git said; several cannot share a line, and each row in the panel is already
         // carrying its own reason under the repo that produced it.
-        detail: only === undefined ? `${refused.length} repos refused it — each row says why.` : `${refused[0]}: ${only.detail}`,
+        detail: only === undefined ? `${refused.length} repos refused it, each row says why.` : `${refused[0]}: ${only.detail}`,
     };
 };
 

@@ -5,13 +5,13 @@ import { computed } from "vue";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { useRepos } from "../../../composables/workspace/useRepos";
 
-/* WHICH REPOS KEEP A CHANGELOG — one switch per repo, and the only place this feature is ever turned on.
+/* WHICH REPOS KEEP A CHANGELOG: one switch per repo, and the only place this feature is ever turned on.
  *
  * IT IS A SWITCH RATHER THAN A DEFAULT because of who this daemon runs for. Everything else about a drafted
  * commit is inferred from the repo's own history: the assistant reads the last handful of subjects and matches
  * whatever convention it finds, so a repo that spells its commits some other way is never argued with. A
- * release note is the one thing that cannot be learned that way — a repo that has never written one gives it
- * nothing to copy — so asking for it has to be somebody's decision, made here, per repo.
+ * release note is the one thing that cannot be learned that way: a repo that has never written one gives it
+ * nothing to copy, so asking for it has to be somebody's decision, made here, per repo.
  *
  * PER REPO rather than per sandbox, because a workspace holds several and they do not answer to the same
  * audience: the product you ship has users waiting to hear what changed, and the scratch repo beside it has

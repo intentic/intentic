@@ -25,7 +25,7 @@ const busy = ref(false);
 const error = ref<NoticeModel>();
 
 onMounted(async () => {
-    // Session refresh and token preview are independent (preview needs no session) — resolve them together.
+    // Session refresh and token preview are independent (preview needs no session): resolve them together.
     const [, previewed] = await Promise.all([refresh(), apiClient.invite.preview({ token }).catch(() => ({ status: `invalid` as const }))]);
     preview.value = previewed;
     loading.value = false;
@@ -72,7 +72,7 @@ const accept = async (): Promise<void> => {
     }
 };
 
-// The workspace is a place, so the button that opens it is a link — same as every other way into it.
+// The workspace is a place, so the button that opens it is a link: same as every other way into it.
 
 const switchAccount = async (): Promise<void> => {
     await signOut();

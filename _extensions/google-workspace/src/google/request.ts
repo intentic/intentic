@@ -70,12 +70,12 @@ export const googleError = (status: number, url: string, body: unknown): GoogleA
     }
     if (status === 403 && /insufficient|scope/i.test(message)) {
         return new GoogleApiError(
-            `Google refused this for lack of permission: ${message} — the connection was approved for narrower scopes than it needs. Re-approve it with the scopes listed on the card, or add the scope to the service account's domain-wide delegation.`,
+            `Google refused this for lack of permission: ${message}, the connection was approved for narrower scopes than it needs. Re-approve it with the scopes listed on the card, or add the scope to the service account's domain-wide delegation.`,
             status,
         );
     }
     if (status === 404) {
-        return new GoogleApiError(`${message} — check the id, and that this account can actually see that item.`, status);
+        return new GoogleApiError(`${message}: check the id, and that this account can actually see that item.`, status);
     }
     if (status === 429) {
         return new GoogleApiError(`Google is rate-limiting this account: ${message}. Try again in a minute, or do less at once.`, status);

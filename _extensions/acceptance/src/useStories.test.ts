@@ -11,7 +11,7 @@ import { useStories } from "./useStories";
  * nothing cached runs its `queryFn` before the rest of the composable's body has been evaluated. A helper the
  * queryFn closes over but that is declared BELOW the query therefore typechecks perfectly and dies at runtime
  * with `Cannot access 'walk' before initialization`. Nothing short of actually calling the composable can see
- * it — which is how it shipped. */
+ * it, which is how it shipped. */
 
 const routes = (json: Readonly<Record<string, unknown>>): IntenticApi =>
     ({
@@ -46,7 +46,7 @@ const routes = (json: Readonly<Record<string, unknown>>): IntenticApi =>
             onDidChange: () => ({ dispose: () => {} }),
             // The host's own file reader, faked over the same route map: it resolves the route, validates the
             // daemon's envelope and hands back the content, exactly as apiImpl does. Absent reads as undefined
-            // rather than throwing — which is the behaviour every caller of it depends on.
+            // rather than throwing, which is the behaviour every caller of it depends on.
             file: async (path: string) => {
                 const hit = json[`/workspace/file?path=${encodeURIComponent(path)}`];
                 const answer = hit === undefined ? undefined : WorkspaceFileSchema.parse(hit);
@@ -56,7 +56,7 @@ const routes = (json: Readonly<Record<string, unknown>>): IntenticApi =>
     }) as unknown as IntenticApi;
 
 /* Fixtures go through the SAME schemas the readers parse with. Those readers swallow a parse failure as
- * "nothing there", so a payload missing a contract field would make every assertion below pass vacuously —
+ * "nothing there", so a payload missing a contract field would make every assertion below pass vacuously:
  * parsing here moves that failure into the fixture, where it is loud. */
 const children = (path: string, entries: readonly WorkspaceTreeEntry[]) =>
     [`/workspace/children?path=${encodeURIComponent(path)}`, WorkspaceChildrenSchema.parse({ entries, hidden: 0 })] as const;
@@ -67,7 +67,7 @@ const file = (path: string, content: string) =>
     ] as const;
 
 // Drive the composable the way the view does: inside an app context (vue-query injects its client from there)
-// and an effect scope (so the query's watchers have somewhere to live). Returns once the initial fetch settles —
+// and an effect scope (so the query's watchers have somewhere to live). Returns once the initial fetch settles:
 // `isLoading` going false, not a fixed number of ticks, so "still fetching" can never pass as "found nothing".
 const run = async (api: IntenticApi): Promise<ReturnType<typeof useStories>> => {
     bindHost(api);
@@ -95,7 +95,7 @@ afterEach(() => {
 });
 
 describe(`useStories`, () => {
-    it(`reads the workspace on its first fetch — which vue-query runs inside useQuery, before the rest of the composable exists`, async () => {
+    it(`reads the workspace on its first fetch, which vue-query runs inside useQuery, before the rest of the composable exists`, async () => {
         const api = routes(
             Object.fromEntries([
                 children(`app/docs/user-stories`, [{ name: `01-sign-in.md`, path: `app/docs/user-stories/01-sign-in.md`, type: `file` }]),

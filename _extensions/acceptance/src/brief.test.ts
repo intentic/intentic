@@ -22,7 +22,7 @@ const brief = (over: { readonly criteria?: readonly string[]; readonly projectNo
     });
 
 describe(`briefFor`, () => {
-    it(`inlines the story rather than pointing at it — the agent must not go read the implementation instead`, () => {
+    it(`inlines the story rather than pointing at it: the agent must not go read the implementation instead`, () => {
         const text = brief();
         expect(text).toContain(`As a user I can sign in with Google.`);
         expect(text).toContain(`app/docs/user-stories/auth/01-sign-in.md`);
@@ -35,7 +35,7 @@ describe(`briefFor`, () => {
         expect(text).toMatch(/Do not start, build, restart or reconfigure it/);
     });
 
-    it(`tells the agent it is a tester — an unfixed defect is the deliverable`, () => {
+    it(`tells the agent it is a tester: an unfixed defect is the deliverable`, () => {
         expect(brief()).toMatch(/Do not fix defects you find/);
     });
 
@@ -66,7 +66,7 @@ describe(`briefFor`, () => {
         expect(text).toContain(`"story": "01-sign-in"`);
     });
 
-    /* The authored criteria are the contract the report is graded against — see brief.ts. They are numbered in
+    /* The authored criteria are the contract the report is graded against: see brief.ts. They are numbered in
      * the instructions AND seeded verbatim into the result shape, because a positional array whose entries the
      * agent paraphrased cannot be lined up with what the story's author promised. */
     describe(`the authored criteria`, () => {

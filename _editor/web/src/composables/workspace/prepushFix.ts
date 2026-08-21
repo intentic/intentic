@@ -21,7 +21,7 @@ import type { PrepushRun } from "@intentic/sandbox-contract";
 export const fixPrompt = (run: PrepushRun): string => {
     const ending =
         run.timedOut === true
-            ? `did not finish — it hit its time limit and was killed. Treat that as a failure: something hangs, and finding what is part of the fix.`
+            ? `did not finish, it hit its time limit and was killed. Treat that as a failure: something hangs, and finding what is part of the fix.`
             : `failed (exit ${run.exitCode ?? `unknown`}).`;
     const output = run.output.trim();
     return [
@@ -37,7 +37,7 @@ export const fixPrompt = (run: PrepushRun): string => {
  * the markdown of `fixPrompt` leaking into a plain-text line, which rendered them as the literal characters.) */
 export const fixSummary = (run: PrepushRun): string => {
     if (run.timedOut === true) {
-        return `never finished — it hit its time limit and was killed.`;
+        return `never finished: it hit its time limit and was killed.`;
     }
     if (run.status === `error`) {
         return `could not run at all.`;

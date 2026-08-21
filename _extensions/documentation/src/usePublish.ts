@@ -95,7 +95,7 @@ export function usePublish() {
             headers: { "content-type": `application/json` },
             body: JSON.stringify({
                 repo: gitRepo(repo),
-                message: `docs: publish architecture documentation\n\n${paths.length} file${paths.length === 1 ? `` : `s`} — package READMEs and the repository map.`,
+                message: `docs: publish architecture documentation\n\n${paths.length} file${paths.length === 1 ? `` : `s`}, package READMEs and the repository map.`,
             }),
         });
         await api.sandbox.request(`/workspace/entry`, {

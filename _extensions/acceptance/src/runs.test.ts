@@ -13,7 +13,7 @@ import {
     type StorySnapshot,
 } from "./runs";
 
-// The daemon's own guard on AgentTurn.conversationId — it lands in branch names (agent/<id>) and filesystem
+// The daemon's own guard on AgentTurn.conversationId: it lands in branch names (agent/<id>) and filesystem
 // paths, so a violation is not a validation error the UI can retry past.
 const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
@@ -42,7 +42,7 @@ describe(`conversationIdOf`, () => {
         expect(conversationIdOf(`r`, `${`a`.repeat(58)}-tail`)).not.toMatch(/-$/);
     });
 
-    // The slug is what gets cut when the two would overflow, never the run id — an id truncated past its run is
+    // The slug is what gets cut when the two would overflow, never the run id: an id truncated past its run is
     // an agent nothing can attribute.
     it(`keeps the run id intact so a card can always be attributed back to its run`, () => {
         const runId = runIdAt(1_800_000_000_000);
@@ -134,7 +134,7 @@ describe(`matchesStoryRevision`, () => {
 });
 
 describe(`storyDir`, () => {
-    it(`sits under .intentic, outside every repo — no git noise, nothing to land`, () => {
+    it(`sits under .intentic, outside every repo: no git noise, nothing to land`, () => {
         expect(storyDir(`rabc`, `login`)).toBe(`.intentic/records/artifacts/acceptance/rabc/login`);
     });
 });
@@ -148,7 +148,7 @@ describe(`isShotPath`, () => {
     });
 });
 
-/* One unreadable run directory must never blank the list — the runs view and the rail badge both walk every
+/* One unreadable run directory must never blank the list: the runs view and the rail badge both walk every
  * directory they find, and a half-written run.json is an ordinary sight while a run is starting. */
 describe(`parseManifest`, () => {
     it(`reads a manifest back`, () => {
@@ -239,7 +239,7 @@ describe(`parseResult`, () => {
 });
 
 /* WHAT A STORY'S ROW SAYS, and the case both surfaces used to get wrong. A test session refused on its first
- * request writes nothing at all — no verdict, no report, no screenshot — so the standing is the only thing
+ * request writes nothing at all: no verdict, no report, no screenshot, so the standing is the only thing
  * either surface can show for it, and both showed the story as though nothing had been attempted: the list left
  * it blank, the report called it neutral. A run whose every session died then read as a run nobody had started. */
 describe(`storyStanding`, () => {
@@ -248,11 +248,11 @@ describe(`storyStanding`, () => {
     });
 
     it(`keeps a written verdict whatever became of the session afterwards`, () => {
-        // The agent judged the story and its session then failed — on the report it was writing, on a later
+        // The agent judged the story and its session then failed: on the report it was writing, on a later
         // turn, on anything. The judgement stands: it is the thing the run exists to produce.
         expect(storyStanding(`pass`, `error`)).toEqual({ label: `pass`, variant: `success` });
         expect(storyStanding(`fail`, `idle`)).toEqual({ label: `fail`, variant: `danger` });
-        // `blocked` stays warning, not danger — the app was unreachable, which is not this story being broken.
+        // `blocked` stays warning, not danger: the app was unreachable, which is not this story being broken.
         expect(storyStanding(`blocked`, undefined)).toEqual({ label: `blocked`, variant: `warning` });
     });
 

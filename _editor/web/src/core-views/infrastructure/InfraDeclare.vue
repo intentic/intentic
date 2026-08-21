@@ -27,7 +27,7 @@ import { wantedApps } from "./wanted";
 /* Infra → the authoring half of the page, organized want-first: the user declares WHAT THEY WANT (apps +
  * self-hosted services, via the one Add catalog dialog) and applies; the i.have.* side is demoted to a
  * collapsed "What you have" section. When a want needs a have that isn't there yet (a server to run on,
- * Cloudflare for a domain), a requirement card appears inline to define it just-in-time — haves are pulled
+ * Cloudflare for a domain), a requirement card appears inline to define it just-in-time: haves are pulled
  * in by wants, never asked for up-front. Apply changes resolves in the sandbox (pausing on missing secrets),
  * then runs apply → adopt as a detached tmux job whose terminal-panel tab is the durable log; on completion
  * the state + deployments queries are invalidated so the Live status block below refreshes in place.
@@ -48,14 +48,14 @@ const progress = useApplyProgress();
 const showConnect = ref(false);
 const addOpen = ref(false);
 
-// Services — apps (declared i.want.app entries ∪ resolved plan ∪ live deployments) and the declared
+// Services: apps (declared i.want.app entries ∪ resolved plan ∪ live deployments) and the declared
 // i.want.service entries.
 const apps = computed(() => wantedApps(entries.value, state.value?.resources ?? [], deployments.value));
 const tools = computed(() => entries.value.filter((entry) => entry.kind === `service`));
-// Apps with an i.want.app entry in intent — the removable ones (a merely resolved/live app has no entry to delete).
+// Apps with an i.want.app entry in intent: the removable ones (a merely resolved/live app has no entry to delete).
 const declaredApps = computed(() => new Set(entries.value.filter((entry) => entry.kind === `app`).map((entry) => entry.name)));
 
-// Connections — the servers the services run on. Cloudflare, GitHub/GitLab and Stripe are credentials with
+// Connections: the servers the services run on. Cloudflare, GitHub/GitLab and Stripe are credentials with
 // their own cards below (Cloudflare needs a token + zone, so it gets the CloudflareConnect step), so they're
 // all excluded from this bare server list.
 const backends = computed(() =>
@@ -129,7 +129,7 @@ const removeEntry = async (entryName: string): Promise<void> => {
     actionError.value = null;
     try {
         await remove.mutateAsync(entryName);
-        // Removing a want stages a pending change like adding one — refresh the preview (never auto-applies).
+        // Removing a want stages a pending change like adding one: refresh the preview (never auto-applies).
         if (hasHost.value) {
             void preview.run();
         }
@@ -139,12 +139,12 @@ const removeEntry = async (entryName: string): Promise<void> => {
 };
 
 // Removing a SERVER is two distinct acts, communicated before anything happens: forgetting it here (the
-// inventory entry + stored SSH key) vs wiping the machine itself — which only the cleanup one-liner run ON
+// inventory entry + stored SSH key) vs wiping the machine itself, which only the cleanup one-liner run ON
 // the server can do. The dialog shows both so nobody is left with a machine full of orphaned containers.
 const removingServer = ref<string | undefined>();
 // Computed, not a constant: in local dev the script's delivery is the developer's choice (scriptSource), and a
 // command built once when the screen mounted would go on offering the checkout path after they asked for the
-// released one — on the single command here that is guaranteed to be run somewhere the checkout is not.
+// released one: on the single command here that is guaranteed to be run somewhere the checkout is not.
 const cleanupHostCommand = computed(() => bashCommand(`cleanupHost`, `sudo `, ``));
 const confirmRemoveServer = async (): Promise<void> => {
     const name = removingServer.value;
@@ -155,7 +155,7 @@ const confirmRemoveServer = async (): Promise<void> => {
     await removeEntry(name);
 };
 
-// Source control: link GitHub as an alternative to self-hosted Forgejo. Browser-driven — the PAT goes straight to
+// Source control: link GitHub as an alternative to self-hosted Forgejo. Browser-driven, the PAT goes straight to
 // the sandbox's .env (never the platform), then i.have.github is declared so the resolver skips Forgejo.
 const showGithub = ref(false);
 const ghToken = ref(``);
@@ -204,7 +204,7 @@ const submitGitlab = async (): Promise<void> => {
     }
 };
 
-// Stripe: same browser-driven shape as GitHub — the API key goes to the sandbox's .env, then i.have.stripe
+// Stripe: same browser-driven shape as GitHub, the API key goes to the sandbox's .env, then i.have.stripe
 // is declared so the resolver validates it and injects it into consuming apps on the next apply.
 const showStripe = ref(false);
 const stripeKey = ref(``);
@@ -236,9 +236,9 @@ const onCloudflareConnected = (): void => {
 
 // Fold the Live-status "up to date / changes pending" pill onto this page, beside the wants.
 const convergence = computed(() => convergedBadge(state.value?.converged));
-// The deployment engine is down on the host: komodo is DECLARED (tri-state false, never undefined — a
+// The deployment engine is down on the host: komodo is DECLARED (tri-state false, never undefined, a
 // services-only intent has no engine to be down) AND a previous apply actually recorded state (converged is
-// only present once status.json exists) — "it was up and now isn't", never first-run noise. Applying repairs
+// only present once status.json exists): "it was up and now isn't", never first-run noise. Applying repairs
 // it (the komodo provider re-ups the stack), so say that instead of leaving the page silently wrong.
 const komodoDown = computed(() => komodoReachable.value === false && state.value?.converged !== undefined);
 // ...and link out to the full Live-status board (its own rail route on the desired-state repo, resolved the
@@ -262,14 +262,14 @@ const showApplyProgress = computed(() => progress.applying.value || progress.err
 watch(entries, () => preview.markStale());
 
 // A want was just added: refresh the preview when a server exists (otherwise the requirement card takes over).
-// It never deploys — staging the change is all Add does now.
+// It never deploys: staging the change is all Add does now.
 const onAdded = (): void => {
     if (hasHost.value) {
         void preview.run();
     }
 };
 
-// A refresh/navigation during a run: the tmux job survived it — recover "Applying…" and resume watching.
+// A refresh/navigation during a run: the tmux job survived it, recover "Applying…" and resume watching.
 onMounted(progress.recover);
 onUnmounted(progress.stopWatching);
 </script>
@@ -277,16 +277,16 @@ onUnmounted(progress.stopWatching);
 <template>
     <Notice v-if="topError" :of="topError" class="mb-6" />
 
-    <!-- The deployment engine on the host is down — the single most load-bearing health fact of this page. -->
+    <!-- The deployment engine on the host is down: the single most load-bearing health fact of this page. -->
     <div v-if="komodoDown" class="mb-6 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
         <Icon name="exclamation-triangle" class="shrink-0" />
         <span>
-            Your deployment engine (Komodo) is unreachable on your server — deployments can't go live until it's back.
+            Your deployment engine (Komodo) is unreachable on your server: deployments can't go live until it's back.
             <b>Apply changes</b> below repairs it.
         </span>
     </div>
 
-    <!-- WHAT YOU WANT — the center of the page: the apps + self-hosted services the user declares; one Add entry point. -->
+    <!-- WHAT YOU WANT, the center of the page: the apps + self-hosted services the user declares; one Add entry point. -->
     <section class="@container mb-6">
         <div class="mb-3 flex items-end justify-between gap-3">
             <div class="flex items-center gap-2">
@@ -295,7 +295,7 @@ onUnmounted(progress.stopWatching);
                     <span class="block text-sm font-medium text-content">What you want</span>
                     <span class="mt-1 block text-xs text-muted">
                         What runs on your server: your <b>apps</b> (from your monorepos) and <b>self-hosted services</b> like Outline or SigNoz. Pick
-                        either from the catalog with <b>Add</b> — anything it needs (a server, Cloudflare) is asked for right when it's needed.
+                        either from the catalog with <b>Add</b>: anything it needs (a server, Cloudflare) is asked for right when it's needed.
                     </span>
                 </InfoHint>
                 <StatusBadge v-if="convergence" :variant="convergence.variant" :label="convergence.label" size="xs" dot />
@@ -307,7 +307,7 @@ onUnmounted(progress.stopWatching);
         </div>
 
         <div class="grid grid-cols-1 gap-4 @lg:grid-cols-2">
-            <!-- Apps — declared i.want.app entries ∪ resolved plan ∪ live deployments (see wanted.ts). -->
+            <!-- Apps: declared i.want.app entries ∪ resolved plan ∪ live deployments (see wanted.ts). -->
             <div class="flex flex-col gap-2">
                 <span :class="ui.sectionLabel()">Apps</span>
                 <Card v-for="app in apps" :key="app.name" class="flex items-center justify-between gap-3">
@@ -336,7 +336,7 @@ onUnmounted(progress.stopWatching);
                     </div>
                 </Card>
                 <Card v-if="apps.length === 0" :dashed="true" class="text-center text-xs text-muted">
-                    No app yet. <b>Add</b> — the apps in your monorepos are in the catalog.
+                    No app yet. <b>Add</b>: the apps in your monorepos are in the catalog.
                 </Card>
             </div>
 
@@ -356,13 +356,13 @@ onUnmounted(progress.stopWatching);
                     </Button>
                 </Card>
                 <Card v-if="tools.length === 0" :dashed="true" class="text-center text-xs text-muted">
-                    No services yet. <b>Add</b> — Outline, Paperless-ngx, OpenProject, SigNoz and more.
+                    No services yet. <b>Add</b>: Outline, Paperless-ngx, OpenProject, SigNoz and more.
                 </Card>
             </div>
         </div>
     </section>
 
-    <!-- REQUIREMENTS — the haves the declared wants pull in, defined inline right where they block the apply. -->
+    <!-- REQUIREMENTS: the haves the declared wants pull in, defined inline right where they block the apply. -->
     <section v-if="needsHost || needsCloudflare" class="mb-6 flex flex-col gap-3">
         <Card v-if="needsHost" class="flex flex-col gap-3">
             <ConnectHost>
@@ -372,13 +372,13 @@ onUnmounted(progress.stopWatching);
         <Card v-if="needsCloudflare" class="flex flex-col gap-3">
             <div class="min-w-0">
                 <span class="font-medium text-content">Connect Cloudflare</span>
-                <p class="mt-0.5 text-xs text-muted">What you want needs a domain — Cloudflare puts it on one, reachable through a tunnel.</p>
+                <p class="mt-0.5 text-xs text-muted">What you want needs a domain: Cloudflare puts it on one, reachable through a tunnel.</p>
             </div>
             <CloudflareConnect />
         </Card>
     </section>
 
-    <!-- WHAT YOU HAVE — optional, collapsed: the servers + accounts the wants run on. Never asked for up-front. -->
+    <!-- WHAT YOU HAVE, optional, collapsed: the servers + accounts the wants run on. Never asked for up-front. -->
     <details class="group mb-6">
         <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
             <Icon name="chevron-right" aria-hidden="true" class="text-xs text-subtle transition-transform group-open:rotate-90" />
@@ -392,7 +392,7 @@ onUnmounted(progress.stopWatching);
                 </Button>
             </div>
 
-            <!-- Source control: where the DevOps repos live — self-hosted Forgejo by default, or link GitHub/GitLab to skip it. -->
+            <!-- Source control: where the DevOps repos live, self-hosted Forgejo by default, or link GitHub/GitLab to skip it. -->
             <Card class="mb-3 flex flex-col gap-3">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -402,8 +402,8 @@ onUnmounted(progress.stopWatching);
                             <StatusBadge v-else-if="hasGitlab" variant="success" size="xs"><Icon name="check" class="text-2xs" /> GitLab</StatusBadge>
                         </div>
                         <p class="mt-0.5 text-xs text-muted">
-                            <template v-if="hasGithub">Your DevOps repos live on GitHub — no Forgejo to run.</template>
-                            <template v-else-if="hasGitlab">Your DevOps repos live on GitLab — no Forgejo to run.</template>
+                            <template v-if="hasGithub">Your DevOps repos live on GitHub: no Forgejo to run.</template>
+                            <template v-else-if="hasGitlab">Your DevOps repos live on GitLab: no Forgejo to run.</template>
                             <template v-else
                                 >Default is self-hosted <b>Forgejo</b> (provisioned for you). Link <b>GitHub</b> or <b>GitLab</b> to use one
                                 instead.</template
@@ -431,7 +431,7 @@ onUnmounted(progress.stopWatching);
                         <span class="ui-field-label">GitHub personal access token</span>
                         <SecretField v-model="ghToken" secret-key="GITHUB_TOKEN" collect placeholder="ghp_…" />
                         <span class="text-2xs text-subtle"
-                            >Stored in your sandbox's .env as <span class="font-mono">GITHUB_TOKEN</span> — never on the platform.</span
+                            >Stored in your sandbox's .env as <span class="font-mono">GITHUB_TOKEN</span>: never on the platform.</span
                         >
                     </label>
                     <div class="flex justify-end gap-2">
@@ -449,11 +449,11 @@ onUnmounted(progress.stopWatching);
                         <span class="ui-field-label">GitLab personal access token</span>
                         <SecretField v-model="glToken" secret-key="GITLAB_TOKEN" collect placeholder="glpat-…" />
                         <span class="text-2xs text-subtle"
-                            >Stored in your sandbox's .env as <span class="font-mono">GITLAB_TOKEN</span> — never on the platform.</span
+                            >Stored in your sandbox's .env as <span class="font-mono">GITLAB_TOKEN</span>: never on the platform.</span
                         >
                     </label>
                     <label class="ui-field">
-                        <span class="ui-field-label">GitLab URL <span class="text-subtle">(optional — self-hosted)</span></span>
+                        <span class="ui-field-label">GitLab URL <span class="text-subtle">(optional: self-hosted)</span></span>
                         <input v-model="glUrl" type="text" autocomplete="off" placeholder="https://gitlab.com" :class="ui.input()" />
                         <span class="text-2xs text-subtle">Leave blank for gitlab.com.</span>
                     </label>
@@ -489,7 +489,7 @@ onUnmounted(progress.stopWatching);
                         <span class="ui-field-label">Stripe API key</span>
                         <SecretField v-model="stripeKey" secret-key="STRIPE_API_KEY" collect placeholder="sk_…" />
                         <span class="text-2xs text-subtle"
-                            >Stored in your sandbox's .env as <span class="font-mono">STRIPE_API_KEY</span> — never on the platform.</span
+                            >Stored in your sandbox's .env as <span class="font-mono">STRIPE_API_KEY</span>: never on the platform.</span
                         >
                     </label>
                     <div class="flex justify-end gap-2">
@@ -507,7 +507,7 @@ onUnmounted(progress.stopWatching);
             </Card>
 
             <!-- Cloudflare: the domain/tunnel backend. Needs a token + zone, so it's connected inline via the shared
-             CloudflareConnect step (writes the secret + declares i.have.cloudflare) — no separate flow. -->
+             CloudflareConnect step (writes the secret + declares i.have.cloudflare): no separate flow. -->
             <Card class="mb-3 flex flex-col gap-3">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -571,8 +571,8 @@ onUnmounted(progress.stopWatching);
         </div>
     </details>
 
-    <!-- APPLY CHANGES — review the plan, then apply. The first run also installs the deployment tooling (Komodo +
-         Forgejo); later runs reconcile. Adding a want only STAGES a change — this is where it becomes real. -->
+    <!-- APPLY CHANGES: review the plan, then apply. The first run also installs the deployment tooling (Komodo +
+         Forgejo); later runs reconcile. Adding a want only STAGES a change: this is where it becomes real. -->
     <div class="mb-8 flex flex-col items-center gap-3 border-y border-line py-6">
         <template v-if="hasHost && wantsSomething">
             <!-- What applying will do, BEFORE anything changes (resolve → plan, read-only). -->
@@ -595,19 +595,19 @@ onUnmounted(progress.stopWatching);
                 <template v-else>Builds what you configured on your server.</template>
             </p>
 
-            <!-- Live apply progress from the durable event stream — replaces the old spinner + terminal-only view;
+            <!-- Live apply progress from the durable event stream: replaces the old spinner + terminal-only view;
                  it survives a refresh and keeps the terminal reachable via "View logs". -->
             <ApplyProgress v-if="showApplyProgress" :progress="progress" />
         </template>
         <p v-else-if="!wantsSomething" class="max-w-lg text-center text-sm text-muted">
-            <b>Add</b> an app or a service above — the first apply then sets up your server to run it.
+            <b>Add</b> an app or a service above: the first apply then sets up your server to run it.
         </p>
-        <p v-else class="max-w-lg text-center text-sm text-muted">Connect a server above — then apply builds what you want on it.</p>
+        <p v-else class="max-w-lg text-center text-sm text-muted">Connect a server above: then apply builds what you want on it.</p>
     </div>
 
     <AddWantDialog v-model:visible="addOpen" @added="onAdded" />
 
-    <!-- Server removal: forgetting the server here vs wiping the machine are separate acts — spell out both,
+    <!-- Server removal: forgetting the server here vs wiping the machine are separate acts, spell out both,
          with the cleanup one-liner front and center, BEFORE the entry disappears. -->
     <ConfirmDialog
         :open="removingServer !== undefined"
@@ -619,13 +619,13 @@ onUnmounted(progress.stopWatching);
     >
         <div class="flex flex-col gap-3">
             <p class="text-sm text-muted">
-                This forgets <b class="text-content">{{ removingServer }}</b> from your inventory — its entry and stored SSH key. The machine itself
+                This forgets <b class="text-content">{{ removingServer }}</b> from your inventory: its entry and stored SSH key. The machine itself
                 is not touched: <b>everything already deployed keeps running on it</b> until you clean it up.
             </p>
             <Code :code="cleanupHostCommand" lang="bash" label="Run on the server (as root) to wipe everything intentic put there" :wrap="true" />
             <p class="text-xs text-subtle">
                 The script lists exactly what it found and asks before removing anything: the deployed containers and their volumes (databases
-                included), the deployment state under /opt/intentic — <b>including the on-host backup repo</b> — the tunnel connector service, and the
+                included), the deployment state under /opt/intentic: <b>including the on-host backup repo</b>, the tunnel connector service, and the
                 intentic service user. Docker itself stays. This host's Cloudflare tunnel + DNS records are cleaned up from here on the next apply,
                 not by the script.
             </p>

@@ -10,7 +10,7 @@
 // timer before admitting a failure that was certain from the first frame.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-// A configured client id, overriding vitest.setup.ts's empty default — the refusal asserted below has to be
+// A configured client id, overriding vitest.setup.ts's empty default: the refusal asserted below has to be
 // the posture rule talking, never "no client id was set". Assigned, not `??=`: the setup file ran first.
 vi.hoisted(() => {
     globalThis.window.env = {
@@ -27,7 +27,7 @@ vi.mock(`../environments/desktop`, () => ({ desktopVersion: () => desktopVersion
 
 const { useGoogleIdentity } = await import("./useGoogleIdentity");
 
-// Google's script, as far as this module can tell — present and working, so a refusal here is the posture
+// Google's script, as far as this module can tell: present and working, so a refusal here is the posture
 // rule talking and never a missing dependency.
 const prompt = vi.fn();
 const gisRenderButton = vi.fn();
@@ -50,7 +50,7 @@ it(`refuses to render Google's button inside the desktop app, even with Google's
     const rendered = await renderButton(document.createElement(`div`), true);
 
     expect(rendered).toBe(false);
-    // Not merely "returned false" — it never asked. A button drawn into that window takes clicks and does
+    // Not merely "returned false": it never asked. A button drawn into that window takes clicks and does
     // nothing, which is worse than no button at all.
     expect(gisRenderButton).not.toHaveBeenCalled();
 });

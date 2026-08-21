@@ -29,7 +29,7 @@ import { launchFailureOf, type RunRow, useRuns } from "./useRuns";
 import { useStories } from "./useStories";
 import { useTargets } from "./useTargets";
 
-/* ACCEPTANCE — the workspace's user stories, their acceptance criteria, and what happened when agents walked
+/* ACCEPTANCE: the workspace's user stories, their acceptance criteria, and what happened when agents walked
  * them through the running app with a real browser.
  *
  * WORKSPACE-WIDE, not per repo, and that is the whole reason this is a rail area rather than a repository panel.
@@ -39,24 +39,24 @@ import { useTargets } from "./useTargets";
  * belong in its workspace panel.)
  *
  * ONE LIST, TWO QUESTIONS. The stories list is the view: each row is a promise, and each row carries where that
- * promise currently stands — the verdict of the newest run that covered it, or `testing` while a session is still
+ * promise currently stands: the verdict of the newest run that covered it, or `testing` while a session is still
  * walking the page. That join is the whole point of putting stories and runs on one surface; without it the list
  * is a pile of intentions and the answer to "is anything broken" lives one click deep in a run nobody opened.
  * The runs list below is the history: the same facts addressed by moment rather than by promise.
  *
  * AUTHORING HAPPENS IN THE LIST, not in a dialog. The composer row creates a story from a title alone, and the
- * row expands into its own editor — see StoryComposer and StoryRow for why that shape and not a form.
+ * row expands into its own editor: see StoryComposer and StoryRow for why that shape and not a form.
  *
  * AND SO DOES RUNNING, for the same reasons. The run used to be composed in a modal that re-rendered this very
- * list inside a 224px scroller, then stacked one card per story group under it to say where each app was — a
+ * list inside a 224px scroller, then stacked one card per story group under it to say where each app was: a
  * monorepo showed six cards agreeing that one dev server was down, two scrollbars fought, and the button you
  * could not yet press was the only thing pinned. All three of its questions were already answerable here: WHICH
  * is ticked in the list, WHERE is stated on the heading the stories sit under (one dev server per repository, so
  * one line per repository), and WHO is the caret on the run button (RunControls). Nothing ticked runs
- * everything, which is what the dialog's preselect-them-all default meant — so there is no mode to enter.
+ * everything, which is what the dialog's preselect-them-all default meant, so there is no mode to enter.
  *
  * THE GATE LIVES HERE, once. A run in scope is waiting on an address or on a stopped server, and that same
- * answer is needed in three places — the button that must refuse, the note that must say why, and the repository
+ * answer is needed in three places: the button that must refuse, the note that must say why, and the repository
  * heading that carries the remedy. Deriving it here rather than in each of them is what keeps them from
  * disagreeing.
  *
@@ -79,7 +79,7 @@ const {
 } = useStories();
 const { runs, browsers, verdicts, error: runsError, isLoading: runsLoading, start, retry, stop, useRunOutcomes } = useRuns();
 
-/* THE ADDRESS EACH GROUP WAS LAST RUN AGAINST — the newest run that named it wins. A group that points somewhere
+/* THE ADDRESS EACH GROUP WAS LAST RUN AGAINST: the newest run that named it wins. A group that points somewhere
  * other than its repo's dev server (a marketing site on its own port) should be typed once, not once per run, and
  * the manifests already on disk are the record of what was chosen. So this is a read of what is already in hand
  * rather than a preference to store: nothing new is written, and a run's own history is what remembers. */
@@ -96,13 +96,13 @@ const remembered = computed<Readonly<Record<string, string>>>(() => {
 });
 const targets = useTargets(remembered);
 
-/* TICKED FOR THE NEXT RUN — and EMPTY MEANS ALL. "Run them all" is the overwhelmingly common gesture and
+/* TICKED FOR THE NEXT RUN, and EMPTY MEANS ALL. "Run them all" is the overwhelmingly common gesture and
  * unpicking is cheaper than picking, so an untouched list is already a complete run and needs no selecting mode
  * to enter or leave. It also means the ticks read correctly on a fresh workspace: an empty box is "not narrowed",
  * not "excluded". */
 const selected = ref(new Set<string>());
 // The one story open for editing. Single, so there is one draft and one autosave in flight, and so the list stays
-// a list — an accordion of open editors is a form again by another name.
+// a list: an accordion of open editors is a form again by another name.
 const editing = ref<string | undefined>(undefined);
 // A story created seconds ago: its row opens focused on the first criterion so the author keeps typing.
 const created = ref<string | undefined>(undefined);
@@ -116,10 +116,10 @@ const outcomes = useRunOutcomes(openRunId);
 
 const topError = computed(() => actionError.value ?? storiesError.value ?? targets.error.value ?? runsError.value ?? outcomes.error.value?.message);
 
-// Opening the area IS reading it — the rail's badge clears here rather than at the next poll.
+// Opening the area IS reading it: the rail's badge clears here rather than at the next poll.
 onMounted(() => void markAcceptanceSeen());
 
-/* Every repo that can hold stories, whether it holds any yet or not, then its stories by subdirectory — the shape
+/* Every repo that can hold stories, whether it holds any yet or not, then its stories by subdirectory: the shape
  * the files already have, read outermost-in. Listing the EMPTY repos matters: the composer lives in the group, so
  * a repo missing from this list is a repo nobody can write the first story for. A workspace with one repo reads
  * exactly as it did when this was a per-repo panel: one heading, the groups under it. */
@@ -135,7 +135,7 @@ const byRepo = computed(() =>
             return {
                 repo,
                 count: own.length,
-                // Whether the repo holds any ungrouped stories — the ones with no `group/` row of their own, so
+                // Whether the repo holds any ungrouped stories: the ones with no `group/` row of their own, so
                 // the heading is where their address has to be reachable from.
                 rooted: groups.has(``),
                 // "" (the top level) first, then named subdirectories alphabetically.
@@ -154,7 +154,7 @@ const chosen = computed<readonly Story[]>(() =>
     selected.value.size === 0 ? stories.value : stories.value.filter((story) => selected.value.has(story.path)),
 );
 
-// First-appearance order of the (repo, group) pairs the scope touches — the keys the run's `targets` map is
+// First-appearance order of the (repo, group) pairs the scope touches: the keys the run's `targets` map is
 // built from, and the things the gate is asked about. One representative story stands for each pair.
 const groups = computed<readonly Story[]>(() => {
     const seen = new Map<string, Story>();
@@ -179,8 +179,8 @@ const canRun = computed(() => chosen.value.length > 0 && blockedGroups.value.len
  * starting" and "needs an address" call for different moves, and a note that gave only a name made the user work
  * out which of the two it was.
  *
- * THE SERVER'S STATE IS ONLY THE STORY WHEN IT IS THE PROBLEM. A repo that is serving — several apps, none of
- * them yet chosen for this group — is blocked on an address, and saying "isn't running" about a dev server the
+ * THE SERVER'S STATE IS ONLY THE STORY WHEN IT IS THE PROBLEM. A repo that is serving: several apps, none of
+ * them yet chosen for this group: is blocked on an address, and saying "isn't running" about a dev server the
  * user is watching output from is how a surface loses their trust in everything else it says. */
 const problems = computed<readonly string[]>(() => {
     const found = new Map<string, string>();
@@ -200,10 +200,10 @@ const blockedNote = computed<string | undefined>(() => {
     return first === undefined ? undefined : `${first}${problems.value.length > 1 ? ` (+${problems.value.length - 1} more)` : ``}`;
 });
 
-/* THE REPOS A RUN IN SCOPE IS WAITING ON — the same gate, projected onto repositories so that the heading
+/* THE REPOS A RUN IN SCOPE IS WAITING ON: the same gate, projected onto repositories so that the heading
  * carrying the remedy is the thing that lights up. Only the repos whose SERVER is the remedy: a repo with no dev
- * server, and a repo already serving an app this group hasn't been pointed at, are both blocked on an ADDRESS —
- * the group chip's business — and tinting a heading whose only control is Start would aim the user at the wrong
+ * server, and a repo already serving an app this group hasn't been pointed at, are both blocked on an ADDRESS:
+ * the group chip's business, and tinting a heading whose only control is Start would aim the user at the wrong
  * row. */
 const stalled = computed<ReadonlySet<string>>(
     () => new Set(blockedGroups.value.filter((story) => [`starting`, `stopped`].includes(targets.stateOf(story.repo))).map((story) => story.repo)),
@@ -222,7 +222,7 @@ const setSelected = (group: readonly string[], on: boolean): void => {
 };
 
 /* WHERE EVERY PROMISE STANDS, by story path: the newest run that covered it and had something to say. Older runs
- * are consulted when the newest never included the story — a story tested last week and untouched since is still
+ * are consulted when the newest never included the story: a story tested last week and untouched since is still
  * telling you something, and blanking it because today's run skipped it would lose the only verdict there is.
  * Bounded by useRuns' scan: a story whose last run has aged out of it simply shows nothing rather than a guess.
  *
@@ -256,18 +256,18 @@ const statuses = computed<Readonly<Record<string, { readonly label: string; read
 });
 
 /* LOADING KEEPS THE SHAPE. Both lists here are a request away, and an area that paints blank and then pops a
- * list in reads as broken on a slow sandbox. So the rows that are coming stand in for themselves — the app's
+ * list in reads as broken on a slow sandbox. So the rows that are coming stand in for themselves: the app's
  * skeleton idiom (see the Sandbox hub's connections list): a pulsing bar wherever text will land, in the row's
  * own geometry, inside the real surface.
  *
- * Only the ROWS are placeholders. The repo groups around them are already known — `byRepo` is built from
- * workspace facts, not from this query — so the headings, and the composer that ends each group, are the real
+ * Only the ROWS are placeholders. The repo groups around them are already known: `byRepo` is built from
+ * workspace facts, not from this query, so the headings, and the composer that ends each group, are the real
  * ones from the first paint. */
 const skeletonBar = `animate-pulse rounded bg-content/10`;
 // Varied so the block reads as text rather than as a bar chart.
 const skeletonTitles = [`w-56`, `w-72`, `w-44`];
 
-/* A run's headline: verdicts once they exist, live progress until then. Deliberately NOT a percentage — a run of
+/* A run's headline: verdicts once they exist, live progress until then. Deliberately NOT a percentage, a run of
  * four stories where one failed is "1 failed", not "75%", and a bar that reads 75% while three tests are still
  * walking a page would be inventing a number nobody can act on.
  *
@@ -279,7 +279,7 @@ const tally = (run: RunRow): { readonly label: string; readonly variant: StatusV
         (story) => known?.[story.slug] === undefined && launchFailureOf(run, story.slug) !== undefined,
     ).length;
     if (run.running) {
-        // A finished story is one that WROTE something, or whose session has settled — not merely one whose
+        // A finished story is one that WROTE something, or whose session has settled, not merely one whose
         // agent is off the roster: archiving a finished agent removes it, and counting roster absence as
         // unfinished would walk the progress backwards while the rest of the run is still going.
         const done = run.manifest.stories.filter((story) => {
@@ -330,7 +330,7 @@ const tally = (run: RunRow): { readonly label: string; readonly variant: StatusV
 const runRows = computed(() => runs.value.map((row) => ({ row, status: tally(row) })));
 
 // Every mutation this view still owns reports through the one banner. The story editor keeps its own failures in
-// the row that caused them — a save error belongs where the text you typed is, not at the top of a scrolled page.
+// the row that caused them: a save error belongs where the text you typed is, not at the top of a scrolled page.
 const attempt = async (action: () => Promise<void>): Promise<void> => {
     actionError.value = undefined;
     try {
@@ -341,7 +341,7 @@ const attempt = async (action: () => Promise<void>): Promise<void> => {
 };
 
 /* Creating a story is one write of the plainest possible file: a heading. Everything else is added in the row
- * that appears, which is why this can be a keystroke rather than a form — and why the empty story is written to
+ * that appears, which is why this can be a keystroke rather than a form, and why the empty story is written to
  * disk immediately instead of being held as a draft. The file IS the story; a draft that only exists in a browser
  * tab is a story that can be lost by closing it. */
 const create = (input: { readonly path: string; readonly title: string }): Promise<void> =>
@@ -373,7 +373,7 @@ const run = async (model: PickedModel): Promise<void> =>
 
 <template>
     <!-- An ordinary page: the shell's router-view wrapper is the scroll container, so this view owns no
-         scrolling and no chrome of its own. The run composer is the last element in it — a pill that sticks to
+         scrolling and no chrome of its own. The run composer is the last element in it: a pill that sticks to
          the bottom of the viewport while the list scrolls under it (RunControls), so it stays reachable without
          a docked bar and without crowding the header. -->
     <Page width="wide">
@@ -389,19 +389,19 @@ const run = async (model: PickedModel): Promise<void> =>
                     </p>
                     <p class="mt-2 text-xs text-muted">
                         Sessions run unattended in their own worktree with tool permissions bypassed, so nothing stops mid-test to ask. The brief
-                        forbids changing the application's source — defects get reported, not fixed.
+                        forbids changing the application's source: defects get reported, not fixed.
                     </p>
                     <p class="mt-2 text-xs text-muted">
-                        You can watch any session's browser live — and take control of it — from the report. Sessions also appear on the Agents board
+                        You can watch any session's browser live, and take control of it: from the report. Sessions also appear on the Agents board
                         like any other. Reports and screenshots land in <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository, so a
                         run never shows up in your changes.
                     </p>
                     <p class="mt-2 text-xs text-muted">
-                        Stories themselves are markdown in each repo's <span class="font-mono">docs/user-stories/</span> — product documentation,
+                        Stories themselves are markdown in each repo's <span class="font-mono">docs/user-stories/</span>: product documentation,
                         versioned with the code it describes. Editing one here writes that file; there is no separate copy.
                     </p>
                     <p class="mt-2 text-xs text-muted">
-                        A subdirectory of that is a group, and a run walks one address per group — so a repository serving both a marketing site and
+                        A subdirectory of that is a group, and a run walks one address per group, so a repository serving both a marketing site and
                         an app can test each of them, against its own server, in the same run. The agents reach these from inside the sandbox, so a
                         localhost address is the direct route.
                     </p>
@@ -458,11 +458,11 @@ const run = async (model: PickedModel): Promise<void> =>
                 <RowGroup v-for="entry in byRepo" :key="entry.repo" :label="entry.repo" :count="storiesLoading ? undefined : entry.count">
                     <!-- THE REPOSITORY'S DEV SERVER, beside the name of the repository it belongs to. The
                                  daemon runs one per repo, so this is where its state, its address and its Start
-                                 belong — stated once, rather than once per story group in a dialog. The address a
+                                 belong: stated once, rather than once per story group in a dialog. The address a
                                  repo's UNGROUPED stories are walked at rides here too, for want of a `group/` row
                                  of their own; grouped stories carry theirs on that row. The span is that row's
                                  hover scope: a group chip's quiet default reveals itself on the row it sits in,
-                                 and a heading's action cluster is not one — without it, the top level's "aim
+                                 and a heading's action cluster is not one: without it, the top level's "aim
                                  elsewhere" could never be reached with a pointer at all. -->
                     <template #actions>
                         <span class="group flex items-center gap-2">
@@ -531,7 +531,7 @@ const run = async (model: PickedModel): Promise<void> =>
                     <StoryComposer v-if="!entry.rooted" :repo="entry.repo" group="" :taken="paths" @create="create" />
                 </RowGroup>
                 <p v-if="unread > 0" class="text-2xs text-subtle">
-                    {{ unread }} further story files are listed by filename only — titles, criteria and text are read for the first 200.
+                    {{ unread }} further story files are listed by filename only: titles, criteria and text are read for the first 200.
                 </p>
             </section>
 
@@ -551,7 +551,7 @@ const run = async (model: PickedModel): Promise<void> =>
                     </div>
                 </template>
                 <div v-else-if="runs.length === 0" :class="ui.emptyState('m-3')">
-                    Nothing has been tested yet. Press Run below — reports land in
+                    Nothing has been tested yet. Press Run below: reports land in
                     <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository.
                 </div>
                 <button
@@ -582,7 +582,7 @@ const run = async (model: PickedModel): Promise<void> =>
                 Verdicts are read for the newest {{ SCAN_RUNS }} runs. Older ones show theirs when opened.
             </p>
 
-            <!-- LAST IN THE PAGE, AND STICKY — so it floats over the list while there is list left to scroll and
+            <!-- LAST IN THE PAGE, AND STICKY, so it floats over the list while there is list left to scroll and
                  settles under it at the end. Inside <Page>, so it is centred on the column the stories are in
                  rather than on the window. Withheld while a report is open: you are reading what a run FOUND,
                  and a composer for the next one over it would be answering a question nobody is asking yet. -->

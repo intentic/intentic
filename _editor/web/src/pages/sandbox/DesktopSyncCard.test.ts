@@ -2,14 +2,14 @@
 //
 // jsdom because both subjects are WHAT THE CARD PUTS ON SCREEN and what a click does before anything is revoked.
 //
-// The card named the machine holding sync and stopped there, so the reader's actual next question — which folder
-// on that computer is this sandbox — had no answer anywhere but that machine's own terminal. And Disable sat one
+// The card named the machine holding sync and stopped there, so the reader's actual next question, which folder
+// on that computer is this sandbox: had no answer anywhere but that machine's own terminal. And Disable sat one
 // unguarded click from revoking every paired computer, in the corner of a card people open to READ their state.
 import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
-// What this component's import chain reads at module eval — the app's environment (the daemon client) and a media
+// What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
 // query (the UI barrel's useDevice), exactly as SandboxComputers.test.ts cuts the same edge.
 
 const syncingPath = ref<string | undefined>(`/home/ada/intentic/work`);
@@ -79,7 +79,7 @@ it(`names the folder on the computer that holds sync`, () => {
     expect(shown()).toContain(`/home/ada/intentic/work`);
 });
 
-// An enrolled machine that has never posted a report genuinely leaves this unknown — the daemon is never told
+// An enrolled machine that has never posted a report genuinely leaves this unknown: the daemon is never told
 // SYNC_DIR. Saying so beats printing the folder the setup flow would have suggested, which the user could change.
 it(`says the folder is unknown rather than guessing it`, () => {
     syncingPath.value = undefined;
@@ -108,7 +108,7 @@ it(`revokes once the confirm is taken`, async () => {
     expect(disable).toHaveBeenCalledTimes(1);
 });
 
-// Cancel is the way OUT — the reason the guard exists at all is that the pointer lands here by mistake. (The
+// Cancel is the way OUT: the reason the guard exists at all is that the pointer lands here by mistake. (The
 // dialog's own dismissal is the kit's transition and is not this card's to assert.)
 it(`leaves every pairing alone when the confirm is cancelled`, async () => {
     mount();

@@ -7,7 +7,7 @@ import { useRailMemory } from "@intentic/ui";
  * worse than not remembering at all: overriding a link somebody sent, opening a view on a repository that no
  * longer exists, or quietly re-narrowing a scope the reader had deliberately widened.
  *
- * The barrel reaches window.matchMedia (useDevice) at import — hence jsdom. */
+ * The barrel reaches window.matchMedia (useDevice) at import: hence jsdom. */
 
 const KEY = `intentic.rail.test.scope`;
 
@@ -30,7 +30,7 @@ describe(`useRailMemory`, () => {
         const options = ref<string[]>([]);
 
         const stop = mount(choice, () => options.value);
-        // Nothing to validate against yet, so nothing is restored — the report has not landed.
+        // Nothing to validate against yet, so nothing is restored: the report has not landed.
         expect(choice.value).toBeUndefined();
 
         options.value = [`registry`, `intentic`];
@@ -39,7 +39,7 @@ describe(`useRailMemory`, () => {
         stop();
     });
 
-    // A choice already in the URL is somebody being deliberate — a shared link, a bookmark, the Back button.
+    // A choice already in the URL is somebody being deliberate: a shared link, a bookmark, the Back button.
     it(`leaves a deep link alone`, async () => {
         localStorage.setItem(KEY, `intentic`);
         const choice = ref<string | undefined>(`registry`);
@@ -99,7 +99,7 @@ describe(`useRailMemory`, () => {
         stop();
     });
 
-    // A rail modelled on a plain string spells "all" as `` — a <Picker> has no undefined to offer — so both
+    // A rail modelled on a plain string spells "all" as ``: a <Picker> has no undefined to offer, so both
     // shapes have to read as "nothing has been narrowed to".
     it(`treats an empty string as no choice`, async () => {
         localStorage.setItem(KEY, `intentic`);

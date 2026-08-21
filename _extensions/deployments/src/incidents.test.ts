@@ -46,7 +46,7 @@ describe(`incidentTone`, () => {
 });
 
 describe(`incidents`, () => {
-    it(`drops resolved alerts — a closed state-change alert is the recovery`, () => {
+    it(`drops resolved alerts: a closed state-change alert is the recovery`, () => {
         const list = incidents([alert({ id: `open`, to: `exited`, ts: 2_000 }), alert({ id: `closed`, to: `exited`, ts: 1_000, resolved: true })]);
         expect(list.map((incident) => incident.alert.id)).toEqual([`open`]);
     });
@@ -62,7 +62,7 @@ describe(`incidents`, () => {
     });
 
     it(`surfaces an alert variant it has never met rather than dropping it`, () => {
-        // An unmapped variant carries no tone, so it does not badge — but the mapper must not throw on it,
+        // An unmapped variant carries no tone, so it does not badge, but the mapper must not throw on it,
         // and a mapped-but-unknown phrasing must still name the resource.
         expect(incidents([alert({ type: `SomethingKomodoAddedLater`, resource: `api` })])).toEqual([]);
         expect(incidentTone(alert({ type: `SomethingKomodoAddedLater` }))).toBeUndefined();
@@ -83,7 +83,7 @@ describe(`unseenIncidents`, () => {
 });
 
 describe(`topTier`, () => {
-    it(`reports only the worst tier — an outage is not diluted by pending version bumps`, () => {
+    it(`reports only the worst tier: an outage is not diluted by pending version bumps`, () => {
         const list = incidents([
             alert({ id: `down`, resource: `api`, to: `exited`, ts: 3_000 }),
             alert({ id: `disk`, type: `ServerDisk`, resource: `prod-1`, ts: 2_000 }),

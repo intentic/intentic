@@ -9,7 +9,7 @@ import { contributedFileBindings, registerFileBindings } from "./fileBindings";
  * into, and the union systemEvents feeds every `workspaceChanged` frame through. */
 
 // Same reason as builtins.test.ts: the builtins list's import chain pulls app-wide singletons that read browser
-// globals at module scope — hence jsdom, and the globals vitest.setup.ts installs for the package.
+// globals at module scope: hence jsdom, and the globals vitest.setup.ts installs for the package.
 
 const { builtinModules } = await import("./builtins");
 
@@ -65,7 +65,7 @@ describe(`the builtins' declared bindings`, () => {
     });
 
     it(`leaves those keys entirely to the extension`, () => {
-        // With no extension running the same write makes nothing stale — the core table no longer reaches across
+        // With no extension running the same write makes nothing stale: the core table no longer reaches across
         // the boundary for keys it does not query.
         expect(staleQueryKeys([`.intentic/config/automations.json`, `.intentic/records/approvals/pending-1.json`], [])).toEqual([]);
     });

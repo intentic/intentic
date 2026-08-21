@@ -7,7 +7,7 @@ const decodeBody = (message: string): string => {
 };
 
 describe("encodeHeader", () => {
-    it("leaves plain ASCII alone — an encoded word where none is needed makes every subject unreadable raw", () => {
+    it("leaves plain ASCII alone: an encoded word where none is needed makes every subject unreadable raw", () => {
         expect(encodeHeader("Q3 numbers")).toBe("Q3 numbers");
     });
 

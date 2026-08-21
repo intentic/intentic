@@ -20,12 +20,12 @@ import DiffView from "../workspace/viewers/DiffView.vue";
  * CONTENTS LEADS. The daemon composes an overlay Dockerfile from the enabled capabilities' fragments plus the
  * custom section the agent proposes, and that file is what this card used to be: a recipe. But approval is the
  * one moment somebody who does not read Dockerfiles is asked to read one, so the plain-language inventory is
- * not a nicety here — it is the better approval surface, and the diff becomes the "show me exactly" escape
+ * not a nicety here: it is the better approval surface, and the diff becomes the "show me exactly" escape
  * hatch behind a pill. The decision itself (and the rebuild that applies it) sits below BOTH views, because it
  * is about the state of the environment rather than about how the environment is being displayed.
  *
  * The OWNER approves or rejects; capability fragments recompose automatically and are not up for review.
- * Approval pins the content's hash; the rebuild itself runs OUTSIDE the container (see HostRecreate) — a button
+ * Approval pins the content's hash; the rebuild itself runs OUTSIDE the container (see HostRecreate): a button
  * in the desktop app or a copyable one-liner in a browser, whose hash argument guarantees only the reviewed
  * content is built, or the next `intentic deploy apply` for a server-managed sandbox. Hidden until there is an
  * overlay or a proposal. */
@@ -41,7 +41,7 @@ const actionNotice = computed<NoticeModel | undefined>(() =>
         : notice.value,
 );
 
-// Only the owner can decide on a proposal — the daemon is the real gate (it 403s a non-owner approve), but we
+// Only the owner can decide on a proposal: the daemon is the real gate (it 403s a non-owner approve), but we
 // hide the buttons for members so a diff they can't act on isn't presented as actionable.
 const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
 
@@ -49,7 +49,7 @@ const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
 const { state, query, proposal, pending, applied, serverManaged, slug } = useEnvironment();
 
 /* Which of the two reads is on screen. "Recipe" rather than "Source" because it says what you are switching TO,
- * and "Contents" rather than "Simplified" because the plain view is not the lesser one — naming it that way
+ * and "Contents" rather than "Simplified" because the plain view is not the lesser one: naming it that way
  * would tell the reader who needs it most that they are on the beginner's setting. */
 const view = ref<`contents` | `recipe`>(`contents`);
 const VIEWS = [
@@ -63,12 +63,12 @@ const VIEWS = [
 const { groups, awaiting, loading, error: contentsError, unsupported, refresh: reprobe } = useEnvironmentContents(() => view.value === `contents`);
 
 /* WHAT IS ACTUALLY DRAWN, as opposed to what is selected. A sandbox whose daemon predates the contents route
- * cannot answer for it, so the card stops offering it: the pill row disappears and the recipe — which every
- * daemon that has an overlay at all can show — takes over. The alternative was leaving a tab that greets its
+ * cannot answer for it, so the card stops offering it: the pill row disappears and the recipe, which every
+ * daemon that has an overlay at all can show: takes over. The alternative was leaving a tab that greets its
  * only visitor with a 404, which is how a missing feature comes to read as a broken one. */
 const shown = computed(() => (unsupported.value ? `recipe` : view.value));
 
-// One refresh for both reads — and it forces a re-probe, so "it says missing but I just installed it" is a click
+// One refresh for both reads, and it forces a re-probe, so "it says missing but I just installed it" is a click
 // rather than a restart.
 const load = (): void => {
     void query.refetch();
@@ -104,7 +104,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
             </template>
         </Row>
 
-        <!-- What the sandbox has, in plain language. Leads in every state — including a pending proposal, whose
+        <!-- What the sandbox has, in plain language. Leads in every state: including a pending proposal, whose
              incoming entries appear here marked as awaiting approval, above the buttons that decide them. -->
         <EnvironmentContents v-if="shown === `contents`" :groups="groups" :awaiting="awaiting" :loading="loading" :error="contentsError" />
 
@@ -132,7 +132,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 
         <!-- Said once, quietly, and only to somebody whose sandbox could show more than it is showing: the reason
              there is no contents list is the sandbox's age, not a fault. It names an UPDATE rather than a rebuild
-             deliberately — an environment rebuild builds on top of the image this sandbox already runs, so it is
+             deliberately: an environment rebuild builds on top of the image this sandbox already runs, so it is
              the one action that would NOT bring this, and sending someone to it would waste a whole rebuild. -->
         <p v-if="unsupported" class="text-2xs text-subtle">
             This sandbox's image is older than the plain-language contents list. Update the sandbox and the list appears beside the recipe.

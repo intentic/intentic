@@ -28,7 +28,7 @@ describe("assertionFor", () => {
     const assertion = assertionFor(domain, "ana@company.com", ["https://www.googleapis.com/auth/gmail.modify"], 1_770_000_000);
     const [header, claims, signature] = assertion.split(".");
 
-    it("claims to be the service account acting AS the named person — which is the whole of delegation", () => {
+    it("claims to be the service account acting AS the named person, which is the whole of delegation", () => {
         expect(decode(claims as string)).toEqual({
             iss: "bot@proj.iam.gserviceaccount.com",
             sub: "ana@company.com",

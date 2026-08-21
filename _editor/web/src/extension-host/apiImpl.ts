@@ -164,7 +164,7 @@ export const createExtensionApi = (
         const method = init?.method ?? `GET`;
         if (!sandboxRouteAllowed(sandboxPermissions, method, path)) {
             throw new Error(
-                `extension "${extensionId}" called undeclared sandbox route ${method.toUpperCase()} ${path} — declare it in permissions.sandbox in the manifest`,
+                `extension "${extensionId}" called undeclared sandbox route ${method.toUpperCase()} ${path}: declare it in permissions.sandbox in the manifest`,
             );
         }
         // The gate has just decided which of the declared entries covers this call, and that answer is the only

@@ -24,7 +24,7 @@ export type ImportSide = { lines: readonly string[]; imports: ReadonlySet<number
 const hunkLines = (side: ImportSide, start: number, end: number): { text: string; isImport: boolean }[] => {
     const lines: { text: string; isImport: boolean }[] = [];
     if (end === 0) {
-        return lines; // untouched — and the start it pairs with is the line the change sits AFTER, not a line of it
+        return lines; // untouched, and the start it pairs with is the line the change sits AFTER, not a line of it
     }
     for (let line = start; line <= end; line += 1) {
         lines.push({ text: side.lines[line - 1] ?? ``, isImport: side.imports.has(line) });

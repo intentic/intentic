@@ -6,18 +6,18 @@ import { panelSessionOf, type useTargets } from "./useTargets";
 
 /* ONE REPO'S DEV SERVER, on the heading of the list its stories are in.
  *
- * This used to be a card inside the run dialog, repeated once per story GROUP — so a monorepo with six groups
+ * This used to be a card inside the run dialog, repeated once per story GROUP, so a monorepo with six groups
  * showed six ~100px cards that all said "Dev server isn't running" about the same single process, and the run
  * button sat below all of them. The daemon runs ONE dev server per repository, so the honest place for it is the
  * repository's heading, once, at one line.
  *
  * IT IS AMBIENT, not part of composing a run: "is the app up?" is worth knowing while you are writing stories
  * against it, and a state that only appears when you are already committed to a run is a state you find out about
- * too late. The whole chip is the control — clicking it opens the server's terminal, which is the only place a
+ * too late. The whole chip is the control: clicking it opens the server's terminal, which is the only place a
  * boot is legible (a first start runs an install and can take minutes, and a failed one has nowhere else to show).
  *
  * THE TERMINAL IT OPENS IS THE ONE ACTUALLY SERVING, not the one a Start would have made. Green here means
- * "something is answering", deliberately including a dev server nobody here started — so the terminal was
+ * "something is answering", deliberately including a dev server nobody here started, so the terminal was
  * offered for `panel-<repo>`, a session that in that case has never existed, and the panel opened onto an empty
  * strip. Each address now carries the session it is served from (the daemon walks the listening socket's
  * process up to its pane), and an address with none SAYS so instead of offering a button that does nothing.
@@ -27,7 +27,7 @@ import { panelSessionOf, type useTargets } from "./useTargets";
  * BECOMES "Starting…" and then the address, because those are the three things that can be true.
  *
  * ONE REPO IS NOT ALWAYS ONE ADDRESS. A monorepo whose `dev` script fans a turbo run out across its packages
- * serves several, and the heading shows the count with the list a click away — each row named by the package that
+ * serves several, and the heading shows the count with the list a click away: each row named by the package that
  * bound it, because `_editor/web` against `_site/site` is the only thing that tells three localhost ports apart.
  * The heading deliberately does not pick one: which app a group's stories belong to is the group's own fact, and
  * it says so on its own row. */
@@ -63,9 +63,9 @@ const start = async (): Promise<void> => {
     <span v-if="targets.stateOf(repo) === `none`" class="text-2xs text-subtle">no dev server</span>
 
     <!-- THE ONE FAILURE IN THESE PACKS THAT IS NOT A <Notice>, and deliberately so. Every other hand-rolled
-         alert strip is that component now; this is a CHIP — it sits inline in a row of addresses, truncates to
+         alert strip is that component now; this is a CHIP: it sits inline in a row of addresses, truncates to
          whatever width is left, and carries its full text in a tooltip. A notice box is a block that owns its
-         line, which is the opposite of what this row needs. It borrows the danger tint, not the shape — and it
+         line, which is the opposite of what this row needs. It borrows the danger tint, not the shape, and it
          spells that tint out rather than sharing a recipe with the box, because a shared recipe is exactly how
          thirty-two views ended up drawing a notice that was not one. -->
     <span
@@ -75,13 +75,13 @@ const start = async (): Promise<void> => {
         >{{ failure }}</span
     >
 
-    <!-- READY, SERVING ONE THING, FROM A TERMINAL. The address is the label — the one fact worth checking at a
-         glance — and it is that terminal's trigger rather than sitting beside a second button for it. -->
+    <!-- READY, SERVING ONE THING, FROM A TERMINAL. The address is the label: the one fact worth checking at a
+         glance, and it is that terminal's trigger rather than sitting beside a second button for it. -->
     <button
         v-else-if="targets.terminalOf(repo) !== undefined"
         type="button"
         :class="ui.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
-        v-tooltip.bottom="`Open the terminal serving this — ${targets.terminalOf(repo)}`"
+        v-tooltip.bottom="`Open the terminal serving this: ${targets.terminalOf(repo)}`"
         @click="host().terminal.open(targets.terminalOf(repo) ?? ``)"
     >
         <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
@@ -89,7 +89,7 @@ const start = async (): Promise<void> => {
         <Icon name="desktop" class="text-subtle" />
     </button>
 
-    <!-- READY, SERVING ONE THING THIS SANDBOX DOESN'T OWN. Same address, no terminal to open — so the click goes
+    <!-- READY, SERVING ONE THING THIS SANDBOX DOESN'T OWN. Same address, no terminal to open, so the click goes
          to the popover, which is where "then where IS it running" gets an answer. -->
     <button
         v-else-if="targets.localUrl(repo) !== undefined"
@@ -123,7 +123,7 @@ const start = async (): Promise<void> => {
         v-else-if="targets.stateOf(repo) === `starting`"
         type="button"
         :class="ui.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
-        v-tooltip.bottom="`A first start installs dependencies, which can take a minute — watch it in the terminal`"
+        v-tooltip.bottom="`A first start installs dependencies, which can take a minute: watch it in the terminal`"
         @click="host().terminal.open(panelSessionOf(repo))"
     >
         <Icon name="spinner" class="shrink-0 animate-spin text-subtle" />
@@ -144,7 +144,7 @@ const start = async (): Promise<void> => {
     </button>
 
     <!-- WHAT IS OCCUPYING THESE PORTS, one row each: the address, the package that bound it, and the terminal it
-         is running in. That last column is the difference between a list you read and a list you can act on —
+         is running in. That last column is the difference between a list you read and a list you can act on:
          every row either opens the output it is producing, or says plainly that this sandbox has none to show. -->
     <Popover ref="popover">
         <div class="flex w-pop-sm flex-col gap-2 p-1">
@@ -161,7 +161,7 @@ const start = async (): Promise<void> => {
                         v-if="server.session"
                         type="button"
                         :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
-                        v-tooltip.bottom="`Open ${server.session} — the terminal this is running in`"
+                        v-tooltip.bottom="`Open ${server.session}: the terminal this is running in`"
                         @click="host().terminal.open(server.session)"
                     >
                         <Icon name="desktop" class="shrink-0" />
@@ -171,7 +171,7 @@ const start = async (): Promise<void> => {
                         v-else
                         class="text-2xs text-subtle"
                         v-tooltip.bottom="
-                            `Nothing in this sandbox's terminals is serving it — it answers from outside them, so there is no output to show here and no session to stop.`
+                            `Nothing in this sandbox's terminals is serving it: it answers from outside them, so there is no output to show here and no session to stop.`
                         "
                     >
                         no terminal
@@ -181,7 +181,7 @@ const start = async (): Promise<void> => {
             <!-- Said here because this is where the count is read, and the remedy is one row down: with several
                  apps behind one `pnpm dev` nothing but the story tree knows which app a group belongs to. -->
             <p v-if="targets.serversOf(repo).length > 1" class="text-2xs text-subtle">
-                Each group below says which of these its stories are walked against — the dev server is shared, the addresses are not.
+                Each group below says which of these its stories are walked against: the dev server is shared, the addresses are not.
             </p>
         </div>
     </Popover>

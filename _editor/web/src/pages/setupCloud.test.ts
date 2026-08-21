@@ -11,7 +11,7 @@ describe(`cloudCredentials`, () => {
         });
     });
 
-    it(`gates oracle on BOTH pastes — a config without its key is not a credential`, () => {
+    it(`gates oracle on BOTH pastes: a config without its key is not a credential`, () => {
         expect(cloudCredentials(`oracle`, { token: ``, ociConfig: `user=x`, ociKey: `` })).toBeUndefined();
         expect(cloudCredentials(`oracle`, { token: ``, ociConfig: ``, ociKey: `pem` })).toBeUndefined();
         expect(cloudCredentials(`oracle`, { token: ``, ociConfig: `user=x`, ociKey: `pem` })).toEqual({
@@ -45,7 +45,7 @@ describe(`labels`, () => {
     });
 });
 
-// The keep-trying offer keys on the adapter's own capacity phrase (a shared contract constant) — only the
+// The keep-trying offer keys on the adapter's own capacity phrase (a shared contract constant): only the
 // refusal that time fixes gets a retry loop; everything else stays a verdict.
 it(`recognizes the capacity miss and nothing else`, () => {
     expect(isCapacityMiss(`Oracle has no free-tier ARM capacity in any availability domain of eu-frankfurt-1 right now`)).toBe(true);
@@ -53,7 +53,7 @@ it(`recognizes the capacity miss and nothing else`, () => {
     expect(isCapacityMiss(undefined)).toBe(false);
 });
 
-// Oracle leads the picker — the free 12 GB machine is the ladder's flagship rung, and the order is the offer.
+// Oracle leads the picker: the free 12 GB machine is the ladder's flagship rung, and the order is the offer.
 it(`offers the free machine first`, () => {
     expect(CLOUD_PROVIDERS[0]?.id).toBe(`oracle`);
 });

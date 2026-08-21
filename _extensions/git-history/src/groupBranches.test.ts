@@ -25,7 +25,7 @@ describe(`groupBranches`, () => {
         expect(groups[0]?.remotes.map((entry) => entry.remote)).toEqual([`origin`, `upstream`]);
     });
 
-    /* A branch that exists only on a remote is the row "somebody pushed something you do not have" — the one a
+    /* A branch that exists only on a remote is the row "somebody pushed something you do not have": the one a
      * checkout would be created from. Dropping it would make that state invisible. */
     it(`keeps a remote-only branch as a group with no local`, () => {
         const groups = groupBranches([], [remote(`origin/feature/x`)]);
@@ -41,7 +41,7 @@ describe(`groupBranches`, () => {
     });
 
     /* PAIRED BY NAME, NOT BY THE CONFIGURED UPSTREAM. A branch whose upstream was deleted (the usual sign a PR
-     * merged) still belongs beside the remote branches sharing its name — and grouping by upstream would strand
+     * merged) still belongs beside the remote branches sharing its name, and grouping by upstream would strand
      * it in a row of its own at exactly the moment the reader is deciding whether to delete it. */
     it(`groups a branch whose upstream is gone with the remote branch of the same name`, () => {
         const groups = groupBranches([local(`main`, { upstream: `origin/main`, gone: true })], [remote(`origin/main`)]);
@@ -49,7 +49,7 @@ describe(`groupBranches`, () => {
         expect(groups[0]?.local?.gone).toBe(true);
     });
 
-    // A branch name may contain slashes; a remote name may not — so the split is on the FIRST slash only.
+    // A branch name may contain slashes; a remote name may not, so the split is on the FIRST slash only.
     it(`splits a nested branch name from its remote correctly`, () => {
         const groups = groupBranches([], [remote(`origin/release/2024/q1`)]);
         expect(groups[0]?.name).toBe(`release/2024/q1`);

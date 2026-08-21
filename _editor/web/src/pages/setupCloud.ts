@@ -39,7 +39,7 @@ export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
     {
         id: `oracle`,
         name: `Oracle`,
-        label: `Oracle — free 12 GB`,
+        label: `Oracle, free 12 GB`,
         kind: `oracle`,
     },
     {
@@ -77,7 +77,7 @@ export const ORACLE_STEPS: readonly { readonly text: string; readonly url?: stri
     {
         // Typographic quotes around the console's own button labels, as everywhere else this app quotes a
         // control, straight ones read as terminal output on a screen that is asking to be trusted with a key.
-        text: `Press “Add API key” → “Generate API key pair” → download the key → “Add”.`,
+        text: `Press "Add API key" → "Generate API key pair" → download the key → "Add".`,
         url: `https://cloud.oracle.com/identity/domains/my-profile/api-keys`,
         urlLabel: `Profile → API keys`,
     },

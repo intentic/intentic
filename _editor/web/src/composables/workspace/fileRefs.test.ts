@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The module reaches for the workspace-tree query (container root + the file index a reference is matched
-// against) — stub it so the path helpers can be exercised without the app graph. `queryData` is the seam both
+// against): stub it so the path helpers can be exercised without the app graph. `queryData` is the seam both
 // lookups read.
 let queryData: { root?: string; tree?: unknown[] }[] = [];
 vi.mock("../queryPersistence", () => ({
@@ -72,7 +72,7 @@ describe(`toWorkspacePath`, () => {
         expect(toWorkspacePath(`./src/foo.ts`)).toBe(`src/foo.ts`);
         // A real single-char first segment that isn't a diff marker survives.
         expect(toWorkspacePath(`x/foo.ts`)).toBe(`x/foo.ts`);
-        // An explicit ./a/ is a tool-relative path, not a diff side — only the ./ is stripped.
+        // An explicit ./a/ is a tool-relative path, not a diff side: only the ./ is stripped.
         expect(toWorkspacePath(`./a/foo.ts`)).toBe(`a/foo.ts`);
     });
 
@@ -80,7 +80,7 @@ describe(`toWorkspacePath`, () => {
         queryData = [treeOf(WORKSPACE_ROOT)];
         expect(toWorkspacePath(`/work/src/foo.ts`)).toBe(`src/foo.ts`);
         expect(toWorkspacePath(`/usr/lib/node.js`)).toBeUndefined();
-        // A sibling directory whose name merely starts with the root is not inside it — and nothing in the
+        // A sibling directory whose name merely starts with the root is not inside it, and nothing in the
         // workspace ends in that path either, so it stays unmapped.
         expect(toWorkspacePath(`/workspace/src/foo.ts`)).toBeUndefined();
     });
@@ -109,7 +109,7 @@ describe(`resolveInTree`, () => {
         expect(resolveInTree(`src/foo.ts`)).toBe(`src/foo.ts`);
     });
 
-    it(`takes the shallowest of several matches — the app's file, not a copy buried in a fixture tree`, () => {
+    it(`takes the shallowest of several matches: the app's file, not a copy buried in a fixture tree`, () => {
         queryData = [treeOf(WORKSPACE_ROOT, `_editor/web/test/fixtures/deep/pages/Foo.vue`, `_editor/web/src/pages/Foo.vue`)];
         expect(resolveInTree(`pages/Foo.vue`)).toBe(`_editor/web/src/pages/Foo.vue`);
     });
@@ -142,7 +142,7 @@ describe(`FILE_REF`, () => {
         expect(matchOf(`the and/or case`)).toBeUndefined();
     });
 
-    it(`does not start mid-token inside a URL — the URL linker owns that`, () => {
+    it(`does not start mid-token inside a URL: the URL linker owns that`, () => {
         expect(matchOf(`https://example.com/foo.ts`)).toBeUndefined();
     });
 });

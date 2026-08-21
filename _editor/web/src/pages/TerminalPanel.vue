@@ -19,25 +19,25 @@ import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type 
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 import { postTurnControl } from "../composables/chat/turnStream";
 
-/* THE terminal panel — mounted once in the shell, below every view. Each tab is a tmux-backed session in the
+/* THE terminal panel: mounted once in the shell, below every view. Each tab is a tmux-backed session in the
  * shared cache (composables/useTerminal): mounting re-appends the active tab's persistent host element,
  * unmounting only detaches it, so scrollback and running processes survive close, navigation, and reload.
  * Tabs arrange into split GROUPS (useTerminal.groups): one pill per group, one segment per session; the
  * active group's sessions render side by side in the pane. The strip is a VSCode-style list: Shift/Ctrl+click
  * multi-selects pills, right-click opens the action menu (split / join / unsplit / kill, and per-terminal
  * rename / color / icon overrides from terminalMeta). Right-click on the bar's empty space opens the same menu
- * on its strip-wide rows alone — kill all, and pop the panel out into its own real window (like the chat
- * strip); the shell owns the teleport. In that window the bar stands up along the LEFT edge — a floating
+ * on its strip-wide rows alone: kill all, and pop the panel out into its own real window (like the chat
+ * strip); the shell owns the teleport. In that window the bar stands up along the LEFT edge: a floating
  * terminal is a tall window, so pills belong on the axis that has room, the way VSCode moves its own terminal
  * list to the side once the panel is wide.
  *
- * The strip lists PLACES — the user's shells and their dev servers. The terminals WORK runs in (an agent's
+ * The strip lists PLACES: the user's shells and their dev servers. The terminals WORK runs in (an agent's
  * Bash, a capability install) are records of something that already happened, so they tab only while someone is
  * watching and retire themselves when they finish (useWorkTerminals, useTerminal's `revealed`); while they run
  * they are one click away in the toolbar's work-terminals popover. That is why there is no broom here: nothing
  * accumulates in the strip to sweep. Every tab still gets the hover-×, and a stopped dev server keeps its pill
- * — it's a place you restart, not litter. Restart is shell-only (a dev-server tab is re-run via Start, or ↑ at
- * its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves — they live
+ *: it's a place you restart, not litter. Restart is shell-only (a dev-server tab is re-run via Start, or ↑ at
+ * its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves: they live
  * in the toolbar's processes popover, and their × only hides the read-only log view. `initial` is an object so
  * re-requesting the same session still refocuses. Height persists per storageKey; `resizable: false` pins the
  * panel to its container (the mobile route, and the pop-out window). */
@@ -52,7 +52,7 @@ const {
     source: TerminalTabsSource;
     storageKey: string;
     initial?: TerminalRequest;
-    // A session to relist as a tab without focusing it (the agent's live terminal — appears without hijacking
+    // A session to relist as a tab without focusing it (the agent's live terminal: appears without hijacking
     // the active tab). Distinct from `initial`, which focuses.
     surfaced?: { readonly name: string };
     resizable?: boolean;
@@ -62,13 +62,13 @@ const emit = defineEmits<{ close: [] }>();
 const tabs = createTerminalTabs(source, storageKey, () => emit(`close`));
 const { order, groups, answer, activeName, switchTab, joinTabs, unsplit, newTab, splitTab, killTabs, restart } = tabs;
 
-/* WHAT THE PANEL SHOWS BEFORE IT KNOWS ANYTHING — the shapes of the strip this sandbox was left with.
+/* WHAT THE PANEL SHOWS BEFORE IT KNOWS ANYTHING: the shapes of the strip this sandbox was left with.
  *
  * Opening the panel is instant and its terminals are one tunnel round trip away, so there is a moment with
- * nothing to draw. It used to be drawn as "No terminals open." — an answer to a question still in flight, taken
+ * nothing to draw. It used to be drawn as "No terminals open.": an answer to a question still in flight, taken
  * back the instant the list landed, and on a slow daemon it was the only thing a returning user saw. The
  * remembered arrangement is the honest alternative: it says how many pills were here and how wide each was,
- * which is exactly a skeleton's claim. Unlabelled and inert on purpose — WHICH terminals came back is the
+ * which is exactly a skeleton's claim. Unlabelled and inert on purpose: WHICH terminals came back is the
  * daemon's to say, and a placeholder that named one would be a promise this panel cannot keep.
  *
  * Capped, because the shapes are decoration: a sandbox left with twenty splits should not spend two rows of the
@@ -77,13 +77,13 @@ const PLACEHOLDER_LIMIT = 6;
 const placeholders = computed(() =>
     answer.value === `waiting` && groups.value.length === 0 ? tabs.remembered.value.slice(0, PLACEHOLDER_LIMIT) : [],
 );
-// Restart kills the active session and opens a fresh web-* shell in its slot — meaningless for a dev-server
+// Restart kills the active session and opens a fresh web-* shell in its slot: meaningless for a dev-server
 // tab, which gets refresh instead.
 const activeShell = computed(() => order.value.find((tab) => tab.name === activeName.value)?.kind === `shell`);
 const popout = useTerminalPopout();
 // The bar turns into a left rail while the panel floats in its own window (see the component comment).
 const vertical = computed(() => popout.poppedOut.value);
-// Teleporting the panel to/from the pop-out window moves the container wholesale without any Vue re-mount —
+// Teleporting the panel to/from the pop-out window moves the container wholesale without any Vue re-mount:
 // remount the active group after the flush so every cell refits (and the PTYs resync) at the new window's size.
 watch(
     popout.poppedOut,
@@ -97,7 +97,7 @@ watch(
 
 // Sessions FINISH through paths no client action fires: an agent's last Bash command exits, a dev server dies.
 // The strip lists imperatively (around spawns, kills, restarts and surfaces), so a tab would keep reading as
-// running — undimmed, and invisible to the sweep below — until the panel was reopened or refreshed by hand.
+// running: undimmed, and invisible to the sweep below, until the panel was reopened or refreshed by hand.
 // Observing the shared entry (the same one the rail's badge reads, and the one the strip's own relists write)
 // supplies the missing edge. Relisting only when the daemon's session set actually changes keeps it to one
 // reconcile per real change, and that relist is served from the cache it just reacted to rather than costing a
@@ -110,12 +110,12 @@ watch(
     () => void tabs.refresh().catch(() => undefined),
 );
 
-/* AND THE DAEMON COMING BACK IS ITSELF A RELIST — for an outage that outlasts asking again.
+/* AND THE DAEMON COMING BACK IS ITSELF A RELIST: for an outage that outlasts asking again.
  *
  * A list refused on the way in re-asks a few times on its own (useTerminal's refresh), which covers the seconds
  * a resumed daemon takes to answer. An outage measured in minutes outlives that, and the watch above cannot end
  * it either: it reacts to the session set CHANGING, and a daemon nobody can reach reports no changes. So the
- * moment this one is reachable again, the strip asks once more — the cheapest possible answer to "was anything
+ * moment this one is reachable again, the strip asks once more: the cheapest possible answer to "was anything
  * running while we were cut off". */
 watch(useSandbox().reachable, (isReachable) => {
     if (isReachable) {
@@ -123,16 +123,16 @@ watch(useSandbox().reachable, (isReachable) => {
     }
 });
 
-/* THE AGENT IS WAITING FOR YOU AT THIS TERMINAL — the answering end of the terminal handover
+/* THE AGENT IS WAITING FOR YOU AT THIS TERMINAL: the answering end of the terminal handover
  * (sandbox terminal/terminal-help.ts), and the exact counterpart of the banner over the Browsers stage.
  *
  * The ask rides the terminals list, so it needs no state of its own here: whichever session the strip has
- * ACTIVE is the one whose banner shows, and it comes down when the daemon publishes the cleared flag — the
+ * ACTIVE is the one whose banner shows, and it comes down when the daemon publishes the cleared flag: the
  * same push that raised it. That the banner follows the active tab rather than shouting from wherever it was
  * raised is the whole reason it belongs here: the thing the owner has to answer is the prompt in the pane
  * directly below it, and an ask floating over a different session's pane would be pointing at nothing.
  *
- * An ask on a tab that is NOT active still reaches the owner — the chat card and the phone notification both
+ * An ask on a tab that is NOT active still reaches the owner: the chat card and the phone notification both
  * carry it, and the card's button focuses this very tab.
  */
 const help = computed(() => listed.sessions.value.find((session) => session.name === activeName.value)?.help);
@@ -162,17 +162,17 @@ const stripIndex = computed(() => {
     }
     return index;
 });
-// What the pop-out button says and is named, both directions — the same wording as the strip menu's row and the
+// What the pop-out button says and is named, both directions: the same wording as the strip menu's row and the
 // palette's, with the chord when one is bound (withShortcut, shared with the chat strip's own button).
 const popoutHint = computed(() => withShortcut(popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`, `terminal.togglePopout`));
-// The panel's dismissal, which is NOT a kill — the sessions are tmux facts on the sandbox and outlive every view
+// The panel's dismissal, which is NOT a kill: the sessions are tmux facts on the sandbox and outlive every view
 // of them. It used to say "Close terminal" under a ×, the same glyph the pills carry for the one action that
 // DOES end a session, so the toolbar read as "kill everything". It now says what it does and leaves × to the
 // pills: docked, the panel drops back down to its dock (chevron-down, pointing where it goes); floating, there
 // is nothing to drop into and the press retires the window, which is the one place a × still tells the truth.
 const closeHint = computed(() =>
     withShortcut(
-        popout.poppedOut.value ? `Close the window — the terminals keep running` : `Hide the panel — the terminals keep running`,
+        popout.poppedOut.value ? `Close the window, the terminals keep running` : `Hide the panel, the terminals keep running`,
         `terminal.toggle`,
     ),
 );
@@ -189,14 +189,14 @@ const segmentTooltip = (name: string): string | undefined => {
         return undefined;
     }
     if (tab.kind === `process`) {
-        return `Background process — read-only logs`;
+        return `Background process: read-only logs`;
     }
     // What it is running leads, whatever kind it is: on a crowded strip the label is a number and the command is
     // the only thing that identifies the terminal to the person about to close it. The full command, untruncated
-    // — the pill clips it, and the tooltip is where the clipped end is meant to be readable.
+    //: the pill clips it, and the tooltip is where the clipped end is meant to be readable.
     const doing = tab.command === undefined ? undefined : `Running ${tab.command}`;
     if (tab.kind === `agent`) {
-        return doing ?? (tab.running === false ? `AI terminal — finished` : `AI terminal`);
+        return doing ?? (tab.running === false ? `AI terminal, finished` : `AI terminal`);
     }
     if (tab.kind === `job`) {
         return doing ?? `Job terminal`;
@@ -235,7 +235,7 @@ const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): vo
 };
 
 // --- Killing ---------------------------------------------------------------------------------
-/* EVERY KILL COMES THROUGH HERE — the pill's ×, the menu's row, the chord, the mass actions — because a tmux
+/* EVERY KILL COMES THROUGH HERE: the pill's ×, the menu's row, the chord, the mass actions, because a tmux
  * session that is killed is gone, and which gesture reached for it changes nothing about that.
  *
  * `killable` is what "all terminals" means: every session EXCEPT a background process's log view, whose
@@ -243,18 +243,18 @@ const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): vo
  *
  * TWO THINGS STOP A KILL, and they are different questions asked of the same set:
  *
- *   · BUSY — something is actually running in that session (`command`: "pnpm build", "vim"). This one stops a
+ *   · BUSY, something is actually running in that session (`command`: "pnpm build", "vim"). This one stops a
  *     SINGLE × too, and it is the reason this section was rewritten. A single close used to go through in
- *     silence on the reasoning that the pill is under the pointer and named in the gesture — true of the pill,
+ *     silence on the reasoning that the pill is under the pointer and named in the gesture: true of the pill,
  *     and no help at all about what is INSIDE it. The strip is a row of near-identical pills; the one beside
  *     the one you meant holds a build half an hour in, or an editor with unsaved buffers, and there is no undo
  *     for either. `running` could not have caught it: a shell reports `running: true` at a bare prompt just as
  *     it does mid-build, so a confirm keyed on that would have fired on every close and taught the user to
- *     click through it — which is worse than no confirm at all. The daemon now says what the pane is running
+ *     click through it, which is worse than no confirm at all. The daemon now says what the pane is running
  *     (system.routes.ts `foreground`), so the dialog only appears when there is something to lose and can name
  *     it. An idle shell still closes on one click, exactly as before.
  *
- *   · BULK — more than one session at once, any of them live. The gesture names a count, not the terminals, so
+ *   · BULK: more than one session at once, any of them live. The gesture names a count, not the terminals, so
  *     the dialog is where the user finds out which they are. The rule the other two strips already follow (the
  *     chat's "stop N running agents?", the workspace's unsaved-edits dialog).
  *
@@ -262,7 +262,7 @@ const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): vo
 const killable = computed(() => order.value.filter((tab) => tab.kind !== `process`).map((tab) => tab.name));
 const pendingKill = ref<string[]>();
 const runningIn = (names: string[]): TerminalTab[] => order.value.filter((tab) => names.includes(tab.name) && tab.running);
-// The tabs with work in them. `process` is excluded on its own terms — its × closes a view, not a session — so
+// The tabs with work in them. `process` is excluded on its own terms: its × closes a view, not a session, so
 // a dev server's log tab never asks a question about a thing the click does not do.
 const busyIn = (names: string[]): TerminalTab[] =>
     order.value.filter((tab) => names.includes(tab.name) && tab.kind !== `process` && tab.command !== undefined);
@@ -271,7 +271,7 @@ const isBusy = (name: string): boolean => {
     return tab !== undefined && tab.kind !== `process` && tab.command !== undefined;
 };
 // What the dialog LISTS: the busy ones when that is why it opened, else the live ones a bulk kill is ending.
-// Never both — a mixed set would ask two questions in one list, and the busy ones are the answer that matters.
+// Never both: a mixed set would ask two questions in one list, and the busy ones are the answer that matters.
 const pendingKillBusy = computed(() => (pendingKill.value === undefined ? [] : busyIn(pendingKill.value)));
 const pendingKillItems = computed(() =>
     pendingKillBusy.value.length > 0 ? pendingKillBusy.value : pendingKill.value === undefined ? [] : runningIn(pendingKill.value),
@@ -279,7 +279,7 @@ const pendingKillItems = computed(() =>
 const killHeader = computed(() => {
     const busy = pendingKillBusy.value;
     if (busy.length === 1) {
-        // The command IS the question — "Kill the terminal running pnpm build?" is answerable; "are you sure?"
+        // The command IS the question: "Kill the terminal running pnpm build?" is answerable; "are you sure?"
         // is not. Truncated because a pill's session can be running something with a very long name.
         return `Kill the terminal running ${(busy[0]?.command ?? ``).slice(0, 24)}?`;
     }
@@ -297,7 +297,7 @@ const requestKill = (names: string[]): void => {
     if (killTabs === undefined || names.length === 0) {
         return;
     }
-    // Nothing running in any of them, and nothing bulk about the gesture — the click is the whole decision.
+    // Nothing running in any of them, and nothing bulk about the gesture: the click is the whole decision.
     if (busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0)) {
         killTabs(names);
         selectedKeys.value = [];
@@ -314,7 +314,7 @@ const confirmKill = (): void => {
 };
 
 // --- Rename (inline, in the strip) -------------------------------------------------------------
-// The pill's label edits IN PLACE — the same gesture as a chat tab and a workspace-tree file, and for the same
+// The pill's label edits IN PLACE: the same gesture as a chat tab and a workspace-tree file, and for the same
 // reason: renaming is a one-field edit of something already on screen, so a modal that hides the strip it
 // renames is pure ceremony. Enter commits, Esc cancels, blur commits, and an EMPTY name clears the override
 // back to the default label (that's the reset, hence no silent-cancel-on-empty here).
@@ -342,7 +342,7 @@ const focusRename = (vnode: VNode): void => {
     el.focus();
     el.select();
 };
-// The default label a cleared name falls back to — the input's placeholder, so "empty resets" is visible.
+// The default label a cleared name falls back to: the input's placeholder, so "empty resets" is visible.
 const defaultLabel = (name: string): string => tabByName.value.get(name)?.label ?? `Terminal ${stripIndex.value.get(name) ?? ``}`;
 
 // --- Color / icon (per-terminal overrides, terminalMeta) ---------------------------------------
@@ -387,7 +387,7 @@ const openTabMenu = (event: MouseEvent, groupIndex: number, name: string): void 
 
 // The rows that name no particular pill: the strip-wide kills, the sweep, and the pop-out toggle. They tail
 // whichever branch of the pill menu is showing AND they are the whole of the menu a right-click on the bar's
-// empty space opens — the same pair of entry points the chat and workspace strips give their Close All. Each
+// empty space opens: the same pair of entry points the chat and workspace strips give their Close All. Each
 // row is absent when it would be a no-op, so the menu never offers one.
 const stripItems = computed<MenuItem[]>(() => {
     const items: MenuItem[] = [];
@@ -397,8 +397,8 @@ const stripItems = computed<MenuItem[]>(() => {
     items.push(
         ...(items.length > 0 ? [{ separator: true }] : []),
         // The one CHECKED row in this menu (see the #item slot's checkmark gutter): whether the terminals work
-        // runs in tab here at all. It sits where the annoyance is felt — a right-click on the strip they were
-        // crowding — and writes the same preference as the work popover's footer and Settings → Appearance.
+        // runs in tab here at all. It sits where the annoyance is felt: a right-click on the strip they were
+        // crowding, and writes the same preference as the work popover's footer and Settings → Appearance.
         {
             label: `Show work terminals`,
             checked: showWorkTerminals.value,
@@ -422,7 +422,7 @@ const menuItems = computed<MenuItem[]>(() => {
     const { name } = target;
     const group = groups.value[target.groupIndex] ?? [name];
     // A multi-selection gets the mass actions; a single pill gets the per-terminal ones. Each item carries its
-    // command's effective shortcut (commandShortcut) so the menu teaches the key — right-aligned via #item.
+    // command's effective shortcut (commandShortcut) so the menu teaches the key: right-aligned via #item.
     if (selectedGroups.value.length > 1) {
         const names = selectedNames.value;
         const items: MenuItem[] = [
@@ -464,7 +464,7 @@ const menuItems = computed<MenuItem[]>(() => {
             {
                 label: tabByName.value.get(name)?.kind === `process` ? `Close log view` : `Kill terminal`,
                 shortcut: commandShortcut(`terminal.kill`),
-                // Through requestKill like every other kill — a menu row aimed at a busy terminal is no more
+                // Through requestKill like every other kill: a menu row aimed at a busy terminal is no more
                 // informed about what is inside it than the × is.
                 command: () => requestKill([name]),
             },
@@ -489,7 +489,7 @@ const openScrollback = async (name: string): Promise<void> => {
     scrollbackFailed.value = false;
     try {
         const captured = await fetchScrollback(name);
-        // Superseded while in flight — the dialog was closed, or another terminal was asked for.
+        // Superseded while in flight: the dialog was closed, or another terminal was asked for.
         if (scrollbackName.value === name) {
             scrollback.value = captured;
         }
@@ -518,12 +518,12 @@ const copyScrollback = (): void => {
 
 // --- Context menu (right-click the GRID) -------------------------------------------------------
 // Right-click inside a terminal used to reach tmux, whose default binding drew its OWN pane menu over the
-// output — splits, swap, kill, respawn: a menu about tmux's panes, in an app whose panes are the strip above,
+// output, splits, swap, kill, respawn: a menu about tmux's panes, in an app whose panes are the strip above,
 // positioned at the pane's idea of the pointer. Those bindings are gone from the image's tmux.conf, so the
 // gesture lands here, on what a terminal actually owes a browser: the clipboard, and the scrollback the
 // alternate screen hides.
 //
-// It targets the session UNDER THE POINTER, not the focused one — in a split those differ, and a menu that
+// It targets the session UNDER THE POINTER, not the focused one: in a split those differ, and a menu that
 // copied from the other pane would be a quiet wrong answer.
 const gridMenu = ref<{ show: (event: Event) => void } | undefined>();
 const gridTarget = ref<string | undefined>(undefined);
@@ -550,7 +550,7 @@ const gridItems = computed<MenuItem[]>(() => {
         return [];
     }
     // Copy and Paste carry no shortcut hint: Ctrl+Shift+C/V are the browser's own (DevTools, paste-as-text) and
-    // this panel deliberately binds neither — plain Ctrl+V already pastes, because it arrives as the textarea
+    // this panel deliberately binds neither: plain Ctrl+V already pastes, because it arrives as the textarea
     // paste event xterm listens for.
     const items: MenuItem[] = [
         { label: `Copy`, disabled: !gridHasSelection.value, command: () => copySelection(session) },
@@ -566,8 +566,8 @@ const gridItems = computed<MenuItem[]>(() => {
 
 // --- Panel geometry ----------------------------------------------------------------------------
 // Persisted per surface. Height is clamped to a floor and ~80% of the viewport. There is no collapsed state:
-// the toolbar's × closes the panel outright, and closing already only unmounts it — every session keeps
-// streaming in the shared cache — so a second, half-shut state was a control that did the same thing worse.
+// the toolbar's × closes the panel outright, and closing already only unmounts it: every session keeps
+// streaming in the shared cache, so a second, half-shut state was a control that did the same thing worse.
 const HEIGHT_KEY = `ui-${storageKey}-terminal-height`;
 const DEFAULT_HEIGHT = 240;
 const MIN_HEIGHT = 96;
@@ -595,8 +595,8 @@ const setHeight = (px: number): void => {
     write(HEIGHT_KEY, String(height.value));
 };
 
-// Alt+PageDown/PageUp walk the strip in READING order — every session, splits included, not just one pill at a
-// time — wrapping at the ends. The chord is the shell-wide one; see the command entries below.
+// Alt+PageDown/PageUp walk the strip in READING order: every session, splits included, not just one pill at a
+// time: wrapping at the ends. The chord is the shell-wide one; see the command entries below.
 const cycleTab = (delta: number): void => {
     const names = groups.value.flat();
     if (names.length < 2) {
@@ -615,25 +615,25 @@ const cycleTab = (delta: number): void => {
 // double-register) and disposed on unmount. Join and kill are selection-aware; the rest act on the focused
 // session.
 //
-// The commands split in two. The TAB family — kill, kill all, next/previous, rename — takes the shell-wide
+// The commands split in two. The TAB family (kill, kill all, next/previous, rename) takes the shell-wide
 // chords the workspace's file tabs and the chat's strip also register (Ctrl+Shift+X, Ctrl+Shift+Backspace,
 // Alt+PageUp/PageDown, F2), each gated to a keystroke from inside THIS panel so focus decides which of the three
 // strips a press reaches (tabSurface.ts). One chord per verb beats three chords memorized, and it is what F2
-// has always done here. The panel's OWN verbs — split, unsplit, join — have no counterpart on the other strips,
+// has always done here. The panel's OWN verbs (split, unsplit, join) have no counterpart on the other strips,
 // so they keep private chords and stay ungated (splitting the focused terminal from the editor is useful).
 //
-// The chorded defaults are all Ctrl+Shift+<key> — the ONE modifier family that's safe here, for two independent
-// reasons: (1) the shell owns every Ctrl+<letter> (C/D/R/U/K/W/A/E… — SIGINT, EOF, reverse-search, readline
+// The chorded defaults are all Ctrl+Shift+<key>: the ONE modifier family that's safe here, for two independent
+// reasons: (1) the shell owns every Ctrl+<letter> (C/D/R/U/K/W/A/E…, SIGINT, EOF, reverse-search, readline
 // line-edits), and Shift makes a DISTINCT keydown, so createTerminalSession's handler swallows only the exact
 // bound chord and leaves the bare control code untouched; (2) it dodges Ctrl+Alt, which is AltGr on
-// Windows/Linux (types € @ … and international glyphs) and an ESC-prefixed control code in a terminal — the
+// Windows/Linux (types € @ … and international glyphs) and an ESC-prefixed control code in a terminal: the
 // trap the old Ctrl+Alt+{R,J,U} defaults fell into. Letters steer clear of the browser chords the page can't
 // intercept (Ctrl+Shift+{I,J,C}=DevTools, N=incognito, T=reopen tab, W=close window, C/V=terminal copy/paste),
 // and lean mnemonic: U=unsplit, G=group(join). Split keeps Ctrl+Shift+5 and New keeps
-// Ctrl+Shift+` — the VSCode/tmux muscle memory — matched by physical key (matchesChord's CODE_TO_KEY path), so
+// Ctrl+Shift+` (the VSCode/tmux muscle memory) matched by physical key (matchesChord's CODE_TO_KEY path), so
 // the Shift glyph ("%","~"), a dead-key layout, or a non-US layout can't break them. Everything is rebindable
-// in Settings → Keybindings — per surface, so remapping Kill Terminal leaves Close Tab alone; the two cosmetic
-// pickers (color, icon) ship UNBOUND — a global chord for a rare "open a swatch grid" earns its keys the least,
+// in Settings → Keybindings: per surface, so remapping Kill Terminal leaves Close Tab alone; the two cosmetic
+// pickers (color, icon) ship UNBOUND: a global chord for a rare "open a swatch grid" earns its keys the least,
 // so they stay palette- and menu-only, exactly as VSCode leaves them (double-click a tab renames without one).
 // "New Terminal" is NOT here: it registers globally (useShellCommands) so it works with the panel closed,
 // routed through useTerminalPanel's spawn hook.
@@ -644,7 +644,7 @@ const registerPanelCommands = (): void => {
             command: `terminal.rename`,
             title: `Rename Terminal`,
             icon: `pencil`,
-            // F2 — the rename key everywhere else in the app (the workspace tree's, the chat strip's) — gated to
+            // F2 (the rename key everywhere else in the app (the workspace tree's, the chat strip's)) gated to
             // a keystroke that came from INSIDE this panel. Outside it the chord stays free (the tree renames
             // its file, a full-screen TUI in another surface keeps F2), and inside it the gate is what makes
             // xterm's key hook forward the press to the dispatcher instead of the PTY: a terminal app that wants
@@ -653,7 +653,7 @@ const registerPanelCommands = (): void => {
             when: `tabSurface == 'terminal'`,
             handler: (): void => {
                 if (renamingName.value !== undefined) {
-                    return; // already editing (F2 lands in the field) — restarting would wipe the draft
+                    return; // already editing (F2 lands in the field): restarting would wipe the draft
                 }
                 if (activeName.value !== undefined) {
                     beginRename(activeName.value);
@@ -750,7 +750,7 @@ const registerPanelCommands = (): void => {
             when: `tabSurface == 'terminal'`,
             handler: (): void => {
                 // A selection is what the chord aims at when there is one (the menu's mass row does the same);
-                // requestKill is what turns a busy session — or two or more live ones — into a confirm. The
+                // requestKill is what turns a busy session, or two or more live ones: into a confirm. The
                 // chord is the gesture with the LEAST aim of the three: it kills whatever happens to be focused,
                 // from a keyboard, without the pointer ever being over the pill.
                 if (selectedNames.value.length > 0) {
@@ -774,7 +774,7 @@ const registerPanelCommands = (): void => {
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
 };
 
-// Right-click on the bar's EMPTY space (not a pill, not a button) OPENS THE MENU on its strip-wide rows — kill
+// Right-click on the bar's EMPTY space (not a pill, not a button) OPENS THE MENU on its strip-wide rows: kill
 // all, sweep the finished, pop the panel out. It used to pop out on the spot, which turned a right-click that
 // merely missed a pill into a whole floating window; the pop-out is a row in the menu now, exactly as on the
 // chat strip.
@@ -799,7 +799,7 @@ const controlCode = (ch: string): string => {
 };
 
 // Ctrl is sticky: arm it, then the next printable keydown (from the soft keyboard) is sent as its control code
-// — the only reliable way to reach Ctrl+C/D/Z without a physical modifier. Best-effort: some Android keyboards
+//, the only reliable way to reach Ctrl+C/D/Z without a physical modifier. Best-effort: some Android keyboards
 // emit no usable keydown, in which case Ctrl just disarms on the next tap. ponytail: no visual affordance for
 // which key it will modify beyond the armed tint.
 const ctrlArmed = ref(false);
@@ -837,7 +837,7 @@ const pressKey = (data: string): void => tabs.sendInput(data);
 
 const container = ref<HTMLElement>();
 
-// The spawn-hook disposer. Registered synchronously at mount — ahead of the initial relist, not behind it:
+// The spawn-hook disposer. Registered synchronously at mount: ahead of the initial relist, not behind it:
 // attach() takes the container before it awaits anything, so the hook is usable the moment it is published,
 // and a relist that REJECTS (an unreachable daemon, or one whose session list predates the contract the app
 // parses it with) must not take "New Terminal" down with it. Behind the await, one bad list left the command a
@@ -848,13 +848,13 @@ let disposeSpawn: (() => void) | undefined;
 // tmux session that no live panel will ever show.
 let live = true;
 
-/* WHAT THE PANEL IS WAITING FOR, and what it may say about it. `tabs.pending` is the wait itself — held until
- * the session is listed, however long that takes (useTerminal's focus) — and this is the sentence that goes
+/* WHAT THE PANEL IS WAITING FOR, and what it may say about it. `tabs.pending` is the wait itself: held until
+ * the session is listed, however long that takes (useTerminal's focus), and this is the sentence that goes
  * with it, kept from the request that started the wait.
  *
  * The wait used to be a bounded race whose only vocabulary was the session name, so a push met a spinner over
  * `job-checks` and no way to find out what that was. Two things fix that: the request carries a title, and the
- * wait ADMITS DEFEAT out loud — `waited` below flips after a few seconds, the panel stops holding itself empty
+ * wait ADMITS DEFEAT out loud: `waited` below flips after a few seconds, the panel stops holding itself empty
  * for a tab that isn't coming, and says what it was waiting for instead of spinning on it forever. */
 const about = ref<TerminalRequest | undefined>(initial);
 const awaiting = computed(() => tabs.pending.value);
@@ -881,20 +881,20 @@ watch(
 const named = computed(() => awaiting.value ?? about.value?.name ?? ``);
 const emptyHint = computed(() => {
     if (awaiting.value !== undefined) {
-        // The wait is still standing — it has only stopped holding the panel empty. Saying so is the difference
+        // The wait is still standing: it has only stopped holding the panel empty. Saying so is the difference
         // between "be patient" and the spinner that used to sit there with nothing behind it.
         return `No terminal has appeared for it yet. It may still be starting, and this panel will show it the moment it does.`;
     }
     if (answer.value === `refused`) {
         // The one case where the panel knows it is not the sandbox that is empty, but the asking that failed.
-        return `This sandbox didn't answer when asked what it was running. Anything already going is still going — try again from the refresh button.`;
+        return `This sandbox didn't answer when asked what it was running. Anything already going is still going: try again from the refresh button.`;
     }
     return about.value === undefined
         ? `Open one to run something here.`
-        : `Nothing in this sandbox runs under that name — it was started outside it, or it has already stopped.`;
+        : `Nothing in this sandbox runs under that name, it was started outside it, or it has already stopped.`;
 });
 
-/* Take the request — and SPEND it. It stands in module state so that setting it can open a panel that isn't
+/* Take the request, and SPEND it. It stands in module state so that setting it can open a panel that isn't
  * mounted yet; left standing afterwards, the next panel to mount replayed it, which is how a terminal from a
  * push half an hour ago came back as "Opening job-checks…" over an empty panel. */
 const openRequested = async (request: TerminalRequest): Promise<void> => {
@@ -911,13 +911,13 @@ onMounted(async () => {
     const pane = container.value;
     if (pane === undefined) {
         // Nothing to attach to, so nothing asked of this panel can be honoured. Both requests are MODULE state
-        // though, and one left standing is not held for its asker — it is handed to whatever unrelated thing
+        // though, and one left standing is not held for its asker: it is handed to whatever unrelated thing
         // mounts a panel next. So they are spent here, where they died.
         consumeSpawnRequest();
         clearTerminalRequest();
         return;
     }
-    // `initial` at mount means the panel was opened FOR that session (Start, Run tests, a capability install) —
+    // `initial` at mount means the panel was opened FOR that session (Start, Run tests, a capability install):
     // attach skips the empty-panel shell for it, so the asked-for tab arrives alone instead of behind a stray
     // `web-*` "1" that filled the second before the daemon's session existed.
     const attaching = tabs.attach(pane, initial?.name);
@@ -925,12 +925,12 @@ onMounted(async () => {
         disposeSpawn = registerTerminalSpawn(newTab);
     }
     const autoCreated = await attaching;
-    /* THE SPAWN REQUEST IS SPENT BY THIS MOUNT, WHATEVER THIS MOUNT MANAGES TO DO WITH IT — so it is read
+    /* THE SPAWN REQUEST IS SPENT BY THIS MOUNT, WHATEVER THIS MOUNT MANAGES TO DO WITH IT, so it is read
      * before any decision, never from behind a `&&` that can skip reading it.
      *
      * A "New Terminal" pressed with no panel mounted stands in module state until a panel takes it. Left there
      * by a mount that raced a Ctrl+` (`live` false by the time we get here), it does not go back to that press:
-     * it lies in wait and opens a shell into whatever brings a panel up next — which is the stray "1" that
+     * it lies in wait and opens a shell into whatever brings a panel up next, which is the stray "1" that
      * turns up beside a push's checks, minutes or hours later.
      *
      * An empty panel's auto-created shell IS that terminal, so it is never opened twice. */
@@ -954,7 +954,7 @@ onBeforeUnmount(() => {
     disposeSpawn?.();
     disposeSpawn = undefined;
 });
-// A parent-driven focus request (a row's terminal button while the panel is already open) — a fresh object per
+// A parent-driven focus request (a row's terminal button while the panel is already open): a fresh object per
 // request, so the same session refocuses too.
 watch(
     () => initial,
@@ -964,7 +964,7 @@ watch(
         }
     },
 );
-// A parent-driven surface request (the agent started running Bash) — relist so the tab appears, without
+// A parent-driven surface request (the agent started running Bash): relist so the tab appears, without
 // focusing it. Only meaningful while the panel is mounted; a closed panel lists the session on its next open.
 watch(
     () => surfaced,
@@ -976,7 +976,7 @@ watch(
 );
 
 const resizing = ref(false);
-// The panel's bottom viewport offset, captured at drag start — its height is the pointer's distance above it.
+// The panel's bottom viewport offset, captured at drag start: its height is the pointer's distance above it.
 let panelBottom = 0;
 
 const startResize = (event: PointerEvent): void => {
@@ -1022,22 +1022,22 @@ const endResize = (event: PointerEvent): void => {
             title="Drag to resize · double-click to reset"
         ></div>
         <!-- The bar: across the top when docked, down the left edge in the pop-out window (`vertical`). Same
-             pills, same toolbar, same right-click menu — only the axis differs. -->
+             pills, same toolbar, same right-click menu: only the axis differs. -->
         <div
             class="flex shrink-0 gap-1 border-line bg-card"
             :class="vertical ? 'w-40 flex-col items-stretch border-r px-1 py-1.5' : 'items-center border-b px-2 py-0.5'"
             @contextmenu="onBarContextMenu"
         >
             <!-- One pill per split GROUP, one segment per tmux session, styled like the editor's FileTabs: glyph
-                 (kind icon or the user's override, tinted by their color), label (or index), and — when the
-                 source manages sessions — a small × that appears on hover. Click switches (and focuses the
+                 (kind icon or the user's override, tinted by their color), label (or index), and, when the
+                 source manages sessions: a small × that appears on hover. Click switches (and focuses the
                  clicked split); Shift/Ctrl+click multi-selects pills for the right-click mass actions; × kills
                  that session; + opens a new one. A dimmed segment is an untracked session (a finished one-shot
                  job's lingering shell, output in scrollback).
 
                  Pills fill one row, then wrap to a second (the chat strip's rule): a sandbox with a dozen
                  sessions used to push half of them off the right edge, where a tab you can't see is a tab you
-                 forget is running. Only past two rows (max-h-13, the cap) does the strip scroll — vertically,
+                 forget is running. Only past two rows (max-h-13, the cap) does the strip scroll: vertically,
                  never sideways. One row leaves the bar at exactly its old height, so the terminal only gives up
                  rows once there are genuinely more tabs than fit. Rows sit a touch further apart than pills in a
                  row (gap-y-1 vs gap-x-0.5): stacked pill backgrounds need the separation to read as two rows. -->
@@ -1073,7 +1073,7 @@ const endResize = (event: PointerEvent): void => {
                                 "
                                 :style="segmentColor(name) === undefined ? undefined : { color: segmentColor(name) }"
                             />
-                            <!-- The label edits in place. The field sizes itself to the pill (a fixed w-24 —
+                            <!-- The label edits in place. The field sizes itself to the pill (a fixed w-24:
                                  the strip must not jump as you type) and swallows the clicks it sits on, so a
                                  caret drag isn't also a tab switch. -->
                             <input
@@ -1097,7 +1097,7 @@ const endResize = (event: PointerEvent): void => {
                                  mis-close starts with a strip of pills that all look alike and no way to tell
                                  the shell you are done with from the one holding a build. The command sits in
                                  mono beside the label (it is a program's name, not prose) and is dropped on the
-                                 horizontal strip once the pill is a split segment — there is no room, and the
+                                 horizontal strip once the pill is a split segment: there is no room, and the
                                  dot alone still says "busy". Vertical pills are wide, so it stays. -->
                             <span
                                 v-if="isBusy(name) && (vertical || group.length === 1)"
@@ -1109,7 +1109,7 @@ const endResize = (event: PointerEvent): void => {
                                 v-if="killTabs !== undefined && renamingName !== name"
                                 class="relative flex h-3 w-3 shrink-0 items-center justify-center"
                                 @click.stop="requestKill([name])"
-                                :aria-label="isBusy(name) ? `Kill terminal — running ${tabByName.get(name)?.command}` : `Kill terminal`"
+                                :aria-label="isBusy(name) ? `Kill terminal, running ${tabByName.get(name)?.command}` : `Kill terminal`"
                             >
                                 <Icon
                                     name="times"
@@ -1121,7 +1121,7 @@ const endResize = (event: PointerEvent): void => {
                 </div>
                 <!-- The strip this sandbox was left with, while its sessions are still on their way: one shape
                      per remembered pill, as wide as that pill's splits made it. Inert and hidden from screen
-                     readers — it is a place being held, not a tab (see `placeholders`). -->
+                     readers: it is a place being held, not a tab (see `placeholders`). -->
                 <div
                     v-for="(group, gi) in placeholders"
                     :key="`held-${gi}`"
@@ -1172,7 +1172,7 @@ const endResize = (event: PointerEvent): void => {
                 >
                     <Icon name="refresh" class="text-xs" />
                 </button>
-                <!-- Into its own window, and back. It was a right-click-the-strip menu row only — the same
+                <!-- Into its own window, and back. It was a right-click-the-strip menu row only: the same
                      burial the chat's pop-out had, on a toolbar that has room to say it out loud. Beside the
                      close × because both answer "where does this panel live", and it flips with the state so
                      the one control is the whole round trip. -->
@@ -1186,8 +1186,8 @@ const endResize = (event: PointerEvent): void => {
         </div>
         <!-- The panes and the touch keys under them: always a column, whichever side the bar is on. -->
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            <!-- THE AGENT ASKED FOR HANDS. Between the strip and the pane — directly over the prompt the owner
-                 has to answer — and its buttons settle the parked request; it comes down on the daemon's own
+            <!-- THE AGENT ASKED FOR HANDS. Between the strip and the pane: directly over the prompt the owner
+                 has to answer, and its buttons settle the parked request; it comes down on the daemon's own
                  push, the same one that raised it. The mirror of the Browsers banner, deliberately. -->
             <div v-if="help" class="flex shrink-0 flex-col gap-2 border-b border-line bg-warning/10 px-3 py-2">
                 <div class="flex items-start gap-2">
@@ -1195,7 +1195,7 @@ const endResize = (event: PointerEvent): void => {
                     <div class="min-w-0 flex-1 text-xs text-content">
                         <span class="font-medium">The agent needs your help:</span>
                         {{ help.message }}
-                        <span class="text-muted"> — type it below, then hand back.</span>
+                        <span class="text-muted">: type it below, then hand back.</span>
                     </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -1211,7 +1211,7 @@ const endResize = (event: PointerEvent): void => {
                         class="shrink-0 rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90"
                         @click="resolveHelp(true)"
                     >
-                        Done — hand back
+                        Done: hand back
                     </button>
                     <button
                         type="button"
@@ -1224,11 +1224,11 @@ const endResize = (event: PointerEvent): void => {
             </div>
             <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of
                  the pane (useTerminal's mount builds one .term-cell per split). The right-click is caught here
-                 rather than per cell because the cells are built imperatively — the handler reads which session
+                 rather than per cell because the cells are built imperatively: the handler reads which session
                  it landed in off the cell's own dataset. -->
             <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2" @contextmenu="onGridContextMenu"></div>
             <!-- NOTHING TO SHOW, SAID OUT LOUD. The panel opened FOR a session suppresses the empty-panel shell
-                 (see attach) because that session is normally seconds away — but a surface can ask for one that
+                 (see attach) because that session is normally seconds away, but a surface can ask for one that
                  will never arrive: a dev server someone started outside this sandbox has no terminal here, and
                  the button offering it left a black rectangle with no tabs, no message and no way to tell a slow
                  start from a session that never existed. An OVERLAY rather than a v-if on the container: the
@@ -1250,7 +1250,7 @@ const endResize = (event: PointerEvent): void => {
                 <p v-if="about?.detail" class="max-w-md truncate font-mono text-2xs text-subtle">{{ about.detail }}</p>
             </div>
             <!-- THE UNKNOWN MOMENT, WEARING ITS OWN SHAPE. Between opening this sandbox's panel and its daemon
-                 saying what it runs there is nothing to show, and the state below — "No terminals open." — is an
+                 saying what it runs there is nothing to show, and the state below ("No terminals open.") is an
                  answer. Stating it here meant retracting it a beat later, and on a daemon still waking it was
                  the only thing a returning user ever saw. -->
             <div
@@ -1303,14 +1303,14 @@ const endResize = (event: PointerEvent): void => {
         <ContextMenu ref="gridMenu" :model="gridItems" :append-to="popout.overlayTarget.value" :min-width="12" />
 
         <!-- The pane's history as selectable text. The live grid can only ever offer the screenful in front of
-             you — a tmux client runs on the alternate screen, so its scrollback never reaches the browser — and
+             you: a tmux client runs on the alternate screen, so its scrollback never reaches the browser, and
              this is where "scroll back and copy that" is answered: real text, native selection, Ctrl+F. -->
         <Modal
             :open="scrollbackName !== undefined"
             size="xl"
             :scroll="false"
             :append-to="popout.overlayTarget.value"
-            :header="scrollbackName === undefined ? '' : `Scrollback — ${segmentLabel(scrollbackName)}`"
+            :header="scrollbackName === undefined ? '' : `Scrollback, ${segmentLabel(scrollbackName)}`"
             @update:open="closeScrollback"
         >
             <!-- Lays out its own height (hence <Modal :scroll="false">): the <pre> below is the scroller, and a
@@ -1322,7 +1322,7 @@ const endResize = (event: PointerEvent): void => {
                         <span v-if="scrollback.truncated">· older lines beyond this are still in tmux</span>
                         <Button class="ml-auto" size="small" severity="secondary" label="Copy all" @click="copyScrollback" />
                     </template>
-                    <span v-else-if="scrollbackFailed">Couldn't read this terminal's scrollback — the session may have ended.</span>
+                    <span v-else-if="scrollbackFailed">Couldn't read this terminal's scrollback: the session may have ended.</span>
                     <span v-else-if="scrollbackPending">Reading…</span>
                 </div>
                 <pre
@@ -1334,7 +1334,7 @@ const endResize = (event: PointerEvent): void => {
         </Modal>
 
         <!-- The confirm a kill gets when there is something to lose: a terminal with work running in it (however
-             it was aimed at — ×, menu row, chord), or a bulk kill of sessions the gesture never named. Each row
+             it was aimed at: ×, menu row, chord), or a bulk kill of sessions the gesture never named. Each row
              carries what that terminal is DOING, because on a strip of numbered pills the command is the only
              thing that tells the user which terminal this actually is. -->
         <ConfirmDialog
@@ -1433,7 +1433,7 @@ const endResize = (event: PointerEvent): void => {
     user-select: none;
 }
 
-/* Terminal tab pill — mirrors FileTabs' .ftab muted→hover→active progression, kept rounded to sit among the
+/* Terminal tab pill: mirrors FileTabs' .ftab muted→hover→active progression, kept rounded to sit among the
    toolbar's other rounded-md buttons. Selected (Shift/Ctrl+click) tints toward primary so a multi-selection
    reads at a glance without fighting the active pill's overlay. */
 .tterm {
@@ -1454,7 +1454,7 @@ const endResize = (event: PointerEvent): void => {
     background: color-mix(in srgb, var(--color-primary-500) 14%, transparent);
     color: var(--color-content);
 }
-/* Split cells (built by useTerminal's mount — plain elements, hence :deep): equal flex columns with a hairline
+/* Split cells (built by useTerminal's mount, plain elements, hence :deep): equal flex columns with a hairline
    between, and a top accent on the focused pane so keystroke routing is visible in a split. */
 .term-body :deep(.term-cell) {
     display: flex;
@@ -1473,7 +1473,7 @@ const endResize = (event: PointerEvent): void => {
 
 /* Touch extra-keys: 40px min targets, monospace glyphs, armed-Ctrl tint. */
 /* 44px, not 36. These keys only exist on a coarse pointer (the row is `v-if="coarse"`), so there is no mouse
-   to keep a tighter size for — and they are the most repeatedly and quickly pressed controls the app has on a
+   to keep a tighter size for, and they are the most repeatedly and quickly pressed controls the app has on a
    phone: driving a shell is Tab, Tab, arrow, Ctrl-C, and every one of those is a key the soft keyboard could
    not offer. They also sit at the very bottom of the screen, where thumb accuracy is worst. The row is theirs
    alone and scrolls sideways, so the height costs nothing but the 8px it takes. */

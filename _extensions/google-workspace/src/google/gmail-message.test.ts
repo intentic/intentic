@@ -23,7 +23,7 @@ describe("bodyText", () => {
         ).toBe("the plain one");
     });
 
-    /* Html-only is not an edge case — it is most machine-sent mail, which is most of what an inbox triage
+    /* Html-only is not an edge case: it is most machine-sent mail, which is most of what an inbox triage
      * command is pointed at. Returning nothing for it would make the tool useless on the mail people get most. */
     it("falls back to stripped html when there is no plain part", () => {
         expect(bodyText({ mimeType: "text/html", body: { data: b64("<h1>Invoice</h1><p>Due <b>today</b></p>") } })).toBe("Invoice\nDue today");

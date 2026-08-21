@@ -33,7 +33,7 @@ test("mailMessage maps an email to the listener envelope", () => {
     });
 });
 
-test("mentioned only when the account address is in To — cc-only mail and host-style logins never set it", () => {
+test("mentioned only when the account address is in To: cc-only mail and host-style logins never set it", () => {
     const ccOnly = mailMessage({ ...base, envelope: { ...base.envelope, to: [{ address: "other@example.com" }] } });
     expect(ccOnly).not.toHaveProperty("mentioned");
     const hostLogin = mailMessage({ ...base, username: "me" });

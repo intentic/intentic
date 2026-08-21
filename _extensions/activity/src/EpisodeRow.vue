@@ -4,12 +4,12 @@ import { computed, ref } from "vue";
 import { type Episode, sourceLabel, typeLabel } from "./episodes";
 import { host } from "./host";
 
-/* One thing that happened, on one line — with everything the old view made you scroll past four rows to learn:
+/* One thing that happened, on one line: with everything the old view made you scroll past four rows to learn:
  * what it was called, who set it off, what served it, how long it took, what it cost, whether it failed.
  *
  * Collapsed is the answer; expanded is the evidence. The raw events the daemon appended are always one click
  * away, because a feed you cannot audit down to the actual record is not an audit surface. Opening the transcript
- * is the other exit — "why did it do that" is only ever answered by reading the turn. */
+ * is the other exit: "why did it do that" is only ever answered by reading the turn. */
 
 const { episode } = defineProps<{ episode: Episode }>();
 
@@ -19,7 +19,7 @@ const open = ref(false);
 const KIND_ICONS: Readonly<Record<Episode["kind"], IconName>> = { turn: `sparkles`, message: `arrow-down-left`, event: `cog` };
 const KIND_TINTS: Readonly<Record<Episode["kind"], string>> = { turn: `text-link`, message: `text-info`, event: `text-subtle` };
 
-// Seconds under a minute, m/s above it — a turn is seconds to minutes, and "110318ms" is not a duration anyone reads.
+// Seconds under a minute, m/s above it: a turn is seconds to minutes, and "110318ms" is not a duration anyone reads.
 const duration = computed(() => {
     if (episode.durationMs === undefined) {
         return undefined;
@@ -62,7 +62,7 @@ const cost = computed(() => (episode.costUsd === undefined ? undefined : episode
                     <span class="shrink-0 text-2xs text-subtle" :title="formatTimestamp(episode.at)">{{ timeAgo(episode.at) }}</span>
                 </div>
 
-                <!-- The facts line: who called, what served it, what it cost, what it did. Every part conditional —
+                <!-- The facts line: who called, what served it, what it cost, what it did. Every part conditional:
                      an empty separator is noise, and most episodes carry only some of these. -->
                 <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-muted">
                     <StatusBadge v-if="episode.failed" variant="danger" label="Failed" size="xs" dot />

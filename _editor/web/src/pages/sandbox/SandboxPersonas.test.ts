@@ -3,7 +3,7 @@
 // jsdom because every property worth pinning here is about what the surface SAYS, and the two it says wrong are
 // the two that cost something. A persona whose accounts are all signed out is the ordinary state of a freshly
 // cloned workspace, and painting it as working is how someone schedules a wake that silently cannot post. A
-// persona is also not per-site — one card holds a Reddit account AND an X account — and a form that quietly sent
+// persona is also not per-site: one card holds a Reddit account AND an X account, and a form that quietly sent
 // one of them would look identical in the list and behave differently at 3am.
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import type { Persona } from "@intentic/sandbox-contract";
@@ -13,14 +13,14 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 vi.hoisted(() => {
     // The folder picker's panel is an <AnchoredOverlay>, which watches its own box to stay put. jsdom ships no
-    // ResizeObserver, and without one the overlay throws on open — off the assertion path, as an unhandled
+    // ResizeObserver, and without one the overlay throws on open: off the assertion path, as an unhandled
     // rejection, which fails the run without failing a test.
 });
 
 const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
 /* Upserts into the list, because the real one does: a save invalidates the personas query and the row comes back
- * in the refetch. Creating a persona now OPENS it, and the card renders inside the row the list draws — so a mock
+ * in the refetch. Creating a persona now OPENS it, and the card renders inside the row the list draws, so a mock
  * that resolved without adding the card would make every creation test assert against a page that never redrew. */
 const save = vi.fn<(persona: Persona) => Promise<unknown>>().mockImplementation(async (persona) => {
     personas.value = [...personas.value.filter((entry) => entry.id !== persona.id), persona];
@@ -50,7 +50,7 @@ vi.mock(`../../composables/extensions/useBrowserAccounts`, () => ({
 const capabilities = ref<{ id: string; kind: string }[]>([]);
 vi.mock(`../../composables/extensions/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 
-/* The open card's kit — its own prompt and its own skills, which live in files rather than on the card and are
+/* The open card's kit: its own prompt and its own skills, which live in files rather than on the card and are
  * read through their own routes. Stubbed like the other composables here rather than left to the query stub
  * below: that one answers every query with a workspace TREE, which is the right shortcut for the folder pickers
  * and the wrong shape for anything else that asks. What this suite is about is the CARD, so the kit answers
@@ -73,7 +73,7 @@ vi.mock(`../../composables/sandbox/usePersonaKit`, async () => {
 
 /* The workspace the folder pickers offer. Both of them read the tree straight off the daemon, and both modules
  * on that road (the client, and the query wrapper that gates on the daemon being reachable) touch
- * environment.ts's `window.env` at module-eval — the same edge useAgents.test.ts cuts, for the same reason.
+ * environment.ts's `window.env` at module-eval: the same edge useAgents.test.ts cuts, for the same reason.
  *
  * Stubbed to a REAL little tree rather than to nothing, because "the picker lists your folders" is the whole of
  * what this control claims and an empty stub would assert only that it renders. The file is here to be filtered
@@ -103,7 +103,7 @@ const mount = (): HTMLElement => {
     document.body.append(el);
     app = createApp({ render: () => h(SandboxPersonas) });
     // The stand-in carries the name through as an attribute, so a test can assert WHICH glyph a row wears rather
-    // than only that it wears one — the permission rows are read by their icons and the mapping is the point.
+    // than only that it wears one: the permission rows are read by their icons and the mapping is the point.
     app.component(
         `Icon`,
         defineComponent({
@@ -124,7 +124,7 @@ const byAriaLabel = (el: HTMLElement, label: string): HTMLElement | undefined =>
     el.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
 
 /* A persona's row, reached through the one thing on it with a stable accessible name. The row itself carries no
- * label of its own — it is a settings row, not a control — and adding a test-only attribute to production markup
+ * label of its own: it is a settings row, not a control, and adding a test-only attribute to production markup
  * to find it would be inventing a convention this app does not have. */
 const rowFor = (el: HTMLElement, id: string): HTMLElement => {
     const persona = personas.value.find((entry) => entry.id === id)!;
@@ -148,14 +148,14 @@ const toggleSwitch = (el: HTMLElement, label: string): void => {
 };
 
 /* One folder's row in an open picker. Searched from the DOCUMENT, not from the mounted element: the panel is an
- * <AnchoredOverlay>, which teleports into the anchor's own document body so it can escape the form's overflow —
+ * <AnchoredOverlay>, which teleports into the anchor's own document body so it can escape the form's overflow:
  * so a query rooted at the mount finds nothing, whether or not the picker is open. Matched on the exact name so
  * `app` cannot be answered by `app/src`. */
 const folderRow = (name: string): HTMLButtonElement | undefined =>
     [...document.body.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).trim() === name);
 
 /* Open one of the two folder pickers, by the field it belongs to. Reached through the field's own group rather
- * than by counting "Choose" buttons on the form — the account chooser is labelled "Choose accounts", so the
+ * than by counting "Choose" buttons on the form: the account chooser is labelled "Choose accounts", so the
  * count starts one to the left of where anyone writing the test would expect. Its opener is the last button in
  * the group; the chips for what is already picked come first. */
 const openFolderPicker = async (el: HTMLElement, field: string): Promise<void> => {
@@ -172,13 +172,13 @@ const type = async (field: HTMLInputElement, value: string): Promise<void> => {
 };
 
 // The account chooser is folded away until it is asked for (a sandbox can hold twenty accounts and the form has
-// three other sections), so every test that picks an account opens it first — as a person does.
+// three other sections), so every test that picks an account opens it first: as a person does.
 const chooseAccounts = async (el: HTMLElement): Promise<void> => {
     buttonLabelled(el, `Choose accounts`)?.click();
     await nextTick();
 };
 
-/* MAKING ONE IS A NAME AND A BUTTON, and then the card is open — so this is what every test that wants a card to
+/* MAKING ONE IS A NAME AND A BUTTON, and then the card is open, so this is what every test that wants a card to
  * poke at now does, exactly as a person would. It used to be "open the form, fill in whatever this test cares
  * about, press Create", which is why so many of these tests reached into a card that did not exist yet. */
 const addPersona = async (el: HTMLElement, name: string): Promise<void> => {
@@ -190,7 +190,7 @@ const addPersona = async (el: HTMLElement, name: string): Promise<void> => {
     await nextTick();
 };
 
-/* An open card shows one of its three questions at a time. The pills are <SegmentedControl>, which renders tabs — found
+/* An open card shows one of its three questions at a time. The pills are <SegmentedControl>, which renders tabs: found
  * by role so this cannot be satisfied by a stray button whose label happens to match a heading in the body. */
 const openTab = async (el: HTMLElement, label: string): Promise<void> => {
     const tab = await vi.waitFor(() => {
@@ -233,7 +233,7 @@ it(`marks a persona whose every account is signed out`, () => {
     expect(text(mount())).toContain(`Not signed in`);
 });
 
-// One connected account is enough to act — the turn simply reaches the one — so this must NOT be marked.
+// One connected account is enough to act: the turn simply reaches the one, so this must NOT be marked.
 it(`does not mark a persona that can reach at least one signed-in account`, () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`, `x-company`] }];
     connected.value = [`x-company`];
@@ -241,9 +241,9 @@ it(`does not mark a persona that can reach at least one signed-in account`, () =
 });
 
 /* A CARD HOLDING NO ACCOUNTS IS AN ORDINARY CARD, not a broken one: one that starts in a folder and bounds what
- * an agent may touch is most of what a persona is for. The row used to write "No accounts — this persona can't
- * post anywhere" in the warning colour, which painted the commonest card there is — including every card a
- * minute old — as a defect, on the one page you come to to look at your personas. */
+ * an agent may touch is most of what a persona is for. The row used to write "No accounts: this persona can't
+ * post anywhere" in the warning colour, which painted the commonest card there is: including every card a
+ * minute old: as a defect, on the one page you come to to look at your personas. */
 it(`says nothing about a persona that holds no accounts`, () => {
     personas.value = [{ id: `docs`, capabilities: [] }];
     const rendered = text(mount());
@@ -273,7 +273,7 @@ it(`saves one persona holding accounts on two different sites`, async () => {
 });
 
 /* MAKING ONE ASKS FOR A NAME AND NOTHING ELSE. It used to open the whole editor with a Create button under it,
- * so the first thing this page asked was thirty questions about a thing that did not exist — and every answer
+ * so the first thing this page asked was thirty questions about a thing that did not exist, and every answer
  * but the name was a default. The card carries those defaults by storing NOTHING, and opens for the rest. */
 it(`asks only for a name, then opens the card it made`, async () => {
     const el = mount();
@@ -296,7 +296,7 @@ it(`asks only for a name, then opens the card it made`, async () => {
     expect(text(el)).toContain(`Speaks through`);
 });
 
-/* The form is now three questions rather than one, and the two new sections are the whole feature — a card that
+/* The form is now three questions rather than one, and the two new sections are the whole feature: a card that
  * renders its accounts and silently drops the powers is indistinguishable, on screen, from one that has no
  * powers to set. This is the check that the sections are actually there and labelled. */
 it(`offers the powers and where-it-works sections when a card is open`, async () => {
@@ -309,12 +309,12 @@ it(`offers the powers and where-it-works sections when a card is open`, async ()
     expect(rendered).toContain(`Change the sandbox`);
     expect(rendered).toContain(`Where it works`);
     expect(rendered).toContain(`Only these folders`);
-    // The honest caveat about what a folder limit is worth — rendered where it is set, not in documentation.
+    // The honest caveat about what a folder limit is worth: rendered where it is set, not in documentation.
     expect(rendered).toContain(`not a shell`);
 });
 
-/* NINE EQUAL SWITCHES IS A LIST NOBODY READS. They are split by blast radius — what this persona can do to your
- * workspace, then what it can reach beyond it — and the headings are the whole of that idea: without them the
+/* NINE EQUAL SWITCHES IS A LIST NOBODY READS. They are split by blast radius: what this persona can do to your
+ * workspace, then what it can reach beyond it, and the headings are the whole of that idea: without them the
  * grouping is invisible and the section is the flat column it used to be. */
 it(`sorts what a persona may do into workspace and outward groups`, async () => {
     const el = mount();
@@ -326,7 +326,7 @@ it(`sorts what a persona may do into workspace and outward groups`, async () => 
 });
 
 /* THE FOLDER FENCE IS A WORKSPACE BOUND, so it reads with the other two rather than in a section of its own below
- * all seven outward switches — which is where it used to sit, with a screenful of unrelated rows between the two
+ * all seven outward switches, which is where it used to sit, with a screenful of unrelated rows between the two
  * halves of "what can this card touch in my repo". The two groups now stand side by side, and reading order is
  * what says which column a heading landed in: workspace things first, outward things after all of them. */
 it(`keeps where-it-works in the workspace group rather than after the outward one`, async () => {
@@ -340,13 +340,13 @@ it(`keeps where-it-works in the workspace group rather than after the outward on
 
 /* EVERY PERMISSION ROW WEARS A GLYPH, and the rule is all of them or none: a list that icons some of its rows
  * reads as a rendering bug, and the switches are scanned by those marks before they are read. So this fails the
- * moment a shelf or a grant group is added without one — which is the only way the rail can rot. */
+ * moment a shelf or a grant group is added without one, which is the only way the rail can rot. */
 it(`gives every permission row an icon`, async () => {
     const el = mount();
     await addPersona(el, `Work`);
     await openTab(el, `What it may do`);
 
-    // A switch row is a <label> with a checkbox in it — ToggleSwitch under its skin.
+    // A switch row is a <label> with a checkbox in it: ToggleSwitch under its skin.
     const rows = [...el.querySelectorAll(`label`)].filter((row) => row.querySelector(`input[type="checkbox"]`) !== null);
     // One workspace shelf, five outward ones (the two execution backends among them), three grant groups.
     expect(rows).toHaveLength(9);
@@ -361,7 +361,7 @@ it(`gives every permission row an icon`, async () => {
 
 /* THE LOCATION FIELDS BORROW THE RAIL from the block they render inside, so their glyphs line up with the switches
  * above them instead of carrying a second copy of the same classes. That hand-off is a slot prop, and a slot prop
- * that stops arriving fails SILENTLY — the icons keep rendering, unsized and undimmed, one column out of true. */
+ * that stops arriving fails SILENTLY: the icons keep rendering, unsized and undimmed, one column out of true. */
 it(`lends the powers rail to the location rows so their icons stay in line`, async () => {
     const el = mount();
     await addPersona(el, `Work`);
@@ -377,7 +377,7 @@ it(`lends the powers rail to the location rows so their icons stay in line`, asy
         return span!.querySelector(`i`)!;
     };
 
-    // The same rail the switch rows use — width and tone, not merely "some class".
+    // The same rail the switch rows use: width and tone, not merely "some class".
     for (const glyph of [labelled(`Starts in`), labelled(`Only these folders`)]) {
         expect(glyph.className).toContain(`w-4`);
         expect(glyph.className).toContain(`text-subtle`);
@@ -385,7 +385,7 @@ it(`lends the powers rail to the location rows so their icons stay in line`, asy
 });
 
 /* WHERE IT WORKS STATES THE ISOLATION RATHER THAN ASKING ABOUT IT. The three-way placement choice is gone, and
- * with it the only control that could put a session on the shared tree — so a card can no longer opt out of the
+ * with it the only control that could put a session on the shared tree, so a card can no longer opt out of the
  * worktree that lets two of them run at once. */
 it(`states that every session works in its own copy, and offers no choice about it`, async () => {
     const el = mount();
@@ -398,14 +398,14 @@ it(`states that every session works in its own copy, and offers no choice about 
 });
 
 /* THE FOLDERS ARE PICKED FROM THE FOLDERS. Both location fields were a text box with a greyed sentence in it,
- * which asks the reader to know what the workspace contains and how the field wants a path spelled — and a typo
+ * which asks the reader to know what the workspace contains and how the field wants a path spelled, and a typo
  * produced a persona fenced to a folder that does not exist, which refuses everything, silently. */
 it(`fences a card to a folder chosen from the workspace tree`, async () => {
     const el = mount();
     await addPersona(el, `Docs`);
     await openTab(el, `What it may do`);
 
-    // Neither picker shows the tree until it is asked for — the form is a form, not a file browser.
+    // Neither picker shows the tree until it is asked for: the form is a form, not a file browser.
     expect(folderRow(`docs`)).toBeUndefined();
     await openFolderPicker(el, `Only these folders`);
 
@@ -435,7 +435,7 @@ it(`opens a card by clicking its row, and closes it by clicking again`, async ()
 });
 
 /* THREE QUESTIONS, ONE AT A TIME. Stacked, they were roughly thirty controls in one scroll for somebody who came
- * to change one thing. What this pins is that the strip is the only way to reach the other two — a card that
+ * to change one thing. What this pins is that the strip is the only way to reach the other two: a card that
  * rendered every section regardless would pass a text assertion on any of them and be the wall this replaced. */
 it(`shows one of the card's three questions at a time`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
@@ -458,7 +458,7 @@ it(`shows one of the card's three questions at a time`, async () => {
 
 /* THE PERMISSIONS ARE NOT CUT IN HALF BY THE TABS, and that is the one thing the strip must not do. A reader
  * arrives at that block asking "which of these did I turn off?", and the scan only works while every switch is
- * on one screen — so the workspace column and the outward column share a tab however tidy four pills would look. */
+ * on one screen, so the workspace column and the outward column share a tab however tidy four pills would look. */
 it(`keeps every permission on one screen rather than splitting them across tabs`, async () => {
     personas.value = [{ id: `work`, capabilities: [] }];
     const el = mount();
@@ -482,7 +482,7 @@ it(`shows the name as text and turns it into a field only when clicked`, async (
     expect(el.querySelector(`input[aria-label="Name"]`)).not.toBeNull();
 });
 
-// Enter commits the rename, and the card it writes is the whole card — a rename that dropped the accounts would
+// Enter commits the rename, and the card it writes is the whole card: a rename that dropped the accounts would
 // be a rename that silently un-personas somebody.
 it(`renames a persona on Enter, keeping the rest of its card`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
@@ -496,7 +496,7 @@ it(`renames a persona on Enter, keeping the rest of its card`, async () => {
     expect(save.mock.calls[0]![0]).toMatchObject({ id: `work`, label: `Work crew`, capabilities: [`reddit-work`, `x-company`] });
 });
 
-// Escape is the way out, and it must leave the name alone — the WorkspaceTree convention this shares.
+// Escape is the way out, and it must leave the name alone: the WorkspaceTree convention this shares.
 it(`abandons a rename on Escape without writing`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [] }];
     const el = mount();
@@ -537,7 +537,7 @@ it(`writes nothing when a card is only opened`, async () => {
 });
 
 /* THE COMMITTED FILE IS A RECORD OF DECISIONS, not a dump of defaults. A card nobody has bounded must save no
- * `powers` at all — otherwise every persona ever created writes ten fields saying "yes" into a tracked file, and
+ * `powers` at all: otherwise every persona ever created writes ten fields saying "yes" into a tracked file, and
  * the diff on a card someone DID bound is buried in noise on every other card. */
 it(`saves no powers block for a card nobody has bounded`, async () => {
     const el = mount();
@@ -559,7 +559,7 @@ it(`shows how bounded a card is on its row`, () => {
     expect(text(mount())).toContain(`Read-only`);
 });
 
-/* A new card landing on a name already taken would UPSERT the other one — the save is by id, so this would read
+/* A new card landing on a name already taken would UPSERT the other one: the save is by id, so this would read
  * as "added a persona" and silently rewrite a different persona's accounts. */
 it(`refuses a new persona whose name is already taken`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
@@ -574,7 +574,7 @@ it(`refuses a new persona whose name is already taken`, async () => {
 });
 
 /* THE CHIP SAYS EACH THING ONCE. A browser capability is usually named after its site, so a picker that prints
- * the id and the site under it renders "reddit" over "Reddit" — the same word twice, on the commonest chip
+ * the id and the site under it renders "reddit" over "Reddit": the same word twice, on the commonest chip
  * there is, in the one place a reader is scanning for what tells two accounts APART. The site is worth a word
  * only where the id has not already said it. */
 it(`does not repeat the site under an account already named after it`, async () => {
@@ -590,7 +590,7 @@ it(`does not repeat the site under an account already named after it`, async () 
 
 /* THE FORM IS A FORM AND NOT A WALL. Every account this sandbox has signed into used to render as a chip in the
  * second field, so on a box with seventeen of them the switches and the folder fence began a screen below the
- * name they belong to. What is on screen unopened is the ANSWER — the accounts this card speaks through — and the
+ * name they belong to. What is on screen unopened is the ANSWER: the accounts this card speaks through, and the
  * chooser is one click away. */
 it(`keeps every account out of the form until the chooser is opened`, async () => {
     const el = mount();
@@ -609,7 +609,7 @@ it(`shows only the accounts a card speaks through when it is opened for editing`
     expect(text(el)).not.toContain(`x-company`);
 });
 
-// Clicking a persona's own account chip takes that account off the card — the summary row is the way to remove
+// Clicking a persona's own account chip takes that account off the card: the summary row is the way to remove
 // one without going back into the chooser to hunt for it.
 it(`drops an account when its chip is clicked`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`, `x-company`] }];
@@ -624,7 +624,7 @@ it(`drops an account when its chip is clicked`, async () => {
 /* The filter exists for the reason the fold does: seventeen accounts, of which one is the one being looked for.
  * It matches the site as well as the id, so "reddit" finds every Reddit account whatever each one is called. */
 it(`narrows the chooser by name or site`, async () => {
-    // Long enough to be worth filtering — the field only appears once the list is past a glance.
+    // Long enough to be worth filtering: the field only appears once the list is past a glance.
     accounts.value = [...accounts.value, ...[`a`, `b`, `c`, `d`, `e`].map((suffix) => account(`spam-${suffix}`, `reddit`))];
     const el = mount();
     await addPersona(el, `Work`);
@@ -637,7 +637,7 @@ it(`narrows the chooser by name or site`, async () => {
 /* ── What the persona is TOLD ────────────────────────────────────────────────────────────────────────────────
  *
  * The third of the card's questions. Two properties are worth pinning here and both are about the FILE: that
- * a card following the sandbox stores nothing (the default, and what almost every card means — a stored
+ * a card following the sandbox stores nothing (the default, and what almost every card means: a stored
  * "inherit" would put a decision nobody made into a tracked file), and that a card given its own base stores
  * exactly that. The TEXT is not the card's and is not asserted here: it lives in the kit, behind its own routes,
  * stubbed above. */
@@ -665,8 +665,8 @@ it(`stores the base a card was given one of its own`, async () => {
     expect(save.mock.calls[0]![0].systemPromptMode).toBe(`claude`);
 });
 
-/* A KIT SKILL IS WRITTEN THE WAY EVERY OTHER SKILL IN THIS APP IS. It was hand-rolled here first — a text link
- * to add one, three bare inputs to write it — which put a second, worse skill editor two clicks from the real
+/* A KIT SKILL IS WRITTEN THE WAY EVERY OTHER SKILL IN THIS APP IS. It was hand-rolled here first: a text link
+ * to add one, three bare inputs to write it, which put a second, worse skill editor two clicks from the real
  * one. So the row that adds one is the same full-width row the Skills list uses, and what it opens is that
  * list's own form, markdown editor and all. */
 it(`adds a persona's own skill through the same row and the same editor as the skills list`, async () => {
@@ -681,7 +681,7 @@ it(`adds a persona's own skill through the same row and the same editor as the s
 
     add.click();
     await nextTick();
-    // <SkillForm>'s own three questions, in its own words — the proof it is that component and not a copy.
+    // <SkillForm>'s own three questions, in its own words: the proof it is that component and not a copy.
     const rendered = text(el);
     expect(rendered).toContain(`When to use it`);
     expect(rendered).toContain(`What it should do`);

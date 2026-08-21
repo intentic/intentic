@@ -37,7 +37,7 @@ describe(`useDraft`, () => {
         await nextTick();
         expect(draft.value).toBe(`one, edited`);
 
-        // The edit committed (saved now equals it) — from here the draft is untouched again and follows.
+        // The edit committed (saved now equals it): from here the draft is untouched again and follows.
         saved.value = `one, edited`;
         await nextTick();
         saved.value = `three`;

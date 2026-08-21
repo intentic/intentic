@@ -8,18 +8,18 @@ import { lensPersonaId, reachOf, reachSentence } from "../../composables/workspa
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { workspaceAgent } from "../../composables/workspace/workspaceScope";
 
-/* WHOSE WORKSPACE AM I LOOKING AT — on screen, for as long as the answer is not "the shared one".
+/* WHOSE WORKSPACE AM I LOOKING AT: on screen, for as long as the answer is not "the shared one".
  *
  * The scope is what makes a file address complete (workspaceScope), and it is invisible: the tree looks like a
  * tree and a file looks like a file. Without this strip the feature would trade one silent wrong answer for
- * another — a reader who followed a link out of a conversation, kept browsing, and had no way to know that the
+ * another: a reader who followed a link out of a conversation, kept browsing, and had no way to know that the
  * `README.md` in front of them was one agent's unlanded draft rather than the repository's.
  *
  * So it names the agent, says the work has not landed, and offers the way out in one click. Nothing here is
  * dismissible: a banner the reader can turn off is a banner that is missing exactly when it matters.
  *
  * It also carries the ONE failure the scope has of its own. An archived agent keeps its work on its branch but
- * loses its checkout, so there is no tree to read — and a link in that conversation is still a link somebody
+ * loses its checkout, so there is no tree to read, and a link in that conversation is still a link somebody
  * clicks months later. That is not a missing file and must not read as one: the daemon says so specifically
  * (PRECONDITION_FAILED, see workspace-scope.ts) and the sentence it sends is shown here, next to the route to
  * the work itself.
@@ -40,7 +40,7 @@ const toShared = (): void => {
  * own for the reason the first one does: a reader has to be told what they are looking at without asking, and
  * two banners stacked would each halve the other's chance of being read.
  *
- * They can be true at once — one agent's checkout, read as one persona — and then both lines show, because they
+ * They can be true at once: one agent's checkout, read as one persona, and then both lines show, because they
  * answer different questions: WHICH copy of the workspace, and WHOSE reach within it. */
 const { personas } = usePersonas();
 const lensCard = computed(() => personas.value.find((persona) => persona.id === lensPersonaId.value));
@@ -78,7 +78,7 @@ const clearLens = (): void => {
         <template v-if="error === undefined">
             <span class="min-w-0 truncate">
                 Showing <span class="font-medium">{{ title }}</span
-                >'s copy of the workspace — its work hasn't landed yet, so these files are read-only.
+                >'s copy of the workspace: its work hasn't landed yet, so these files are read-only.
             </span>
         </template>
         <template v-else>

@@ -3,7 +3,7 @@
 // The subject is what the panel BUILDS, which is the one thing that made the workspace unusable: a one-word
 // query in a monorepo answers with a couple of thousand rows, the panel asked the highlighter to colour every
 // one of them, the batch overflowed its LRU, and the rows that got evicted were re-requested by the very
-// re-render their landing triggered — 1331 lines scheduled, then 731 rescheduled per round, forever, on the
+// re-render their landing triggered: 1331 lines scheduled, then 731 rescheduled per round, forever, on the
 // main thread with no yield. The tab took no further input. Nothing about that is visible in a composable
 // test: it is a property of how many rows the component decides to build.
 import type { WorkspaceSearchGroup } from "@intentic-app/api-contract";
@@ -104,7 +104,7 @@ test(`scrolling swaps the window instead of adding to it`, async () => {
     // The rows on screen are the ones at that offset, not the ones at the top.
     expect(el.textContent).not.toContain(`source0.ts`);
     // Two windows' worth of colour requested for two screenfuls looked at, and the LRU holds far more than
-    // that — which is the whole reason nothing evicts under the render that asked for it.
+    // that, which is the whole reason nothing evicts under the render that asked for it.
     expect(tokenized.length).toBeLessThan(80);
 });
 

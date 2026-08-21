@@ -4,23 +4,23 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/sandbox/personaCard";
 
-/* WHAT A PERSONA MAY DO — the shelves, and the per-id grants under them. Its own component because two surfaces
+/* WHAT A PERSONA MAY DO: the shelves, and the per-id grants under them. Its own component because two surfaces
  * ask this exact question and neither is allowed to answer it differently: the full editor on the Personas page,
  * and the Advanced section of the quick panel behind a directory row's persona icon in the Workspace tree.
  *
  * These switches are the one part of a card where a copy that drifts is a SECURITY surprise rather than a cosmetic
- * one — a surface missing a shelf silently grants it, and the reader has no way to see the difference. So the list
+ * one: a surface missing a shelf silently grants it, and the reader has no way to see the difference. So the list
  * of shelves, the wording of each consequence, and the caveat about the shell all live here once.
  *
  * SPLIT BY BLAST RADIUS, which is the one grouping that answers the question a reader actually arrives with.
- * These were nine controls in a flat column of equal weight, and nine equal things is a list nobody reads — the
+ * These were nine controls in a flat column of equal weight, and nine equal things is a list nobody reads: the
  * file dropdown that decides whether a session can rewrite the repo sat in the same visual rank as which MCP
  * connections it may call. So: what this persona can do TO YOUR WORKSPACE, then what it can REACH beyond it.
  * Everything is still visible and nothing is behind a disclosure, because a permission you cannot see is one you
  * cannot audit, and halving the scan was never worth hiding the switch that matters most.
  *
  * THOSE TWO GROUPS SIT SIDE BY SIDE, and the split is at the GROUP and never at the row. A reader arrives asking
- * "which of these did I turn off?", and that scan works only because every switch in a group shares one gutter —
+ * "which of these did I turn off?", and that scan works only because every switch in a group shares one gutter:
  * reflowing the rows themselves into two columns would put two gutters on screen and turn the one audit this
  * surface exists for into a zigzag. So each column keeps its single edge of switches, and the second column buys
  * back the half of the card that used to be empty.
@@ -30,18 +30,18 @@ import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/san
  * column on its own.
  *
  * THE SWITCH SITS AT THE ROW'S TRAILING EDGE with the consequence beneath the label, rather than in a third
- * column after a fixed-width label. At half the width that ran out of room — every hint wrapped, so rows went
+ * column after a fixed-width label. At half the width that ran out of room: every hint wrapped, so rows went
  * ragged and the gutter they are scanned by stopped being straight. Trailing switches are one hard right edge per
  * column at any width, which is the property worth protecting.
  *
  * EACH ROW WEARS A GLYPH, dim and all one size in a fixed-width rail. It is for re-finding rather than for
- * explaining — on a card you come back to, "look for the globe" beats reading seven labels, and a mark at each
+ * explaining: on a card you come back to, "look for the globe" beats reading seven labels, and a mark at each
  * left edge chunks a seven-row group that otherwise reads as one block. Deliberately quiet: on a permissions card
  * the loudest pixel has to be the switch state, and a bright icon column would compete with it for the eye. The
- * rows that actually earn one are the jargon ones — Delegate, Connectors, MCP connections — but a list that icons
+ * rows that actually earn one are the jargon ones: Delegate, Connectors, MCP connections, but a list that icons
  * half its rows reads as a bug, so every row gets one.
  *
- * The draft is the parent's, mutated in place — same contract as <PersonaForm>, for the same reason: the parent
+ * The draft is the parent's, mutated in place, same contract as <PersonaForm>, for the same reason: the parent
  * owns the whole card and has to read these fields back to decide whether anything was bounded at all. */
 
 const {
@@ -52,7 +52,7 @@ const {
     draft: PersonaPowersDraft;
     /** The connectors, computers and MCP connections this sandbox has, for the per-id grants. */
     grantables: readonly PersonaGrantable[];
-    /** Whether the parent's form has ALSO fenced this card to a set of folders — the shell caveat's third case. */
+    /** Whether the parent's form has ALSO fenced this card to a set of folders: the shell caveat's third case. */
     folderBound?: boolean;
 }>();
 
@@ -73,7 +73,7 @@ const HINT = `pl-6 text-xs text-subtle`;
 
 // What it can do to the workspace itself. The files dropdown leads because it is the widest of them and the
 // one a reader most often came here to change; `sandbox` is beside it because the sandbox's own settings and
-// the public outbox ARE workspace files — an ordinary edit reaches both.
+// the public outbox ARE workspace files: an ordinary edit reaches both.
 const WORKSPACE_SHELVES = [
     {
         key: `sandbox` as const,
@@ -90,8 +90,8 @@ const OUTWARD_SHELVES = [
     { key: `shell` as const, icon: `terminal` as const, label: `Run commands`, hint: `Shell, tests, builds, and every CLI on the image.` },
     /* The second execution backend, directly under the first: the two are one question asked twice ("what may
      * a session RUN"), and a reader deciding one wants the other in view. Its hint says what makes it the
-     * smaller grant — the runtime itself fences its reads and writes to the Files answer above, and it cannot
-     * start programs unless Run commands is also on — because that difference is the whole reason a card
+     * smaller grant: the runtime itself fences its reads and writes to the Files answer above, and it cannot
+     * start programs unless Run commands is also on, because that difference is the whole reason a card
      * would keep this on while switching the shell off. */
     {
         key: `code` as const,
@@ -103,12 +103,12 @@ const OUTWARD_SHELVES = [
      * The collision is real and the globe stays here anyway, because the alternative is worse: that mark comes
      * from useBrowserAccounts, which exists precisely so one account wears one mark everywhere, and moving it
      * would make the same account a globe on /capabilities and something else here. So the two are told apart by
-     * treatment instead — an account's mark is coloured and sits on its own plate, this is a dim line glyph in a
-     * rail of them — and the globe goes to the row it describes best. */
+     * treatment instead: an account's mark is coloured and sits on its own plate, this is a dim line glyph in a
+     * rail of them, and the globe goes to the row it describes best. */
     { key: `web` as const, icon: `globe` as const, label: `Read the web`, hint: `Fetch a page, run a search.` },
     // Says what it is NOT rather than pointing at the account picker: this component renders in the quick panel
     // too, which has no picker, and "the list above" was then a reference to nothing.
-    /* A FRAMED WINDOW, and it is the nearest thing this set has — there is no browser glyph in it and the globe
+    /* A FRAMED WINDOW, and it is the nearest thing this set has: there is no browser glyph in it and the globe
      * is spoken for. `window-maximize` was the first guess and drew Remix's fullscreen arrows, which say "make
      * this bigger" to a reader deciding whether a session may drive Chrome. */
     {
@@ -118,7 +118,7 @@ const OUTWARD_SHELVES = [
         hint: `The anonymous browser, not the signed-in accounts.`,
     },
     // A hierarchy branching into children, which is what delegating IS. A group of people was the first guess and
-    // drew one indistinct blob at this size — and said "several people" where the row means "several agents".
+    // drew one indistinct blob at this size, and said "several people" where the row means "several agents".
     { key: `delegate` as const, icon: `sitemap` as const, label: `Delegate`, hint: `Spawn sub-agents and run workflows.` },
 ];
 
@@ -137,7 +137,7 @@ const GRANT_GROUPS = [
 
 const groupItems = (kind: PersonaGrantable[`kind`]): PersonaGrantable[] => grantables.filter((entry) => entry.kind === kind);
 
-// `undefined` is "every one of them", so an unset group reads as all-picked — including anything connected
+// `undefined` is "every one of them", so an unset group reads as all-picked: including anything connected
 // later, which is what the tri-state buys and what a materialised list of today's ids would silently lose.
 const grantsAll = (key: `connectors` | `computers` | `mcp`): boolean => draft[key] === undefined;
 const granted = (key: `connectors` | `computers` | `mcp`, id: string): boolean => draft[key]?.includes(id) ?? true;
@@ -152,7 +152,7 @@ const setGrantsAll = (key: `connectors` | `computers` | `mcp`, all: boolean): vo
 
 /* WHY THE SHELL SWITCH GETS A SENTENCE NOBODY ELSE GETS. A session with a shell can read a credential this card
  * never granted it, so every limit below it is a strong default rather than a wall. Saying that AT the switch is
- * the whole point — a limit that is weaker than it looks is worse than no limit, and the person setting it is
+ * the whole point: a limit that is weaker than it looks is worse than no limit, and the person setting it is
  * the only one who can decide whether that trade is fine for this persona. Raised by any bound the shell can
  * walk around, which is every per-id grant and the folder fence the parent may have set. */
 const shellCaveat = computed(
@@ -164,9 +164,9 @@ const shellCaveat = computed(
     <div class="@container">
         <!-- The fold is at @2xl and not higher: this app's root font is 17.6px, so a rem threshold lands ~10%
              wider than it reads, and @3xl kept an opened card in one column on any window narrower than about
-             1100px — which is most of them once a chat panel is docked beside it. -->
+             1100px, which is most of them once a chat panel is docked beside it. -->
         <div class="grid items-start gap-x-10 gap-y-6 @2xl:grid-cols-2">
-            <!-- IN YOUR WORKSPACE — what changes what this box holds, and then where in it this card may stand.
+            <!-- IN YOUR WORKSPACE: what changes what this box holds, and then where in it this card may stand.
                  The location fields belong to whichever parent HAS them (the editor does, the quick panel does
                  not), so they arrive through the slot rather than being rendered here. -->
             <div class="flex flex-col gap-6">
@@ -195,7 +195,7 @@ const shellCaveat = computed(
                 <slot name="where" :rail="RAIL" />
             </div>
 
-            <!-- REACHING OUT — everything whose consequences leave this box. -->
+            <!-- REACHING OUT: everything whose consequences leave this box. -->
             <div class="flex flex-col gap-3">
                 <span :class="ui.sectionLabel()">Reaching out</span>
 
@@ -212,7 +212,7 @@ const shellCaveat = computed(
                      that has bounded something WHILE leaving the shell on. Silent otherwise, because a full-powers
                      card has nothing to be misled about. -->
                 <Notice v-if="shellCaveat" tone="warning">
-                    With <strong>Run commands</strong> on, every other limit on this card is a strong default rather than a wall — a session with a
+                    With <strong>Run commands</strong> on, every other limit on this card is a strong default rather than a wall: a session with a
                     shell can reach a credential it wasn't granted. Turn it off for a persona that has to be fenced in.
                 </Notice>
 

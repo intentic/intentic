@@ -80,7 +80,7 @@ export function useApplyProgress() {
         applyPoll ??= setInterval(async () => {
             const sessions = await globalTerminalSource.list().catch(() => undefined);
             if (sessions === undefined) {
-                return; // transient list failure — the job's fate is unknown, keep polling.
+                return; // transient list failure: the job's fate is unknown, keep polling.
             }
             if (sessions.some((session) => session.name === APPLY_SESSION && session.running)) {
                 missStreak = 0;
@@ -114,7 +114,7 @@ export function useApplyProgress() {
             for await (const line of readIntenticLines(response.body)) {
                 if (generation !== attachGeneration) {
                     controller.abort();
-                    return; // a newer run took over — this loop is stale.
+                    return; // a newer run took over: this loop is stale.
                 }
                 armStall();
                 state.value = reduceApplyLine(state.value, line);

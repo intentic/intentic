@@ -1,20 +1,20 @@
-<!-- WHEN A DRAFT GOES OUT — a sentence you read, and a date input only once you ask for one.
+<!-- WHEN A DRAFT GOES OUT: a sentence you read, and a date input only once you ask for one.
 
      THIS REPLACES A COLUMN OF DATE PICKERS. Every draft row used to render a live `datetime-local`: the widest
      and loudest control on the page, drawn even on posted rows where it was empty and disabled, and stacked
      directly above the Approve button it out-weighed. Rescheduling is the rarest thing anyone does on an
-     approval screen — the agent already proposed a time — so the resting state is one muted phrase and the
+     approval screen: the agent already proposed a time, so the resting state is one muted phrase and the
      input is a click away. The pencil appears on the row's hover (Row is the `group`), which is how the
      phrase advertises that it is editable without carrying chrome that says so permanently.
 
      SIZE AND COLOUR ARE THE CALLER'S. No text-size class here, so the same control reads as body text under a
-     post being reviewed and as a small fact beside a scheduled one — the two placements it has. -->
+     post being reviewed and as a small fact beside a scheduled one: the two placements it has. -->
 <script setup lang="ts">
 import { ui, formatDateTime, formatTimestamp, formatWeekdayTime } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, ref } from "vue";
 
 const { at } = defineProps<{
-    /** Epoch ms, or absent — a draft with no date posts as soon as the publisher picks it up. */
+    /** Epoch ms, or absent: a draft with no date posts as soon as the publisher picks it up. */
     at?: number;
     /** Names the row this belongs to, for the input's accessible label. */
     label: string;
@@ -26,7 +26,7 @@ const emit = defineEmits<{ change: [at: number | undefined] }>();
 const editing = ref(false);
 
 /* A calendar date alone ("Aug 5, 2026, 14:00") is unreadable at a glance over the horizon this queue works
- * across — the next few days — so anything inside a week reads as a weekday and only genuinely distant dates
+ * across: the next few days, so anything inside a week reads as a weekday and only genuinely distant dates
  * spell themselves out. The exact instant stays in the tooltip. Local wall clock throughout: the agent bakes a
  * UTC offset into scheduledAt, so both ends agree on the instant and only the displayed clock is the viewer's. */
 const WEEK = 7 * 24 * 3_600_000;
@@ -84,7 +84,7 @@ const commit = (value: string): void => {
         v-else
         type="button"
         class="flex cursor-pointer items-center gap-1.5 transition-colors hover:text-content"
-        v-tooltip.top="at === undefined ? `Posts as soon as the publisher picks it up — click to pick a date` : formatTimestamp(at)"
+        v-tooltip.top="at === undefined ? `Posts as soon as the publisher picks it up, click to pick a date` : formatTimestamp(at)"
         @click="editing = true"
     >
         <Icon name="clock" />

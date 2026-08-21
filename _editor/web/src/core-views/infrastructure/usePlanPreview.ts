@@ -143,10 +143,10 @@ export function usePlanPreview() {
         } catch (err) {
             const reason = controller.signal.aborted ? (controller.signal.reason as unknown) : err;
             if (reason instanceof DOMException && reason.name === `AbortError`) {
-                return; // cancelled by the user — not an error, the preview simply stays stale.
+                return; // cancelled by the user, not an error, the preview simply stays stale.
             }
             if (reason instanceof DOMException && reason.name === `TimeoutError`) {
-                error.value = `The preview stalled — last activity: ${activity.value ?? `starting`}. Cancel-and-retry, or check the sandbox.`;
+                error.value = `The preview stalled, last activity: ${activity.value ?? `starting`}. Cancel-and-retry, or check the sandbox.`;
                 return;
             }
             error.value = describeProvisionError(errorMessage(err, `Preview failed.`));

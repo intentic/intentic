@@ -9,9 +9,9 @@ import { useWorkspaceApps } from "../../composables/extensions/useWorkspaceApps"
 import CloudflareConnect from "./CloudflareConnect.vue";
 import ConnectHost from "./ConnectHost.vue";
 
-/* The Infra "Add" dialog — the single entry point for declaring a want. Step 1 is a catalog with two groups:
- * YOUR APPS (the apps present in workspace monorepos, via the daemon's per-repo apps routes — each addable as
- * i.want.app) and SELF-HOSTED SERVICES (INVENTORY_SERVICES → i.want.service). Step 2 is a minimal form — name
+/* The Infra "Add" dialog: the single entry point for declaring a want. Step 1 is a catalog with two groups:
+ * YOUR APPS (the apps present in workspace monorepos, via the daemon's per-repo apps routes: each addable as
+ * i.want.app) and SELF-HOSTED SERVICES (INVENTORY_SERVICES → i.want.service). Step 2 is a minimal form: name
  * and zone-aware domain; host/Cloudflare bindings are derived (exposure is the single Cloudflare entry, the
  * server is asked for only when several are declared). Submitting writes the entry into deploy.config.ts
  * through the sandbox's /inventory routes and emits `added`, so the page can run its Apply-changes stream. */
@@ -37,13 +37,13 @@ const on = ref(``);
 const subdomain = ref(``);
 const subdomainValid = computed(() => SUBDOMAIN_RE.test(subdomain.value.trim()));
 
-// The apps living in workspace monorepos — fetched only while the dialog is open, live against the repo list.
+// The apps living in workspace monorepos: fetched only while the dialog is open, live against the repo list.
 const { apps: workspaceApps, error: appsError } = useWorkspaceApps(visible);
 const appsNotice = computed<NoticeModel | undefined>(() =>
     appsError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list the apps in this workspace.`, detail: appsError.value },
 );
 
-// Apps already declared in intent (by entry name) — shown as added instead of addable.
+// Apps already declared in intent (by entry name): shown as added instead of addable.
 const declaredApps = computed(() => new Set(entries.value.filter((entry) => entry.kind === `app`).map((entry) => entry.name)));
 
 // Host / Cloudflare binding names the user already declared (a want references them by name).
@@ -53,7 +53,7 @@ const cloudflareEntries = computed(() => entries.value.filter((entry) => entry.k
 // Exposure is derived, never asked: Cloudflare is the single exposure mechanism, so the want binds to the
 // (only) declared cloudflare entry.
 const expose = computed(() => cloudflareEntries.value[0]?.name ?? ``);
-// The zone recorded on the cloudflare entry when it was connected — drives the `<subdomain>.<zone>` domain
+// The zone recorded on the cloudflare entry when it was connected: drives the `<subdomain>.<zone>` domain
 // field in every session. Undefined (free-text full-domain fallback) only when the token was pre-seeded, so
 // no zone could be listed at connect time.
 const zone = computed(() => {
@@ -103,7 +103,7 @@ const pick = async (picked: Picked): Promise<void> => {
     on.value = hostOptions.value.includes(`self`) ? `self` : (hostOptions.value[0] ?? ``);
 };
 
-// A server that registers while the dialog is open (the inline ConnectHost flow) becomes the binding —
+// A server that registers while the dialog is open (the inline ConnectHost flow) becomes the binding:
 // the form appears with `on` already wired, no re-pick needed.
 watch(hostOptions, (hosts) => {
     if (on.value === ``) {
@@ -212,7 +212,7 @@ const submit = async (): Promise<void> => {
                 <!-- Placement is derived (single host, single Cloudflare); only a genuine choice is asked. -->
                 <label v-if="hostOptions.length > 1" class="ui-field">
                     <span class="ui-field-label">Server</span>
-                    <!-- `on` holds `` for "none yet" (the Picker's empty state), never undefined — hence the
+                    <!-- `on` holds `` for "none yet" (the Picker's empty state), never undefined: hence the
                          explicit binding instead of v-model. -->
                     <Picker
                         :model-value="on === `` ? undefined : on"
@@ -231,11 +231,11 @@ const submit = async (): Promise<void> => {
             </form>
         </template>
 
-        <!-- STEP 1: the catalog — your apps, then the self-hosted services. -->
+        <!-- STEP 1: the catalog, your apps, then the self-hosted services. -->
         <template v-else>
             <p class="mb-4 text-sm text-muted">
                 Pick what you want to run on your own server. It's declared in your intent (<span class="font-mono text-xs">deploy.config.ts</span>)
-                and deployed on the next apply — the platform stores nothing.
+                and deployed on the next apply: the platform stores nothing.
             </p>
 
             <template v-if="workspaceApps.length > 0 || appsError">

@@ -19,7 +19,7 @@
                 "label": "Google Workspace",
                 "mentionLabel": "Only mail addressed directly to you (your address in To)",
                 "channel": { "label": "Gmail label or calendar id (optional)", "placeholder": "every watched inbox and calendar" },
-                "starterPrompt": "Google Workspace events just arrived — each line of the payload is one JSON event. Type `mail` is new Gmail: the author is the sender, content holds the subject and a text excerpt, and extra carries the message id, thread id, labels and attachment names (`gw mail read <id>` for the whole thing). Type `event` is a calendar event about to start: content holds the title, time and location, and extra carries the event id, calendar, attendees and any meeting link. Triage what arrived and act on it — `gw` is on your PATH for the whole of Gmail, Calendar, Drive, Docs, Sheets and Contacts."
+                "starterPrompt": "Google Workspace events just arrived, each line of the payload is one JSON event. Type `mail` is new Gmail: the author is the sender, content holds the subject and a text excerpt, and extra carries the message id, thread id, labels and attachment names (`gw mail read <id>` for the whole thing). Type `event` is a calendar event about to start: content holds the title, time and location, and extra carries the event id, calendar, attendees and any meeting link. Triage what arrived and act on it, `gw` is on your PATH for the whole of Gmail, Calendar, Drive, Docs, Sheets and Contacts."
             }
         },
         "processes": [
@@ -43,16 +43,16 @@
                     "guide": {
                         "url": "https://console.cloud.google.com/apis/credentials",
                         "linkLabel": "Open Google Cloud credentials",
-                        "scopes": "read & write: `gmail.modify` `gmail.send` `calendar` `drive` `documents` `spreadsheets` `contacts` — read only: the `.readonly` form of each",
+                        "scopes": "read & write: `gmail.modify` `gmail.send` `calendar` `drive` `documents` `spreadsheets` `contacts`, read only: the `.readonly` form of each",
                         "steps": [
                             "In `console.cloud.google.com`, create a project (or pick one), then under `APIs & Services` → `Library` enable `Gmail API`, `Google Calendar API`, `Google Drive API`, `Google Docs API`, `Google Sheets API` and `People API`.",
-                            "YOUR ACCOUNT — `APIs & Services` → `OAuth consent screen`: user type `External`, add yourself as a test user, and add the scopes above.",
-                            "YOUR ACCOUNT — on that same screen set the publishing status to `In production`. This one matters: a screen left in `Testing` hands out refresh tokens that STOP WORKING AFTER 7 DAYS, and the connection then dies for no visible reason. `In production` without Google's verification is fine for your own account — you click through an `unverified app` warning once.",
-                            "YOUR ACCOUNT — `Credentials` → `Create credentials` → `OAuth client ID` → `Web application`, and add `https://developers.google.com/oauthplayground` as an authorized redirect URI. Copy the client ID and client secret.",
-                            "YOUR ACCOUNT — open `developers.google.com/oauthplayground`, click the gear, tick `Use your own OAuth credentials` and paste the pair. Select the scopes above, `Authorize APIs`, approve, then `Exchange authorization code for tokens` and copy the REFRESH token. Paste all three here.",
-                            "WHOLE COMPANY — `IAM & Admin` → `Service Accounts` → create one → `Keys` → `Add key` → `JSON`, and note the service account's numeric `Client ID`.",
-                            "WHOLE COMPANY — in `admin.google.com` → `Security` → `Access and data control` → `API controls` → `Domain-wide delegation`, add that client ID with the full scope URLs (`https://www.googleapis.com/auth/` + each scope above). Paste the JSON key here and the address the agent should act as.",
-                            "Prefer not to use the playground? Connect with the client ID and secret and run `gw auth login` in a chat — the agent walks you through approving in the sandbox's own browser and hands you the refresh token to paste."
+                            "YOUR ACCOUNT, `APIs & Services` → `OAuth consent screen`: user type `External`, add yourself as a test user, and add the scopes above.",
+                            "YOUR ACCOUNT, on that same screen set the publishing status to `In production`. This one matters: a screen left in `Testing` hands out refresh tokens that STOP WORKING AFTER 7 DAYS, and the connection then dies for no visible reason. `In production` without Google's verification is fine for your own account, you click through an `unverified app` warning once.",
+                            "YOUR ACCOUNT: `Credentials` → `Create credentials` → `OAuth client ID` → `Web application`, and add `https://developers.google.com/oauthplayground` as an authorized redirect URI. Copy the client ID and client secret.",
+                            "YOUR ACCOUNT: open `developers.google.com/oauthplayground`, click the gear, tick `Use your own OAuth credentials` and paste the pair. Select the scopes above, `Authorize APIs`, approve, then `Exchange authorization code for tokens` and copy the REFRESH token. Paste all three here.",
+                            "WHOLE COMPANY: `IAM & Admin` → `Service Accounts` → create one → `Keys` → `Add key` → `JSON`, and note the service account's numeric `Client ID`.",
+                            "WHOLE COMPANY: in `admin.google.com` → `Security` → `Access and data control` → `API controls` → `Domain-wide delegation`, add that client ID with the full scope URLs (`https://www.googleapis.com/auth/` + each scope above). Paste the JSON key here and the address the agent should act as.",
+                            "Prefer not to use the playground? Connect with the client ID and secret and run `gw auth login` in a chat: the agent walks you through approving in the sandbox's own browser and hands you the refresh token to paste."
                         ]
                     }
                 },
@@ -83,7 +83,7 @@
                         "label": "Refresh token",
                         "secret": true,
                         "when": "mode == 'user'",
-                        "hint": "Rotate this here when Google revokes it — a password change, six months idle, or a hundredth token on the same client all do that."
+                        "hint": "Rotate this here when Google revokes it, a password change, six months idle, or a hundredth token on the same client all do that."
                     },
                     {
                         "key": "clientSecret",

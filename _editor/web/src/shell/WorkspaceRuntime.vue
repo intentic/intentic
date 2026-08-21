@@ -13,14 +13,14 @@ import PoppablePanels from "./PoppablePanels.vue";
 import PushNotice from "./PushNotice.vue";
 import ReceiptBar from "./ReceiptBar.vue";
 
-/* THE SIGNED-IN SESSION'S LIVE CONNECTION TO ITS SANDBOX, and the panels that connection feeds — mounted by
+/* THE SIGNED-IN SESSION'S LIVE CONNECTION TO ITS SANDBOX, and the panels that connection feeds: mounted by
  * App.vue for as long as an account has a sandbox selected, and therefore ABOVE every route rather than inside
  * the workspace shell.
  *
  * It sits here because the shell is not the app. /setup (where "Add sandbox" goes), an invite link and the
  * desktop sign-in handoff are all routes outside it, and stopping the daemon stream on the way to one is what
  * made a popped-out chat go dead the moment the user clicked "Add sandbox": the panel itself now survives that
- * navigation (PoppablePanels), so the stream behind it has to survive it too — a floating window rendering a
+ * navigation (PoppablePanels), so the stream behind it has to survive it too: a floating window rendering a
  * disconnected chat would only be a slower way to lose the conversation.
  *
  * Presence rides the same lifetime, as it always has: it is this tab's claim about what its user is looking at,
@@ -53,7 +53,7 @@ watch(
 watch(onScreen, (looking) => reportIdle(!looking), { immediate: true });
 
 // One long-lived SSE stream to the daemon keeps `reachable` live for the whole session, so a killed sandbox is
-// detected the moment the stream breaks — wherever in the app the user happens to be standing.
+// detected the moment the stream breaks: wherever in the app the user happens to be standing.
 onMounted(() => liveness.start());
 onUnmounted(() => liveness.stop());
 
@@ -71,7 +71,7 @@ startDraftingReceipts();
 </script>
 
 <template>
-    <!-- The mobile shell docks neither panel — its chat is the agent route and its terminal a tab of its own —
+    <!-- The mobile shell docks neither panel: its chat is the agent route and its terminal a tab of its own:
          so there is nothing out there to own, and nothing that could be popped into a window. -->
     <PoppablePanels v-if="!mobile" />
     <!-- A push that needs an answer, asked wherever the user has got to. It belongs to the session for the same
@@ -79,7 +79,7 @@ startDraftingReceipts();
          else, and every route in the app is somewhere they might reasonably be when it lands. -->
     <PushNotice />
     <!-- The app's quiet channel: what just happened, retiring itself. One host above the router, for the same
-         reason the notice above has one — a completion reported from a dialog, a tree row or a settings card is
+         reason the notice above has one: a completion reported from a dialog, a tree row or a settings card is
          the same event to the user and must not depend on which view raised it. It is deliberately NOT cleared
          on navigation: "3 files deleted" is still true on the next screen, and it is gone in seconds anyway. -->
     <ReceiptBar />

@@ -14,13 +14,13 @@
                 "catalog": {
                     "name": "Windows PC",
                     "icon": "desktop",
-                    "description": "Your Windows PC — shell, files, screen.",
+                    "description": "Your Windows PC, shell, files, screen.",
                     "category": "machines",
                     "hint": "The name is how you and the agent refer to this computer (\"check the logs on my-laptop\"). Adding it hands you a one-liner to run on that machine.",
                     "guide": {
                         "steps": [
-                            "Add the computer here — a one-time command appears straight away, and `Connect` on its card brings it back later.",
-                            "Run that command in `PowerShell` on the computer you want to connect — it installs a small agent that dials this sandbox.",
+                            "Add the computer here: a one-time command appears straight away, and `Connect` on its card brings it back later.",
+                            "Run that command in `PowerShell` on the computer you want to connect: it installs a small agent that dials this sandbox.",
                             "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
                             "You can revoke it any time from this card; `intentic-host uninstall` removes the agent from the machine."
                         ]
@@ -35,13 +35,13 @@
                 "catalog": {
                     "name": "Linux PC",
                     "logo": "linux",
-                    "description": "Your Linux PC — shell, files, desktop.",
+                    "description": "Your Linux PC, shell, files, desktop.",
                     "category": "machines",
                     "hint": "The name is how you and the agent refer to this computer (\"run the tests on my-desktop\"). Adding it hands you a one-liner to run on that machine.",
                     "guide": {
                         "steps": [
-                            "Add the computer here — a one-time command appears straight away, and `Connect` on its card brings it back later.",
-                            "Run that command in a terminal on the computer you want to connect — it installs a small agent that dials this sandbox.",
+                            "Add the computer here: a one-time command appears straight away, and `Connect` on its card brings it back later.",
+                            "Run that command in a terminal on the computer you want to connect: it installs a small agent that dials this sandbox.",
                             "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
                             "You can revoke it any time from this card; `intentic-host uninstall` removes the agent from the machine."
                         ]

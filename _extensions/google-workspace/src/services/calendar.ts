@@ -200,7 +200,7 @@ const create: Command = {
 
 const update: Command = {
     name: "update",
-    summary: "Change an event — only the fields you pass",
+    summary: "Change an event, only the fields you pass",
     usage: "gw cal update <eventId> [--title] [--start] [--end] [--location] [--description] [--attendees] [--calendar id]",
     writes: true,
     run: async (ctx) => {
@@ -208,7 +208,7 @@ const update: Command = {
         const zone = await zoneOf(ctx.session, id);
         const body = eventBody(ctx, zone, new Date());
         if (Object.keys(body).length === 0) {
-            throw new Error("Nothing to change — pass at least one of --title, --start, --end, --location, --description, --attendees.");
+            throw new Error("Nothing to change: pass at least one of --title, --start, --end, --location, --description, --attendees.");
         }
         const updated = await call<CalendarEvent>(ctx.session, {
             method: "PATCH",
@@ -286,6 +286,6 @@ const busy: Command = {
 
 export const calendarGroup: CommandGroup = {
     name: "cal",
-    summary: "Calendar — what is on, book, move, cancel, check who is free",
+    summary: "Calendar, what is on, book, move, cancel, check who is free",
     commands: [calendars, listEvents, show, create, update, remove, busy],
 };

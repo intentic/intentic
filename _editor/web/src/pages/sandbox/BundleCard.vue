@@ -9,13 +9,13 @@ import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { bundleDownloadUrl, useBundleExports } from "../../composables/sandbox/useBundleExports";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 
-/* MOVING A SANDBOX — export this one's environment to a file, or restore one into this sandbox.
+/* MOVING A SANDBOX: export this one's environment to a file, or restore one into this sandbox.
  *
  * Everything on the left of this card is DERIVED from the daemon's export directory (useBundleExports), which
  * is what makes an export findable later. The first cut streamed the bundle down the click's own response and
  * held its state in a local `busy` ref: switching view or refreshing abandoned the pack AND lost every trace of
  * it, leaving a reset button and no answer to "where did my export go". Now the click starts a job, the row
- * appears at once, and the row is still there — packing, ready or failed — however the browser is treated in
+ * appears at once, and the row is still there (packing, ready or failed) however the browser is treated in
  * the minutes that follow.
  *
  * The container still cannot travel, which is why a restore ends in a report rather than a success tick: the
@@ -38,7 +38,7 @@ const { busy: importing, notice: importError, run: runImport } = useAsyncAction(
 const startExport = (): Promise<void> => runStart(() => start(withSecrets.value), `Could not start the export.`);
 
 /* Navigating to the URL is the point: the browser's own download manager takes the file, with a real
- * Content-Length behind it, so a multi-GB bundle never passes through this tab's memory — and closing the tab
+ * Content-Length behind it, so a multi-GB bundle never passes through this tab's memory, and closing the tab
  * afterwards does not cancel it. */
 const download = (entry: BundleExport): Promise<void> =>
     runStart(async () => {
@@ -53,7 +53,7 @@ const importBundle = (event: Event): Promise<void> =>
             return;
         }
         report.value = undefined;
-        // One continuous body, like the folder-drop archive route — the daemon streams it to disk entry by entry.
+        // One continuous body, like the folder-drop archive route: the daemon streams it to disk entry by entry.
         report.value = ImportReportSchema.parse(await sandboxJson(`/bundles/restore`, { method: `POST`, body: file, duplex: `half` } as RequestInit));
     }, `Could not restore the bundle.`);
 
@@ -71,13 +71,13 @@ const sizeLabel = (bytes: number): string => {
             :heading="2"
             icon="box"
             title="Move this sandbox"
-            description="Export the workspace, its git history and the agent board as one file — then restore it into a fresh sandbox."
+            description="Export the workspace, its git history and the agent board as one file: then restore it into a fresh sandbox."
         />
 
         <template v-if="isOwner">
             <!-- THE ONE DECISION THIS CARD ASKS FOR, on the card's own surface. It used to sit in its own boxed
                  inset, which read as a second card inside the first for a border that said nothing the hairline
-                 doesn't. The lock is the state at a glance — it opens and goes warning-coloured the moment the
+                 doesn't. The lock is the state at a glance: it opens and goes warning-coloured the moment the
                  bundle stops being safe to hand over, so the danger is legible before the sentence is read.
 
                  FULL-BLEED, because the whole row is the click target and the hover tint has to show that. A
@@ -85,7 +85,7 @@ const sizeLabel = (bytes: number): string => {
                  rectangle starting at the divider and stopping dead against the lock on one side and the toggle
                  on the other, with no air anywhere.
 
-                 THE BLEED IS THE WRAPPER'S, NOT THE ROW'S, and it has to be — a <Row> carries `w-full`, and a
+                 THE BLEED IS THE WRAPPER'S, NOT THE ROW'S, and it has to be: a <Row> carries `w-full`, and a
                  negative side margin on a box whose width is pinned to 100% SLIDES it instead of widening it:
                  the band hung a card-padding over the left edge and finished a card-padding short of the right,
                  which is the "still not full-width" of the second report. An undecorated wrapper has no width of
@@ -99,7 +99,7 @@ const sizeLabel = (bytes: number): string => {
                     :icon="withSecrets ? `unlock` : `lock`"
                     :tone="withSecrets ? `warning` : `default`"
                     title="Include secrets"
-                    description="Capability credentials, the CI webhook secret, extension settings, ssh keys and the agent's AI logins. Leave this off and the bundle is safe to hand to someone else — the restore then lists what to re-enter."
+                    description="Capability credentials, the CI webhook secret, extension settings, ssh keys and the agent's AI logins. Leave this off and the bundle is safe to hand to someone else: the restore then lists what to re-enter."
                     class="px-5 py-2.5"
                     :class="packing === undefined ? `cursor-pointer` : `cursor-default`"
                 >
@@ -107,7 +107,7 @@ const sizeLabel = (bytes: number): string => {
                         <ToggleSwitch v-model="withSecrets" :disabled="packing !== undefined" />
                     </template>
                     <!-- `v-if` ON THE SLOT, not on a <p> inside it. A slot that is always PASSED is always
-                         rendered, so the row drew its `#below` wrapper — margin and all — around nothing
+                         rendered, so the row drew its `#below` wrapper (margin and all) around nothing
                          whenever the warning was off, which is where the band's uneven top and bottom came
                          from: eleven pixels of padding above the title and twenty-four below the sentence. -->
                     <template v-if="withSecrets" #below>
@@ -137,12 +137,12 @@ const sizeLabel = (bytes: number): string => {
         <p v-else class="text-2xs text-subtle">Only the sandbox owner can export or restore an environment.</p>
 
         <!-- THE ANSWER TO "where do I get it later": the exports that exist, whatever this tab has been doing.
-             A <RowGroup> of <Row>s rather than the hand-drawn list this was — the anatomy is a record list's
+             A <RowGroup> of <Row>s rather than the hand-drawn list this was: the anatomy is a record list's
              (a name, a line of facts under it, a badge, two actions), which is the shape those two components
              exist to state once.
 
              BOTH ACTIONS ARE THE SAME AFFORDANCE, and that is the fix to a row that had two. Download was a
-             bordered chip and delete a bare glyph, so the quieter of the two — throwing the file away — was
+             bordered chip and delete a bare glyph, so the quieter of the two (throwing the file away) was
              the one drawing a box, and the row read as a button with a stray mark after it. `ui.iconButton`
              is the app's toolbar action: no chrome until the pointer is on it, the tone arriving with the
              hover. Neither needs a label because the row is one file and these are the only two things anyone
@@ -188,7 +188,7 @@ const sizeLabel = (bytes: number): string => {
         </RowGroup>
 
         <p v-if="isOwner" class="text-2xs text-subtle">
-            Exports stay on the sandbox until you delete them, so you can come back for one later. Restore onto a FRESH sandbox — it overwrites files
+            Exports stay on the sandbox until you delete them, so you can come back for one later. Restore onto a FRESH sandbox: it overwrites files
             this workspace already has.
         </p>
 
@@ -209,7 +209,7 @@ const sizeLabel = (bytes: number): string => {
                 </div>
             </div>
             <p v-if="report.refused.length > 0" class="text-2xs text-warning">
-                {{ report.refused.length }} entries were refused — the bundle carried paths this sandbox does not accept (identity files, or paths
+                {{ report.refused.length }} entries were refused: the bundle carried paths this sandbox does not accept (identity files, or paths
                 outside the workspace).
             </p>
         </template>

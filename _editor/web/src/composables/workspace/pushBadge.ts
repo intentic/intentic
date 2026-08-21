@@ -15,7 +15,7 @@ export const pushBadge = (stage: PushStage | undefined, question: PushQuestion |
     // A decision the user owes. `danger` is spent here, sparingly, per ViewBadge, because a push the user
     // asked for is standing unsent, and the tile is the only thing saying so once the notice has been dismissed.
     if (question !== undefined) {
-        return { mark: `exclamation-triangle`, tone: `danger`, tooltip: `${question.title} — your push is waiting on you` };
+        return { mark: `exclamation-triangle`, tone: `danger`, tooltip: `${question.title}, your push is waiting on you` };
     }
     // `wave-pulse` rather than a spinner: the rail draws a mark as a static glyph, and a spinner that does not
     // turn reads as something stuck. This one depicts a live thing without pretending to animate.

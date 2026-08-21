@@ -6,12 +6,12 @@ import { isShotPath, storyDir, storyStanding } from "./runs";
 import { launchFailureOf, type LiveBrowser, type RunRow, type StoryOutcome } from "./useRuns";
 
 /* One run, story by story: the verdict, the walkthrough the agent wrote, and the screenshots it took at each
- * step. A story with no result yet shows the live session instead — the fleet already knows what it is doing,
+ * step. A story with no result yet shows the live session instead: the fleet already knows what it is doing,
  * and "still walking the page" is a truer answer than a blank row.
  *
  * WATCHING. While a session is live, its Chromium is streamed by the daemon (browser-sessions.ts attaches over
  * CDP on the agent's first browser call) into the shell's Browsers area, a tab per open page and a Take control
- * button. This row is the pointer at it — the reason a run is supervisable rather than merely reportable. The
+ * button. This row is the pointer at it: the reason a run is supervisable rather than merely reportable. The
  * button appears only for a session the daemon has actually listed; see useRuns' `browsers` for why it is never
  * derived and offered blind.
  *
@@ -20,17 +20,17 @@ import { launchFailureOf, type LiveBrowser, type RunRow, type StoryOutcome } fro
  * sit outside any served origin and reach it only through the daemon's authenticated /workspace/raw, which
  * means an object URL. And an object URL cannot be substituted into the markdown SOURCE, because the sanitizer
  * strips `blob:` from an img src (verified: DOMPurify's default URI allowlist has no blob scheme) while leaving
- * a relative path alone. So the swap happens AFTER sanitizing, imperatively on the rendered DOM — which is also
+ * a relative path alone. So the swap happens AFTER sanitizing, imperatively on the rendered DOM, which is also
  * the only place the fetch can be lazy, one story at a time, instead of pulling every shot of every story. */
 
 const { run, outcomes, browsers, loading, stop, retry } = defineProps<{
     run: RunRow;
     outcomes: Readonly<Record<string, StoryOutcome>>;
-    // Live browsers by conversationId — see useRuns.
+    // Live browsers by conversationId: see useRuns.
     browsers: Readonly<Record<string, LiveBrowser>>;
     loading: boolean;
     // Ends one story's session. A fan-out of ten unattended sessions has to be stoppable from the surface that
-    // started it — sending someone to the Agents board to find the ten cards this view already knows about is
+    // started it: sending someone to the Agents board to find the ten cards this view already knows about is
     // the kind of errand that gets a run left running instead.
     stop: (conversationId: string) => Promise<void>;
     // Relaunches a story whose POST was refused before a fleet session existed.
@@ -65,13 +65,13 @@ const unstartedFailureOf = (slug: string): string | undefined =>
         ? launchFailureOf(run, slug)
         : undefined;
 
-/* WHY A STORY WAS NEVER WALKED — the session's own last words, which the fleet carries only while its card
+/* WHY A STORY WAS NEVER WALKED: the session's own last words, which the fleet carries only while its card
  * still reads as failed. A run whose sessions were refused on their first request (a spent plan, an
  * organization with Claude Code switched off) reported itself here as a grey "error" and "No report was
  * written", so the one place the reason existed was a transcript nobody opens for a fan-out of ten. */
 const failureOf = (slug: string): string | undefined => agentOf(slug)?.failure ?? unstartedFailureOf(slug);
 
-/* This row's badge — the shared standing (runs.ts) with the two answers only a report can give: a run whose
+/* This row's badge, the shared standing (runs.ts) with the two answers only a report can give: a run whose
  * artifacts are still being read, and a story whose session is not on the roster at all. Everything the stories
  * list also shows comes from the shared one, so the two surfaces cannot disagree about the same story again. */
 const verdictBadge = (slug: string): { readonly label: string; readonly variant: StatusVariant } => {
@@ -92,7 +92,7 @@ const verdictBadge = (slug: string): { readonly label: string; readonly variant:
     return { label: agent.status, variant: `neutral` };
 };
 
-/* Both of these rows are PLACES — the agent's own session log, and the browser it drove — so both render as
+/* Both of these rows are PLACES: the agent's own session log, and the browser it drove, so both render as
  * real links (appLink): an address under the pointer, the browser's own menu on them, and Ctrl/⌘-click opening
  * one beside the report instead of on top of it. Each is only ever rendered where the id exists (`v-if`), so
  * the empty fallback is unreachable and merely spares the template a narrowing it cannot do. */
@@ -185,7 +185,7 @@ const restrictReportImages = (fragment: DocumentFragment): void => {
 };
 
 /* Resolve the rendered report's relative <img> sources against the story's own run directory. Runs after every
- * render of an open story (flush: post — the v-html has to exist first) and is idempotent: only object URLs
+ * render of an open story (flush: post, the v-html has to exist first) and is idempotent: only object URLs
  * minted below survive a later pass. restrictReportImages has already removed every untrusted source. */
 const resolveShots = (slug: string): void => {
     const container = reportEl.value[slug];
@@ -230,7 +230,7 @@ onBeforeUnmount(() => {
 
 const defects = computed(() => run.manifest.stories.flatMap((story) => outcomes[story.slug]?.result?.defects ?? []));
 // One line per address the run used: which app each group of stories was walked through. Read straight off the
-// manifest rather than re-derived from the stories — what was CHOSEN is the fact a report needs, and a run that
+// manifest rather than re-derived from the stories: what was CHOSEN is the fact a report needs, and a run that
 // aimed two groups of one repo at two ports is unreadable a week later without it.
 const addresses = computed(() => Object.entries(run.manifest.targets).map(([key, url]) => ({ key, url })));
 </script>
@@ -305,7 +305,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     <!-- The report is the artifact; everything else on this row is a summary of it. -->
                     <!-- A measure, because this page is 72rem wide and a report is the longest prose in the
                          extension: unbounded, its paragraphs ran past 150 characters a line. Only text takes the
-                         cap (see prose.css) — the screenshots under it still get the full column, which is where
+                         cap (see prose.css): the screenshots under it still get the full column, which is where
                          the extra room is actually worth something. -->
                     <div v-if="outcomes[story.slug]?.report" :ref="(el) => (reportEl[story.slug] = el as HTMLElement)" style="--prose-measure: 68ch">
                         <Markdown :source="outcomes[story.slug]?.report ?? ``" :decorate="restrictReportImages" />
@@ -327,16 +327,16 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     <div v-else :class="ui.emptyState()">
                         {{
                             verdictBadge(story.slug).variant === `info`
-                                ? `Still testing — the report is written at the end of the walkthrough.`
+                                ? `Still testing: the report is written at the end of the walkthrough.`
                                 : `No report was written. Open the session to see how far it got.`
                         }}
                     </div>
 
                     <!-- The criteria matrix: the story's own promises, one verdict each, in the order they were
                          authored. It is the one part of result.json the report's prose does not already say in
-                         order — and the reason the brief hands the agent a numbered list. -->
+                         order, and the reason the brief hands the agent a numbered list. -->
                     <!-- The promises themselves, so at the reading size and the full content colour the design
-                         system reserves for text read in sentences — this matrix is the answer to the question
+                         system reserves for text read in sentences: this matrix is the answer to the question
                          the whole view exists for, and it was set two steps down and dimmed, as if it were the
                          chrome around the answer rather than the answer. The agent's note stays quiet: that IS
                          the annotation. -->
@@ -355,7 +355,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                             />
                             <span class="min-w-0 flex-1 text-content">
                                 {{ criterion.text }}
-                                <span v-if="criterion.note" class="text-subtle"> — {{ criterion.note }}</span>
+                                <span v-if="criterion.note" class="text-subtle">: {{ criterion.note }}</span>
                             </span>
                         </li>
                     </ul>

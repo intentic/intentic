@@ -2,7 +2,7 @@
     "extends": "./tsconfig.json",
     "compilerOptions": {
         "outDir": "./out-tsc/app",
-        // `node` is here for the test files this `include` also covers — several read fixtures off disk
+        // `node` is here for the test files this `include` also covers: several read fixtures off disk
         // (`node:fs`/`node:path`). It used to arrive by accident, through the Stripe client's declarations
         // referencing it; @types/node is a devDependency of this package, so ask for it directly.
         "types": ["vite/client", "node"]

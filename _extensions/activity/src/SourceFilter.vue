@@ -3,7 +3,7 @@ import { type IconName, Picker, type PickerOptions } from "@intentic/extension-u
 import { computed } from "vue";
 import { DIRECT, SCHEDULE, type Source } from "./episodes";
 
-/* WHO CALLED — the view's source filter, and the reason the feed can stay finite.
+/* WHO CALLED: the view's source filter, and the reason the feed can stay finite.
  *
  * This is bounded by how many things can reach the agent (connections + you), never by how much they send. That
  * is the whole answer to "5 connections calling plenty of times an hour": the list stays the same six entries
@@ -14,7 +14,7 @@ import { DIRECT, SCHEDULE, type Source } from "./episodes";
  * surface from claiming to be about Discord while showing a thousand rows of the user's own work.
  *
  * ONE FORM, AND IT IS THE PICKER. This was a 16rem index column on desktop and a Picker on a phone. Activity is
- * a SECTION of the sandbox hub now, and the hub already spends a column on its own index — a second one butted
+ * a SECTION of the sandbox hub now, and the hub already spends a column on its own index: a second one butted
  * against it would read as two rails competing for the same job, and a reader would have to work out which of
  * them moves what. So the compact form is the only form, and it rides the feed's filter bar beside the time
  * window: WHO, WHEN and free text, three controls narrowing one list, in one instrument.
@@ -38,13 +38,13 @@ const SOURCE_ICONS: Readonly<Record<string, IconName>> = {
 };
 const iconOf = (key: string): IconName => SOURCE_ICONS[key] ?? `comments`;
 
-// idle is not a fault — it means the gateway is deliberately not connecting because no automation asked it to.
+// idle is not a fault: it means the gateway is deliberately not connecting because no automation asked it to.
 // disconnected is, because the daemon resolves the deliberate case to idle before this ever sees it. `ready` is
 // the resting state and says nothing: a phrase on every healthy row is a phrase nobody reads.
 const GATEWAY_WORDS: Readonly<Record<NonNullable<Source["gateway"]>, string | undefined>> = {
     ready: undefined,
     connecting: `connecting…`,
-    // Not a synonym for "connecting": nothing here resolves by waiting — a person has to type a code into a
+    // Not a synonym for "connecting": nothing here resolves by waiting, a person has to type a code into a
     // phone, and the word has to send them looking for the card that holds it.
     pairing: `waiting to be linked`,
     disconnected: `not connected`,

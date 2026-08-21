@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
  *
  * Why the rule exists at all: a view's internal navigation has to live in the query, because `/ext/:ext/:key?` has
  * exactly one free path segment and it already means "which activation". So more than one thing can be writing to
- * the same query string, and the invariant below — patching your own key never touches anyone else's — is what
+ * the same query string, and the invariant below (patching your own key never touches anyone else's) is what
  * makes that safe. */
 
 describe(`flattenQuery`, () => {
@@ -21,7 +21,7 @@ describe(`flattenQuery`, () => {
     });
 
     it(`reads a valueless key as empty rather than dropping it`, () => {
-        // `?draft` is present-but-empty, which is a different answer from absent — the caller can tell them apart.
+        // `?draft` is present-but-empty, which is a different answer from absent: the caller can tell them apart.
         expect(flattenQuery({ draft: null })).toEqual({ draft: `` });
         expect(flattenQuery({ draft: [null] })).toEqual({ draft: `` });
     });

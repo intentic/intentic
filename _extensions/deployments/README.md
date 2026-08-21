@@ -11,24 +11,24 @@ What is actually running on the servers you own, read from a Komodo you already 
 
 ## Key files
 
-- [src/contract.ts](src/contract.ts) — the extension's OWN wire shapes, imported by both halves so their wire
+- [src/contract.ts](src/contract.ts): the extension's OWN wire shapes, imported by both halves so their wire
   cannot drift; zod only, so the web bundle never pulls the route table in.
-- [src/server/server.ts](src/server/server.ts) — the backend half (`activateServer`), built to `dist/server.js`
+- [src/server/server.ts](src/server/server.ts): the backend half (`activateServer`), built to `dist/server.js`
   (`pnpm build`) and run by the daemon's backend host. Reads the Komodo credential through the daemon's
-  connection route and starts fix turns through `POST /agent` — both declared in `permissions.daemon`.
-- [src/server/komodo-client.ts](src/server/komodo-client.ts) — the Komodo Core API behind one client shape.
-- [src/server/komodo-overview.ts](src/server/komodo-overview.ts) — Komodo's vocabulary → the view's, pure and tested.
-- [src/server/komodo-repos.ts](src/server/komodo-repos.ts) — which workspace repo belongs to which stack.
-- [src/server/komodo-store.ts](src/server/komodo-store.ts) — seen-timestamps and repo→stack links (its runtime home, `.intentic/local/runtime/extensions/deployments/komodo.json`).
-- [src/useDeploymentBoard.ts](src/useDeploymentBoard.ts) — the board's data: what is running, where, and how it is doing.
-- [src/incidents.ts](src/incidents.ts) — what counts as an incident rather than as noise.
-- [src/stateVisual.ts](src/stateVisual.ts) — one mapping from a state to how it reads, so nothing invents its own colour.
-- [src/RepoLinkRow.vue](src/RepoLinkRow.vue) — the join from a deployment back to a repo.
-- [src/extension.ts](src/extension.ts) — activation, and why it is one tile per connection.
+  connection route and starts fix turns through `POST /agent`: both declared in `permissions.daemon`.
+- [src/server/komodo-client.ts](src/server/komodo-client.ts): the Komodo Core API behind one client shape.
+- [src/server/komodo-overview.ts](src/server/komodo-overview.ts): Komodo's vocabulary → the view's, pure and tested.
+- [src/server/komodo-repos.ts](src/server/komodo-repos.ts): which workspace repo belongs to which stack.
+- [src/server/komodo-store.ts](src/server/komodo-store.ts): seen-timestamps and repo→stack links (its runtime home, `.intentic/local/runtime/extensions/deployments/komodo.json`).
+- [src/useDeploymentBoard.ts](src/useDeploymentBoard.ts), the board's data: what is running, where, and how it is doing.
+- [src/incidents.ts](src/incidents.ts): what counts as an incident rather than as noise.
+- [src/stateVisual.ts](src/stateVisual.ts): one mapping from a state to how it reads, so nothing invents its own colour.
+- [src/RepoLinkRow.vue](src/RepoLinkRow.vue): the join from a deployment back to a repo.
+- [src/extension.ts](src/extension.ts): activation, and why it is one tile per connection.
 
 ## How it fits
 
-Capability-driven, not repo-driven — the same shape as `ext-pipelines`, for the same reason. Gating on the
+Capability-driven, not repo-driven: the same shape as `ext-pipelines`, for the same reason. Gating on the
 intent and desired-state repos would mean someone who simply connects a Komodo they already run gets nothing.
 
 **One tile per connection**, not one for the extension: two Komodos are two production estates, and looking at

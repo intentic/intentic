@@ -14,7 +14,7 @@ describe("composeProjectName", () => {
     });
 
     test("ignores a `name` that is not the top-level key", () => {
-        // A service called `name`, or a container_name — indented, so not the project's own name.
+        // A service called `name`, or a container_name: indented, so not the project's own name.
         expect(composeProjectName(`services:\n    web:\n        name: nope\n`)).toBeUndefined();
     });
 

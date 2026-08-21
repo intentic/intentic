@@ -84,10 +84,10 @@ export const releaseDiscordClient = (token: string, consumer: Consumer): void =>
 const loginFailure = (error: unknown): Error => {
     const message = error instanceof Error ? error.message : String(error);
     if (/token/i.test(message)) {
-        return new Error("Discord rejected the bot token — check the capability's botToken");
+        return new Error("Discord rejected the bot token: check the capability's botToken");
     }
     if (/intent/i.test(message)) {
-        return new Error("Discord refused the gateway intents — enable the Message Content privileged intent (Developer Portal → Bot)");
+        return new Error("Discord refused the gateway intents: enable the Message Content privileged intent (Developer Portal → Bot)");
     }
     return error instanceof Error ? error : new Error(message);
 };

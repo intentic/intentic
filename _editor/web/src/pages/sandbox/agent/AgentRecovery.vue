@@ -3,15 +3,15 @@ import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 
-/* WHO PICKS A TURN BACK UP WHEN IT DIES THROUGH NO FAULT OF ITS OWN — and, at the end, who stops one that is
+/* WHO PICKS A TURN BACK UP WHEN IT DIES THROUGH NO FAULT OF ITS OWN, and, at the end, who stops one that is
  * only ever going to die again. Both resumes are off until the owner asks for them: a re-run spends their
  * allowance on a turn they sent once, which is the same reason a spent usage limit is missing from the pair
- * entirely — it stops the turn, says when it resets, and leaves the next send to them. */
+ * entirely: it stops the turn, says when it resets, and leaves the next send to them. */
 
 const { settings, patch } = useSandboxSettings();
 
-// The spin-loop guard's threshold, as a count in the box. 0 is a real value here — it means "never quarantine"
-// — so unlike the holdout boxes an emptied field cannot fall back to the saved number without making 0
+// The spin-loop guard's threshold, as a count in the box. 0 is a real value here: it means "never quarantine"
+//, so unlike the holdout boxes an emptied field cannot fall back to the saved number without making 0
 // unreachable; it clamps to the bound instead, and the input is written back so a refused number doesn't stay
 // on screen.
 const setAutomationFailureLimit = (event: Event): void => {
@@ -54,13 +54,13 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!-- Restart auto-resume — for the last thing that kills a turn nobody chose to kill: this sandbox
+        <!-- Restart auto-resume, for the last thing that kills a turn nobody chose to kill: this sandbox
              restarting under it. Every update, environment approval and image rebuild recreates the container,
              so the common case is the user's OWN approval taking down the run that asked for it. -->
         <Row
             icon="refresh"
             title="Resume turns after a restart"
-            description="When the sandbox restarts while an agent is mid-turn — an update, an approved environment change, a crash — pick that turn back up when it comes back."
+            description="When the sandbox restarts while an agent is mid-turn: an update, an approved environment change, a crash, pick that turn back up when it comes back."
         >
             <template #control>
                 <ToggleSwitch
@@ -95,7 +95,7 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
             <template #below>
                 <p v-if="(settings?.automationFailureLimit ?? 0) > 0" class="text-2xs text-muted">
-                    Only errored runs count — a guard skipping a run, or the daemon restarting under one, does not. The row says why it stopped, and
+                    Only errored runs count: a guard skipping a run, or the daemon restarting under one, does not. The row says why it stopped, and
                     its switch turns it back on.
                 </p>
             </template>

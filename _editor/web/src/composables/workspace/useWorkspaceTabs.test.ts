@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The strip is what the workspace comes back as. Until it was persisted, a reload kept only the URL's one
-// active file and dropped every other tab the session had opened — so this pins both halves: what a reload
+// active file and dropped every other tab the session had opened, so this pins both halves: what a reload
 // restores, and what a diff (the one kind too big and too stale to store) does to the focus that named it.
 import { expect, it } from "vitest";
 import { nextTick } from "vue";
@@ -50,7 +50,7 @@ it(`persists an opened tab`, async () => {
 });
 
 // A diff carries both sides of the file as content and shows a comparison the agent has likely moved past by
-// the next load, so it is never stored — and the focus it held lands on its last surviving neighbour rather
+// the next load, so it is never stored, and the focus it held lands on its last surviving neighbour rather
 // than on a tab that won't be there.
 it(`leaves a diff out, and the focus it held with it`, async () => {
     openDiff(diffPayload(`src/main.ts`), `keep`);
@@ -70,7 +70,7 @@ it(`keeps a focus that was genuinely nothing`, async () => {
 });
 
 // The close family's undo: a mis-closed tab comes back WHERE it was, which is what separates "reopen" from
-// "open it again" — a tab restored at the end of the strip would leave the user hunting for it.
+// "open it again": a tab restored at the end of the strip would leave the user hunting for it.
 it(`reopens the last closed tab at the position it held, and focuses it`, () => {
     closeTabIds(new Set(tabs.value.filter((tab) => tab.kind === `diff`).map((tab) => tab.id)));
     selectTab(`src/main.ts`);
@@ -87,7 +87,7 @@ it(`reopens the last closed tab at the position it held, and focuses it`, () => 
     expect(closedTabs.value).toHaveLength(1);
 });
 
-// One entry per CLOSE, so undoing a bulk close brings the whole strip back in order and in one press — the
+// One entry per CLOSE, so undoing a bulk close brings the whole strip back in order and in one press: the
 // action the user took is the unit they undo.
 it(`restores a whole bulk close in one press, in order and focused as it was`, () => {
     selectTab(`health:root`);
@@ -113,7 +113,7 @@ it(`does nothing when nothing has been closed`, () => {
 });
 
 /* The preview slot. Reading down the Changes list used to leave one pinned tab per file merely looked at, so a
- * row click now opens into a single slot that the next look takes over — and the gestures that mean "I want
+ * row click now opens into a single slot that the next look takes over, and the gestures that mean "I want
  * this one" (a double-click on the tab or on the row) hand the tab over to the strip proper. */
 it(`replaces the previewed diff with the next one looked at, in its place`, () => {
     const kept = tabs.value.map((tab) => tab.id);
@@ -142,7 +142,7 @@ it(`hands the tab over on a double-click, and previews the next one beside it`, 
 });
 
 // The other half of the same gesture: double-clicking the row re-opens the diff it is already previewing, and
-// that second open is the one asking to keep it — one tab, no slot.
+// that second open is the one asking to keep it: one tab, no slot.
 it(`releases the slot when the previewed row is re-opened to keep`, () => {
     openDiff(diffPayload(`src/c.ts`), `keep`);
 
@@ -182,7 +182,7 @@ it(`keeps the peeked file when it is opened again to keep`, () => {
     expect(tabs.value.filter((tab) => tab.id === `src/peek-b.ts`)).toHaveLength(1);
 });
 
-// A tab the user chose to keep is never demoted by a later look at it — a peek at a file already open would
+// A tab the user chose to keep is never demoted by a later look at it: a peek at a file already open would
 // otherwise hand its tab to the next peek and close the one they had deliberately pinned.
 it(`leaves an already-open tab where it stands when it is peeked at`, () => {
     openFile(`src/peek-c.ts`, `preview`);
@@ -200,7 +200,7 @@ it(`stores the slot, so a session that ended mid-peek comes back mid-peek`, asyn
 });
 
 /* A replaced preview gives up what a closed tab gives up. The editor seeds from the buffer before the file it
- * re-reads, so a peek left behind would come back as the text the file had the FIRST time — stale the moment an
+ * re-reads, so a peek left behind would come back as the text the file had the FIRST time: stale the moment an
  * agent touched it, and written back over the newer file on the next save. */
 it(`drops the replaced peek's text, so the file is re-read the next time it is opened`, () => {
     const { setBaseline, bufferOf } = useEditBuffers();

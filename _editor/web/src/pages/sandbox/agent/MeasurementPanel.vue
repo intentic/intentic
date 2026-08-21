@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { ExperimentVerdict } from "../savingsChart";
 
-/* A plain <script> block purely so the shape a caller has to build is EXPORTED — `<script setup>` cannot carry
+/* A plain <script> block purely so the shape a caller has to build is EXPORTED: `<script setup>` cannot carry
  * an export, and a type its two callers assemble by hand is exactly the thing that should be named once. */
 export interface PanelReading {
     readonly verdict: ExperimentVerdict;
@@ -17,22 +17,22 @@ export interface PanelReading {
 import { ui } from "@intentic/ui";
 import { commitPercent } from "./numberInputs";
 
-/* THE "MEASURE IT" BLOCK — a setting's control group and what its experiment has said so far — written once
+/* THE "MEASURE IT" BLOCK (a setting's control group and what its experiment has said so far) written once
  * for the two settings that carry one (the terse steer, the iq search teaching).
  *
- * ONE COMPONENT BECAUSE THE SHAPE THEY HAD DRIFTED INTO WAS THE FAULT. Both rows glued four separate facts —
- * the verdict, its margin, how much sample is still owed, and the two arms' sizes — into a single sentence
+ * ONE COMPONENT BECAUSE THE SHAPE THEY HAD DRIFTED INTO WAS THE FAULT. Both rows glued four separate facts:
+ * the verdict, its margin, how much sample is still owed, and the two arms' sizes: into a single sentence
  * joined by em dashes, set at one size, sitting under a sub-control of the same weight as the row's own
  * description. Four facts at one rank read as none, and the row that carried the most information on the page
  * was the one nobody could read. The Savings card had already solved this for the SAME readings: a verdict slot
  * the eye lands on first, then what qualifies it, then the evidence. This is that discipline at row scale.
  *
- * THE FIRST READING IS THE HEADLINE, and the rule lives here rather than at each call site — an experiment has
+ * THE FIRST READING IS THE HEADLINE, and the rule lives here rather than at each call site: an experiment has
  * exactly one (savingsChart.ts, verdictsOf), and the others are second readings of the same subject. Rendering
  * them as peers is what turns one answer into two competing ones.
  *
  * THE METHODOLOGY IS NOT HERE. Why a control group is needed at all, and why an arm is pinned for a whole
- * conversation, are paragraphs — they belong in the group's (i), which is a dialog with room for them. A
+ * conversation, are paragraphs: they belong in the group's (i), which is a dialog with room for them. A
  * settings row is read in a glance or not at all, so it gets one line: what the number does. */
 
 const {
@@ -45,7 +45,7 @@ const {
 } = defineProps<{
     /** The holdout as the whole percent the box shows. */
     percent: number;
-    /** Headline first — see above. Empty until the daemon has an experiment to report. */
+    /** Headline first: see above. Empty until the daemon has an experiment to report. */
     readings: readonly PanelReading[];
     /** ONE line saying what the box does. Anything longer belongs in the group's (i). */
     note: string;
@@ -64,7 +64,7 @@ const VALUE_TONE = { success: `text-success`, content: `text-content`, muted: `t
 
 <template>
     <!-- A RECESSED WELL, not another framed box. `bg-canvas` inside the row's `bg-card` reads as a step DOWN
-         from the setting it belongs to, which is the relationship — a stroke here would read as a second row. -->
+         from the setting it belongs to, which is the relationship: a stroke here would read as a second row. -->
     <div class="rounded-lg bg-canvas px-3 py-2.5">
         <label class="flex items-center justify-between gap-3">
             <span class="flex min-w-0 flex-col">
@@ -98,7 +98,7 @@ const VALUE_TONE = { success: `text-success`, content: `text-content`, muted: `t
                 {{ readings[0].on.toLocaleString() }} {{ onLabel }} · {{ readings[0].off.toLocaleString() }} {{ offLabel }}
             </p>
 
-            <!-- Second readings of the same experiment — one line, one rank below the headline, so a
+            <!-- Second readings of the same experiment: one line, one rank below the headline, so a
                  two-metric experiment reads as one answer with a footnote rather than as two answers. -->
             <p
                 v-for="more in readings.slice(1)"

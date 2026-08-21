@@ -51,7 +51,7 @@ export const recordTurnWrite = (
         paths.add(location.path.startsWith(`./`) ? location.path.slice(2) : location.path);
     }
     if (current?.startedAt === startedAt && paths.size === before) {
-        return; // a re-edit of a file already recorded — no reactive churn for the panel
+        return; // a re-edit of a file already recorded: no reactive churn for the panel
     }
     byConversation.value = { ...byConversation.value, [conversationId]: { startedAt, paths } };
 };

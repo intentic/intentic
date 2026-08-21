@@ -3,19 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PopoutAnswer } from "./handshake";
 
 /* WHEN A FLOATING WINDOW GETS TO ASK, which is the half of the liveness handshake that no amount of care on the
- * app's side can fix. Everything the window does — uncover the panel, veil it, close itself — hangs off asking
+ * app's side can fix. Everything the window does (uncover the panel, veil it, close itself) hangs off asking
  * its opener whether anyone is still drawing in it, and a window the user is not looking at does not get to run
  * its clock: the browser throttles a hidden window's intervals to one a second, and after a few minutes of that
  * to one a MINUTE.
  *
  * That is the whole of the reported bug. The app gives up waiting for a window in two and a half seconds and
- * puts the panel back in its column; the window, throttled, does not notice for up to a minute — so there is a
+ * puts the panel back in its column; the window, throttled, does not notice for up to a minute, so there is a
  * chat docked on the right and a chat floating on the other screen, and the floating one is a photograph that
  * is not even veiled, because painting the veil is something the tick does too. Worse, the deadline that should
  * have retired it was counted in TICKS: twelve seconds' worth at 200ms each is an hour at one a minute.
  *
- * So both tests below take the window's clock away — setInterval is stubbed out, which is exactly what
- * throttling amounts to from in here — and pin what is left: it still reports in, and it still gives up on time. */
+ * So both tests below take the window's clock away: setInterval is stubbed out, which is exactly what
+ * throttling amounts to from in here, and pin what is left: it still reports in, and it still gives up on time. */
 
 const answers = { current: `live` as PopoutAnswer };
 
@@ -105,7 +105,7 @@ describe(`the pop-out window's keeper`, () => {
         answers.current = `waiting`;
         await startKeeper(`patient-panel`);
 
-        // Owned but empty is the hopeful case — an app still booting, a panel host between mounts — and it gets
+        // Owned but empty is the hopeful case: an app still booting, a panel host between mounts, and it gets
         // a minute of real time rather than a tick count that throttling turns into an afternoon.
         vi.advanceTimersByTime(20_000);
         document.dispatchEvent(new Event(`visibilitychange`));

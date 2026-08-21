@@ -10,7 +10,7 @@ const report = (overrides: Partial<SetupReport>): SetupReport => ({
 });
 
 describe(`setupReportView`, () => {
-    it(`is empty with no report — an old ic never reports, and the card keeps its canned lines`, () => {
+    it(`is empty with no report: an old ic never reports, and the card keeps its canned lines`, () => {
         expect(setupReportView(null)).toEqual({ failures: null, stage: undefined });
     });
 
@@ -22,14 +22,14 @@ describe(`setupReportView`, () => {
         expect(view.stage).toContain(`takes a few minutes`);
     });
 
-    it(`turns failures into a diagnosis and drops the narration — never both`, () => {
+    it(`turns failures into a diagnosis and drops the narration: never both`, () => {
         const failed = [{ check: `Docker`, problem: `the docker daemon is not running.`, remedy: `start Docker, then re-run.` }];
         const view = setupReportView(report({ stage: `preflight`, failed }));
         expect(view.failures).toEqual(failed);
         expect(view.stage).toBeUndefined();
     });
 
-    it(`covers every stage the wire allows — a new stage without words would render 'undefined'`, () => {
+    it(`covers every stage the wire allows: a new stage without words would render 'undefined'`, () => {
         const stages: SetupReport[`stage`][] = [
             `preflight`,
             `pulling-image`,

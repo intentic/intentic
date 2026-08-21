@@ -56,7 +56,7 @@ describe(`activeAt`, () => {
     });
 
     /* The reader is inside a section from the moment its heading passes the line, not from when it touches the
-     * top edge — at the top edge the previous section still fills the screen. */
+     * top edge: at the top edge the previous section still fills the screen. */
     it(`switches only once the next heading is past the line`, () => {
         expect(activeAt(tops, 400, false)).toBe(0);
         expect(activeAt(tops, 440, false)).toBe(1);
@@ -81,7 +81,7 @@ describe(`progressAt`, () => {
         expect(progressAt(1000, 2000, 1000)).toBe(1);
     });
 
-    // A document that fits its pane has been read the moment it is shown — a progress bar stuck at 0 on a file
+    // A document that fits its pane has been read the moment it is shown: a progress bar stuck at 0 on a file
     // with nothing below the fold reads as broken.
     it(`calls a document that fits fully read`, () => {
         expect(progressAt(0, 800, 1000)).toBe(1);
@@ -109,7 +109,7 @@ describe(`matchHeadings`, () => {
         expect(matchHeadings(headings, `PUBLISH`).map((row) => row.heading.text)).toEqual([`Publishing one`]);
     });
 
-    /* The index a row carries is its place in the DOCUMENT, not in the filtered list — that is what a click
+    /* The index a row carries is its place in the DOCUMENT, not in the filtered list: that is what a click
      * scrolls to, so filtering must not renumber it. */
     it(`carries each survivor's document position, not its place in the results`, () => {
         expect(matchHeadings(headings, `uncovered`)).toEqual([{ heading: headings[2], index: 2 }]);

@@ -36,6 +36,6 @@ if (import.meta.env.DEV) {
     const missing = extensionUiNames.filter((name) => !actual.has(name));
     const unlisted = [...actual].filter((name) => !extensionUiNames.includes(name));
     if (missing.length > 0 || unlisted.length > 0) {
-        console.error(`extension-ui names.mjs drift — missing: [${missing.join(", ")}], unlisted: [${unlisted.join(", ")}]`);
+        console.error(`extension-ui names.mjs drift, missing: [${missing.join(", ")}], unlisted: [${unlisted.join(", ")}]`);
     }
 }

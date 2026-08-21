@@ -82,7 +82,7 @@ export function useBranches(repo: Ref<string>) {
                 await api.sandbox.rpc.git.deleteBranch({ repo: repo.value, name, force });
                 await invalidateRefs();
             },
-            force ? `Could not delete that branch.` : `Branch has unmerged commits — deleting it would lose them.`,
+            force ? `Could not delete that branch.` : `Branch has unmerged commits, deleting it would lose them.`,
         );
 
     return {

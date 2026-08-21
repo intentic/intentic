@@ -6,7 +6,7 @@ import Button from "primevue/button";
 import { computed, onMounted, reactive, ref } from "vue";
 import { apiClient } from "../../composables/useApi";
 
-/* OFFERING A PAID SERVICE — the provider's side of open admission, which used to be a Discord conversation
+/* OFFERING A PAID SERVICE: the provider's side of open admission, which used to be a Discord conversation
  * and an operator writing a row by hand.
  *
  * The screen's order is the order of the work: whether this account can list at all, what the rules are, the
@@ -17,7 +17,7 @@ import { apiClient } from "../../composables/useApi";
  * rules-based admission is that a provider can look the thresholds up before they build, and a second copy on
  * a screen is a copy free to drift from the one the algorithm applies.
  *
- * A signing secret appears exactly twice — when it is minted and when it is rotated — because the platform
+ * A signing secret appears exactly twice, when it is minted and when it is rotated, because the platform
  * keeps only an encrypted copy and never answers one back. That is why it gets its own loud box rather than a
  * line in a list: it is the one thing on this page that cannot be recovered by reloading. */
 
@@ -25,7 +25,7 @@ const state = ref<ProviderServicesState | null>(null);
 const loadError = ref<NoticeModel | undefined>(undefined);
 
 // The one secret currently on screen, and which listing it belongs to. Cleared by the provider, never by a
-// reload — a box that vanished on its own would be the worst possible behaviour for an unrecoverable value.
+// reload. A box that vanished on its own would be the worst possible behaviour for an unrecoverable value.
 const shownSecret = ref<{ slug: string; secret: string } | null>(null);
 // The last probe verdict per listing, so a provider fixing an endpoint can see all three checks at once.
 const probes = reactive<Record<string, ServiceProbeResult>>({});
@@ -48,7 +48,7 @@ const load = async (): Promise<void> => {
 
 onMounted(load);
 
-// Only once the wait has earned it — see the payouts card, which reads the other half of the same account.
+// Only once the wait has earned it. See the payouts card, which reads the other half of the same account.
 const outline = useLoadingReveal(
     computed(() => state.value === null && loadError.value === undefined),
     computed(() => `provider-services`),
@@ -59,7 +59,7 @@ const services = computed(() => state.value?.services ?? []);
 const ready = computed(() => state.value?.holdsAnyPublisher === true && state.value.payoutsEnabled);
 
 const STATUS_LABEL: Record<ProviderService[`status`], string> = {
-    draft: `Draft — nobody can see or run this yet`,
+    draft: `Draft. Nobody can see or run this yet`,
     probation: `Live, on probation`,
     listed: `Live`,
     suspended: `Suspended`,
@@ -70,7 +70,7 @@ const nextStep = (service: ProviderService): string => {
     if (service.status === `draft`) {
         return service.probedAt === undefined
             ? `Run the health check, then publish.`
-            : `Health check passed. Publish while it's fresh — it's good for ${rules.value?.probeFreshMinutes ?? 60} minutes.`;
+            : `Health check passed. Publish while it's fresh. It's good for ${rules.value?.probeFreshMinutes ?? 60} minutes.`;
     }
     if (service.status === `probation`) {
         const target = rules.value?.graduationRuns ?? 0;
@@ -79,7 +79,7 @@ const nextStep = (service: ProviderService): string => {
     if (service.status === `suspended`) {
         return service.suspendedFor ?? `Suspended.`;
     }
-    return `Graduated — the full price band is open to this listing.`;
+    return `Graduated. The full price band is open to this listing.`;
 };
 
 const act = async (slug: string, what: () => Promise<unknown>, fallback: string): Promise<void> => {
@@ -146,7 +146,7 @@ const copySecret = async (): Promise<void> => {
             <template v-else-if="outline">
                 <!-- The same wait the payouts card draws, for the same reason: the masthead is instant and the
                      body is a round-trip, so a titled card sits empty until the listings answer. What is outlined
-                     is only what every provider gets — the admission rules, which are rendered from the
+                     is only what every provider gets: the admission rules, which are rendered from the
                      platform's own numbers and are therefore the one block guaranteed to land. Listings and the
                      create form are withheld: most providers have neither, and promising rows that never arrive
                      is worse than promising nothing. -->
@@ -176,7 +176,7 @@ const copySecret = async (): Promise<void> => {
                 <div v-if="shownSecret" class="flex flex-col gap-2 rounded border border-warn/40 bg-warn/5 p-3">
                     <h3 class="text-xs font-semibold">Signing key for {{ shownSecret.slug }}</h3>
                     <p class="text-xs text-muted">
-                        This is the only time it's shown — we keep an encrypted copy and can't read it back. Your endpoint verifies every forwarded
+                        This is the only time it's shown. We keep an encrypted copy and can't read it back. Your endpoint verifies every forwarded
                         call against it.
                     </p>
                     <div class="flex items-center gap-2">
@@ -201,7 +201,7 @@ const copySecret = async (): Promise<void> => {
                 <div class="flex flex-col gap-1.5">
                     <h3 class="text-xs font-semibold">How admission works</h3>
                     <p class="text-xs text-muted">
-                        There's no review queue. You prove a publisher name, connect payouts, and pass a health check — three calls to your endpoint,
+                        There's no review queue. You prove a publisher name, connect payouts, and pass a health check: three calls to your endpoint,
                         one correctly signed that has to answer, and two deliberately bad ones that have to be refused. Passing puts you live
                         immediately, on probation. The check gives your endpoint the same five minutes a paid run gets, so a slow one takes a while to
                         come back.
@@ -209,7 +209,7 @@ const copySecret = async (): Promise<void> => {
                     <p class="text-xs text-muted">
                         Probation caps the price at {{ rules.probationMaxCredits }} credits and badges every listing as new. It lifts after
                         {{ rules.graduationRuns }} served runs. Above {{ Math.round(rules.maxRefundRate * 100) }}% of your last
-                        {{ rules.watchWindowRuns }} runs failing to answer, the listing is suspended automatically — so is one that fails
+                        {{ rules.watchWindowRuns }} runs failing to answer, the listing is suspended automatically, so is one that fails
                         {{ rules.canaryFailures }} health checks in a row. Prices move once every {{ rules.priceChangeHours }} hours, inside
                         {{ rules.minCredits }}–{{ rules.maxCredits }} credits. {{ rules.maxServicesPerOwner }} live listings per account.
                     </p>
@@ -234,7 +234,7 @@ const copySecret = async (): Promise<void> => {
                         <div v-if="probes[service.slug]" class="flex flex-col gap-0.5">
                             <p v-for="check in probes[service.slug]?.checks ?? []" :key="check.name" class="text-2xs text-muted">
                                 <span :class="check.passed ? `text-ok` : `text-danger`">{{ check.passed ? `✓` : `✕` }}</span>
-                                {{ check.name }} — {{ check.detail }}
+                                {{ check.name }}: {{ check.detail }}
                             </p>
                         </div>
 
@@ -281,7 +281,7 @@ const copySecret = async (): Promise<void> => {
                     <input v-model="form.name" placeholder="name members see" :class="ui.input()" />
                     <textarea
                         v-model="form.description"
-                        placeholder="what it does — the only prose a member reads before paying"
+                        placeholder="what it does, the only prose a member reads before paying"
                         rows="2"
                         :class="ui.input()"
                     />

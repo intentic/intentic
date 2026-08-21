@@ -85,7 +85,7 @@ describe(`clicking a file the agent mentioned`, () => {
     });
 });
 
-/* A link written inside an isolated conversation opens that conversation's own copy of the file — the whole
+/* A link written inside an isolated conversation opens that conversation's own copy of the file: the whole
  * point of the scope, and the thing a path alone could never say. */
 describe(`clicking a file an isolated conversation mentioned`, () => {
     const scopedSurface = (markdown: string): HTMLDivElement => {

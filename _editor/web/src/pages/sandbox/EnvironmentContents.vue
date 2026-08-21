@@ -6,13 +6,13 @@ import type { ContentsGroup } from "../../composables/sandbox/useEnvironmentCont
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { environmentVisual } from "./environmentVisual";
 
-/* THE SANDBOX AS CONTENTS rather than as a build recipe — the answer to "what can this thing do?", which is what
+/* THE SANDBOX AS CONTENTS rather than as a build recipe: the answer to "what can this thing do?", which is what
  * people actually open the Environment tab for. The recipe stays one pill away for whoever wants to see exactly
  * what runs.
  *
  * TWO PRESENTATIONS, BECAUSE THE GROUPS ARE ASKED DIFFERENT QUESTIONS. What an agent added and what a capability
- * costs are DECISIONS — few, rationale attached, worth reading, and the reason someone opened this tab. What
- * ships with every sandbox is a LOOKUP: nobody reads "Git — every repo in the workspace is a real git repo",
+ * costs are DECISIONS: few, rationale attached, worth reading, and the reason someone opened this tab. What
+ * ships with every sandbox is a LOOKUP: nobody reads "Git, every repo in the workspace is a real git repo",
  * they only ever ask "is Python in here?". Drawing thirteen lookups in the same reading layout as three
  * decisions is what made this tab two screens long and made the decisions the quietest thing on it. So the
  * staples are a strip of marks you scan or filter, and the rows are kept for the entries that earn them.
@@ -27,7 +27,7 @@ import { environmentVisual } from "./environmentVisual";
  * mark, and the ladder inside <BrandMark> owns what happens when a brand cannot be fetched.
  *
  * ONE FILLED SHAPE IN THE WHOLE VIEW, AND IT MEANS "CLICK ME". This tab drew a version two ways: a filled
- * capsule on the rows, and a bordered capsule in the staples strip painted in the PAGE's background — one
+ * capsule on the rows, and a bordered capsule in the staples strip painted in the PAGE's background: one
  * stepping up off the card, one punching a hole in it, for the same fact. So a version is now plain tabular
  * text wherever it merely annotates a name (a version is a footnote to the thing it versions; a filled badge
  * made it louder than the name itself), and the capsule survives only in the strip, where the capsule IS the
@@ -37,10 +37,10 @@ import { environmentVisual } from "./environmentVisual";
  * and it is the wrong one: it does not exist on a touch screen, it is awkward from the keyboard, and a
  * twenty-line box that vanishes when the pointer crosses a gap is not a place anybody reads. A click opens the
  * paragraph in place. Hover stays what it is good for: text that had to be cut, and the provenance of a version
- * number — a footnote read once, which used to cost three lines at the top of the tab.
+ * number: a footnote read once, which used to cost three lines at the top of the tab.
  *
  * AND NOTHING IS SHOWN TWICE, WHICH TOOK BOTH SIDES. Every long entry here used to open on its own opening
- * sentence twice — once as the row's trimmed line, once as the head of the paragraph below it — because the
+ * sentence twice: once as the row's trimmed line, once as the head of the paragraph below it, because the
  * disclosure was built as "the prose minus the row's line" while the row's line is a SUMMARY of that prose
  * rather than its first instalment. The daemon now sends the paragraph whole (see detailOf) and this view shows
  * one of the two at a time; the same rule is why the row's tooltip is `.overflow` and why the strip's pills open
@@ -76,8 +76,8 @@ const toggleFull = (id: string): void => {
     full.value = flipped(full.value, id);
 };
 
-/* ONE FILTER FOR THE WHOLE TAB, not one per group. "Is X installed?" does not know which group X is in — ffmpeg
- * is a workspace addition here and a staple on the next sandbox — so a filter attached to the long group would
+/* ONE FILTER FOR THE WHOLE TAB, not one per group. "Is X installed?" does not know which group X is in: ffmpeg
+ * is a workspace addition here and a staple on the next sandbox, so a filter attached to the long group would
  * answer the question wrongly rather than not at all. Groups that match nothing drop out entirely: an empty
  * bordered surface under a heading reads as "you have none of these", which would be a lie about a group the
  * query simply missed. */
@@ -97,8 +97,8 @@ const rowGroups = computed(() => shown.value.filter((group) => group.origin !== 
 const staples = computed(() => shown.value.find((group) => group.origin === `base`));
 
 /* The strip opens ONE sentence at a time, where the rows open independently. A pill is 100px wide and its
- * sentence is a paragraph — several open at once would push the strip apart and lose the grid that makes it
- * scannable — so the sentence lands under the whole strip and the next pill replaces it. */
+ * sentence is a paragraph: several open at once would push the strip apart and lose the grid that makes it
+ * scannable, so the sentence lands under the whole strip and the next pill replaces it. */
 const picked = ref<string>();
 const pick = (id: string): void => {
     picked.value = picked.value === id ? undefined : id;
@@ -111,17 +111,17 @@ const SHOWN_TOOLS = 3;
 const shownTools = (item: EnvironmentItem): EnvironmentItem[`tools`] => item.tools.slice(0, SHOWN_TOOLS);
 
 /* A single-tool row is usually NAMED after its tool ("ffmpeg", "bun"), and printing that name twice on one line
- * — once as the title, once beside the version — reads as a rendering bug. So the version stands alone there,
+ * (once as the title, once beside the version) reads as a rendering bug. So the version stands alone there,
  * and keeps its command's name wherever the row installs more than its own namesake. */
 const toolLabel = (item: EnvironmentItem, tool: EnvironmentItem[`tools`][number]): string =>
     item.tools.length === 1 && tool.name.toLowerCase() === item.name.toLowerCase() ? `` : tool.name;
 
 // Where a number came from, on the number itself. This was three lines of preamble above the list, which is a
-// lot of permanent space for a claim each reader checks once — and it was nowhere near the thing it vouches for.
+// lot of permanent space for a claim each reader checks once, and it was nowhere near the thing it vouches for.
 const provenance = (tool: EnvironmentItem[`tools`][number]): string => `Read by running ${tool.name} in this sandbox, just now`;
 
 /* WHAT THE ROW SAYS ABOUT ITS OWN STATE, and only when there is something to say. An `active` item gets no
- * badge at all — the whole list is things the sandbox has, so marking the normal case would put a green tick on
+ * badge at all: the whole list is things the sandbox has, so marking the normal case would put a green tick on
  * every line and leave the two that matter no louder than the rest. */
 const STATES = {
     active: undefined,
@@ -138,13 +138,13 @@ const attribution = (item: EnvironmentItem): string | undefined =>
     item.originLabel?.toLowerCase().startsWith(item.name.toLowerCase()) === false ? item.originLabel : undefined;
 
 /* WHAT AN OPENED ROW SHOWS: the comment the agent wrote, whole, from the top. Not the row's line and then the
- * rest of it — the row's line is a SUMMARY of this paragraph (a trailing parenthetical dropped, an over-long
+ * rest of it: the row's line is a SUMMARY of this paragraph (a trailing parenthetical dropped, an over-long
  * sentence cut back to its claim), so stacking the two printed the opening twice, once cut and once in full,
  * which is what the reader was seeing. */
 const explanation = (item: EnvironmentItem): string => item.detail ?? item.purpose ?? ``;
 
 /* AND IT LEADS WITH THE OPENING PARAGRAPH. A toolchain's rationale runs to bullets, CI history and the reason a
- * package list is copied verbatim — all worth keeping, none of it worth landing at once on somebody who clicked
+ * package list is copied verbatim: all worth keeping, none of it worth landing at once on somebody who clicked
  * a row to find out why Rust is in here. Cut at the paragraph break the agent wrote rather than at a line count,
  * so "there is more" is a fact about the text instead of a guess about the width it renders at. */
 const paragraphs = (item: EnvironmentItem): string[] => explanation(item).split(`\n\n`);
@@ -207,7 +207,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                     />
                 </template>
                 <!-- NAME, VERSIONS AND SENTENCE ON ONE LINE. The versions ride the name because they are what
-                     the name is a version OF, and the sentence takes whatever width is left and truncates —
+                     the name is a version OF, and the sentence takes whatever width is left and truncates:
                      the row had a second line for prose while half its first line sat empty. -->
                 <template #title>
                     <!-- The line's own clip, so nothing runs through the trailing facts on a card sharing its
@@ -222,7 +222,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                              keeps its own tooltip, so provenance still belongs to the number it vouches for.
 
                              AND IT ELLIPSES RATHER THAN CLIPPING, BUT ONLY PAST ITS SHARE OF THE ROW. A number
-                             sliced at the row's edge is not a truncated number — it is a DIFFERENT one, read as
+                             sliced at the row's edge is not a truncated number: it is a DIFFERENT one, read as
                              complete ("node 24.18" for 24.18.0), which is what a card sharing its width with
                              the chat column did to a toolchain's third version. So the cluster keeps its full
                              width up to half the line and truncates visibly past that: a lone `psql 16.4` is
@@ -244,7 +244,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                         </span>
                         <!-- And it steps aside once the row is open: the same sentence is the first line of the
                              disclosure, in full, two lines below. Cut and whole at once reads as a repeat.
-                             `.overflow` for the same reason one level down — a tooltip that quotes a line the
+                             `.overflow` for the same reason one level down: a tooltip that quotes a line the
                              reader can already see whole is the same repeat in a box. -->
                         <span
                             v-if="item.purpose !== undefined && !open.has(item.id)"
@@ -276,7 +276,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                          more" and the code block's copy button must not travel up to it and collapse the thing
                          the reader just asked to see. -->
                     <div class="flex flex-col gap-3" @click.stop>
-                        <!-- What the agent wrote, as prose. Its own paragraphs, its own bullet lists — it was
+                        <!-- What the agent wrote, as prose. Its own paragraphs, its own bullet lists: it was
                              written to be read, and rendering it as code would undo that. -->
                         <p class="whitespace-pre-line text-xs leading-relaxed text-muted">
                             {{ full.has(item.id) ? explanation(item) : opening(item) }}
@@ -291,7 +291,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                             <Icon :name="full.has(item.id) ? `chevron-up` : `chevron-down`" />
                         </button>
                         <!-- The plumbing count belongs here rather than on the row. It is the least useful fact
-                             on a line that has to fit a name, its versions and a sentence — nobody runs these —
+                             on a line that has to fit a name, its versions and a sentence: nobody runs these:
                              and it was the fact pushing the sentence off a card that shares its width. -->
                         <p v-if="item.extras !== undefined" class="text-2xs text-subtle">
                             Plus {{ item.extras }} libraries and headers these commands need, which nobody runs directly.
@@ -313,7 +313,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                  `px-4`), so all three sections start at one left edge. -->
             <div class="flex flex-col gap-2 px-4">
                 <div class="flex flex-wrap gap-1.5">
-                    <!-- THE ONE CAPSULE ON THE TAB. Tinted rather than outlined — an outline inside a card is a
+                    <!-- THE ONE CAPSULE ON THE TAB. Tinted rather than outlined: an outline inside a card is a
                          fourth stroke, where a tint of the text colour steps off the surface in both schemes (the
                          old `bg-canvas` fill was the PAGE behind the card, so a pill read as a hole in it). It
                          carries the app's own selected tint when open, the same one every picked row uses. -->
@@ -343,7 +343,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                 </div>
                 <!-- Under the strip rather than beside the pill, so opening one never reflows the grid above it. -->
                 <p v-if="pickedItem !== undefined" class="text-2xs text-muted">
-                    <span class="font-medium text-content">{{ pickedItem.name }}</span> — {{ pickedItem.purpose }}
+                    <span class="font-medium text-content">{{ pickedItem.name }}</span>: {{ pickedItem.purpose }}
                 </p>
             </div>
         </RowGroup>
@@ -354,13 +354,13 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
              THE FIRST OF THE FOUR IS DRAWN, NOT SAID, and this is the longest wait in the hub to draw: the read
              behind it asks every tool on the overlay for its version, one process spawn each, so it is measured
              in seconds rather than in the round-trip the other tabs pay. A spinner over an empty card for that
-             long is the view at its least informative exactly when it is on screen the longest — and what is
+             long is the view at its least informative exactly when it is on screen the longest, and what is
              coming is highly regular (labelled sections of name-and-version rows, then the staples strip), so
              the shape is worth far more here than the sentence was. -->
         <div v-if="loading && outline" class="flex flex-col gap-5" role="status" aria-busy="true">
             <span class="sr-only">Checking installed versions…</span>
             <!-- Two sections rather than the three that can appear: the outline promises the shape, and a
-                 sandbox with nothing added on top has only the base group — over-promising sections is how a
+                 sandbox with nothing added on top has only the base group: over-promising sections is how a
                  placeholder ends up taller than the answer. -->
             <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat>
                 <template #label><span class="skeleton block h-2.5" :class="index === 0 ? `w-44` : `w-36`" aria-hidden="true" /></template>
@@ -385,8 +385,8 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
         <template v-else-if="loading" />
         <Notice v-else-if="error !== undefined" :of="{ tone: `warning`, title: `Could not read what the sandbox has installed.`, detail: error }" />
         <div v-else-if="groups.length === 0" :class="ui.emptyState(`py-8`)">
-            Nothing added on top of the stock image yet — and nothing in it answered, which usually means the sandbox is still starting.
+            Nothing added on top of the stock image yet, and nothing in it answered, which usually means the sandbox is still starting.
         </div>
-        <div v-else-if="shown.length === 0" :class="ui.emptyState(`py-8`)">Nothing here matches “{{ query.trim() }}”.</div>
+        <div v-else-if="shown.length === 0" :class="ui.emptyState(`py-8`)">Nothing here matches "{{ query.trim() }}".</div>
     </div>
 </template>

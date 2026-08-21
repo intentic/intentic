@@ -1,7 +1,7 @@
 <!-- Choosing a run's SCOPE, which is the only decision a generation run really needs from the user.
 
      The default is deliberately not "everything". A package is one isolated agent, so documenting a 50-package
-     monorepo is fifty sessions and real money — and after the first run, the packages worth revisiting are the ones
+     monorepo is fifty sessions and real money, and after the first run, the packages worth revisiting are the ones
      that changed. So the presets are "what has no document" and "what the tool says is stale", with everything as
      an explicit choice rather than the path of least resistance. -->
 <script setup lang="ts">
@@ -13,7 +13,7 @@ import type { DocIndex } from "./docModel.js";
 const { packages, index, label } = defineProps<{
     // Every package the facts tool found in this repo, in path order.
     packages: readonly string[];
-    // The generated index, when the repo has one — the source of "undocumented" and "stale".
+    // The generated index, when the repo has one: the source of "undocumented" and "stale".
     index: DocIndex | undefined;
     label: string;
 }>();
@@ -57,7 +57,7 @@ const start = (): void => {
     <Modal v-model:open="open" size="md" :header="`Generate documentation for ${label}`">
         <div class="flex flex-col gap-4">
             <p class="text-xs text-muted">
-                One agent writes the repository's map first — the components, the vocabulary, the reading order. The packages you pick below are then
+                One agent writes the repository's map first: the components, the vocabulary, the reading order. The packages you pick below are then
                 documented in parallel, one agent each, and land as a draft you review before anything is committed.
             </p>
 

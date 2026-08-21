@@ -72,14 +72,14 @@ describe(`storiesOf`, () => {
         expect(storiesOf(`app`, noise).map((story) => story.slug)).toEqual([`keep`]);
     });
 
-    it(`keeps same-named stories in different groups apart — one run directory each, no silent overwrite`, () => {
+    it(`keeps same-named stories in different groups apart: one run directory each, no silent overwrite`, () => {
         const collide = [file(`app/docs/user-stories/auth/overview.md`), file(`app/docs/user-stories/billing/overview.md`)];
         expect(storiesOf(`app`, collide).map((story) => story.slug)).toEqual([`overview`, `overview-2`]);
     });
 });
 
 /* The cross-repo half of the same guard. storiesOf only ever sees one repo, so two repos that both ship
- * `checkout.md` derive the same conversation id and the same run directory — two agents overwriting each other's
+ * `checkout.md` derive the same conversation id and the same run directory: two agents overwriting each other's
  * report, which is precisely what the within-repo renumbering above exists to prevent. */
 describe(`uniqueOf`, () => {
     const story = (repo: string, slug: string): Story => ({ repo, path: `${repo}/docs/user-stories/${slug}.md`, slug, title: slug, group: `` });
@@ -120,7 +120,7 @@ describe(`criteriaOf`, () => {
         expect(criteriaOf(`## ACCEPTANCE CRITERIA\n- One`)).toEqual([`One`]);
     });
 
-    it.each([undefined, ``, `# Sign in\n\nJust prose.`])(`yields none for %p — a story without the section is still a story`, (content) => {
+    it.each([undefined, ``, `# Sign in\n\nJust prose.`])(`yields none for %p: a story without the section is still a story`, (content) => {
         expect(criteriaOf(content)).toEqual([]);
     });
 });
@@ -135,7 +135,7 @@ describe(`narrativeOf`, () => {
     });
 });
 
-/* The editor's output has to be a story the parsers read back identically — a story written here and a story
+/* The editor's output has to be a story the parsers read back identically: a story written here and a story
  * hand-written in an editor are the same artifact, or the format has forked. */
 describe(`storyMarkdown`, () => {
     const written = storyMarkdown({
@@ -165,8 +165,8 @@ describe(`storyPath`, () => {
     });
 });
 
-/* One repository can serve several applications — a monorepo's marketing site and its web app are two dev
- * servers on two ports — and the group is the only thing in a stories tree that already says which is which. */
+/* One repository can serve several applications: a monorepo's marketing site and its web app are two dev
+ * servers on two ports, and the group is the only thing in a stories tree that already says which is which. */
 describe(`targetKeyOf`, () => {
     it(`aims a grouped story at its own address`, () => {
         expect(targetKeyOf({ repo: `intentic`, group: `01-arrive` })).toBe(`intentic/01-arrive`);

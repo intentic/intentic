@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveBridgeCall } from "./directoryUiVerbs";
 
-// The bridge's allowlist IS the security boundary — these lock it down: only known verbs resolve, ids are
+// The bridge's allowlist IS the security boundary, these lock it down: only known verbs resolve, ids are
 // encoded into paths (no traversal/injection), and missing ids fail loudly instead of hitting a malformed route.
 describe(`resolveBridgeCall`, () => {
     it(`rejects any verb not on the allowlist`, () => {

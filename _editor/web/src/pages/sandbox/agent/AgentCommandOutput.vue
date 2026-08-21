@@ -72,7 +72,7 @@ const toggleCleaner = (id: string, on: boolean): void => {
 // Holdout control: a percentage [0,100] of commands whose output bypasses cleaning, stored as a fraction [0,1].
 const holdoutPercent = computed<number>(() => asPercent(settings.value?.outputHoldout));
 
-/* What each mechanism has been worth, all-time — the readout that belongs NEXT TO ITS SWITCH. Unwindowed on
+/* What each mechanism has been worth, all-time: the readout that belongs NEXT TO ITS SWITCH. Unwindowed on
  * purpose: this page is where a switch is flipped, not where a period is compared, and the Usage tab's Savings
  * section owns the windowed chart. */
 const savedTokens = computed(() => savedByCleaner(savings.value?.input));
@@ -84,7 +84,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
         <Row
             icon="bolt"
             title="Clean command output"
-            description="Trim noisy shell output before it reaches the assistant — fewer tokens, same signal (errors always kept)."
+            description="Trim noisy shell output before it reaches the assistant: fewer tokens, same signal (errors always kept)."
         >
             <template #control>
                 <ToggleSwitch
@@ -93,7 +93,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                     @update:model-value="(value: boolean) => patch({ outputCleaners: value ? `` : `off` })"
                 />
             </template>
-            <!-- Per-cleaner switches (the spec, as a checklist) — only meaningful while cleaning is on. -->
+            <!-- Per-cleaner switches (the spec, as a checklist): only meaningful while cleaning is on. -->
             <template v-if="settings !== undefined && cleaningOn" #below>
                 <div class="flex flex-col gap-2">
                     <div class="flex items-baseline justify-between gap-2">
@@ -120,7 +120,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                         </label>
                     </div>
 
-                    <!-- Holdout: measurement control — a % of commands left raw so the savings report has a real
+                    <!-- Holdout: measurement control, a % of commands left raw so the savings report has a real
                          cleaned-vs-raw baseline instead of an estimate. -->
                     <label class="mt-1 flex items-center justify-between gap-3 border-t border-line pt-3">
                         <span class="flex min-w-0 flex-col">
@@ -143,8 +143,8 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
             </template>
         </Row>
 
-        <!-- Realized savings. The hero is one number; everything that qualifies it — freshness, what it is a
-             share of — sits under it rather than trailing it as a run-on, because those are the facts that tell
+        <!-- Realized savings. The hero is one number; everything that qualifies it: freshness, what it is a
+             share of: sits under it rather than trailing it as a run-on, because those are the facts that tell
              a live figure from a frozen one, and this card once sat on a ledger nothing was writing any more.
              The breakdown BY mechanism lives on the Usage tab, where a window exists to compare it over. -->
         <Row icon="wave-pulse" title="Output savings">
@@ -164,11 +164,11 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                 <!-- Absence used to be the empty state: the row simply wasn't rendered, so a page of switches
                      promising savings showed nothing at all about them. -->
                 <span v-else class="text-muted">
-                    Nothing measured yet — the ledger fills as the agent runs shell commands, one row per command.
+                    Nothing measured yet: the ledger fills as the agent runs shell commands, one row per command.
                 </span>
             </template>
             <!-- WHERE THE NEXT CLEANER WOULD PAY. Grouped by command and ranked by total, so the list answers
-                 "what is worth a handler" rather than "which single run was biggest" — and the count is shown
+                 "what is worth a handler" rather than "which single run was biggest", and the count is shown
                  because a command that costs this much across twenty runs is the one to write for. -->
             <template v-if="savings !== undefined && savings.input.gaps.length > 0" #below>
                 <div class="flex flex-col gap-1">

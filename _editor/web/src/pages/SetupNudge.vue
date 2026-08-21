@@ -9,19 +9,19 @@
      uses and for the same reason: it appeared at the very bottom of a long card, several screenfuls under the
      command it was correcting, which is the one place a correction cannot do its job.
 
-     `variant` is decided by the page, because the page holds the state that decides it — what kind of handoff
+     `variant` is decided by the page, because the page holds the state that decides it: what kind of handoff
      was made, and on what device. Everything here is prose about one of those states. -->
 <script setup lang="ts">
 import { CopyButton, Notice } from "@intentic/ui";
 
 /* The reader this is addressed to:
- *   `cloud`    — a machine was created and hasn't claimed; the provider's console holds the boot log
- *   `emailed`  — a phone that mailed itself the link and hasn't opened it on the other computer
- *   `terminal` — the command is on screen and was, apparently, never pasted anywhere
- *   `phone`    — a phone with the command still folded away, which has not been told anything wrong yet
- *   `install`  — a browser offered the desktop app, which hasn't been installed and opened yet
- *   `app`      — the desktop app was handed the setup and its own window has the log
- *   `button`   — in the app, with nothing pressed yet */
+ *   `cloud`   : a machine was created and hasn't claimed; the provider's console holds the boot log
+ *   `emailed` : a phone that mailed itself the link and hasn't opened it on the other computer
+ *   `terminal`: the command is on screen and was, apparently, never pasted anywhere
+ *   `phone`   : a phone with the command still folded away, which has not been told anything wrong yet
+ *   `install` : a browser offered the desktop app, which hasn't been installed and opened yet
+ *   `app`     : the desktop app was handed the setup and its own window has the log
+ *   `button`  : in the app, with nothing pressed yet */
 const {
     variant,
     cloudName = ``,
@@ -37,7 +37,7 @@ const {
     // answered back instead. Only the `terminal` reader has a terminal to be told about.
     stalled?: boolean;
     command?: string;
-    // Copying again IS the way out for the reader who has the command — and is no kind of help to the one
+    // Copying again IS the way out for the reader who has the command, and is no kind of help to the one
     // whose clipboard was never the blocked step.
     copyable?: boolean;
 }>();
@@ -70,13 +70,13 @@ const emit = defineEmits<{ copied: [] }>();
                 <span class="font-medium">Still nothing.</span> Check the Intentic window. It shows what the setup is doing, and any error it hit.
             </span>
             <span v-else class="min-w-0">
-                <span class="font-medium">Still nothing.</span> Nothing starts until you press “Set it up now” above.
+                <span class="font-medium">Still nothing.</span> Nothing starts until you press "Set it up now" above.
             </span>
             </p>
             <p v-if="stalled && variant === `terminal`" class="opacity-90">
                 Already ran it? Check that terminal: an error there stops the sandbox before it can report in. Safe to run again.
             </p>
-            <!-- `cta`, because here copying again IS the way out — the quiet chip that suits a copy-beside-content
+            <!-- `cta`, because here copying again IS the way out: the quiet chip that suits a copy-beside-content
                  read as the dimmest thing in the loudest box on the card. `self-start`, or the column flex stretches
                  it edge to edge. -->
             <CopyButton v-if="copyable" class="self-start" :text="command" label="Copy again" :cta="true" @copied="emit(`copied`)" />

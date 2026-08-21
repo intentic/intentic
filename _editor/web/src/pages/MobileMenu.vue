@@ -20,12 +20,12 @@ import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
 import { environment } from "../environments/environment";
 import AccountCredits from "../shell/AccountCredits.vue";
 
-/* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page —
+/* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page:
  * sandbox switching, the live presence roster, the area list (rail tiles), and the account actions. State
  * comes from the same singletons the desktop chrome reads; only the presentation is form-factor-specific. */
 
 interface AreaRow {
-    // The contributing extension's id — what railBands groups by, so this page's sections and the desktop rail's
+    // The contributing extension's id: what railBands groups by, so this page's sections and the desktop rail's
     // hairline-separated runs are the same partition of the same list.
     readonly id: string;
     readonly to: string;
@@ -57,8 +57,8 @@ const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability
 const { user, signOut } = useAuth();
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
-/* What the sandbox needs from its owner. The desktop splits this across two surfaces — a badge on the rail's
- * collapsed chip, the sentences in the popover it opens — and the phone splits it the same way: the Menu TAB
+/* What the sandbox needs from its owner. The desktop splits this across two surfaces: a badge on the rail's
+ * collapsed chip, the sentences in the popover it opens, and the phone splits it the same way: the Menu TAB
  * carries the badge, and this page, which is what the tab opens, carries the rows. So the Sandbox row below
  * takes no badge of its own: on desktop the chip and its popover are never on screen together, here they
  * would be, and a chip restating the section right above it is the badge saying nothing twice.
@@ -73,7 +73,7 @@ onMounted(() => {
     }
 });
 
-/* The rail's extension tiles, same detection AND same bands as ShellDesktop — Workspace/Drafts/Chat live on the
+/* The rail's extension tiles, same detection AND same bands as ShellDesktop: Workspace/Drafts/Chat live on the
  * tab bar, so the menu lists only the remaining areas. The desktop rail separates its bands with a hairline
  * because 44px leaves no room for a word; this page has the width, so it spells the band names out. Same
  * partition either way, which is the point of railBands living in the registry. */
@@ -85,9 +85,9 @@ const areaBands = computed(() =>
         (area) => area.id,
     ),
 );
-// The box rather than the work — the same things the desktop rail keeps below its last divider, next to the
+// The box rather than the work: the same things the desktop rail keeps below its last divider, next to the
 // terminal and the "+". Not banded: none of them is an area a rail tile ever stood for. The terminal row is
-// the ship tier's, like the desktop rail's tile — a PTY is the whole sandbox, and the daemon refuses the
+// the ship tier's, like the desktop rail's tile: a PTY is the whole sandbox, and the daemon refuses the
 // socket below maintainer anyway.
 const { canShip } = useRole();
 const sandboxRows = computed<readonly AreaRow[]>(() => [
@@ -98,12 +98,12 @@ const sandboxRows = computed<readonly AreaRow[]>(() => [
 ]);
 
 // Two lists, for the desktop switcher's reasons (roster.ts): a sandbox that has never checked in cannot be
-// switched to, so it is not offered beside the ones that can — tapping it here used to strand the reader on a
+// switched to, so it is not offered beside the ones that can: tapping it here used to strand the reader on a
 // connecting gate with no way back but the menu they had just left.
 const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
-// Both of these are places, so both are links — the same rule the desktop switcher's rows follow. Switching
+// Both of these are places, so both are links: the same rule the desktop switcher's rows follow. Switching
 // sandboxes is not (it re-points this window at another daemon), so those rows stay buttons.
 const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } });
 
@@ -135,7 +135,7 @@ const logout = async (): Promise<void> => {
             </RouterLink>
         </section>
 
-        <!-- What is simply true of the box — same rows, quieter ink, and a heading that asks for nothing. None of
+        <!-- What is simply true of the box: same rows, quieter ink, and a heading that asks for nothing. None of
              these put the badge on the tab that opened this page, so none of them may read as the reason it is
              there. -->
         <section v-if="sandboxNotes.length > 0" class="flex flex-col gap-1">
@@ -208,7 +208,7 @@ const logout = async (): Promise<void> => {
             </template>
         </section>
 
-        <!-- The other members connected right now — same roster the desktop rail stacks. -->
+        <!-- The other members connected right now: same roster the desktop rail stacks. -->
         <section v-if="presenceOthers.length > 0" class="flex flex-col gap-2">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Here now</h2>
             <div class="flex flex-col gap-1">
@@ -228,12 +228,12 @@ const logout = async (): Promise<void> => {
             </div>
         </section>
 
-        <!-- The areas the desktop rail links to (minus the ones on the tab bar), in the rail's own bands — the
+        <!-- The areas the desktop rail links to (minus the ones on the tab bar), in the rail's own bands: the
              headings the 44px column can only imply with a hairline. -->
         <!-- A BADGE'S SENTENCE IS A SECOND LINE, NEVER A PILL BESIDE THE NAME. A tooltip is a sentence
-             ("api agent/soft-deletes is failing — 1 run in a row"), and rendered as a `shrink-0` chip it was
-             the only thing in the row that could not yield: the name — the one word saying where the row goes
-             — collapsed to nothing, and the chip still ran 130px past the edge of the screen. So the name
+             ("api agent/soft-deletes is failing: 1 run in a row"), and rendered as a `shrink-0` chip it was
+             the only thing in the row that could not yield: the name, the one word saying where the row goes
+            : collapsed to nothing, and the chip still ran 130px past the edge of the screen. So the name
              keeps the first line to itself and the sentence sits under it, which is the shape the "Needs you"
              section above already uses. The PILL survives for a bare count, which is what a pill is for. -->
         <section v-for="band in areaBands" :key="band.group.id" class="flex flex-col gap-1">

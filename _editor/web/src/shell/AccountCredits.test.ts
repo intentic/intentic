@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 //
 // THE ROW THAT ANSWERS "WHERE ARE MY CREDITS". What matters about it is not its markup but WHICH SENTENCE it
-// prints in each state — an untouched allowance, a spent one, and the two cases where it must not appear at all
-// — because each of those is a decision about what the reader is told, and each was got wrong by the surface
+// prints in each state: an untouched allowance, a spent one, and the two cases where it must not appear at all
+//, because each of those is a decision about what the reader is told, and each was got wrong by the surface
 // this replaces (which said nothing anywhere). Mounted with plain Vue, as ReviewStat.test does.
 import type { MembershipState } from "@intentic-app/api-contract";
 import { describe, expect, it, vi } from "vitest";
 import { createApp, h, type VNode } from "vue";
 
 // The @intentic/ui barrel reaches a component that tracks media queries at import time, and jsdom has no
-// matchMedia — vitest.setup.ts stands one up for the package, before any of this loads.
+// matchMedia: vitest.setup.ts stands one up for the package, before any of this loads.
 
 // Hoisted so the mock factory below never reads it in its temporal dead zone (see vitest.config.ts).
 const shared = vi.hoisted(() => ({ current: undefined as MembershipState | undefined }));
@@ -54,7 +54,7 @@ const render = (state: MembershipState | undefined): HTMLElement => {
     const host = document.createElement(`div`);
     document.body.append(host);
     const app = createApp({ render: () => h(AccountCredits) });
-    // Both are global in the real app. The glyph is stubbed away — nothing here asserts on it — and RouterLink
+    // Both are global in the real app. The glyph is stubbed away: nothing here asserts on it, and RouterLink
     // becomes a plain anchor so the row's destination stays assertable.
     app.component(`Icon`, { render: () => null });
     app.component(`RouterLink`, {

@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 //
 // THE CLAIM THIS GROUP RESTS ON: a row offers only what its origin can honour. Every control is drawn from what
-// the daemon said about that row — never from a rule restated in the component — because a switch that appeared to
+// the daemon said about that row: never from a rule restated in the component, because a switch that appeared to
 // work and was undone by the next reconcile is worse than no switch, and a delete that silently came back is worse
 // still. So what is under test is the mapping from six origins to the controls each one gets.
 //
 // The second claim is completeness: this list exists to answer "what is my agent carrying", which is only worth
-// asking if the answer includes the things nobody remembers adding — a plugin's skills, a connection's cheatsheet,
+// asking if the answer includes the things nobody remembers adding: a plugin's skills, a connection's cheatsheet,
 // a file the agent wrote itself, and a built-in that is currently switched OFF.
 //
 // The third is that reading one is the ROW'S OWN CLICK. It used to be a hamburger, a two-item menu, and a text
@@ -26,7 +26,7 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env).
 
 // A row's mark is fetched from an icon CDN (<BrandMark>), which a test has no business reaching. Answered as a
-// miss, which is the same path an offline sandbox takes — the glyph tier underneath.
+// miss, which is the same path an offline sandbox takes: the glyph tier underneath.
 vi.stubGlobal(`fetch`, () => Promise.resolve({ ok: false, text: () => Promise.resolve(``) }));
 
 const skills = ref<SkillSummary[]>([]);
@@ -78,8 +78,8 @@ const mount = (): HTMLElement => {
     document.body.append(host);
     app = createApp({ render: () => h(AgentSkills) });
     // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin
-    // (the rules group's convention). PrimeVue goes on bare — its inputs read the injected config while
-    // rendering — without the theme the app dresses it in, which this test has no opinion about.
+    // (the rules group's convention). PrimeVue goes on bare: its inputs read the injected config while
+    // rendering: without the theme the app dresses it in, which this test has no opinion about.
     app.use(PrimeVue);
     app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
     app.directive(`tooltip`, {});
@@ -120,7 +120,7 @@ const type = async (field: HTMLInputElement, value: string): Promise<void> => {
     field.dispatchEvent(new Event(`input`));
     await nextTick();
 };
-// The row's own header button — the one gesture that opens a skill.
+// The row's own header button: the one gesture that opens a skill.
 const rows = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll(`button[aria-expanded]`)] as HTMLElement[];
 const button = (host: HTMLElement, label: string): HTMLElement | undefined =>
     [...host.querySelectorAll(`button`)].find((element) => element.textContent?.trim() === label);
@@ -134,7 +134,7 @@ test(`the switch appears only on rows the daemon said are switchable, and writes
     skills.value = [
         skill({ id: `notes`, name: `notes` }),
         skill({ id: `lsp`, name: `lsp`, origin: `builtin`, editable: false, removable: false }),
-        // Everything below is on because something else is on — a switch here could not honour a click.
+        // Everything below is on because something else is on: a switch here could not honour a click.
         skill({ id: `plugin:pack:review`, name: `review`, origin: `plugin`, owner: `pack`, switchable: false, editable: false, removable: false }),
         skill({ id: `github`, name: `github`, origin: `capability`, owner: `github`, switchable: false, editable: false, removable: false }),
     ];
@@ -148,14 +148,14 @@ test(`the switch appears only on rows the daemon said are switchable, and writes
 });
 
 /* A BUILT-IN THAT IS OFF IS THE ONE ROW HERE THAT IS NOT LOADED, and it has to be drawn anyway: hiding it is
- * exactly what once made `lsp` undiscoverable — never declined, just never learned about. */
+ * exactly what once made `lsp` undiscoverable: never declined, just never learned about. */
 test(`a switched-off skill still gets a row, drained and switchable`, () => {
     skills.value = [skill({ id: `lsp`, name: `lsp`, origin: `builtin`, enabled: false, editable: false, removable: false })];
     const host = mount();
 
     expect(host.textContent).toContain(`lsp`);
     expect(switches(host)).toHaveLength(1);
-    // <BrandMark idle> — the mark goes grey, which says the same thing to someone who cannot see the colour.
+    // <BrandMark idle>: the mark goes grey, which says the same thing to someone who cannot see the colour.
     expect(host.querySelector(`.grayscale`)).not.toBeNull();
 });
 
@@ -163,7 +163,7 @@ test(`a switched-off skill still gets a row, drained and switchable`, () => {
  * to go and look at, and a bare "Plugin" does not.
  *
  * It is also ALL a row says about provenance. Each origin used to carry a sentence here as well ("Remove the plugin
- * to drop it."), which read as the same line four times down one group and pushed most rows onto two lines — so
+ * to drop it."), which read as the same line four times down one group and pushed most rows onto two lines, so
  * what a kind lets you do moved into the group's (i), where it is read once. */
 test(`each row names where it came from, with its owner when it has one`, () => {
     skills.value = [
@@ -189,7 +189,7 @@ test(`an empty list invites the first skill rather than reading as a failure`, (
     expect(host.textContent).toContain(`Write a skill`);
 });
 
-/* ONE CLICK OPENS IT, THE SAME CLICK CLOSES IT, and there is no menu in between. The row is the control — which
+/* ONE CLICK OPENS IT, THE SAME CLICK CLOSES IT, and there is no menu in between. The row is the control, which
  * also means the reader's own skill lands straight in the editor, since for them reading and editing are one
  * errand. */
 test(`a row opens itself and closes itself, with nothing to discover first`, async () => {
@@ -210,7 +210,7 @@ test(`a row opens itself and closes itself, with nothing to discover first`, asy
     expect(host.querySelector(`[aria-label="What this skill should do"]`)).toBeNull();
 });
 
-/* SOMEBODY ELSE'S SKILL IS A DOCUMENT, not a grey monospace block — a skill is markdown, and rendering it as
+/* SOMEBODY ELSE'S SKILL IS A DOCUMENT, not a grey monospace block: a skill is markdown, and rendering it as
  * source said the opposite of what it is. The file itself stays one pill away. */
 test(`a skill the owner can't edit opens as its own prose, with the raw file one pill away`, async () => {
     skills.value = [skill({ id: `scratch`, name: `scratch`, origin: `dropped`, switchable: false, editable: false })];
@@ -223,7 +223,7 @@ test(`a skill the owner can't edit opens as its own prose, with the raw file one
 });
 
 /* THE LIST IS AS LONG AS THE CONNECTION LIST, AND THAT IS WHAT THE FOLD IS FOR. Forty-one rows of which twelve
- * could be tuned meant the act this group exists for — read down it, switch off what you don't recognise —
+ * could be tuned meant the act this group exists for: read down it, switch off what you don't recognise:
  * happened inside a haystack, and the three groups under this one were off the bottom of the page. So what came
  * with something else collapses behind a line that counts it. */
 test(`what came with something else folds away once it would bury what can be tuned`, () => {
@@ -238,14 +238,14 @@ test(`what came with something else folds away once it would bury what can be tu
     expect(switches(host)).toHaveLength(1);
 });
 
-// Few enough to read is few enough to leave alone — a fold over three rows is a click that buys nothing.
+// Few enough to read is few enough to leave alone: a fold over three rows is a click that buys nothing.
 test(`a short list is left open`, () => {
     skills.value = [skill({ id: `notes`, name: `notes` }), ...fromConnections(3)];
     expect(fold(mount())?.open).toBe(true);
 });
 
-/* COMPLETENESS IS STILL THE PROMISE. A folded row is one click from being read, and — since its whole reason for
- * being listed is that nobody remembers adding it — it has to be findable by what it came WITH, not just by a
+/* COMPLETENESS IS STILL THE PROMISE. A folded row is one click from being read, and, since its whole reason for
+ * being listed is that nobody remembers adding it: it has to be findable by what it came WITH, not just by a
  * name the reader has never heard. */
 test(`the filter reaches inside the fold, by name and by origin`, async () => {
     skills.value = [skill({ id: `notes`, name: `notes` }), ...fromConnections(20)];
@@ -294,8 +294,8 @@ test(`delete waits for a second press, under the fold`, async () => {
 
 /* THE ROW THAT OPENS INTO THE FORM IS THE ONE MOST LIKELY TO NEED THIS, and it was the one row that never offered
  * it: a skill the reader wrote themselves opens straight into the editor, and the delete used to live inside the
- * branch that renders somebody ELSE's skill. So the only skills a person is allowed to delete — their own, and
- * every skill on a persona's card, which is this row too — had no way to be deleted from the app at all. */
+ * branch that renders somebody ELSE's skill. So the only skills a person is allowed to delete: their own, and
+ * every skill on a persona's card, which is this row too: had no way to be deleted from the app at all. */
 test(`a skill the reader owns offers delete under its editor`, async () => {
     skills.value = [skill({ id: `notes`, name: `notes` })];
     const host = mount();
@@ -303,7 +303,7 @@ test(`a skill the reader owns offers delete under its editor`, async () => {
     rows(host)[0]?.click();
     await settle();
 
-    // The editor is what opened — and the delete sits below it rather than instead of it.
+    // The editor is what opened, and the delete sits below it rather than instead of it.
     expect(button(host, `Save changes`)).toBeDefined();
     button(host, `Delete this skill`)?.click();
     await nextTick();

@@ -31,7 +31,7 @@
                     "logo": "obsidian",
                     "description": "Your own Obsidian vault, live from the app.",
                     "category": "business",
-                    "hint": "Reaches the vault open in Obsidian on your machine through its Local REST API plugin — the agent can read, search and open your notes there, and carry notes between that vault and this sandbox's Knowledge folder in both directions (`obsidian pull` / `obsidian push`). It is a copy each way, not a sync: nothing watches and nothing merges. Obsidian has to be running for any of it to work, which is why the workspace Knowledge folder stays the knowledge base the agent can always reach. Writing to your vault is off until you turn it on below.",
+                    "hint": "Reaches the vault open in Obsidian on your machine through its Local REST API plugin, the agent can read, search and open your notes there, and carry notes between that vault and this sandbox's Knowledge folder in both directions (`obsidian pull` / `obsidian push`). It is a copy each way, not a sync: nothing watches and nothing merges. Obsidian has to be running for any of it to work, which is why the workspace Knowledge folder stays the knowledge base the agent can always reach. Writing to your vault is off until you turn it on below.",
                     "guide": {
                         "url": "https://github.com/coddingtonbear/obsidian-local-rest-api",
                         "linkLabel": "Open the Local REST API plugin",
@@ -39,7 +39,7 @@
                             "In Obsidian: `Settings` → `Community plugins` → `Browse`, install `Local REST API` and enable it.",
                             "Open its settings and copy the `API Key` it shows.",
                             "Leave its default encrypted (HTTPS) server on `27124`. Its certificate is self-signed, which this connection expects.",
-                            "The URL above is already right for a sandbox: `host.docker.internal` is this machine seen from the container — `localhost` would be the container itself.",
+                            "The URL above is already right for a sandbox: `host.docker.internal` is this machine seen from the container, `localhost` would be the container itself.",
                             "Obsidian must be OPEN for the vault to answer. Nothing here reaches it when the app is closed."
                         ]
                     }
@@ -61,7 +61,7 @@
                         "label": "Let the agent write notes",
                         "boolean": true,
                         "default": "off",
-                        "hint": "Off means read and search only. On lets the agent add, edit and delete notes in your vault — these are notes you keep yourself, so it stays your call."
+                        "hint": "Off means read and search only. On lets the agent add, edit and delete notes in your vault, these are notes you keep yourself, so it stays your call."
                     },
                     {
                         "key": "folder",

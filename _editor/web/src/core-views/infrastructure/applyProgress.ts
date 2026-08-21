@@ -141,7 +141,7 @@ export const reduceApplyLine = (state: ApplyProgressState, line: Record<string, 
             // applyRunLive use the same convention (isTerminalExit).
             applyPhaseDone: state.applyPhaseDone || command !== `resolve` || failed,
             jobDone: state.jobDone || command === `adopt` || command === undefined || failed,
-            error: state.error ?? (failed ? `${label} failed — open the logs below for details.` : undefined),
+            error: state.error ?? (failed ? `${label} failed, open the logs below for details.` : undefined),
         };
     }
     return state;

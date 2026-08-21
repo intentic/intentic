@@ -118,7 +118,7 @@ export const composeFile = (args: ComposeArgs): string => {
         // tunnel. A build whose env.js substitution didn't land would emit a bare `GOOGLE_CLIENT_ID:` and start
         // exactly that daemon, so an empty value becomes a compose var that refuses to start instead. (The daemon
         // refuses too, see requireAuthWhenReachable, this just fails one layer earlier, with the fix named.)
-        `            GOOGLE_CLIENT_ID: ${args.googleClientId === `` ? `\${GOOGLE_CLIENT_ID:?the web app did not supply a Google client id — reload the setup page}` : args.googleClientId}`,
+        `            GOOGLE_CLIENT_ID: ${args.googleClientId === `` ? `\${GOOGLE_CLIENT_ID:?the web app did not supply a Google client id, reload the setup page}` : args.googleClientId}`,
         // The SPA origin the daemon emits CORS for. Omitted when it is the hosted app, which env.config already
         // defaults to, but a self-hosted or localhost-dev SPA is a browser the daemon has never heard of, and
         // without this line every call it makes is blocked before the bearer is ever looked at.

@@ -3,12 +3,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { nextTick, ref } from "vue";
 import { type RailSeat, useRailMemory } from "./railMemory";
 
-// The environment read this module's import chain reaches (via useSandbox) at module eval — the same edge
+// The environment read this module's import chain reaches (via useSandbox) at module eval: the same edge
 // daemonRestart.test.ts cuts, and jsdom plus this is the whole of what it wants.
 
 /* The rail's memory, exercised through the composable itself rather than a pure helper: the rules worth pinning
- * are both about WHEN it acts — hold a seat until the run is complete, write only when the seats themselves
- * change — and a helper handed the answer would test neither. No sandbox is selected here, so the memory lands
+ * are both about WHEN it acts: hold a seat until the run is complete, write only when the seats themselves
+ * change, and a helper handed the answer would test neither. No sandbox is selected here, so the memory lands
  * under the no-sandbox key. */
 
 const KEY = `intentic.railSeats.local`;
@@ -64,7 +64,7 @@ it(`rewrites only when the seats themselves change`, async () => {
     useRailMemory(live, ref(true));
     expect(writes).toHaveBeenCalledTimes(1);
 
-    // A poll landing a new count re-runs the live rail several times a minute — same seats, so nothing is written.
+    // A poll landing a new count re-runs the live rail several times a minute: same seats, so nothing is written.
     live.value = [badged(`agents`, 4)];
     await nextTick();
     expect(writes).toHaveBeenCalledTimes(1);

@@ -8,8 +8,8 @@ import { useRunning } from "../../composables/sandbox/useRunning";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { detectActivations, extensionPath } from "../../core-views/registry";
 
-/* The Sandbox hub's "Status" tab: live things across both classes — operator-panel dev servers (with port +
- * preview) and active services — plus the VPN card, which is where a tunnel is connected and disconnected.
+/* The Sandbox hub's "Status" tab: live things across both classes, operator-panel dev servers (with port +
+ * preview) and active services: plus the VPN card, which is where a tunnel is connected and disconnected.
  * The only at-a-glance view of what is actually up right now. */
 
 const { panels, isLoading: panelsLoading } = usePanels();
@@ -17,7 +17,7 @@ const { capabilities, isLoading: capabilitiesLoading } = useCapabilities();
 const { runningPanels, activeServices } = useRunning();
 
 /* THE EMPTY STATE HERE IS A CLAIM, and until both reads land it is one this tab cannot make. "Nothing running"
- * and "nothing read yet" are the same shape — two empty arrays — and drawing the first for the second told
+ * and "nothing read yet" are the same shape: two empty arrays, and drawing the first for the second told
  * everyone with a cold cache that their dev servers were down, on the one tab whose whole job is saying what is
  * up. The outline says the honest thing instead: this list is coming.
  *
@@ -53,7 +53,7 @@ const stateVariant = (state: string): StatusVariant =>
                 </template>
             </div>
             <div v-else-if="runningPanels.length === 0 && activeServices.length === 0" class="px-4 py-6 text-center text-xs text-muted">
-                Nothing running — open a panel from the sidebar.
+                Nothing running: open a panel from the sidebar.
             </div>
             <template v-else>
                 <!-- Operator-panel dev servers that are up: link to the panel page for controls; port + preview here. -->
@@ -82,7 +82,7 @@ const stateVariant = (state: string): StatusVariant =>
                     </template>
                 </Row>
                 <!-- Service-type capabilities reporting active (self-hosted stacks, ssh, docker). VPNs are NOT
-                     here — they have their own card above, with the detail and the controls a tunnel needs. -->
+                     here: they have their own card above, with the detail and the controls a tunnel needs. -->
                 <Row v-for="service in activeServices" :key="service.id" icon="server">
                     <template #title>
                         {{ service.id }}<span class="ml-2 text-2xs font-normal text-subtle">{{ service.kind }}</span>

@@ -83,7 +83,7 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
                     return {
                         body:
                             config === undefined
-                                ? "No Discord bot is connected — add the Discord capability first."
+                                ? "No Discord bot is connected: add the Discord capability first."
                                 : await joinVoice(ctx, channelId, config),
                     };
                 }

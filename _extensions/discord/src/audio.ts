@@ -20,7 +20,7 @@ const defaultExec: ExecFn = promisify(execFile);
 // instead of a doomed retry loop (or a needless overlay proposal: the fragment is already composed).
 export const WHISPER_MISSING =
     "whisper-cli isn't installed in this sandbox yet. It's part of the environment overlay that was composed when " +
-    "Discord was connected — the sandbox needs a one-time rebuild. Ask the owner to run the rebuild command shown on " +
+    "Discord was connected: the sandbox needs a one-time rebuild. Ask the owner to run the rebuild command shown on " +
     "the Sandbox page's Environment card, and don't retry joining voice (or propose an overlay) until it has landed.";
 
 // ENOENT on spawn ⇒ the binary isn't on PATH. Any other outcome (including a non-zero exit) means it exists.

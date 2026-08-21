@@ -6,12 +6,12 @@ import { useRoute } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { environment } from "../environments/environment";
 
-/* WHERE A CODING AGENT'S OWNER SIGNS IN — the landing Better Auth's `mcp` plugin sends an unauthenticated
+/* WHERE A CODING AGENT'S OWNER SIGNS IN: the landing Better Auth's `mcp` plugin sends an unauthenticated
  * OAuth authorize to (api auth.ts `loginPage`).
  *
  * NOT /login, and the difference is the whole reason this file exists. /login's job is to open a workspace: it
  * ends by pushing into the shell, and the shell's guard bounces anyone without a sandbox to /setup. Somebody
- * arriving here has no sandbox and is not trying to get one — they typed `/mcp` in a terminal on their own
+ * arriving here has no sandbox and is not trying to get one: they typed `/mcp` in a terminal on their own
  * laptop and were handed a URL. Sending them to a setup wizard would be the app answering a question nobody
  * asked, at the one moment they are deciding whether this platform is worth an account.
  *
@@ -21,7 +21,7 @@ import { environment } from "../environments/environment";
  *
  * THE QUERY IS THE AUTHORIZATION REQUEST and is carried through untouched: client id, redirect uri, PKCE
  * challenge, state. Better Auth also stashed it in a signed cookie on the way here, but the round trip is what
- * it reads on the way back, so it must survive the sign-in — which is why the callback path below is this
+ * it reads on the way back, so it must survive the sign-in, which is why the callback path below is this
  * page's own full path rather than a bare "/connect". */
 
 const route = useRoute();
@@ -80,11 +80,11 @@ const switchAccount = async (): Promise<void> => {
                 <span>Checking your session…</span>
             </div>
 
-            <!-- Opened by hand. Not an error — just a page with nothing to do — so it says what it is for. -->
+            <!-- Opened by hand. Not an error: just a page with nothing to do, so it says what it is for. -->
             <template v-else-if="!authorizeQuery">
                 <h2 class="text-2xl font-semibold tracking-tight">Nothing to connect</h2>
                 <p class="mt-2 text-sm text-muted">
-                    This page finishes connecting a coding agent to intentic. Start it from your agent — in Claude Code, install the intentic plugin
+                    This page finishes connecting a coding agent to intentic. Start it from your agent: in Claude Code, install the intentic plugin
                     and run <span class="font-mono text-content">/mcp</span>.
                 </p>
             </template>
@@ -119,7 +119,7 @@ const switchAccount = async (): Promise<void> => {
                     </li>
                     <li class="flex gap-2.5 text-xs text-muted">
                         <Icon name="undo" class="mt-0.5 shrink-0 text-sm text-success" />
-                        <span>No sandbox and no install needed — an account is enough.</span>
+                        <span>No sandbox and no install needed: an account is enough.</span>
                     </li>
                 </ul>
                 <Button label="Continue with Google" severity="secondary" class="mt-6 w-full justify-center" @click="signIn">

@@ -22,7 +22,7 @@ import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
 
-/* The AI accounts the sandbox's agent signs in as — the Agent tab's first section, and the one place in the
+/* The AI accounts the sandbox's agent signs in as: the Agent tab's first section, and the one place in the
  * product where a credential is added or dropped. Five providers, two mechanisms (a provider's own account, a
  * subscription served by the bundled translator), ONE way of looking and behaving:
  *
@@ -36,12 +36,12 @@ import ConnectionRow from "./ConnectionRow.vue";
  *
  * NOTHING HAPPENS THAT WASN'T ASKED FOR. Switching provider used to fire a connect handshake by itself for
  * three of the five tabs, so a look at a tab painted a Connect button, silently minted a one-time device code,
- * and then swapped the button for that code — a flicker with a 15-minute poll attached. Browsing is now just
+ * and then swapped the button for that code: a flicker with a 15-minute poll attached. Browsing is now just
  * browsing (useChat.setManagedProvider); every sign-in starts from a button.
  *
  * AN UNREAD STATE IS NOT AN EMPTY ONE. Connections live on the daemon and are read when it answers, which can
  * be a probe and a tunnel round-trip away. Until then this section shows that it is loading rather than
- * claiming "not connected" and taking it back — see `accountsLoaded`. */
+ * claiming "not connected" and taking it back: see `accountsLoaded`. */
 
 const { reachable } = useSandbox();
 const {
@@ -69,8 +69,8 @@ const {
 } = useChat();
 /* The chat store reports a bare message; this section knows the user is here to connect an account.
  *
- * The store's message lands in `detail` on the noticeFrom convention — the app's sentence leads, the caught one
- * is evidence — and that is the slot the DAEMON's sentence arrives in for a failed sign-in. Which is why this
+ * The store's message lands in `detail` on the noticeFrom convention: the app's sentence leads, the caught one
+ * is evidence, and that is the slot the DAEMON's sentence arrives in for a failed sign-in. Which is why this
  * card was useless for so long: oRPC replaced every message the translator routes threw with "Internal server
  * error" (fixed at the source in translator.routes.ts), so the evidence line named no cause and the headline
  * was all the reader got. The pairing is right; the wire was dropping half of it. */
@@ -81,15 +81,15 @@ const chatNotice = computed<NoticeModel | undefined>(() =>
 // The subscription connections, served by the sandbox's translator (CLIProxyAPI). For ChatGPT, Kimi Code and
 // Google they are the only connections. For Grok they're secondary rows beneath the native account
 // (the account runs Grok's own harness; a subscription runs Grok models UNDER the Claude Code harness). Claude
-// has no row: it IS the Claude Code harness. A provider can hold several subscription accounts — the translator
-// balances turns across them — so each renders as a row of its own.
+// has no row: it IS the Claude Code harness. A provider can hold several subscription accounts, the translator
+// balances turns across them, so each renders as a row of its own.
 const routedProvider = computed<KeyedProvider | undefined>(() =>
     managedProvider.value === `codex` || managedProvider.value === `grok` || managedProvider.value === `kimi` || managedProvider.value === `gemini`
         ? managedProvider.value
         : undefined,
 );
 // Each routed row carries two registers of explanation, because they are read at different moments. `hint` is
-// the glanceable one — what this connection costs you, in a fragment — and it is the only one on screen. `about`
+// the glanceable one: what this connection costs you, in a fragment, and it is the only one on screen. `about`
 // is the full mechanic, parked behind the row's (i) for the reader who actually wants it: printing both is what
 // turned this card into a wall of prose. The live sign-in's own copy (destination button, login hint) lives in
 // ConnectFlow beside the flow it narrates.
@@ -97,29 +97,29 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: st
     codex: {
         title: `ChatGPT subscription`,
         hint: `The only connection Codex needs.`,
-        about: `Runs Codex on your ChatGPT subscription — everywhere: on its own and under the Claude Code harness.`,
+        about: `Runs Codex on your ChatGPT subscription, everywhere: on its own and under the Claude Code harness.`,
     },
     grok: {
         title: `Under Claude Code`,
         hint: `Your SuperGrok / X Premium subscription.`,
-        about: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription — a separate sign-in from the Grok account above.`,
+        about: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription, a separate sign-in from the Grok account above.`,
     },
     kimi: {
         title: `Kimi Code subscription`,
         hint: `Runs on your Kimi Code plan.`,
-        about: `Runs Kimi models under the Claude Code harness on your Kimi Code subscription — no API key or metered API balance required.`,
+        about: `Runs Kimi models under the Claude Code harness on your Kimi Code subscription, no API key or metered API balance required.`,
     },
     gemini: {
         title: `Google account`,
         // The models are worth naming even in the short line, because they are not the ones a "Google" tab
         // implies: Google's Antigravity channel vends Claude and GPT-OSS on the same ordinary sign-in (see
-        // gemini-models.ts). Free is the other half — it is the only free row on this page.
-        hint: `Free — Gemini, Claude and GPT-OSS models.`,
-        about: `Runs Gemini, Claude and GPT-OSS models under the Claude Code harness on your Google account — free, and the one connection this provider needs.`,
+        // gemini-models.ts). Free is the other half: it is the only free row on this page.
+        hint: `Free, Gemini, Claude and GPT-OSS models.`,
+        about: `Runs Gemini, Claude and GPT-OSS models under the Claude Code harness on your Google account, free, and the one connection this provider needs.`,
     },
 };
 
-// Codex, Kimi and Gemini own no native account — the subscription row IS their connection.
+// Codex, Kimi and Gemini own no native account: the subscription row IS their connection.
 const hasNativeAccounts = computed(() => managedProvider.value !== `codex` && managedProvider.value !== `kimi` && managedProvider.value !== `gemini`);
 // Grok holds a single account (OpenCode owns the xAI credential), so hide "connect another" once it's linked.
 const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
@@ -129,20 +129,20 @@ const nativeFlowLive = computed(() => nativeConnectFlow.value?.provider === mana
 const routedFlowLive = computed(() => routedProvider.value !== undefined && translatorConnectFlow.value?.provider === routedProvider.value);
 
 /* NO TWO ROWS MAY READ THE SAME. A list whose every entry says "Claude" answers none of the questions the list
- * exists for — which account is this, is it the one my last turn ran on, which one am I about to disconnect —
+ * exists for, which account is this, is it the one my last turn ran on, which one am I about to disconnect:
  * and that is what these three pieces fix, in order of how much they actually tell you:
  *
  *   1. the identity the provider itself reports (Claude returns the email + organization with the token), shown
  *      beside the name because the NAME is the user's to change and can be anything;
- *   2. the name, renamable in place — the answer when the derived identity isn't what the user calls an account;
- *   3. failing both, when two rows still read alike, when each was connected — a weak difference, but a real one,
+ *   2. the name, renamable in place: the answer when the derived identity isn't what the user calls an account;
+ *   3. failing both, when two rows still read alike, when each was connected: a weak difference, but a real one,
  *      and infinitely better than none.
  *
  * Grok is the exception to (2): OpenCode owns that credential and holds exactly one, so there is nothing to
  * rename and nothing it could be confused with. */
 const renamable = computed(() => managedProvider.value !== `grok`);
 
-// Labels shared by more than one of this provider's accounts — the rows that cannot be told apart on name alone.
+// Labels shared by more than one of this provider's accounts: the rows that cannot be told apart on name alone.
 const ambiguousLabels = computed(() => {
     const seen = new Map<string, number>();
     for (const account of managedAccounts.value) {
@@ -151,8 +151,8 @@ const ambiguousLabels = computed(() => {
     return new Set([...seen].filter(([, count]) => count > 1).map(([label]) => label));
 });
 
-// The line beside the name: who this account signs in as, or — when the provider told us nothing and the name
-// is shared with another row — when it was connected. Parts equal to the name are dropped: an account named by
+// The line beside the name: who this account signs in as, or, when the provider told us nothing and the name
+// is shared with another row, when it was connected. Parts equal to the name are dropped: an account named by
 // its own email must not print that email twice.
 const identityNote = (account: OauthAccount): string | undefined => {
     const identity = [account.email, account.organization].filter((part) => part !== undefined && part !== account.label);
@@ -164,7 +164,7 @@ const identityNote = (account: OauthAccount): string | undefined => {
 
 /* A short usage summary line per account (from /system/usage).
  *
- * ALWAYS A LINE, once the read has landed — an account with no turns yet says so rather than dropping the line.
+ * ALWAYS A LINE, once the read has landed: an account with no turns yet says so rather than dropping the line.
  * That read is a round trip behind the connections one, so a row that only grows a second line when it has
  * something to put there changes height a moment after it is painted, and the whole list under it jumps. With
  * the placeholder above it and this below, the row is one height from first paint to settled. */
@@ -175,7 +175,7 @@ const usageLine = (id: string): string => {
     }
     const cost = usage.costUsd > 0 ? ` · $${usage.costUsd.toFixed(2)}` : ``;
     // Cache read = prompt tokens served from the provider's cache; the rate is the share of prompt input that
-    // hit the cache (read / (read + uncached input)) — how effective prefix caching is for this account.
+    // hit the cache (read / (read + uncached input)): how effective prefix caching is for this account.
     const cacheDenom = usage.cacheReadTokens + usage.inputTokens;
     const cache =
         usage.cacheReadTokens > 0 && cacheDenom > 0
@@ -191,7 +191,7 @@ const usageLine = (id: string): string => {
  * ONE path for every provider, because by the time a row reaches this component the difference between a native
  * account and a routed subscription is already gone: the daemon puts the same `usage` on both (see
  * AccountUsageSchema), whether it read it from a Claude turn's stream or pulled it from the translator. What a
- * ring MEANS lives in usageStatus.ts with the composer's — the threshold, the tone and the merge with a live
+ * ring MEANS lives in usageStatus.ts with the composer's: the threshold, the tone and the merge with a live
  * turn's frame are shared, not re-decided here.
  *
  * Rows are decorated ONCE rather than per binding: the row used to hand the ring three separate props off three
@@ -200,7 +200,7 @@ const usageLine = (id: string): string => {
 
 // A row ready to render: the account, its headroom (the ring and the card behind it), and whether it is
 // effectively spent. The headroom also carries when the reading was taken, which the provider's refusal line
-// needs to tell whether a reading has overtaken it (refusalIsCurrent) — a question about the whole list rather
+// needs to tell whether a reading has overtaken it (refusalIsCurrent): a question about the whole list rather
 // than about any one row.
 interface AccountRow<T> {
     account: T;
@@ -245,15 +245,15 @@ const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
  * turn is served by whichever auth file CLIProxyAPI picks, so a refusal belongs to the provider the switcher is
  * on. Repeating it down 31 Google rows would restate one event 31 times.
  *
- * It earns a place beside the rings because it answers what a ring cannot. A ring is polled — at turn end for
- * Claude, on a five-minute sweep for the routed subscriptions — and the pools are account-wide, so every other
+ * It earns a place beside the rings because it answers what a ring cannot. A ring is polled: at turn end for
+ * Claude, on a five-minute sweep for the routed subscriptions, and the pools are account-wide, so every other
  * client on the plan drains them without this sandbox hearing about it. The refusal is the moment the plan
  * actually said no. Together they are readable: a green ring under a fresh refusal says the ring is stale.
  *
- * This is the state that sent someone here to reconnect a Kimi account in perfect health — the chat said
+ * This is the state that sent someone here to reconnect a Kimi account in perfect health: the chat said
  * "Failed to authenticate", because that is what the harness prints over a 403, and the Agent tab showed a
  * healthy green dot beside it with nothing to reconcile the two. */
-// Loud only while nothing that happened since has answered it — see refusalNote, which also decides what a
+// Loud only while nothing that happened since has answered it: see refusalNote, which also decides what a
 // refusal SAYS in each of those two states. Both lists, because the provider's accounts are one list to the
 // reader whichever mechanism holds them, and each row carries the account key a refusal names its own by.
 const refusal = computed(() =>
@@ -281,13 +281,13 @@ const COLLAPSE_THRESHOLD = 5;
 const VISIBLE_WHEN_COLLAPSED = 3;
 const expanded = ref(false);
 
-// The count of ALL visible accounts, both native and routed — the metric that decides whether collapsing fires.
+// The count of ALL visible accounts, both native and routed: the metric that decides whether collapsing fires.
 const totalAccountCount = computed(() => accountRows.value.length + translatorRows.value.length);
 const shouldCollapse = computed(() => totalAccountCount.value > COLLAPSE_THRESHOLD);
 const collapsedCount = computed(() => totalAccountCount.value - VISIBLE_WHEN_COLLAPSED);
 
 // How many native accounts to show when collapsed: the first VISIBLE_WHEN_COLLAPSED, unless routed rows exist
-// and would push the total above VISIBLE_WHEN_COLLAPSED — then native gets fewer to make room for at least one
+// and would push the total above VISIBLE_WHEN_COLLAPSED: then native gets fewer to make room for at least one
 // routed row. When expanded, all of them.
 const visibleNativeAccounts = computed<readonly AccountRow<OauthAccount>[]>(() => {
     if (!shouldCollapse.value || expanded.value) {
@@ -309,17 +309,17 @@ const visibleRoutedLimit = computed(() => {
 const managedLabel = computed(() => providerTabs.find((tab) => tab.value === managedProvider.value)?.label ?? providerLabel(managedProvider.value));
 
 /* Arriving from a chat's "Connect account" gate carries `?connect=<provider>`: open that provider's rows, flash
- * them, and start the sign-in — the deep link IS the click, so finishing it here is continuing an action rather
+ * them, and start the sign-in: the deep link IS the click, so finishing it here is continuing an action rather
  * than performing one uninvited (which is precisely why the provider SWITCHER no longer does this).
  * Driven by a watch, not just onMounted: the chat panel lives in the persistent shell, so the gate can deep-link
- * here while this tab is already open — a query-only navigation doesn't remount the component. */
+ * here while this tab is already open: a query-only navigation doesn't remount the component. */
 const route = useRoute();
 const ringing = ref(false);
 let ringTimer: ReturnType<typeof setTimeout> | undefined;
 
 // The sign-in the deep link asked for, through whichever mechanism the provider actually uses. Never a second
 // one: a live flow already IS the answer, and re-arming would mint a fresh code that diverges from the sign-in
-// tab the user has open. Nor one for a provider that is already connected — a stale link is not a request to
+// tab the user has open. Nor one for a provider that is already connected: a stale link is not a request to
 // add an account.
 const connectRequested = (target: AgentProvider): void => {
     if (nativeConnectFlow.value !== undefined || translatorConnectFlow.value !== undefined || providerReady(target)) {
@@ -349,7 +349,7 @@ const focusConnect = (): void => {
 
 onMounted(() => {
     /* Ask on open, rather than waiting for the reachable seam to have asked. That seam fires on the first
-     * liveness success — a probe plus a tunnel round-trip away — so landing here inside that window used to mean
+     * liveness success: a probe plus a tunnel round-trip away, so landing here inside that window used to mean
      * sitting in front of a card that had never asked the daemon anything. It is also simply out of date by now:
      * another device may have connected or dropped something since. Between them, that is why connected accounts
      * "took forever to show up"; now the wait is this request, and the skeletons say so while it runs. */
@@ -366,7 +366,7 @@ onUnmounted(() => clearTimeout(ringTimer));
 
 <template>
     <!-- A RowGroup like every other section on this page, NOT a Card: the connections are a grouped list, and
-         wrapping that list in a card put a bordered surface inside a bordered surface for no gain — the group
+         wrapping that list in a card put a bordered surface inside a bordered surface for no gain: the group
          label carries the heading. -->
     <!-- The deep-link flash rings the whole group (label included). `-m-1 p-1` holds the layout still while it
          does: the ring needs room to sit outside the surface, and growing the section for 2.5s would shove the
@@ -375,14 +375,14 @@ onUnmounted(() => clearTimeout(ringTimer));
         <template #info>
             <InfoHint label="About AI accounts">
                 <span class="block text-xs text-content">
-                    The accounts your agent signs in as. Every credential is stored inside your sandbox, never on the platform — connecting here signs
+                    The accounts your agent signs in as. Every credential is stored inside your sandbox, never on the platform: connecting here signs
                     the sandbox in, not this browser.
                 </span>
             </InfoHint>
         </template>
         <!-- The provider switcher rides the group label (where "Command output" carries its own trailing
              controls), and the dot per chip is the point: this group shows ONE provider at a time, so without it
-             the question it exists to answer — which AI can my agent use? — costs a click each. The dot has
+             the question it exists to answer, which AI can my agent use?: costs a click each. The dot has
              THREE states, not two: while the connections are still being read it pulses, because a grey dot
              claiming "not connected" for every provider is exactly the answer this section keeps getting wrong. -->
         <template #actions>
@@ -403,7 +403,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     />
                     {{ tab.label }}
                     <!-- The one chip that costs nothing, said on the chip itself. The card behind it has always
-                         led with "Free", but only after a click — so a user pricing up five identical-looking
+                         led with "Free", but only after a click, so a user pricing up five identical-looking
                          chips had to open each one to find the answer that decides which they press. Dropped
                          once it IS connected: a connected provider should read as the plain default rather than
                          keep advertising, which is the same rule accessBadge follows. -->
@@ -421,7 +421,7 @@ onUnmounted(() => clearTimeout(ringTimer));
 
         <!-- The provider's own words, the last time it refused a turn (see `refusal` above). An alert while it
              is the newest thing known about this provider; once something taken since has answered it, a quiet
-             footnote saying so with those words on the hover — a stale alarm over a live meter is worse than no
+             footnote saying so with those words on the hover: a stale alarm over a live meter is worse than no
              alarm at all. -->
         <Notice v-if="refusal !== undefined && refusal.current" tone="warning" class="m-3">{{ refusal.line }}</Notice>
         <p v-else-if="refusal !== undefined" class="mx-3 mt-3 text-2xs text-subtle" v-tooltip.top="refusal.detail">{{ refusal.line }}</p>
@@ -433,7 +433,7 @@ onUnmounted(() => clearTimeout(ringTimer));
             v-if="!accountsLoaded && !reachable"
             title="Connections unavailable"
             state="missing"
-            description="Your sandbox is offline — its accounts can't be read or changed from here."
+            description="Your sandbox is offline: its accounts can't be read or changed from here."
         />
         <template v-else-if="!accountsLoaded">
             <!-- Two lines, because a connected row has two: the name and the usage line under it. An outline
@@ -458,14 +458,14 @@ onUnmounted(() => clearTimeout(ringTimer));
             </Row>
         </template>
 
-        <!-- Every connection this provider has — native accounts and translator subscriptions alike — as rows of
+        <!-- Every connection this provider has (native accounts and translator subscriptions alike) as rows of
              ONE list. They are different mechanisms but the same question ("what am I signed in with, and can I
              drop it?"), so they share a row shape: status dot, name, live state, one action. A sign-in in
              progress opens in the row's own #below, so it stays inside that row's hairline instead of spawning
              an inset panel detached from the thing it connects. -->
         <template v-else>
             <!-- Native accounts (Claude and Grok), each disconnectable on its own. Codex, Kimi and Gemini have
-                 none — the subscription row below IS their connection — so they skip straight to it. -->
+                 none: the subscription row below IS their connection, so they skip straight to it. -->
             <template v-if="hasNativeAccounts">
                 <ConnectionRow
                     v-for="{ account, headroom, exhausted } in visibleNativeAccounts"
@@ -474,7 +474,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :state="account.needsReauth ? `reauth` : `connected`"
                     :tone="account.needsReauth ? `warning` : `default`"
                     :note="identityNote(account)"
-                    :description="account.needsReauth ? (account.detail ?? `Signed out — reconnect to keep using it.`) : usageLine(account.id)"
+                    :description="account.needsReauth ? (account.detail ?? `Signed out, reconnect to keep using it.`) : usageLine(account.id)"
                     :description-pending="!account.needsReauth && !usageLoaded"
                     :renamable="renamable"
                     :headroom="headroom"
@@ -503,7 +503,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                 <!-- No account yet is a ROW, not a sentence floating above a button: same shape as a connected
                      one, so the empty state reads as the connection that is missing rather than as an apology,
                      and its action sits where every other row's action sits. That action is also the only thing
-                     that changes as the sign-in runs — Connect, then Connect spinning, then Cancel — so the
+                     that changes as the sign-in runs: Connect, then Connect spinning, then Cancel, so the
                      handshake never arrives as a control the user didn't press anything to get. -->
                 <ConnectionRow
                     v-if="accountRows.length === 0"
@@ -542,8 +542,8 @@ onUnmounted(() => clearTimeout(ringTimer));
 
             <!-- The subscription connection (translator). ChatGPT/Codex, Kimi and Gemini: the ONE connection kind, so
                  it's the group's primary control. Grok: rows beneath the native account, for running Grok UNDER
-                 the Claude Code harness. A provider can hold SEVERAL subscription accounts side by side — the
-                 translator balances turns across them, so a second account is more headroom — and each renders
+                 the Claude Code harness. A provider can hold SEVERAL subscription accounts side by side: the
+                 translator balances turns across them, so a second account is more headroom, and each renders
                  as its own row with its own Disconnect, mirroring the native list above. Codex/Grok/Kimi mint a
                  one-time code and the translator connects on its own; Google redirects instead, so that flow
                  asks for the landing URL back. Either way the shared poll lands the new account's row. -->
@@ -572,7 +572,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                 </ConnectionRow>
 
                 <!-- No subscription yet: the row states what is missing and offers the one action that fixes it.
-                     With one connected, the same slot quiets down to "Add another account" — a different act
+                     With one connected, the same slot quiets down to "Add another account": a different act
                      from having none, so it borrows the native list's quiet plus-row shape. Either way the
                      sign-in it starts unfolds below this row. -->
                 <ConnectionRow

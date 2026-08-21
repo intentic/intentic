@@ -2,7 +2,7 @@
      asked to approve, plus whatever goes out attached to them.
 
      A MEASURE, BEFORE ANYTHING ELSE. The queue's rows are as wide as the window, and a paragraph run across
-     them is ~110 characters a line — past roughly 75 the eye loses its place on the return sweep, which is
+     them is ~110 characters a line: past roughly 75 the eye loses its place on the return sweep, which is
      what made this page "unreadable" rather than merely plain. The column here is capped in `ch`, so it holds
      at any window width and on any theme's font. The review body uses the design system's compact prose scale:
      smaller than the old 16px post treatment, but still large enough to read as paragraphs rather than chrome.
@@ -15,7 +15,7 @@
 
      LONG POSTS FOLD. A YouTube description is a screenful on its own; three of them push everything else in
      the queue below the fold, including the section that owes a decision. Past LONG_POST the body clamps with
-     a fade and a toggle — the same shape <Code> uses for a long command, for the same reason: a hard cut reads
+     a fade and a toggle, the same shape <Code> uses for a long command, for the same reason: a hard cut reads
      as a rendering bug. -->
 <script setup lang="ts">
 import type { DraftSummary } from "@intentic/sandbox-contract";
@@ -30,7 +30,7 @@ const { draft, tone = `full` } = defineProps<{
     tone?: `full` | `quiet`;
 }>();
 
-// Only when the platform really publishes one — otherwise the field is the agent's note and the row's footer
+// Only when the platform really publishes one: otherwise the field is the agent's note and the row's footer
 // carries it (postText.ts). A headline drawn for a note is the thing that used to outweigh the post itself.
 const title = computed(() => (postsATitle(draft.platform, draft.target) ? draft.title : undefined));
 
@@ -44,7 +44,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
 <template>
     <div :class="tone === `full` ? `max-w-read` : `max-w-read-lg`">
         <!-- Quiet sections show the opening of the post, not the post: the decision there is already made, so
-             a couple of lines are enough to tell one row from another. Still legible text — this is the line
+             a couple of lines are enough to tell one row from another. Still legible text: this is the line
              that had faded to 11px of the page's faintest grey in the posted list. -->
         <template v-if="tone === `quiet`">
             <p v-if="title" class="truncate text-sm font-medium text-content">{{ title }}</p>

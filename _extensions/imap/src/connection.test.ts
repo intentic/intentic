@@ -21,7 +21,7 @@ test("desiredAccounts filters unconfigured connectors", () => {
         { id: "work", config },
         { id: "blank", config: { ...config, password: "" } },
     ];
-    // The no-automations gate lives in the shared gateway shell now — this only judges config completeness.
+    // The no-automations gate lives in the shared gateway shell now: this only judges config completeness.
     expect(desiredAccounts(connectors)).toEqual([{ id: "work", config }]);
 });
 

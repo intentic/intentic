@@ -37,7 +37,7 @@ interface Row {
     // chevron and expands/collapses like a dir, while clicking the row still opens the file itself.
     readonly nest?: boolean;
     // A settled-barren branch (emptyDirs.ts): dims like an ignored row, and a single-child descent collapses
-    // into this ONE row — `chain` labels it ("public / demo / assets"), `chainTail` is the deepest link, whose
+    // into this ONE row: `chain` labels it ("public / demo / assets"), `chainTail` is the deepest link, whose
     // children are what an expanded chain shows. The row stays keyed by the branch ROOT, so selection, delete
     // and the keyboard axis all act on the unit the user would actually remove.
     readonly barren?: boolean;
@@ -45,7 +45,7 @@ interface Row {
     readonly chainTail?: WorkspaceTreeEntry;
 }
 // A non-interactive "N more items" marker, rendered ONLY under a dir the daemon actually cut (or at the root),
-// and only ever with the real count it reported — a directory that merely hasn't been loaded yet lazy-loads on
+// and only ever with the real count it reported: a directory that merely hasn't been loaded yet lazy-loads on
 // expand instead of claiming things are missing. Kept out of the selection/keyboard axis: it's a fact, not a row.
 interface MoreRow {
     readonly more: number;
@@ -55,17 +55,17 @@ interface MoreRow {
 
 /* The file explorer: a custom recursive tree (dense, VSCode-like rows) that is also the file-management surface.
  * VSCode-style multi-selection (plain click = one, Ctrl/Cmd+click = toggle, Shift+click = range) drives mass
- * actions — delete, cut/copy/paste, and drag-move all act on the whole selection. Arrow keys move a focus "lead"
+ * actions: delete, cut/copy/paste, and drag-move all act on the whole selection. Arrow keys move a focus "lead"
  * (roving tabindex); Shift/Ctrl+↑↓ extend/move it. All ops route through useWorkspaceTree's mutations. Paths are
  * root-relative; a dir is the drop/create target, a file's parent stands in for it.
  *
  * Cut/copy/paste ride the NATIVE clipboard events rather than a Ctrl+X/C/V keydown branch. Two reasons, both
  * about the chord actually arriving: the browser fires copy/cut/paste at whatever non-editable element holds
  * focus, so the gesture reaches us even where a keydown wouldn't (Safari and macOS Firefox don't focus a
- * <button> on click at all — the old handler was simply dead there), and only the event carries `clipboardData`,
+ * <button> on click at all: the old handler was simply dead there), and only the event carries `clipboardData`,
  * which is what lets a copy publish its paths to the SYSTEM clipboard and a paste accept files copied out of the
  * OS file manager. Owning the keyboard is the other half: a row focuses itself on click and the container takes
- * focus when the click lands on empty space, so the explorer holds focus the way VSCode's does — and, equally,
+ * focus when the click lands on empty space, so the explorer holds focus the way VSCode's does, and, equally,
  * a chord pressed with the editor or chat focused still belongs to them. */
 
 const {
@@ -82,9 +82,9 @@ const {
     filter?: string;
     selectedPath?: string | null;
     // Directory paths that have a management surface (a directory-surface extension serves the repo). Activating
-    // such a row with the KEYBOARD also opens its operator tab — the row's cog is one of its rowActions.
+    // such a row with the KEYBOARD also opens its operator tab: the row's cog is one of its rowActions.
     manageableDirs?: ReadonlySet<string>;
-    /* What this directory offers beside its name — its documents, its health, its history, its management panel
+    /* What this directory offers beside its name: its documents, its health, its history, its management panel
      * (see rowActions.ts). The tree does not know what any of them mean: it draws the icons and runs the one that
      * is clicked. That is what lets an EXTENSION put something on a row without this component learning about it.
      *
@@ -93,7 +93,7 @@ const {
     rowActions?: (dir: string) => readonly RowAction[];
 }>();
 /* `openFile` carries the GESTURE, not just the path (see OpenMode): a single click is a peek, and it lands in the
- * strip's one transient slot that the next peek takes over — reading down a folder used to leave a pinned tab per
+ * strip's one transient slot that the next peek takes over: reading down a folder used to leave a pinned tab per
  * file glanced at. A double-click on the row is the "I want this one" that keeps it, exactly as in VSCode. */
 const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string] }>();
 
@@ -117,7 +117,7 @@ const layout = useLayout();
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { say } = useReceipts();
 const { fileNesting } = useFileNesting();
-// Barren branches — folders holding nothing but empty folders (settled, so an agent mid-scaffold never
+// Barren branches: folders holding nothing but empty folders (settled, so an agent mid-scaffold never
 // flickers the tree). Rows dim and collapse below; the sweep line names them and clears the whole set.
 const {
     isBarren,
@@ -130,7 +130,7 @@ const {
 );
 
 // Expanded directory paths live in useWorkspaceTree (shared with the explorer toolbar's Collapse All), consulted
-// here only when not filtering — a filter force-expands matched branches.
+// here only when not filtering: a filter force-expands matched branches.
 // Multi-selection: the set of selected paths, plus an `anchor` (Shift-range pivot) and a `lead` (keyboard focus
 // cursor). Ops act on the whole `selection`; opening a file collapses it back to that one (the watch below).
 const selection = ref<Set<string>>(new Set(selectedPath ? [selectedPath] : []));
@@ -141,7 +141,7 @@ const renameDraft = ref(``);
 // Inline create (VSCode-style): a phantom input row rendered inside the target dir; `` = the root.
 const creating = ref<{ dir: string; type: "file" | "dir" } | undefined>(undefined);
 const createDraft = ref(``);
-// Paths pending delete confirmation — also drives the confirm dialog's visibility.
+// Paths pending delete confirmation: also drives the confirm dialog's visibility.
 const confirmPaths = ref<readonly string[] | undefined>(undefined);
 const dragOverPath = ref<string | undefined>(undefined);
 // The paths being dragged WITHIN the tree (an internal move), set on dragstart. Lets dragover validate the target
@@ -149,7 +149,7 @@ const dragOverPath = ref<string | undefined>(undefined);
 const dragPaths = ref<readonly string[]>([]);
 const menu = ref<{ show: (event: Event) => void } | undefined>(undefined);
 const menuEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
-// Row elements by path (roving-tabindex focus) — plain Map, kept in sync by the :ref callback on each button.
+// Row elements by path (roving-tabindex focus): plain Map, kept in sync by the :ref callback on each button.
 const rowEls = new Map<string, HTMLElement>();
 // The tree container. Focusable (tabindex -1) so a click on the empty space below the rows still parks focus
 // inside the explorer, which is what makes the clipboard events below arrive.
@@ -169,10 +169,10 @@ watch(
 const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
 const canMoveInto = (source: string, dir: string): boolean => !(dir === source || dir === parentDir(source) || dir.startsWith(`${source}/`));
 
-/* THE ROWS THE SANDBOX KEEPS TO ITSELF — its capability sign-ins, the owner record, the agents' provider homes
+/* THE ROWS THE SANDBOX KEEPS TO ITSELF: its capability sign-ins, the owner record, the agents' provider homes
  * (isLockedWorkspacePath owns the list). They are listed, because they exist and hiding them would read as
  * files having gone missing, but every op below refuses them the way the daemon does: no rename, no delete, no
- * cut, no copy, no drag, no drop into them, and no expanding a locked folder — the walk doesn't list what is
+ * cut, no copy, no drag, no drop into them, and no expanding a locked folder: the walk doesn't list what is
  * inside one. A click still opens a tab, which is the whole point: FileLocked says what the file holds and
  * where to manage it, instead of the old flash of a tab that closed itself.
  *
@@ -180,7 +180,7 @@ const canMoveInto = (source: string, dir: string): boolean => !(dir === source |
  * the tree, and a folder's children inherit it for free. */
 const locked = (path: string): boolean => isLockedWorkspacePath(path);
 
-/* Would the persona being read as be refused this path? Only ever a DIMMING — see personaReach.ts for why a
+/* Would the persona being read as be refused this path? Only ever a DIMMING: see personaReach.ts for why a
  * lens must not take the explorer away from the person using it: they are not the persona, the rows stay
  * clickable, and a folder on the way to a reachable one is not dimmed at all. */
 const { personas: lensPersonas } = usePersonas();
@@ -189,13 +189,13 @@ const lensReach = computed(() => {
     return card === undefined ? undefined : reachOf(card);
 });
 const refused = (path: string): boolean => lensReach.value?.refuses(path) === true;
-// Paths from a selection that the file ops may actually touch — a Ctrl+A then Delete must not send the daemon
+// Paths from a selection that the file ops may actually touch: a Ctrl+A then Delete must not send the daemon
 // a delete for a file it will refuse, and then report that refusal as "couldn't delete that".
 const unlockedOnly = (paths: readonly string[]): string[] => paths.filter((path) => !locked(path));
 
 // Children to render under a dir: the inline `children` from the eager walk when it descended there, otherwise
-// the lazily-fetched ones (keyed by path). A dir with NO `children` was never listed — ignored, or below the
-// walk's breadth-first budget — so it fetches on expand; `children: []` is a genuinely empty dir.
+// the lazily-fetched ones (keyed by path). A dir with NO `children` was never listed: ignored, or below the
+// walk's breadth-first budget, so it fetches on expand; `children: []` is a genuinely empty dir.
 const isUnlisted = (entry: WorkspaceTreeEntry): boolean => entry.type === `dir` && entry.children === undefined;
 const childrenOf = (entry: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] => entry.children ?? lazyChildren.value.get(entry.path) ?? [];
 
@@ -225,14 +225,14 @@ const targetDir = (path: string | null): string => {
 };
 
 // Flattened, ordered list of the rows to render (single-pass filter/expand). A "N more items" marker is injected
-// under a dir the daemon reported a nonzero cut for (and at the root), only when NOT filtering — a filter can't
+// under a dir the daemon reported a nonzero cut for (and at the root), only when NOT filtering: a filter can't
 // reveal server-hidden items anyway. A dir that is merely unlisted gets no marker: expanding it loads it.
 const visibleRows = computed<(Row | MoreRow)[]>(() => {
     const needle = filter.trim().toLowerCase();
     const open = expanded.value;
     // Every level passes through here, so applying the toolbar's filters once covers the root, every
-    // lazily-loaded subtree, and the name filter's matches — and with them the selection/keyboard axis built off
-    // these rows. Nesting only applies unfiltered — a filter flattens every level so it can match folded names
+    // lazily-loaded subtree, and the name filter's matches, and with them the selection/keyboard axis built off
+    // these rows. Nesting only applies unfiltered: a filter flattens every level so it can match folded names
     // directly.
     const level = (nodes: readonly WorkspaceTreeEntry[]): readonly NestedEntry[] => {
         const shown = nodes.filter((entry) => explorerShows(entry, layout.showIgnored.value, layout.hideTests.value));
@@ -246,7 +246,7 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
                 if (needle === ``) {
                     const isExpanded = open.has(entry.path);
                     // A barren branch is ONE row: the single-child descent collapses into it, and expanding it
-                    // continues from the chain's tail — three rows of debris become one legible line whose shape
+                    // continues from the chain's tail: three rows of debris become one legible line whose shape
                     // says exactly what happened. Skipped while filtering, like nesting: a filter flattens.
                     if (isBarren(entry.path)) {
                         const { names, tail } = chainOf(entry);
@@ -297,11 +297,11 @@ const orderedPaths = computed<string[]>(() => visibleRows.value.filter((row): ro
 /* ---- reveal (the open file, wherever it was opened from) ----
  * Open the tree to the selected file: expand the way down to it (revealPath.ts does that arithmetic) and bring
  * its row on screen. Without this, the file the user is looking at is invisible in the explorer they are
- * looking at it with — and on a reload it was the whole workspace that seemed to have collapsed, since the
+ * looking at it with, and on a reload it was the whole workspace that seemed to have collapsed, since the
  * restored tab points at a file buried under closed folders.
  *
  * Once per path, and only once the row exists: on a reload the path is known before the tree query lands, so an
- * early pass expands and a later one — the tree, or a lazy subtree, arriving — does the scroll. `visibleRows`
+ * early pass expands and a later one (the tree, or a lazy subtree, arriving) does the scroll. `visibleRows`
  * as the source is what makes that retry automatic. Keyed on the path rather than re-running per tree refetch
  * (the file watcher fires one on every agent write), so a folder the user collapses stays collapsed, and the
  * reveal is silent about focus: it orients, it doesn't take the keyboard away from whatever holds it. */
@@ -328,7 +328,7 @@ watch(
         await nextTick();
         const el = rowEls.get(path);
         if (el === undefined) {
-            revealedPath = undefined; // not painted yet (or filtered out) — a later pass reveals it
+            revealedPath = undefined; // not painted yet (or filtered out): a later pass reveals it
             return;
         }
         el.scrollIntoView({ block: `nearest` });
@@ -341,14 +341,14 @@ const tabbablePath = computed<string | null>(() =>
     lead.value !== null && orderedPaths.value.includes(lead.value) ? lead.value : (orderedPaths.value[0] ?? null),
 );
 
-// The lead's visible row + index — expand/collapse and parent jumps work on rows, not raw entries, so a
+// The lead's visible row + index: expand/collapse and parent jumps work on rows, not raw entries, so a
 // nest parent (package.json) behaves like a dir on the keyboard.
 const leadRowAt = (): { row: Row; index: number } | undefined => {
     const index = visibleRows.value.findIndex((row) => !(`more` in row) && row.entry.path === lead.value);
     return index === -1 ? undefined : { row: visibleRows.value[index] as Row, index };
 };
 
-// The active file-tree setup (minimal/colorful/vivid) — size, colour and folder emphasis for every row.
+// The active file-tree setup (minimal/colorful/vivid): size, colour and folder emphasis for every row.
 const { explorerStyle } = useExplorerStyle();
 const treatEntry = (name: string, type: "file" | "dir", isExpanded: boolean, ignored: boolean | undefined) =>
     explorerTreatment(explorerStyle.value, name, type, isExpanded, ignored);
@@ -356,7 +356,7 @@ const treatEntry = (name: string, type: "file" | "dir", isExpanded: boolean, ign
 // fact about it the moment it is the one thing you cannot open.
 const treat = (row: Row): ReturnType<typeof treatEntry> => {
     // A barren row wears the ignored dimming: nothing is at risk, so it gets the same weight as any other
-    // out-of-focus row — a fact, not an alarm.
+    // out-of-focus row: a fact, not an alarm.
     const treatment = treatEntry(row.entry.name, row.entry.type, row.isExpanded, row.entry.ignored === true || row.barren === true);
     return locked(row.entry.path) ? { ...treatment, icon: `lock` satisfies IconName, colorClass: `text-subtle` } : treatment;
 };
@@ -367,15 +367,15 @@ const treat = (row: Row): ReturnType<typeof treatEntry> => {
  * sandbox declining on purpose. */
 const linkTooltip = (link: WorkspaceLink): string =>
     link.state === `broken`
-        ? `Link to ${link.to} — there is nothing there`
+        ? `Link to ${link.to}: there is nothing there`
         : link.state === `outside`
-          ? `Link to ${link.to} — outside the workspace, so the sandbox won't open it`
+          ? `Link to ${link.to}: outside the workspace, so the sandbox won't open it`
           : `Link to ${link.to}`;
 // A link that goes nowhere or leaves the workspace: dimmed like an ignored row, and never expandable.
 const deadLink = (entry: WorkspaceTreeEntry): boolean => entry.link?.state !== undefined;
 
 // Whether a row has anything to expand into. A barren chain expands from its TAIL, and a chain whose tail is
-// the empty leaf gets no chevron — the gesture would be a promise the row can't keep (same as a locked dir,
+// the empty leaf gets no chevron: the gesture would be a promise the row can't keep (same as a locked dir,
 // and same as a link with nothing reachable behind it).
 const expandable = (row: Row): boolean =>
     (row.entry.type === `dir` || row.nest === true) &&
@@ -384,7 +384,7 @@ const expandable = (row: Row): boolean =>
     (row.barren !== true || childrenOf(row.chainTail ?? row.entry).length > 0);
 
 // Expansion is the whole gesture: a dir the walk never listed (ignored, or below its entry budget) fetches its
-// children off this set, in useWorkspaceTree — so a folder restored open on reload loads exactly like one the
+// children off this set, in useWorkspaceTree, so a folder restored open on reload loads exactly like one the
 // user just clicked.
 const toggleExpand = (path: string): void => {
     const next = new Set(expanded.value);
@@ -465,16 +465,16 @@ const actionsFor = (path: string): readonly RowAction[] => rowActions?.(path) ??
 /* How much of an icon is showing when the pointer is somewhere else. Hover (and the selected row) brings every
  * one of them up to full; this is only about the resting state, and there are three of them:
  *
- *   hidden   an ACTION — what you can do to a repo. Revealed on hover, because fifty-five rows of cogs is the
+ *   hidden   an ACTION: what you can do to a repo. Revealed on hover, because fifty-five rows of cogs is the
  *            noise that stops the eye reading the names, and nobody hunts for an action they haven't decided on.
- *   dimmed   EVIDENCE — the row has a page to read. Hiding this hides the fact itself: a documented monorepo
+ *   dimmed   EVIDENCE, the row has a page to read. Hiding this hides the fact itself: a documented monorepo
  *            looked exactly like an undocumented one, so the per-package documentation nobody could see was
  *            documentation nobody had.
  *   full     the row the user is on. */
 const restingClass = (action: RowAction, path: string): string =>
     selection.value.has(path) ? `opacity-100` : action.standing ? `opacity-40` : `pointer-events-none opacity-0`;
 
-// Running one selects its row first, so the highlight follows what the user just opened — the behaviour all
+// Running one selects its row first, so the highlight follows what the user just opened: the behaviour all
 // three hardcoded affordances used to repeat, now stated once.
 const runAction = (entry: WorkspaceTreeEntry, action: RowAction): void => {
     selectSingle(entry.path);
@@ -497,7 +497,7 @@ const onRowClick = (event: MouseEvent, row: Row): void => {
 };
 
 /* The second half of the click: a double-click keeps the tab the first click previewed. Only a file has anything
- * to keep — a directory row toggles on each of the two clicks and lands back where it started, which is what
+ * to keep: a directory row toggles on each of the two clicks and lands back where it started, which is what
  * VSCode's explorer does too. */
 const onRowDblClick = (row: Row): void => {
     if (row.entry.type === `file` || locked(row.entry.path)) {
@@ -586,7 +586,7 @@ const commitCreate = async (): Promise<void> => {
     creating.value = undefined;
     const path = joinPath(spec.dir, name);
     if (spec.type === `dir`) {
-        // The user's own New Folder is empty by definition — exempt from the barren marking until it gains
+        // The user's own New Folder is empty by definition: exempt from the barren marking until it gains
         // content, so the explorer doesn't call it junk three seconds after they made it.
         noteUserCreatedDir(path);
         await run(() => createDir(path), `Couldn't create that folder.`);
@@ -595,7 +595,7 @@ const commitCreate = async (): Promise<void> => {
         return;
     }
     // A new file: create it, open it, and drop straight into the editor so the user can type immediately. Kept,
-    // never previewed — the user is about to type into it, and the next peek must not close it under them.
+    // never previewed: the user is about to type into it, and the next peek must not close it under them.
     await run(() => saveText(path, ``), `Couldn't create that file.`);
     selectSingle(path);
     emit(`openFile`, path, `keep`);
@@ -611,7 +611,7 @@ const doDeleteSelection = (): void => {
         return;
     }
     // A selection that is ONLY barren branches skips the confirm dialog: no content is lost, so "this can't
-    // be undone" would be false — the receipt's Undo puts an empty folder back exactly. Anything holding real
+    // be undone" would be false: the receipt's Undo puts an empty folder back exactly. Anything holding real
     // content keeps the full confirmation below.
     const entries = paths.map((path) => byPath.value.get(path));
     const barrenOnly = entries.every((entry): entry is WorkspaceTreeEntry => entry !== undefined && entry.type === `dir` && isBarren(entry.path));
@@ -622,7 +622,7 @@ const doDeleteSelection = (): void => {
     confirmPaths.value = paths;
 };
 /* WHAT THE SWEEP IS ABOUT TO TAKE. A bare count asked the user to authorise deleting N things it never named,
- * and the receipt afterwards named them no better — so the only record of what went was an Undo that restores
+ * and the receipt afterwards named them no better, so the only record of what went was an Undo that restores
  * all of it or none of it. The line NAMES what it counts instead: one branch reads as itself, several fold into
  * a count that opens, and every name is a control that points at the row it stands for. Naming them is also
  * what makes the choice stop being all-or-nothing, since a named branch can carry its own Keep.
@@ -633,7 +633,7 @@ const sweepOpen = ref(false);
 const pointedBarren = ref<string | undefined>(undefined);
 /* Each branch as the line writes it, in TWO parts, because a list standing away from the tree cannot borrow
  * the tree's indentation to say where a folder lives: a branch called `old` names nothing a user could act on.
- * So `where` carries the folders above it and `label` the barren chain itself — the same "web / demo / assets"
+ * So `where` carries the folders above it and `label` the barren chain itself: the same "web / demo / assets"
  * the collapsed tree row wears. Kept apart rather than glued into one path because they mean opposite things:
  * everything in `label` is about to be deleted and everything in `where` is staying, and a reader who takes
  * "src / old" for one empty run would think a folder full of source was going with it. */
@@ -650,9 +650,9 @@ const branchOf = (entry: WorkspaceTreeEntry): BarrenBranch => ({
 const barrenBranches = computed<readonly BarrenBranch[]>(() => barrenRootEntries.value.map(branchOf));
 // One branch needs no disclosure: the line just says it.
 const soleBarren = computed(() => (barrenBranches.value.length === 1 ? barrenBranches.value[0] : undefined));
-// The whole path in one string — for a receipt, where there is no room to shade the two parts differently.
+// The whole path in one string: for a receipt, where there is no room to shade the two parts differently.
 const barrenPath = (branch: BarrenBranch): string => (branch.where === `` ? branch.label : `${branch.where} / ${branch.label}`);
-// A list that empties — swept, or the folders gained content — has nothing left to disclose. Folding it back
+// A list that empties (swept, or the folders gained content) has nothing left to disclose. Folding it back
 // here is what stops it springing open later on an unrelated empty folder.
 watch(barrenBranches, (branches) => {
     if (branches.length < 2) {
@@ -663,7 +663,7 @@ watch(barrenBranches, (branches) => {
     }
 });
 /* Point at the folder the line is naming: open the way down to it, scroll it into view, select it. Selection
- * rather than focus, matching the reveal watch above — it orients the eye without taking the keyboard away
+ * rather than focus, matching the reveal watch above: it orients the eye without taking the keyboard away
  * from the list the user is still working through. */
 const revealBarren = async (entry: WorkspaceTreeEntry): Promise<void> => {
     const dirs = ancestorDirs(entry.path);
@@ -677,7 +677,7 @@ const revealBarren = async (entry: WorkspaceTreeEntry): Promise<void> => {
     rowEls.get(entry.path)?.scrollIntoView({ block: `nearest` });
 };
 /* Remove barren branches without ceremony, and hold the way back: the branch shapes are recorded BEFORE the
- * delete (afterwards the tree no longer knows them), and Undo recreates the deepest folder of each chain —
+ * delete (afterwards the tree no longer knows them), and Undo recreates the deepest folder of each chain:
  * recursive create rebuilds the exact shape, which is what makes this the one delete that is genuinely
  * reversible. Counted in BRANCHES, the unit the user sees and deletes. */
 const sweepBarren = (roots: readonly WorkspaceTreeEntry[]): void => {
@@ -688,7 +688,7 @@ const sweepBarren = (roots: readonly WorkspaceTreeEntry[]): void => {
     const leaves = dirs.filter((dir) => !dirs.some((other) => other !== dir && other.startsWith(`${dir}/`)));
     const paths = roots.map((root) => root.path);
     // Named while the tree still knows the shape. ONE branch fits a receipt and is the whole story; several
-    // would be a list, and a pill that retires itself is the wrong place for one — naming them was the line's
+    // would be a list, and a pill that retires itself is the wrong place for one: naming them was the line's
     // job, before the click, where the names could still change the decision.
     const first = roots[0];
     const only = roots.length === 1 && first !== undefined ? barrenPath(branchOf(first)) : undefined;
@@ -730,7 +730,7 @@ const confirmDelete = (): void => {
     anchor.value = null;
 };
 // Keep a barren branch on purpose: drop the standard placeholder into its DEEPEST folder, so the whole chain
-// is non-empty from then on — real for git, carried by clones, and out of the empty-folder list for good.
+// is non-empty from then on: real for git, carried by clones, and out of the empty-folder list for good.
 const keepFolder = (entry: WorkspaceTreeEntry): void => {
     const tail = chainOf(entry).tail;
     void run(async () => {
@@ -741,10 +741,10 @@ const keepFolder = (entry: WorkspaceTreeEntry): void => {
 const cancelDelete = (): void => {
     confirmPaths.value = undefined;
 };
-// Stage the selection on the clipboard. `system` publishes the same paths as text to the OS clipboard — the
+// Stage the selection on the clipboard. `system` publishes the same paths as text to the OS clipboard: the
 // menu path has no clipboard event to write through, so it asks the async API (best effort: it needs a secure
 // context, and CopyButton swallows the same failure). Reached through the tree element so a POPPED-OUT
-// explorer writes to the window the user is actually looking at — see clipboardOf.
+// explorer writes to the window the user is actually looking at: see clipboardOf.
 const stage = (mode: "copy" | "cut", system: "async" | "event"): readonly string[] => {
     const paths = clipPaths();
     if (paths.length === 0) {
@@ -759,7 +759,7 @@ const stage = (mode: "copy" | "cut", system: "async" | "event"): readonly string
     return paths;
 };
 
-// The names already in the target dir — what a paste must not land on top of. A dir the walk never listed is
+// The names already in the target dir: what a paste must not land on top of. A dir the walk never listed is
 // fetched first, so the check is made against what's really there rather than an empty "nothing here yet".
 const namesIn = async (dir: string): Promise<ReadonlySet<string>> => {
     const target = dir === `` ? undefined : byPath.value.get(dir);
@@ -771,7 +771,7 @@ const namesIn = async (dir: string): Promise<ReadonlySet<string>> => {
 };
 
 // Show what a paste produced: expand the target dir and select the landed entries. Without this a paste into a
-// collapsed folder — or one scrolled out of view — is indistinguishable from nothing having happened.
+// collapsed folder, or one scrolled out of view: is indistinguishable from nothing having happened.
 const revealPasted = (dir: string, paths: readonly string[]): void => {
     if (dir !== `` && !expanded.value.has(dir)) {
         toggleExpand(dir);
@@ -781,7 +781,7 @@ const revealPasted = (dir: string, paths: readonly string[]): void => {
     lead.value = anchor.value;
 };
 
-// Paste the clipboard into `dir`. A copy never overwrites — each source lands under a free name (VSCode's
+// Paste the clipboard into `dir`. A copy never overwrites: each source lands under a free name (VSCode's
 // "<name> copy"); a cut moves and consumes the clipboard.
 const doPaste = async (dir: string): Promise<void> => {
     const clip = clipboard.value;
@@ -823,7 +823,7 @@ const onCopyEvent = (event: ClipboardEvent, mode: "copy" | "cut"): void => {
         return;
     }
     // Publishing the paths as text is what makes an explorer copy useful outside the tree (paste into the chat,
-    // a terminal, an editor) — and it replaces whatever the OS clipboard held, so the file branch of onPasteEvent
+    // a terminal, an editor), and it replaces whatever the OS clipboard held, so the file branch of onPasteEvent
     // can't then fire on a stale file copied before this one.
     event.clipboardData?.setData(`text/plain`, paths.join(`\n`));
     event.preventDefault();
@@ -903,7 +903,7 @@ const onKeydown = (event: KeyboardEvent): void => {
         if (at !== undefined && (at.row.entry.type === `dir` || at.row.nest === true) && at.row.isExpanded) {
             toggleExpand(at.row.entry.path); // collapse
         } else if (at !== undefined) {
-            // Jump to the visual parent: the nearest shallower row above — the containing dir, or the nest
+            // Jump to the visual parent: the nearest shallower row above, the containing dir, or the nest
             // parent when the lead is a file folded under a package.json.
             for (let i = at.index - 1; i >= 0; i--) {
                 const above = visibleRows.value[i];
@@ -922,7 +922,7 @@ const onKeydown = (event: KeyboardEvent): void => {
         event.preventDefault();
     } else if (event.key === `Enter`) {
         if (leadEntry.value !== undefined) {
-            // Enter is the keyboard's single click, so it peeks like one — walking a folder with ↑↓ then Enter
+            // Enter is the keyboard's single click, so it peeks like one: walking a folder with ↑↓ then Enter
             // leaves the same one tab behind that clicking down it does.
             activate(leadEntry.value, true, `preview`);
         }
@@ -951,7 +951,7 @@ const onKeydown = (event: KeyboardEvent): void => {
 /* WHERE A DROP ON THIS ROW LANDS. A folder takes the drop itself; a FILE stands in for the folder holding it,
  * exactly as it does for New File, paste and every other op here (targetDir above). Aiming at a file used to be
  * the one gesture that ignored what was under the pointer: the row declined the drop, it bubbled to the
- * explorer background, and the files landed at the workspace root — nowhere near the folder the user was
+ * explorer background, and the files landed at the workspace root: nowhere near the folder the user was
  * pointing into. Dropping ONTO something now always means "beside it". */
 const dropDirOf = (row: Row): string => (row.entry.type === `dir` ? row.entry.path : parentDir(row.entry.path));
 const isInvalidMoveTarget = (dir: string): boolean => dragPaths.value.length > 0 && dragPaths.value.every((source) => !canMoveInto(source, dir));
@@ -961,7 +961,7 @@ const onRowDragStart = (event: DragEvent, row: Row): void => {
     }
     const path = row.entry.path;
     // Grabbing a selected row drags the whole selection; grabbing an unselected row drags (and selects) just it.
-    // Locked rows never travel — dragging one out of the state folder is a move the daemon refuses.
+    // Locked rows never travel: dragging one out of the state folder is a move the daemon refuses.
     const paths = unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
     if (paths.length === 0) {
         event.preventDefault();
@@ -983,7 +983,7 @@ const onRowDragEnd = (): void => {
 const onRowDragOver = (event: DragEvent, row: Row): void => {
     const offer = dragOffer(event);
     // Nothing this row can take (an image or a link dragged around inside the app): left alone, so the browser
-    // declines it — the same answer the explorer background gives, which a row must not quietly overrule.
+    // declines it: the same answer the explorer background gives, which a row must not quietly overrule.
     if (!offer.files && !offer.rows) {
         return;
     }
@@ -994,7 +994,7 @@ const onRowDragOver = (event: DragEvent, row: Row): void => {
     if (event.dataTransfer !== null) {
         event.dataTransfer.dropEffect = invalid ? `none` : dragPaths.value.length > 0 ? `move` : `copy`;
     }
-    // The highlight names the DESTINATION, so hovering a file lights up the folder row holding it — the answer
+    // The highlight names the DESTINATION, so hovering a file lights up the folder row holding it: the answer
     // to "where will this land?" is the row it will land in, not the one under the pointer. A file at the root
     // has no such row: the explorer background's own "drop to add" hint is already up and says it.
     dragOverPath.value = invalid || dir === `` ? undefined : dir;
@@ -1036,7 +1036,7 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
 // ---- context menu (acts on the whole selection when the right-clicked row is part of it) ----
 const menuItems = computed<MenuItem[]>(() => {
     const target = menuEntry.value;
-    /* A locked row has no menu worth showing — every item on it is something the sandbox refuses — so it gets
+    /* A locked row has no menu worth showing: every item on it is something the sandbox refuses, so it gets
      * the one line that explains the padlock instead. Said here as well as on the row because the menu is where
      * a user goes when a row won't do what they expect, and an empty menu would answer them with nothing. */
     if (target !== undefined && locked(target.path)) {
@@ -1049,7 +1049,7 @@ const menuItems = computed<MenuItem[]>(() => {
         { label: `New File`, icon: `file`, command: () => beginCreate(dir, `file`) },
         { label: `New Folder`, icon: `folder`, command: () => beginCreate(dir, `dir`) },
     ];
-    /* What the row's own icons offer, said in words and at the top — because the icons are revealed by HOVER, and
+    /* What the row's own icons offer, said in words and at the top, because the icons are revealed by HOVER, and
      * a touch device has no hover and a keyboard user never reaches them (the row is the button; the icons inside
      * it cannot be). This menu is the whole non-pointer route to a directory's document, health and history. */
     if (target?.type === `dir` && !multi) {
@@ -1063,7 +1063,7 @@ const menuItems = computed<MenuItem[]>(() => {
         if (!multi) {
             items.push({ label: `Rename`, icon: `pencil`, command: () => beginRename(target.path) });
         }
-        /* The one user-facing gesture a barren branch keeps: saying it is INTENTIONAL — a place a build drops
+        /* The one user-facing gesture a barren branch keeps: saying it is INTENTIONAL, a place a build drops
          * output, a mount point. Kept the durable way, with the standard placeholder file, so the folder is
          * genuinely non-empty from then on: real for git, visible to teammates, out of this list forever. No
          * private exclusion state anyone else can't see. */
@@ -1155,7 +1155,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                 >
                     <span class="w-[0.7rem] shrink-0"></span>
                     <span class="min-w-0 flex-1 truncate"
-                        >{{ row.more.toLocaleString() }} more {{ row.more === 1 ? "item" : "items" }} — search to reach them</span
+                        >{{ row.more.toLocaleString() }} more {{ row.more === 1 ? "item" : "items" }}, search to reach them</span
                     >
                 </div>
                 <template v-else>
@@ -1185,7 +1185,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @dragleave="onRowDragLeave(row)"
                         @drop="onRowDrop($event, row)"
                     >
-                        <!-- No chevron on a locked folder (nothing behind it to expand into — the walk stops there)
+                        <!-- No chevron on a locked folder (nothing behind it to expand into: the walk stops there)
                          or on a barren chain whose tail is the empty leaf: either way the gesture would only be
                          a promise the row can't keep. -->
                         <Icon
@@ -1197,7 +1197,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         <span v-else class="w-[0.7rem] shrink-0"></span>
                         <!-- Icon size/colour come from the active explorer setup (minimal/colorful/vivid). The fixed-width
                          slot keeps every glyph in one column so filenames align; ignored rows always dim. A locked
-                         row shows a padlock here (treat) and says so on hover — the tab it opens says the rest. -->
+                         row shows a padlock here (treat) and says so on hover: the tab it opens says the rest. -->
                         <span
                             class="flex shrink-0 items-center justify-center"
                             :class="treat(row).slotClass"
@@ -1217,7 +1217,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             @vue:mounted="focusRename"
                         />
                         <!-- A collapsed barren chain reads as one path ("public / demo / assets"): the shape of the
-                         label IS the explanation — a branch holding nothing but emptiness, selectable and
+                         label IS the explanation: a branch holding nothing but emptiness, selectable and
                          deletable as the one unit it really is. -->
                         <span
                             v-else
@@ -1225,14 +1225,14 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             :class="[
                                 row.entry.ignored || row.barren || locked(row.entry.path) || deadLink(row.entry) ? 'text-subtle' : 'text-content/90',
                                 // Out of the persona being read as: dimmed FURTHER, and only while a lens is on.
-                                // Opacity rather than a colour, so it stacks on whatever the row already was —
+                                // Opacity rather than a colour, so it stacks on whatever the row already was:
                                 // an ignored row outside the fence should read as both, not as one of the two.
                                 refused(row.entry.path) ? 'opacity-40' : '',
                             ]"
                             >{{ row.chain !== undefined ? row.chain.join(" / ") : row.entry.name }}</span
                         >
-                        <!-- A SYMLINK. The row already wears its TARGET's icon — a link to a folder looks like a
-                         folder, because that is what opening it gets you — so this marker is the one thing that
+                        <!-- A SYMLINK. The row already wears its TARGET's icon: a link to a folder looks like a
+                         folder, because that is what opening it gets you, so this marker is the one thing that
                          says the name is a pointer rather than the thing. Small and after the name, the way
                          VSCode hangs a ⤷ badge off the row rather than swapping the icon out. Hover names where
                          it goes, which VSCode's explorer does NOT do and which is most of the value: the whole
@@ -1246,7 +1246,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             :class="deadLink(row.entry) ? 'text-warning' : 'text-subtle'"
                             v-tooltip.right="linkTooltip(row.entry.link)"
                         />
-                        <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk —
+                        <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk:
                          the badge names what it is. What the shelf is FOR was a 29-word paragraph hanging off a
                          tree row, which is neither where anyone reads documentation nor anywhere a touch device
                          can reach; the workspace README owns that. -->
@@ -1256,7 +1256,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             >reference</span
                         >
                         <!-- The outbox, and the one badge here that is a WARNING rather than a label: everything
-                         under this directory is on the open internet. Colored, not dimmed — the shelf is out of
+                         under this directory is on the open internet. Colored, not dimmed: the shelf is out of
                          focus, this is the opposite of out of focus. The Public tab in the sandbox hub owns the
                          detail (which files, at what address, which ones the guards refused). -->
                         <span
@@ -1273,15 +1273,15 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             class="shrink-0 text-2xs text-subtle"
                         />
                         <!-- What this directory offers beside its name: its documents, its codebase health, its commit
-                         graph, its management panel — whatever rowActions gives it (the tree doesn't know which).
+                         graph, its management panel: whatever rowActions gives it (the tree doesn't know which).
                          Root has no row, so its own pair sits on the explorer toolbar instead.
 
-                         REVEALED ON HOVER, and kept on the selected row — except for the ones that are standing
+                         REVEALED ON HOVER, and kept on the selected row: except for the ones that are standing
                          (see restingClass). Always-on for ALL of them was affordable while only the two or three
                          repo rows had any; a documented monorepo puts one on fifty-five package rows, and a
                          permanent icon column is exactly the noise that stops the eye reading the names. The space
                          is reserved either way, so nothing shifts as the pointer sweeps down the tree, and a
-                         hidden icon takes no clicks — invisible-but-clickable is worse than absent.
+                         hidden icon takes no clicks: invisible-but-clickable is worse than absent.
 
                          An icon with a handler rather than a <button>: the ROW is the button (role="treeitem"),
                          and an interactive element inside one is invalid. The keyboard reaches these through the
@@ -1296,7 +1296,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             v-tooltip.right="action.tooltip"
                             @click.stop="runAction(row.entry, action)"
                         />
-                        <!-- Other members with this file open right now — live co-presence on the row. -->
+                        <!-- Other members with this file open right now: live co-presence on the row. -->
                         <PresenceAvatars v-if="row.entry.type === 'file'" :members="viewersOfPath(row.entry.path)" label="viewing this file" />
                         <!-- Transient "just changed" dot (a shape cue, not color-only) alongside the row tint. -->
                         <Icon
@@ -1341,8 +1341,8 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                 {{ filter.trim() ? "No matching files." : "Empty workspace." }}
             </p>
         </div>
-        <!-- THE SWEEP. Present only while settled-barren branches exist and gone the moment they are — not a
-             fixture waiting to be useful — and PINNED to the bottom of the panel, because a line that only
+        <!-- THE SWEEP. Present only while settled-barren branches exist and gone the moment they are, not a
+             fixture waiting to be useful, and PINNED to the bottom of the panel, because a line that only
              surfaces at the end of a long scroll tells a large workspace nothing at all.
 
              It NAMES what it counts. A single branch reads as itself; several fold into a count that opens; and
@@ -1366,7 +1366,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @blur="pointedBarren = undefined"
                     >
                         <!-- Two lines rather than one path, because a path in a 16rem column truncates from the
-                             RIGHT — which is precisely where the folder being deleted is. The name that is going
+                             RIGHT, which is precisely where the folder being deleted is. The name that is going
                              gets its own line and is never cut; where it lives goes underneath, quieter (those
                              folders are staying) and croppable, since it is the half you can afford to lose. -->
                         <span class="block truncate">{{ branch.label }}</span>
@@ -1375,7 +1375,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     <button
                         type="button"
                         class="shrink-0 cursor-pointer py-0.5 text-2xs text-subtle underline-offset-2 hover:text-content hover:underline"
-                        v-tooltip.top="'Keep this folder — it stops counting as empty'"
+                        v-tooltip.top="'Keep this folder: it stops counting as empty'"
                         @click="keepFolder(branch.entry)"
                     >
                         Keep
@@ -1447,7 +1447,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
    the file under it just changed on disk, and the row an empty-folder name in the sweep line is pointing at.
    Hover, selection and the focus ring come from the utility. */
 
-/* POINTED AT FROM ELSEWHERE — the pointer is on a name in the sweep line, not on this row, so the row cannot
+/* POINTED AT FROM ELSEWHERE: the pointer is on a name in the sweep line, not on this row, so the row cannot
    use hover to answer. An outline rather than a fill: it has to be legible next to both the plain hover tint
    and the selection tint without being mistaken for either. */
 .ui-row-select-pointed {

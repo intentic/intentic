@@ -9,15 +9,15 @@ import MigrationCard from "./MigrationCard.vue";
 
 /* The Sandbox hub's "Environment" tab: the composed overlay Dockerfile (agent-proposed, owner-approved, applied
  * by a rebuild), and below it the bundle card that moves the whole environment to another sandbox. The two
- * belong together — a restored bundle's last step IS the rebuild the card above hands you, because the overlay
+ * belong together: a restored bundle's last step IS the rebuild the card above hands you, because the overlay
  * travels as a recipe and the image it describes does not. EnvironmentCard self-hides until there's an overlay
  * or a proposal, so this tab adds the empty-state for a sandbox that has neither yet. */
 
 const { proposal, pending, applied, query } = useEnvironment();
 const empty = computed(() => !proposal.value && !pending.value && !applied.value);
 
-/* The empty state below is indistinguishable from the unread one — all three computeds read off a single
- * `state` that is undefined until /environment answers — so without this a sandbox WITH an overlay still opened
+/* The empty state below is indistinguishable from the unread one: all three computeds read off a single
+ * `state` that is undefined until /environment answers, so without this a sandbox WITH an overlay still opened
  * on "no environment changes yet" and then replaced it with a diff. That is the one sentence on this tab a
  * reader might act on (propose a change that already exists), told wrong.
  *

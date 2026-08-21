@@ -66,7 +66,7 @@ const RULES: readonly FieldRule[] = [
     // it, so say so here rather than after a round-trip.
     (_field, value) =>
         value.length > 0 && isForticlientCiphertext(value)
-            ? `FortiClient encrypted this with a key tied to the machine that exported it — it can't be used. Enter the real value.`
+            ? `FortiClient encrypted this with a key tied to the machine that exported it: it can't be used. Enter the real value.`
             : undefined,
     (field, value) => {
         if (value.length === 0 || field.key !== `port`) {

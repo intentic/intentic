@@ -5,10 +5,10 @@
 // the strip and the address:
 //
 //   · the category has to survive a reload and a shared link, because three places already link into this page
-//     aimed at ONE setting — the composer's connect gate, and Usage's two experiment cards. A link that lands on
+//     aimed at ONE setting: the composer's connect gate, and Usage's two experiment cards. A link that lands on
 //     a category not holding what it promised is worse than the long scroll it replaced.
 //   · a `?connect=` sign-in link has to win over a remembered category, and pressing a pill has to be able to
-//     get out from under it again — otherwise the strip reads as dead.
+//     get out from under it again: otherwise the strip reads as dead.
 //
 // None of that can be read off the template, and the last one is the failure the two params can produce between
 // them.
@@ -25,7 +25,7 @@ vi.mock(`../../composables/sandbox/useSandboxSettings`, () => ({
 
 // Every group stood in for by its own name, because the assertion IS the name: each real one opens a daemon read
 // of its own, and mounting thirteen of them would test the network rather than the split. Written out one call
-// per group rather than looped — vi.mock is hoisted, so its specifier has to be a literal.
+// per group rather than looped: vi.mock is hoisted, so its specifier has to be a literal.
 const stub = (name: string) => ({ default: defineComponent({ render: () => h(`section`, { "data-group": name }) }) });
 vi.mock(`./AiAccountSection.vue`, () => stub(`AI account`));
 vi.mock(`./agent/AgentModels.vue`, () => stub(`Models`));
@@ -61,7 +61,7 @@ const EVERY_GROUP = [
 const { default: SandboxAgent } = await import("./SandboxAgent.vue");
 
 // The hub's route, alone: the app's own carries guards that would redirect an unauthenticated visitor, and a
-// redirected test reads as a page showing its default category — precisely the thing half of these check.
+// redirected test reads as a page showing its default category: precisely the thing half of these check.
 const routerFor = async (query: Record<string, string>): Promise<Router> => {
     const router = createRouter({
         history: createMemoryHistory(),
@@ -121,7 +121,7 @@ it(`opens the category a link named`, async () => {
     expect(shown(el)).not.toContain(`AI account`);
 });
 
-// A stale or hand-typed name lands on the default rather than on a page with nothing on it — there is no row in
+// A stale or hand-typed name lands on the default rather than on a page with nothing on it: there is no row in
 // the strip to get back from a blank one.
 it(`falls back to accounts when the address names a category that does not exist`, async () => {
     const { el } = await mount({ section: `nonsense` });
@@ -136,7 +136,7 @@ it(`shows accounts for a sign-in link even while another category is named`, asy
     expect(shown(el)).not.toContain(`Checks`);
 });
 
-// A press navigates, so the assertions wait for the navigation rather than for a render tick — the strip writes
+// A press navigates, so the assertions wait for the navigation rather than for a render tick: the strip writes
 // the address and reads the page back off it, which is the whole reason a reload keeps the category.
 it(`writes the picked category to the address, and the default writes no param`, async () => {
     const { el, router } = await mount();

@@ -11,8 +11,8 @@ import { normalizeHostName } from "./hostName";
 /* The single add-a-server flow: shown by InfraDeclare and the Add dialog as the requirement card when
  * something the user wants needs a deploy target (the parent unmounts it once a host registers), and by
  * InfraDeclare's "What you have" section behind its Add server button. Run a single connect-host
- * command on each host you want to deploy onto — it sets up the host (service user + SSH key + its own
- * Cloudflare tunnel) and self-registers with the sandbox via /enroll (authed by the connection token) — no
+ * command on each host you want to deploy onto: it sets up the host (service user + SSH key + its own
+ * Cloudflare tunnel) and self-registers with the sandbox via /enroll (authed by the connection token): no
  * sandbox recreate, no keys pasted here.
  *
  * The command carries the user's OWN Cloudflare token, always: a deploy target is reached over SSH, and
@@ -35,7 +35,7 @@ const hostNameTouched = ref(false);
 const rawHostName = computed(() => hostName.value.trim());
 const canonicalHostName = computed(() => normalizeHostName(hostName.value));
 const hostNameReady = computed(() => rawHostName.value === `` || canonicalHostName.value !== ``);
-/* The zone to create this host's tunnel in, derived client-side from the daemon URL — right when the sandbox is
+/* The zone to create this host's tunnel in, derived client-side from the daemon URL: right when the sandbox is
  * behind the user's OWN domain (same account, same zone). A sandbox we connect answers under intentic's zone,
  * which the user's token cannot touch: pass no ZONE there and let the host resolve the token's own zone. */
 const zone = computed(() => (active.value?.providedTunnel === true ? undefined : zoneFromUrl(daemonUrl.value)));
@@ -130,7 +130,7 @@ onUnmounted(() => clearInterval(timer));
                     />
                     <span v-if="cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid" class="ui-field-error">
                         <Icon name="exclamation-triangle" class="text-2xs" />
-                        That doesn’t look like a Cloudflare API token — double-check for copy/paste slips.
+                        That doesn't look like a Cloudflare API token: double-check for copy/paste slips.
                     </span>
                     <span v-else class="text-2xs text-subtle"
                         >Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Rides the command into your host, never to the platform.</span
@@ -181,7 +181,7 @@ onUnmounted(() => clearInterval(timer));
             <div v-if="commandReady" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" class="text-info" spin />
                 <span
-                    >Waiting for machines to register — each appears in your server list as you connect it. Re-run the command on each host you want
+                    >Waiting for machines to register: each appears in your server list as you connect it. Re-run the command on each host you want
                     to add.</span
                 >
             </div>

@@ -3,7 +3,7 @@ import { useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { useLayout } from "../../../composables/useLayout";
 
-/* The outline of a diff whose content has not arrived yet — what a `pending` tab shows instead of an empty pane.
+/* The outline of a diff whose content has not arrived yet: what a `pending` tab shows instead of an empty pane.
  *
  * Drawn as the layout the content will occupy, for the same reason the transcript's outline is: the reader
  * already knows which file they clicked (the strip says so, and the toolbar above this has the status letter and
@@ -14,14 +14,14 @@ import { useLayout } from "../../../composables/useLayout";
  * diff then contradicts.
  *
  * Nothing here is armed with a timer or a slow state: this outline is only ever mounted through the workspace's
- * loading reveal, which does not draw it at all for an answer that lands in the first beat — and a warmed diff
+ * loading reveal, which does not draw it at all for an answer that lands in the first beat, and a warmed diff
  * lands in the same tick as the click. */
 
 const { mobile } = useDevice();
 const { diffLayout } = useLayout();
 const split = computed(() => !mobile.value && diffLayout.value === `split`);
 
-// Code-shaped line widths — a fixed uneven set, indented the way a file is. Fixed rather than random because an
+// Code-shaped line widths: a fixed uneven set, indented the way a file is. Fixed rather than random because an
 // outline that reshuffles on every re-render is an animation nobody asked for.
 const LINES = [
     { width: `w-5/6`, indent: `` },

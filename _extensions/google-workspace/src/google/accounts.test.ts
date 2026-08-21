@@ -46,7 +46,7 @@ describe("connectionsFrom", () => {
         });
     });
 
-    // A card the owner half-filled must be VISIBLE with its reason, not absent — "no Google account is
+    // A card the owner half-filled must be VISIBLE with its reason, not absent: "no Google account is
     // connected" is the wrong sentence to show someone looking straight at their card.
     it("keeps a half-filled card and says what is missing", () => {
         const [connection] = connectionsFrom(userEnv("GOOGLE", { GOOGLE_REFRESH_TOKEN_GOOGLE: "" }));

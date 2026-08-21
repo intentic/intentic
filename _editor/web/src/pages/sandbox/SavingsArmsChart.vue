@@ -8,10 +8,10 @@ import { providerColor } from "./usageChart";
  * differ in nothing a reader cares about except which arm is which and what the bars measure.
  *
  * Two bars rather than a trend line, because the subject is a comparison of two populations, not a quantity
- * over time — and the arms are not sampled evenly through the window (the holdout is a minority by design), so
+ * over time, and the arms are not sampled evenly through the window (the holdout is a minority by design), so
  * a line would draw a shape that is an artefact of the coin flip.
  *
- * Each arm is TWO lines — its name and mean on one, its bar and n on the next — rather than one line of
+ * Each arm is TWO lines (its name and mean on one, its bar and n on the next) rather than one line of
  * [label | bar | value] in fixed columns. The columned version reserved 7.5rem for a label and truncated it,
  * so on a card this section actually renders at, the two things a reader must tell apart read "steer off …"
  * and "steer on". Nothing here is allowed to truncate: a bar whose arm you cannot name is not evidence.
@@ -23,7 +23,7 @@ const { reading, onLabel, offLabel, detail } = defineProps<{
     reading: TurnMetricReading;
     onLabel: string;
     offLabel: string;
-    // The verdict's own qualification — its margin, or how far the shorter arm has left to run — printed under
+    // The verdict's own qualification (its margin, or how far the shorter arm has left to run) printed under
     // the arms it is about rather than beside the headline, which has no room for a clause.
     detail: string;
 }>();

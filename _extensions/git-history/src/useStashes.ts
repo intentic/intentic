@@ -53,7 +53,7 @@ export function useStashes(repo: Ref<string>) {
                 const result = await api.sandbox.rpc.git.stashApply({ repo: repo.value, ref, pop });
                 await invalidate();
                 if (!result.ok) {
-                    throw new Error(`Could not apply cleanly — resolve the conflict in the Changes panel. The stash is still there.`);
+                    throw new Error(`Could not apply cleanly: resolve the conflict in the Changes panel. The stash is still there.`);
                 }
             }, `Could not apply that stash.`),
         drop: (ref: string): Promise<void> =>

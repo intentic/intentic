@@ -6,13 +6,13 @@ import { createPopout, type Popout } from "./usePopout";
 
 /* The reload contract. A page refresh (dev-server HMR, an update, F5) destroys the realm driving a popped-out
  * panel but NOT the window it lives in: the window's keeper asks whatever page answers on the opener next
- * whether anyone is driving it, and this module's hook answers — taking the window over when nobody is.
+ * whether anyone is driving it, and this module's hook answers: taking the window over when nobody is.
  *
  * What is pinned here is that side of the handshake, and the ANSWER as much as the adoption. A pop-out window
  * renders state that lives in another window's realm, so a keeper that hears `live` from a page that is not
  * actually drawing in it is how a panel ends up a photograph of the app: still showing the tabs, the selection
  * and the drafts of a realm that is gone, while the board in the live window moves on without it. Which is why
- * the answer is three-valued and comes from the PANEL — `waiting` is the whole of the difference between a
+ * the answer is three-valued and comes from the PANEL: `waiting` is the whole of the difference between a
  * window whose app is coming and a window whose app has forgotten it. */
 
 // A stand-in for the pop-out window: a real (detached) document, so dressing it is exercised for real, plus the
@@ -36,13 +36,13 @@ const fakeWindow = (name: string) => {
     };
 };
 
-// One keeper tick: "is a live page drawing in me?" — the three-valued answer is what the window acts on
+// One keeper tick: "is a live page drawing in me?", the three-valued answer is what the window acts on
 // (`live` uncovers the panel, `waiting` veils it but keeps it, `none` starts the count towards closing).
 const adopt = (name: string, win: ReturnType<typeof fakeWindow>) => window.__intentic?.adoptPopout(name, win as unknown as Window) ?? `none`;
 
 /* The panel HOST, which in the app is the component that renders the panel into whichever window currently
  * holds it (shell/PoppablePanels.vue). Its own scope is what ends the hold, so mounting and unmounting one is
- * an effect scope here — and every test that expects a window to be told it is `live` has to have one, which is
+ * an effect scope here, and every test that expects a window to be told it is `live` has to have one, which is
  * the point: nothing else in the page can honestly say a panel is on screen out there. */
 const renders = (popout: Popout): (() => void) => {
     const scope = effectScope();
@@ -86,7 +86,7 @@ describe(`createPopout`, () => {
 
         popout.popOut();
 
-        // A real page of this app, named for the panel it holds — where about:blank left the window with no
+        // A real page of this app, named for the panel it holds, where about:blank left the window with no
         // address, no icon and a white rectangle in it until the panel landed.
         expect(open).toHaveBeenCalledWith(`/popout.html?panel=open-panel`, `open-panel`, expect.stringContaining(`popup=1`));
         expect(win.focus).toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe(`createPopout`, () => {
         open.mockRestore();
     });
 
-    /* The pop-out page is addressed by URL, so it is addressed under the app's BASE — this same build is served
+    /* The pop-out page is addressed by URL, so it is addressed under the app's BASE: this same build is served
      * under a prefix by the marketing site's recorded demo (`/demo/`), where a root-absolute `/popout.html` is
      * that site's 404 page: a window nothing in it can answer the keeper's handshake from, and therefore a panel
      * that never leaves its column. */
@@ -120,7 +120,7 @@ describe(`createPopout`, () => {
     it(`adopts the window a reload left floating, without docking on the way`, () => {
         sessionStorage.setItem(`ui-popout-reload-panel`, `1`);
         const popout = createPopout(`reload-panel`, `Panel`, size);
-        // The shell keeps the column collapsed and the panel unmounted while this is true — the frames between
+        // The shell keeps the column collapsed and the panel unmounted while this is true: the frames between
         // load and adoption are exactly where a docked flash would show.
         expect(popout.restoring.value).toBe(true);
         expect(popout.poppedOut.value).toBe(false);
@@ -140,7 +140,7 @@ describe(`createPopout`, () => {
         const popout = createPopout(`dress-panel`, `Dressed`, size);
         const win = fakeWindow(`dress-panel`);
         // What the previous page left behind: its own stylesheet clone, marked as a clone, and the panel DOM it
-        // teleported out — inert now that the realm animating it is gone.
+        // teleported out: inert now that the realm animating it is gone.
         const stale = Object.assign(win.document.createElement(`style`), { textContent: `.dead{}` });
         stale.setAttribute(`data-intentic-clone`, ``);
         win.document.head.appendChild(stale);
@@ -190,7 +190,7 @@ describe(`createPopout`, () => {
 
         expect(popout.poppedOut.value).toBe(false);
         expect(popout.body.value).toBeUndefined();
-        // A window that is closing needs no closing — and one that is merely RELOADING must not be closed, or
+        // A window that is closing needs no closing, and one that is merely RELOADING must not be closed, or
         // an F5 out there aborts mid-navigation and takes the user's floating panel with it.
         expect(win.close).not.toHaveBeenCalled();
         // Rescued into this document rather than left in one that is being torn down: same live elements, so a
@@ -227,12 +227,12 @@ describe(`createPopout`, () => {
         createPopout(`silent-panel`, `Panel`, size);
         const win = fakeWindow(`other-panel`);
 
-        // A name this page has no store for, and a store that never adopted this window — the keeper of either
+        // A name this page has no store for, and a store that never adopted this window: the keeper of either
         // hears `none`, veils its panel and starts counting towards closing rather than showing a dead one.
         expect(adopt(`no-such-panel`, win)).toBe(`none`);
     });
 
-    it(`stops holding the docked slot for a window that never reports in — but still takes it if it does`, () => {
+    it(`stops holding the docked slot for a window that never reports in, but still takes it if it does`, () => {
         sessionStorage.setItem(`ui-popout-late-panel`, `1`);
         const popout = createPopout(`late-panel`, `Panel`, size);
         renders(popout);
@@ -272,12 +272,12 @@ describe(`createPopout`, () => {
         expect(win.close).toHaveBeenCalled();
     });
 
-    /* THE ROLL-CALL. Everything above happens the moment the window asks — which is the catch, because when a
+    /* THE ROLL-CALL. Everything above happens the moment the window asks, which is the catch, because when a
      * window gets to ask is not up to it. A window the user is not looking at (behind another, on a monitor
      * that has gone to sleep) has its interval throttled to one a second and, after a few minutes, to one a
      * MINUTE, while the wait above runs out in two and a half. That gap IS the report this exists for: the
      * panel back in its column, the window still standing on the other screen showing the last frame it was
-     * handed, not even veiled — painting the veil is something the tick does too.
+     * handed, not even veiled: painting the veil is something the tick does too.
      *
      * So the page says out loud that it can answer, and every window holding the panel asks straight away
      * (popout/handshake.ts). Real timers here: a broadcast is delivered by the runtime's own queue, which is
@@ -304,7 +304,7 @@ describe(`createPopout`, () => {
     });
 
     it(`asks unprompted too, because the note a window leaves does not survive every reload`, async () => {
-        // A self-heal reload wipes this origin's storage on the way out (composables/selfHeal.ts) — the window
+        // A self-heal reload wipes this origin's storage on the way out (composables/selfHeal.ts): the window
         // it left floating is real all the same, so the roll-call does not wait to be told one is expected.
         vi.useRealTimers();
         const heard = await nudges();
@@ -321,7 +321,7 @@ describe(`createPopout`, () => {
         adopt(`answer-panel`, fakeWindow(`answer-panel`));
         const heard = await nudges();
 
-        // The veil comes off on the arrival and back on at the departure — both used to reach the window a tick
+        // The veil comes off on the arrival and back on at the departure: both used to reach the window a tick
         // later at best, and a throttled minute later at worst.
         const unmount = renders(popout);
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -339,7 +339,7 @@ describe(`createPopout`, () => {
         const popout = createPopout(`retire-panel`, `Panel`, size);
         const heard = await nudges();
 
-        // Nothing observable changed here — the store simply stopped expecting the window — so the ask is
+        // Nothing observable changed here: the store simply stopped expecting the window, so the ask is
         // explicit, and the leftover closes itself on the answer rather than floating until its next tick.
         popout.dock();
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -349,7 +349,7 @@ describe(`createPopout`, () => {
 
     /* THE GHOST. Everything below is one bug, reported as "I refreshed and ended up with the chat in a floating
      * window AND in its column, and the floating one doesn't react to anything". It was possible because the
-     * answer used to be a claim — "I attached to this window once" — so any state that left a store attached to
+     * answer used to be a claim: "I attached to this window once", so any state that left a store attached to
      * a window it was not drawing into told that window it was live, forever. The veil never came, the
      * twelve-second self-close never came, and the window sat frozen on its last frame beside a perfectly live
      * docked panel. */
@@ -358,7 +358,7 @@ describe(`createPopout`, () => {
         const popout = createPopout(`blank-panel`, `Panel`, size);
         const win = fakeWindow(`blank-panel`);
 
-        // No host: the app has adopted the window in the gap before the panel is mounted — every reload has one,
+        // No host: the app has adopted the window in the gap before the panel is mounted, every reload has one,
         // and a session that lands on /login or a sandbox that never resolves never leaves it.
         const driven = adopt(`blank-panel`, win);
 
@@ -379,7 +379,7 @@ describe(`createPopout`, () => {
         const unmount = renders(popout);
         expect(adopt(`arrive-panel`, win)).toBe(`live`);
 
-        // The host going away — a hot update re-creating it, a shell swap, the workspace ending. The window is
+        // The host going away: a hot update re-creating it, a shell swap, the workspace ending. The window is
         // told the truth on the very next tick rather than being left with a picture of the app.
         unmount();
         expect(adopt(`arrive-panel`, win)).toBe(`waiting`);
@@ -421,7 +421,7 @@ describe(`createPopout`, () => {
 
     /* The other half of the same lesson, and the reason handing back is not simply dock(): losing the host is
      * not the user asking for the panel in its column. A store that treated it as one refused every window that
-     * reported in afterwards — so a teardown in the seconds after a refresh (the sign-in settling, a sandbox
+     * reported in afterwards, so a teardown in the seconds after a refresh (the sign-in settling, a sandbox
      * resolving) permanently closed the window the reload was supposed to give back. */
     it(`stays adoptable after handing a window back`, () => {
         const popout = createPopout(`readopt-panel`, `Panel`, size);
@@ -431,7 +431,7 @@ describe(`createPopout`, () => {
         unmount();
         vi.advanceTimersByTime(3000);
 
-        // The panel is mounted again and the user pops out again — or the same window's keeper reports in late.
+        // The panel is mounted again and the user pops out again, or the same window's keeper reports in late.
         renders(popout);
         const back = fakeWindow(`readopt-panel`);
 
@@ -449,12 +449,12 @@ describe(`createPopout`, () => {
 
     /* The other half of "the panel is a view of the app, not a picture of it": it has to answer the pointer out
      * there. Every overlay in the app arms one listener on `document` to catch the click that dismisses it, and
-     * `document` in this realm is the main window's — so these pin that a click in the pop-out reaches it. */
+     * `document` in this realm is the main window's, so these pin that a click in the pop-out reaches it. */
     it(`hands a pop-out document the app's dismiss listeners, real event and all`, () => {
         const popout = createPopout(`dismiss-panel`, `Panel`, size);
         const targets: (EventTarget | null)[] = [];
         const onClick = vi.fn((event: Event) => targets.push(event.target));
-        // Armed BEFORE the window opens — an overlay already open when the user pops the panel out. It gets the
+        // Armed BEFORE the window opens: an overlay already open when the user pops the panel out. It gets the
         // window on attach, or the first thing the user clicked out there would be the thing that never closes.
         document.addEventListener(`click`, onClick);
         const win = fakeWindow(`dismiss-panel`);
@@ -466,7 +466,7 @@ describe(`createPopout`, () => {
 
         // The REAL click, with the REAL target: PrimeVue reads it to tell "outside" from "the trigger that just
         // opened me" and from "my own content". Re-dispatching a synthetic click into this document instead
-        // would name this document as the target — and close every popover on the click that opened it.
+        // would name this document as the target, and close every popover on the click that opened it.
         expect(onClick).toHaveBeenCalledTimes(1);
         expect(targets).toEqual([empty]);
 
@@ -477,7 +477,7 @@ describe(`createPopout`, () => {
         expect(onClick).toHaveBeenCalledTimes(1);
 
         // Docked, the window is no longer a window the app renders into, so nothing armed afterwards belongs out
-        // there. (A fresh node, because docking salvages the panel's own nodes INTO this document — see dock.)
+        // there. (A fresh node, because docking salvages the panel's own nodes INTO this document: see dock.)
         popout.dock();
         const leftover = win.document.createElement(`div`);
         win.document.body.appendChild(leftover);
@@ -492,7 +492,7 @@ describe(`createPopout`, () => {
         const onVisibility = vi.fn();
         // `visibilitychange` describes the document it was armed on, so a listener asking after THIS window must
         // not be answered by a pop-out minimizing. Whether the app is on screen anywhere is a separate question,
-        // and onScreen.ts answers it by asking each window for itself — see the test below.
+        // and onScreen.ts answers it by asking each window for itself: see the test below.
         document.addEventListener(`visibilitychange`, onVisibility);
         const win = fakeWindow(`scope-panel`);
         adopt(`scope-panel`, win);
@@ -503,15 +503,15 @@ describe(`createPopout`, () => {
         document.removeEventListener(`visibilitychange`, onVisibility);
     });
 
-    /* A pop-out window is one of the app's own windows, and the gates that ask "is anyone looking?" — the unread
-     * badge, presence idle — have to count it. Everything out there is drawn by the realm in the app's TAB, so
+    /* A pop-out window is one of the app's own windows, and the gates that ask "is anyone looking?": the unread
+     * badge, presence idle: have to count it. Everything out there is drawn by the realm in the app's TAB, so
      * for as long as they read that tab's visibility, a chat being read on a second screen counted as nobody
      * looking whenever the tab itself sat behind something. */
     it(`counts the window a panel floats in as somewhere the app is on screen`, () => {
         const popout = createPopout(`screen-panel`, `Panel`, size);
         const win = fakeWindow(`screen-panel`);
         // jsdom answers `visible` for the page's own document and `prerender` for a detached one, and neither
-        // can be set — so both windows are dressed by hand, the way the browser would report them.
+        // can be set, so both windows are dressed by hand, the way the browser would report them.
         Object.defineProperty(win.document, `visibilityState`, { value: `visible`, configurable: true });
         Object.defineProperty(document, `visibilityState`, { value: `hidden`, configurable: true });
         document.dispatchEvent(new Event(`visibilitychange`)); // the tab going behind another one
@@ -522,7 +522,7 @@ describe(`createPopout`, () => {
 
         popout.dock();
 
-        // Docked, the window shows nothing of the app and stops answering for it — leaving the tab, which is
+        // Docked, the window shows nothing of the app and stops answering for it: leaving the tab, which is
         // behind another one.
         expect(onScreen.value).toBe(false);
         Reflect.deleteProperty(document, `visibilityState`);
@@ -546,7 +546,7 @@ describe(`createPopout`, () => {
 
     /* WHERE THE WINDOW COMES BACK. Popping a panel out is a many-times-a-day gesture, so a window that always
      * opens centred on the app is a window the user drags to the same corner of the same screen a dozen times a
-     * day. The frame it was last left in is what reopening asks for — the one part of the cost of this action
+     * day. The frame it was last left in is what reopening asks for: the one part of the cost of this action
      * that no amount of surfacing the ACTION could pay off. */
     it(`reopens the window in the frame the user left it in`, () => {
         const popout = createPopout(`frame-panel`, `Panel`, size);
@@ -558,7 +558,7 @@ describe(`createPopout`, () => {
         const open = vi.spyOn(window, `open`).mockReturnValue(null);
         popout.popOut();
 
-        // The second screen it was dragged to, at the size it was dragged to — not `size()` centred on the app.
+        // The second screen it was dragged to, at the size it was dragged to, not `size()` centred on the app.
         expect(open).toHaveBeenCalledWith(expect.any(String), `frame-panel`, `popup=1,width=900,height=1100,left=2200,top=180`);
         open.mockRestore();
     });
@@ -578,7 +578,7 @@ describe(`createPopout`, () => {
         localStorage.setItem(`ui-popout-frame-gone-panel`, `2200,180,900,1100`);
         // One screen attached now, and the remembered frame is off the side of it: the monitor it names has been
         // unplugged, and a window opened out there is one the user can neither find nor close. Only a browser
-        // that says `false` proves this — silence keeps the frame, because silence is also what a second monitor
+        // that says `false` proves this: silence keeps the frame, because silence is also what a second monitor
         // sounds like.
         Object.defineProperty(window.screen, `isExtended`, { value: false, configurable: true });
         const popout = createPopout(`gone-panel`, `Panel`, size);
@@ -614,7 +614,7 @@ describe(`createPopout`, () => {
     });
 
     /* A popped-out panel is drawn by THIS realm into another window, so everything the design system reads off
-     * <html> has to be put there by hand — and kept there. The text size is the one that changes the layout
+     * <html> has to be put there by hand, and kept there. The text size is the one that changes the layout
      * rather than the colours, so a window left behind on the old size is the most visible way for the two
      * windows to disagree: a chat set a step smaller than the app it was torn off. */
     it(`carries the base text size out to a pop-out window, and follows it when the reader changes it`, async () => {
@@ -625,13 +625,13 @@ describe(`createPopout`, () => {
         adopt(`text-size-panel`, win);
         expect(win.document.documentElement.getAttribute(`data-text-size`)).toBe(`large`);
 
-        // Changed while the window is open — the pop-out page's own restore script ran once, at load, so this
+        // Changed while the window is open: the pop-out page's own restore script ran once, at load, so this
         // is the only thing that can move it.
         document.documentElement.setAttribute(`data-text-size`, `compact`);
         await vi.advanceTimersByTimeAsync(10);
         expect(win.document.documentElement.getAttribute(`data-text-size`)).toBe(`compact`);
 
-        // And back to the default, which is the ABSENCE of the attribute — a stale `compact` left behind here
+        // And back to the default, which is the ABSENCE of the attribute: a stale `compact` left behind here
         // would strand the window one size below the app for as long as it stayed open.
         document.documentElement.removeAttribute(`data-text-size`);
         await vi.advanceTimersByTimeAsync(10);

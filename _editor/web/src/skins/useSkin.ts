@@ -33,8 +33,8 @@ const ATTRIBUTE = `data-skin`;
 const FONT_ELEMENT_ID = `ui-skin-font`;
 
 /* One entry per skin that wants a face of its own. The HUD takes Chakra Petch's angular technical caps. Sanctum
- * takes the SITE'S two faces — Baloo 2 for every heading and label in the chrome, Playfair Display for the one
- * heading in the app drawn at display size — so the workspace and the marketing pages are set in the same type.
+ * takes the SITE'S two faces: Baloo 2 for every heading and label in the chrome, Playfair Display for the one
+ * heading in the app drawn at display size, so the workspace and the marketing pages are set in the same type.
  * A skin absent from this map simply loads nothing. */
 const FONT_HREF: Partial<Record<Skin, string>> = {
     hud: `https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap`,

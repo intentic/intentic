@@ -14,14 +14,14 @@ describe("parseArgs", () => {
         expect(bool(args, "json")).toBe(true);
     });
 
-    // A flag whose next token is another flag takes no value — otherwise `--json --to x` would set json="--to".
+    // A flag whose next token is another flag takes no value: otherwise `--json --to x` would set json="--to".
     it("does not swallow the next flag as a value", () => {
         const args = parseArgs(["--all", "--body", "hi"]);
         expect(bool(args, "all")).toBe(true);
         expect(flag(args, "body")).toBe("hi");
     });
 
-    // Negative numbers are values, not flags — the one place the leading dash has to be looked past.
+    // Negative numbers are values, not flags: the one place the leading dash has to be looked past.
     it("takes a negative number as a value", () => {
         expect(flag(parseArgs(["--offset", "-5"]), "offset")).toBe("-5");
     });

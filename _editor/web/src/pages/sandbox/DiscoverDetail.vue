@@ -8,7 +8,7 @@ import { useMembership } from "../../composables/membership/useMembership";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
 import PremiumCost from "./PremiumCost.vue";
 
-/* ONE LISTING, READ BEFORE IT IS RUN — and the surface where this product's actual argument about trust gets
+/* ONE LISTING, READ BEFORE IT IS RUN, and the surface where this product's actual argument about trust gets
  * made instead of implied.
  *
  * The source identity pins what runs, a deterministic scanner and the registry's agent gate inspect that exact
@@ -45,13 +45,13 @@ const sourceHref = computed(() => {
     if (url === undefined) {
         return undefined;
     }
-    // A GitHub pointer can link at the exact commit, which is the only link worth having here — the branch
+    // A GitHub pointer can link at the exact commit, which is the only link worth having here: the branch
     // shows code that is not what would be installed.
     return repo.value !== undefined && ref40.value !== undefined ? `https://github.com/${repo.value}/tree/${ref40.value}` : url.replace(/\.git$/, ``);
 });
 
 // An audit reads a commit, so it is offered exactly when there is one to read. Everything else on this panel
-// renders regardless — a listing nobody can install is still a listing somebody may want to understand.
+// renders regardless: a listing nobody can install is still a listing somebody may want to understand.
 const auditable = computed(() => ref40.value !== undefined && listing.state.kind !== `blocked`);
 const actionable = computed(() => listing.state.action !== undefined && canInstall);
 // The audit leads wherever the registry has not vouched for the code. See the block comment above.
@@ -61,7 +61,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
  *
  * A premium install donates to the creator from the owner's daily allowance, and this dialog is the last thing
  * read before that happens. The cost block below states the price and the balance; what is HERE is the other
- * half of the same fix — the price on the button. A reader who skips the body and goes straight for the action
+ * half of the same fix: the price on the button. A reader who skips the body and goes straight for the action
  * still cannot spend without seeing what it costs, which is the point.
  *
  * Only where a spend is actually pending: an already-installed listing has no button, and a free one has no
@@ -80,7 +80,7 @@ const priceLabel = computed(() =>
 <template>
     <!-- The footer WRAPS, which is not cosmetic: its primary label is a sentence ("Have my agent read the code
          first") because that is the offer this panel exists to make, and on a phone that sentence plus Install
-         is wider than the dialog — unwrapped, the one control that matters most is the one that gets clipped. -->
+         is wider than the dialog: unwrapped, the one control that matters most is the one that gets clipped. -->
     <Modal v-model:open="open" size="md">
         <template #header>
             <div class="flex min-w-0 items-center gap-3">
@@ -104,7 +104,7 @@ const priceLabel = computed(() =>
                 >
                 <span v-if="listing.entry.category">{{ listing.entry.category }}</span>
                 <span :class="listing.entry.tier === `premium` ? `text-primary-500` : ``">
-                    {{ listing.entry.tier === "premium" ? "Premium — needs an intentic membership" : "Free" }}
+                    {{ listing.entry.tier === "premium" ? "Premium, needs an intentic membership" : "Free" }}
                 </span>
                 <a
                     v-if="listing.entry.homepage"
@@ -142,7 +142,7 @@ const priceLabel = computed(() =>
                     <div class="flex items-start gap-2 text-xs">
                         <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
                         <span class="text-content">
-                            <b>Deterministic scan</b> — {{ listing.entry.securityReview.deterministic.scanner }}
+                            <b>Deterministic scan</b>: {{ listing.entry.securityReview.deterministic.scanner }}
                             {{ listing.entry.securityReview.deterministic.version }} found no blocking dependency, secret, or configuration issue.
                             <span class="text-muted">Workflow run {{ listing.entry.securityReview.deterministic.runId }}.</span>
                         </span>
@@ -150,7 +150,7 @@ const priceLabel = computed(() =>
                     <div class="flex items-start gap-2 text-xs">
                         <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
                         <span class="text-content">
-                            <b>Agent security audit</b> — {{ listing.entry.securityReview.reviewer }} passed this exact source under
+                            <b>Agent security audit</b>: {{ listing.entry.securityReview.reviewer }} passed this exact source under
                             <code class="ui-code">{{ listing.entry.securityReview.policy }}</code
                             >. <span class="text-muted">Gate run {{ listing.entry.securityReview.runId }}.</span>
                         </span>
@@ -159,26 +159,26 @@ const priceLabel = computed(() =>
                 <div v-else class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
                     <span class="text-content">
-                        <b>No security audit record</b> — this registry has not bound both automated checks to the source.
+                        <b>No security audit record</b>: this registry has not bound both automated checks to the source.
                     </span>
                 </div>
 
                 <div v-if="verified" class="flex items-start gap-2 text-xs">
                     <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
                     <span class="text-content">
-                        <b>Human reviewed</b> — someone here also read the source at this commit.
+                        <b>Human reviewed</b>: someone here also read the source at this commit.
                         <span v-if="listing.entry.trustReason" class="text-muted">{{ listing.entry.trustReason }}</span>
                     </span>
                 </div>
                 <div v-else class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
-                    <span class="text-content"><b>No human source review</b> — use your own agent read if you want an independent account.</span>
+                    <span class="text-content"><b>No human source review</b>: use your own agent read if you want an independent account.</span>
                 </div>
 
                 <div v-if="ref40" class="flex items-start gap-2 text-xs">
                     <Icon name="check" class="mt-0.5 shrink-0 text-success" />
                     <span class="text-content">
-                        <b>Pinned</b> — you install commit <code class="ui-code">{{ shortRef }}</code
+                        <b>Pinned</b>: you install commit <code class="ui-code">{{ shortRef }}</code
                         >. <span class="text-muted">A force-push upstream cannot change what runs here.</span>
                     </span>
                 </div>
@@ -186,7 +186,7 @@ const priceLabel = computed(() =>
                 <div class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
                     <span class="text-content">
-                        <b>Not browser-isolated</b> —
+                        <b>Not browser-isolated</b>:
                         <span class="text-muted">
                             its bundle shares this app's page, browser storage and network access. The manifest gates daemon calls made through the
                             extension API; it does not confine browser code.
@@ -198,7 +198,7 @@ const priceLabel = computed(() =>
                      registry that runs no scanner has not failed a check. -->
                 <div v-if="loads" class="flex items-start gap-2 text-xs">
                     <Icon name="check" class="mt-0.5 shrink-0 text-success" />
-                    <span class="text-muted">Re-checked at this exact commit by the registry's nightly scan — the manifest parses and it loads.</span>
+                    <span class="text-muted">Re-checked at this exact commit by the registry's nightly scan: the manifest parses and it loads.</span>
                 </div>
                 <div v-else-if="problem" class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />

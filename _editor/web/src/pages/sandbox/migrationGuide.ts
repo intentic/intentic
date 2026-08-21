@@ -34,7 +34,7 @@ export const SOURCE_GUIDES: Record<MigrationSource, SourceGuide> = {
         label: `Hermes`,
         folder: `.hermes`,
         command: `tar czf ~/hermes-setup.tar.gz -C ~ .hermes && echo "Ready: ~/hermes-setup.tar.gz"`,
-        lands: `It prints "Ready" and leaves hermes-setup.tar.gz in your home folder. No "Ready" line means it did not work — read the error above it.`,
+        lands: `It prints "Ready" and leaves hermes-setup.tar.gz in your home folder. No "Ready" line means it did not work, read the error above it.`,
     },
     openclaw: {
         label: `OpenClaw`,
@@ -57,17 +57,17 @@ export interface HelpTopic {
 export const helpTopics = (guide: SourceGuide): HelpTopic[] => [
     {
         title: `It runs on a server, not on this computer`,
-        body: `Usual case. Run the command over SSH on the server, then bring the file down to the computer you are reading this on — replace the parts in capitals with yours.`,
+        body: `Usual case. Run the command over SSH on the server, then bring the file down to the computer you are reading this on, replace the parts in capitals with yours.`,
         command: `scp YOU@YOUR-SERVER:~/${guide.folder === `.hermes` ? `hermes` : `openclaw`}-setup.tar.gz ~/Downloads/`,
     },
     {
         title: `I can't find the folder`,
-        body: `This prints where it is, including the case where it was moved somewhere custom. Pack whatever folder it names — any folder name works, since we find the setup by its settings file rather than by its name.`,
+        body: `This prints where it is, including the case where it was moved somewhere custom. Pack whatever folder it names, any folder name works, since we find the setup by its settings file rather than by its name.`,
         command: `ls -d ~/${guide.folder} 2>/dev/null; echo "$HERMES_HOME $OPENCLAW_STATE_DIR"`,
     },
     {
         title: `It runs in a container`,
-        body: `Then the folder lives inside the container, not on the machine. Copy it out first, then pack the copy — replace NAME with your container's name.`,
+        body: `Then the folder lives inside the container, not on the machine. Copy it out first, then pack the copy, replace NAME with your container's name.`,
         command: `docker cp NAME:/root/${guide.folder} ./setup && tar czf ~/setup.tar.gz -C . setup`,
     },
 ];

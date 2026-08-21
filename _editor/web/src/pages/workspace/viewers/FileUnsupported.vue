@@ -17,7 +17,7 @@ const message = computed(() => {
     }
     if (mode === `too-large`) {
         const label = formatBytes(size);
-        return label ? `This file is ${label} — too large to preview here.` : `This file is too large to preview here.`;
+        return label ? `This file is ${label}, too large to preview here.` : `This file is too large to preview here.`;
     }
     return `Preview isn't available for this file type.`;
 });

@@ -9,7 +9,7 @@ import { formatCredits as n } from "../composables/membership/creditMeter";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
 
-/* THE APPROVAL CARD, AS A PAGE — and the reason a Claude Code session can be trusted with a spending catalogue
+/* THE APPROVAL CARD, AS A PAGE, and the reason a Claude Code session can be trusted with a spending catalogue
  * at all.
  *
  * Inside a sandbox this is a frame in the owner's own conversation and a click the daemon is holding a socket
@@ -22,7 +22,7 @@ import { useAuth } from "../composables/useAuth";
  * because the grant only exists if this page wrote it. That is the difference between a gate and a prompt.
  *
  * EVERY NUMBER HERE IS THE PLATFORM'S. The price was stamped on the offer when it went up, so a listing
- * repriced while somebody is deciding cannot change what they agreed to — and nothing the calling agent typed
+ * repriced while somebody is deciding cannot change what they agreed to, and nothing the calling agent typed
  * reaches this page except the request body and the one line of why, both of which are labelled as its words
  * rather than ours. */
 
@@ -81,7 +81,7 @@ const secondsLeft = computed(() => {
 const countdown = computed(() => `${Math.floor(secondsLeft.value / 60)}:${String(secondsLeft.value % 60).padStart(2, `0`)}`);
 
 // Pretty-printed, because the point of showing it is that somebody can read it. Falls back to the raw string
-// for a body that is not JSON — better an ugly truth than a swallowed one.
+// for a body that is not JSON: better an ugly truth than a swallowed one.
 const requestBody = computed(() => {
     const raw = offer.value?.request ?? ``;
     try {
@@ -165,7 +165,7 @@ const view = computed(() => {
             </Card>
 
             <!-- ══ THE ASK ══════════════════════════════════════════════════════════════════════════════════
-                 Price first, because it is the decision. Then what will be sent, then why — in that order,
+                 Price first, because it is the decision. Then what will be sent, then why: in that order,
                  because a reader who has decided on the price does not read further, and a reader who has not
                  wants the body next. -->
             <template v-else-if="view === 'pending'">
@@ -244,7 +244,7 @@ const view = computed(() => {
                 <!-- The four things a reader silently asks at this button. Same four as the membership page,
                      narrowed to this decision. -->
                 <p class="mt-4 text-xs text-muted">
-                    This approves one run and nothing else — a second run asks again. If the service doesn't answer, the credits come straight back
+                    This approves one run and nothing else: a second run asks again. If the service doesn't answer, the credits come straight back
                     and no receipt is written.
                 </p>
             </template>
@@ -256,7 +256,7 @@ const view = computed(() => {
                     icon="check-circle"
                     tone="success"
                     title="Approved"
-                    description="Head back to your terminal — the run starts as soon as your agent asks again. You can close this tab."
+                    description="Head back to your terminal: the run starts as soon as your agent asks again. You can close this tab."
                 />
             </Card>
 
@@ -277,7 +277,7 @@ const view = computed(() => {
                     icon="clock"
                     tone="warning"
                     title="This approval expired"
-                    description="Approvals stand for ten minutes so an old link can never spend anything. Nothing was charged — ask your agent again if you still want the run."
+                    description="Approvals stand for ten minutes so an old link can never spend anything. Nothing was charged: ask your agent again if you still want the run."
                 />
             </Card>
 
@@ -298,7 +298,7 @@ const view = computed(() => {
                     :heading="2"
                     icon="info-circle"
                     title="Already answered"
-                    description="This approval has been settled somewhere else — another tab, most likely. Nothing was charged twice."
+                    description="This approval has been settled somewhere else: another tab, most likely. Nothing was charged twice."
                 />
             </Card>
 

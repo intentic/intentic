@@ -2,8 +2,8 @@
 //
 // jsdom because the subject is WHAT THE TAB SAYS AFTER AN INVITE, and that sentence was the bug.
 //
-// Inviting is two writes — the daemon's enforced list, then the platform's record + email — and they used to
-// share one catch, with one sentence: "Couldn't send the invite — is the sandbox online?". So a platform-side
+// Inviting is two writes: the daemon's enforced list, then the platform's record + email, and they used to
+// share one catch, with one sentence: "Couldn't send the invite, is the sandbox online?". So a platform-side
 // failure accused a sandbox that had just answered, and a REFUSED EMAIL (the whole request 500'd on it) read as
 // an invite that never happened, over a roster already showing the person pending. Nothing on screen could tell
 // those three apart, which is why they are three tests.
@@ -11,7 +11,7 @@ import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
-// What this component's import chain reads at module eval — the app's environment (the API client) and a media
+// What this component's import chain reads at module eval: the app's environment (the API client) and a media
 // query (the UI barrel's useDevice), exactly as DesktopSyncCard.test.ts cuts the same edge.
 
 const sandboxJson = vi.fn(async () => ({ members: [] }));
@@ -88,7 +88,7 @@ it(`does not ask whether the sandbox is online when the platform is what failed`
 });
 
 /* An invite whose mail could not travel is still an invite. The link comes back with the roster, so the owner
- * can hand it over — which is the only way this works at all on a platform served at localhost. */
+ * can hand it over, which is the only way this works at all on a platform served at localhost. */
 it(`hands the owner the link when the email did not carry it`, async () => {
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(globalThis.navigator, `clipboard`, { value: { writeText }, configurable: true });
@@ -110,8 +110,8 @@ it(`hands the owner the link when the email did not carry it`, async () => {
     expect(writeText).toHaveBeenCalledWith(`https://localhost:47145/invite/tok`);
 });
 
-/* And when the provider REFUSED it, what it said is on the card. The owner's platform is the owner's to fix —
- * a quota, a key, an unverified domain — and none of that is actionable from "internal server error". */
+/* And when the provider REFUSED it, what it said is on the card. The owner's platform is the owner's to fix:
+ * a quota, a key, an unverified domain, and none of that is actionable from "internal server error". */
 it(`shows what the mail provider said when it refused`, async () => {
     create.mockResolvedValue({
         members: [],

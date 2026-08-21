@@ -12,14 +12,14 @@ import { grantablesFrom, type PersonaGrantable, personaSlug, powersDraftOf, stor
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 
-/* THE PERSONAS this sandbox wears when it acts outside, and the one place a WHOLE card is written — the accounts
+/* THE PERSONAS this sandbox wears when it acts outside, and the one place a WHOLE card is written: the accounts
  * it speaks through, what it may do, where it works. (A folder's own personas can also be named and bounded from
  * the Workspace tree's row icon; that panel asks for a name and links here for the rest. Both write through
  * personaCard.ts.)
  *
  * A persona is NOT per-site. It is a person the outside world reads: "Work" holds its Reddit account AND its X
  * account AND whatever else belongs to that person, so one card can span every platform the owner signed into
- * under that name. That is the whole reason the layer exists — the accounts already live one-per-login in the
+ * under that name. That is the whole reason the layer exists: the accounts already live one-per-login in the
  * capability manifest, and what was missing was anything saying which of them are the same someone.
  *
  * It lives in the sandbox hub rather than beside the accounts on /capabilities because it is a property of the
@@ -27,8 +27,8 @@ import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
  * answers "what is this sandbox signed into"; this answers "who is it".
  *
  * Under "Reach" and pointedly not under "Configuration", where the AI-account row lives: those two are one
- * letter apart in English and opposite in consequence — which subscription PAYS for a turn versus whose name is
- * on what it posts — and putting them in the same group is how someone eventually gets the billing right and
+ * letter apart in English and opposite in consequence, which subscription PAYS for a turn versus whose name is
+ * on what it posts, and putting them in the same group is how someone eventually gets the billing right and
  * the Reddit wrong. */
 
 const { personas, connected, isConnected, error, isLoading, save, remove } = usePersonas();
@@ -42,18 +42,18 @@ const listNotice = computed<NoticeModel | undefined>(() =>
 // of them belongs on any given card.
 const { accounts, accountOf } = useBrowserAccounts();
 
-// The other three things a card grants by id — see grantablesFrom, shared with the Workspace tree's quick panel.
+// The other three things a card grants by id: see grantablesFrom, shared with the Workspace tree's quick panel.
 const { capabilities } = useCapabilities();
 const grantables = computed<PersonaGrantable[]>(() => grantablesFrom(capabilities.value));
 
-/* The marks a row shows for the accounts its card names — the fastest way to read that a persona spans two
+/* The marks a row shows for the accounts its card names: the fastest way to read that a persona spans two
  * sites, and the reason the row does not spell them out in a comma-joined line. An id the manifest has no
  * capability for still gets an entry: a card may name an account nobody has added HERE, and dropping it would
  * make the row claim a persona reaches less than it was written to. */
 const marks = (persona: Persona) => persona.capabilities.map((id) => ({ id, account: accountOf(id), signedIn: isConnected(id) }));
 
-/* Whether a card can act AT ALL right now. A persona naming three accounts with one signed in is still usable —
- * the turn simply reaches the one — so this marks only the persona that can reach nothing, which is every one
+/* Whether a card can act AT ALL right now. A persona naming three accounts with one signed in is still usable:
+ * the turn simply reaches the one, so this marks only the persona that can reach nothing, which is every one
  * of them on a workspace someone has just cloned and the state a surface must not paint as working. */
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
 
@@ -62,13 +62,13 @@ const ready = (persona: Persona): boolean => persona.capabilities.some((id) => i
  * AN ACCORDION OVER A SETTINGS OBJECT, and the two rules that follow from calling it that.
  *
  * A persona is settings, not a document: nine switches, two folder answers and a list of accounts, each of which
- * means something on its own. So an OPEN card writes as you change it — flip a switch and it is flipped, the way
- * every settings surface people already use behaves — and there is no Save button to leave a card half-decided
+ * means something on its own. So an OPEN card writes as you change it: flip a switch and it is flipped, the way
+ * every settings surface people already use behaves, and there is no Save button to leave a card half-decided
  * behind.
  *
  * The row is the disclosure. There is no pencil-to-edit mode: the thing you click to see a card is the thing you
  * click to change it, which is one affordance instead of two and the pattern the Environment tab already uses.
- * The NAME is not in the panel at all — it stays the row's own title, text until you click it (inlineRename). */
+ * The NAME is not in the panel at all: it stays the row's own title, text until you click it (inlineRename). */
 const draft = ref<PersonaDraft | undefined>(undefined);
 const saveError = ref<NoticeModel | undefined>(undefined);
 
@@ -83,7 +83,7 @@ const draftOf = (persona: Persona): PersonaDraft => ({
     systemPromptMode: persona.systemPromptMode,
 });
 
-/* Changing the draft without the autosave below reading it as an edit — installing one on open, and writing a
+/* Changing the draft without the autosave below reading it as an edit: installing one on open, and writing a
  * committed rename back into it. Both are the app catching the draft UP to the truth, and a save fired for
  * either would be a write nobody asked for (and, on open, a write of every card the user merely looked at). */
 let settling = false;
@@ -110,12 +110,12 @@ const toggleOpen = (persona: Persona): void => {
 /* ── Making one ──────────────────────────────────────────────────────────────────────────────────────────────
  *
  * A NAME, AND NOTHING ELSE. Creating a persona used to open the whole editor with a Create button under it, so
- * the first thing this page ever asked a new user was thirty questions about a thing that did not exist yet —
+ * the first thing this page ever asked a new user was thirty questions about a thing that did not exist yet:
  * which accounts it speaks through, nine permissions, two folders, a system prompt. Almost every answer is a
  * default, and the one that is not is the name.
  *
  * So it is one field. The card is written with the defaults the schema already means (full toolbox, whole
- * workspace, the sandbox's prompt — all of which it stores as ABSENT, so the committed file says nothing about
+ * workspace, the sandbox's prompt: all of which it stores as ABSENT, so the committed file says nothing about
  * questions nobody was asked), and then the new card OPENS, which is where the rest is set at leisure with the
  * row's own title above it saying what is being edited.
  *
@@ -135,7 +135,7 @@ const cancelAdd = (): void => {
 };
 
 const newId = computed(() => personaSlug(newName.value ?? ``));
-// A new card may not land on a name already taken — saving would silently edit the other one instead.
+// A new card may not land on a name already taken: saving would silently edit the other one instead.
 const taken = computed(() => personas.value.some((persona) => persona.id === newId.value));
 const newValid = computed(() => newId.value !== `` && !taken.value);
 const nameHint = computed(() => {
@@ -146,7 +146,7 @@ const nameHint = computed(() => {
 });
 
 /* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all, and one that limits nothing
- * stores no `workspace` — so the committed file stays a description of the DECISIONS somebody made rather than a
+ * stores no `workspace`, so the committed file stays a description of the DECISIONS somebody made rather than a
  * dump of every default, and a diff on it reads as the change it was.
  *
  * That is the same rule the label follows, applied to two objects instead of a field. The powers half lives in
@@ -171,7 +171,7 @@ const cardFrom = (state: PersonaDraft): Persona => {
     };
 };
 
-/* CREATE, THEN OPEN. The card is written with nothing on it but its name and an empty account list — every
+/* CREATE, THEN OPEN. The card is written with nothing on it but its name and an empty account list: every
  * other answer is a default the schema already means, and storing them would put a decision nobody made into a
  * tracked file. Then the new card opens, because "made a persona" and "now set it up" are one errand and the
  * editor is where the second half happens. */
@@ -229,7 +229,7 @@ onBeforeUnmount(() => clearTimeout(pending));
  * One state machine for the whole list rather than one per row: only ever one name is being typed, and a factory
  * inside a v-for would build (and throw away) one for every persona on every render.
  *
- * A rename writes the WHOLE card, because the save is an upsert — and it reads that card from the open draft
+ * A rename writes the WHOLE card, because the save is an upsert, and it reads that card from the open draft
  * when there is one, so a rename lands on top of switches flipped a second ago rather than on the version the
  * list was last told about. The id is frozen either way: automations pin to it, so only the label moves. */
 const renamingId = ref<string | undefined>(undefined);
@@ -269,15 +269,15 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div>
-        <!-- One sentence. The rest of what a persona is — that it spans sites, that the names travel and the
-             logins don't — is shown by the surface itself rather than explained above it. -->
+        <!-- One sentence. The rest of what a persona is: that it spans sites, that the names travel and the
+             logins don't: is shown by the surface itself rather than explained above it. -->
         <p class="mb-5 max-w-2xl text-sm text-muted">
             A persona is who this sandbox is when it works: the accounts it speaks through, what it may do, and where in the workspace it works. Point
             an automation at one and it runs inside those bounds.
         </p>
 
         <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
-        <!-- The empty state below is a real one — it explains what NOT having a persona costs — so it must not
+        <!-- The empty state below is a real one: it explains what NOT having a persona costs, so it must not
              be shown to somebody who simply has not been told yet. The list's own shape stands in meanwhile. -->
         <template v-if="isLoading">
             <RowGroup v-if="outline" label="Your personas">
@@ -296,14 +296,14 @@ const confirmRemove = async (): Promise<void> => {
                  headed; it does not have to be shouted from here. -->
 
             <!-- NO PERSONAS AND NOTHING BEING WRITTEN gets a real empty state rather than a group with one line
-                 of apology in it. It says what is true right now — automations are mute, chats are unrestricted
-                 — because that is the consequence someone is here to change, and offers the one action. -->
+                 of apology in it. It says what is true right now: automations are mute, chats are unrestricted
+                , because that is the consequence someone is here to change, and offers the one action. -->
             <div v-if="personas.length === 0 && newName === undefined" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
                 <Avatar :size="40" />
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-medium text-content">No personas yet</span>
                     <span class="max-w-md text-xs text-muted">
-                        Until there is one, an automation you schedule can't post anywhere — and a chat reaches every account you've connected.
+                        Until there is one, an automation you schedule can't post anywhere, and a chat reaches every account you've connected.
                     </span>
                 </div>
                 <!-- Never disabled on "you have no accounts". A card with none is a card that bounds where an
@@ -336,14 +336,14 @@ const confirmRemove = async (): Promise<void> => {
                     interactive
                     @click="toggleOpen(persona)"
                 >
-                    <!-- A persona is a person, so it gets a person's face — the SAME one, at the same size and
+                    <!-- A persona is a person, so it gets a person's face: the SAME one, at the same size and
                          in the same colours, that the chat's persona rail draws it with. This page is where you
                          come to look at your personas, so of all the surfaces it is the last one that should
                          show them smaller or greyer than everywhere else; it used to do both. Neither the size
                          nor the colour is decided here any more (PersonaFace holds both), which is what keeps
                          the two lists in step.
 
-                         The disclosure arrow rides in front of the face — where a reader looks for one —
+                         The disclosure arrow rides in front of the face, where a reader looks for one:
                          rather than in the row's trailing cluster, which is where facts and actions live. -->
                     <template #lead>
                         <span class="flex items-center gap-1.5">
@@ -355,7 +355,7 @@ const confirmRemove = async (): Promise<void> => {
                         </span>
                     </template>
 
-                    <!-- THE NAME READS AS A NAME until you ask to change it — click-to-rename, on the app's one
+                    <!-- THE NAME READS AS A NAME until you ask to change it: click-to-rename, on the app's one
                          inline-rename machine (enter commits, escape cancels, blur commits, unchanged is a
                          silent cancel). An input parked here permanently would make a settings list look like a
                          form and put a text box where every other row in the app has a title. -->
@@ -383,19 +383,19 @@ const confirmRemove = async (): Promise<void> => {
                     </template>
 
                     <!-- THE ACCOUNTS BY NAME, under the persona's own. The marks on the right say which
-                         platforms at a glance, but a mark cannot tell `reddit-work` from `reddit-personal` — those
+                         platforms at a glance, but a mark cannot tell `reddit-work` from `reddit-personal`: those
                          two being different is the entire problem this feature exists to solve, so the names
                          are not something the row can leave to a tooltip.
 
                          A CARD HOLDING NONE LEAVES THE SLOT EMPTY rather than filling it with a warning. This
-                         wrote "No accounts — this persona can't post anywhere" there, which painted the most
-                         ordinary card there is — one made to work in a folder, one made a minute ago — as a
+                         wrote "No accounts: this persona can't post anywhere" there, which painted the most
+                         ordinary card there is (one made to work in a folder, one made a minute ago) as a
                          defect, in the warning colour, on the very page you come to to look at your personas. -->
                     <template #description>
                         <span v-if="rename.error !== undefined && renamingId === persona.id" class="text-danger">{{ rename.error }}</span>
                         <!-- Separated, because two account names running together read as one. A signed-out
                              account is dimmed rather than struck through: a line through it says REMOVED, and
-                             what is true is that it is listed and cannot act yet — which the badge names. -->
+                             what is true is that it is listed and cannot act yet, which the badge names. -->
                         <span v-else class="flex flex-wrap items-center gap-x-1 gap-y-0.5">
                             <template v-for="(mark, at) in marks(persona)" :key="mark.id">
                                 <span v-if="at > 0" class="text-subtle">·</span>
@@ -422,7 +422,7 @@ const confirmRemove = async (): Promise<void> => {
                         </span>
                         <!-- A card that has been bounded says so on its row. Which shelf is off is the form's
                              business; what the LIST owes a reader scanning six cards is which of them are
-                             limited at all — that is the difference between "my Front Desk is safe" being a
+                             limited at all: that is the difference between "my Front Desk is safe" being a
                              belief and being something they can see. -->
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                         <StatusBadge v-if="persona.capabilities.length > 0 && !ready(persona)" variant="neutral" size="xs" dot>
@@ -445,10 +445,10 @@ const confirmRemove = async (): Promise<void> => {
                     </template>
 
                     <!-- The card opens INSIDE the row it belongs to, so there is never a form on screen whose
-                         subject you have to remember — and the name it would have asked for first is the row's
+                         subject you have to remember, and the name it would have asked for first is the row's
                          own title, three lines up. No Save: an open card writes as it is changed.
 
-                         `click.stop` because the row itself is the disclosure — without it every switch flipped
+                         `click.stop` because the row itself is the disclosure: without it every switch flipped
                          in here would ALSO close the card it belongs to. -->
                     <template v-if="isOpen(persona)" #below>
                         <div class="pt-4" @click.stop>
@@ -459,7 +459,7 @@ const confirmRemove = async (): Promise<void> => {
 
                 <!-- MAKING ONE ASKS FOR A NAME AND NOTHING ELSE, at the tail of the group where the new row will
                      appear. Everything else about a persona has a default worth keeping, and the card opens the
-                     moment it exists — so this is the one field between "I want a persona" and having one, rather
+                     moment it exists, so this is the one field between "I want a persona" and having one, rather
                      than a form standing in front of thirty answers nobody has an opinion about yet. -->
                 <div v-if="newName !== undefined" class="flex flex-col gap-2 px-4 py-4">
                     <div class="flex flex-wrap items-center gap-2">
@@ -469,7 +469,7 @@ const confirmRemove = async (): Promise<void> => {
                         <input
                             v-model="newName"
                             :class="ui.input('min-w-0 max-w-xs flex-1 font-medium')"
-                            placeholder="Name it — Work, Studio, Reddit Writer…"
+                            placeholder="Name it: Work, Studio, Reddit Writer…"
                             aria-label="Name this persona"
                             autofocus
                             @keydown.enter="submit"
@@ -486,7 +486,7 @@ const confirmRemove = async (): Promise<void> => {
             </RowGroup>
         </template>
 
-        <!-- Removing a card takes away a persona, never an account — worth saying on the confirm, because the two
+        <!-- Removing a card takes away a persona, never an account: worth saying on the confirm, because the two
              are easy to conflate and only one of them is undoable by clicking again. -->
         <ConfirmDialog
             :open="removing !== undefined"

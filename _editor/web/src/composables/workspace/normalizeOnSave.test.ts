@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { normalizationEdits, type NormalizeEdit } from "./normalizeOnSave";
 
 /* Save-time normalization exists for the agent: its exact-string edits fail on invisible whitespace, so every
- * saved file must land in ONE canonical shape — no trailing spaces (markdown excepted), no trailing blank
+ * saved file must land in ONE canonical shape: no trailing spaces (markdown excepted), no trailing blank
  * lines, exactly one final newline. These tests pin that shape by applying the computed edits to real text. */
 
-// Apply Monaco-shaped 1-based line/column edits to plain text — the reference implementation the edits are
+// Apply Monaco-shaped 1-based line/column edits to plain text: the reference implementation the edits are
 // checked against. Applied last-to-first so earlier ranges stay valid (the edits are emitted sorted ascending).
 const apply = (text: string, edits: readonly NormalizeEdit[]): string => {
     const lines = text.split(`\n`);

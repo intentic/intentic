@@ -9,7 +9,7 @@ describe("limitOf", () => {
         expect(limitOf(`x`)).toBe(280);
         expect(limitOf(`X`)).toBe(280);
         expect(limitOf(`discord`)).toBe(2_000);
-        // Reddit's cap is far past anything an agent writes, and an unknown platform has no cap to state —
+        // Reddit's cap is far past anything an agent writes, and an unknown platform has no cap to state:
         // both get a plain character count instead of a made-up denominator.
         expect(limitOf(`reddit`)).toBeUndefined();
         expect(limitOf(`some-new-network`)).toBeUndefined();
@@ -23,7 +23,7 @@ describe("postsATitle", () => {
     });
 
     /* THE TWO CASES WHERE `title` IS THE AGENT TALKING, not the post's headline: a platform with no titles at
-     * all, and a reply — comments carry no headline anywhere, whatever the platform. Both used to render as a
+     * all, and a reply: comments carry no headline anywhere, whatever the platform. Both used to render as a
      * three-line bold block above the post they had no business outweighing. */
     it("is a note on a platform without titles, and on any reply", () => {
         expect(postsATitle(`x`, undefined)).toBe(false);
@@ -47,7 +47,7 @@ describe("destinationOf", () => {
         expect(destinationOf(`https://reddit.com/r/webdev/comments/abc/title/`).label).toBe(`r/webdev`);
     });
 
-    /* TALKING TO THE ROOM VS TALKING TO ONE PERSON — the same URL with one more segment on it, and a different
+    /* TALKING TO THE ROOM VS TALKING TO ONE PERSON: the same URL with one more segment on it, and a different
      * decision for the reviewer. Both of reddit's permalink shapes say so, and a `?context=` on a thread does
      * not: that is still the thread's own address. */
     it("says when the target is one comment rather than the thread", () => {
@@ -67,7 +67,7 @@ describe("destinationOf", () => {
         expect(destinationOf(`https://www.youtube.com/watch?v=abc`).label).toBe(`youtube.com`);
     });
 
-    // A target that starts with "http" and still isn't a URL — shown as written rather than swallowed.
+    // A target that starts with "http" and still isn't a URL: shown as written rather than swallowed.
     it("shows an unparseable target as it was written", () => {
         expect(destinationOf(`https://`)).toEqual({ label: `https://` });
     });
@@ -109,7 +109,7 @@ describe("postEdit", () => {
         });
     });
 
-    // An identical re-post would still rewrite the file, refetch the queue and flash the row — a click that did
+    // An identical re-post would still rewrite the file, refetch the queue and flash the row: a click that did
     // nothing, reported as if it did.
     it("is not a save when nothing changed", () => {
         expect(postEdit(article, { content: `as written`, title: `Ship it on Friday` })).toBeUndefined();
@@ -126,7 +126,7 @@ describe("countdownWords", () => {
     });
 
     it("never counts to zero", () => {
-        // By the time a "0s" rendered next to a Stop button, the publisher already has the post — the button
+        // By the time a "0s" rendered next to a Stop button, the publisher already has the post: the button
         // would be promising something nobody can deliver.
         expect(countdownWords(0)).toBe(`any moment now`);
         expect(countdownWords(-5_000)).toBe(`any moment now`);

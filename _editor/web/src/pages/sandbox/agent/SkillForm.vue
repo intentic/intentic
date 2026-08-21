@@ -4,24 +4,24 @@ import { ui, CodeField, Markdown, ProseField, SegmentedControl } from "@intentic
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 
-/* WRITING ONE SKILL — three boxes, in the order the model reads them.
+/* WRITING ONE SKILL: three boxes, in the order the model reads them.
  *
  * A skill is a name, a line saying when to reach for it, and the instructions themselves, and those three are not
  * equals: the model reads the middle one on EVERY turn to decide whether to open the third. So the second box is
- * the one this form makes a fuss about — its own label, its own hint, no sharing a row — because a skill with a
+ * the one this form makes a fuss about: its own label, its own hint, no sharing a row, because a skill with a
  * vague description is a skill that is never picked, and that failure is silent. Nothing on screen would look
  * wrong; the agent would simply never use it.
  *
- * THE NAME IS ASKED FIRST HERE, unlike the rule form which derives one. A skill's name is not a label — it is how
+ * THE NAME IS ASKED FIRST HERE, unlike the rule form which derives one. A skill's name is not a label: it is how
  * the agent invokes it and the directory it lives in, so it cannot be a footnote the user may overwrite. It is
  * also the identity a save upserts on, which is why an existing skill's name box is frozen: typing over it would
  * read as a rename and would in fact write a second skill beside the first.
  *
- * THE BODY IS THE SKILL, so it gets the room — and it is MARKDOWN, which is what the third box is now written to
+ * THE BODY IS THE SKILL, so it gets the room, and it is MARKDOWN, which is what the third box is now written to
  * be. It was a prose field: the right surface for a sentence, and the wrong one for a file with headings, fenced
  * commands and lists in it, because it set all of that in one flat grey weight and left the author to keep the
- * structure in their head. So it is <CodeField lang="markdown"> — a real caret over markdown's own colours, the
- * same surface the memory notes are corrected in — with a Preview pill that renders exactly what the agent will
+ * structure in their head. So it is <CodeField lang="markdown">: a real caret over markdown's own colours, the
+ * same surface the memory notes are corrected in: with a Preview pill that renders exactly what the agent will
  * read. Neither half is a fixed number of rows: the field grows with the file, so a skill is never written
  * through an eight-line window. */
 
@@ -49,14 +49,14 @@ const onName = (event: Event): void => {
     name.value = slug;
 };
 
-/* WHY THE BUTTON IS GREY, said next to the button — the rule form's own answer to the same question. Named one at
+/* WHY THE BUTTON IS GREY, said next to the button: the rule form's own answer to the same question. Named one at
  * a time, in the order the boxes sit, so fixing the one it names always moves you forward. */
 const missing = computed<string | undefined>(() => {
     if (name.value.replace(/-+$/, ``) === ``) {
         return `Give it a name.`;
     }
     if (description.value.trim() === ``) {
-        return `Say when the agent should reach for it — this is the line it reads to decide.`;
+        return `Say when the agent should reach for it: this is the line it reads to decide.`;
     }
     if (body.value.trim() === ``) {
         return `Write what it should do.`;
@@ -93,7 +93,7 @@ const save = (): void => {
             <p v-if="skill !== undefined" class="text-2xs text-subtle">
                 A skill's name is how the agent invokes it, so it can't change. Add a new one and delete this if you want it called something else.
             </p>
-            <p v-else class="text-2xs text-subtle">Lowercase letters, numbers and dashes — it's how the agent invokes it.</p>
+            <p v-else class="text-2xs text-subtle">Lowercase letters, numbers and dashes: it's how the agent invokes it.</p>
         </div>
 
         <!-- THE LINE THAT DECIDES WHETHER ANY OF THE REST IS EVER READ. Its own section, above the body rather

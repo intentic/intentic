@@ -13,19 +13,19 @@ import { triggerKey, useAutomationForm } from "./useAutomationForm";
  * This was a 44rem modal, and the modal had been losing for a while: its width had already gone 32rem → 44rem
  * to stop the Front Desk branch wrapping into a column you scrolled twice, and its template gallery had already
  * been demoted to a fold-away disclosure because one card per connected capability pushed Name below the fold.
- * Both are symptoms of the same thing — an automation is the biggest form in the app, and a dialog is the
+ * Both are symptoms of the same thing: an automation is the biggest form in the app, and a dialog is the
  * smallest surface in it.
  *
  * Editing had already drawn that conclusion: it happens in the row, at page width (see AutomationRow). So one
  * form was rendering at two measures, the folds tuned for the narrow one, and every field added had to be
  * checked twice. Creating now uses the same panel, at the same width, and there is one layout again.
  *
- * MOUNTED ONLY WHILE OPEN, so every field, the pick and the error start empty — the dialog stayed mounted
+ * MOUNTED ONLY WHILE OPEN, so every field, the pick and the error start empty: the dialog stayed mounted
  * between openings and had to hand-reset all three on @hide.
  *
  * The one thing it keeps from the dialog is the HANDOFF: a webhook and a Front Desk are not finished when they
  * are saved, because a URL or a snippet still has to be pasted into some other system. That belongs where the
- * act happened, so the panel stays in place and swaps its body for what to paste — the list is above and below
+ * act happened, so the panel stays in place and swaps its body for what to paste: the list is above and below
  * it the whole time, never covered. */
 
 const { prefill, listenerSources, templates } = defineProps<{
@@ -44,7 +44,7 @@ const { form, valid, touchAll, build, loadTemplate } = state;
 
 const capabilities = computed(() => host().workspace.capabilities());
 const picked = ref<AutomationTemplate | undefined>(prefill);
-/* The template the form is actually holding — the pick, for as long as the trigger is still the one it prefilled.
+/* The template the form is actually holding: the pick, for as long as the trigger is still the one it prefilled.
  * Choosing another trigger rewrites the prompt for whatever fires now (useAutomationForm), so a chip still naming
  * the template would be naming text that is gone. Derived rather than cleared by hand because the chip is a claim
  * ABOUT the form: read from the form, it cannot disagree with it. */
@@ -58,8 +58,8 @@ const template = computed(() =>
  * single lines.
  *
  * IT OPENS OVER THE FORM, NOT ABOVE IT. Inline, the collapsed bar was a full-width slab sitting between the
- * panel's title and the Name field — the loudest thing in the panel, in the position that belongs to the first
- * question — and opening it pushed Name 470px down the page, which is the same displacement that got the
+ * panel's title and the Name field: the loudest thing in the panel, in the position that belongs to the first
+ * question, and opening it pushed Name 470px down the page, which is the same displacement that got the
  * gallery folded away in the dialog. Both go away by giving it the geometry it always wanted: a control in the
  * panel's own header, and a popover that covers the form for as long as it is being read. Nothing under it
  * moves, so the answer to "what was I filling in?" is still exactly where it was. */
@@ -81,7 +81,7 @@ const CARD_IDLE = `bg-overlay text-muted hover:text-content`;
 const recipes = computed(() => availableTemplates(templates, capabilities.value));
 
 // The open gallery, filtered and split in two: chores watch this workspace, everything else is fired from
-// outside it. Two short labelled runs stay scannable where one flat pile of near-identical cards would not —
+// outside it. Two short labelled runs stay scannable where one flat pile of near-identical cards would not:
 // "Push to repo" is two different templates once GitHub and GitLab are both connected.
 const recipeGroups = computed(() => {
     const needle = recipeFilter.value.trim().toLowerCase();
@@ -111,7 +111,7 @@ const pickRecipe = (recipe: AutomationTemplate): void => {
     loadTemplate(recipe);
 };
 
-// Enter in the filter takes the top match — and, because the gallery sits inside the form, never submits it.
+// Enter in the filter takes the top match, and, because the gallery sits inside the form, never submits it.
 const pickFirstMatch = (): void => {
     const first = recipeGroups.value[0]?.items[0];
     if (first !== undefined) {
@@ -150,7 +150,7 @@ const submit = async (): Promise<void> => {
 };
 
 /* Open the new row, then go. Deferred to HERE rather than fired the moment the save lands, because the handoff
- * and the row it describes would otherwise be on screen together showing the same webhook URL twice — a thing
+ * and the row it describes would otherwise be on screen together showing the same webhook URL twice: a thing
  * that could not happen while this was a modal covering the list, and reads as two answers to one question.
  * Whichever of the two the user is looking at, it is the only one. */
 const finish = (id: string): void => {
@@ -170,7 +170,7 @@ const finish = (id: string): void => {
                  header states what the fields below were prefilled from without spending a row on saying it. -->
             <div v-if="recipes.length > 0" class="relative flex shrink-0 items-center">
                 <!-- Clearing the template lives INSIDE the chip, on its tint, because outside it was a bare ✕
-                     eight pixels from the panel's own bare ✕ — two identical glyphs side by side, one of which
+                     eight pixels from the panel's own bare ✕: two identical glyphs side by side, one of which
                      throws away everything typed so far. On the tint it reads as part of the thing it clears. -->
                 <div class="flex items-center rounded-md transition-colors" :class="template ? CARD_SELECTED : CARD_IDLE">
                     <button
@@ -238,11 +238,11 @@ const finish = (id: string): void => {
                                     <!-- STACKED, not a row. The note beside the title is what the dialog's one-line
                                          rows did, and at a third of this popover's width it took so much of the
                                          card that the title truncated to "Patch security ad…" and the description
-                                         wrapped a word per line. Title, then what it does, then when it runs —
+                                         wrapped a word per line. Title, then what it does, then when it runs:
                                          each on its own line, each with the whole card to use. -->
                                     <span class="min-w-0 flex-1">
                                         <span class="block truncate font-medium">{{ recipe.title }}</span>
-                                        <!-- Chores carry a description and now have room to show it — in the
+                                        <!-- Chores carry a description and now have room to show it: in the
                                              dialog's one-line rows it lived in a tooltip. An integration has none
                                              by design (see AutomationTemplate.description): title and note say
                                              enough. -->
@@ -282,10 +282,10 @@ const finish = (id: string): void => {
             </div>
         </form>
 
-        <!-- The handoff: the one thing creating an automation does NOT finish. Same shape for both — a copyable
+        <!-- The handoff: the one thing creating an automation does NOT finish. Same shape for both, a copyable
              line and what to do with it. -->
         <div v-else-if="savedAutomation && embedSnippet(savedAutomation)" class="flex flex-col gap-3">
-            <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Front Desk created — drop this into your site:</p>
+            <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Front Desk created: drop this into your site:</p>
             <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
                 <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ embedSnippet(savedAutomation) }}</code>
                 <CopyButton :text="embedSnippet(savedAutomation) ?? ''" :aria-label="`Copy the embed snippet for ${savedAutomation.id}`" />
@@ -297,7 +297,7 @@ const finish = (id: string): void => {
             <div class="flex justify-end"><Button label="Done" @click="finish(savedId ?? ``)" /></div>
         </div>
         <div v-else class="flex flex-col gap-3">
-            <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Automation created — wire up the webhook:</p>
+            <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Automation created: wire up the webhook:</p>
             <div v-if="savedAutomation" class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
                 <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ webhookUrl(savedAutomation) }}</code>
                 <CopyButton :text="webhookUrl(savedAutomation) ?? ''" :aria-label="`Copy webhook URL for ${savedAutomation.id}`" />

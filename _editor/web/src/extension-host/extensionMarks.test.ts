@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 /* EVERY FIRST-PARTY EXTENSION'S MARK NAMES A GLYPH THAT EXISTS.
  *
  * `icon` is an open string in the manifest, because a third-party extension is written against a build that has
- * not shipped and must install anyway — so a typo in one of OURS is not a schema error, not a compile error and
+ * not shipped and must install anyway, so a typo in one of OURS is not a schema error, not a compile error and
  * not a runtime error either. <BrandMark> falls through to the extension's initials, which looks deliberate and
  * is how the same class of typo already shipped once as a blank rail tile (`book`).
  *
@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
  * package that can ask the question.
  *
  * `logo` is deliberately NOT checked: a simple-icons slug can only be confirmed by fetching it, and a test that
- * reaches a CDN fails on a train. A dead slug is the one tier that degrades on its own — the mark underneath is
+ * reaches a CDN fails on a train. A dead slug is the one tier that degrades on its own: the mark underneath is
  * already painted.
  *
  * `art` IS checked, and for the mirror-image reason: it is the one tier whose whole document is already here, so
@@ -42,12 +42,12 @@ const manifests = readdirSync(EXTENSIONS_DIR, { withFileTypes: true })
     });
 
 describe(`first-party extension marks`, () => {
-    it(`finds the manifests at all — a glob that silently matches nothing asserts nothing`, () => {
+    it(`finds the manifests at all: a glob that silently matches nothing asserts nothing`, () => {
         expect(manifests.length).toBeGreaterThan(15);
     });
 
     for (const { dir, manifest } of manifests) {
-        it(`names an icon this build can draw — ${dir}`, () => {
+        it(`names an icon this build can draw: ${dir}`, () => {
             const declared = [
                 ...(manifest.icon === undefined ? [] : [manifest.icon]),
                 ...(manifest.contributes?.capabilities ?? []).flatMap((capability) =>
@@ -57,19 +57,19 @@ describe(`first-party extension marks`, () => {
             expect(declared.filter((icon) => !isIconName(icon))).toEqual([]);
         });
 
-        /* Something to draw, without exception. An extension that declares no tier at all still renders — its
-         * initials are the floor — but a FIRST-PARTY one arriving with no mark is an oversight rather than a
+        /* Something to draw, without exception. An extension that declares no tier at all still renders: its
+         * initials are the floor, but a FIRST-PARTY one arriving with no mark is an oversight rather than a
          * choice, and the Extensions tab is where it shows: one row in a column of marks wearing two grey
          * letters reads as the one that failed to load. */
-        it(`declares a mark — ${dir}`, () => {
+        it(`declares a mark: ${dir}`, () => {
             expect(manifest.art ?? manifest.logo ?? manifest.icon).toBeDefined();
         });
 
         /* Artwork that would not survive the gate is worse than none: it falls back silently, so the author sees
          * the glyph they also declared and never learns the drawing they shipped is not being drawn. Checked
          * here rather than in the schema because "is an SVG document" is not a thing zod can say about a string,
-         * and because the answer has to be the RENDERER's — this calls the same function <BrandMark> calls. */
-        it(`declares artwork this build will actually paint — ${dir}`, () => {
+         * and because the answer has to be the RENDERER's: this calls the same function <BrandMark> calls. */
+        it(`declares artwork this build will actually paint: ${dir}`, () => {
             if (manifest.art === undefined) {
                 return;
             }

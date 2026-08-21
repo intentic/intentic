@@ -10,8 +10,8 @@ import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
 import { useAutomationForm } from "./useAutomationForm";
 
 /* One automation as ONE line: a health dot, its name, what fires it, when it last ran, when it fires next, and
- * the switch. Everything that is prose rather than state — the prompt, the guard, which agent and model the
- * wake runs on, the webhook URL, the run history — sits behind the row's own disclosure, because a page that
+ * the switch. Everything that is prose rather than state: the prompt, the guard, which agent and model the
+ * wake runs on, the webhook URL, the run history: sits behind the row's own disclosure, because a page that
  * must still be readable at thirty automations is read as a COLUMN OF STATES, not as thirty paragraphs. The
  * two time columns are fixed-width and right-aligned for the same reason: they only scan if they line up.
  *
@@ -45,12 +45,12 @@ const triggerLabel = computed<string>(() => {
         const when = fires.event === `turn.settled` ? `Turn settles` : `Work lands`;
         return fires.repo !== undefined ? `${when} · ${fires.repo}` : when;
     }
-    // A provider with no source entry is a gateway extension this build doesn't know — it reads as its own id
+    // A provider with no source entry is a gateway extension this build doesn't know: it reads as its own id
     // rather than as a blank.
     const source = listenerSourceOf(props.listenerSources, fires.provider, fires.eventType).label;
     return [
-        // "live" means a gateway is holding a connection open. CI has none — its events arrive by webhook or
-        // by poll — so saying it there would be describing a thing that isn't running.
+        // "live" means a gateway is holding a connection open. CI has none: its events arrive by webhook or
+        // by poll, so saying it there would be describing a thing that isn't running.
         fires.provider === `ci` ? source : `${source} live`,
         ...(fires.eventType !== undefined ? [fires.eventType] : []),
         // The branch matters enough to earn room in the row: two CI automations differing only by branch are
@@ -61,8 +61,8 @@ const triggerLabel = computed<string>(() => {
 });
 
 /* The dot: one mark carrying "is it on" and "did the last run go wrong". `idle` covers never-run AND
- * all-skipped, because a guard that skipped is the DESIGNED outcome of a tool-driven chore — it checked, found
- * nothing, and cost nothing — and must never wear a warning colour for doing its job. An `interrupted` run is
+ * all-skipped, because a guard that skipped is the DESIGNED outcome of a tool-driven chore: it checked, found
+ * nothing, and cost nothing, and must never wear a warning colour for doing its job. An `interrupted` run is
  * `idle` for the same reason inverted: nothing went wrong with the automation, the sandbox went away under it. */
 type Health = `off` | `ok` | `failed` | `idle`;
 const DOT: Record<Health, string> = {
@@ -83,7 +83,7 @@ const OUTCOME_VERB: Record<AutomationRun[`outcome`], string> = {
     completed: `ran`,
     error: `failed`,
     skipped: `skipped`,
-    // Not "failed": the run never reached an outcome of its own — the sandbox restarted under it.
+    // Not "failed": the run never reached an outcome of its own, the sandbox restarted under it.
     interrupted: `cut off`,
 };
 const OUTCOME_CLASS: Record<AutomationRun[`outcome`], string> = {
@@ -92,7 +92,7 @@ const OUTCOME_CLASS: Record<AutomationRun[`outcome`], string> = {
     skipped: `text-subtle`,
     interrupted: `text-subtle`,
 };
-const runTooltip = (run: AutomationRun): string => `${formatDateTime(run.at)}${run.detail !== undefined ? ` — ${run.detail}` : ``}`;
+const runTooltip = (run: AutomationRun): string => `${formatDateTime(run.at)}${run.detail !== undefined ? `, ${run.detail}` : ``}`;
 
 // A run's transcript, on the host's one chat surface. Runs that reached a turn carry the stable conversation;
 // a guard-skip never needed one.
@@ -109,7 +109,7 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
  * The form is loaded from the stored automation when Edit is pressed and thrown away on Cancel, so the row is
  * never quietly holding a half-typed version of something the list is showing as saved. There is no
  * save-as-you-type here, unlike the acceptance rows this borrows its shape from: a story is a document, while
- * an automation EXECUTES — a Front Desk with half an origin typed into it would start turning visitors away
+ * an automation EXECUTES: a Front Desk with half an origin typed into it would start turning visitors away
  * between keystrokes. */
 const editing = ref(false);
 const editError = ref<string | undefined>(undefined);
@@ -124,7 +124,7 @@ const startEdit = (): void => {
     editForm.load(props.automation);
     editError.value = undefined;
     editing.value = true;
-    // Editing implies reading what you are editing — a collapsed row would hide the form entirely.
+    // Editing implies reading what you are editing: a collapsed row would hide the form entirely.
     if (!props.expanded) {
         emit(`expand`);
     }
@@ -160,7 +160,7 @@ const frontDesk = computed(() => {
     }
     const config = props.automation.webchat ?? {};
     // Mirrors the daemon's own resolution (webchat-config.ts): a mechanism whose keys are missing is reported
-    // as off, because that is what will actually be enforced — the row must not claim a check nobody runs.
+    // as off, because that is what will actually be enforced: the row must not claim a check nobody runs.
     const turnstileReady = config.turnstileSiteKey !== undefined && config.turnstileSecret !== undefined;
     return {
         origins: fires.allowedOrigins ?? [],
@@ -169,7 +169,7 @@ const frontDesk = computed(() => {
             config.antiBot === `turnstile` && turnstileReady
                 ? `Turnstile`
                 : config.antiBot === `turnstile`
-                  ? `Turnstile not finished — no bot check`
+                  ? `Turnstile not finished: no bot check`
                   : config.antiBot === `pow`
                     ? `built-in bot check`
                     : `no bot check`,
@@ -198,7 +198,7 @@ const frontDesk = computed(() => {
                     {{ triggerLabel }}
                 </span>
                 <!-- Chores carry their own check (knip clean, no advisories, duplication under the floor) and
-                     wake only when it finds something. There is no longer a field for one — the icon says the
+                     wake only when it finds something. There is no longer a field for one: the icon says the
                      row behaves that way, which is what explains its "skipped" runs; the command itself was a
                      line of shell in a list of automations, read by nobody. -->
                 <Icon
@@ -216,7 +216,7 @@ const frontDesk = computed(() => {
                 <!-- What it says, in the width the row has spare: the name answers "which one", this answers
                      "and what does it do" without costing a second line. First thing to go as the page narrows.
                      aria-hidden so the disclosure's accessible name stays "<id> <trigger>" rather than a whole
-                     truncated prompt — the full text is one expand away, unabridged. -->
+                     truncated prompt: the full text is one expand away, unabridged. -->
                 <span class="hidden min-w-0 flex-1 truncate text-2xs text-subtle @3xl:block" aria-hidden="true">{{ automation.prompt }}</span>
             </button>
 
@@ -237,7 +237,7 @@ const frontDesk = computed(() => {
                 {{ nextLabel }}
             </span>
 
-            <!-- A Front Desk's snippet is the DELIVERABLE — the one thing the owner came here to get — so unlike
+            <!-- A Front Desk's snippet is the DELIVERABLE: the one thing the owner came here to get, so unlike
                  Run and Delete it is always visible rather than hover-revealed, and it sits before them because
                  installing is what you do first and most often. It also carries the install status, which is
                  the only place in the app that can say whether the paste worked. -->
@@ -264,12 +264,12 @@ const frontDesk = computed(() => {
                 <Icon name="pencil" class="text-xs" />
             </button>
 
-            <!-- Fire it now. The reason this exists at all: a 3 a.m. cron or a webhook you would have to forge —
+            <!-- Fire it now. The reason this exists at all: a 3 a.m. cron or a webhook you would have to forge:
                  neither testable by waiting. Hover-revealed beside Delete, because it is an occasional act, not
                  part of reading the column of states. It works on a disabled row too: trying the prompt before
                  switching it on is the point.
 
-                 A chat listener has no button, because a by-hand fire carries no message — it could only ever
+                 A chat listener has no button, because a by-hand fire carries no message: it could only ever
                  wake an agent that asks where the events went, and it would hold the automation's turn against
                  the real mention arriving behind it. Testing one means sending the bot a message, which is the
                  whole path anyway. -->
@@ -337,12 +337,12 @@ const frontDesk = computed(() => {
 
                 <!-- A Front Desk's embed snippet, where the owner will actually look for it: on the row, months after
                  the create dialog that first showed it. Beside it, the two things that decide whether the widget
-                 works at all — which sites may load it, and who it lets in. -->
+                 works at all, which sites may load it, and who it lets in. -->
                 <!-- State only. The snippet itself lives behind Install above rather than being repeated here: two
                  copies of the one string the owner acts on is two places for it to be stale or disagree. -->
                 <div v-if="frontDesk" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
                     <span v-if="frontDesk.origins.length > 0">on {{ frontDesk.origins.join(`, `) }}</span>
-                    <span v-else class="text-danger">no sites allowed — nobody can chat</span>
+                    <span v-else class="text-danger">no sites allowed: nobody can chat</span>
                     <span>{{ frontDesk.access }}</span>
                     <span>{{ frontDesk.botCheck }}</span>
                 </div>
@@ -353,7 +353,7 @@ const frontDesk = computed(() => {
                     <span v-if="automation.requireApproval">holds for approval</span>
                 </div>
 
-                <!-- The run history, and — where the run reached a turn — a way INTO it. "It failed at 3am and I
+                <!-- The run history, and, where the run reached a turn: a way INTO it. "It failed at 3am and I
                  can't see why" is answered by a transcript, so a run with a conversation is a button that opens
                  one; a guard-skip has nothing behind it and stays plain text. -->
                 <div class="flex flex-col gap-1 border-t border-line pt-2">

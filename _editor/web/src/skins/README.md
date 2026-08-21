@@ -1,14 +1,14 @@
 # Skins
 
 A **skin** is a whole-interface look, as opposed to a colour. The accent picker and the light/dark switch both
-answer *what colour is this app*; a skin answers *what is this app made of* — what a surface is, what an edge is,
+answer *what colour is this app*; a skin answers *what is this app made of*: what a surface is, what an edge is,
 what light does when you touch something.
 
 There are two, and they are deliberately opposite materials:
 
-- **HUD** (`hud.css`) — a heads-up display. Deep cool glass over a survey grid, hairlines that glow, corner
+- **HUD** (`hud.css`): a heads-up display. Deep cool glass over a survey grid, hairlines that glow, corner
   brackets instead of soft rounding, angular geometry, and an angular technical face on headings.
-- **Sanctum** (`sanctum.css`) — **the site's design system, worn by the app**. Same metals, same ink, same
+- **Sanctum** (`sanctum.css`): **the site's design system, worn by the app**. Same metals, same ink, same
   materials, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground with a
   whisper of tooth in it, one gold rule round everything, cream ink, and the site's two faces. The rail and
   every overlay are a flat unlit shadow that the icons and the lists sit in; the two filled button tiers are
@@ -19,7 +19,7 @@ There are two, and they are deliberately opposite materials:
 user picked: every glow, edge and focus ring is mixed from `--color-primary-*`, so Lagoon gives it cyan and Ember
 gives the same instrument panel amber. Sanctum's structure is **fixed gold** (`#c9a05c`, the site's own) whatever
 the picker says, and spends the accent only where it means something: a link, a focus ring, a ticked box. That is
-not a smaller idea, it is the site's own rule — *structure is gold, the ember is spent, never spread* — and it is
+not a smaller idea, it is the site's own rule (*structure is gold, the ember is spent, never spread*) and it is
 what stopped the skin reading as one warm smear. A skin that lets the accent paint its hairlines has a thousand
 of them to paint.
 
@@ -27,7 +27,7 @@ of them to paint.
 
 **Every surface a word sits on is flat in the low frequencies, and opaque.** Overlays that cover live text are
 solid, never translucent, and no plate ever carries a *gradient*. A wash down the top of a card puts the first
-line of a paragraph on a different ground from the last — nothing is unreadable and everything is slightly worse,
+line of a paragraph on a different ground from the last: nothing is unreadable and everything is slightly worse,
 which is the expensive kind of wrong because it never announces itself.
 
 A *texture* is not that. A fine, high-frequency speckle has no low-frequency component at all: every square inch
@@ -39,14 +39,14 @@ under a hundredth of a contrast ratio point.
 Sanctum has paid for that rule and ten others, and the notes are kept at the top of the file:
 
 - **Ornament on an edge becomes noise at UI size.** A carved arcade that reads as stone at 40px reads as a torn,
-  dithered edge at 14px — and every panel in an app is a 14px edge. Character has to come from the material, the
+  dithered edge at 14px: and every panel in an app is a 14px edge. Character has to come from the material, the
   line weights and the type, because those survive being shrunk. The site's turned corner is therefore drawn in
   exactly one place: the dialog, which is the only panel big enough to carry it.
 - **A decorative layer that scales with the viewport will eventually fill the screen.** The temple was sized as a
   share of window width; at 1900px it became a lit mountain range across the bottom third. It is capped in
   absolute pixels now.
 - **A brown ground makes gold invisible.** The cut before this one ran the stone ramp at three times the chroma,
-  at a redder hue, and drew every rule in the accent — so the wall, the plates and the lines were all the same
+  at a redder hue, and drew every rule in the accent: so the wall, the plates and the lines were all the same
   warm thing and none of them could be the brightest. The ground lost its colour and the metal kept it.
 - **The app's accent tier is six warm chips on a settings page.** `<Button>` tints itself from the picked
   colour, so every committing button came out a warm chip on a warm wall. The severities (`danger`, `warn`,
@@ -55,33 +55,33 @@ Sanctum has paid for that rule and ten others, and the notes are kept at the top
 - **A dark primary on a dark window is not a primary.** The fix for the warm chips was a gold hairline round a
   dark box, and it swapped a loud fault for a quiet one: a dark box inside a warm rule is also the description
   of a card, a field, an input, a chip and a secondary button here. The primary had no property the furniture
-  did not share, so a screen had nothing on it that looked pressable — and the only honest report of it was the
+  did not share, so a screen had nothing on it that looked pressable: and the only honest report of it was the
   user's, that the buttons had not meaningfully changed. The eye finds differences of *lightness* first.
   Both filled tiers invert now: the committing button is a **carved stone plaque** cut from the wall's own
   rock, `ui-button-loud` is a **cast bronze** one a clear step brighter, and both have their label cut INTO
-  them. Two materials, one hierarchy, no colour spent and no second shape — which is the only kind of hierarchy
+  them. Two materials, one hierarchy, no colour spent and no second shape: which is the only kind of hierarchy
   that survives being repeated on three hundred screens. The site reached the same conclusion about its own
   hero (see the note over `.btn-primary` in `global.css`), but its plaque is *polished*, and a specular
   highlight that is right for ninety seconds on a page is a lamp in the corner of the eye for nine hours in a
   window: same three layers, a third of the sweep, no outer halo.
 - **Beware `:where()` in a tier selector.** The button tiers are matched with `.p-button:where(:not(…))`, which
-  keeps the exclusion list readable and contributes **nothing** to specificity — so a tier's base rule sits at
+  keeps the exclusion list readable and contributes **nothing** to specificity: so a tier's base rule sits at
   one class while a generic `:enabled:hover` sits at three. Every tier that paints a `box-shadow` has to repaint
   it in its own hover rule, or the plaque visibly sinks into the page the moment a pointer arrives.
 - **A light texture raises the ground it lies on.** The wall's tooth lifted the canvas by about five luminance
-  levels, so a canvas token written at the app's own value *shipped* lighter than the app's — and the plates lost
+  levels, so a canvas token written at the app's own value *shipped* lighter than the app's: and the plates lost
   most of their step off it, which is why cards started reading as panes of glass. Surface tokens under a
   texture have to be chosen against what renders, not against what is written. Anything else keyed to the wall
   (the temple's alpha, the lane's fill) has to be re-checked whenever it moves.
-- **The navigation rail is not a surface, it is a gap.** Three cuts spent the skin's material budget on it —
-  timber, then cloth on a brown ground, then the same cloth on the app's own `bg-card` — and each one failed
+- **The navigation rail is not a surface, it is a gap.** Three cuts spent the skin's material budget on it:
+  timber, then cloth on a brown ground, then the same cloth on the app's own `bg-card`: and each one failed
   differently: a directional grain has room for three strokes across 48px, a colour of its own makes a seam
   against the panel beside it, and a weave has a slow component that never averages out over a column that
   narrow. The answer was that you look *past* a rail forty times a minute, so anything in it is something to
   look past. It is flat, unlit, and a step deeper than the wall now. The overlays followed it there for the
   same reason: a context menu is a thing you look *through* to a list of names.
 - **"In front" is a relationship, not a value.** The overlays used to sit a step ABOVE a card because that is
-  what floating usually means. But every plate in this skin is lit — bevel, ledge, drop — so a panel that goes
+  what floating usually means. But every plate in this skin is lit (bevel, ledge, drop) so a panel that goes
   the other way, unlit and below the wall, is unmistakably not one of them and reads as floating over the lot
   without ever being the brightest thing on screen.
 - **A site's squareness does not survive being repeated.** Sanctum copied the site's hard corner outright and it
@@ -89,11 +89,11 @@ Sanctum has paid for that rule and ten others, and the notes are kept at the top
   large, a workspace draws hundreds and most of them are a 28px row or a 20px chip. At that size a right angle
   stops reading as *carved* and starts reading as a corner that catches the eye every time it passes, and the
   fatigue is cumulative in a way ninety seconds on a page never shows. The radius ramp is the design system's
-  own, eased by about a fifth — a rubbed arris, not a pill.
+  own, eased by about a fifth: a rubbed arris, not a pill.
 - **A skin cannot only repaint what it owns.** The role tokens came down and the app's own tinted marks did not,
   so the calmest chrome in the product was still carrying a lane of forty saturated category chips down the
   middle of it. Whatever a skin leaves at full chroma becomes, by default, the loudest thing in the room. Two
-  things needed naming here — the session card's `.category-tile` and `--color-danger-800` — and both were found
+  things needed naming here (the session card's `.category-tile` and `--color-danger-800`) and both were found
   by *counting* what the chrome actually uses, not by guessing. Note the tile's selector begins with `html`:
   the app's own dark rule is exactly as specific and is declared later in the same layer, so the type selector
   is the cheapest legal way to outrank it.
@@ -101,7 +101,7 @@ Sanctum has paid for that rule and ten others, and the notes are kept at the top
 ## How it works
 
 One attribute on `<html>`: `data-skin="hud"` or `data-skin="sanctum"`. Every rule in a skin's stylesheet is scoped
-to it, so an app with no skin selected is not a skin turned down — it is the skin's rules never matching. `none`
+to it, so an app with no skin selected is not a skin turned down: it is the skin's rules never matching. `none`
 writes no attribute at all.
 
 Each stylesheet overrides three tiers and then names a handful of components:
@@ -110,14 +110,14 @@ Each stylesheet overrides three tiers and then names a handful of components:
 | --------------------- | ------------------------------------------------------------------------------------------- |
 | `--color-surface-*`   | Every Tailwind `surface-*` utility **and** every PrimeVue component (theme.ts bridges them)  |
 | `--role-*`            | `bg-card`, `border-line`, `text-muted` and their thousand call sites                         |
-| `--radius-*`          | Every `rounded-*` utility — this is what makes a rounded app angular, or a hard one gentle   |
+| `--radius-*`          | Every `rounded-*` utility: this is what makes a rounded app angular, or a hard one gentle   |
 
 Only after those does a skin name individual selectors, and only ever to change **paint**: colour, border,
-shadow, background, outline. Never a width, a padding or a position — a skin that moves things is a skin that
+shadow, background, outline. Never a width, a padding or a position: a skin that moves things is a skin that
 breaks screens it has never been looked at on. That is also why neither skin touches the **body** face: heading
 faces are paint, but the reading face sets the metrics of every truncated label in the app, which is geometry.
 
-Component rules sit in `@layer components`, one layer below Tailwind's utilities on purpose — a caller who wrote
+Component rules sit in `@layer components`, one layer below Tailwind's utilities on purpose: a caller who wrote
 `bg-warning/10` on a card still wins, exactly as they do without the skin. The one deliberate exception in each
 file is the section-label rule, which is unlayered because the treatment it restates is spelled out by utilities.
 
@@ -125,22 +125,22 @@ Both skins imply a dark scheme (PrimeVue keys its own dark preset off `data-mode
 when a skin goes on. Each skin's display webfont is fetched only while that skin is active, and switching between
 them re-points the single `<link>` rather than stacking a second one. Sanctum asks for the site's two: Baloo 2
 for every heading and label in the chrome, Playfair Display for the one heading in the app drawn at display size
-(`h1.text-4xl`, the sign-in line) — the site's own size band, where a serif with hairlines still has hairlines.
+(`h1.text-4xl`, the sign-in line): the site's own size band, where a serif with hairlines still has hairlines.
 
 ## Removing skins entirely
 
 Delete this directory, then remove three one-line call sites:
 
-1. `web/src/styles.css` — the two `@import "./skins/…"` lines
-2. `web/src/pages/settings/SettingsAppearance.vue` — the `useSkin` import and the `── SKINS ──` block. The Theme
+1. `web/src/styles.css`: the two `@import "./skins/…"` lines
+2. `web/src/pages/settings/SettingsAppearance.vue`: the `useSkin` import and the `── SKINS ──` block. The Theme
    row then wants its two-option control back: `themeOptions` loses the `hud` and `sanctum` entries and becomes
    the plain light/dark pair bound to `:model-value="scheme"` / `@update:model-value="setScheme"`, and the row's
    icon goes back to ``scheme === `dark` ? `moon` : `sun` ``
-3. `web/index.html` — the `ui-skin` clause in the anti-flash script
+3. `web/index.html`: the `ui-skin` clause in the anti-flash script
 
 The tests travel with this directory; nothing outside it references a skin, and no design-system file is touched
 by the feature at all. A workspace someone had left on a skin comes back on the app's own dark scheme, because
-that is what selecting the skin set — the leftover `ui-skin` key in their browser storage is then read by nothing.
+that is what selecting the skin set: the leftover `ui-skin` key in their browser storage is then read by nothing.
 
 ## Adding another skin
 
@@ -151,9 +151,9 @@ where that lives.
 
 Three selectors are worth copying rather than re-deriving, because each was a bug first:
 
-- a grouped-list slab is `section > .bg-card.divide-y`, **not** `section > .bg-card` — the workspace's file-tab
+- a grouped-list slab is `section > .bg-card.divide-y`, **not** `section > .bg-card`: the workspace's file-tab
   strip is also a card-painted direct child of a `<section>`, and it wore a full panel frame across a bar of tabs;
-- the route element is `#app > :first-child`, **not** `#app > *` — `#app` also holds a screen-reader live region
+- the route element is `#app > :first-child`, **not** `#app > *`: `#app` also holds a screen-reader live region
   and a fixed toast layer, and a backdrop painted on the toast layer floats above the whole app;
 - a button-tier rule must exclude `.p-button-danger`, `.p-button-warn` and `.p-button-success` explicitly, or a
   `components`-layer tone silently repaints the destructive button in the skin's own metal.

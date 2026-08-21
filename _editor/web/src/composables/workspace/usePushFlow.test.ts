@@ -1,6 +1,6 @@
 import type { PrepushRun } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
-// Statically imported for its LOAD COST alone — every test re-imports it through `load()` below, and the first
+// Statically imported for its LOAD COST alone: every test re-imports it through `load()` below, and the first
 // of those pulled the unmocked half of the graph (the agent-run model resolver and the contract it resolves
 // against) inside the first test's 20s budget: ~1s idle, but several times that on a runner where every core is
 // busy, which is how this file failed with the first test timing out. The second failure was the same one: a
@@ -11,8 +11,8 @@ import { beforeEach, expect, test, vi } from "vitest";
 import "./usePushFlow";
 
 /* THE PROMISE UNDER TEST IS A LIFETIME. Every case here runs with NO component mounted, because that is the
- * situation the flow exists for: the user starts a push, walks off to another view — which destroys the panel
- * they started it in — and the run has to finish, send, and raise its question anyway. The old flow lived in
+ * situation the flow exists for: the user starts a push, walks off to another view, which destroys the panel
+ * they started it in, and the run has to finish, send, and raise its question anyway. The old flow lived in
  * that panel's setup, so leaving lost the verdict, the fix proposal, and any sign the push had happened.
  *
  * The seams are the two things that talk to the daemon (the check and git) plus the two the composed fix reads.
@@ -53,7 +53,7 @@ vi.mock(`./usePrepush`, async () => {
 
 vi.mock(`./useChanges`, async () => {
     const { ref } = await import(`vue`);
-    // ONE of each, shared by every caller — as in the real module, where these are module-level singletons. A
+    // ONE of each, shared by every caller: as in the real module, where these are module-level singletons. A
     // fresh spy per call would have handed the flow a different `syncAll` than the one under assertion.
     const actionBusy = ref(false);
     const failures = ref(new Map<string, { action: string; detail: string }>());
@@ -62,7 +62,7 @@ vi.mock(`./useChanges`, async () => {
 });
 
 // The check this flow gates on is a `push.starting` rule, so the settings the flow reads carry a rule table
-// rather than a command field — the real shape, so the real reader (prepushCommandOf) runs against it.
+// rather than a command field: the real shape, so the real reader (prepushCommandOf) runs against it.
 vi.mock(`../sandbox/useSandboxSettings`, async () => {
     const { ref } = await import(`vue`);
     const rules = [
@@ -80,7 +80,7 @@ vi.mock(`../sandbox/useSandboxSettings`, async () => {
 });
 
 // The agent-run list resolves against what this sandbox can actually reach, so the flow's proposal names a
-// model that can be sent. Everything is connected here — which provider is ready is agentRunModel.test's
+// model that can be sent. Everything is connected here, which provider is ready is agentRunModel.test's
 // business, not this suite's.
 vi.mock(`../chat/access`, () => ({ providerReady: () => true }));
 
@@ -99,7 +99,7 @@ const PUSH = [{ repo: `intentic`, pull: false, push: true }];
 const load = async () => {
     vi.clearAllMocks();
     vi.resetModules();
-    /* Sequentially, and the seams BEFORE the flow — not a style preference. Imported concurrently, the test's
+    /* Sequentially, and the seams BEFORE the flow, not a style preference. Imported concurrently, the test's
      * own `import` of a mocked module raced the flow's, each evaluating the factory, and the two ended up
      * holding different copies of its state: `finish` resolved a promise the flow was not waiting on, and the
      * check appeared to hang forever. Warming the registry first makes both sides the same instance. */
@@ -109,7 +109,7 @@ const load = async () => {
     const module = await import(`./usePushFlow`);
     const seam = prepush as unknown as { finish: (fields: Partial<PrepushRun>) => void; reset: () => void };
     seam.reset();
-    // The flow captures useChanges on its first call, so this is the same object it acts through — and the same
+    // The flow captures useChanges on its first call, so this is the same object it acts through, and the same
     // singletons the last case left behind, which is why they are put back here.
     const git = changes.useChanges();
     git.actionBusy.value = false;
@@ -117,7 +117,7 @@ const load = async () => {
     return { finish: seam.finish, git, suggestion, flow: module.usePushFlow() };
 };
 
-// The seams all resolve immediately, so the flow settles entirely in microtasks — a macrotask boundary drains
+// The seams all resolve immediately, so the flow settles entirely in microtasks: a macrotask boundary drains
 // however many of them a path happens to take, rather than counting ticks that change whenever the code does.
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -151,7 +151,7 @@ test(`a green check sends the push with nobody watching`, async () => {
 });
 
 /* The case the rewrite is for: the verdict lands on a flow whose panel is long gone. Nothing here mounts
- * anything, and a second caller — the notice, the rail — sees the same question rather than a fresh empty one. */
+ * anything, and a second caller (the notice, the rail) sees the same question rather than a fresh empty one. */
 test(`a red check raises a question that outlives the surface that asked`, async () => {
     const { flow, git, suggestion, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
@@ -160,7 +160,7 @@ test(`a red check raises a question that outlives the surface that asked`, async
 
     expect(git.syncAll).not.toHaveBeenCalled();
     expect(flow.question.value).toEqual({ kind: `checks`, title: `Checks failed`, command: `pnpm check`, detail: `failed with exit 1.` });
-    /* Composed once, from the failure — text, model and effort — and waiting to be edited whenever the user
+    /* Composed once, from the failure: text, model and effort, and waiting to be edited whenever the user
      * gets back to it.
      *
      * The MODEL is the head of the sandbox's agent-run list, resolved rather than copied out of the setting:
@@ -176,7 +176,7 @@ test(`a red check raises a question that outlives the surface that asked`, async
     expect(usePushFlow().question.value).toEqual(flow.question.value);
 });
 
-// Push anyway never asks twice — and the verdict it outran has nobody left to interrupt.
+// Push anyway never asks twice, and the verdict it outran has nobody left to interrupt.
 test(`pushing anyway mid-run sends at once and the late verdict says nothing`, async () => {
     const { flow, git, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
@@ -233,7 +233,7 @@ test(`a refused push asks again instead of reporting success`, async () => {
     expect(flow.question.value).toEqual({ kind: `push`, title: `Push failed`, detail: `intentic: rejected: non-fast-forward` });
 });
 
-/* The invitation this design makes — keep working while the suite runs — is exactly what breaks a push fired
+/* The invitation this design makes (keep working while the suite runs) is exactly what breaks a push fired
  * blind: useChanges refuses a batch while another is in flight, so a green check landing mid-commit would have
  * been dropped and reported as sent. */
 test(`a push waits for a git action the user started while the suite ran`, async () => {
@@ -251,7 +251,7 @@ test(`a push waits for a git action the user started while the suite ran`, async
     expect(flow.pushed.value).toBeDefined();
 });
 
-// Nothing leaves the machine on a pull-only sync, so there is nothing to check — and the outcome is still
+// Nothing leaves the machine on a pull-only sync, so there is nothing to check, and the outcome is still
 // reported, because "did it go" is asked whether or not a suite was involved.
 test(`a pull-only sync skips the check entirely`, async () => {
     const { flow, git } = await load();
@@ -279,7 +279,7 @@ test(`handing the failure to an agent starts the session and drops the push`, as
     expect(flow.pending.value).toBeUndefined();
 });
 
-// How long this suite usually takes, so the readout can say more than "it is running" — the difference between
+// How long this suite usually takes, so the readout can say more than "it is running": the difference between
 // watching a progress line and being able to walk away from one.
 test(`a completed run is remembered as how long the suite takes`, async () => {
     const { flow, finish } = await load();

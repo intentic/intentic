@@ -207,7 +207,7 @@ const routes: RouteRecordRaw[] = [
                     () => import(`../pages/Capabilities.vue`),
                     hubOutline(
                         `Capabilities`,
-                        `Grow your sandbox — each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox.`,
+                        `Grow your sandbox: each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox.`,
                         6,
                     ),
                 ),

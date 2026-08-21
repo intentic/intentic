@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { analyzeCode, modelLineOf } from "./codeAnalysis";
 
-// Against the real TypeScript grammar — the point of going through Shiki is that the comment spans are the
+// Against the real TypeScript grammar: the point of going through Shiki is that the comment spans are the
 // tokenizer's, so a test with a hand-rolled fake grammar would be testing nothing.
 
 describe(`comment analysis`, () => {
@@ -19,7 +19,7 @@ describe(`comment analysis`, () => {
 
         expect((await analyzeCode(source, `typescript`))?.code).toEqual({
             // The trailing comment goes with the line it sits on; the one wedged inside the call stays, because
-            // cutting it would splice the statement. Blank lines survive — except the one left behind by a
+            // cutting it would splice the statement. Blank lines survive: except the one left behind by a
             // removed block, which collapses into the blank already there.
             text: [`const a = 1;`, ``, `const b = f(/* n */ 2);`].join(`\n`),
             lines: [4, 5, 8],
@@ -48,7 +48,7 @@ describe(`comment analysis`, () => {
         });
     });
 
-    it(`makes a comment-only edit vanish — the whole reason the diff is computed on the stripped text`, async () => {
+    it(`makes a comment-only edit vanish: the whole reason the diff is computed on the stripped text`, async () => {
         const before = [`// old wording`, `const a = 1;`].join(`\n`);
         const after = [`// new wording, at length`, ``, `const a = 1;`].join(`\n`);
 
@@ -88,7 +88,7 @@ describe(`modelLineOf`, () => {
 
     it(`stops at the end for a line past everything kept`, () => {
         expect(modelLineOf(lines, 99)).toBe(3);
-        // A view with nothing in it still has to name a line — Monaco has no line 0.
+        // A view with nothing in it still has to name a line: Monaco has no line 0.
         expect(modelLineOf([], 1)).toBe(1);
     });
 });

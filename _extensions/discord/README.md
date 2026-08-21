@@ -11,14 +11,14 @@ Discord as a place the agent works: it reads channels, replies, and can join a v
 
 ## Key files
 
-- [src/gateway.ts](src/gateway.ts) — the connection, and staying on it.
-- [src/listener.ts](src/listener.ts) — which Discord events become a turn, and which are ignored.
-- [src/voice.ts](src/voice.ts) / [src/audio.ts](src/audio.ts) — joining voice, and the audio path in both directions.
+- [src/gateway.ts](src/gateway.ts): the connection, and staying on it.
+- [src/listener.ts](src/listener.ts): which Discord events become a turn, and which are ignored.
+- [src/voice.ts](src/voice.ts) / [src/audio.ts](src/audio.ts): joining voice, and the audio path in both directions.
 
 ## How it fits
 
 This is a **daemon-side** extension, not a browser one: it contributes a listener, a process, a bin and
-capabilities — no views. It runs inside the sandbox alongside the agent, and the browser never talks to Discord.
+capabilities: no views. It runs inside the sandbox alongside the agent, and the browser never talks to Discord.
 
 ## Conventions & gotchas
 

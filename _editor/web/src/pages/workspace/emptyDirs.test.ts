@@ -25,7 +25,7 @@ describe(`barrenDirs`, () => {
     });
 
     it(`treats unknown (never-listed) dirs as poison, not as empty`, () => {
-        // No `children` at all — ignored or beyond the walk's budget. Neither it nor its parent may be flagged.
+        // No `children` at all: ignored or beyond the walk's budget. Neither it nor its parent may be flagged.
         const tree = [dir(`a`, [dir(`a/unknown`)])];
         expect(barrenDirs(tree, NO_LAZY)).toEqual(new Set());
     });
@@ -35,7 +35,7 @@ describe(`barrenDirs`, () => {
         expect(barrenDirs(tree, NO_LAZY)).toEqual(new Set());
     });
 
-    it(`never counts a symlink as debris — the sweep would delete something someone made on purpose`, () => {
+    it(`never counts a symlink as debris: the sweep would delete something someone made on purpose`, () => {
         // Deleting a link removes the LINK, never what it points at, so an "empty folder" offer here would be
         // made on the strength of a fact about an entirely different directory.
         const link: WorkspaceTreeEntry = { ...dir(`a/linked`, []), link: { to: `../elsewhere` } };
@@ -59,8 +59,8 @@ describe(`barrenDirs`, () => {
 
     // The daemon remakes each of these on its next converge, so an offer to sweep one is a loop the owner
     // cannot win. `.claude` reads as empty for a second reason worth stating: it holds one SYMLINK per loaded
-    // skill, and the tree walk lists no symlinks at all — so a folder full of skills arrives as `children: []`.
-    it(`leaves the daemon's own folders alone — its state dir and the skill projections`, () => {
+    // skill, and the tree walk lists no symlinks at all, so a folder full of skills arrives as `children: []`.
+    it(`leaves the daemon's own folders alone: its state dir and the skill projections`, () => {
         const tree = [
             dir(`.intentic`, [dir(`.intentic/local/cache`, [dir(`.intentic/local/cache/iq`, [dir(`.intentic/local/cache/iq/spool`, [])])])]),
             dir(`.claude`, [dir(`.claude/skills`, [])]),
@@ -155,7 +155,7 @@ describe(`settleBarren`, () => {
         expect([...second.settled]).toEqual([`a`]);
     });
 
-    it(`forgets a path that left the set — re-emptying restarts the clock`, () => {
+    it(`forgets a path that left the set: re-emptying restarts the clock`, () => {
         const first = settleBarren(new Set([`a`]), new Map(), none, 1000, 500);
         const gone = settleBarren(new Set(), first.firstSeen, none, 1200, 500);
         expect(gone.firstSeen.has(`a`)).toBe(false);

@@ -81,7 +81,7 @@ const ARCHETYPE: Record<RefactorKind, { hint: string; diagnosis: string; goal: s
     decompose: {
         hint: `Split it along its change seams`,
         diagnosis: `It changes constantly and branches heavily, so every edit here is slow and easy to get wrong.`,
-        goal: `Split it along its change seams — what gets edited together stays together — moving the branch-dense logic into single-purpose units with names of their own.`,
+        goal: `Split it along its change seams, what gets edited together stays together, moving the branch-dense logic into single-purpose units with names of their own.`,
         done: `Done when \`iq hotspots --in <path>\` reports materially fewer branch points and the project's checks pass.`,
     },
     simplify: {
@@ -92,7 +92,7 @@ const ARCHETYPE: Record<RefactorKind, { hint: string; diagnosis: string; goal: s
     },
     split: {
         hint: `Split it by responsibility, so changes stop colliding`,
-        diagnosis: `The churn is out of proportion to the branching: this file is not tangled, it is crowded — unrelated work keeps landing in one place.`,
+        diagnosis: `The churn is out of proportion to the branching: this file is not tangled, it is crowded, unrelated work keeps landing in one place.`,
         goal: `Split it by responsibility so those changes stop colliding: one subject per file, each named for what it is FOR.`,
         done: `Done when every new file's subject takes one line to state and the project's checks pass.`,
     },
@@ -105,14 +105,14 @@ const ARCHETYPE: Record<RefactorKind, { hint: string; diagnosis: string; goal: s
     tests: {
         hint: `Split it by subject and hoist shared setup`,
         diagnosis: `It is a test file, so these figures are the cost of working in it rather than risk to the product.`,
-        goal: `Split it by subject — one behaviour per file — and hoist repeated setup into shared fixtures. Do not change what is asserted; if an assertion looks wrong, say so instead of fixing it.`,
+        goal: `Split it by subject, one behaviour per file, and hoist repeated setup into shared fixtures. Do not change what is asserted; if an assertion looks wrong, say so instead of fixing it.`,
         done: `Done when the same tests pass, the same number of them run, and no assertion changed.`,
     },
     narrow: {
         hint: `Narrow its surface into modules by subject`,
         diagnosis: `Everything imports it because it holds everything, so unrelated changes queue behind each other here.`,
         goal: `Split it into modules by what each export is ABOUT, and repoint importers at the module that now owns what they use.`,
-        done: `Done when what remains at that path exports only what belongs together — \`iq outline\` it to check — and the project's checks pass.`,
+        done: `Done when what remains at that path exports only what belongs together, \`iq outline\` it to check, and the project's checks pass.`,
     },
 };
 
@@ -129,10 +129,10 @@ const compose = (path: string, why: string, kind: RefactorKind): string => {
 // What the row is ranked ON, in the agent's terms: the same numbers the user is looking at, so the two of them
 // are arguing about one set of facts.
 const hotspotWhy = (hotspot: WorkspaceHotspot, rank: number, window: ChurnWindow): string =>
-    `#${rank} hotspot in this repository — ${count(hotspot.commits)} commits ${WINDOW_PHRASE[window]}, +${count(hotspot.adds)}/-${count(hotspot.dels)} lines, ${count(hotspot.complexity)} branch points.`;
+    `#${rank} hotspot in this repository: ${count(hotspot.commits)} commits ${WINDOW_PHRASE[window]}, +${count(hotspot.adds)}/-${count(hotspot.dels)} lines, ${count(hotspot.complexity)} branch points.`;
 
 export interface HotspotContext {
-    // Position in the report — 1-based, and a real claim about the repository: the ranking is computed over
+    // Position in the report, 1-based, and a real claim about the repository: the ranking is computed over
     // every qualifying file and only the DISPLAY is capped.
     readonly rank: number;
     readonly window: ChurnWindow;
@@ -169,7 +169,7 @@ export const hotspotAsk = (hotspot: WorkspaceHotspot, context: HotspotContext): 
     return {
         kind,
         hint: dormant
-            ? `Nothing has touched this in ${dormantFor(idle)} — a tangled file nobody edits costs nobody anything. Start an agent anyway: ${ARCHETYPE[kind].hint.toLowerCase()}.`
+            ? `Nothing has touched this in ${dormantFor(idle)}, a tangled file nobody edits costs nobody anything. Start an agent anyway: ${ARCHETYPE[kind].hint.toLowerCase()}.`
             : `Start an agent on it: ${ARCHETYPE[kind].hint.toLowerCase()}.`,
         prompt: compose(hotspot.path, hotspotWhy(hotspot, context.rank, context.window), kind),
         dormant,
@@ -190,7 +190,7 @@ export const moduleAsk = (module: WorkspaceKeyModule, context: ModuleContext): R
     if (module.exports < WIDE_FLOOR || module.exports < context.medianExports * WIDE_MULTIPLE) {
         return undefined;
     }
-    const why = `#${context.rank} key module by PageRank — ${count(module.exports)} exports against a median of ${count(context.medianExports)} across that ranking.`;
+    const why = `#${context.rank} key module by PageRank: ${count(module.exports)} exports against a median of ${count(context.medianExports)} across that ranking.`;
     return {
         kind: `narrow`,
         hint: `Start an agent on it: ${ARCHETYPE.narrow.hint.toLowerCase()}.`,

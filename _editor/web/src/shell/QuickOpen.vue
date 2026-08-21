@@ -12,9 +12,9 @@ import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { iconForEntry, type IconName, Modal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 
-/* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — client-
+/* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type, client-
  * ranked over the explorer's cached tree (useFuzzyFiles), so results land in the same frame as the keystroke;
- * the daemon's `files` search serves only the include-ignored / truncated-tree fallback — and opens the pick
+ * the daemon's `files` search serves only the include-ignored / truncated-tree fallback, and opens the pick
  * as an editor tab. Mounted once in the desktop shell and opened from its global keydown. Below the search
  * floor it offers the open tabs as jump targets so Enter always has somewhere to go. A `>` prefix flips the
  * palette to COMMAND mode (VSCode's Ctrl+Shift+P folded into the same field), filtering the command registry
@@ -26,7 +26,7 @@ const { tabs } = useWorkspaceTabs();
 const { agentById } = useAgents();
 // Resolve the platform once so command rows can render their shortcut in native form (⇧⌘P vs Ctrl+Shift+P).
 const isMac = isApplePlatform();
-// The chord a row displays is the EFFECTIVE one (user override ?? declared default) — reads keymapOverrides
+// The chord a row displays is the EFFECTIVE one (user override ?? declared default): reads keymapOverrides
 // reactively, so a live remap re-renders the hint. undefined when the command has no shortcut / was unbound.
 const chordFor = (entry: RegisteredCommand): string | undefined => effectiveKeybinding(entry.command, entry.keybinding);
 
@@ -39,17 +39,17 @@ const commandRows = computed<readonly RegisteredCommand[]>(() =>
         (entry) => entry.title.toLowerCase().includes(commandQuery.value) || entry.command.toLowerCase().includes(commandQuery.value),
     ),
 );
-/* A PASTED SESSION REFERENCE — the way back into the app from everywhere the id gets carried. An agentic
+/* A PASTED SESSION REFERENCE: the way back into the app from everywhere the id gets carried. An agentic
  * session's name is the join between this app and git, the worktree on disk and the CLI, so it travels: out of
- * a branch chip, through a terminal or a message, and back in here. Until now the return leg did not exist —
+ * a branch chip, through a terminal or a message, and back in here. Until now the return leg did not exist:
  * you held the exact name of a thing the app knows and had no way to spend it.
  *
  * It takes over the palette rather than adding a row to the file list, for the same reason `>` does: a session
  * name has no file matches worth ranking, so a list would be one offer and a page of nothing. Any of the four
- * spellings is accepted (see sessionRef) — nobody should have to convert a name they did not choose — and the
+ * spellings is accepted (see sessionRef): nobody should have to convert a name they did not choose, and the
  * roster is lent to it so a bare id that is nobody's uuid (a workflow names its steps' sessions) still lands. */
 const sessionRef = computed(() => (commandMode.value ? undefined : sessionIdFrom(query.value, (id) => agentById(id) !== undefined)));
-// The agent behind it, when this browser has been told about it — the row shows a title where it can, and
+// The agent behind it, when this browser has been told about it: the row shows a title where it can, and
 // otherwise still offers the jump: the detail page settles an id the roster has not caught up with yet.
 const sessionAgent = computed(() => (sessionRef.value === undefined ? undefined : agentById(sessionRef.value)));
 
@@ -67,7 +67,7 @@ const showingRecents = computed(() => query.value.trim().length < floor.value);
 const rows = computed<readonly string[]>(() => (showingRecents.value ? openTabPaths.value : filePaths.value));
 const rowCount = computed(() => (commandMode.value ? commandRows.value.length : sessionRef.value !== undefined ? 1 : rows.value.length));
 
-// Snap the highlight back to the top whenever the result set changes under it — including the swap to the
+// Snap the highlight back to the top whenever the result set changes under it: including the swap to the
 // single session row, whose only index is 0.
 watch([rows, commandRows, sessionRef], () => (activeIndex.value = 0));
 
@@ -88,7 +88,7 @@ const open = (path: string): void => {
 
 const run = (entry: RegisteredCommand): void => {
     isOpen.value = false;
-    // A throwing command is its owner's bug — contain it to the console, never the palette.
+    // A throwing command is its owner's bug: contain it to the console, never the palette.
     void Promise.resolve(executeCommand(entry.command)).catch((caught: unknown) => console.error(`command ${entry.command} failed`, caught));
 };
 
@@ -126,8 +126,8 @@ const openActive = (): void => {
 };
 
 // Focus the field each time the palette opens (the ChatTabs @show pattern), starting at the top row. Seed the
-// query from the shortcut that opened us — `> ` for the Command Palette (Ctrl/Cmd+Shift+P), empty for Go to File
-// (Ctrl/Cmd+P) — a fresh field each open, like VSCode.
+// query from the shortcut that opened us: `> ` for the Command Palette (Ctrl/Cmd+Shift+P), empty for Go to File
+// (Ctrl/Cmd+P): a fresh field each open, like VSCode.
 const onShow = async (): Promise<void> => {
     query.value = mode.value === `commands` ? `> ` : ``;
     await nextTick();
@@ -191,13 +191,13 @@ const onShow = async (): Promise<void> => {
                     }}</kbd>
                 </button>
                 <p v-if="commandRows.length === 0 && commands.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
-                    No commands registered — extensions contribute them.
+                    No commands registered: extensions contribute them.
                 </p>
                 <p v-else-if="commandRows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No commands match.</p>
             </div>
             <!-- One offer, because there is only ever one thing a session's name can mean. The id is echoed
                  under the title so the reader can check the string they pasted against the one that matched
-                 before pressing — the whole value of a name is that it is exact. -->
+                 before pressing: the whole value of a name is that it is exact. -->
             <div
                 v-else-if="sessionRef !== undefined"
                 id="quick-open-list"

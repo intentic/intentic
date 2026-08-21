@@ -6,17 +6,17 @@ import { describe, expect, it } from "vitest";
 
 /* WHAT A REGISTRY ROW IS ALLOWED TO PAINT.
  *
- * `art` is the one mark tier whose document comes from a stranger — a row in somebody's registry, rendered by
- * this app before a line of the extension's code has been cloned — and it is the only one that arrives as a
+ * `art` is the one mark tier whose document comes from a stranger: a row in somebody's registry, rendered by
+ * this app before a line of the extension's code has been cloned, and it is the only one that arrives as a
  * whole document rather than as a name to look up. Both halves of that need holding down.
  *
  * The SAFETY half is not this function's to hold and must not be mistaken for it: the document goes to an
  * <img>, where the browser refuses script and external references whatever the bytes say. What is asserted
- * here is that the gate never PAINTS a hole — every string that would put the browser's broken-image glyph in
+ * here is that the gate never PAINTS a hole: every string that would put the browser's broken-image glyph in
  * a 28px tile has to answer `undefined`, so the ladder drops to a tier that has something real to draw.
  *
  * The ENCODING half is asserted because it fails silently and totally. Every mark worth drawing carries `#`
- * in a fill, `#` opens a URL fragment, and an unescaped one truncates the data URI at the first colour —
+ * in a fill, `#` opens a URL fragment, and an unescaped one truncates the data URI at the first colour:
  * which is not a broken tile but a subtly wrong one, on every mark at once. */
 
 const MARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#6C4FE0"/></svg>`;
@@ -30,7 +30,7 @@ describe(`artSrc`, () => {
 
     it(`escapes the fragment character, so a mark keeps every colour past its first`, () => {
         // The whole failure this catches: `fill="#6C4FE0"` unescaped ends the URI at the `#`, and what loads is
-        // a document truncated mid-attribute — one that still parses, and paints in the wrong colour or not at all.
+        // a document truncated mid-attribute: one that still parses, and paints in the wrong colour or not at all.
         const src = artSrc(MARK) ?? ``;
         expect(src).not.toContain(`#`);
         expect(decodeURIComponent(src.replace(/^data:image\/svg\+xml,/u, ``))).toBe(MARK);
@@ -62,9 +62,9 @@ describe(`artSrc`, () => {
         });
     }
 
-    it(`refuses a mark carrying script — belt to the <img>'s braces, and said out loud`, () => {
+    it(`refuses a mark carrying script: belt to the <img>'s braces, and said out loud`, () => {
         /* NOT the security boundary. An SVG in an <img> never runs script, so this changes no outcome an
-         * attacker cares about — it is here so that "a mark with script in it is not a mark we draw" is a
+         * attacker cares about: it is here so that "a mark with script in it is not a mark we draw" is a
          * sentence a registry reviewer can rely on rather than infer, and so that removing the <img> for an
          * inline <svg> someday breaks a test instead of a person. */
         expect(artSrc(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`)).toBeUndefined();

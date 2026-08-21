@@ -198,7 +198,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
             const where = resource.server === undefined ? "" : ` on ${resource.server}`;
             const prompt = [
                 `The Komodo ${input.kind} "${resource.name}"${where} is ${resource.state}${resource.status === undefined ? "" : ` (${resource.status})`}. Investigate and fix it.`,
-                `Its image is ${resource.image ?? "not recorded"}. Komodo is at ${connection.baseUrl} and you have it as a capability — use it to read state and logs, and to redeploy once you have a fix.`,
+                `Its image is ${resource.image ?? "not recorded"}. Komodo is at ${connection.baseUrl} and you have it as a capability: use it to read state and logs, and to redeploy once you have a fix.`,
                 `Find the cause in this workspace's source where it is a code or config problem, fix it there, and say plainly when the cause is outside the workspace (a bad env var, a full disk, an unreachable dependency) rather than inventing a code change. You are in an isolated worktree: commit your fix and it goes through review.`,
                 ...(tail !== "" ? [`--- container log tail ---\n${tail}`] : []),
             ].join("\n\n");

@@ -63,10 +63,10 @@ export const reachOf = (persona: Persona): PersonaReach => {
  * read twice on a 256px sidebar is a strip that gets read never. */
 export const reachSentence = (name: string, reach: PersonaReach): string => {
     if (reach.readsNothing) {
-        return `Viewing as ${name} — it has no file access at all, so every path here is refused to its file tools.`;
+        return `Viewing as ${name}: it has no file access at all, so every path here is refused to its file tools.`;
     }
     if (reach.folders.length === 0) {
-        return `Viewing as ${name} — it works anywhere in the workspace, so nothing here is fenced off.`;
+        return `Viewing as ${name}: it works anywhere in the workspace, so nothing here is fenced off.`;
     }
-    return `Viewing as ${name} — it works in ${reach.folders.join(`, `)}. Dimmed folders are refused to its file tools; you can still open them.`;
+    return `Viewing as ${name}: it works in ${reach.folders.join(`, `)}. Dimmed folders are refused to its file tools; you can still open them.`;
 };

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The italic tab is the ONLY thing on screen that says a tab is a peek — that the next file looked at will take
+// The italic tab is the ONLY thing on screen that says a tab is a peek: that the next file looked at will take
 // its place. Nothing else in the strip distinguishes it, so if the italic stops being drawn the behaviour becomes
 // tabs disappearing for no visible reason. Asserted here on the real strip, along with the gesture that ends it.
 import { beforeEach, expect, it, vi } from "vitest";

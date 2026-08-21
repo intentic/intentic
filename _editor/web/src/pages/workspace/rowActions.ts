@@ -95,8 +95,8 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
             personaCount === 0
                 ? `Choose who works here`
                 : personaCount === 1
-                  ? `Change who works here — 1 persona`
-                  : `Change who works here — ${personaCount} personas`,
+                  ? `Change who works here: 1 persona`
+                  : `Change who works here, ${personaCount} personas`,
         standing: personaCount > 0,
         run: (): void => sources.openPersonas(dir),
     });

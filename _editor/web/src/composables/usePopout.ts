@@ -76,7 +76,7 @@ import { nudgePopout, type PopoutAnswer } from "../popout/handshake";
  *
  * WHEN THE WINDOW IS ASKED is its own half of the contract and it lives in popout/handshake.ts: the answers
  * above are only worth what their timing is worth, and a window the user is not looking at has its clock taken
- * away by the browser. So this store NUDGES — at load, and on every change to what it would answer — and the
+ * away by the browser. So this store NUDGES: at load, and on every change to what it would answer, and the
  * window replies on the spot instead of on whatever tick it is next allowed. */
 
 declare global {
@@ -113,8 +113,8 @@ const popoutPage = (): string => `${import.meta.env.BASE_URL}popout.html`;
 const CLONE_ATTR = `data-intentic-clone`;
 
 // How long a remembered window gets to come back before the panel stops holding its docked slot shut. A backstop
-// for the window that ISN'T there — a note left by a browser crash, a window the user closed while this tab was
-// gone — rather than the mechanism: the roll-call this store posts at load reaches a live window in about a
+// for the window that ISN'T there: a note left by a browser crash, a window the user closed while this tab was
+// gone, rather than the mechanism: the roll-call this store posts at load reaches a live window in about a
 // millisecond, so a wait that reaches this deadline is almost always a wait for nothing. Both ways of being
 // wrong are cheap: overshooting means an emptier column for a moment, and undershooting only means the panel
 // shows docked until the window reports in, it is no longer a deadline the window has to beat to survive.
@@ -586,7 +586,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     });
 
     /* THE ROLL-CALL, and the reason the wait above is a backstop rather than a race. A page that has just loaded
-     * cannot see the window a previous page left floating — it holds no reference to it, and asking is the
+     * cannot see the window a previous page left floating: it holds no reference to it, and asking is the
      * window's job. So this page says so out loud the moment it can answer, and every window holding this panel
      * puts the question straight away instead of on whatever tick the browser next allows it. That is the whole
      * of the fix for a panel that came back to its column while its window was still on the other screen: a
@@ -599,7 +599,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
 
     /* …and again whenever what this store would ANSWER changes: the panel arriving (the veil comes off), its
      * host going away (the veil goes back on), a deliberate dock (the window closes). Each of those used to
-     * reach the window a tick later at best, and a throttled minute later at worst — long enough for the reader
+     * reach the window a tick later at best, and a throttled minute later at worst: long enough for the reader
      * to act on a window showing something that is no longer true. */
     watch([holders, poppedOut], () => nudgePopout(name), { flush: `sync` });
 
@@ -713,7 +713,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         // windows, and a window a reload left floating is taken back over rather than joined by a second one.
         const win = window.open(`${popoutPage()}?panel=${name}`, name, features(rememberedFrame() ?? centred(size())));
         if (win === null) {
-            return; // blocked by the popup blocker — the panel stays docked
+            return; // blocked by the popup blocker: the panel stays docked
         }
         dismissed = false;
         win.focus();

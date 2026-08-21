@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // `useSkin` reaches `useTheme` through the design system's barrel, which pulls in app-wide singletons that read
-// browser globals at import time (useDevice reads window.matchMedia) — stood up for the package by
+// browser globals at import time (useDevice reads window.matchMedia): stood up for the package by
 // vitest.setup.ts, which runs before this file is loaded.
 
 const load = () => import("./useSkin");
@@ -64,9 +64,9 @@ describe(`useSkin`, () => {
         expect(fontLink()).not.toBeNull();
     });
 
-    // The detach, asserted: leaving the skin has to leave NOTHING — no attribute for a rule to match, no font
+    // The detach, asserted: leaving the skin has to leave NOTHING, no attribute for a rule to match, no font
     // being paid for. Anything left behind here is the app not actually coming back to normal.
-    it(`turns it off completely — no attribute left, no webfont left`, async () => {
+    it(`turns it off completely: no attribute left, no webfont left`, async () => {
         localStorage.setItem(`ui-skin`, `hud`);
         const { useSkin } = await load();
 
@@ -87,7 +87,7 @@ describe(`useSkin`, () => {
     });
 
     // Each skin has a face of its own, and swapping between them must RE-POINT the one <link> rather than stack
-    // a second one behind it — which is the bug the id and the re-point in applyFont exist to prevent.
+    // a second one behind it, which is the bug the id and the re-point in applyFont exist to prevent.
     it(`swaps one webfont for the other when the skin changes`, async () => {
         const { useSkin } = await load();
 

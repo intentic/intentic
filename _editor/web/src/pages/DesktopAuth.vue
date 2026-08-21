@@ -10,7 +10,7 @@ import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { signInThroughBrowser } from "../environments/desktop";
 
-/* SIGNING IN FOR THE DESKTOP APP — this page runs in the user's REAL BROWSER, never in the app's webview.
+/* SIGNING IN FOR THE DESKTOP APP: this page runs in the user's REAL BROWSER, never in the app's webview.
  *
  * The app opened it with `opener` because Google refuses OAuth from an embedded webview and Google Identity
  * Services is FedCM-based, which the Linux webview does not implement (see environments/desktop.ts). Here,
@@ -21,7 +21,7 @@ import { signInThroughBrowser } from "../environments/desktop";
  * kicks the Google mint off before the session round trip (router/index.ts), and the button below is on
  * screen from the first frame instead of behind a timer. What the user sees is the whole product here.
  *
- * The two credentials are then parked on the platform for one pickup, and the app is handed the row's id —
+ * The two credentials are then parked on the platform for one pickup, and the app is handed the row's id:
  * NOT the credentials. A deep link is delivered as a process argument, readable by anything else running on
  * the machine, so the id is the only thing small and worthless enough to travel that way.
  *
@@ -37,24 +37,24 @@ const error = ref<NoticeModel | undefined>(undefined);
 const working = ref(false);
 /* Which wait the user is in. They are different lengths and only one of them is theirs to end: `checking`
  * and `handing` are round trips to the platform, `signin` is Google and may need a click. Naming them apart
- * is what lets the Google button stand on the page during the one wait it can shorten — and, more to the
+ * is what lets the Google button stand on the page during the one wait it can shorten, and, more to the
  * point, stay OFF it during the two it cannot. */
 const stage = ref<`checking` | `signin` | `handing` | `done`>(`checking`);
 
 const googleButton = ref<HTMLElement>();
 
 /* How much life the credential must have left to be worth handing over. Google's tokens live about an hour,
- * so this asks for most of one — enough to cover an install that goes on to create and boot a sandbox before
+ * so this asks for most of one: enough to cover an install that goes on to create and boot a sandbox before
  * anything can spend it. It is not a guarantee (nothing here can extend a Google token), which is why the
  * workspace's own sign-in gate now offers this same hand-off when the hour does run out. */
 const HANDOFF_USABLE_FOR_MS = 45 * 60 * 1000;
 
-/* THE CREDENTIAL THE PLATFORM ALREADY HOLDS — tried first, so the ordinary desktop sign-in shows no Google
+/* THE CREDENTIAL THE PLATFORM ALREADY HOLDS: tried first, so the ordinary desktop sign-in shows no Google
  * surface at all. Arriving here means the user pressed sign in inside the app AND is signed in to this
  * platform in this browser; a Google button on top of that is a third act of consent for something they have
  * already twice agreed to, and it is the step people were getting stuck on.
  *
- * It is also the only escape that works when Google's in-page button CANNOT run — a blocked frame, an
+ * It is also the only escape that works when Google's in-page button CANNOT run: a blocked frame, an
  * extension, an origin Google is refusing. Those are invisible from this page: the button renders, takes the
  * click, and does nothing. Asking the platform costs one round trip and needs none of that machinery.
  *
@@ -75,7 +75,7 @@ const platformHeldToken = async (): Promise<string | undefined> => {
         adoptIdToken(idToken);
         return idToken;
     } catch {
-        // A platform without this route (an older or self-hosted build) is not an error here — it is simply
+        // A platform without this route (an older or self-hosted build) is not an error here: it is simply
         // one that holds nothing, and the Google button below is exactly what that case already had.
         return undefined;
     }
@@ -83,7 +83,7 @@ const platformHeldToken = async (): Promise<string | undefined> => {
 
 /* Google's own page, as the last way out. Everything above can fail silently in a browser that will not run
  * Google's frame, and this depends on none of it: it is a full-page redirect, which is the one sign-in Google
- * accepts everywhere. It returns to THIS url — state and challenge intact — with the account's Google tokens
+ * accepts everywhere. It returns to THIS url (state and challenge intact) with the account's Google tokens
  * freshly stored, so the check above then answers on the first try and the hand-off completes by itself. */
 const useGooglesOwnPage = async (): Promise<void> => {
     await signInWithGoogle(route.fullPath);
@@ -93,10 +93,10 @@ const hand = async (): Promise<void> => {
     const state = route.query[`state`];
     const challenge = route.query[`challenge`];
     if (typeof state !== `string` || state === `` || typeof challenge !== `string` || challenge === ``) {
-        error.value = noticeOf(`This link is missing the value that ties it to your app — open Intentic and sign in from there.`);
+        error.value = noticeOf(`This link is missing the value that ties it to your app: open Intentic and sign in from there.`);
         return;
     }
-    // Park the credentials for one pickup and send the app the row's id — never the credentials themselves.
+    // Park the credentials for one pickup and send the app the row's id: never the credentials themselves.
     const deliver = async (idToken: string): Promise<void> => {
         stage.value = `handing`;
         const { handoff } = await apiClient.desktop.handoff({ idToken, challenge });
@@ -116,11 +116,11 @@ const hand = async (): Promise<void> => {
         /* The daemon's credential, when the platform held none. `gate: false` because the button is already
          * ON this page: the shared overlay's job is to interrupt a screen that was doing something else, and
          * this screen is doing nothing else. The silent attempt (auto re-auth for a returning user) races that
-         * button — whichever produces a credential first resolves this.
+         * button: whichever produces a credential first resolves this.
          *
          * `usableFor` because this token LEAVES: the app cannot spend it until it has a daemon to spend it
          * on, which after a fresh install is a whole setup away. A cached one with minutes left would satisfy
-         * this page and strand the app — so anything shorter than the window below is re-minted here, where
+         * this page and strand the app, so anything shorter than the window below is re-minted here, where
          * Google is available and usually silent, rather than in the app's webview, where it is neither. */
         const idToken = await getIdToken({ gate: false, usableFor: HANDOFF_USABLE_FOR_MS });
         if (idToken === undefined) {
@@ -137,10 +137,10 @@ const hand = async (): Promise<void> => {
 
 /* Google's own button, on screen from the first frame rather than after a timer decides the silent attempt
  * failed. It costs nothing when it goes unused, and it is the only thing that can end the wait when the
- * silent attempt is blocked — which is the ordinary case in a browser that suppresses the FedCM prompt.
+ * silent attempt is blocked, which is the ordinary case in a browser that suppresses the FedCM prompt.
  * Re-rendered whenever the container reappears (a retry) or the colour scheme flips.
  *
- * A refusal means this page is somewhere it cannot work — and the one place that is true is the desktop
+ * A refusal means this page is somewhere it cannot work, and the one place that is true is the desktop
  * webview, which is exactly where this page's whole purpose says it should not be. So the answer is to send
  * it where it belongs rather than to leave an empty card: the app opens the real browser at this same page. */
 const googleReady = ref(true);
@@ -178,7 +178,7 @@ onMounted(() => void hand());
             <Notice v-if="error" :of="error" />
             <p v-else-if="stage === `done`" class="flex items-start gap-2 text-xs text-muted">
                 <Icon name="check-circle" class="mt-0.5 shrink-0 text-success" />
-                <span>Sent to the app — you can close this tab. If nothing happened, make sure Intentic is running and try again.</span>
+                <span>Sent to the app: you can close this tab. If nothing happened, make sure Intentic is running and try again.</span>
             </p>
             <p v-else-if="stage === `handing`" class="flex items-start gap-2 text-xs text-muted">
                 <Icon name="spinner" spin class="mt-0.5 shrink-0" />
@@ -198,13 +198,13 @@ onMounted(() => void hand());
             <template v-else>
                 <p class="text-xs text-muted">
                     <template v-if="googleReady">Continue with Google to hand this sign-in to the app.</template>
-                    <template v-else>This page has to run in your browser — Google won't sign you in inside an app window.</template>
+                    <template v-else>This page has to run in your browser: Google won't sign you in inside an app window.</template>
                 </p>
                 <div v-show="googleReady" ref="googleButton" class="flex justify-center" style="color-scheme: light"></div>
                 <Button v-if="!googleReady" label="Open this in your browser" severity="secondary" class="self-start" @click="signInThroughBrowser" />
 
                 <!-- Unconditional, for the same reason the login page's is. A button that renders but cannot
-                     work — a blocked frame, a policy, an origin Google has stopped accepting — is invisible
+                     work (a blocked frame, a policy, an origin Google has stopped accepting) is invisible
                      from this page, and every one of those looks identical to a screen that simply does
                      nothing. This way out depends on none of that machinery: a full-page redirect, back to
                      this same link, after which the check above answers on its own. -->

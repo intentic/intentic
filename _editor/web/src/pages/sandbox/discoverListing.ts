@@ -139,7 +139,7 @@ export const listingSections = (listings: readonly DiscoverListing[]): readonly 
         {
             id: `listed`,
             label: `Everything published`,
-            caption: `no human source review — open an entry to see both automated checks`,
+            caption: `no human source review, open an entry to see both automated checks`,
             listings: listings.filter((listing) => listing.entry.trust !== `verified`),
         },
     ].filter((section) => section.listings.length > 0);

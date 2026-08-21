@@ -8,11 +8,11 @@ import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
 /* Desktop sync enablement (on the /sandbox hub). Three states over useDesktopSync: pick a folder and Enable →
  * copy-paste one-liner carrying a single-use pairing token → "enabled" once the daemon reports the key enrolled.
  * No Google sign-in on the laptop; reuses the shared Code + status-pill markup. The card is explicit that the
- * one-liner installs a resident agent doing TWO things — file sync and localhost port mirroring — and that
+ * one-liner installs a resident agent doing TWO things: file sync and localhost port mirroring, and that
  * Disable revokes access but leaves the agent installed (`intentic-sync uninstall` removes it).
  *
  * Two enrollment modes surface here: full "sync" (file sync + ports, single holder, owner-only) and "mirror"
- * (ports only, any number of machines). An owner can pick either — including mirroring a second computer while
+ * (ports only, any number of machines). An owner can pick either: including mirroring a second computer while
  * their first holds sync; a member only ever sees the mirror flow, matching what the daemon would grant them. */
 
 const { highlight = false } = defineProps<{ highlight?: boolean }>();
@@ -44,7 +44,7 @@ const {
 const mirrorOnly = ref(false);
 const portsOnly = computed(() => !isOwner.value || mirrorOnly.value);
 
-// Takeover and mirror setup are mutually exclusive forms — entering one leaves the other.
+// Takeover and mirror setup are mutually exclusive forms: entering one leaves the other.
 const startTakeover = (): void => {
     takeover.value = true;
     mirrorOnly.value = false;
@@ -54,7 +54,7 @@ const startMirror = (): void => {
     takeover.value = false;
 };
 
-// "What stays on your computer" disclosure — collapsed by default, but always one click away before pasting.
+// "What stays on your computer" disclosure: collapsed by default, but always one click away before pasting.
 const showFootprint = ref(false);
 
 // Brief ring when the user arrives here from the Workspace "Open in local editor" shortcut.
@@ -71,8 +71,8 @@ watch(
     { immediate: true },
 );
 
-/* DISABLE ASKS FIRST. It is a one-click kill switch for every paired computer — file sync stops, mirrored ports
- * fall off localhost — sitting in the corner of a card people open to READ their sync state, with nothing between
+/* DISABLE ASKS FIRST. It is a one-click kill switch for every paired computer: file sync stops, mirrored ports
+ * fall off localhost: sitting in the corner of a card people open to READ their sync state, with nothing between
  * the pointer and the revoke. Re-enabling is not a click either: it means pasting a fresh one-liner on the
  * machine. So it takes the app's own confirm, which names what goes and what survives. */
 const confirmingDisable = ref(false);
@@ -97,9 +97,9 @@ onUnmounted(stop);
             <Row flush :heading="2" icon="sync" title="Desktop sync">
                 <template #description>
                     <template v-if="isOwner">
-                        Edit your sandbox in your own editor, and reach its dev servers on your own localhost — same ports, cookies, and CORS.
+                        Edit your sandbox in your own editor, and reach its dev servers on your own localhost, with the same ports, cookies, and CORS.
                     </template>
-                    <template v-else>Mirror this sandbox's dev servers onto your own localhost — same ports, cookies, and CORS.</template>
+                    <template v-else>Mirror this sandbox's dev servers onto your own localhost, with the same ports, cookies, and CORS.</template>
                 </template>
             </Row>
             <!-- The pill follows the HEARTBEAT, not the enrollment record: a green "Enabled" over a machine that
@@ -129,7 +129,7 @@ onUnmounted(stop);
                          it is half an answer: the reader's next move is almost always to OPEN the folder, and the
                          one place the path could be read was the machine's own terminal. Copyable for the same
                          reason it is here at all.
-                         Wraps rather than truncates — the tail of a path is the part that identifies it, and every
+                         Wraps rather than truncates: the tail of a path is the part that identifies it, and every
                          sandbox on one machine shares the head. -->
                     <div v-if="syncingFrom !== undefined" class="flex items-start justify-between gap-3">
                         <dt class="shrink-0 text-subtle">Folder on that computer</dt>
@@ -151,13 +151,13 @@ onUnmounted(stop);
                 <p class="text-2xs text-subtle">Folders, ports and agent health for every paired computer are listed above.</p>
                 <!-- The holder went quiet. Name the likeliest cause first: on a computer running more than one
                      sandbox, the agent is shared, and older builds silently handed the whole pairing to whichever
-                     sandbox was set up last — so a folder stops syncing with nothing on either end saying so. -->
+                     sandbox was set up last, so a folder stops syncing with nothing on either end saying so. -->
                 <div v-if="syncStopped" class="flex flex-col gap-1 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-2xs text-warning">
                     <p class="font-medium">
                         <span class="font-mono">{{ syncingFrom }}</span> hasn't checked in since {{ syncLastSeen ?? "it was enrolled" }}.
                     </p>
                     <p>
-                        Nothing is reaching its folder. That computer may be asleep or offline — or its sync agent was pointed at a different sandbox.
+                        Nothing is reaching its folder. That computer may be asleep or offline, or its sync agent was pointed at a different sandbox.
                         Run <span class="font-mono">intentic-sync status</span> there to see every sandbox it pairs, then re-enable below if this one
                         is missing.
                     </p>
@@ -188,24 +188,24 @@ onUnmounted(stop);
             </template>
 
             <!-- Setup: fresh enable, takeover (move an active sync here), or a mirror-only enrollment (always
-                 addable — mirrors don't contend). Pick a folder (sync only), reveal the one-liner. -->
+                 addable: mirrors don't contend). Pick a folder (sync only), reveal the one-liner. -->
             <template v-if="!enrolled || takeover || portsOnly">
                 <!-- Just disabled: revoking stops the agent's access (its watcher shuts down on its own), but the
                      installation stays until uninstall runs on that machine. -->
                 <p v-if="!enrolled && revokedFrom !== undefined" class="text-2xs text-subtle">
-                    Access for <span class="font-mono text-content">{{ revokedFrom }}</span> is revoked — its port mirroring stops by itself within a
+                    Access for <span class="font-mono text-content">{{ revokedFrom }}</span> is revoked. Its port mirroring stops by itself within a
                     minute. To remove the agent from that computer, run <span class="font-mono text-content">intentic-sync uninstall</span> there.
                 </p>
                 <p v-if="takeover" class="text-2xs text-warning">
-                    This takes over from {{ syncingFrom ?? "the other computer" }} — its sync stops when you run the command below.
+                    This takes over from {{ syncingFrom ?? "the other computer" }}. Its sync stops when you run the command below.
                 </p>
                 <p v-if="portsOnly && pairToken === undefined" class="text-2xs text-subtle">
                     <template v-if="isOwner">
-                        Ports only: the sandbox's dev servers appear on the enrolling computer's localhost — no files are synced.
+                        Ports only: the sandbox's dev servers appear on the enrolling computer's localhost. No files are synced.
                     </template>
                     <template v-else>
-                        As a collaborator, you can mirror the sandbox's dev servers onto your own localhost — live previews without file access beyond
-                        what the workspace already shows. Files aren't synced.
+                        As a collaborator, you can mirror the sandbox's dev servers onto your own localhost for live previews. No files are synced
+                        beyond what the workspace already shows.
                     </template>
                 </p>
                 <div v-if="!portsOnly" class="flex flex-col gap-1.5">
@@ -245,14 +245,14 @@ onUnmounted(stop);
                     <p class="text-2xs text-subtle">
                         <template v-if="pairMode === 'mirror'">
                             Run this on the computer that should get the ports. It installs the sync agent and mirrors the sandbox's dev servers onto
-                            its localhost — no files are synced, no sign-in needed.
+                            its localhost. No files are synced, and no sign-in is needed.
                         </template>
                         <template v-else>
-                            Run this on your computer. It installs the sync agent and starts two things — file sync, and a port mirror that puts the
-                            sandbox's dev servers on your localhost — no sign-in needed.
+                            Run this on your computer. It installs the sync agent and starts two things: file sync, and a port mirror that puts the
+                            sandbox's dev servers on your localhost. No sign-in is needed.
                         </template>
                     </p>
-                    <!-- Both forms are on screen at once here, and the switch rewrites the pair — so it sits
+                    <!-- Both forms are on screen at once here, and the switch rewrites the pair, so it sits
                          above them rather than beside either. The computer being enrolled is by definition not
                          the sandbox's own machine, and need not be the developer's. -->
                     <ScriptSourceSwitch />
@@ -286,7 +286,7 @@ onUnmounted(stop);
              web traffic only for now. Either way sync has nothing to ride, and saying so beats an Enable button
              whose one-liner would hang on the laptop. -->
         <div v-else :class="ui.emptyState()">
-            Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet — one behind your own domain does.
+            Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet, but one behind your own domain does.
         </div>
 
         <ConfirmDialog
@@ -307,7 +307,7 @@ onUnmounted(stop);
                  is the one fact that makes "which sandbox is this?" answerable without leaving the dialog. -->
             <p v-if="syncingPath !== undefined" class="mt-2 break-all font-mono text-xs text-content">{{ syncingPath }}</p>
             <p class="mt-2">
-                Nothing on that computer is deleted and its sync agent stays installed — but turning this back on means running a fresh pairing
+                Nothing on that computer is deleted and its sync agent stays installed, but turning this back on means running a fresh pairing
                 command there.
             </p>
         </ConfirmDialog>

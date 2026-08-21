@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { Icon, type IconName } from "@intentic/ui";
 
-/* THE FULL-SCREEN NOTICE — what stands in the workspace outlet when there is no workspace to show: the daemon
+/* THE FULL-SCREEN NOTICE, what stands in the workspace outlet when there is no workspace to show: the daemon
  * is unreachable, or still booting, or reachable but refusing this account.
  *
  * All three gates had drawn this themselves, identically: centred card, 48px icon tile, title, muted body,
- * one action. Which is the right shape — a gate is a full screen saying one thing — but three copies of it
+ * one action. Which is the right shape: a gate is a full screen saying one thing, but three copies of it
  * meant three chances for the fade-in, the tile radius or the max-width to drift apart, on the exact screens a
  * user sees when something is already wrong. A gate should never be the thing that looks broken.
  *
  * `spinner` is the difference between waiting and refusing, and it belongs in the chrome rather than in each
  * gate's title: the connecting and warming screens resolve BY THEMSELVES, and the spinner beside the title is
  * the whole promise that nothing is being asked of the reader. The unauthorized gate has no spinner for the
- * same reason — waiting will not fix an account mismatch, so pretending to wait would be a lie.
+ * same reason: waiting will not fix an account mismatch, so pretending to wait would be a lie.
  *
  * Three slots, because a gate has three registers. The default one is the sentence, centred with the title.
  * #actions is the single button, absent on a gate with nothing to offer. #below is FULL WIDTH and left-aligned
- * — the boot chain's step list, the only thing here that is a table rather than a message. */
+ *: the boot chain's step list, the only thing here that is a table rather than a message. */
 
 defineProps<{ icon: IconName; title: string; spinner?: boolean }>();
 </script>

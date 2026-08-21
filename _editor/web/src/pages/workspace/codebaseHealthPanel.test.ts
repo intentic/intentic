@@ -4,7 +4,7 @@
 // archetype is covered in refactorAsk.test.ts; what this pins is the wiring the template owns and a unit test
 // cannot see: that the action exists once per hotspot row, that a key module with an ordinary surface offers
 // none, and that a press carries THAT row's composed prompt into a new agent. The row was a single button
-// before this — one cannot nest inside another, so the markup had to be restructured, and a regression there
+// before this: one cannot nest inside another, so the markup had to be restructured, and a regression there
 // looks like a panel that renders perfectly and does nothing.
 import { beforeAll, expect, it, vi } from "vitest";
 import { createApp, h, nextTick, ref } from "vue";
@@ -19,7 +19,7 @@ import CodebaseHealth from "./CodebaseHealth.vue";
  *
  * `matchMedia` comes from vitest.setup.ts: ui's useDevice reads it at module scope, and its matches:false keeps
  * the device DESKTOP, where the refactor action is hover-revealed. `started` is every prompt a press handed to
- * the fleet — the action itself
+ * the fleet: the action itself
  * is covered in agentActions.test.ts, so the seam is mocked and this test says nothing about turns. One repo,
  * so the header renders its name rather than the Picker (a PrimeVue overlay this test has no use for). */
 const mocked = vi.hoisted(() => {

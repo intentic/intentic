@@ -272,7 +272,7 @@ export const packageBrief = (input: PackageBriefInput): string => {
         glossary.length === 0
             ? undefined
             : `## This repository's vocabulary\n\nUse these words to mean these things:\n\n${glossary
-                  .map((term) => `- **${term.term}** — ${term.means}`)
+                  .map((term) => `- **${term.term}**: ${term.means}`)
                   .join(`\n`)}`,
         [`## Start from the facts`, ``, `    intentic-docs facts${repoFlag}`].join(`\n`),
         `Find \`${dir}\` in the output: its size, whether it has tests, and which ` +

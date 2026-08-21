@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // WHO THIS PANEL IS OFFERING THE DESKTOP APP TO. It sits beside the install command as the alternative to a
-// terminal — which is exactly right in a browser, and nonsense in the app itself, where the reader is already
+// terminal, which is exactly right in a browser, and nonsense in the app itself, where the reader is already
 // inside the thing the two buttons download. What this panel EXPLAINS (what the command does, and the one line
 // that removes it again) is the same in both windows; only the offer to install it is not.
 import { expect, it, vi } from "vitest";

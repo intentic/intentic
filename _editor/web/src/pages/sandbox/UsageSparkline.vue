@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-/* The trend line on a stat tile — a shape cue, not a readable plot: no axis, no labels, no hover. It draws in
+/* The trend line on a stat tile, a shape cue, not a readable plot: no axis, no labels, no hover. It draws in
  * `currentColor`, so the caller's text class sets the de-emphasis hue. `preserveAspectRatio="none"` lets it
  * stretch to whatever width the tile has; `vector-effect="non-scaling-stroke"` is what keeps that stretch from
  * smearing the stroke along with it. */

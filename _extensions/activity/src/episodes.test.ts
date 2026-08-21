@@ -3,7 +3,7 @@ import { formatDayMonth } from "@intentic/extension-ui/format";
 import { expect, test } from "vitest";
 import { byDay, DIRECT, matches, SCHEDULE, sourceKeyOf, toEpisodes, toSources } from "./episodes.js";
 
-/* The grouping IS the feature — a wrong join here renders somebody else's turn under your Discord bot, which is
+/* The grouping IS the feature: a wrong join here renders somebody else's turn under your Discord bot, which is
  * worse than the flat list it replaced. Fixtures are the shapes real appends produce (agent.routes.ts's record(),
  * outbound.ts's sniffer, listeners.ts's inbound), including the two that made the old view unreadable: a
  * turn.started that has no sessionId yet, and a turn whose title only exists by the time it completes. */
@@ -12,7 +12,7 @@ const at = (minutes: number): number => Date.UTC(2026, 7, 2, 12, 0, 0) + minutes
 
 const event = (fields: Partial<ActivityEvent> & Pick<ActivityEvent, "id" | "at" | "direction" | "type">): ActivityEvent => fields;
 
-// One turn as the daemon writes it, newest first — the order /activity serves.
+// One turn as the daemon writes it, newest first: the order /activity serves.
 const TURN: ActivityEvent[] = [
     event({
         id: `e4`,
@@ -58,7 +58,7 @@ test("a turn's lifecycle marks and its outbound calls collapse into one episode 
         costUsd: 7.24,
         outbound: 2,
     });
-    // Every raw row stays reachable, oldest first — collapsing must not mean discarding.
+    // Every raw row stays reachable, oldest first: collapsing must not mean discarding.
     expect(episode?.events.map((entry) => entry.id)).toEqual([`e1`, `e2`, `e3`, `e4`]);
 });
 

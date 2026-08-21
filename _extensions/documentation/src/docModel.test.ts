@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { componentOfPackage, parseDocIndex, parseRepoDoc, type RepoDoc } from "./docModel.js";
 
 /* A document set is written by a model into a repository the owner then reads, so every parser here is total: a
- * field that arrives malformed must cost that field, never the page. The exception — and the only one — is
+ * field that arrives malformed must cost that field, never the page. The exception, and the only one: is
  * provenance, which is required, because a document nobody can date is a document nobody can trust. */
 
 const provenance = { sourceRev: `abc123`, generatedAt: 1_785_000_000_000 };
@@ -49,7 +49,7 @@ describe(`parseRepoDoc`, () => {
             }),
         );
         expect(doc?.components).toHaveLength(1);
-        // A component with no `name` is named by its id rather than dropped — the id is authored and readable.
+        // A component with no `name` is named by its id rather than dropped: the id is authored and readable.
         expect(doc?.components[0]).toMatchObject({ id: `a`, name: `a` });
         expect(doc?.glossary).toHaveLength(1);
     });

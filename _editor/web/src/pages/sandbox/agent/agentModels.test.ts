@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 //
 // THE QUICK MODEL ROW IS AN ORDER, and the claim under test is that what is on screen IS the order the daemon
-// will walk — same list, same sequence, written straight back to the setting. A row that drew a list it did not
+// will walk: same list, same sequence, written straight back to the setting. A row that drew a list it did not
 // write would be the worst possible version of this feature: the user reads "GPT, then Haiku", the sandbox
 // spends something else, and nothing on either side says so.
 //
-// Mounted rather than projected because what is under test is the round trip a person performs — add a model,
-// move it up, take it out — and each of those happens in the component's own handler.
+// Mounted rather than projected because what is under test is the round trip a person performs: add a model,
+// move it up, take it out, and each of those happens in the component's own handler.
 import type { SandboxSettings } from "@intentic-app/api-contract";
 import { SandboxSettingsSchema } from "@intentic-app/api-contract";
 import PrimeVue from "primevue/config";
@@ -25,7 +25,7 @@ vi.mock(`../../../composables/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
-// Two connected accounts and one that is not — the whole point of this row is which of them a click spends, so
+// Two connected accounts and one that is not: the whole point of this row is which of them a click spends, so
 // the catalog it reads is the fixture, not a detail.
 const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
     codex: [{ value: `gpt-5.6`, label: `GPT 5.6 Luna` }],
@@ -76,7 +76,7 @@ test("draws nothing but Auto's own ladder until a model is written down", async 
     const host = mount();
     await Promise.resolve();
 
-    // Auto is a chain too, so the row names every rung rather than the word "Auto" on its own — this is the
+    // Auto is a chain too, so the row names every rung rather than the word "Auto" on its own: this is the
     // whole discoverability story for a setting nobody has opened.
     expect(host.textContent).toContain(`Auto`);
     expect(host.textContent).toContain(`Claude Haiku 4.5`);

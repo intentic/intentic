@@ -4,34 +4,34 @@ import { AgentRunButton, ui, Icon, useAgentRunPick } from "@intentic/extension-u
 import { computed } from "vue";
 import { host } from "./host";
 
-/* THE RUN CONTROL — a pill that floats over the list it acts on, inside the page's own column.
+/* THE RUN CONTROL: a pill that floats over the list it acts on, inside the page's own column.
  *
  * IT HAS BEEN TWO WRONG THINGS FIRST, and each was wrong in a way worth writing down.
  *
  * A DOCKED BAR: full-bleed, bordered, permanently present, ignoring the page column everything above it obeyed
  * and lining up with the shell's own account avatar, so the two read as one status bar. It was there to never be
- * scrolled away from — the right instinct — and it paid for that with a second layer of app chrome in a view that
+ * scrolled away from: the right instinct, and it paid for that with a second layer of app chrome in a view that
  * is otherwise an ordinary page.
  *
- * THE HEADER'S ACTION CLUSTER: no chrome, consistent with every other view — and it put four controls in the row
+ * THE HEADER'S ACTION CLUSTER: no chrome, consistent with every other view, and it put four controls in the row
  * beside the h1, so a warning long enough to be worth reading squashed the title, and Run left the screen the
  * moment you scrolled into the twenty-one stories it was about to run.
  *
- * So: STICKY, `bottom-4`, INSIDE the page. Sticky rather than docked is the whole difference — the pill's flow
+ * So: STICKY, `bottom-4`, INSIDE the page. Sticky rather than docked is the whole difference, the pill's flow
  * position is the end of the page, so it is a normal element that happens to stay reachable, it inherits the
  * page's width constraint and centring (which is what makes it read as belonging to the list rather than to the
  * window), and it reserves its own space at the bottom of the scroll instead of covering the last row forever.
  * Rounded and shadowed because it floats: a hairline rectangle at the foot of a scroller reads as a docked bar
  * again, and the point is that this is over the content, not under it.
  *
- * WHAT THE PILL SAYS, left to right, is the sentence "N stories, on this model, are about to cost N sessions —
+ * WHAT THE PILL SAYS, left to right, is the sentence "N stories, on this model, are about to cost N sessions:
  * except this is in the way". The scope is on the button (`Run all 21 stories`), because a button that states its
  * own scope needs no separate readout and can never disagree with one. The model is the caret ON that button,
- * so the two operands of the multiplication cannot be separated. What is left — the product, or the reason
- * there won't be one — is the one line to their left, and it is either/or: once something is blocking the run,
+ * so the two operands of the multiplication cannot be separated. What is left: the product, or the reason
+ * there won't be one, is the one line to their left, and it is either/or: once something is blocking the run,
  * the price is not what the user has to act on.
  *
- * THE MODEL WAS A CHIP OF ITS OWN HERE FIRST, and this view was the only place in the app that had one — which
+ * THE MODEL WAS A CHIP OF ITS OWN HERE FIRST, and this view was the only place in the app that had one, which
  * is precisely why it is now the shared <AgentRunButton> instead. Four other surfaces start the same kind of
  * run and none of them could choose at all; unifying them on this view's good idea was worth giving up its
  * bespoke spelling of it.
@@ -51,13 +51,13 @@ const { chosen, total, narrowed, blocked, canRun } = defineProps<{
     // Whether anything is ticked at all. Distinct from `chosen < total`: ticking every row by hand is still a
     // narrowed list, and Clear must stay reachable from it.
     narrowed: boolean;
-    // The first thing standing between this scope and a run, already worded — undefined when nothing is.
+    // The first thing standing between this scope and a run, already worded: undefined when nothing is.
     blocked?: string | undefined;
     canRun: boolean;
 }>();
 const emit = defineEmits<{ submit: [PickedModel]; clear: [] }>();
 
-/* WHO RUNS IT — the sandbox's agent-run list (Sandbox ▸ Agent ▸ Models), the same setting every other
+/* WHO RUNS IT: the sandbox's agent-run list (Sandbox ▸ Agent ▸ Models), the same setting every other
  * surface-started run spends, with the caret overriding it for this run alone.
  *
  * THE CHIP THIS ROW USED TO OWN IS GONE, and that is the point of the change rather than a side effect of it.
@@ -97,7 +97,7 @@ const spend = computed<string>(() => `${chosen} ${chosen === 1 ? `session` : `se
             </button>
 
             <!-- The app's one run button, here as everywhere else: the scope on the label, the model behind the
-                 caret. `rounded` is dropped — the two halves need square inner edges to read as one control,
+                 caret. `rounded` is dropped: the two halves need square inner edges to read as one control,
                  and a pill inside a pill was never doing any work. -->
             <AgentRunButton
                 :label="`Run ${narrowed ? storyCount(chosen) : `all ${storyCount(total)}`}`"
@@ -105,7 +105,7 @@ const spend = computed<string>(() => `${chosen} ${chosen === 1 ? `session` : `se
                 :model-label="fixModel.model.value.label"
                 :overridden="fixModel.overridden.value"
                 :disabled="!canRun"
-                hint="Every test session runs on this model — one session per story"
+                hint="Every test session runs on this model: one session per story"
                 @run="emit(`submit`, fixModel.model.value as PickedModel)"
                 @pick="fixModel.choose"
             />

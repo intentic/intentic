@@ -3,7 +3,7 @@ import { registerViewer } from "../../../core-views/viewerRegistry";
 import { RAW_MAX_BYTES } from "../fileType";
 import { resolveOpenFile } from "./openFile";
 
-/* The order between the core's text resolver and the extensions' viewer registry — the whole reason FileViewer
+/* The order between the core's text resolver and the extensions' viewer registry: the whole reason FileViewer
  * has no per-format branches. Registrations are made and disposed per test against the real registry (a
  * module-level singleton, the app's no-Pinia convention): the disposal path is half of what is under test,
  * since it is what "switch the extension off" runs. */
@@ -37,13 +37,13 @@ describe(`resolveOpenFile with viewers registered`, () => {
     it(`lets a viewer claim an extension the core called binary`, () => {
         register(`image`, [`png`, `jpg`], `blob`);
         expect(resolveOpenFile(`logo.png`, 1000)).toMatchObject({ kind: `viewer`, viewer: { id: `image`, fetch: `blob` } });
-        // Case-insensitively — a screenshot off a phone is as likely to be .PNG.
+        // Case-insensitively: a screenshot off a phone is as likely to be .PNG.
         expect(resolveOpenFile(`shots/Logo.PNG`, 1000)).toMatchObject({ kind: `viewer` });
         // An extension nobody claimed is untouched.
         expect(resolveOpenFile(`bundle.zip`, 1000)).toEqual({ kind: `binary` });
     });
 
-    it(`lets a viewer claim a TEXT extension — that is what makes an .svg a picture`, () => {
+    it(`lets a viewer claim a TEXT extension: that is what makes an .svg a picture`, () => {
         expect(resolveOpenFile(`icon.svg`, 1000)).toEqual({ kind: `code`, lang: `xml` });
         register(`svg`, [`svg`], `text`);
         expect(resolveOpenFile(`icon.svg`, 1000)).toMatchObject({ kind: `viewer`, viewer: { fetch: `text` } });

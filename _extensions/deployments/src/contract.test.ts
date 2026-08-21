@@ -3,7 +3,7 @@ import { DeployOverviewResponseSchema } from "./contract";
 
 /* The deployments board crosses the same seam and learned it the hard way. `repos` (workspace repo → Komodo
  * stack links) shipped REQUIRED, and the first sandbox whose daemon predated it rendered
- * `Invalid input: expected array, received undefined at repos` instead of the board — a dead page, on the one
+ * `Invalid input: expected array, received undefined at repos` instead of the board, a dead page, on the one
  * surface whose job is to say whether production is up, to hide a band of suggestions.
  *
  * `viewer` is the deliberate contrast: also added later, also absent from an older daemon, but OPTIONAL rather
@@ -29,6 +29,6 @@ test("a board that did carry links keeps them, and garbage in them is still a fa
         alerts: [],
     };
     expect(DeployOverviewResponseSchema.parse(current).repos[0]?.suggestions).toEqual(["app-prod"]);
-    // Tolerance is for absence, not for the wrong shape — a `repos` that is present and wrong is real drift.
+    // Tolerance is for absence, not for the wrong shape: a `repos` that is present and wrong is real drift.
     expect(DeployOverviewResponseSchema.safeParse({ ...current, repos: "none" }).success).toBe(false);
 });

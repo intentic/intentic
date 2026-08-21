@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, watch } from "vue";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { formatBytes } from "@intentic/ui";
 
-// Non-blocking upload feedback, anchored bottom-right of the workspace body. Driven entirely by useUploadQueue —
+// Non-blocking upload feedback, anchored bottom-right of the workspace body. Driven entirely by useUploadQueue:
 // the drop targets and the upload button all funnel through it, so a second drop mid-upload just appends here.
 // Narrates the whole lifecycle from the first interaction: Scanning the dropped folder → Uploading (aggregate
 // bytes + throughput + per-folder breakdown) → Done. Auto-dismisses on a clean finish; stays (with the failures
@@ -34,7 +34,7 @@ const {
 
 const pct = computed(() => (bytesTotal.value === 0 ? 100 : Math.min(100, Math.round((bytesDone.value / bytesTotal.value) * 100))));
 
-// One row per top-level dropped folder (root-level loose files group under "(files)") — scales to huge drops
+// One row per top-level dropped folder (root-level loose files group under "(files)"): scales to huge drops
 // where a flat per-file list would not.
 const groups = computed(() => {
     const map = new Map<string, { name: string; total: number; done: number; failed: number }>();
@@ -59,7 +59,7 @@ const failures = computed(() => files.value.filter((file) => file.status === `fa
 // offer is shown for the WHOLE upload rather than as a dialog before it or a prompt after: the user keeps the
 // "drag it in and it just works" flow, and still has the entire upload to uncheck it before anything runs.
 // One line per project, since a drop can carry several; `evidence` names the file we read so the pick is
-// never opaque ("pnpm — pnpm-lock.yaml", or "npm — package.json (no lockfile)", which invites a correction).
+// never opaque ("pnpm (pnpm-lock.yaml", or "npm) package.json (no lockfile)", which invites a correction).
 const setupSummary = computed(() =>
     setupProjects.value.map((project) => ({
         dir: project.dir === `` ? `the workspace root` : project.dir,
@@ -72,14 +72,14 @@ watch(
     [finished, installSettled],
     ([isFinished, isSettled]) => {
         // Hold the panel until the install request has settled, so a clean finish can't vanish before saying
-        // what it kicked off. Longer once something started — that line is news, not just an acknowledgement.
+        // what it kicked off. Longer once something started: that line is news, not just an acknowledgement.
         if (isFinished && failedCount.value === 0 && isSettled && installError.value === undefined) {
             timer = setTimeout(dismiss, installQueued.value.length > 0 ? 6000 : 3000);
         }
     },
     { immediate: true },
 );
-// A "nothing to upload" notice is informational — auto-dismiss it like a clean finish.
+// A "nothing to upload" notice is informational: auto-dismiss it like a clean finish.
 watch(skippedNotice, (notice) => {
     if (notice !== undefined) {
         timer = setTimeout(dismiss, 4000);
@@ -116,7 +116,7 @@ onBeforeUnmount(() => {
             <Icon name="info-circle" class="text-sm text-muted" />
             <span class="flex-1 font-medium">
                 Nothing to upload<template v-if="skippedNotice > 0">
-                    — skipped {{ skippedNotice }} {{ skippedNotice === 1 ? `item` : `items` }} that couldn't be read (symlink or special
+                   , skipped {{ skippedNotice }} {{ skippedNotice === 1 ? `item` : `items` }} that couldn't be read (symlink or special
                     file)</template
                 >
             </span>
@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
         <div v-if="files.length === 0 && skippedNotice === undefined && skippedUnchanged > 0" class="flex items-center gap-2">
             <Icon name="check-circle" class="text-sm text-success" />
             <span class="flex-1 font-medium"
-                >Already up to date — skipped {{ skippedUnchanged }} unchanged {{ skippedUnchanged === 1 ? `file` : `files` }}</span
+                >Already up to date, skipped {{ skippedUnchanged }} unchanged {{ skippedUnchanged === 1 ? `file` : `files` }}</span
             >
             <button
                 type="button"
@@ -155,7 +155,7 @@ onBeforeUnmount(() => {
             </div>
         </template>
 
-        <!-- Uploading, or done with failures — both show the breakdown -->
+        <!-- Uploading, or done with failures: both show the breakdown -->
         <template v-else>
             <div class="flex items-center gap-2">
                 <Icon name="spinner" v-if="!finished" class="text-sm text-muted" spin />
@@ -197,7 +197,7 @@ onBeforeUnmount(() => {
             <ul v-if="failures.length > 0" class="scrollbar-thin mt-2 max-h-24 space-y-1 overflow-auto border-t border-line pt-2">
                 <li v-for="file in failures" :key="file.path" class="text-2xs text-danger" v-tooltip.left="file.error">
                     <span class="truncate">{{ file.path }}</span>
-                    <span class="text-subtle"> — {{ file.error }}</span>
+                    <span class="text-subtle">: {{ file.error }}</span>
                 </li>
             </ul>
         </template>

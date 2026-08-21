@@ -1,4 +1,4 @@
-<!-- One page of a document set: the prose, and the two things around it that only the app can add — clickable
+<!-- One page of a document set: the prose, and the two things around it that only the app can add, clickable
      anchors into the workspace, and an honest line about how old this page is.
 
      The prose is rendered by the kit's <Markdown>, which is the same engine the chat and the file viewer use, so
@@ -24,18 +24,18 @@ const { prose, figures, anchors, provenance, repo, staleness } = defineProps<{
      * to guess where a README's own first paragraph ends. */
     figures?: string;
     anchors: readonly DocAnchor[];
-    // The repository overview's provenance. A PACKAGE page has none — it is a README, and its date is the commit
+    // The repository overview's provenance. A PACKAGE page has none: it is a README, and its date is the commit
     // that last touched it, which the index carries.
     provenance?: DocProvenance;
-    // Which repository the anchors are relative to — a document's paths are repo-relative (that is what
+    // Which repository the anchors are relative to: a document's paths are repo-relative (that is what
     // `intentic-docs validate` resolves them against), and the workspace route is root-relative.
     repo: string;
-    // This page's row in the generated index, when there is one — the tool's verdict on whether it is still true.
+    // This page's row in the generated index, when there is one: the tool's verdict on whether it is still true.
     staleness: DocIndexEntry | undefined;
 }>();
 
 /* An anchor opens the file in the workspace view, under its repository: without that prefix every link on this
- * page missed by one segment in any workspace whose repo is not the tree root. `line` is dropped on purpose —
+ * page missed by one segment in any workspace whose repo is not the tree root. `line` is dropped on purpose:
  * the workspace route addresses a path, and appending a line it does not understand would produce a link that
  * silently fails rather than one that lands one screen away from the right place. */
 const anchorLink = (anchor: DocAnchor) => {
@@ -57,16 +57,16 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
              call for different actions.
 
              ONE LINE, NOT A PANEL. Most pages in a live repository are behind by a commit or two at any moment,
-             so this is the ordinary condition of a document rather than an alarm about it — drawn as a bordered
+             so this is the ordinary condition of a document rather than an alarm about it: drawn as a bordered
              amber block it was the loudest thing on every page, which is both wrong and, being nearly always
              true, ignorable. The dot is the same amber as the sidebar's marks, so the two read as one fact. -->
         <p v-if="staleness?.stale === true" class="flex items-center gap-2 text-xs text-muted">
             <span class="size-1.5 shrink-0 rounded-full bg-warning/70" aria-hidden="true"></span>
-            May be out of date — {{ staleness.reason }}.
+            May be out of date: {{ staleness.reason }}.
         </p>
 
         <!-- Measured facts first: how big this is, what it sits between, how it compares. Nobody writes
-             these — `intentic-docs check` computes them into the index and this draws them, so a page cannot
+             these: `intentic-docs check` computes them into the index and this draws them, so a page cannot
              carry a line count that stopped being true. -->
         <Markdown v-if="figures !== undefined && figures !== ``" :source="figures" style="--prose-measure: 76ch" />
 

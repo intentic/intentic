@@ -4,22 +4,22 @@ import { describe, expect, it } from "vitest";
 import { analyzeCode } from "./codeAnalysis";
 import { firstChangeBeyondImports, type ImportSide } from "./codeImports";
 
-// Against the real grammars — the point of reading TextMate scopes is that the answer is the tokenizer's, so a
+// Against the real grammars: the point of reading TextMate scopes is that the answer is the tokenizer's, so a
 // test with a hand-rolled fake grammar would be testing nothing. The languages below are the ones whose import
 // syntax the scope families were derived from, and the traps are the lines that LOOK like imports to a regex.
 
 /* The grammar is COMPILED first, so that the walk under test is not the one paying for it. The tokenizer compiles
- * a rule's regexes the first time a line reaches them, once per language per session — C++'s come to ~0.6s on an
- * idle machine against ~4ms a line once compiled — and that compile is charged to the walk's hang guard
+ * a rule's regexes the first time a line reaches them, once per language per session: C++'s come to ~0.6s on an
+ * idle machine against ~4ms a line once compiled, and that compile is charged to the walk's hang guard
  * (codeTokens' TIME_BUDGET). On a runner busy enough, the guard is what fires: the walk abandons the file, and the
  * empty set it hands back reads here as the grammar's ANSWER rather than as a busy machine. That is exactly how
  * the C++ case below failed on CI, where every package's suite runs at once and a walk measures ~10× an idle one.
- * The warm-up runs the same lines through the same grammar under no limit at all — the 0 the tokenizer reads as
- * unbounded — so the walk that follows spends only the per-line cost these assertions are about. */
+ * The warm-up runs the same lines through the same grammar under no limit at all: the 0 the tokenizer reads as
+ * unbounded, so the walk that follows spends only the per-line cost these assertions are about. */
 const lines = async (source: readonly string[], lang: string): Promise<ReadonlySet<number>> => {
     const grammar = (await useHighlighter().ensureLang(lang))?.getLanguage(lang);
     if (grammar !== undefined) {
-        // Carried, like the walk's own stack — a line inside an open statement reaches rules a fresh one doesn't.
+        // Carried, like the walk's own stack: a line inside an open statement reaches rules a fresh one doesn't.
         let stack: Parameters<typeof grammar.tokenizeLine>[1] = null;
         for (const line of source) {
             stack = grammar.tokenizeLine(line, stack, 0).ruleStack;
@@ -50,7 +50,7 @@ describe(`import analysis`, () => {
     });
 
     it(`carries a bracketed import onto the lines the grammar leaves as plain code`, async () => {
-        // Go's import block lists bare strings and Python's bare names — neither is scoped as an import, so the
+        // Go's import block lists bare strings and Python's bare names: neither is scoped as an import, so the
         // unclosed bracket is the only thing that says those lines are still the statement above them.
         const go = [`package main`, ``, `import (`, `    "os"`, `    m "math"`, `)`, ``, `func main() {}`];
         expect(await lines(go, `go`)).toEqual(new Set([3, 4, 5, 6]));
@@ -60,7 +60,7 @@ describe(`import analysis`, () => {
     });
 
     // Six grammars compiled from cold in one test, C++ among them, is seconds of real work rather than the
-    // milliseconds every other test here spends — and the suite-wide timeout is sized for the milliseconds. Its
+    // milliseconds every other test here spends, and the suite-wide timeout is sized for the milliseconds. Its
     // own budget, then, big enough that only a hang reaches it on a runner shared with every other suite.
     it(`covers the other languages we ship a grammar for`, async () => {
         expect(await lines([`use std::collections::HashMap;`, `pub fn main() {}`], `rust`)).toEqual(new Set([1]));
@@ -116,14 +116,14 @@ describe(`firstChangeBeyondImports`, () => {
         expect(firstChangeBeyondImports(changes, await sideOf(before), await sideOf(after))).toBe(changes[1]);
     });
 
-    it(`opens on the first change when every hunk is imports — there is nothing else to show`, async () => {
+    it(`opens on the first change when every hunk is imports, there is nothing else to show`, async () => {
         const changes = [hunk(1, 1, 1, 1), hunk(2, 2, 2, 2)];
 
         expect(firstChangeBeyondImports(changes, await sideOf(before), await sideOf(after))).toBe(changes[0]);
     });
 
     it(`stops on a hunk that adds an import AND the code under it`, async () => {
-        // One hunk, because the two changed lines are adjacent — skipping it would hide a real change.
+        // One hunk, because the two changed lines are adjacent: skipping it would hide a real change.
         const grown = [`import { a } from "./a";`, `import { c } from "./c";`, `const x = 2;`];
         const changes = [hunk(2, 2, 2, 3)];
 
@@ -138,13 +138,13 @@ describe(`firstChangeBeyondImports`, () => {
         expect(firstChangeBeyondImports(changes, await sideOf(before), await sideOf(trimmed))).toBe(changes[1]);
     });
 
-    it(`stops on blank-line churn — the preference skips imports, not everything dull`, async () => {
+    it(`stops on blank-line churn: the preference skips imports, not everything dull`, async () => {
         const changes = [hunk(3, 3, 3, 0)];
 
         expect(firstChangeBeyondImports(changes, await sideOf(before), await sideOf(after))).toBe(changes[0]);
     });
 
-    it(`reads an insertion at the very top of a file — where Monaco reports the untouched side as line 0`, async () => {
+    it(`reads an insertion at the very top of a file, where Monaco reports the untouched side as line 0`, async () => {
         const grown = [`import { c } from "./c";`, ...before];
         const changes = [hunk(0, 0, 1, 1), hunk(4, 4, 5, 5)];
 

@@ -159,7 +159,7 @@ export const toWorkspacePath = (rawPath: string): string | undefined => {
     }
     // An absolute path under SOME OTHER root: an isolated turn's worktree (/history/worktrees/<id>/…, which
     // mirrors the workspace layout below its own lead) or a machine path from a pasted log. It maps only if the
-    // workspace really holds a file that path ends in — /usr/lib/… never will, which is what keeps a system
+    // workspace really holds a file that path ends in: /usr/lib/… never will, which is what keeps a system
     // path plain prose instead of a link to nothing.
     return resolveInTree(rawPath);
 };

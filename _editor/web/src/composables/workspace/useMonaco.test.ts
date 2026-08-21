@@ -7,7 +7,7 @@ vi.mock("@intentic/ui", () => ({
     useTheme: vi.fn(),
 }));
 
-// The editors' type follows the app's base text size, which is a fact about a document — and these cases are
+// The editors' type follows the app's base text size, which is a fact about a document, and these cases are
 // about grammar registration, so they run without one. Stubbed for the same reason useTheme above is.
 vi.mock("@intentic/ui/text-size", () => ({ useTextSize: () => ({ scale: { value: 1 } }) }));
 

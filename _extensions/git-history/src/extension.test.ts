@@ -18,7 +18,7 @@ const facts = (repo: string): RepoFacts => ({
     docs: false,
 });
 
-// Accepts every registration `activate` makes and records what it was handed — the same shape the host's real
+// Accepts every registration `activate` makes and records what it was handed: the same shape the host's real
 // api presents, narrowed to what this extension touches.
 const capture = (repos: readonly RepoFacts[]) => {
     const documents: DocumentProviderRegistration[] = [];
@@ -42,12 +42,12 @@ describe(`ext-git-history`, () => {
         const provider = documents[0]!;
 
         expect(provider.detect(`intentic`)).toEqual({ icon: `sitemap`, tooltip: `Open git history`, title: `History` });
-        // A package inside the monorepo is a directory, not a repository — it has files, but no history of its own.
+        // A package inside the monorepo is a directory, not a repository: it has files, but no history of its own.
         expect(provider.detect(`intentic/_editor/web`)).toBeUndefined();
         expect(provider.detect(`not-a-repo`)).toBeUndefined();
     });
 
-    /* The workspace root is a repository the tree never draws a row for — it is the container every other repo is
+    /* The workspace root is a repository the tree never draws a row for: it is the container every other repo is
      * discovered inside, so `workspace.repos()` legitimately omits it. If this stops answering, root's history
      * becomes unreachable rather than merely awkward. */
     it(`offers the workspace root's history under the empty path`, () => {
@@ -55,7 +55,7 @@ describe(`ext-git-history`, () => {
         expect(documents[0]!.detect(``)).toMatchObject({ title: `History` });
     });
 
-    // The icon has to appear the moment a repo is cloned, and `detect` reads the host's live facts to manage it —
+    // The icon has to appear the moment a repo is cloned, and `detect` reads the host's live facts to manage it:
     // so a repo absent from one call and present in the next must flip the answer with no re-registration.
     it(`tracks the live repo set rather than a snapshot taken at activation`, () => {
         const repos: RepoFacts[] = [];

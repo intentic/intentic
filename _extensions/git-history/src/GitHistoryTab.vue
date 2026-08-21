@@ -28,11 +28,11 @@ import { buildFileTree, flattenFileTree } from "./commitFileTree.js";
 import { computeGraphLayout, type GraphRow } from "./graphLayout.js";
 import { matchesSearch, searchWords } from "./searchCommits.js";
 
-/* One repo's git-history graph — the committed side of the real-git story whose uncommitted side is the Changes
+/* One repo's git-history graph: the committed side of the real-git story whose uncommitted side is the Changes
  * panel (this is NOT the Checkpoints safety timeline). A wide document, so it lives in the main editor area as a
  * tab (VSCode puts its SCM list in the sidebar and the graph in an editor tab; we mirror that). The lane
  * geometry is computed by graphLayout.ts; this file is the SVG mapping, the inline expandable commit detail
- * (click a row), and the commit context menu (right-click) — VSCode "Git Graph" parity. Every write action is
+ * (click a row), and the commit context menu (right-click): VSCode "Git Graph" parity. Every write action is
  * auto-checkpointed daemon-side, so even a rebase / hard reset stays reversible from the Checkpoints timeline.
  *
  * The host binds `path` (a document provider renders per DIRECTORY), and the repo is what sits on it. There is
@@ -42,22 +42,22 @@ import { matchesSearch, searchWords } from "./searchCommits.js";
 const { path } = defineProps<{ path: string }>();
 
 // The provider only offers this document for a directory that IS a repo, so the fallback is unreachable in
-// practice — it exists so a tab restored against a repo that has since been deleted degrades to the root's
+// practice: it exists so a tab restored against a repo that has since been deleted degrades to the root's
 // history rather than to a broken request.
 const repoRef = computed(() => repoAt(path) ?? `root`);
-// This tab's root — the element a clipboard write is reached through, so it lands in the window the reader is
+// This tab's root: the element a clipboard write is reached through, so it lands in the window the reader is
 // actually looking at rather than the opener's (see clipboardOf).
 const rootEl = ref<HTMLElement>();
 const log = useGitLog(repoRef);
 const { commits, branch, loading, error, hasMore, fetchingMore, loadMore, commitFiles, commitFileDiff, workingFileDiff } = log;
-// A merge/rebase/cherry-pick/revert a TERMINAL left halted. Nothing this tab starts can cause one — every write
-// it makes aborts cleanly daemon-side — which is exactly why the graph has to say so when something else did.
+// A merge/rebase/cherry-pick/revert a TERMINAL left halted. Nothing this tab starts can cause one: every write
+// it makes aborts cleanly daemon-side, which is exactly why the graph has to say so when something else did.
 const operation = useOperation(repoRef);
 /* The branch-level counterpart to the Checkpoints timeline: a checkpoint puts the FILES back, this puts the
- * BRANCH back. Offered in the header rather than behind a menu because the moment it is wanted — a rebase just
- * went somewhere unexpected — is the moment nobody wants to go looking for it. */
+ * BRANCH back. Offered in the header rather than behind a menu because the moment it is wanted: a rebase just
+ * went somewhere unexpected: is the moment nobody wants to go looking for it. */
 const undo = useUndo(repoRef);
-// The same branch state BranchSwitcher renders — one query key, so vue-query serves both from one request. The
+// The same branch state BranchSwitcher renders: one query key, so vue-query serves both from one request. The
 // tab needs it for the ref pills: which remotes exist, and the push/delete verbs behind a branch pill.
 const branchState = useBranches(repoRef);
 // Hard for anything that rewrote files (a rebase, a reset, a pull), soft for a commit or an amend, whose content
@@ -101,11 +101,11 @@ const workingRow = computed<GitCommit | undefined>(() =>
 );
 /* STASHES, drawn as what they are: commits that hang off the history rather than flowing down it.
  *
- * Each entry is spliced in DIRECTLY ABOVE the commit it was taken on, carrying only that commit as its parent —
+ * Each entry is spliced in DIRECTLY ABOVE the commit it was taken on, carrying only that commit as its parent:
  * its other parents (the index tree, and the untracked tree when `-u` was used) are not in the log and would be
  * dropped anyway. That placement is the whole trick: the existing lane algorithm then gives the stash a free
  * lane and its own colour, and draws its edge bending into the commit one row below. No special case in the
- * layout, and the picture is the true one — work set aside AT that commit.
+ * layout, and the picture is the true one: work set aside AT that commit.
  *
  * A stash whose parent commit is outside the fetched window is left out rather than floated: an edge to nothing
  * would read as a root commit, which is the one thing a stash is not. */
@@ -134,11 +134,11 @@ const stashRows = computed(() => {
     }
     return byParent;
 });
-// Which rows ARE stashes, by sha — the renderer needs it for the pill and the detail, and a Map keeps the
+// Which rows ARE stashes, by sha: the renderer needs it for the pill and the detail, and a Map keeps the
 // lookup out of the row loop.
 const stashBySha = computed(() => new Map(stashes.stashes.value.map((entry) => [entry.sha, entry])));
 
-/* SEARCH NARROWS THE ROWS, and it narrows them BEFORE the layout runs — so the lanes are recomputed over what
+/* SEARCH NARROWS THE ROWS, and it narrows them BEFORE the layout runs, so the lanes are recomputed over what
  * is actually on screen rather than drawn for the full history and then hidden. Hiding rows would leave edges
  * running to commits that are no longer there, which reads as corruption rather than as a filter.
  *
@@ -175,12 +175,12 @@ const graphRows = computed(() =>
 );
 
 /* HOVER TO TRACE A BRANCH. In a graph more than two or three lanes wide, following one line down through the
- * merges it crosses is genuinely hard — the eye loses the colour among its neighbours. Hovering a row fades
+ * merges it crosses is genuinely hard: the eye loses the colour among its neighbours. Hovering a row fades
  * everything that is not on that row's branch, which turns a search into a glance.
  *
  * Keyed by the branch COLOUR rather than by walking the parent graph, and that is exact rather than an
  * approximation: the layout already assigns one colour per branch for its whole descent (see graphLayout), so
- * "same colour" IS "same branch" — including where the branch changes column, which is precisely where a reader
+ * "same colour" IS "same branch": including where the branch changes column, which is precisely where a reader
  * loses it.
  *
  * Reactive, not a class mutated onto queried DOM: the rows are already a `v-for` over computed state, so an
@@ -220,7 +220,7 @@ watch(sentinel, (element) => {
 });
 onScopeDispose(() => observer?.disconnect());
 
-// A ref decoration split into its kind — a branch pill vs a `tag: x` pill; HEAD is surfaced separately.
+// A ref decoration split into its kind, a branch pill vs a `tag: x` pill; HEAD is surfaced separately.
 const refBadge = (decoration: string): { tag: boolean; label: string } =>
     decoration.startsWith(`tag: `) ? { tag: true, label: decoration.slice(`tag: `.length) } : { tag: false, label: decoration };
 
@@ -248,7 +248,7 @@ watch(openSha, async (sha) => {
     if (sha === undefined) {
         return;
     }
-    // Row zero's files are already in hand — they came from the same scan the Changes panel renders, so there
+    // Row zero's files are already in hand: they came from the same scan the Changes panel renders, so there
     // is nothing to fetch and nothing that can fail.
     if (sha === WORKING) {
         files.value = working.changes.value;
@@ -259,7 +259,7 @@ watch(openSha, async (sha) => {
     const stash = stashBySha.value.get(sha);
     try {
         // A stash's diff spans three parent trees (tracked, index, untracked), which only `git stash show` knows
-        // how to read — hence its own route rather than the commit one.
+        // how to read: hence its own route rather than the commit one.
         const result = stash === undefined ? await commitFiles(sha) : await stashes.files(stash.ref);
         if (token === detailToken) {
             files.value = result.files;
@@ -282,7 +282,7 @@ const toggle = (sha: string): void => {
 
 /* The bytes behind a BINARY diff. The daemon's file-diff route ships text and can only FLAG an image
  * (`binary: true`), so the picture itself is fetched per side from /diff/raw, at this commit and its first
- * parent — the same pair the text diff compares. Which sides exist is read off git's status letter rather than
+ * parent: the same pair the text diff compares. Which sides exist is read off git's status letter rather than
  * off the response: a binary diff ships no text to infer it from, an added file has no before, a deleted one no
  * after, and a rename's before side sits at a path this route cannot pair. */
 const rawSides = (sha: string, change: GitChange): { beforeRaw?: string; afterRaw?: string } => {
@@ -294,7 +294,7 @@ const rawSides = (sha: string, change: GitChange): { beforeRaw?: string; afterRa
     };
 };
 
-// Row zero's equivalent: the same route, a `working` source, and the git side the row came from — which is what
+// Row zero's equivalent: the same route, a `working` source, and the git side the row came from, which is what
 // distinguishes a partially staged file's two halves.
 const workingRawSides = (change: GitChange, side: GitDiffSide): { beforeRaw?: string; afterRaw?: string } => {
     const url = (which: "before" | "after"): string =>
@@ -307,7 +307,7 @@ const workingRawSides = (change: GitChange, side: GitDiffSide): { beforeRaw?: st
 
 /* The host owns the tab strip; this hands it a diff and it lands beside the files it is about.
  *
- * Row zero opens a WORKING-TREE diff instead of a commit one, against the side the row came from — a partially
+ * Row zero opens a WORKING-TREE diff instead of a commit one, against the side the row came from: a partially
  * staged file's staged and unstaged halves are two different diffs, and opening whichever happened to be found
  * first would show the user the wrong one. Keyed `working:<repo>` so it is the same tab identity the app's own
  * Changes panel opens, which means clicking a file in either place focuses one tab rather than stacking two. */
@@ -346,7 +346,7 @@ const openFileDiff = (commit: GitCommit, change: GitChange): void => {
 
 /* Reached through this tab's root, not the module's `navigator`: a POPPED-OUT panel keeps its JS in the opener's
  * realm, whose document isn't focused, so an async clipboard write from there rejects and this catch swallowed
- * it — copying a SHA out of a popped-out history did nothing at all. See clipboardOf. */
+ * it: copying a SHA out of a popped-out history did nothing at all. See clipboardOf. */
 const copy = (text: string): void =>
     void clipboardOf(rootEl.value)
         .writeText(text)
@@ -385,7 +385,7 @@ const openMenu = (event: Event, commit: GitCommit): void => {
     menuCommit.value = commit;
     menu.value?.show(event);
 };
-// Whether the first read has lasted long enough to be worth drawing — see useLoadingReveal.
+// Whether the first read has lasted long enough to be worth drawing: see useLoadingReveal.
 const outline = useLoadingReveal(
     computed(() => loading.value && commits.value.length === 0),
     computed(() => `git-history`),
@@ -444,7 +444,7 @@ const menuItems = computed<MenuItem[]>(() => {
  *
  * The verbs differ by KIND because the nouns do. A branch is a place you can go (checkout), publish (push) or
  * stop keeping (delete). A tag is a marker you publish or remove. A remote-tracking pill is somebody else's
- * branch, so its only local verb is checking out a copy of it — deleting it is their repository's business.
+ * branch, so its only local verb is checking out a copy of it: deleting it is their repository's business.
  *
  * Deliberately NOT drag-and-drop, which is where git-go takes this next: dropping a branch on a branch to merge
  * is a large surface with its own hold-to-reveal vocabulary, and in a workspace where most refs move because an
@@ -456,11 +456,11 @@ const openRefMenu = (event: Event, decoration: string, commit: GitCommit): void 
     refMenu.value?.show(event);
 };
 
-// Which remotes this repo has, deduplicated — the set a tag can be pushed to, and what tells `origin/main`
+// Which remotes this repo has, deduplicated: the set a tag can be pushed to, and what tells `origin/main`
 // apart from a local branch that happens to have a slash in its name.
 const remoteNames = computed(() => [...new Set(branchState.remotes.value.map((entry) => entry.remote))]);
 
-// A decoration is a tag, a remote-tracking branch (`origin/main`) or a local branch — three different sets of
+// A decoration is a tag, a remote-tracking branch (`origin/main`) or a local branch: three different sets of
 // verbs, told apart the same way the pill's own styling tells them apart.
 const refKind = (decoration: string): "tag" | "remote" | "local" => {
     if (refBadge(decoration).tag) {
@@ -570,12 +570,12 @@ const runPending = async (): Promise<void> => {
     try {
         const result = await runAction(kind, commit, name);
         if (isConflict(result)) {
-            actionError.value = `Couldn't ${ACTIONS[kind].confirm.toLowerCase()} cleanly — a conflict or uncommitted changes. Resolve it in a terminal.`;
+            actionError.value = `Couldn't ${ACTIONS[kind].confirm.toLowerCase()} cleanly: a conflict or uncommitted changes. Resolve it in a terminal.`;
             return; // keep the dialog open with the message
         }
         pending.value = undefined; // success
         if (kind === `checkout` || kind === `reset` || kind === `rebase` || kind === `drop`) {
-            openSha.value = undefined; // HEAD moved / history rewrote — the open detail may be stale
+            openSha.value = undefined; // HEAD moved / history rewrote: the open detail may be stale
         }
     } catch (cause) {
         actionError.value = cause instanceof Error ? cause.message : `Action failed.`;
@@ -588,7 +588,7 @@ const runPending = async (): Promise<void> => {
 <template>
     <div ref="rootEl" class="flex h-full min-h-0 flex-col bg-canvas text-content">
         <!-- Header: which repository this is · its checked-out branch · how many commits are drawn. The repo is
-             a LABEL, not a control — this tab belongs to one directory, and the tree row beside the next repo is
+             a LABEL, not a control: this tab belongs to one directory, and the tree row beside the next repo is
              how you reach its history. -->
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line bg-card px-3">
             <Icon name="sitemap" class="shrink-0 text-xs text-subtle" />
@@ -596,7 +596,7 @@ const runPending = async (): Promise<void> => {
             <!-- The checked-out branch, and the switch/create/delete popover behind it. A detached HEAD has
                  no branch to show as a pill, but the switcher is still the way BACK onto one. -->
             <BranchSwitcher :repo="repoRef" />
-            <!-- How many rows are drawn, and — while searching — out of how many are loaded. Saying "of 300"
+            <!-- How many rows are drawn, and, while searching: out of how many are loaded. Saying "of 300"
                  rather than "of all" is the honest scope: this filters the pages that have been fetched. -->
             <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{
                 searching ? `${matched.length} of ${commits.length}` : commits.length
@@ -612,7 +612,7 @@ const runPending = async (): Promise<void> => {
                 :disabled="undo.busy.value"
                 @click="runUndo"
                 v-tooltip.bottom="
-                    `${undo.action.value?.description ?? ''} — moves ${undo.action.value?.branch ?? 'the branch'} back. A restore point is saved first.`
+                    `${undo.action.value?.description ?? ''}: moves ${undo.action.value?.branch ?? 'the branch'} back. A restore point is saved first.`
                 "
             >
                 <Icon name="undo" class="mr-0.5 text-3xs" />{{ undo.label.value }}
@@ -656,7 +656,7 @@ const runPending = async (): Promise<void> => {
             <!-- "Loading history…" was one small grey line standing in for a full-height graph, so the panel
                  was empty in every way that shows and the whole log dropped in at once. The rows the log is
                  about to draw stand in: the lane gutter on the left, the subject, and the author line under
-                 it. The gutter is a column of dots rather than lanes — the SHAPE of somebody's branch history
+                 it. The gutter is a column of dots rather than lanes: the SHAPE of somebody's branch history
                  is what this view exists to show, and it is the last thing to invent. -->
             <div v-if="loading && commits.length === 0" role="status" aria-busy="true">
                 <span class="sr-only">Reading this repository's history…</span>
@@ -721,7 +721,7 @@ const runPending = async (): Promise<void> => {
                             stroke-width="1.5"
                         />
                     </svg>
-                    <!-- A stash wears its ref as a pill, the way a branch or tag does — it is a named thing you
+                    <!-- A stash wears its ref as a pill, the way a branch or tag does: it is a named thing you
                          can act on, and the name (`stash@{0}`) is also the handle its verbs take. -->
                     <span
                         v-if="stashBySha.get(commit.sha)"
@@ -744,7 +744,7 @@ const runPending = async (): Promise<void> => {
                     <span class="min-w-0 flex-1 truncate text-xs" :class="commit.sha === openSha ? 'text-content' : 'text-content/90'">{{
                         commit.subject
                     }}</span>
-                    <!-- Row zero has no author, no date and no sha — none of them exist yet. What it has instead
+                    <!-- Row zero has no author, no date and no sha: none of them exist yet. What it has instead
                          is how much is uncommitted, and whether any of it is blocking. -->
                     <template v-if="commit.sha === WORKING">
                         <span v-if="working.conflicted.value > 0" class="shrink-0 text-2xs text-danger"
@@ -771,7 +771,7 @@ const runPending = async (): Promise<void> => {
                                 },
                                 {
                                     label: 'Drop',
-                                    title: 'Discard this stash — a restore point is saved first',
+                                    title: 'Discard this stash, a restore point is saved first',
                                     run: () => stashes.drop(stashBySha.get(commit.sha)!.ref),
                                 },
                             ]"

@@ -23,4 +23,4 @@ auth (host = $GITLAB_URL without the scheme):
 - Pull/push an existing repo (https or ssh clone): `git -C <REPO> pull` / `git -C <REPO> push`
 - If native SSH is active, `ssh -T git@<GITLAB_HOST>` greets you; if it isn't, ssh-form URLs still work over https.
 
-Notes: `<ID>` is the numeric project id (from the projects list) or a URL-encoded path (group%2Frepo). Self-hosted works — $GITLAB_URL points at your instance.
+Notes: `<ID>` is the numeric project id (from the projects list) or a URL-encoded path (group%2Frepo). Self-hosted works, $GITLAB_URL points at your instance.

@@ -48,34 +48,34 @@ import type { HostedStatus } from "@intentic-app/api-contract";
 
 /* The setup gate's destination (outside the workspace shell). THERE ARE TWO STEPS, and the first asks for
  * NOTHING: the sandbox is created on arrival under a name this page picks (autoCreate + setupName.ts) and its
- * address is provisioned right behind it, so step 1 opens already done and reports one fact — the name, with a
+ * address is provisioned right behind it, so step 1 opens already done and reports one fact: the name, with a
  * pencil. It was two cards before it was one line: a numbered card whose whole body was a rename link, above a
  * numbered card whose whole body was a hostname, is a spine that counts to three to say the machine is ready
  * to be started.
  *
  * THE ADDRESS IS REPORTED BY STEP 2 rather than by step 1, because it is a consequence of the rung rather than
- * a fact about the sandbox — and because a hex hostname in the page's first position is three lines a stranger
+ * a fact about the sandbox, and because a hex hostname in the page's first position is three lines a stranger
  * has to skip to reach the only choice on the page. It leads the run card, above the command that carries it.
  * It is also where the two reachability paths part:
  *   • intentic-provided (default): the platform provisions a Cloudflare tunnel under its OWN zone; the user needs no
  *     Cloudflare of their own. The subdomain is fixed (server-derived from the connection token), so this path IS
  *     the one-liner and the escape hatch shares its row.
  *   • own Cloudflare: the user pastes their token, picks a zone, and edits the subdomain; the sandbox creates its own
- *     tunnel. The token only reaches the platform for a request-scoped zone listing, then is dropped — on this path it
+ *     tunnel. The token only reaches the platform for a request-scoped zone listing, then is dropped: on this path it
  *     rides the command as a CF_TOKEN env var, never stored. That is a form, and it expands the step in place.
  * Either way the platform mints a SHORT-LIVED SETUP CODE (sandbox.setupCode) for the chosen target; the copy-paste
- * command carries only that code and the connect script redeems it at POST /setup/claim for the real values — so no
+ * command carries only that code and the connect script redeems it at POST /setup/claim for the real values, so no
  * raw token lands in shell history. Step 2 also offers desktop sync (on by default): the choice + folder ride the
  * same code (SYNC_DIR + a platform-minted single-use SYNC_PAIR_TOKEN in the payload), so the one pasted command
- * additionally enrolls the sync agent after the sandbox boots — no second paste. Step 2 also carries the CLOUD
+ * additionally enrolls the sync agent after the sandbox boots: no second paste. Step 2 also carries the CLOUD
  * MACHINE choice (`machine` below, SetupCloud.vue): no computer to paste into, so one is created in the user's
  * own cloud account and its first boot claims this same code headlessly. Once running, the DAEMON announces
  * its URL + liveness to the platform; this page just polls sandbox.list for a fresh lastSeenAt and then opens the
- * workspace — the browser never resolves the sandbox hostname here, so no DNS race can wedge setup. That wait is
+ * workspace: the browser never resolves the sandbox hostname here, so no DNS race can wedge setup. That wait is
  * step 2's own footer rather than a step of its own: it asks the user for nothing, so a card of its own was chrome
  * around one sentence, and the sentence belongs under the command whose result it is reporting.
  *
- * Step 2 is also where the flow is most often abandoned — not because a pasted command does more than an .msi
+ * Step 2 is also where the flow is most often abandoned, not because a pasted command does more than an .msi
  * would, but because it shows up without any of an installer's affordances. So where we ship a build for the
  * machine reading the page, step 2 IS the .msi (`appFirst`) and the command folds behind one link; where we
  * don't, the card states what will be created, what it writes outside Docker and how to remove all of it, and
@@ -84,22 +84,22 @@ import type { HostedStatus } from "@intentic-app/api-contract";
  *
  * That is the PROVISION lane. There is a second, one-step ATTACH lane for a user whose sandbox is already running
  * behind a domain of their own: they paste the address, the browser probes it (setupAttach.ts), and sandbox.attach
- * records it — no tunnel to provision, no command to run, no announce to wait for, so step 2 never renders.
+ * records it: no tunnel to provision, no command to run, no announce to wait for, so step 2 never renders.
  * `lane` decides which spine step 1 is the head of.
  *
  * The two lanes SHARE their state rather than mirroring it. Everything a lane owns is genuinely lane-specific
  * (the reachability target, the command, the sync opt-in vs. the domain and the probe outcome); everything about
- * the sandbox itself — its `name` and its `created` row — is one value read by both. That is what makes a lane
+ * the sandbox itself (its `name` and its `created` row) is one value read by both. That is what makes a lane
  * switch lossless in either direction at any point: a name typed before switching survives, and a row created by
  * an attach whose probe passed but whose attach then failed continues as the provision lane's sandbox instead of
  * being stranded. The attach lane shows that name as a field and the provision lane behind a pencil, but
- * both edit the same buffer and commit it the same way (saveName). `targetKey` is gated on the lane for the same reason in reverse — minting is what buys the
+ * both edit the same buffer and commit it the same way (saveName). `targetKey` is gated on the lane for the same reason in reverse: minting is what buys the
  * Cloudflare tunnel, and an attached sandbox is reached over the user's own domain, so it must not mint. */
 
 const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
-// A phone gets a DIFFERENT step 2, not a narrower one — the command runs on a machine this browser is not, so
+// A phone gets a DIFFERENT step 2, not a narrower one: the command runs on a machine this browser is not, so
 // the handoff is the step and the command folds behind a disclosure (see `commandVisible`). The rest of what
 // this drives is content the md: classes below cannot reach: the run tabs' labels, and the size and emphasis
 // of the controls that carry them.
@@ -112,14 +112,14 @@ const { getIdToken, warmIdToken } = useGoogleIdentity();
 const created = ref<SandboxSummary | null>(null);
 // True when we arrived via ?sandbox=<id> and resumed an existing sandbox (vs. created one here now).
 const resuming = ref(false);
-/* THE ROW ON SCREEN WAS MINTED BY THIS VISIT — the half of the discard rule that says what may be thrown away.
+/* THE ROW ON SCREEN WAS MINTED BY THIS VISIT: the half of the discard rule that says what may be thrown away.
  * A resumed sandbox predates the visit and is somebody's unfinished errand; only a row this page created out of
  * nothing is a draft nobody has agreed to yet. */
 const createdHere = ref(false);
 // The reader typed a name over the one we picked. The cheapest possible signal of intent, and enough on its own
 // to keep the draft: nobody renames a machine they are about to walk away from.
 const renamed = ref(false);
-// Setup ran to the end — the daemon reported in, or an attach bound one. Set on the way out, because both exits
+// Setup ran to the end: the daemon reported in, or an attach bound one. Set on the way out, because both exits
 // navigate and the row's own `lastSeenAt` in `created` can still be the pre-announce copy at that moment.
 const finished = ref(false);
 // The name on screen: the created row's, until the user edits it in the rename box (or the attach lane's field).
@@ -127,34 +127,34 @@ const name = ref(``);
 const creating = ref(false);
 const error = ref<NoticeModel | null>(null);
 /* Has the arrival read answered yet. `created === null && !creating` is the shape of a FAILED create, and it is
- * also the shape of the first frame of every visit — so without this the card opens on its own error state and
+ * also the shape of the first frame of every visit, so without this the card opens on its own error state and
  * corrects itself a round-trip later. Set once, in a finally, so a mount read that throws still lands on a card
  * that offers the retry rather than spinning forever. */
 const loaded = ref(false);
 
 // The rename box, open only when asked for. The name is a default nobody typed, so changing it has to be one
-// click away — and it must never be a gate: setup runs to completion whether or not this is ever touched.
+// click away, and it must never be a gate: setup runs to completion whether or not this is ever touched.
 const renaming = ref(false);
 const savingName = ref(false);
 const nameInput = ref<HTMLInputElement | null>(null);
 
-// Is there a workspace to go BACK to — some sandbox other than the one being set up here that has actually
+// Is there a workspace to go BACK to: some sandbox other than the one being set up here that has actually
 // reported in. Both halves matter: a row this page created moments ago is not somewhere to return to, and
 // neither is one that has never had a daemon (its shell would open on a connecting gate that never resolves).
 const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => entry.id !== created.value?.id && entry.lastSeenAt !== null));
 
 // The reachability mode (step 1's address line). Default is the zero-config intentic-provided path; "own" is the bring-your-own-Cloudflare toggle.
 const mode = ref<"intentic" | "own">(`intentic`);
-/* Whether this platform hands out addresses at all — `undefined` until sandbox.addressOffer answers on
+/* Whether this platform hands out addresses at all: `undefined` until sandbox.addressOffer answers on
  * arrival, and the gate on every lane that needs one (see `addressed` below).
  *
  * IT STARTS UNKNOWN RATHER THAN TRUE, and that is the whole of the fix it exists for. Assuming the offer was
  * there meant a platform without it drew the machine ladder in full, minted against a route that answers
- * "not here", and then took the cloud rung back off screen — two options that appeared for one round-trip and
+ * "not here", and then took the cloud rung back off screen: two options that appeared for one round-trip and
  * vanished, over an address line left spinning on "Preparing your intentic domain…" forever, because nothing
  * told it the answer would never come. Unknown draws neither, so nothing has to be retracted. */
 const intenticAvailable = ref<boolean | undefined>(undefined);
-// This platform mints addresses — the answer is in, and it is yes. The lanes that need one gate on this.
+// This platform mints addresses: the answer is in, and it is yes. The lanes that need one gate on this.
 const addressed = computed(() => intenticAvailable.value === true);
 // …and it is no. Distinct from "not yet": the first is a fact to state on the card, the second is a wait.
 const addressless = computed(() => intenticAvailable.value === false);
@@ -169,10 +169,10 @@ let mintTimer: ReturnType<typeof setTimeout> | undefined;
 
 // --- own-Cloudflare path state ---
 // Token + zone discovery is shared with the in-app Connect Cloudflare step (useCloudflareZones). Here it only
-// feeds the setup-code target — on this path the token rides the install command, it isn't written to .env.
+// feeds the setup-code target: on this path the token rides the install command, it isn't written to .env.
 const cf = useCloudflareZones();
 const { cfToken, cfTokenValid, selectedZone, zonesLoading, zonesError } = cf;
-// Zones are domains — monospace rows behind a filterable picker, since an account-wide token can carry dozens.
+// Zones are domains: monospace rows behind a filterable picker, since an account-wide token can carry dozens.
 // The editable subdomain prefix, pre-filled with the derived `sandbox-<hash>` default (so an untouched field
 // reproduces the CLI's default). The full hostname is `<subdomain>.<selectedZone>`.
 const subdomain = ref(``);
@@ -181,9 +181,9 @@ const subdomainValid = computed(() => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(su
 
 // --- desktop sync opt-in (step 2) ---
 // On by default: the same pasted command also enrolls the sync agent. The folder rides the command as a
-// SYNC_DIR env var (a path, not a secret), so toggling this just adds/removes it — no re-mint. The folder is
-// derived from the sandbox name AND the hostname the mint just provisioned (not user-editable) — shown as
-// info, not a field — so it carries the same id the sandbox's address does. Empty until the mint lands, which
+// SYNC_DIR env var (a path, not a secret), so toggling this just adds/removes it: no re-mint. The folder is
+// derived from the sandbox name AND the hostname the mint just provisioned (not user-editable): shown as
+// info, not a field, so it carries the same id the sandbox's address does. Empty until the mint lands, which
 // is also when the command that would carry it appears.
 const syncEnabled = ref(true);
 const syncDir = computed(() => (created.value && setup.value ? syncFolder(created.value.name, setup.value.hostname) : ``));
@@ -192,18 +192,18 @@ const syncDir = computed(() => (created.value && setup.value ? syncFolder(create
 // Which spine step 1 heads: `provision` (name + address, then run and wait in step 2) or `attach` (paste the domain
 // the sandbox is ALREADY reachable at → verify → workspace), which finishes inside step 1 itself.
 //
-// Both lanes work on the SAME `name` and the SAME `created` row — a sandbox's name and identity are facts about
+// Both lanes work on the SAME `name` and the SAME `created` row: a sandbox's name and identity are facts about
 // the sandbox, not about how the user chose to reach it. Duplicating either into lane-local state is what makes
 // a lane switch lose typing, so there is deliberately no `attachName`/`attachRow` here.
 const lane = ref<"provision" | "attach">(`provision`);
-/* The one "reach it some other way" disclosure, open. Both ways off the default address — your own Cloudflare
- * zone, and a domain the sandbox already answers on — used to be their own link in their own place, and
+/* The one "reach it some other way" disclosure, open. Both ways off the default address: your own Cloudflare
+ * zone, and a domain the sandbox already answers on: used to be their own link in their own place, and
  * telling them apart needed the distinction they exist to explain. One link, two choices under it, each
  * described by what the reader already knows about their own machine. */
 const reaching = ref(false);
 const domain = ref(``);
 // The connection token the daemon was started with, revealed only after a `needs-token` probe. Used for that
-// one first-bind request and never persisted — the daemon stops caring the moment an owner is bound, so the
+// one first-bind request and never persisted: the daemon stops caring the moment an owner is bound, so the
 // platform has no reason to hold a copy (same posture as the Cloudflare token above).
 const attachToken = ref(``);
 const attaching = ref(false);
@@ -214,7 +214,7 @@ const domainProblem = computed(() => daemonUrlProblem(domain.value));
 
 // A resumed sandbox that has ACTUALLY run before is being reconnected; one that was named and never started is
 // just being picked back up, and calling that "Reconnect" claims a history it doesn't have. Read by the
-// resumed sandbox's own line, which is the only place on the card that says which of the two this is — the
+// resumed sandbox's own line, which is the only place on the card that says which of the two this is: the
 // provision card carries no title to put it in.
 const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
 
@@ -222,7 +222,7 @@ const neverStarted = computed(() => created.value !== null && created.value.last
 const { cmdOs } = useOsPreference();
 
 // The third Run tab: manage the sandbox with the user's own docker-compose.yml instead of the install
-// script. Local state layered over the persisted OS preference — picking Compose must not overwrite the
+// script. Local state layered over the persisted OS preference: picking Compose must not overwrite the
 // unix/windows choice other screens share (CommandOs stays a two-value type).
 const composeSelected = ref(false);
 const runTab = computed<`unix` | `windows` | `compose`>({
@@ -237,8 +237,8 @@ const runTab = computed<`unix` | `windows` | `compose`>({
 // Two of the three labels shed a qualifier on a phone, where the three tabs share one line: the shell
 // ("PowerShell") and the vendor ("Docker") are both restated by the panel each tab opens, and a tab that wraps
 // to two lines while its neighbours don't stops reading as one control.
-// The third tab is on a different axis from the first two — it is not another OS, it is the path for someone
-// who would rather read a file than run a script — and its label can't say so without outgrowing the row. The
+// The third tab is on a different axis from the first two: it is not another OS, it is the path for someone
+// who would rather read a file than run a script, and its label can't say so without outgrowing the row. The
 // title says it on a desktop and the panel's own first line says it everywhere, which is where the reader who
 // needs it actually arrives.
 const runTabOptions = computed(() => [
@@ -252,30 +252,30 @@ const runTabOptions = computed(() => [
 ]);
 
 /* The one control over the SHAPE of the pasted command. It exists because a copy-paste install is the point
- * people balk at — not because it does more than an .exe would, but because it arrives with none of an
+ * people balk at, not because it does more than an .exe would, but because it arrives with none of an
  * installer's affordances: no publisher, no preview, no file list, no uninstaller.
  *
- * `hasDocker` drops the `sudo`. It is in there for exactly one job — installing Docker when the machine has
- * none (connect.sh's require_root_to_install_docker states the same deal from the other side) — and for a
+ * `hasDocker` drops the `sudo`. It is in there for exactly one job: installing Docker when the machine has
+ * none (connect.sh's require_root_to_install_docker states the same deal from the other side), and for a
  * developer who already runs Docker it is the single most alarming token in the line. Not persisted: it is a
  * claim about the machine the user is about to paste into, which is not necessarily the one they are reading on.
  *
- * It used to have a peer — a `review` switch that split the one-liner into download-it, read it, then run the
+ * It used to have a peer: a `review` switch that split the one-liner into download-it, read it, then run the
  * file. It was removed because it read as a WARNING rather than an offer: a checkbox telling you to read
  * something before running it is an admission that running it is unsafe, on the one step where hesitation is
  * what loses people. The reference panel already says what the command creates and how to undo it, and the
  * desktop app is the real answer for anyone who wants an installer instead of a pipe. */
 const hasDocker = ref(false);
 
-/* THE THIRD WAY TO RUN STEP 3 — the desktop app (_editor/desktop-app), when this page is being read INSIDE it.
+/* THE THIRD WAY TO RUN STEP 3: the desktop app (_editor/desktop-app), when this page is being read INSIDE it.
  *
  * It is the same handoff the command is: the app claims this same setup code and runs the same connect
- * script, so nothing about steps 1-2 or the announce-watch below changes. What it removes is the terminal —
+ * script, so nothing about steps 1-2 or the announce-watch below changes. What it removes is the terminal:
  * which is what people actually balk at here, and what the two switches above can only soften.
  *
  * So inside the app step 2 IS that button, not a second offer beside a command: one line of consequence, the
  * button, and a link for the person who wanted a server after all. Everything below that belongs to the
- * COMMAND rather than to the step — the paste-it-into-a-terminal line, the `sudo` switch, "Copy again" —
+ * COMMAND rather than to the step: the paste-it-into-a-terminal line, the `sudo` switch, "Copy again":
  * is gated on the command actually being on screen, because in the app it usually isn't.
  *
  * A browser that is NOT the app still gets the link (the OS routes it to an installed app) plus somewhere to
@@ -287,54 +287,54 @@ const desktop = computed(() => desktopVersion() !== undefined);
  * `curl -fsSL … | sudo sh` is the most alarm-raising string this product puts in front of anybody, and it was
  * the DEFAULT rung's first screen: preselected, above the fold, before a stranger had seen the product. The
  * people who are comfortable with it are exactly the people who would find it behind one click without a
- * flinch — so the default exposed the timid and protected the confident, which is the wrong way round. The
+ * flinch, so the default exposed the timid and protected the confident, which is the wrong way round. The
  * installer is the same handoff wearing an installer's affordances (a publisher, a file, an uninstaller),
  * which is the whole of what the two switches under the command were groping for.
  *
  * The command is one labelled click away and loses nothing: it is the same disclosure the app and the phone
  * already fold it behind, and the reader who wants a terminal is the one reader guaranteed to recognise the
- * link. Where there is no build — macOS today — this is `undefined` and the command stays the path, because a
+ * link. Where there is no build (macOS today) this is `undefined` and the command stays the path, because a
  * button pointing at a downloads page that has nothing for you is worse than the pipe it replaced. */
 const installer = computed(() => (desktop.value || mobile.value ? undefined : desktopInstaller()));
 const appFirst = computed(() => installer.value !== undefined);
 
 /* THE COMMAND IS FOLDED AWAY WHEREVER IT IS NOT THE PATH, behind the same one-line disclosure everywhere: in
  * the app the button above already runs it (a server is still an ordinary place to want the sandbox, and the
- * app cannot run it there), on a phone there is no shell to paste into — the handoff is the step there, and
- * the command under it was six controls of scenery around a clipboard write that leads nowhere — and in a
+ * app cannot run it there), on a phone there is no shell to paste into: the handoff is the step there, and
+ * the command under it was six controls of scenery around a clipboard write that leads nowhere, and in a
  * browser with an installer to offer, the installer is the step. No reader is shut out: a phone driving a
  * server over SSH is one tap from the same command, and the tap is labelled for exactly that person. */
 const showCommand = ref(false);
 const commandVisible = computed(() => (desktop.value || mobile.value || appFirst.value ? showCommand.value : true));
-// Compose declares its own env, so neither switch under the command applies to it — but "no tab is on screen
+// Compose declares its own env, so neither switch under the command applies to it, but "no tab is on screen
 // at all" is a different thing from "the compose tab is", and only the second one hides the sync option.
 const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
-/* WHICH MACHINE runs step 2 — the computer the user already has (the command / handoff / app button), or a
+/* WHICH MACHINE runs step 2: the computer the user already has (the command / handoff / app button), or a
  * new one created in THEIR cloud account (SetupCloud.vue). A phone starts on `cloud` only until the offers
  * land: the hosted rung takes the phone's default the moment it is offered (see arrive()), because a phone
- * can finish it alone off a single tap — where `cloud` opens on a credential paste, the hardest possible
+ * can finish it alone off a single tap, where `cloud` opens on a credential paste, the hardest possible
  * opening ask, and the email handoff asks for a second computer. `cloud` stays the phone's fallback on a
  * platform that doesn't host, for the original reason: it is the one classic lane a phone finishes alone.
- * The picker is hidden inside the desktop app (the app IS a computer the user has — its one
+ * The picker is hidden inside the desktop app (the app IS a computer the user has: its one
  * button is the step there), so `machine` stays `mine` in it by construction.
  *
- * The cloud machine claims the SAME minted setup code the command would, so everything downstream — the
- * locked gate, the claim stamp, the stage report, the announce watch — is untouched; only the card's content
+ * The cloud machine claims the SAME minted setup code the command would, so everything downstream: the
+ * locked gate, the claim stamp, the stage report, the announce watch: is untouched; only the card's content
  * and the wait's wording switch on this. It needs the intentic-provided tunnel (the machine boots headless,
  * with no Cloudflare of its own), so the form yields to a pointer at step 1 while `mode` says `own`. */
 const machine = ref<"hosted" | "mine" | "cloud">(mobile.value ? `cloud` : `mine`);
 
-/* THE OTHER RUNGS, INSIDE THE APP — hidden by default, never absent.
+/* THE OTHER RUNGS, INSIDE THE APP: hidden by default, never absent.
  *
  * They used to be hard-excluded here on the argument above: the app IS a computer the user has, so a picker
- * offering them a different one is scenery. That holds right up until this computer cannot run it — no WSL2,
- * no Docker, a locked-down work laptop, a machine too small — and then the app has nothing to say and the
+ * offering them a different one is scenery. That holds right up until this computer cannot run it: no WSL2,
+ * no Docker, a locked-down work laptop, a machine too small, and then the app has nothing to say and the
  * user has nowhere to go. The app's own requirements screen now links here for exactly that reader
  * (`?elsewhere=1`, desktop-app/src/App.vue), and a link into a page that still hides what it promised would
  * be worse than not offering it.
  *
  * So: local stays the loud default in the app, unchanged and preselected, and the other rungs sit behind one
- * quiet line. `elsewhere` is what opens them — set by the link from the requirements screen, or by that line.
+ * quiet line. `elsewhere` is what opens them: set by the link from the requirements screen, or by that line.
  */
 const elsewhere = ref(route.query[`elsewhere`] === `1`);
 // Inside the app the other rungs are one click away rather than on screen; outside it, nothing is hidden.
@@ -342,23 +342,23 @@ const elsewhereOffered = computed(() => !desktop.value || elsewhere.value);
 const cloudOffered = computed(() => addressed.value && elsewhereOffered.value);
 /* The pasted command is an address away from being useless: the script it runs redeems a setup code, and a
  * platform that mints none has nothing for it to redeem. So this rung stands on the same offer the cloud one
- * does — including in the desktop app, where the button IS the command. */
+ * does: including in the desktop app, where the button IS the command. */
 const commandOffered = computed(() => addressed.value);
 
 /* --- the hosted lane (machine === `hosted`) ---
  *
  * The lane with no command, no code and no machine of the user's: the platform gives THIS sandbox a machine
- * it runs (sandbox.hostedProvision), and the ordinary announce watch below carries the rest — the page
+ * it runs (sandbox.hostedProvision), and the ordinary announce watch below carries the rest: the page
  * redirects the moment the daemon reports in, exactly as it does for a pasted run. With the other rungs one click away.
  *
  * A LANE MOVES A MACHINE, NOT THE SANDBOX. Every lane works on the row created on arrival, so choosing this
- * one attaches a machine and choosing another hands it back (sandbox.hostedRelease) — the name, the address
+ * one attaches a machine and choosing another hands it back (sandbox.hostedRelease): the name, the address
  * and the row itself survive the switch. The first version deleted and re-created the sandbox on every
  * crossing, which is how a mis-click cost a person their typed name and their place in the flow. */
 // The platform's offer, read on arrival. Null until answered; a platform without the route reads as disabled.
 const hostedOffer = ref<HostedOffer | null>(null);
 const hostedOffered = computed(() => hostedOffer.value?.enabled === true && elsewhereOffered.value);
-/* Is there a provision lane to be in at all — a machine we can start, or an address we can put on one the
+/* Is there a provision lane to be in at all: a machine we can start, or an address we can put on one the
  * reader starts. With neither, the way BACK to it (the attach lane's last line) is a promise this platform
  * cannot keep, and the attach lane is not a detour off the flow but the whole of it. */
 const provisionOffered = computed(() => addressed.value || hostedOffered.value);
@@ -368,32 +368,32 @@ const hostedBusy = ref(false);
 // Why the hosted lane could not be taken, rendered ON the run step where the click happened. Separate from
 // the page-level `error` (which belongs to the sandbox card above and is cleared by any create) precisely
 // because the first version let a failed hosted attempt bounce the user to the command lane with the reason
-// wiped — a silent lane switch that read as the page breaking.
+// wiped: a silent lane switch that read as the page breaking.
 const hostedError = ref<NoticeModel | undefined>(undefined);
-// The created row IS a hosted one — the wait card renders off this rather than off the picker, so a resumed
+// The created row IS a hosted one: the wait card renders off this rather than off the picker, so a resumed
 // hosted sandbox narrates correctly however the page was entered.
 const hostedRow = computed(() => created.value?.hosted ?? null);
-// The allowance is SPENT — this account already has the hosted sandbox it is entitled to, and it isn't this
+// The allowance is SPENT: this account already has the hosted sandbox it is entitled to, and it isn't this
 // one. The card still renders (hiding an option the reader was just offered elsewhere explains nothing); it
 // says why it cannot be taken instead.
 const hostedSpent = computed(() => hostedOffered.value && (hostedOffer.value?.remaining ?? 0) === 0 && hostedRow.value === null);
-/* Is there a lane on the provision spine the reader can actually take — an address for a machine of theirs,
+/* Is there a lane on the provision spine the reader can actually take: an address for a machine of theirs,
  * a machine of ours still to claim, or one they already have. With none of the three, that spine can only
  * render a step that never unlocks. */
 const anyLaneTakeable = computed(() => addressed.value || (hostedOffered.value && !hostedSpent.value) || hostedRow.value !== null);
 /* …so the page opens on the lane that still works, and says why once it gets there. Called only once the
- * sandbox row is settled: a RESUMED hosted sandbox is a lane of its own — its machine already exists — and
+ * sandbox row is settled: a RESUMED hosted sandbox is a lane of its own, its machine already exists, and
  * reading the offers alone would have sent it here. Never fires on a platform that mints addresses. */
 const fallBackToAttach = (): void => {
     if (!anyLaneTakeable.value) {
         lane.value = `attach`;
     }
 };
-/* The free lane's awake-hour budget, or null for anyone it does not apply to — a member, or a platform
+/* The free lane's awake-hour budget, or null for anyone it does not apply to: a member, or a platform
  * running without a ceiling. The distinction is the whole point of reading it here: `null` means the cards
  * below say nothing about hours at all, rather than showing a member a limit they do not have. */
 const hostedHours = computed(() => hostedOffer.value?.hours ?? null);
-// The daemon's announced host, once it exists — step 1's address line for a lane that never mints a code.
+// The daemon's announced host, once it exists: step 1's address line for a lane that never mints a code.
 const hostedHost = computed(() => {
     const url = created.value?.daemonUrl;
     if (url === null || url === undefined) {
@@ -406,10 +406,10 @@ const hostedHost = computed(() => {
     }
 });
 // When the hosted wait began. The command lane's fuses are guesses about a clipboard; this one is only ever
-// used to escalate a wait that is otherwise progressing — everything the card actually SAYS comes from what
+// used to escalate a wait that is otherwise progressing: everything the card actually SAYS comes from what
 // the machine and the sandbox report, never from the clock (see hostedWait.ts).
 const hostedSince = ref<number | undefined>(undefined);
-// The machine's own power state, polled from the platform while — and only while — somebody is waiting on it.
+// The machine's own power state, polled from the platform while, and only while: somebody is waiting on it.
 // `undefined` until the first answer, and after any failure to get one: the wait must degrade to its plain
 // spinner when the provider can't be asked, never to a wrong story.
 const hostedMachine = ref<HostedStatus[`machine`] | undefined>(undefined);
@@ -417,7 +417,7 @@ const hostedMachine = ref<HostedStatus[`machine`] | undefined>(undefined);
 // and rate-limited, and nothing about a boot is missed by asking every dozen seconds instead of every three.
 const MACHINE_EVERY = 4;
 let machineTick = 0;
-/* The sandbox's own last word about its boot, and any check-in we refused — kept as refs the poll writes,
+/* The sandbox's own last word about its boot, and any check-in we refused: kept as refs the poll writes,
  * beside `claimedAt` and `report` and for the same reason: `created` is the row this page CREATED, and the
  * wait is about what has happened to it since. Both null until they happen, which is also what every sandbox
  * older than this reporting looks like. */
@@ -425,25 +425,25 @@ const bootReport = ref<SandboxSummary[`bootReport`]>(null);
 const announceRefusal = ref<SandboxSummary[`announceRefusal`]>(null);
 // Whether the daemon has ever checked in. Read off the poll rather than off `created` for the same reason.
 const announced = ref(false);
-// The provisioned machine's display facts (SandboxCloudSchema) — set by the provision response (or a resumed
+// The provisioned machine's display facts (SandboxCloudSchema): set by the provision response (or a resumed
 // row that was provisioned last visit), and the switch that turns the cloud form into its summary line.
 const cloudMachine = ref<SandboxSummary[`cloud`]>(null);
-// The company's NAME, never the picker's pitch — every use below is inside a sentence, and `label` carries
-// the free tier's sales line ("Oracle — free 12 GB"), which reads as a typo the moment it lands mid-clause.
+// The company's NAME, never the picker's pitch: every use below is inside a sentence, and `label` carries
+// the free tier's sales line ("Oracle: free 12 GB"), which reads as a typo the moment it lands mid-clause.
 const cloudProviderName = computed(() => (cloudMachine.value === null ? `` : cloudProviderMeta(cloudMachine.value.provider).name));
-// The provision response is a fresher row (it carries the cloud stamp) — adopt it, then let the ordinary
+// The provision response is a fresher row (it carries the cloud stamp): adopt it, then let the ordinary
 // claim → report → announce watch narrate the machine's first boot.
 const onProvisioned = (summary: SandboxSummary): void => {
     created.value = summary;
     cloudMachine.value = summary.cloud;
 };
 
-/* THE LADDER — the machine choice as a range of power rather than a binary, each rung captioned by what it
+/* THE LADDER: the machine choice as a range of power rather than a binary, each rung captioned by what it
  * costs and what it buys.
  *
  * IT IS A PICKER AND ONE CAPTION, and it has to stay that. The shape this replaced tried to say the same
  * thing with surfaces: a tinted panel for the hosted offer, a bordered list of the other two under it, the
- * chosen one ringed inside that list, and the command's own tab track and code frame under THAT — six framed
+ * chosen one ringed inside that list, and the command's own tab track and code frame under THAT: six framed
  * surfaces deep before a single instruction. Nesting is what a reader pays for structure, and a
  * three-item structure does not need paying for. Weight belongs in the words (the rung order, the caption)
  * and in what is on screen at all, never in another box around it.
@@ -451,18 +451,18 @@ const onProvisioned = (summary: SandboxSummary): void => {
  * The rungs are the lanes that already exist; this picker is just the honest map: instant-and-small (hosted)
  * → a free 12 GB cloud machine or a paid one (SetupCloud's providers, Oracle's Always-Free first) → the
  * reader's own hardware (the most power, and the only GPU story anyone can offer). */
-/* CARDS, NOT CHIPS. This is the decision the whole rest of onboarding hangs off — whether the reader ever
- * opens a terminal, what the box can do, and who pays for it — and it spent one release as three small pills
+/* CARDS, NOT CHIPS. This is the decision the whole rest of onboarding hangs off, whether the reader ever
+ * opens a terminal, what the box can do, and who pays for it, and it spent one release as three small pills
  * with a caption underneath, which is the control this design system uses for Preview/Source. A pill row
  * shows only the labels, so the two things that actually decide the answer (what you get, what it asks of
  * you) were invisible until after you had already picked; and the pill for the lane you were on looked
  * exactly like the pill for the lane that would delete it.
  *
- * So: one card per rung, each stating its own trade in the reader's terms, with the cost as a badge — a
+ * So: one card per rung, each stating its own trade in the reader's terms, with the cost as a badge, a
  * layout that can be READ before it is clicked. The order is the ladder's: instant and small, then your own
  * hardware, then a machine you rent.
  *
- * READ, THOUGH — NOT STUDIED. The first version of these cards put the whole trade on every card at once:
+ * READ, THOUGH: NOT STUDIED. The first version of these cards put the whole trade on every card at once:
  * three paragraphs, side by side, above the one command the reader came here to run. Three columns of prose
  * is not a picker; nobody compares three paragraphs, they skim the titles and pick, which means the paragraphs
  * cost attention and bought nothing. A card is an icon, a name, a price and three or four words.
@@ -483,17 +483,17 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
         ? [
               {
                   value: `hosted` as const,
-                  /* Titles answer the reader's question — what do I do — never the topology's. This one read
+                  /* Titles answer the reader's question (what do I do) never the topology's. This one read
                    * "We host it", which asks a newcomer to weigh hosting arrangements before they have seen
                    * the product. The note is where whose-machine-it-is moved: selling the speed without
                    * saying where it runs would be the quiet push toward our servers this page must not make. */
                   title: `Start instantly`,
                   /* The badge carries the hour ceiling when there is one, because "Free" alone in the place a
-                   * reader looks for the cost is the version of this card that has to be corrected later —
+                   * reader looks for the cost is the version of this card that has to be corrected later:
                    * AND IT SAYS WHAT HAPPENS AFTER THE HOURS, for the same reason. "40h a month" answers
                    * "how much do I get" and leaves "and then?" hanging, which is precisely the question a
                    * price is read to settle; the honest answer is that a membership lifts the limit (and the
-                   * two rungs beside this one never had it) — said as the upgrade it is. It read "then
+                   * two rungs beside this one never had it): said as the upgrade it is. It read "then
                    * membership" for a release, which names the same fact as a subscription already scheduled.
                    * Members and ceiling-less platforms send no hours at all and read the old way. */
                   meta:
@@ -522,7 +522,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   /* WHOSE MACHINE IT IS BELONGS IN THE TITLE, and it is the only thing this rung has to say
                    * that the one above it doesn't: we host one too, and the difference is the account it
                    * lives in and the bill. It used to be "A new cloud machine" over "In your own cloud
-                   * account" — a title and a note that spent their two lines saying "cloud" twice, so the
+                   * account": a title and a note that spent their two lines saying "cloud" twice, so the
                    * card's last line, the one place left to tell the reader something they don't know, was
                    * a paraphrase of its first. It names the three providers instead: somebody who already
                    * has a Hetzner account recognises this rung as theirs from the picker, without opening
@@ -534,12 +534,12 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
           ]
         : []),
 ]);
-/* Shown once there is a CHOICE to make. A picker over one rung is not a picker — it is a card describing the
- * only thing on offer, which is what the step under it already does — and while the offers are still being
+/* Shown once there is a CHOICE to make. A picker over one rung is not a picker: it is a card describing the
+ * only thing on offer, which is what the step under it already does, and while the offers are still being
  * read there is nothing honest to draw at all. */
 const ladderShown = computed(() => elsewhereOffered.value && ladderOptions.value.length > 1);
 
-/* WHICH ADDRESS THE CARD IS REPORTING — one of four, and they are mutually exclusive: a hosted machine
+/* WHICH ADDRESS THE CARD IS REPORTING, one of four, and they are mutually exclusive: a hosted machine
  * announces its own, a platform that mints none says so, the default is the intentic domain, and the last is
  * the reader's own Cloudflare zone (the only one that is a FORM rather than a fact, which is why it is the one
  * that still gets a block of its own under the row). */
@@ -547,8 +547,8 @@ const addressFact = computed<`hosted` | `none` | `intentic` | `own`>(() =>
     machine.value === `hosted` ? `hosted` : addressless.value ? `none` : mode.value === `intentic` ? `intentic` : `own`,
 );
 
-/* The label in front of each of step 1's two facts. Label and value are ONE size — the field size, since the
- * name becomes a field — and colour alone separates them: the name used to sit in the step's own heading, in
+/* The label in front of each of step 1's two facts. Label and value are ONE size: the field size, since the
+ * name becomes a field, and colour alone separates them: the name used to sit in the step's own heading, in
  * the heading's weight and the heading's colour, where the one word on the card worth changing read as the
  * label in front of it. The rows' shared grid column, rather than padding on either label, lines the two
  * values up. */
@@ -556,7 +556,7 @@ const factLabel = `shrink-0 text-sm text-muted`;
 
 /* …and the slot each value sits in. It looks like an empty box because it IS one: the name has to be able to
  * turn into a text field without moving, which means the idle name already wears the field's height, padding
- * and (transparent) border. The address wears the same slot for one reason — otherwise the field's padding
+ * and (transparent) border. The address wears the same slot for one reason: otherwise the field's padding
  * would start the name a few pixels right of an address that has none, and the two facts on this card would
  * be out of line down the only column that carries meaning. Paying that back with a negative margin was the
  * first attempt and it hard-codes a spacing token the theme is free to change. */
@@ -565,21 +565,21 @@ const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-tra
 // There is one lane now: every sandbox's address is derived from its own connect token, so nothing has to be
 // chosen before a code can be minted. `targetKey` survives as the mint's dedupe/stale-response key.
 // Identity of the target, for mint dedupe + stale-response drops (a mint answers for the key it was fired for).
-// The sandbox id is part of the key — a code redeems ONE sandbox's token, so switching sandboxes mid-page
+// The sandbox id is part of the key: a code redeems ONE sandbox's token, so switching sandboxes mid-page
 // (resume → "create a new one instead") invalidates the previous mint instead of showing sandbox A's command
-// for sandbox B. The sync choice is deliberately NOT part of this — it rides the command, not the code, so
+// for sandbox B. The sync choice is deliberately NOT part of this: it rides the command, not the code, so
 // toggling it never re-mints.
 // The LANE is part of the gate, not just the inputs: minting is what provisions the intentic tunnel + DNS, and
-// an attached sandbox reaches the browser over the user's own domain — so a code minted while in the attach
+// an attached sandbox reaches the browser over the user's own domain, so a code minted while in the attach
 // lane would buy Cloudflare infrastructure nothing will ever dial. Undefined here also re-arms the mint when the
 // user comes back: the key changes from undefined to a real one, which is exactly what the watcher fires on.
 const targetKey = computed<string | undefined>(() => {
     // The hosted lane never mints: its machine was born holding the tunnel, and a code would buy a command
-    // nothing will ever run — same reasoning as the attach lane's gate.
+    // nothing will ever run: same reasoning as the attach lane's gate.
     if (created.value === null || lane.value === `attach` || machine.value === `hosted` || hostedRow.value !== null) {
         return undefined;
     }
-    // Nor does a platform that has no addresses to mint, in EITHER mode — the mint is fabric-gated server-side,
+    // Nor does a platform that has no addresses to mint, in EITHER mode: the mint is fabric-gated server-side,
     // so bring-your-own-Cloudflare fails there exactly like the default does. Asking anyway is what left the
     // address line spinning on a promise the platform had already declined to make.
     if (!addressed.value) {
@@ -590,15 +590,15 @@ const targetKey = computed<string | undefined>(() => {
 
 // The command can be built only once the chosen target has a code minted for it.
 const commandReady = computed(() => setup.value !== null && mintedFor.value === targetKey.value);
-/* Desktop sync is an option ON THE PASTED COMMAND — it rides it as an env var, and the folder it names is
+/* Desktop sync is an option ON THE PASTED COMMAND: it rides it as an env var, and the folder it names is
  * derived from the address the mint just provisioned. So it exists exactly where that command does: not
  * before a code is minted, not on the compose tab (that file declares its own env), and not in the lanes that
- * run no command of the reader's at all — a cloud machine boots with its own copy, a hosted one was born
+ * run no command of the reader's at all: a cloud machine boots with its own copy, a hosted one was born
  * holding everything. It survives the command being FOLDED away in the app, where it rides the handoff too. */
 const syncOffered = computed(
     () => commandReady.value && !composeShown.value && (commandVisible.value || desktop.value) && !(machine.value === `cloud` && cloudOffered.value),
 );
-// `.title` rather than the NoticeModel itself — interpolated whole, it renders as its own JSON.
+// `.title` rather than the NoticeModel itself: interpolated whole, it renders as its own JSON.
 const lockedReason = computed(() => {
     // The one state that is not a wait: there is no command coming, so the lock says what is true and the card
     // above carries the way on. "Preparing…" here is the sentence that made this page read as hung.
@@ -632,35 +632,35 @@ const lockedReason = computed(() => {
 /* --- the handoff (step 2) ---
  *
  * Step 2 is a HANDOFF to a machine this browser cannot see, and every way people get stuck here comes from the
- * card not modelling that. It used to have exactly one state — a spinner and "waiting for your sandbox to report
- * in", shown from the moment the code was minted — so a person who had not opened a terminal and a person whose
+ * card not modelling that. It used to have exactly one state: a spinner and "waiting for your sandbox to report
+ * in", shown from the moment the code was minted, so a person who had not opened a terminal and a person whose
  * Docker pull was four minutes deep saw the identical screen, forever. It read as "the platform is provisioning
  * something", which is the one thing it never means, and the only button-shaped thing left on the card was
- * "Check now". So people sat and pressed it — which is also why that button is gone: the registry is polled
+ * "Check now". So people sat and pressed it, which is also why that button is gone: the registry is polled
  * every 3s either way, so it never bought a single second, and offering it made pressing it look like progress.
  *
  * `handoff` is that missing model, in the order it actually happens:
- *   • `locked`  — the chosen path isn't ready, so there is no command yet (lockedReason says what's missing)
- *   • `yours`   — the command is on screen and NOTHING is in flight; the next move is the user's, in a terminal
- *   • `handed`  — they copied it (or, in the app, pressed the button), so we are waiting on their machine
+ *   • `locked` : the chosen path isn't ready, so there is no command yet (lockedReason says what's missing)
+ *   • `yours`  : the command is on screen and NOTHING is in flight; the next move is the user's, in a terminal
+ *   • `handed` : they copied it (or, in the app, pressed the button), so we are waiting on their machine
  *                 rather than on our own infrastructure
- *   • `claimed` — a machine redeemed the setup code at /setup/claim: the command demonstrably ran, and the
+ *   • `claimed`, a machine redeemed the setup code at /setup/claim: the command demonstrably ran, and the
  *                 minutes of invisible Docker work that follow are finally a wait this page has earned
  *
  * The `claimed` state is the one that needed a server change (Sandbox.setupCodeClaimedAt): the claim is the only
  * evidence the platform ever gets that the pasted command reached a machine, and without it the card cannot
- * tell "you haven't run it yet" from "it's running and slow" — which is exactly the ambiguity people resolve,
+ * tell "you haven't run it yet" from "it's running and slow", which is exactly the ambiguity people resolve,
  * wrongly, by waiting. */
 type Handoff = "locked" | "yours" | "handed" | "claimed";
 
 // This browser put the command on the clipboard. Page-level and persistent, unlike CopyButton's own 1.5s
 // flash: it is the hinge the card turns on, not a button animation.
 const copied = ref(false);
-// The app was handed the setup code — the desktop path's equivalent of copying, and the last thing this page
+// The app was handed the setup code: the desktop path's equivalent of copying, and the last thing this page
 // can observe before the machine takes over. Without it, pressing the one button on the card left the footer
 // still reading "Nothing is running yet" for as long as it takes the app to claim.
 const launched = ref(false);
-// A link back to this screen is in the user's inbox (the phone's handoff — SetupHandoff.vue). Deliberately NOT
+// A link back to this screen is in the user's inbox (the phone's handoff: SetupHandoff.vue). Deliberately NOT
 // part of `handoff` below: that state machine tracks the COMMAND's journey to a machine, and posting yourself a
 // bookmark does not advance it by a step. What it does change is what the stuck-wait nudge should say, because
 // for this user the next move is on a laptop that hasn't been opened yet rather than in a terminal.
@@ -670,7 +670,7 @@ const emailed = ref(false);
 const claimedAt = ref<string | null>(null);
 /* The machine's own account of the run (SetupReport): the connect flow posts each stage while it works, and
  * on failure every broken check with its fix. This is the answer to the one question the old card could not
- * answer — a machine that claimed the code and then died left the browser guessing by elapsed time, with the
+ * answer: a machine that claimed the code and then died left the browser guessing by elapsed time, with the
  * real reason scrolling away in a terminal that may already be closed. Cleared server-side on every mint,
  * like the claim stamp, so a value here always narrates the command currently on screen. */
 const report = ref<SetupReport | null>(null);
@@ -679,15 +679,15 @@ const report = ref<SetupReport | null>(null);
 const reportFailures = computed(() => setupReportView(report.value).failures);
 const buildStage = computed(() => setupReportView(report.value).stage);
 
-// There is a command out there and we're watching the registry — drives the card's footer. Gated on
+// There is a command out there and we're watching the registry: drives the card's footer. Gated on
 // `commandReady` rather than a bare mint, so a re-mint's stale command never narrates a wait of its own.
 const waiting = computed(() => commandReady.value);
 const handoff = computed<Handoff>(() => {
     if (!commandReady.value) {
         return `locked`;
     }
-    // A setup report is the same proof as the claim stamp — it can only come from a machine that ran the
-    // command — and it can arrive FIRST: the preflight reports "Docker is not running" before anything is
+    // A setup report is the same proof as the claim stamp: it can only come from a machine that ran the
+    // command, and it can arrive FIRST: the preflight reports "Docker is not running" before anything is
     // redeemed. Without this, that card would say "waiting for you to run the command" beside the failure.
     if (claimedAt.value !== null || report.value !== null) {
         return `claimed`;
@@ -699,10 +699,10 @@ const handoff = computed<Handoff>(() => {
 
 /* The card escalates on its own, because the failure it guards against is silent: someone who has not realised
  * the command has to be run somewhere else will never do anything this page can react to, so nothing but
- * elapsed time can trigger the correction. `armedAt` is when the command became runnable — reset by a re-mint,
+ * elapsed time can trigger the correction. `armedAt` is when the command became runnable: reset by a re-mint,
  * which hands out a different command. */
 const armedAt = ref<number | undefined>(undefined);
-// The app's one wall clock, armed only while a command is on screen — nothing below reads it before then
+// The app's one wall clock, armed only while a command is on screen: nothing below reads it before then
 // (waitedMs is 0 without an armedAt, and `claimed` implies one), so an unarmed step 2 costs no tick.
 const now = useNow(() => armedAt.value !== undefined || hostedSince.value !== undefined);
 watch(commandReady, (ready) => {
@@ -713,7 +713,7 @@ watch(commandReady, (ready) => {
  * it, the sandbox's own verdict on whether its public address answers, and any check-in we refused. This is
  * what replaced a single sentence that was shown to four different problems.
  *
- * Down here with the other fuses because it reads the clock — but it reads it only to escalate a wait that is
+ * Down here with the other fuses because it reads the clock, but it reads it only to escalate a wait that is
  * otherwise progressing. Everything the card SAYS comes from something somebody established. */
 const hostedWait = computed(() =>
     hostedWaitView({
@@ -722,18 +722,18 @@ const hostedWait = computed(() =>
         refusal: announceRefusal.value,
         announced: announced.value,
         // The machine's origin off the row's hosted stamp: a pool machine boots in seconds, a built-to-order
-        // one spends its first boot downloading — which of the two promises the card makes hangs on this.
+        // one spends its first boot downloading, which of the two promises the card makes hangs on this.
         warm: hostedRow.value?.warm,
         waitedMs: hostedSince.value === undefined ? 0 : now.value - hostedSince.value,
     }),
 );
 
-// When the card stops being polite about the likeliest reason nothing has reached us — the command is still
+// When the card stops being polite about the likeliest reason nothing has reached us: the command is still
 // sitting on a clipboard. Long enough to walk to another machine; short enough to catch someone who has
 // settled in to watch this page. The compose path is a file to paste into an editor and edited there, so the
 // same nudge on that tab would fire at somebody doing exactly the right thing.
 // A phone gets the same long fuse, for the same reason in a different shape: the step is a walk to another
-// machine BY CONSTRUCTION there, and the handoff above says so before the command is even reached — so forty
+// machine BY CONSTRUCTION there, and the handoff above says so before the command is even reached, so forty
 // seconds would fire at someone who has understood perfectly and is halfway to their desk.
 // A cloud machine's fuse is the longest: its first boot legitimately spends minutes on cloud-init + a Docker
 // install + the image pull before anything can claim, and a nudge inside that window would accuse a machine
@@ -782,7 +782,7 @@ const nudgeVariant = computed(() => {
     }
     return launched.value ? (`app` as const) : (`button` as const);
 });
-// Copying again is only an answer for the reader who has a command and hasn't run it — never for a phone whose
+// Copying again is only an answer for the reader who has a command and hasn't run it: never for a phone whose
 // clipboard was never the blocked step, and never for a machine that will fetch the command itself.
 const nudgeCopyable = computed(
     () => commandVisible.value && runTab.value !== `compose` && !(mobile.value && emailed.value) && cloudMachine.value === null,
@@ -799,7 +799,7 @@ const slowBuild = computed(
 // most informative funnel milestone between "was shown a command" and "ran one".
 // `mobile` rides along because the same event means opposite things on the two devices: a copy on a desktop is
 // a step towards a terminal that is right there, and a copy on a phone writes to a clipboard no terminal can
-// read. Without the split those two average into one meaningless conversion rate — which is why nobody could
+// read. Without the split those two average into one meaningless conversion rate, which is why nobody could
 // see this screen failing on phones from the funnel alone.
 const onCopied = (): void => {
     copied.value = true;
@@ -845,7 +845,7 @@ const runHere = (): void => {
     );
 };
 
-// oRPC surfaces a disabled endpoint as NOT_FOUND (404) — the signal that the intentic-provided path is off.
+// oRPC surfaces a disabled endpoint as NOT_FOUND (404): the signal that the intentic-provided path is off.
 const isNotFound = (err: unknown): boolean => {
     if (err && typeof err === `object`) {
         const e = err as { code?: unknown; status?: unknown };
@@ -854,7 +854,7 @@ const isNotFound = (err: unknown): boolean => {
     return false;
 };
 
-// The daemon registers ONCE on boot, so lastSeenAt marks its last (re)start, not a live heartbeat — we can't
+// The daemon registers ONCE on boot, so lastSeenAt marks its last (re)start, not a live heartbeat: we can't
 // use absolute freshness (a long-running sandbox's stamp is legitimately old). Instead we remember the stamp we
 // started watching with and redirect when it ADVANCES: a daemon has (re)booted since the user got the command.
 // Comparing two server timestamps to each other is also immune to browser clock skew.
@@ -867,21 +867,21 @@ watch(
     { immediate: true },
 );
 
-// Why we're still waiting (undefined while nothing informative to say) — the run step shows it so a stuck wait names
+// Why we're still waiting (undefined while nothing informative to say): the run step shows it so a stuck wait names
 // its cause instead of spinning silently.
 const status = ref<string | undefined>(undefined);
-// A poll is in flight. Purely a re-entrancy guard — the 3s interval must not stack requests behind a slow
+// A poll is in flight. Purely a re-entrancy guard: the 3s interval must not stack requests behind a slow
 // one. It is deliberately NOT rendered: it used to drive a "Check now" button's busy state, which meant the
 // automatic poll flipped that button's label and icon every third second for as long as the user sat there.
 const checking = ref(false);
 
 /* Poll the platform registry for the daemon's boot registration (POST /sandbox/announce writes daemonUrl +
- * lastSeenAt). When lastSeenAt advances past the baseline, a daemon has come up for this sandbox — open the
+ * lastSeenAt). When lastSeenAt advances past the baseline, a daemon has come up for this sandbox: open the
  * workspace. Same-origin, no DNS resolution of the sandbox hostname.
  *
  * The row is looked up by `created.id` IN THE LIST THE REFRESH RETURNED, never through `sandbox.active`. Those
  * are the same sandbox only while the selection happens to point at the one being set up, and `reconcileActive`
- * moves the selection to `live[0]` whenever the active id is absent from a list response — which is exactly
+ * moves the selection to `live[0]` whenever the active id is absent from a list response, which is exactly
  * what a just-created row is until the server read catches up with the write. For an account that already owns
  * a connected sandbox, that fallback put a real `lastSeenAt` in front of a baseline of null, so naming a second
  * sandbox redirected straight into the FIRST one's workspace: setup looked complete, the command was never run,
@@ -893,13 +893,13 @@ const check = async (): Promise<void> => {
         return;
     }
     // The code this poll is asking about. A response that lands after a re-mint answers for a command that no
-    // longer exists, and its claim stamp would report the PREVIOUS command as picked up — the one lie this
+    // longer exists, and its claim stamp would report the PREVIOUS command as picked up: the one lie this
     // card must never tell, since the whole point of the stamp is that it is trustworthy.
     const askedFor = mintedFor.value;
     checking.value = true;
     try {
         const live = await sandbox.refresh();
-        // A reachable platform clears any earlier "can't reach" warning — it must not outlive its cause.
+        // A reachable platform clears any earlier "can't reach" warning: it must not outlive its cause.
         status.value = undefined;
         const row = live.find((entry) => entry.id === pending.id);
         if (askedFor === mintedFor.value) {
@@ -918,17 +918,17 @@ const check = async (): Promise<void> => {
             }
             report.value = reported;
         }
-        // What the sandbox has said about itself since — the wait card's two other sources.
+        // What the sandbox has said about itself since: the wait card's two other sources.
         bootReport.value = row?.bootReport ?? null;
         announceRefusal.value = row?.announceRefusal ?? null;
         announced.value = (row?.lastSeenAt ?? null) !== null;
-        /* The machine's own state, for the wait card's first steps — the only part of the story that exists
+        /* The machine's own state, for the wait card's first steps: the only part of the story that exists
          * before the daemon does. Asked for ONLY while a hosted wait is on screen, which is why it is a
          * separate call and not a field on the row every browser polls.
          *
          * And asked for a good deal less often than the registry: at the far end of it is somebody else's API
          * with somebody else's rate limit, and a machine's power state moves on the scale of a boot, not of a
-         * poll. A failure leaves the last answer standing — the card falls back to its plain spinner rather
+         * poll. A failure leaves the last answer standing: the card falls back to its plain spinner rather
          * than telling a different story every few seconds. */
         if (row !== undefined && (row.hosted ?? null) !== null && machineTick++ % MACHINE_EVERY === 0) {
             hostedMachine.value =
@@ -938,7 +938,7 @@ const check = async (): Promise<void> => {
         /* THE HANDOVER, and the correction at the heart of this screen. A check-in proves the daemon STARTED;
          * it has never proved anybody can reach it, and taking the first for the second is what walked people
          * into a workspace that could only spin at them. So a sandbox that is telling us its own address does
-         * not answer is held here — where there is a reason on screen and a button under it — until it says
+         * not answer is held here, where there is a reason on screen and a button under it, until it says
          * otherwise.
          *
          * Held, not failed: the box keeps probing and this keeps polling, so the ordinary case (a tunnel that
@@ -971,13 +971,13 @@ const check = async (): Promise<void> => {
     }
 };
 
-/* Create the sandbox (which mints its connection token) and make it active. Entry point of the flow — the mint
- * watcher below takes over the moment `created` holds a sandbox — and it runs WITHOUT BEING ASKED FOR, on
+/* Create the sandbox (which mints its connection token) and make it active. Entry point of the flow: the mint
+ * watcher below takes over the moment `created` holds a sandbox, and it runs WITHOUT BEING ASKED FOR, on
  * arrival, which is the point.
  *
  * Step 1 used to be a form: an empty field, and a Create button that stayed dead until a word was typed. That
- * word buys nothing at this moment — a name only ever tells sandboxes apart in the switcher, and the first one
- * has nothing to be told apart from — while it costs the two things onboarding can least afford: a decision
+ * word buys nothing at this moment: a name only ever tells sandboxes apart in the switcher, and the first one
+ * has nothing to be told apart from, while it costs the two things onboarding can least afford: a decision
  * before anything has been seen, and the seconds of tunnel provisioning that cannot start until a row exists.
  * Naming it here starts the address mint immediately, so the first screen a new account sees is the command.
  *
@@ -990,13 +990,13 @@ const autoCreate = async (): Promise<void> => {
     creating.value = true;
     error.value = null;
     try {
-        // A name already in the box wins — the attach lane offers one before any row exists, and this is also
+        // A name already in the box wins: the attach lane offers one before any row exists, and this is also
         // the retry after a failed create, where re-picking the default would throw that typing away.
         const typed = name.value.trim();
         const row = await sandbox.create(typed === `` ? autoSandboxName(sandbox.sandboxes.value.map((entry) => entry.name)) : typed);
         created.value = row;
         name.value = row.name;
-        // Minted here, agreed to by nobody — from this instant it is a draft the discard rule below owns.
+        // Minted here, agreed to by nobody: from this instant it is a draft the discard rule below owns.
         createdHere.value = true;
     } catch (err) {
         error.value = noticeFrom(err, `Could not create your sandbox.`);
@@ -1006,11 +1006,11 @@ const autoCreate = async (): Promise<void> => {
 };
 
 /* WHAT THE ACCOUNT HAS LEFT, ASKED AGAIN EVERY TIME WE CHANGE IT. The offer is the server's count of machines
- * this account holds, and it used to be read once on arrival and never again — so a reader who resumed a
+ * this account holds, and it used to be read once on arrival and never again, so a reader who resumed a
  * hosted sandbox (allowance spent, on that very machine) and then picked another rung was left in front of a
  * page that still counted the machine it had just handed back: the rung they had come off sat disabled under
  * "Already using yours", naming a machine that no longer existed, with no way back to it but a reload.
- * A failed re-read keeps the last answer — this must retract nothing that is still true. */
+ * A failed re-read keeps the last answer: this must retract nothing that is still true. */
 const refreshHostedOffer = async (): Promise<void> => {
     try {
         hostedOffer.value = await apiClient.sandbox.hostedOffer();
@@ -1020,8 +1020,8 @@ const refreshHostedOffer = async (): Promise<void> => {
 };
 
 /* Give THIS sandbox a machine the platform runs, then let the ordinary announce watch take over. The row is
- * already there (created on arrival like every lane's), so a refusal — capacity weather, the allowance
- * already spent, a platform whose provider credential is wrong — costs nothing but the attempt: the reason
+ * already there (created on arrival like every lane's), so a refusal: capacity weather, the allowance
+ * already spent, a platform whose provider credential is wrong, costs nothing but the attempt: the reason
  * lands on this step, the lane falls back to where it was, and the sandbox the reader already has is
  * untouched. `false` when the machine did not happen, so callers can decide what to do next. */
 const provisionHosted = async (): Promise<boolean> => {
@@ -1042,7 +1042,7 @@ const provisionHosted = async (): Promise<boolean> => {
         hostedError.value = noticeFrom(err, `Couldn't start a machine for you right now.`);
         return false;
     } finally {
-        // Whether it worked or not, the count on the server may have moved — a refusal is often the allowance
+        // Whether it worked or not, the count on the server may have moved: a refusal is often the allowance
         // being spent somewhere else, which is a thing this page should then be saying. Inside the busy window,
         // so the rungs stay unclickable until the page knows what it is offering.
         await refreshHostedOffer();
@@ -1051,7 +1051,7 @@ const provisionHosted = async (): Promise<boolean> => {
 };
 
 /* THE WAIT'S ONE RECOVERY, and the reason its failures are worth naming at all: a diagnosis nobody can act on
- * is a nicer spinner. Which recovery is hostedWait.ts's call, because the two are not interchangeable —
+ * is a nicer spinner. Which recovery is hostedWait.ts's call, because the two are not interchangeable:
  * `remake` throws the machine away and builds another (the only thing that fixes an address baked in wrong),
  * `reboot` boots the one that exists (enough for a daemon that died or a tunnel that never bound, and it
  * keeps the files). The reader sees one button either way; the difference is which of them is safe.
@@ -1092,10 +1092,10 @@ const restartHosted = async (): Promise<void> => {
     }
 };
 
-/* The ladder's switch — it moves a MACHINE, never the sandbox. Choosing the hosted rung provisions one for
+/* The ladder's switch: it moves a MACHINE, never the sandbox. Choosing the hosted rung provisions one for
  * the row already on screen; choosing another rung hands the machine back (it has never been connected to,
  * so there is nothing on it to lose) and the row carries on into that lane with its name and address intact.
- * A failure in either direction leaves the reader where they were, with a reason on the card — the previous
+ * A failure in either direction leaves the reader where they were, with a reason on the card: the previous
  * design deleted and recreated the sandbox around every crossing, so one mis-click threw away a typed name
  * and, when the provision then failed, silently landed them in a different lane with no explanation. */
 const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> => {
@@ -1109,8 +1109,8 @@ const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> =
     hostedError.value = undefined;
     const row = created.value;
     const rowHosted = (row?.hosted ?? null) !== null;
-    /* CHOOSING THE HOSTED RUNG STARTS NOTHING. It used to create the machine on the click — the rung WAS the
-     * button — so reading the row cost you a machine, and clicking back off it destroyed one. A picker whose
+    /* CHOOSING THE HOSTED RUNG STARTS NOTHING. It used to create the machine on the click: the rung WAS the
+     * button, so reading the row cost you a machine, and clicking back off it destroyed one. A picker whose
      * options have side effects is not a picker; the card below now carries the button, and until it is
      * pressed this click has done nothing but change what the page is describing. */
     if (next === `hosted`) {
@@ -1126,7 +1126,7 @@ const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> =
             hostedError.value = noticeFrom(err, `Couldn't remove the machine we started. Try again in a moment.`);
             return;
         } finally {
-            // The machine we just handed back is the machine the allowance was counting — re-read it before the
+            // The machine we just handed back is the machine the allowance was counting: re-read it before the
             // rungs go live again, so the one being stepped off is takeable the moment it is clickable.
             await refreshHostedOffer();
             hostedBusy.value = false;
@@ -1135,7 +1135,7 @@ const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> =
     machine.value = next;
 };
 
-// Open the rename box on the row's own name, selected — the name was chosen for the user, so the likeliest
+// Open the rename box on the row's own name, selected: the name was chosen for the user, so the likeliest
 // next keystroke is a replacement rather than an edit.
 const startRename = async (): Promise<void> => {
     name.value = created.value?.name ?? ``;
@@ -1146,7 +1146,7 @@ const startRename = async (): Promise<void> => {
 };
 
 // Commit the rename box (and the attach lane's Name field, which is the same edit under a different roof).
-// Writing the row back is what keeps everything derived from the name honest — the step title, and the sync
+// Writing the row back is what keeps everything derived from the name honest: the step title, and the sync
 // folder the install command carries.
 const saveName = async (): Promise<void> => {
     const row = created.value;
@@ -1178,7 +1178,7 @@ const cancelRename = (): void => {
 // Connect a sandbox that is ALREADY reachable: probe the pasted address from this browser, and only once the
 // daemon has authorized us record it on the platform. Verifying BEFORE creating anything means a typo can't
 // leave an orphan sandbox behind; a retry after a failed attach re-uses
-// the row the previous attempt created. On success there is nothing left to do — straight to the workspace.
+// the row the previous attempt created. On success there is nothing left to do: straight to the workspace.
 const connectDomain = async (): Promise<void> => {
     const url = normalizedDomain.value;
     if (url === undefined || attaching.value) {
@@ -1202,7 +1202,7 @@ const connectDomain = async (): Promise<void> => {
             attachOutcome.value = outcome;
             return;
         }
-        // There is normally a row already — one is created on arrival — and reusing it is what keeps a retry
+        // There is normally a row already: one is created on arrival, and reusing it is what keeps a retry
         // after a failed attach from leaving a stray sandbox behind. The create here covers the one case where
         // there isn't: a lane switch made while the arrival create was failing.
         if (created.value === null) {
@@ -1216,7 +1216,7 @@ const connectDomain = async (): Promise<void> => {
         // rather than left in a box the user is one line away from navigating out of.
         await saveName();
         await sandbox.attach(row.id, url);
-        // Same milestone as the provision lane's announce — the user has a live sandbox in the workspace, and
+        // Same milestone as the provision lane's announce: the user has a live sandbox in the workspace, and
         // the workspace has to open on THAT one (see check()).
         track(`sandbox_connected`, { resuming: resuming.value, attached: true });
         finished.value = true;
@@ -1230,7 +1230,7 @@ const connectDomain = async (): Promise<void> => {
 };
 
 // Flip which lane step 1 heads. Nothing is copied across because nothing is duplicated: the typed name and any
-// row already created stay exactly where they were, so a switch in either direction is lossless — including
+// row already created stay exactly where they were, so a switch in either direction is lossless: including
 // back out of a half-finished attach, whose created row simply continues as the provision lane's sandbox.
 const setLane = (next: "provision" | "attach"): void => {
     lane.value = next;
@@ -1271,7 +1271,7 @@ const mint = async (key: string): Promise<void> => {
         claimedAt.value = null;
     } catch (err) {
         if (isNotFound(err)) {
-            // The platform runs no tunnel fabric — the attach lane is the only honest offer left.
+            // The platform runs no tunnel fabric: the attach lane is the only honest offer left.
             intenticAvailable.value = false;
         } else if (key === targetKey.value) {
             setupError.value = noticeFrom(err, `Couldn't prepare your install command. Try again.`);
@@ -1280,7 +1280,7 @@ const mint = async (key: string): Promise<void> => {
 };
 
 // The locally-built sandbox image a dev sandbox runs. Without it, connect.sh pulls the published
-// sandbox:stable, whose daemon predates any unreleased routes the dev web app calls — every new daemon
+// sandbox:stable, whose daemon predates any unreleased routes the dev web app calls: every new daemon
 // endpoint would answer 404 until the next release. connect.sh's ensure_image never pulls a registry-less
 // tag: it uses the local image, or builds it from the checkout the dev command runs the script from.
 const DEV_SANDBOX_IMAGE = `intentic-sandbox:dev`;
@@ -1289,7 +1289,7 @@ const DEV_SANDBOX_IMAGE = `intentic-sandbox:dev`;
  * nothing can ever pull it: connect.sh builds it, and it can only build it when invoked BY PATH, which is the
  * one form that has a repo to build from. Asking for the released script (scriptSource, the switch the
  * connect-a-computer and connect-a-server blocks carry) and still naming the dev tag would hand out a command
- * that silently runs whatever stale `:dev` image happens to be lying around — or dies on a tag it cannot
+ * that silently runs whatever stale `:dev` image happens to be lying around, or dies on a tag it cannot
  * fetch. So the tag rides the checkout form and nothing else; the rest of the dev env is a URL and a volume
  * name, and travels either way. */
 const buildsFromCheckout = computed(() => platformUrlOverride.value !== undefined && scriptSource.value === `checkout`);
@@ -1297,7 +1297,7 @@ const buildsFromCheckout = computed(() => platformUrlOverride.value !== undefine
 // The shared env suffix each command carries: the local-dev PLATFORM_URL override (plus the shared dev
 // agent-auth volume, so sandboxes created against a localhost platform keep their AI logins across resets,
 // and the locally-built sandbox image so the daemon matches the working tree), and SYNC_DIR when desktop
-// sync is opted in (a folder path, not a secret — the connect script runs the sync agent only when it's set).
+// sync is opted in (a folder path, not a secret: the connect script runs the sync agent only when it's set).
 const platformEnv = (): string =>
     platformUrlOverride.value
         ? ` PLATFORM_URL='${platformUrlOverride.value}' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'${
@@ -1315,7 +1315,7 @@ const syncEnvPs = (): string => (syncEnabled.value ? `$env:SYNC_DIR='${syncDir.v
 
 /* The daemon emits CORS only for the origins WEB_ORIGIN names, and both connect scripts default it to the
  * hosted app (@intentic/constants PLATFORM_WEB_ORIGIN) because that is the one browser origin that calls a
- * daemon in the normal case. THIS PAGE IS THAT BROWSER — so a build served from anywhere else (the localhost
+ * daemon in the normal case. THIS PAGE IS THAT BROWSER, so a build served from anywhere else (the localhost
  * dev SPA, a self-hosted deployment) has to say so in the command it hands out, or the sandbox it creates
  * refuses the very first /health the workspace screen asks for and the user sees only "Failed to fetch".
  * Derived rather than configured: the origin the setup page is loaded from is, by construction, the origin the
@@ -1331,15 +1331,15 @@ const webOriginEnvPs = (): string => {
     return origin === undefined ? `` : `$env:WEB_ORIGIN='${origin}'; `;
 };
 
-// The commands carry only the short-lived setup code (redeemed by the script at /setup/claim) — plus, on the
+// The commands carry only the short-lived setup code (redeemed by the script at /setup/claim): plus, on the
 // own-Cloudflare path, the CF token as an env var (never stored by the platform, so it can't ride the code).
 // Everything between the pipe and `sh`: the runner, then the env assignments the script reads.
 const linuxPrefix = (): string => {
     const envs = `${mode.value === `own` ? ` CF_TOKEN='${cfToken.value.trim()}'` : ``}${platformEnv()}${webOriginEnv()}${syncEnv()}`;
-    // Production's curl|sh install needs root ONLY to install Docker when the machine has none — which is why
+    // Production's curl|sh install needs root ONLY to install Docker when the machine has none, which is why
     // `hasDocker` can drop it (connect.sh then stops with the remedy rather than escalating). Local dev runs
-    // connect.sh BY PATH as the developer — who has docker via their group and their Node toolchain (pnpm) on
-    // PATH — so `sudo` there only resets PATH to root's secure_path, which kills the in-repo `pnpm build:sandbox`
+    // connect.sh BY PATH as the developer, who has docker via their group and their Node toolchain (pnpm) on
+    // PATH, so `sudo` there only resets PATH to root's secure_path, which kills the in-repo `pnpm build:sandbox`
     // the dev image is built from: the build fails "pnpm: command not found" and connect.sh silently falls back
     // to the PREVIOUS image, so the sandbox never runs the working tree. No sudo in dev ⇒ the paste rebuilds.
     const runner = environment.production && !hasDocker.value ? `sudo ` : ``;
@@ -1372,7 +1372,7 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
         code: setup.value.code,
         hostname: setup.value.hostname,
         ...(mode.value === `own` ? { cfToken: cfToken.value.trim() } : {}),
-        // Compose has NO build step and is deployed to a host that must PULL the image — so it always
+        // Compose has NO build step and is deployed to a host that must PULL the image, so it always
         // references the published registry image, never the local `:dev` tag connect.sh rebuilds from the
         // checkout (a local-only tag can't be pulled and won't exist on a deploy target). The rendered file
         // gets pull_policy: always, tracking the moving `:stable` release.
@@ -1384,29 +1384,29 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
 });
 
 /* Which sandbox this page is setting up. Three ways in:
- *   • an id in the URL — the gate's "Open setup", the switcher's unfinished row, requireSetup's redirect
+ *   • an id in the URL: the gate's "Open setup", the switcher's unfinished row, requireSetup's redirect
  *   • nothing in the URL, and the account has NO working sandbox but does own an unfinished one
- *   • none of the above — a fresh account, or the switcher's "Add sandbox" — and one is created on the spot
+ *   • none of the above: a fresh account, or the switcher's "Add sandbox", and one is created on the spot
  *
- * The second exists because leaving mid-setup is normal — you get as far as the command, mean to paste it on
+ * The second exists because leaving mid-setup is normal: you get as far as the command, mean to paste it on
  * the other machine, and close the tab. Coming back to a blank first step is worse than useless there: it hides
  * the sandbox you already made. So an account whose only sandbox is unfinished resumes it wherever it enters from.
  *
  * Gated on there being no connected sandbox anywhere, which is what keeps the switcher's "Add sandbox" honest
- * — that button exists to make a SECOND sandbox, and it is only reachable from a shell that already has a
+ *: that button exists to make a SECOND sandbox, and it is only reachable from a shell that already has a
  * working first one.
  *
- * Owned only — a member can't mint someone else's setup code, so their id gets them a sandbox of their own
+ * Owned only: a member can't mint someone else's setup code, so their id gets them a sandbox of their own
  * instead. The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained. */
 const arrive = async (): Promise<void> => {
     const [rows, offer, address] = await Promise.all([
         sandbox.list(),
-        // An older platform without the route reads as "doesn't host" — the classic lanes carry on unchanged.
+        // An older platform without the route reads as "doesn't host": the classic lanes carry on unchanged.
         // Resolve-then-call so even a client missing the method entirely lands in the catch, not in mount.
         Promise.resolve()
             .then(() => apiClient.sandbox.hostedOffer())
             .catch((): HostedOffer => ({ enabled: false, remaining: 0 })),
-        // WHAT THIS PLATFORM CAN REACH A SANDBOX WITH, asked before anything is drawn — the two offers land
+        // WHAT THIS PLATFORM CAN REACH A SANDBOX WITH, asked before anything is drawn: the two offers land
         // together, so the ladder and the address line are right on their first frame instead of correcting
         // themselves a round-trip later. A platform that cannot answer is one that mints nothing.
         Promise.resolve()
@@ -1419,7 +1419,7 @@ const arrive = async (): Promise<void> => {
      * `mine` and `cloud` both point at a step that can only sit locked while the machine we host sits
      * unoffered behind a hidden picker. And a PHONE takes the hosted rung whenever it is on offer: `cloud`
      * earned the phone default by being the one lane a phone finishes alone, but it opens on a cloud
-     * credential paste — the hosted rung finishes alone too, off a single tap. */
+     * credential paste: the hosted rung finishes alone too, off a single tap. */
     if (hostedOffered.value && !hostedSpent.value && (mobile.value || !commandOffered.value)) {
         machine.value = `hosted`;
     }
@@ -1438,8 +1438,8 @@ const arrive = async (): Promise<void> => {
     name.value = found.name;
     created.value = found;
     resuming.value = true;
-    // A resumed sandbox that was provisioned last visit continues as the story it is — hosted machines may
-    // still be booting (or asleep — the wake reflex handles that), and cloud machines hold a code the command
+    // A resumed sandbox that was provisioned last visit continues as the story it is: hosted machines may
+    // still be booting (or asleep: the wake reflex handles that), and cloud machines hold a code the command
     // lane must not re-ask for.
     if ((found.hosted ?? null) !== null) {
         machine.value = `hosted`;
@@ -1469,13 +1469,13 @@ onMounted(async () => {
  * user's list, wearing a "Setup" chip, that they never asked for and could not tell apart from one they meant to
  * make. Looking at a thing must not create it.
  *
- * So the row is a DRAFT until something happens that only somebody who means it would do — and leaving without
+ * So the row is a DRAFT until something happens that only somebody who means it would do, and leaving without
  * one of those discards it. Every clause below is an act, not a guess from elapsed time:
- *   • the command is on a clipboard, in an inbox, or handed to the app — it may already be running somewhere
- *   • a machine exists (ours or the reader's cloud account) — there is hardware behind this row now
- *   • a machine redeemed the code, or reported on its run — the sandbox is being built as we speak
- *   • the daemon checked in, or an attach bound one — it is a workspace, not a draft
- *   • the name was typed over the one we picked — nobody renames a machine they are about to abandon
+ *   • the command is on a clipboard, in an inbox, or handed to the app: it may already be running somewhere
+ *   • a machine exists (ours or the reader's cloud account): there is hardware behind this row now
+ *   • a machine redeemed the code, or reported on its run: the sandbox is being built as we speak
+ *   • the daemon checked in, or an attach bound one: it is a workspace, not a draft
+ *   • the name was typed over the one we picked: nobody renames a machine they are about to abandon
  *
  * Deliberately NOT in the list: which lane or rung is selected, an expanded disclosure, a pasted Cloudflare
  * token, a typed domain that was never verified. Those are all still looking. */
@@ -1494,11 +1494,11 @@ const committed = computed(
 );
 
 /* Throw the draft away. Owner-delete drops the platform row AND the intentic-provided tunnel the mint bought,
- * so a peek leaves nothing behind on either side — which is the whole point of doing this rather than just
+ * so a peek leaves nothing behind on either side, which is the whole point of doing this rather than just
  * hiding the row.
  *
  * Fire-and-forget by design: every caller is on its way somewhere (an unmount, a lane's replacement create), and
- * `remove` drops the row from the shared cache synchronously before its first await — so the switcher is already
+ * `remove` drops the row from the shared cache synchronously before its first await, so the switcher is already
  * clean on the frame the reader lands back in the workspace. A failure is swallowed for the same reason it is
  * not retried: nobody is waiting on it, and a sandbox that outlives this is exactly what the switcher's
  * unfinished section is there to catch. */
@@ -1513,10 +1513,10 @@ const discardDraft = (): void => {
 };
 
 // Escape hatch from a resumed setup: forget the resumed sandbox and start a new one in its place. Everything
-// derived from the resumed sandbox resets too — its minted code, hostname, and token-derived subdomain must
+// derived from the resumed sandbox resets too: its minted code, hostname, and token-derived subdomain must
 // not leak into the sandbox created next.
 const startFresh = (): void => {
-    // Walking away from a row THIS visit minted is the same abandonment as leaving the page — the replacement is
+    // Walking away from a row THIS visit minted is the same abandonment as leaving the page: the replacement is
     // created two lines down, and two drafts for one reader is the mess this rule exists to prevent. A resumed
     // sandbox is untouched (it fails `createdHere`): it is the user's, from before, and they are only setting it
     // aside.
@@ -1529,7 +1529,7 @@ const startFresh = (): void => {
     setup.value = null;
     mintedFor.value = undefined;
     setupError.value = undefined;
-    // A resumed hosted sandbox being walked away from keeps existing (it is the user's, with their files) —
+    // A resumed hosted sandbox being walked away from keeps existing (it is the user's, with their files):
     // but the fresh one starts on the classic lane: the hosted allowance is likely spent on the row being left.
     hostedSince.value = undefined;
     if (machine.value === `hosted`) {
@@ -1540,12 +1540,12 @@ const startFresh = (): void => {
     copied.value = false;
     launched.value = false;
     claimedAt.value = null;
-    // The provisioned machine belongs to the abandoned sandbox — the next one has no machine yet, and keeping
+    // The provisioned machine belongs to the abandoned sandbox: the next one has no machine yet, and keeping
     // the stamp would freeze its mint (see the watcher below) for a VM that claims someone else's code.
     cloudMachine.value = null;
     subdomain.value = ``;
     derivedPrefix.value = ``;
-    // The attach lane's inputs described the sandbox being abandoned — a stale domain would otherwise be sitting
+    // The attach lane's inputs described the sandbox being abandoned: a stale domain would otherwise be sitting
     // in the field, ready to be attached to whichever sandbox is created next.
     domain.value = ``;
     attachToken.value = ``;
@@ -1563,7 +1563,7 @@ const timer = setInterval(() => void check(), 3000);
  *
  * Three seconds is the right cadence for a page someone is watching, and the wrong one for a page nobody is:
  * a hidden tab has its timers throttled to something closer to a minute, and inside the desktop app this page
- * is hidden for the WHOLE install — the app's own window takes the frame while the script runs (windows.rs).
+ * is hidden for the WHOLE install: the app's own window takes the frame while the script runs (windows.rs).
  * So the poll that is supposed to notice a live daemon in three seconds noticed it minutes later, and
  * `sandbox_connected` carried that lateness into the funnel with it. Coming back to the front is precisely
  * when the answer is most likely to have changed, so it is worth a poll of its own. `check` is re-entrant
@@ -1581,7 +1581,7 @@ onUnmounted(() => {
     clearTimeout(mintTimer);
     document.removeEventListener(`visibilitychange`, recheck);
     window.removeEventListener(`focus`, recheck);
-    /* LEAVING WITHOUT COMMITTING THROWS THE DRAFT AWAY — "Back to workspace", the browser's back button, a deep
+    /* LEAVING WITHOUT COMMITTING THROWS THE DRAFT AWAY: "Back to workspace", the browser's back button, a deep
      * link, any of them. This is the only exit hook there is: `beforeunload` cannot hold a page open for a
      * round-trip, so a closed tab keeps its draft and the switcher's unfinished section is what picks it up. */
     discardDraft();
@@ -1598,7 +1598,7 @@ watch(
         if (key === undefined || created.value === null || mintedFor.value === key) {
             return;
         }
-        // A provisioned cloud machine boots holding THE minted code — re-minting would overwrite it
+        // A provisioned cloud machine boots holding THE minted code: re-minting would overwrite it
         // server-side and the machine's claim would find a code that no longer exists. Once one exists, the
         // code is frozen with it.
         if (cloudMachine.value !== null) {
@@ -1609,7 +1609,7 @@ watch(
     { immediate: true },
 );
 
-// Ask for the address again after a mint that failed — the retry beside the reason on the run step. The
+// Ask for the address again after a mint that failed: the retry beside the reason on the run step. The
 // watcher above only fires on a CHANGED target, and a failure changes nothing about what was asked for, so
 // without this the only way back was reloading the page.
 const remint = (): void => {
@@ -1637,12 +1637,12 @@ watch(
     { immediate: true },
 );
 
-// Warm the browser→sandbox Google credential as soon as the install command is ready — while the user copies and
-// runs it — instead of lazily on the first daemon call after the post-connect redirect. The ID token is a
+// Warm the browser→sandbox Google credential as soon as the install command is ready, while the user copies and
+// runs it: instead of lazily on the first daemon call after the post-connect redirect. The ID token is a
 // Google-signed JWT the daemon verifies; minting it needs no daemon, so having it cached means the workspace is
 // reachable the instant the daemon reports in (no connecting-gate stall). Fired once.
 //
-// SILENT, and it must stay that way. This fires the moment step 2 renders a command — the sandbox does not
+// SILENT, and it must stay that way. This fires the moment step 2 renders a command: the sandbox does not
 // exist yet, the command has not been copied, and the user may well close the tab instead. Warming through
 // `getIdToken` put a full-screen sign-in gate over that command whenever Google couldn't renew quietly (One Tap
 // cooldown, a browser that blocks FedCM), which reads as being asked to sign in twice to set up a machine that
@@ -1662,7 +1662,7 @@ watch(commandReady, (ready) => {
     <!-- dvh, not vh: a phone's collapsing browser chrome makes 100vh taller than the screen, which parks the
          last step under the address bar on first paint. -->
     <div class="scrollbar-thin min-h-dvh w-full overflow-auto bg-canvas text-content">
-        <!-- The page widens at xl to make room for a second column — see the aside below the steps. Below that
+        <!-- The page widens at xl to make room for a second column: see the aside below the steps. Below that
              it is the single centred column it has always been, and max-w-3xl still governs the steps
              themselves, so the command never gets narrower than it is today at any width. 74rem is that
              arithmetic: steps (max-w-3xl) + gap + the aside's own width, so widening the aside to fit the
@@ -1675,7 +1675,7 @@ watch(commandReady, (ready) => {
                  width instead of collapsing to "Set up / your / workspace" beside a button pushed off-screen. -->
             <header class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <!-- Escape hatch for a returning user: they have a workspace that already works, so /'s
-                     requireSetup guard lets them back into it. Hidden for a new user, who'd only bounce back —
+                     requireSetup guard lets them back into it. Hidden for a new user, who'd only bounce back:
                      which is what `length > 0` was for, and what it stopped doing the moment this page created
                      a row of its own: naming a sandbox made "Back to workspace" appear beside the very first
                      step, offering a finished workspace to someone who has not run anything yet. -->
@@ -1701,13 +1701,13 @@ watch(commandReady, (ready) => {
                      wrapper is a normal block again and the two stack beside the logo as before. -->
                 <div class="contents md:block md:min-w-0 md:flex-1">
                     <!-- Medium, not semibold, and every heading under it follows: at a screen's worth of dark
-                         surfaces this page was set almost entirely in bold — page title, three step headings, the
-                         panel's — and a hierarchy in which everything is emphasised has none. Size and colour
+                         surfaces this page was set almost entirely in bold: page title, three step headings, the
+                         panel's, and a hierarchy in which everything is emphasised has none. Size and colour
                          carry it now; weight only marks the step you are being asked to read.
                          FOUR SIZES ON THE WHOLE PAGE, and they are the theme's own: this title, a card heading
-                         (StepSection's, at the body size), `text-sm` for the things that are VALUES — the two
+                         (StepSection's, at the body size), `text-sm` for the things that are VALUES: the two
                          facts, a rung's name, the panel's heading, anything sitting in or beside a field, since
-                         `ui.input` is that size — and `text-xs` for every word that is prose. `text-2xs` is
+                         `ui.input` is that size, and `text-xs` for every word that is prose. `text-2xs` is
                          gone from this flow entirely: an 11px caption under 12px body is not a tier anybody
                          reads as one, it is the same sentence looking accidentally smaller, and this page had it
                          in nine places. A 24px title over an 11px line was the widest ramp in the app for the
@@ -1730,8 +1730,8 @@ watch(commandReady, (ready) => {
             <div class="flex flex-col gap-3 md:gap-4 xl:flex-row xl:items-start xl:gap-6">
                 <div class="flex min-w-0 flex-1 flex-col gap-3 md:gap-4 xl:max-w-3xl">
                     <!-- THE ATTACH LANE'S WHOLE FLOW: one address for a sandbox that is already running and
-                         reachable. It keeps a titled card because it ASKS for something — a card with a form on
-                         it and no heading is a form nobody knows the purpose of — and it takes an icon rather
+                         reachable. It keeps a titled card because it ASKS for something: a card with a form on
+                         it and no heading is a form nobody knows the purpose of, and it takes an icon rather
                          than a number, since it is the whole flow and a "1" would promise a step 2 that is never
                          coming. -->
                     <StepSection v-if="lane === `attach`" icon="link" title="Connect your sandbox">
@@ -1740,7 +1740,7 @@ watch(commandReady, (ready) => {
                              naming what this platform does turns it into the flow it actually is. -->
                         <p v-if="!provisionOffered" class="flex items-start gap-2 text-xs text-muted">
                             <Icon name="info-circle" class="mt-0.5 shrink-0" />
-                            <span>This platform doesn't start sandboxes or hand out addresses — it connects to one you're already running.</span>
+                            <span>This platform doesn't start sandboxes or hand out addresses: it connects to one you're already running.</span>
                         </p>
                         <p class="text-xs text-muted">
                             Already running the sandbox container behind a domain of your own? Give us the address it answers on. We'll check it, then
@@ -1782,7 +1782,7 @@ watch(commandReady, (ready) => {
                         </label>
 
                         <!-- The SAME `name` the rename box binds, so switching lanes never loses what was typed.
-                     It arrives filled in — the row was created on the way in — and Connect commits whatever
+                     It arrives filled in: the row was created on the way in, and Connect commits whatever
                      is in it, so this lane asks for a domain and nothing else unless the user wants to. -->
                         <label class="ui-field">
                             <span class="ui-field-label">Name</span>
@@ -1813,7 +1813,7 @@ watch(commandReady, (ready) => {
                                 detail: `Something is listening, but it isn't replying: a sandbox still starting up, or a proxy pointed at the wrong port. Give it a moment and try again.`,
                             }"
                         />
-                        <!-- The tunnel/proxy is alive but has no sandbox behind it — overwhelmingly the case when a
+                        <!-- The tunnel/proxy is alive but has no sandbox behind it: overwhelmingly the case when a
                      resumed sandbox's container is gone, so name that instead of quoting a 530. -->
                         <Notice
                             v-else-if="attachOutcome?.kind === `no-origin`"
@@ -1865,7 +1865,7 @@ watch(commandReady, (ready) => {
 
                         <Notice v-if="error" :of="error" />
                         <!-- With a row already in hand, going back CONTINUES that sandbox through the run step rather
-                     than setting a new one up — the label has to say which of the two it is.
+                     than setting a new one up: the label has to say which of the two it is.
                      Gone entirely where there is nothing to go back TO: on a platform that neither hosts nor
                      hands out addresses, both labels promise something it cannot do, and this lane is the flow
                      rather than a detour off one. -->
@@ -1880,31 +1880,31 @@ watch(commandReady, (ready) => {
                     </StepSection>
 
                     <!-- THE SANDBOX, AS A FACT RATHER THAN A STEP: what it is called. Already true when the card
-                         renders — created on arrival — so it asks for nothing, and a card that asks for nothing
+                         renders: created on arrival, so it asks for nothing, and a card that asks for nothing
                          has no business wearing a step number or a heading. "Your sandbox" above a row labelled
                          "Name" was a title that only restated the label under it.
                          THE ADDRESS USED TO SIT HERE TOO, and moving it is what this card is now short for. A
                          hostname nobody typed, nobody can parse and nobody is deciding held the page's most
-                         valuable position — first thing a stranger reads, above the only choice on the page —
+                         valuable position: first thing a stranger reads, above the only choice on the page:
                          and its escape hatch ("Use a different address") put an advanced path there with it.
                          It is a CONSEQUENCE of the rung, so it now reports itself on the run card, above the
                          command whose hostname it is. What is left here is the one line that is genuinely
                          about the sandbox rather than about the machine under it.
                          The card chrome is StepSection's own, spelled out here because this is the one card on
-                         the page that is deliberately not a step — and it is deliberately SHALLOWER than one:
+                         the page that is deliberately not a step, and it is deliberately SHALLOWER than one:
                          a fact on a line does not need a step's padding around it, and every pixel this card
                          spends is pushing the only decision on the page further down it. -->
                     <section v-else class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3 md:px-5 md:py-4">
                         <!-- BEFORE THE MOUNT READ HAS ANSWERED there is no story to tell yet, and telling the
                              one below would be telling the wrong one: `created` is null and `creating` is false
                              on the first frame of every visit, which is the shape of a create that FAILED. So
-                             the card opened on "Try again" for the fraction of a second the list took to land —
+                             the card opened on "Try again" for the fraction of a second the list took to land:
                              an error the reader saw, could not read, and never had. A spinner with no words on
                              it is the honest thing to show while the answer is in flight. -->
                         <p v-if="!loaded" class="flex items-center gap-2 text-xs text-muted">
                             <Icon name="spinner" spin class="text-info" />
                         </p>
-                        <!-- No row yet, which on this lane means the arrival create is in flight or has failed —
+                        <!-- No row yet, which on this lane means the arrival create is in flight or has failed:
                              never a form waiting to be filled in. Both states are one line, because neither is
                              something the user has to do anything about. -->
                         <template v-else-if="created === null">
@@ -1927,21 +1927,21 @@ watch(commandReady, (ready) => {
                         <template v-else>
                             <!-- Two different histories, and only one of them is a reconnect. A sandbox that ran
                                  before was torn down locally; one that was made here and never started is simply
-                                 where the user left off — telling them a container was cleared would be describing
+                                 where the user left off: telling them a container was cleared would be describing
                                  a machine that never existed.
                                  ONE LINE, WITH THE WAY OUT INSIDE IT. It was a two-line paragraph ending in "or
                                  create a new sandbox instead", above a link that said "Not this one? Create a new
-                                 sandbox instead" — the same sentence twice, three lines tall, at the top of the
+                                 sandbox instead": the same sentence twice, three lines tall, at the top of the
                                  page, to report something the reader had not asked about.
                                  The two histories are ONE interpolation rather than two `<template v-if>`
                                  branches, because the space before the link would then be a text node between two
-                                 elements, and the compiler condenses those away — the sentence ran straight into
+                                 elements, and the compiler condenses those away: the sentence ran straight into
                                  the link. -->
                             <p v-if="resuming" class="text-xs text-muted">
                                 {{
                                     neverStarted
-                                        ? `Picking up where you left off — nothing has run yet.`
-                                        : `Still on the platform — the cleanup only cleared its local container.`
+                                        ? `Picking up where you left off: nothing has run yet.`
+                                        : `Still on the platform, the cleanup only cleared its local container.`
                                 }}
                                 <button type="button" class="cursor-pointer text-link hover:underline" @click="startFresh">
                                     Use a new sandbox instead</button
@@ -1952,7 +1952,7 @@ watch(commandReady, (ready) => {
                                  between them makes the second read as a different kind of thing from the first. -->
                             <div class="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
                                 <!-- THE NAME, AS A LINE RATHER THAN A HEADING. Nobody typed it, so the row that reports
-                                 it is also where it is changed — and the change is a pencil, not a sentence: the
+                                 it is also where it is changed, and the change is a pencil, not a sentence: the
                                  card used to spend a paragraph explaining that the name was a default and a link
                                  saying so again, which is three lines of apology for a word the user can simply
                                  overwrite. The label is muted, so the value is the thing the
@@ -1960,19 +1960,19 @@ watch(commandReady, (ready) => {
                                  ever touched.
                                  STRICTLY IN PLACE, the way the sandbox settings header renames: pressing the pencil
                                  used to replace this row with a stacked field and two labelled buttons, which moved
-                                 every glyph on the card and shoved the run step down the page — a jump, on a card
+                                 every glyph on the card and shoved the run step down the page: a jump, on a card
                                  whose whole job is to sit still while you read it. -->
                                 <span :class="factLabel">Name</span>
                                 <div class="flex min-w-0 items-center">
                                     <!-- The name and the field it becomes share ONE grid cell at one type scale, one
                                      height and one padding, so switching modes paints a border and nothing else.
                                      The hidden sizer gives the field the width of the text it holds instead of the
-                                     whole row — with `size="1"` on the input, which is what lets it: an input
+                                     whole row, with `size="1"` on the input, which is what lets it: an input
                                      carries an intrinsic width of about twenty characters, and in a `w-fit` cell
                                      THAT is what decided the column, so the field opened ~100px wider than the
                                      name and shoved the two buttons beside it sideways. Same jump, last axis.
                                      THE ADDRESS WEARS THE SAME EMPTY SLOT (`factSlot`), so the two values sit at
-                                     one height and one padding however the name is being read — as a word or as
+                                     one height and one padding however the name is being read: as a word or as
                                      a field it has just become. -->
                                     <div class="grid w-fit max-w-full min-w-0 grid-cols-1 grid-rows-1">
                                         <template v-if="renaming">
@@ -2000,7 +2000,7 @@ watch(commandReady, (ready) => {
                                      is `invisible`, which keeps its size while leaving the tab order.
                                      32px rather than the recipe's 24: these are not in a toolbar of their peers,
                                      they are alone beside a line of text on a card people reach on a phone. And a
-                                     step dimmer than the recipe's muted — the name is the thing being read here,
+                                     step dimmer than the recipe's muted: the name is the thing being read here,
                                      and an affordance beside one word should not compete with it. -->
                                     <div class="grid grid-cols-1 grid-rows-1 items-center">
                                         <div class="col-start-1 row-start-1 flex items-center" :class="renaming ? `invisible` : ``">
@@ -2042,21 +2042,21 @@ watch(commandReady, (ready) => {
                         </template>
                     </section>
 
-                    <!-- Step 2: run the sandbox — and the whole reason this page loses people. A copy-paste command is
+                    <!-- Step 2: run the sandbox, and the whole reason this page loses people. A copy-paste command is
                  no more dangerous than an .msi, but it arrives without any of an installer's affordances: no
                  publisher, no preview of what will happen, no list of what it changes, no uninstaller.
                  The wait folded in here too: watching for the daemon asked nothing of the user, so a card of its
-                 own was chrome around one sentence — and that sentence belongs under the command that causes it.
+                 own was chrome around one sentence, and that sentence belongs under the command that causes it.
 
                  EVERY VISIBLE ACTOR ON THIS CARD IS THE USER. The title used to read "Run your sandbox", which
-                 names no one — people read it as something the platform was doing for them, sat through a
+                 names no one: people read it as something the platform was doing for them, sat through a
                  spinner that started before they had done anything, and pressed the only button on the card
                  ("Check now") until they gave up. So the title gives the instruction and names the machine, and
                  the wait at the bottom is a state machine over the handoff (see `handoff`) rather than one
                  perpetual "waiting…".
 
                  WHAT IS ON THE CARD IS WHAT YOU DO; WHAT IS IN THE PANEL IS WHAT IT MEANS. The card carries the
-                 command, the two switches that reshape it, and one line of state — and nothing else, because a
+                 command, the two switches that reshape it, and one line of state, and nothing else, because a
                  step people are trying to get through is not where prose belongs. Everything that is worth
                  knowing but not worth reading right now (what gets created, what is written outside Docker, how
                  to remove all of it) moved to SetupRunDetails, which is docked in a column of its own from xl
@@ -2065,14 +2065,14 @@ watch(commandReady, (ready) => {
 
                  AND ON A PHONE, WHAT YOU DO IS NOT THE COMMAND. The card here is one sentence, one button and
                  one line of state: the step happens on a computer this browser is not, so the email handoff is
-                 the whole of it. The command and everything that dresses it — three tabs, a code block, a copy
-                 button, two checkboxes, a dev note — sat between that button and the state line, five bordered
+                 the whole of it. The command and everything that dresses it: three tabs, a code block, a copy
+                 button, two checkboxes, a dev note: sat between that button and the state line, five bordered
                  surfaces deep (card → panel → button, plus the tab track and the code frame), all of it in
                  service of a clipboard the target machine cannot read. It is now one line's worth of
                  disclosure, addressed to the one reader it is true for: someone holding an SSH session. -->
 
                     <!-- No number on the badge. The card above it reports facts and asks for nothing, so it is not
-                         a step and does not wear one — which leaves this as the only thing on the page anybody has
+                         a step and does not wear one, which leaves this as the only thing on the page anybody has
                          to DO, and a lone "2" beside an unnumbered card counts a spine that isn't there. The icon
                          says which kind of card this is instead, exactly as the attach lane's does. -->
                     <!-- WHERE THE SANDBOX RUNS, AND THEN THE ONE THING THAT MAKES IT RUN. No step chrome and no
@@ -2080,11 +2080,11 @@ watch(commandReady, (ready) => {
                          your computer" over a chooser that also offers a machine you never touch), and the
                          chooser says what this card is about better than a title could. Same bare-section
                          shape as the sandbox card above it, for the same reason. -->
-                    <!-- THE LADDER — ITS OWN ROW, OUTSIDE EVERY CARD. It answers "which machine", and what
+                    <!-- THE LADDER: ITS OWN ROW, OUTSIDE EVERY CARD. It answers "which machine", and what
                          follows is the consequence of that answer: nesting it inside the run card put a
                          three-column picker inside a bordered surface inside a column, and the choice read as
                          a detail of the step it actually decides. Out here it is the row the page turns on,
-                         and each rung is its own card — which is also what stopped the rungs from needing a
+                         and each rung is its own card, which is also what stopped the rungs from needing a
                          card around them to look like objects.
                          Hidden in the desktop app, where "this computer" is the whole point of being in it. -->
                     <div v-if="created && lane === `provision` && ladderShown" class="flex flex-col gap-2">
@@ -2115,13 +2115,13 @@ watch(commandReady, (ready) => {
                                      to be a 16px icon beside the title, after a stacked 2xl glyph was pulled
                                      for spending a third of the card on a bolt that only said "instantly"
                                      again. What sits here now is a drawing of where the machine would live,
-                                     which is the one thing on this page a stranger cannot look up — so it
+                                     which is the one thing on this page a stranger cannot look up, so it
                                      earns the height the synonym could not.
                                      The spinner takes the drawing's PLACE rather than a corner of it: while a
                                      machine is being started there is nothing to choose, and a spinner pinned
                                      to a picture reads as an illustration that has broken. The two stack in one
                                      grid cell and the drawing goes `invisible` rather than away, so the cell
-                                     keeps the artwork's exact height and the row cannot jump — the same trick
+                                     keeps the artwork's exact height and the row cannot jump: the same trick
                                      the name row above uses for its pencil and its Save pair, and for the same
                                      reason. A hand-written height here would be a second copy of a number the
                                      drawing already owns. -->
@@ -2153,13 +2153,13 @@ watch(commandReady, (ready) => {
                     </div>
 
                     <section v-if="created && lane === `provision`" class="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 md:p-5">
-                        <!-- WHERE THIS MACHINE WILL ANSWER — the rung's consequence, reported by the card the rung
+                        <!-- WHERE THIS MACHINE WILL ANSWER: the rung's consequence, reported by the card the rung
                              chose. It spent a release as the second line of the sandbox card, which put a hex
                              hostname above the only decision on the page and made a stranger skip it to reach the
                              choice. Down here it is read by somebody who has already picked, next to the command
                              that carries it, and each rung's answer is the one that belongs to that rung: a hosted
                              machine announces its own, this platform may hand out none, the default is minted from
-                             the connect token, and the last is a Cloudflare zone of the reader's — the only one
+                             the connect token, and the last is a Cloudflare zone of the reader's: the only one
                              that is a FORM rather than a fact, which is why it takes the whole block instead of a
                              row in it.
                              It leads the card in every lane, so "the token above", "the address above" and the
@@ -2173,12 +2173,12 @@ watch(commandReady, (ready) => {
                             <div v-if="addressFact !== `own`" class="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
                                 <span :class="factLabel">Address</span>
                                 <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                                    <!-- A hosted sandbox's address is the daemon's own announce — no mint, no
+                                    <!-- A hosted sandbox's address is the daemon's own announce: no mint, no
                                          escape hatches: the machine is born holding its tunnel, and the page
                                          redirects the moment this turns real.
                                          KEYED ON THE RUNG, NOT ON THE MACHINE. Now that choosing that rung starts
                                          nothing, there is a stretch with the hosted lane selected and no machine
-                                         behind it — and read off the machine, this fell through to the mint's
+                                         behind it, and read off the machine, this fell through to the mint's
                                          spinner and promised a domain that lane never asks for. A spinner before
                                          the button is pressed is the same lie the addressless platform used to
                                          tell. -->
@@ -2196,7 +2196,7 @@ watch(commandReady, (ready) => {
                                         This platform doesn't set one up
                                     </span>
                                     <template v-else>
-                                        <!-- `.title` — this is a NoticeModel, and interpolating the object itself
+                                        <!-- `.title`: this is a NoticeModel, and interpolating the object itself
                                              put its JSON on the card. -->
                                         <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
                                         <span v-else-if="setup" :class="`${factSlot} break-words`">{{ setup.hostname }}</span>
@@ -2205,7 +2205,7 @@ watch(commandReady, (ready) => {
                                         </span>
                                         <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and
                                              "Already reachable at a domain? Connect it" were two links, in two
-                                             places, asking the same question — how should this be reached — and the
+                                             places, asking the same question: how should this be reached, and the
                                              reader had to know the difference between provisioning under their zone
                                              and attaching an address that already answers BEFORE they could tell
                                              which link was theirs. Now one link opens both, each stating what it
@@ -2218,7 +2218,7 @@ watch(commandReady, (ready) => {
                             </div>
 
                             <!-- What the row could not say on its own line, under it rather than in it: this
-                                 platform hands out no addresses, so here is the one thing that does work — and the
+                                 platform hands out no addresses, so here is the one thing that does work, and the
                                  two ways off the default one, opened by the link above. They were rows in a
                                  bordered inset with a caption each: a second frame, inside a card, to hold two
                                  choices that fit on one line. The labels carry the distinction, which is the only
@@ -2241,7 +2241,7 @@ watch(commandReady, (ready) => {
 
                             <!-- Own Cloudflare: token + zone + editable subdomain. The way back sits on a row with
                                  the (i) that explains the token, which is the corner the step header used to keep
-                                 it in — this card has no header to hang it off any more. -->
+                                 it in: this card has no header to hang it off any more. -->
                             <template v-if="addressFact === `own`">
                                 <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                                     <button v-if="intenticAvailable" type="button" :class="ui.linkButton()" @click="mode = `intentic`">
@@ -2273,7 +2273,7 @@ watch(commandReady, (ready) => {
                                 />
 
                                 <!-- Editable domain: the subdomain prefix under the chosen zone. The zone suffix wraps
-                                     to its own line rather than stealing width from the one part that is editable — an
+                                     to its own line rather than stealing width from the one part that is editable: an
                                      account's zone can be long, and on a phone the two together left no field to type
                                      in. -->
                                 <label v-if="selectedZone" class="ui-field">
@@ -2304,14 +2304,14 @@ watch(commandReady, (ready) => {
                              attempt used to bounce the reader into another lane with the reason already erased. -->
                         <Notice v-if="hostedError" :of="hostedError" />
 
-                        <!-- THE HOSTED WAIT. Nothing to run and nothing to copy — the platform is doing the work
-                             — but "the platform is doing the work" was the entire message for every one of the
+                        <!-- THE HOSTED WAIT. Nothing to run and nothing to copy: the platform is doing the work
+                            , but "the platform is doing the work" was the entire message for every one of the
                              several minutes it can take, and for every way it can fail. A spinner is honest
                              about there being nothing to DO; it was never honest about there being nothing to
                              KNOW, and people sat through a wedged tunnel because the page could not tell them
                              apart from a slow boot.
 
-                             So: the steps, ticking, while it is going fine — or what broke and what happens
+                             So: the steps, ticking, while it is going fine, or what broke and what happens
                              next, when it isn't. Never both (hostedWait.ts owns that decision, the way
                              setupReport.ts owns step 2's). -->
                         <template v-if="machine === `hosted`">
@@ -2357,7 +2357,7 @@ watch(commandReady, (ready) => {
                                         </li>
                                     </ul>
                                     <!-- The promise under the list is the view's (hostedWait.ts): the estimate
-                                         this machine's origin earns, then — once minutes are on the clock —
+                                         this machine's origin earns, then: once minutes are on the clock:
                                          how many, so a long download reads as counted work, never as a hang. -->
                                     <p class="text-xs text-muted">{{ hostedWait.note }}</p>
                                 </template>
@@ -2368,8 +2368,8 @@ watch(commandReady, (ready) => {
                             </p>
                             <!-- NOTHING HAS BEEN CREATED YET, AND THIS IS THE THING THAT CREATES IT. The rung
                                  above is a description; this is the commitment, which is why the one fact about
-                                 this machine that changes what a reasonable person does — its disk is ours and we
-                                 do not back it up — is stated HERE, where somebody is deciding, rather than as
+                                 this machine that changes what a reasonable person does: its disk is ours and we
+                                 do not back it up: is stated HERE, where somebody is deciding, rather than as
                                  small print under a picker they were only reading.
                                  `hostedError` above already says why a previous attempt failed, so this doubles
                                  as the retry without having to call itself one. -->
@@ -2388,14 +2388,14 @@ watch(commandReady, (ready) => {
                                         that's using it.
                                     </template>
                                     <template v-else>
-                                        It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep
+                                        It sleeps while you're away and wakes when you come back. We don't back it up: turn on desktop sync, or keep
                                         your work in a git remote.<template v-if="hostedHours"> Unopened for a few weeks, it's removed.</template>
                                     </template>
                                 </p>
                             </template>
                         </template>
 
-                        <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
+                        <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready: a
                      command missing the token/zone/subdomain or the provisioned tunnel would just fail in the sandbox.
                      A FAILED mint gets a notice and a retry instead of the dashed placeholder: "Preparing your
                      intentic domain…" that never resolves is the state that made this page read as broken, and
@@ -2416,14 +2416,14 @@ watch(commandReady, (ready) => {
                         <template v-else>
                             <template v-if="machine === `cloud` && cloudOffered">
                                 <!-- The machine boots headless with no Cloudflare of its own, so only the
-                                     intentic-provided tunnel can make it reachable — a step-2 own-zone pick has
+                                     intentic-provided tunnel can make it reachable: a step-2 own-zone pick has
                                      to be walked back before the form is any use. -->
                                 <p v-if="mode !== `intentic`" class="flex items-start gap-2 text-xs text-muted">
                                     <Icon name="info-circle" class="mt-0.5 shrink-0" />
                                     <span>Cloud machines use intentic's domain. Switch the address above back to intentic's to create one.</span>
                                 </p>
                                 <!-- Provisioned: the form's work is done, and the one fact worth keeping on screen
-                                     is where the machine lives — the wait below narrates the rest. -->
+                                     is where the machine lives: the wait below narrates the rest. -->
                                 <p v-else-if="cloudMachine" class="flex items-start gap-2 text-xs text-muted">
                                     <Icon name="check" class="mt-0.5 shrink-0 text-success" />
                                     <span class="min-w-0">
@@ -2436,12 +2436,12 @@ watch(commandReady, (ready) => {
                             <template v-else>
                                 <!-- Inside the desktop app the terminal is gone: one click hands this same setup code to the
                                  app, which runs the same connect script on this machine and streams what it says into
-                                 its manager window. So in the app this IS the step — a line of consequence, the button
+                                 its manager window. So in the app this IS the step: a line of consequence, the button
                                  that causes it, and a way out for someone who wanted a server after all.
                                  It used to be a tinted, bordered panel carrying its own "Run it on this computer"
                                  heading with a primary button inside: the step title, the panel heading and the button
                                  label all saying the same sentence, three boxes deep, inside a card that already has a
-                                 border. The title above names the machine, so the button only has to name the verb —
+                                 border. The title above names the machine, so the button only has to name the verb:
                                  which is also the shape the app's other two handoffs use (HostRecreate, the
                                  environment card), and there is no reason onboarding should be the loud one. -->
                                 <template v-if="desktop">
@@ -2453,7 +2453,7 @@ watch(commandReady, (ready) => {
                                         <template #icon><Icon name="bolt" /></template>
                                     </Button>
                                     <!-- THE OTHER RUNGS, ONE CLICK AWAY RATHER THAN ABSENT.
-                                         They were hidden here on the argument that the app IS the computer — which
+                                         They were hidden here on the argument that the app IS the computer, which
                                          is true until this computer cannot run it, and the readers who meet that are
                                          precisely the ones with no WSL2, no Docker and no administrator. The app's
                                          requirements screen links straight to this with `?elsewhere=1`, so the
@@ -2473,7 +2473,7 @@ watch(commandReady, (ready) => {
                                 </template>
 
                                 <!-- …and in a browser, the same answer one install earlier: the app, for the
-                                     machine this reader is on. One button and nothing else — the sentence that
+                                     machine this reader is on. One button and nothing else: the sentence that
                                      would sell it is the sentence the reader is already deciding without, and the
                                      app's own first screen is the branch above, where the button finishes the job.
                                      `secondary` is deliberately NOT used here: this is the step, and the only
@@ -2488,7 +2488,7 @@ watch(commandReady, (ready) => {
                                     <template #icon><Icon name="download" /></template>
                                 </Button>
 
-                                <!-- On a phone, the step's actual next move — see SetupHandoff.vue. It goes ABOVE the
+                                <!-- On a phone, the step's actual next move: see SetupHandoff.vue. It goes ABOVE the
                                  command because the command is the thing it is redirecting people away from, and a
                                  correction printed underneath what it corrects is read second or not at all. It is
                                  no longer gated on the command being on screen: it is what the step IS here, and the
@@ -2499,7 +2499,7 @@ watch(commandReady, (ready) => {
                                  here gets the same offer, worded for the one who takes it: a server the app can't
                                  reach, a shell app on the phone (Termius, Blink, a tmux session someone never
                                  closed), or simply somebody who would rather type than install. Everything the
-                                 command needs — its tabs, its options, its dev note — lives inside the disclosure,
+                                 command needs (its tabs, its options, its dev note) lives inside the disclosure,
                                  so a phone that isn't driving a server never sees any of it.
                                  The browser wording is the shortest of the three on purpose: the reader it is for
                                  recognises "the command" from those two words, and anyone who doesn't is exactly
@@ -2523,7 +2523,7 @@ watch(commandReady, (ready) => {
                                 <div v-if="commandVisible" class="flex flex-col gap-2">
                                     <!-- One line, because the title already gave the instruction and nobody reads the second
                              sentence of a step they are trying to get through. All this adds is the bit the title
-                             can't: WHICH machine — which is why it belongs to the COMMAND and not to the step, and
+                             can't: WHICH machine, which is why it belongs to the COMMAND and not to the step, and
                              why it is no longer above a button whose whole selling point is that there is no
                              terminal. In the app (where this computer already has a button of its own) the machine
                              that runs this is by construction not the one reading it.
@@ -2540,7 +2540,7 @@ watch(commandReady, (ready) => {
                                     </p>
                                     <!-- On a phone the picker takes a full row of its own: three pill tabs sharing a
                              340px line wrapped every label to two lines. The copy button leaves that row with
-                             it — a chip stranded on a line of its own under the tabs, one row above the thing
+                             it: a chip stranded on a line of its own under the tabs, one row above the thing
                              it copies, was the loose end on this card. Beside the tabs on a desktop, under the
                              command on a phone; either way it is next to what it acts on. -->
                                     <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
@@ -2565,7 +2565,7 @@ watch(commandReady, (ready) => {
                                  comes next. The dev command is the long one, but even the hosted one-liner
                                  wraps to four lines at 390px.
                                  No label. It read "Terminal", to stop a dark monospace box being taken for a
-                                 documentation snippet — but the line above the block already says to paste this
+                                 documentation snippet, but the line above the block already says to paste this
                                  into a terminal, so it was a heading restating the sentence directly above it,
                                  and a row of chrome between the Copy button and the thing it copies. -->
                                         <Code
@@ -2576,7 +2576,7 @@ watch(commandReady, (ready) => {
                                             :clamp-lines="mobile ? 4 : undefined"
                                         />
                                         <!-- Full width and touch-sized, directly under the command: the reader who
-                                 opened this disclosure came for the clipboard, so here — and only here — copying
+                                 opened this disclosure came for the clipboard, so here, and only here: copying
                                  is the action. `secondary`, because the primary on this card is the email
                                  handoff above it and two filled buttons make the reader choose twice. -->
                                         <CopyButton
@@ -2587,7 +2587,7 @@ watch(commandReady, (ready) => {
                                             severity="secondary"
                                             @copied="onCopied"
                                         />
-                                        <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
+                                        <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev, connect.sh
                                  rebuilds it from this checkout on every run (layer-cached), so the pasted command is
                                  self-sufficient and never runs a stale image after sandbox edits. Folded shut: it is a
                                  note to whoever is developing intentic itself, not a step in setting a sandbox up.
@@ -2618,10 +2618,10 @@ watch(commandReady, (ready) => {
                                  Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
                                  there is no switch here and the Docker prerequisite is left to the panel, which
                                  names the reboot a first Windows install may want. And only while the command is
-                                 on screen — it rewrites one token of a line, which is no kind of offer when the
+                                 on screen: it rewrites one token of a line, which is no kind of offer when the
                                  line itself is folded away.
                                  The <label> stops at the option's NAME rather than wrapping the row: a label
-                                 toggles on any click inside it, and the caption beside it mentions `sudo` — text
+                                 toggles on any click inside it, and the caption beside it mentions `sudo`: text
                                  people select and read. -->
                                 <div
                                     v-if="environment.production && commandVisible && runTab === `unix`"
@@ -2640,12 +2640,12 @@ watch(commandReady, (ready) => {
                                 <!-- …and sync itself, for the widths with no reference column to put it in. Sync
                                      outlives the command in the APP, where it rides the desktop handoff too, so it
                                      survives the command being folded away there. Only the compose tab drops it
-                                     outright — that file declares its own env. -->
+                                     outright: that file declares its own env. -->
                                 <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="xl:hidden" />
                             </template>
                         </template>
 
-                        <!-- The wait's whole job, as the footer of the step it reports on — now saying WHICH of the two
+                        <!-- The wait's whole job, as the footer of the step it reports on: now saying WHICH of the two
                      waits this is. A spinner from the moment a code was minted is what made a screen where the
                      user has done nothing look identical to one where Docker is four minutes into an image
                      pull, and "your workspace opens automatically" is a promise about the second that reads, in
@@ -2653,13 +2653,13 @@ watch(commandReady, (ready) => {
                      So the icon leads, and it SPINS IN EVERY STATE, because in every state something is
                      genuinely running: the registry poll, every 3s, for as long as this card is on screen.
                      The idle state used to get a static dot instead, to keep a spinner from claiming progress
-                     the platform wasn't making — but that reads as a page that has stopped, and the fix for
+                     the platform wasn't making, but that reads as a page that has stopped, and the fix for
                      "the platform is doing this for you" belongs in the WORDS, which is where it is now: the
-                     line names the person whose move it is. Colour carries the difference the spin doesn't —
+                     line names the person whose move it is. Colour carries the difference the spin doesn't:
                      subtle while we're waiting on the user, info once it's out of their hands, success once a
                      machine has it.
                      There is no "Check now" here any more. The registry is polled every 3s regardless, so the
-                     button re-asked a question already being asked and bought nothing but its own presence —
+                     button re-asked a question already being asked and bought nothing but its own presence:
                      and because the poll shares `checking`, it spent every third second flipping itself to
                      "Checking…" and back, which is a card that looks broken while it works perfectly. -->
                         <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
@@ -2677,7 +2677,7 @@ watch(commandReady, (ready) => {
                                     :class="handoff === `claimed` ? `text-success` : handoff === `handed` ? `text-info` : `text-subtle`"
                                 />
                                 <span class="min-w-0">
-                                    <!-- The machine narrating its own stage beats the canned guess — "Starting
+                                    <!-- The machine narrating its own stage beats the canned guess: "Starting
                                          Docker" was written when this page knew nothing after the claim. -->
                                     <template v-if="handoff === `claimed` && buildStage !== undefined">
                                         <span class="font-medium text-success">Your machine picked it up.</span> Right now: {{ buildStage }}.
@@ -2701,16 +2701,16 @@ watch(commandReady, (ready) => {
                                         <span class="font-medium text-content">Copied.</span> Paste it into that terminal and press Enter.
                                     </template>
                                     <!-- "Nothing is running yet" described the SANDBOX and told the reader nothing
-                                         they could act on — the one fact this state has is whose move it is, so
+                                         they could act on: the one fact this state has is whose move it is, so
                                          it says that instead. In the app there is no command to name and the
                                          button has a label, so it names the button. -->
                                     <template v-else-if="machine === `cloud` && cloudOffered">
                                         <span class="font-medium text-content">Waiting for you to create the machine.</span> Paste a credential above,
-                                        then create it — nothing runs, or costs anything, until you do.
+                                        then create it: nothing runs, or costs anything, until you do.
                                     </template>
                                     <template v-else-if="desktop && !commandVisible">
-                                        <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press “Set
-                                        it up now” above.
+                                        <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press "Set
+                                        it up now" above.
                                     </template>
                                     <!-- The same sentence for the browser that was offered an installer: naming the
                                          app's button here would name one this reader hasn't got yet. -->
@@ -2725,7 +2725,7 @@ watch(commandReady, (ready) => {
                                 </span>
                             </p>
 
-                            <!-- The machine said exactly what broke — render it verbatim, problem and fix per check,
+                            <!-- The machine said exactly what broke: render it verbatim, problem and fix per check,
                                  and the one instruction that is always true. This is the card the whole report
                                  channel exists for: the answer used to live in a terminal nobody was watching. -->
                             <Notice
@@ -2741,7 +2741,7 @@ watch(commandReady, (ready) => {
                                 <p class="mt-1.5 text-2xs">Fix the above, then run the same command again. It stays valid.</p>
                             </Notice>
 
-                            <!-- The correction, on a timer — and NOT here on a wide screen, where it rides in the
+                            <!-- The correction, on a timer, and NOT here on a wide screen, where it rides in the
                                  reference column instead (see the aside below). At the foot of this card it was
                                  the furthest thing on the page from the command it corrects: three tabs, a code
                                  block, two switches and a wait line above it, on a card long enough to scroll. -->
@@ -2758,11 +2758,11 @@ watch(commandReady, (ready) => {
                             />
 
                             <!-- A claim with no daemon behind it is a genuinely different failure from silence: the
-                         command ran, so the terminal is where the answer is. Much longer fuse — the first image
+                         command ran, so the terminal is where the answer is. Much longer fuse: the first image
                          pull legitimately takes minutes. -->
                             <p v-if="slowBuild" class="flex items-start gap-2 text-xs text-warning">
                                 <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
-                                <!-- Where the answer is depends on what actually ran it — the app streams its own
+                                <!-- Where the answer is depends on what actually ran it: the app streams its own
                                      log, everything else has a terminal. Asking `commandVisible` instead used to
                                      send a phone whose command is folded away to an app window that only exists on
                                      a desktop. -->
@@ -2784,13 +2784,13 @@ watch(commandReady, (ready) => {
                 </div>
 
                 <!-- The docked half of the run step's reference material (SetupRunDetails carries the reasoning).
-                     Present only while the run step is, because it is that step's material and nothing else's — the
+                     Present only while the run step is, because it is that step's material and nothing else's: the
                      attach lane runs no command and has nothing to explain here. `hidden` below xl: the same
                      content is on the run step's (i) hint there, and the hint's trigger is `xl:hidden` in turn, so
                      exactly one of the two is reachable at any width.
                      The width is measured, not picked: 22rem is what the longest cleanup one-liner (the sh
                      one, 44 mono characters at text-xs) needs to sit on a single line inside the card's
-                     padding. At 18rem it wrapped into three lines — the undo read as a paragraph. -->
+                     padding. At 18rem it wrapped into three lines: the undo read as a paragraph. -->
                 <aside
                     v-if="created && lane === `provision` && machine !== `hosted`"
                     class="hidden flex-col gap-3 xl:sticky xl:top-8 xl:flex xl:w-88 xl:shrink-0"

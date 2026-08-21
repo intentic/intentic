@@ -4,7 +4,7 @@
      receipts.ts; what lives here is the timing, because the timing depends on the pointer:
 
      A receipt PAUSES while hovered. Vanishing under the cursor that came for its Undo would fail the
-     affordance at the only moment it is ever wanted — the board found this first, and it is the reason expiry
+     affordance at the only moment it is ever wanted: the board found this first, and it is the reason expiry
      is a view's business rather than the store's.
 
      The window restarts on each new receipt (the watch reads the ref itself, so replacing it re-arms the full
@@ -20,7 +20,7 @@ import { useReceipts } from "../composables/receipts";
 const RECEIPT_MS = 7_000;
 // A problem gets longer, because its sentence is longer and it is doing more work: a completion confirms
 // something the user already expected, while this one is telling them why the thing they asked for did not
-// arrive — and if it expires unread they are back to a button that did nothing.
+// arrive, and if it expires unread they are back to a button that did nothing.
 const PROBLEM_MS = 12_000;
 
 const { receipt, dismissReceipt } = useReceipts();
@@ -85,7 +85,7 @@ const undo = (): void => {
 </template>
 
 <style scoped>
-/* Rises into place and sinks out of it — the same direction both ways, so one that expires on its own and one
+/* Rises into place and sinks out of it: the same direction both ways, so one that expires on its own and one
  * dismissed by an Undo read as the same object leaving. */
 .receipt-enter-active,
 .receipt-leave-active {

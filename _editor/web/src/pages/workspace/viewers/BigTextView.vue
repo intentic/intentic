@@ -8,12 +8,12 @@ import { changeEpochOf } from "../../../composables/workspace/useWorkspaceLive";
 import { RAW_MAX_BYTES } from "../fileType";
 import CodeView from "./CodeView.vue";
 
-/* The read-only, WINDOWED surface for text too big to hold as an editable buffer — a build log, a data dump, a
+/* The read-only, WINDOWED surface for text too big to hold as an editable buffer: a build log, a data dump, a
  * generated bundle. It exists because the alternative was a dead end: over the cap the viewer used to offer
  * nothing but Download, and Download went to /workspace/raw, which 413s above 25MB. A 120MB log could not be
  * read and could not be saved.
  *
- * The editor is not the constraint here (Monaco builds a 120MB, 1M-line model in ~150ms and types in 2ms) —
+ * The editor is not the constraint here (Monaco builds a 120MB, 1M-line model in ~150ms and types in 2ms):
  * the daemon and the wire are, so text arrives one window at a time: the head to begin with, `Load more` for
  * the next slice, and `Follow` to jump to the end and stay there.
  *
@@ -21,7 +21,7 @@ import CodeView from "./CodeView.vue";
  * path re-reads the file on every change epoch, which for a log an agent or a build is still writing means the
  * whole file, four times a second, forever. */
 
-// `first` is the window the dispatcher already fetched to learn the file's size — reusing it means opening a
+// `first` is the window the dispatcher already fetched to learn the file's size: reusing it means opening a
 // huge file costs exactly one read, not two.
 const { path, first, lang } = defineProps<{ path: string; first: WorkspaceFileWindow; lang?: string }>();
 const emit = defineEmits<{ download: [] }>();
@@ -42,7 +42,7 @@ const busy = ref(false);
 const error = ref<string | null>(null);
 const view = ref<InstanceType<typeof CodeView>>();
 
-// One in-flight window at a time, aborted on unmount — a follow tick that arrives while the last one is still
+// One in-flight window at a time, aborted on unmount: a follow tick that arrives while the last one is still
 // running is dropped rather than queued, because the next tick will read from wherever this one lands.
 let inFlight: AbortController | undefined;
 onBeforeUnmount(() => inFlight?.abort());
@@ -64,7 +64,7 @@ const read = async (offset: number, limit?: number): Promise<WorkspaceFileWindow
     busy.value = true;
     try {
         const window = await readFileWindow(path, { offset, limit, signal: controller.signal });
-        // Deleted while being followed — the honest thing to say, and the view keeps whatever it already holds
+        // Deleted while being followed: the honest thing to say, and the view keeps whatever it already holds
         // rather than blanking a log the reader may still be reading.
         if (!window.present) {
             error.value = `That file is no longer there.`;
@@ -108,7 +108,7 @@ const loadMore = async (): Promise<void> => {
     if (window === undefined) {
         return;
     }
-    // The file shrank below where we were reading — rotated, or rewritten from scratch. Nothing we hold is
+    // The file shrank below where we were reading: rotated, or rewritten from scratch. Nothing we hold is
     // still true, so read one end of the new file instead of appending to the old one's text.
     if (window.size < end.value) {
         await restartFrom(following.value ? -FILE_WINDOW_BYTES : 0);
@@ -140,7 +140,7 @@ const toggleFollow = async (): Promise<void> => {
 
 /* The file changed on disk. Only a follower reads anything: a windowed view is a snapshot of a range the user
  * asked for, and re-reading it on every write is what made an open log a per-batch full re-read. A follow tick
- * fetches from `end` — the appended bytes and nothing else — and is dropped while one is already running. */
+ * fetches from `end`: the appended bytes and nothing else, and is dropped while one is already running. */
 watch(
     () => changeEpochOf(path),
     async () => {
@@ -157,7 +157,7 @@ watch(
     <div class="flex h-full min-h-0 flex-col">
         <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">
             <Icon name="eye" class="shrink-0 text-[0.7rem]" />
-            <span class="shrink-0">Read-only — {{ position }}</span>
+            <span class="shrink-0">Read-only: {{ position }}</span>
             <span v-if="error" class="min-w-0 flex-1 truncate text-danger">{{ error }}</span>
             <span v-else class="flex-1"></span>
             <button
@@ -180,7 +180,7 @@ watch(
                 <Icon :name="following ? `wave-pulse` : `chevron-down`" class="text-[0.7rem]" /> Follow
             </button>
             <!-- Only when a download would actually work: /workspace/raw serves to RAW_MAX_BYTES and 413s above
-                 it, and a button whose whole job is to fail is worse than no button — reading is covered here. -->
+                 it, and a button whose whole job is to fail is worse than no button: reading is covered here. -->
             <button
                 v-if="size <= RAW_MAX_BYTES"
                 type="button"

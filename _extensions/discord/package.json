@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-discord",
     "version": "1.0.0",
-    "description": "Discord — the connected server as an agent tool, plus the gateway + voice runtime as a baked extension process",
+    "description": "Discord, the connected server as an agent tool, plus the gateway + voice runtime as a baked extension process",
     "license": "MIT",
     "private": true,
     "type": "module",

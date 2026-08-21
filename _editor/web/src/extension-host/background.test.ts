@@ -3,7 +3,7 @@ import { resetSandboxScope, sandboxLedger, sandboxPoll } from "@intentic/extensi
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /* The background pair (extension-api/src/background.ts), tested from here because the SDK ships no test harness
- * of its own — the same reason scope.test.ts and surface-guard.test.ts live in this directory.
+ * of its own: the same reason scope.test.ts and surface-guard.test.ts live in this directory.
  *
  * What is under test is the set of rules seven hand-written copies of this had to remember, and six of them got
  * one of wrong. Each rule below is invisible in the code that breaks it: the tile simply says something untrue,
@@ -98,7 +98,7 @@ describe(`sandboxPoll`, () => {
         expect(poll.state.value).toBe(`initial`);
     });
 
-    it(`keeps the last good answer when a read fails — "we could not ask" is not "there is nothing there"`, async () => {
+    it(`keeps the last good answer when a read fails: "we could not ask" is not "there is nothing there"`, async () => {
         const { api } = fakeApi();
         let fail = false;
         const poll = sandboxPoll({
@@ -230,7 +230,7 @@ describe(`sandboxLedger`, () => {
         const { api } = fakeApi({ file: { first: `one` } });
         const ledger = sandboxLedger(() => api, `seen.json`);
 
-        // Written, and already-saying-it, both count as landed — the badge fold is right in either case.
+        // Written, and already-saying-it, both count as landed: the badge fold is right in either case.
         expect(await ledger.mark({ second: `two` })).toBe(true);
         expect(await ledger.mark({ first: `one` })).toBe(true);
     });

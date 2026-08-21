@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-imap",
     "version": "1.0.0",
-    "description": "IMAP — an email inbox as an agent tool, plus the mailbox-watching gateway as a baked extension process",
+    "description": "IMAP, an email inbox as an agent tool, plus the mailbox-watching gateway as a baked extension process",
     "license": "MIT",
     "private": true,
     "type": "module",

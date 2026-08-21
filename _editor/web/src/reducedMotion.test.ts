@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
  *
  * `prefers-reduced-motion` is a preference the OS states plainly and this app used to honour by hand: three
  * call sites wrote `motion-reduce:animate-none` and thirty did not, because remembering is not a mechanism.
- * The answer now lives once, unlayered, in the design system's utilities.css — and this is what keeps it
+ * The answer now lives once, unlayered, in the design system's utilities.css, and this is what keeps it
  * whole: every animation class the app actually uses must be named there, or named here as a deliberate
  * exemption. Adding an animation therefore costs one line in one of two places, which is the point. The
  * failure this prevents is silent and invisible to whoever causes it: nobody who does not set the preference
@@ -59,16 +59,16 @@ const animationClasses = (): Set<string> => {
 
 /* WHAT EACH ONE DOES WHEN THE PREFERENCE IS SET, and why that is the right answer for it. Three verdicts:
  *
- * `stopped` — the motion was decoration and the state it reported is carried by something still.
- * `slowed`  — the motion is load-bearing and stopping it would misreport (a frozen spinner reads as hung).
- * `kept`    — it is not movement. An opacity fade triggers nobody, and denying it is a cost with no benefit.
+ * `stopped`: the motion was decoration and the state it reported is carried by something still.
+ * `slowed` : the motion is load-bearing and stopping it would misreport (a frozen spinner reads as hung).
+ * `kept`   : it is not movement. An opacity fade triggers nobody, and denying it is a cost with no benefit.
  *
  * Only `stopped` and `slowed` owe a rule in the stylesheet; `kept` is a decision recorded so that the next
  * person to look does not have to re-derive it. */
 const DECIDED: Record<string, { readonly verdict: "stopped" | "slowed" | "kept"; readonly why: string }> = {
     "animate-pulse": { verdict: `stopped`, why: `decoration on a placeholder or a resting state` },
     "animate-spin": { verdict: `slowed`, why: `the app's only running indicator on a dozen surfaces` },
-    "animate-fade-in": { verdict: `kept`, why: `opacity only — not movement` },
+    "animate-fade-in": { verdict: `kept`, why: `opacity only, not movement` },
     "animate-fade-in-up": { verdict: `stopped`, why: `re-pointed at the fade-only keyframes, losing the 8px travel` },
     // Not an `animate-*` utility: the design system's loading placeholder owns its own sweep, in `components`.
     skeleton: { verdict: `stopped`, why: `content the reader cannot act on yet` },
@@ -109,7 +109,7 @@ describe(`reduced motion`, () => {
         }
     });
 
-    it(`keeps the answer central — no per-call-site opt-outs`, () => {
+    it(`keeps the answer central: no per-call-site opt-outs`, () => {
         // A `motion-reduce:` variant in a component is the habit this replaced: it hides the decision in markup
         // nobody greps, and it is only ever written by whoever happened to remember.
         const strays = everySource.filter((text) => text.includes(`motion-reduce:`)).length;

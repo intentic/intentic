@@ -1,7 +1,7 @@
-<!-- The markdown preview's outline — a document's own headings, as a column of places to go.
+<!-- The markdown preview's outline: a document's own headings, as a column of places to go.
 
      WHY A LIST OF WORDS AND NOT A MINIMAP. The code surface beside this one has a minimap and is right to: code
-     has a silhouette — indentation, line-length variance, colour — so a shrunken page is still recognisable.
+     has a silhouette: indentation, line-length variance, colour, so a shrunken page is still recognisable.
      Rendered prose is a uniform slab; every paragraph looks like every other paragraph, and the only landmarks
      in it are the headings. A minimap would show those as unreadable grey bars, where this shows them as their
      own words. That is the same answer GitHub, VS Code and Obsidian arrived at for the same reason.
@@ -22,7 +22,7 @@ const { headings, active } = defineProps<{
 }>();
 const emit = defineEmits<{ jump: [index: number] }>();
 
-/* Past this many sections the list is its own navigation problem — you are scanning a column of forty names for
+/* Past this many sections the list is its own navigation problem: you are scanning a column of forty names for
  * one word, which is the scrolling you came here to avoid. Under it, a filter box is a control nobody needs
  * taking the room two more headings could have used. */
 const FILTER_FROM = 12;

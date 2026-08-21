@@ -24,7 +24,7 @@ describe(`revealTargets`, () => {
         expect(revealTargets(`web/pnpm-lock.yaml`, siblings, true)).toEqual([`web`, `web/package.json`]);
     });
 
-    it(`names folders only when nesting is off — every file has its own row`, () => {
+    it(`names folders only when nesting is off: every file has its own row`, () => {
         expect(revealTargets(`web/pnpm-lock.yaml`, siblings, false)).toEqual([`web`]);
     });
 

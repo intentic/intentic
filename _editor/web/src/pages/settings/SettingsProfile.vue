@@ -8,12 +8,12 @@ import { useAuth } from "../../composables/useAuth";
 import { useDraft } from "../../composables/useDraft";
 
 /* Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). The picked file
- * becomes a small square data URL in the browser — no upload. Re-seeded from the shared user ref, so a save
+ * becomes a small square data URL in the browser, with no upload. Re-seeded from the shared user ref, so a save
  * (which refreshes the session) syncs the form back to what the server stored. */
 
 const { user, updateProfile } = useAuth();
 
-// Seeded from the session's name and following a rename made elsewhere — but never over an edit in this form:
+// Seeded from the session's name and following a rename made elsewhere, but never over an edit in this form:
 // refresh() rebuilds `user` as a fresh object on every call, so an unconditional re-seed here was one new
 // refresh() caller away from wiping a half-typed name (see useDraft).
 const profileName = useDraft(() => user.value?.name);

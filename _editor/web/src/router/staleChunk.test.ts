@@ -2,16 +2,16 @@
 //
 // The stale-window recovery's ROUTER half: after a redeploy, a lazy route still loaded at route level (login,
 // the auth handoffs, the shell record itself) points at a content-hashed chunk that no longer exists. The
-// dynamic import rejects, vue-router aborts the navigation, and without a handler the URL just flickered back —
+// dynamic import rejects, vue-router aborts the navigation, and without a handler the URL just flickered back:
 // a click that did nothing until a hard refresh. The handler answers a failed chunk load with the reload the
 // user would perform by hand, landed on the route they asked for; these tests drive the real router at real
-// failing routes. The in-shell views load through asyncView now, whose failures no router hook sees — that
+// failing routes. The in-shell views load through asyncView now, whose failures no router hook sees: that
 // half of the recovery (same shared staleChunk module) is covered in components/asyncView.test.ts.
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { router } from "./index";
 
 // vitest.setup.ts installs the browser globals before this file is loaded, so the router module above evaluates
-// with them already in place — which is why the import can be static. It used to be an `await import` inside
+// with them already in place, which is why the import can be static. It used to be an `await import` inside
 // beforeAll, and pulling the router's whole module graph there spent ~1s of a 10s hook budget on module loading
 // rather than on the hook's work. On a loaded runner that is the difference between a pass and a hook timeout.
 
@@ -41,18 +41,18 @@ beforeEach(() => {
     assign.mockClear();
 });
 
-it(`reloads onto the route whose chunk is gone — once, and lands there rather than where the user was`, async () => {
+it(`reloads onto the route whose chunk is gone: once, and lands there rather than where the user was`, async () => {
     await router.push(`/stale-chunk`).catch(() => undefined);
     expect(assign).toHaveBeenCalledWith(`/stale-chunk`);
 
     // The chunk is GENUINELY gone (a broken deploy): after the reload the fresh window's own navigation to
     // this target fails again, and that second failure must not loop. Only a navigation that LANDS clears the
-    // flag — the next redeploy earns its one reload again — so the repeat here stays suppressed.
+    // flag: the next redeploy earns its one reload again, so the repeat here stays suppressed.
     await router.push(`/stale-chunk`).catch(() => undefined);
     expect(assign).toHaveBeenCalledTimes(1);
 });
 
-it(`leaves a real load-time error alone — reloading a coding bug would loop, not recover`, async () => {
+it(`leaves a real load-time error alone: reloading a coding bug would loop, not recover`, async () => {
     await router.push(`/broken-component`).catch(() => undefined);
     expect(assign).not.toHaveBeenCalled();
 });

@@ -7,7 +7,7 @@ import SubagentsInfo from "./SubagentsInfo.vue";
 /* HOW MUCH THE ASSISTANT MAY DELEGATE. Three ceilings on the same activity, and they are three rows rather than
  * one because they stop different things: the width of one fan-out, the lifetime budget of a conversation, and
  * how far a delegated agent may itself delegate. Raising only the first is what makes a wide sweep hit the second
- * two rounds later — which reads as the same wall in a new place, so all three are shown together.
+ * two rounds later, which reads as the same wall in a new place, so all three are shown together.
  *
  * The bounds are the daemon's (SandboxSettingsSchema), restated here so the box refuses a number the save would:
  * a field that accepts 5000 and then silently keeps 200 looks like a setting that didn't take. */
@@ -22,13 +22,13 @@ const DEPTH = { min: 1, max: 10 };
     <RowGroup label="Subagents">
         <template #info><SubagentsInfo /></template>
 
-        <!-- The parallel width — the one people meet first, because it is the one a fan-out hits within seconds.
+        <!-- The parallel width: the one people meet first, because it is the one a fan-out hits within seconds.
              The assistant is told to stop and NOT retry when it lands here, so the cost of a low number is work
              done one item at a time rather than a failure. -->
         <Row
             icon="users"
             title="Subagents at once"
-            description="How many delegated agents may work in parallel. Reaching this doesn't fail anything — the assistant is told to stop starting new ones and carry on itself."
+            description="How many delegated agents may work in parallel. Reaching this doesn't fail anything: the assistant is told to stop starting new ones and carry on itself."
         >
             <template #control>
                 <input
@@ -48,7 +48,7 @@ const DEPTH = { min: 1, max: 10 };
         </Row>
 
         <!-- The lifetime budget of one conversation. Separate from the width because it is the cap a long session
-             creeps up on rather than one a single message hits — twenty rounds of five is the same hundred agents
+             creeps up on rather than one a single message hits: twenty rounds of five is the same hundred agents
              as one round of a hundred, and only this row bounds it. -->
         <Row
             icon="clone"
@@ -96,7 +96,7 @@ const DEPTH = { min: 1, max: 10 };
             <template #below>
                 <p v-if="(settings?.subagentDepth ?? 3) > 3" class="text-2xs text-muted">
                     Each level multiplies the one above it, and every agent at every level spends tokens. The two caps above are what actually bound
-                    that — this row only decides how far down it can go.
+                    that: this row only decides how far down it can go.
                 </p>
             </template>
         </Row>

@@ -160,6 +160,6 @@ const clear: Command = {
 
 export const sheetsGroup: CommandGroup = {
     name: "sheets",
-    summary: "Sheets — read a range as CSV, write, append, clear",
+    summary: "Sheets, read a range as CSV, write, append, clear",
     commands: [create, tabs, read, write, append, clear],
 };

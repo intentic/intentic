@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openingRepo } from "./repoChoice.js";
 
-/* Where the area opens when the URL names no repository — the answer the rail's tile always needs, since its link
+/* Where the area opens when the URL names no repository: the answer the rail's tile always needs, since its link
  * carries no query at all. */
 describe(`openingRepo`, () => {
     const repos = [``, `intentic`, `site`];

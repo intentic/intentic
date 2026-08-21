@@ -3,7 +3,7 @@
 // THE SUBJECT IS A BROWSER NEWER THAN ITS DAEMON, which is a supported state and not a fault (useDaemonRoutes):
 // the app plane serves whatever image a user last pulled, and in local development the web app runs from the
 // working tree while the daemon is the last one built. The contents view is a hand-written Hono route, so the
-// daemon never advertises it by name and `supportsRoute` cannot gate on it — a 404 is the only signal there is.
+// daemon never advertises it by name and `supportsRoute` cannot gate on it: a 404 is the only signal there is.
 //
 // Shipped without this the card offered a tab whose only greeting was "Could not read what the sandbox has
 // installed · Request failed (404)", i.e. a working sandbox reading as a broken feature. What is pinned here is
@@ -13,7 +13,7 @@ import type { Environment } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 
-// An applied overlay and nothing pending — the ordinary state, so what varies between tests is only whether the
+// An applied overlay and nothing pending: the ordinary state, so what varies between tests is only whether the
 // daemon can answer for its contents.
 const OVERLAY = `FROM ghcr.io/intentic/sandbox:stable\n\n# ---- ffmpeg ----\nRUN apt-get install -y ffmpeg\n`;
 const environment: Environment = {
@@ -88,11 +88,11 @@ it(`offers both reads when the daemon can answer for its contents`, () => {
 it(`falls back to the recipe on a daemon that predates the contents route, and stops offering the tab`, () => {
     unsupported.value = true;
     const el = mount();
-    // No tab row at all — a choice whose one option 404s is not a choice.
+    // No tab row at all: a choice whose one option 404s is not a choice.
     expect(el.querySelectorAll(`[role="tab"]`)).toHaveLength(0);
     // What every daemon with an overlay can show, shown.
     expect(el.textContent).toContain(`Active overlay`);
-    /* And the reason, once, quietly — the image's age, not a fault. It has to send them to an UPDATE: an
+    /* And the reason, once, quietly, the image's age, not a fault. It has to send them to an UPDATE: an
      * environment rebuild builds on top of the image this sandbox already runs, so it is the one action that
      * would not bring this, and pointing there would cost them a rebuild to learn so. */
     expect(el.textContent).toContain(`image is older than the plain-language contents list`);

@@ -66,7 +66,7 @@ describe(`originHue`, () => {
 describe(`landedMessage`, () => {
     const message = { subject: `fix: cascading markers` };
 
-    test(`takes the card's copy — it is the one the daemon pushes the moment the sentence exists`, () => {
+    test(`takes the card's copy: it is the one the daemon pushes the moment the sentence exists`, () => {
         expect(landedMessage({ landedMessage: message }, undefined)).toEqual(message);
         expect(landedMessage({ landedMessage: message }, {})).toEqual(message);
     });
@@ -100,7 +100,7 @@ describe(`commitMessageOf`, () => {
         );
     });
 
-    test(`no message is no message — the box stays the user's to type in`, () => {
+    test(`no message is no message: the box stays the user's to type in`, () => {
         expect(commitMessageOf(undefined)).toBeUndefined();
     });
 });
@@ -124,7 +124,7 @@ describe(`chipMessageNotice`, () => {
         boxIsYours: false,
     };
 
-    test(`says nothing when no chip is lit — nothing has been asked of the box`, () => {
+    test(`says nothing when no chip is lit: nothing has been asked of the box`, () => {
         expect(chipMessageNotice({ ...state, label: undefined })).toBeUndefined();
     });
 
@@ -141,7 +141,7 @@ describe(`chipMessageNotice`, () => {
         expect(chipMessageNotice({ ...state, draft: running() })).toBe(`Writing a message for Review panel · audit…`);
     });
 
-    test(`says the same before any model has been reached — the report below has the phase`, () => {
+    test(`says the same before any model has been reached: the report below has the phase`, () => {
         expect(chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [] } })).toBe(`Writing a message for Review panel · audit…`);
     });
 
@@ -186,7 +186,7 @@ describe(`chipMessageNotice`, () => {
  * lays out. What each status earns is pinned here because these rows ARE the feature: the difference between a
  * minute-long mystery and a minute-long wait you can watch move. */
 describe(`draftReport`, () => {
-    test(`no draft is no report — the one-line notice covers that case`, () => {
+    test(`no draft is no report: the one-line notice covers that case`, () => {
         expect(draftReport(undefined, NOW)).toEqual([]);
     });
 

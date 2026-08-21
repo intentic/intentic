@@ -4,26 +4,26 @@ import { nextTick, ref, useTemplateRef } from "vue";
 import UsageRing from "../../components/UsageRing.vue";
 import type { PlanHeadroom } from "../../composables/chat/usageStatus";
 
-/* ONE connection row. Every credential the Agent tab can hold renders through this — a native provider account,
- * a translator subscription, the "you have none yet" placeholder and the "add another" invitation alike — so
+/* ONE connection row. Every credential the Agent tab can hold renders through this: a native provider account,
+ * a translator subscription, the "you have none yet" placeholder and the "add another" invitation alike, so
  * they cannot drift into looking like different kinds of thing. They are not: each one answers "what am I
  * signed in with, and what can I do about it?".
  *
  * The anatomy, left to right, is fixed:
- *   · a status GLYPH in a fixed-width well (dot, or the plus of an add-row) — so every title starts on the
+ *   · a status GLYPH in a fixed-width well (dot, or the plus of an add-row), so every title starts on the
  *     same x, whatever the row is
  *   · the connection's NAME, which is EDITABLE IN PLACE where the sandbox owns the credential (`renamable`).
  *     A name is not a setting hidden behind a menu: the thing you want to change is right there on screen, so
  *     you change it there. It is also the only answer for a connection whose provider hands back no identity to
- *     derive a name from — without it, a second one is a second row saying nothing but the provider's name.
+ *     derive a name from: without it, a second one is a second row saying nothing but the provider's name.
  *   · its STATE, in the same small type, in the same place, for every provider ("not connected", the signed-in
  *     identity, "signing in…")
  *   · an optional (i) for the paragraph of mechanics that would otherwise be printed on screen
- *   · the ACTION, in #control — one of them, except on a credential that has gone bad, where repairing it and
+ *   · the ACTION, in #control: one of them, except on a credential that has gone bad, where repairing it and
  *     dropping it are genuinely two different answers
  *   · the live sign-in, in #below, inside this row's hairline rather than in a panel detached from it
  *
- * `state` drives only the glyph and the tone — never the layout — which is what lets a row change state
+ * `state` drives only the glyph and the tone: never the layout, which is what lets a row change state
  * (missing → signing-in → connected) without anything moving. */
 
 const {
@@ -36,7 +36,7 @@ const {
     state: `connected` | `reauth` | `missing` | `unknown` | `add`;
     // The state line beside the title (the signed-in identity, "not connected", "signing in…").
     note?: string;
-    // Whether `note` is a live wait, which earns it a spinner — the one moving thing in the row.
+    // Whether `note` is a live wait, which earns it a spinner: the one moving thing in the row.
     noteBusy?: boolean;
     // The half-sentence under the title: what this connection costs / what it runs / why it needs reconnecting.
     description?: string;
@@ -45,10 +45,10 @@ const {
     // second line materialising under a row already on screen pushes every row below it down.
     descriptionPending?: boolean;
     tone?: `default` | `warning`;
-    // The paragraph of mechanics, parked behind an (i) — printing one per row is what made this card a wall.
+    // The paragraph of mechanics, parked behind an (i): printing one per row is what made this card a wall.
     about?: string;
     interactive?: boolean;
-    // Whether this connection's name is the user's to change — true only where the sandbox owns the credential.
+    // Whether this connection's name is the user's to change: true only where the sandbox owns the credential.
     renamable?: boolean;
     // This account's plan limits, when they have been read. Replaces the plain dot with a ring (and the card
     // that opens beside it) so the headroom is visible at a glance. Undefined = no reading, and the dot stays.
@@ -61,7 +61,7 @@ const emit = defineEmits<{ rename: [label: string] }>();
 
 /* Renaming, in place. Committing on ENTER and on BLUR (rather than only on an explicit Save button) is what
  * keeps this from being a form: you click the name, you type, you click away, it's named. Escape restores what
- * was there — the one thing a click-away commit needs, so leaving the field can never be a mistake you can't
+ * was there: the one thing a click-away commit needs, so leaving the field can never be a mistake you can't
  * take back. A value equal to the current title emits nothing, so a stray click through the name is free. */
 const editing = ref(false);
 const draft = ref(``);
@@ -104,7 +104,7 @@ const DOT_TONE: Record<string, string> = {
             <span class="flex min-w-0 flex-wrap items-center gap-x-2.5" :class="state === `add` ? `text-muted` : ``">
                 <span class="flex w-[1.125rem] shrink-0 justify-center">
                     <Icon v-if="state === `add`" name="plus" class="text-2xs" />
-                    <!-- A ring replaces the dot when usage data is available — the account's headroom is worth
+                    <!-- A ring replaces the dot when usage data is available: the account's headroom is worth
                          more than a binary "connected" dot, and the ring carries the same color system (green /
                          yellow / red) so the meaning is consistent. Hovering it opens the pool-by-pool card,
                          spilling LEFT into the page gutter: this ring opens its row, so everything to its right
@@ -129,7 +129,7 @@ const DOT_TONE: Record<string, string> = {
                 <!-- Not hover-only: a pencil that appears on hover is invisible on touch and undiscoverable
                      anywhere, which is how this card ended up with no way to name an account at all. It sits at
                      half strength beside the name and comes up to full on hover. The "Rename" hint rides the
-                     PENCIL, not the name — hovering an account's name should offer to finish reading it (the
+                     PENCIL, not the name: hovering an account's name should offer to finish reading it (the
                      `.overflow` tooltip, which only appears when the name is actually cut off), not pop a label
                      about editing over the row above every time the pointer crosses it. -->
                 <button
@@ -154,7 +154,7 @@ const DOT_TONE: Record<string, string> = {
                 </InfoHint>
             </span>
         </template>
-        <!-- Indented to the title's x, not the glyph's — the description belongs to the name above it. A bar of
+        <!-- Indented to the title's x, not the glyph's: the description belongs to the name above it. A bar of
              the same line's height stands in while the read behind it is still out, so the row is its final
              height from the first frame. -->
         <template v-if="description || descriptionPending" #description>

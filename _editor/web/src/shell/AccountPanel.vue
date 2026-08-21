@@ -12,7 +12,7 @@ import AccountCredits from "./AccountCredits.vue";
  * day's credit balance, and the account actions (Settings, Sign out). The sandbox and its status live in the
  * rail's top switcher; personal preferences (theme) live on the /settings page.
  *
- * CREDITS BELONG TO THE PERSON, WHICH IS WHY THEY ARE HERE — see AccountCredits for the whole argument. What
+ * CREDITS BELONG TO THE PERSON, WHICH IS WHY THEY ARE HERE: see AccountCredits for the whole argument. What
  * this file adds on top of that row is the only part of it that reaches the app frame: the tooltip, and a dot
  * when the allowance is gone. */
 
@@ -22,14 +22,14 @@ const route = useRoute();
 /* THE SETTINGS PAGES HAVE NO TILE, SO THE CONTROL THAT OPENS THEM IS THE TILE. /settings and its tabs are
  * reached from this avatar's menu and from nowhere else in the rail, which left the whole area as the one place
  * in the app where the frame said nothing about where you were standing. Lit on the same terms as a navigation
- * tile (route AND any sub-path, so a tab keeps it), in the same accent — the avatar is round and bordered
+ * tile (route AND any sub-path, so a tab keeps it), in the same accent: the avatar is round and bordered
  * rather than a plate, so the accent lands on its ring and its glyph. */
 const onSettings = computed(() => route.path === `/settings` || route.path.startsWith(`/settings/`));
 
 /* THE BALANCE, WITHOUT OPENING ANYTHING. Two escalating steps, and deliberately no third:
  *
  *  - The tooltip already existed and said "Account", which is what the avatar plainly is. Given a meter it says
- *    the balance instead — so a member can learn what is left by resting a pointer, and nothing is added to the
+ *    the balance instead, so a member can learn what is left by resting a pointer, and nothing is added to the
  *    rail to make that true.
  *  - A dot, and ONLY when the allowance is actually spent. That is the one credit state where something a person
  *    tries will be refused, so it is the one worth a mark on the frame. Not for "low": running out later today
@@ -51,7 +51,7 @@ const avatarLoadFailed = (): void => {
     avatarFailed.value = true;
 };
 
-/* Settings is a PLACE, so its row is an anchor and not a button that pushed the router — which is what buys
+/* Settings is a PLACE, so its row is an anchor and not a button that pushed the router, which is what buys
  * back the address in the status bar, the browser's own "Open in new tab", and Ctrl/⌘-click. Sign out stays a
  * button: it is a thing that happens, not somewhere to go.
  *
@@ -74,10 +74,10 @@ const logout = async (): Promise<void> => {
 <template>
     <!-- The dot sits OUTSIDE the avatar's clipping circle, so the wrapper carries the position and the button
          keeps its overflow-hidden (an avatar image has to be clipped round; a marker must not be). -->
-    <!-- THE "YOU ARE HERE" MARK IS A LIT PLATE BEHIND THE AVATAR — the same plate every navigation tile above
+    <!-- THE "YOU ARE HERE" MARK IS A LIT PLATE BEHIND THE AVATAR: the same plate every navigation tile above
          wears while you stand on its view, in the same accent, at the same corner radius. Anything drawn ON the
          avatar fails twice over: a photo fills the circle edge to edge, so a border under it is invisible, and
-         a ring around it puts a coloured collar on somebody's face — a decoration of the person, not a
+         a ring around it puts a coloured collar on somebody's face: a decoration of the person, not a
          statement about the app's frame. Behind it, the rail is doing the talking, which is whose job it is.
 
          The plate is a sibling, absolutely positioned, so the avatar keeps its own round clip and its size: the
@@ -129,7 +129,7 @@ const logout = async (): Promise<void> => {
 
             <div class="my-1 border-t border-line"></div>
 
-            <!-- The day's allowance, between who you are and what you can do — it is a fact about the account,
+            <!-- The day's allowance, between who you are and what you can do: it is a fact about the account,
                  and it is the reason somebody opens this menu without wanting either Settings or Sign out.
                  Dismisses the menu on its way to the membership page like every other row here. -->
             <AccountCredits @click="dismiss" />

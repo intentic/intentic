@@ -23,15 +23,15 @@ const { state, busy, error, delivered, canToggle, enable, disable, sendTest } = 
 const enabled = computed(() => state.value === `on`);
 
 // What a successful test proves, said in the only terms that help when nothing appears on screen: the daemon
-// did its half. That leaves exactly one suspect — this device's own notification settings (Focus/Do Not
-// Disturb, or the browser muted at OS level) — which is worth naming, because it is the one place the page
+// did its half. That leaves exactly one suspect: this device's own notification settings (Focus/Do Not
+// Disturb, or the browser muted at OS level), which is worth naming, because it is the one place the page
 // cannot see and the user can. The plural matters: other browsers you enabled also got it.
 const sent = computed(() => {
     if (delivered.value === undefined) {
         return undefined;
     }
     const where = delivered.value === 1 ? `1 registered device` : `${delivered.value} registered devices`;
-    return `Sent to ${where}. If nothing appeared, the send worked and your system swallowed it — check notification settings and Do Not Disturb for your browser.`;
+    return `Sent to ${where}. If nothing appeared, the send worked and your system swallowed it. Check notification settings and Do Not Disturb for your browser.`;
 });
 
 const toggle = (next: boolean): void => void (next ? enable() : disable());
@@ -43,7 +43,7 @@ const status = computed(() => {
         case `unsupported`:
             return `This browser can't receive push notifications. Safari needs the app added to your Home Screen first.`;
         case `denied`:
-            return `Blocked for this app. It won't ask again — re-allow notifications in your browser's site settings (or, in the iOS app, in Settings > Notifications), then reload.`;
+            return `Blocked for this app. It won't ask again. Re-allow notifications in your browser's site settings (or, in the iOS app, in Settings > Notifications), then reload.`;
         case `on`:
             return `This device will be notified when a turn finishes, when the agent needs an answer, and when an automation is waiting for approval.`;
         default:
@@ -63,7 +63,7 @@ const status = computed(() => {
                     v-if="enabled"
                     icon="send"
                     title="Send a test"
-                    description="Checks the whole chain — the sandbox, the push service, and your operating system's notification settings."
+                    description="Checks the whole chain: the sandbox, the push service, and your operating system's notification settings."
                 >
                     <template #control>
                         <button
@@ -80,7 +80,7 @@ const status = computed(() => {
 
             <p class="px-0.5 text-2xs leading-relaxed text-subtle">
                 A registration belongs to the browser or phone that created it, so turn this on again on every device you want notified. Nothing is
-                sent while a tab on this sandbox is open and active — you're only interrupted once you've actually stepped away.
+                sent while a tab on this sandbox is open and active, so you're only interrupted once you've actually stepped away.
             </p>
         </div>
 

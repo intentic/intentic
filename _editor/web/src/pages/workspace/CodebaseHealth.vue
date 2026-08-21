@@ -6,19 +6,19 @@ import { useCodebaseHealth } from "../../composables/workspace/useCodebaseHealth
 import { useRepos } from "../../composables/workspace/useRepos";
 import { type ChurnWindow, CHURN_WINDOWS, formatCount, hotspotRows, moduleRows, perFile } from "./codebaseHealth";
 
-/* One repo's codebase health — the third repository-level surface, beside its management panel (the cog) and
+/* One repo's codebase health: the third repository-level surface, beside its management panel (the cog) and
  * its git history (the graph). Where the graph answers "what happened here", this answers "where does the risk
  * sit, and what holds this repo together": the daemon's resident iq engine ranks churn × complexity
  * (`hotspots`) and PageRank over the import graph (`map`), and this plots what the CLI prints.
  *
  * Every number here is a COUNT, never a grade. Branch points, commits, exported symbols: figures a reader can
  * go and recount in the files. A composite "maintainability score" would be unfalsifiable, not comparable
- * between repos, and would quietly replace the reader's judgement with the tool's — the ranking exists to send
+ * between repos, and would quietly replace the reader's judgement with the tool's: the ranking exists to send
  * someone to a FILE, which is why every row here opens one.
  *
  * The second thing a row can do is hand that file to an agent. It is the SAME claim acted on rather than read:
  * the prompt quotes the row's own numbers and nothing else, and which refactor it asks for is derived from
- * them (refactorAsk.ts). The user still picks the row — the ranking never picks it for them, which is why the
+ * them (refactorAsk.ts). The user still picks the row: the ranking never picks it for them, which is why the
  * action rides on the row instead of standing at the top of the panel as a "fix my repo" button. */
 
 const { repo } = defineProps<{ repo: string }>();
@@ -41,7 +41,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
 
 <template>
     <div class="@container flex h-full min-h-0 flex-col bg-canvas text-content">
-        <!-- Header: repo switcher · churn window · refresh — the same shape as the graph's, one surface over. -->
+        <!-- Header: repo switcher · churn window · refresh, the same shape as the graph's, one surface over. -->
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line bg-card px-3">
             <Icon name="wave-pulse" class="shrink-0 text-xs text-subtle" />
             <!-- Switching navigates between per-repo health tabs, exactly as the graph's switcher does. -->
@@ -79,7 +79,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
             <template v-else>
                 <p v-if="building" class="mb-3 flex items-center gap-1.5 text-2xs text-warning">
                     <Icon name="exclamation-triangle" class="shrink-0 text-[0.65rem]" />
-                    The index is still building — these figures cover only what has been read so far.
+                    The index is still building: these figures cover only what has been read so far.
                 </p>
 
                 <!-- What the index holds, as four counts. Not a chart: a handful of headline numbers is a
@@ -114,12 +114,12 @@ const building = computed(() => health.value?.freshness.state === `building`);
                         >
                     </h2>
                     <p class="mt-0.5 text-2xs text-subtle">
-                        Commits × branch points. Neither alone is a warning — a churning config file is trivial, and a tangled file nobody touches
+                        Commits × branch points. Neither alone is a warning: a churning config file is trivial, and a tangled file nobody touches
                         costs nobody anything. Open a row to read the file, or
                         <Icon name="sparkles" class="text-[0.65rem]" aria-hidden="true" /> to start an agent refactoring it.
                     </p>
                     <p v-if="rows.length === 0" class="py-3 text-2xs text-subtle">
-                        No file here has both commits and branch points — a repository with no history yet, or one holding only markup and config,
+                        No file here has both commits and branch points: a repository with no history yet, or one holding only markup and config,
                         ranks nothing.
                     </p>
                     <template v-else>
@@ -142,7 +142,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
                                 <button type="button" class="hs-row min-w-0 flex-1 text-left" @click="emit('open-file', row.path)">
                                     <span class="text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
                                     <!-- The DIRECTORY takes the truncation; the filename is what identifies the
-                                         row, so it never shrinks — and it is the directory, not the row, that
+                                         row, so it never shrinks, and it is the directory, not the row, that
                                          earns a tooltip, and only while it is actually cut off. -->
                                     <span class="flex min-w-0 overflow-hidden text-xs">
                                         <span class="truncate text-subtle" v-tooltip.top.overflow="row.dir">{{ row.dir }}</span>
@@ -160,7 +160,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
                                 <!-- Out of the scan until the row is hovered, on a pointer device: the ranking is
                                      what this panel is for, and twenty always-lit buttons would read as twenty
                                      things to do. Touch has no hover, so there it stays put. A dormant row keeps
-                                     the action but dims it — the tooltip says why it probably isn't worth it,
+                                     the action but dims it: the tooltip says why it probably isn't worth it,
                                      and the user may still know something the git log doesn't. -->
                                 <button
                                     type="button"
@@ -180,7 +180,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
                 <section class="mt-5">
                     <h2 class="text-2xs font-medium uppercase tracking-wide text-subtle">Key modules</h2>
                     <p class="mt-0.5 text-2xs text-subtle">
-                        Ranked by PageRank over the import graph — what the rest of this repository leans on, which is rarely what the file tree puts
+                        Ranked by PageRank over the import graph: what the rest of this repository leans on, which is rarely what the file tree puts
                         first.
                     </p>
                     <p v-if="modules.length === 0" class="py-3 text-2xs text-subtle">Nothing in this repository exports a symbol the index reads.</p>
@@ -196,8 +196,8 @@ const building = computed(() => health.value?.freshness.state === `building`);
                                 <span class="shrink-0 text-2xs tabular-nums text-muted">{{ formatCount(module.exports) }} exports</span>
                             </button>
                             <!-- Only where the SURFACE is the finding. The top of a PageRank ranking is also where
-                                 a healthy chokepoint lives — an index.ts everything imports and that exports four
-                                 things is the shape you want — so most rows here keep the empty track and stay
+                                 a healthy chokepoint lives: an index.ts everything imports and that exports four
+                                 things is the shape you want, so most rows here keep the empty track and stay
                                  what they are: a pointer at a file. -->
                             <button
                                 v-if="module.ask"
@@ -219,7 +219,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
 </template>
 
 <style scoped>
-/* A row is the ranking plus its action, side by side — the ranking a button that opens the file, the action a
+/* A row is the ranking plus its action, side by side: the ranking a button that opens the file, the action a
    button of its own beside it, because one cannot nest inside the other. The hover tint lives out here so that
    reaching for the action still lights the row it belongs to. */
 .row-line {

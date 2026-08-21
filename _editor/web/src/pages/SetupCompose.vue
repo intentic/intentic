@@ -10,7 +10,7 @@ import { composeBootstrap, composeFile } from "./setupCompose";
  * and cleanup keep working whichever way the sandbox is managed. */
 
 const props = defineProps<{ args: ComposeArgs }>();
-// Forty-odd lines of YAML is a file to paste into an editor, not something anyone reads down a phone — on a
+// Forty-odd lines of YAML is a file to paste into an editor, not something anyone reads down a phone: on a
 // phone it is clamped to a glimpse of what it declares, with the copy button (and "Show all") right there.
 const { mobile } = useDevice();
 

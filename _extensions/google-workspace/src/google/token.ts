@@ -76,12 +76,12 @@ export const tokenFailure = (connection: Connection, mode: Credential["mode"], e
         ].join(" ");
     }
     if (error === "invalid_client") {
-        return `Google rejected the OAuth client on "${who}" — check the client ID and secret came from the same credential in the console.`;
+        return `Google rejected the OAuth client on "${who}": check the client ID and secret came from the same credential in the console.`;
     }
     if (error === "unauthorized_client" && mode === "domain") {
         return `The service account on "${who}" is not authorized for these scopes. Add its client ID under Security → API controls → Domain-wide delegation in admin.google.com.`;
     }
-    return `Google refused to issue a token for "${who}": ${error}${description === undefined ? "" : ` — ${description}`}.`;
+    return `Google refused to issue a token for "${who}": ${error}${description === undefined ? "" : `, ${description}`}.`;
 };
 
 export const mintToken = async (connection: Connection, credential: Credential, now: number): Promise<AccessToken> => {
@@ -127,7 +127,7 @@ export const exchangeCode = async (
     const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok) {
         const error = typeof body["error"] === "string" ? body["error"] : `HTTP ${response.status}`;
-        const description = typeof body["error_description"] === "string" ? ` — ${body["error_description"]}` : "";
+        const description = typeof body["error_description"] === "string" ? `, ${body["error_description"]}` : "";
         throw new Error(`Google refused to exchange the authorization code: ${error}${description}.`);
     }
     const refreshToken = body["refresh_token"];

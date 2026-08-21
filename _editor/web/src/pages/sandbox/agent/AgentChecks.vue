@@ -10,10 +10,10 @@ import { useRules } from "../../../composables/sandbox/useRules";
  *
  * BOTH ARE RULES (composables/sandbox/useRules.ts), written by these two rows rather than by the general add
  * flow below them. The rows stay because they are the two people ask for by name, and a switch reads better
- * than a form — but there is nothing behind them the table cannot express, which is why outgrowing either one
+ * than a form, but there is nothing behind them the table cannot express, which is why outgrowing either one
  * (a second command before a push, a check that only applies to one repo) needs no new setting.
  *
- * WHICH MODEL the failed check's suggested fix opens on is NOT here — it is `agentRunModels`, up in the Models
+ * WHICH MODEL the failed check's suggested fix opens on is NOT here: it is `agentRunModels`, up in the Models
  * group, because that session is an agent run like the Fix button on a red pipeline and a Maintenance chore. */
 
 const { settings, byId, upsert, remove, setEnabled } = useRules();
@@ -21,7 +21,7 @@ const { settings, byId, upsert, remove, setEnabled } = useRules();
 const verify = () => byId(NAMED_RULES.verify);
 const prepush = () => byId(NAMED_RULES.prepush);
 
-// The proof ledger is a built-in action: what it does — read what the turn edited against what the turn ran —
+// The proof ledger is a built-in action: what it does, read what the turn edited against what the turn ran:
 // is not a command and never will be, so the rule names it rather than describing it.
 const setVerify = (on: boolean): void => {
     const existing = verify();
@@ -40,7 +40,7 @@ const setVerify = (on: boolean): void => {
 
 /* --- The pre-push check -------------------------------------------------------------------------------------
  * The command the workspace runs when a push is about to go out. It belongs on this tab and not in personal
- * Settings for the same reason the quick model does: it names something that only exists inside this sandbox —
+ * Settings for the same reason the quick model does: it names something that only exists inside this sandbox:
  * a command that has to run in THIS workspace's toolchain.
  *
  * Empty is the default and it means OFF, which is why there is no separate enable switch to disagree with it:
@@ -48,7 +48,7 @@ const setVerify = (on: boolean): void => {
  * a bug on its first run. Emptying the box DELETES the rule rather than leaving a disabled one behind, so the
  * list below never fills up with blanks nobody wrote on purpose.
  *
- * Committed on change rather than per keystroke — every save is a daemon round-trip, and a half-typed command
+ * Committed on change rather than per keystroke: every save is a daemon round-trip, and a half-typed command
  * is a command. */
 const prepushCommand = (): string => {
     const action = prepush()?.action;
@@ -83,7 +83,7 @@ const savePrepush = (): void => {
 
 <template>
     <RowGroup label="Checks">
-        <!-- Verify before finishing — the daemon keeps a per-turn ledger of edited code against the checks
+        <!-- Verify before finishing: the daemon keeps a per-turn ledger of edited code against the checks
              that ran, and asks once when a turn tries to end with neither. Off by default because only the
              owner knows what verifies their workspace: a repo with failing baseline tests would get an ask
              it cannot satisfy, and the ask costs a whole model turn. -->
@@ -103,7 +103,7 @@ const savePrepush = (): void => {
             </template>
         </Row>
 
-        <!-- The pre-push check — the shift-left of the CI round-trip: the same question CI asks, asked of the
+        <!-- The pre-push check, the shift-left of the CI round-trip: the same question CI asks, asked of the
              same artifact, at the last moment before it leaves the machine and while the user is still standing
              there. The command gets the row's full width rather than a 14rem control slot: it is a shell line,
              it is read left-to-right, and truncating `pnpm -w turbo run test --filter=…` at the tenth character
@@ -111,7 +111,7 @@ const savePrepush = (): void => {
         <Row
             icon="shield"
             title="Check before you push"
-            description="Run this command over your workspace when you push. It runs in the workspace root, exactly as a terminal would — pass and the push goes, fail and you get the output. Empty turns the check off."
+            description="Run this command over your workspace when you push. It runs in the workspace root, exactly as a terminal would: pass and the push goes, fail and you get the output. Empty turns the check off."
         >
             <template #below>
                 <div

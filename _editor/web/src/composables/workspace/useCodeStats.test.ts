@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sumCounts, useCodeStats, type CodeCount } from "./useCodeStats";
 
 /* THE THREE ANSWERS, kept apart. What this file is really pinning is that "I have not counted this yet" never
- * leaves here looking like "there is nothing to count" — those two used to arrive as the same absent value, and a
+ * leaves here looking like "there is nothing to count": those two used to arrive as the same absent value, and a
  * badge that cannot tell them apart prints git's number for both and then replaces one of them under the reader.
  *
  * The store is module state shared by every review surface, so each case works on a key of its own. Counted
@@ -25,14 +25,14 @@ describe(`useCodeStats`, () => {
         expect(countOf(`counted`)).toEqual({ code: { additions: 1, deletions: 0 }, counting: false });
     });
 
-    it(`settles a file it has no grammar to strip as git's own reading — an answer, not an absence`, async () => {
+    it(`settles a file it has no grammar to strip as git's own reading, an answer, not an absence`, async () => {
         await record(`no-grammar`, `notes.unknownext`, `one`, `two`);
 
-        // No `code`, so the badge prints git's numbers — and `counting: false` is what stops it saying "…" forever.
+        // No `code`, so the badge prints git's numbers, and `counting: false` is what stops it saying "…" forever.
         expect(countOf(`no-grammar`)).toEqual({ counting: false });
     });
 
-    it(`writes off a diff there was no text to read — bytes, or one too big for the daemon to send`, () => {
+    it(`writes off a diff there was no text to read: bytes, or one too big for the daemon to send`, () => {
         noCode(`bytes`);
 
         expect(countOf(`bytes`)).toEqual({ counting: false });

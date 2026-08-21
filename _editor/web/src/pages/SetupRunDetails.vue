@@ -4,13 +4,13 @@
      It is a component because it renders in two places and must not be written twice. Above `xl` the setup page
      docks it in a column of its own beside the steps, where it is simply always visible; below `xl` there is no
      room for a second column, so the same content hangs off step 3's (i) hint. Only one of the two is ever
-     visible — the other is display:none, and the hint's card is inside a v-if that a hidden trigger can never
+     visible: the other is display:none, and the hint's card is inside a v-if that a hidden trigger can never
      open, so nothing renders twice.
 
      The docked column is the whole point. As a hover card teleported to <body> this content landed ON the
      command it described: 288px of explanation over the one thing the step exists to hand you, on exactly the
      wide screens with room to spare. InfoHint's own header comment already names this failure mode and the
-     remedy — put it in the layout, not over it (CredentialGuide reached the same conclusion for the capability
+     remedy: put it in the layout, not over it (CredentialGuide reached the same conclusion for the capability
      forms). This is the third time, so the content moved out to where both surfaces can share it. -->
 <script setup lang="ts">
 import { CopyButton } from "@intentic/ui";
@@ -18,7 +18,7 @@ import Button from "primevue/button";
 import { computed } from "vue";
 import { DESKTOP_DOWNLOADS, desktopVersion } from "../environments/desktop";
 
-// Read INSIDE the desktop app, this panel is being read in the very thing it offers to download — so the two
+// Read INSIDE the desktop app, this panel is being read in the very thing it offers to download, so the two
 // installers are hidden there. Nothing else about the panel changes: what the command does, and how to undo
 // it, are the same facts whichever window is reading them.
 const desktop = computed(() => desktopVersion() !== undefined);
@@ -27,7 +27,7 @@ const desktop = computed(() => desktopVersion() !== undefined);
  *
  * `downloads` is off wherever the step itself now leads with an installer for the reader's own machine: the
  * two offers were the same offer, and the one on the card is the one with a verb on it. It stays ON for the
- * reader whose card has no button — a Mac, or the cloud lane, where the app is nothing to do with the machine
+ * reader whose card has no button: a Mac, or the cloud lane, where the app is nothing to do with the machine
  * being set up but is still the thing that will manage it afterwards. */
 const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?: boolean }>();
 </script>
@@ -90,13 +90,13 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
         </div>
 
         <!-- The undo. It used to sit on the card, on the argument that knowing the undo exists is worth a row of
-             the install step — true, but it earned that row by being the only place it could go. Here it is
+             the install step: true, but it earned that row by being the only place it could go. Here it is
              permanently visible on a wide screen instead of one row among eight, and on a narrow one it is a tap
              away in the same panel as the rest of what running this means. -->
         <div class="flex flex-col gap-1 border-t border-line pt-3 text-xs text-muted">
             <!-- The copy button rides the label, not the command. Beside the command it took ~25px off the
                  one line that has to survive intact, and a one-liner that wraps stops looking like a thing you
-                 run — the docked column is sized (Setup.vue's aside) so the command clears its full width. -->
+                 run: the docked column is sized (Setup.vue's aside) so the command clears its full width. -->
             <span class="flex items-center gap-2">
                 <Icon name="undo" class="shrink-0 text-subtle" />
                 Removes all of it

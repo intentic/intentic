@@ -11,7 +11,7 @@ const server = (info: KomodoServerInfo): KomodoListItem<KomodoServerInfo> => ({ 
 describe("deployState", () => {
     test("running keeps its meaning and every in-motion state reads as deploying", () => {
         expect(deployState("running")).toBe("running");
-        // Teardown is a transition someone asked for, not a breakage — it belongs with deploying, and
+        // Teardown is a transition someone asked for, not a breakage: it belongs with deploying, and
         // crucially not with unhealthy.
         for (const state of ["deploying", "stopping", "removing"]) {
             expect(deployState(state)).toBe("deploying");
@@ -90,7 +90,7 @@ describe("servers", () => {
         expect(entry).toMatchObject({ name: "prod-1", state: "ok", cpuPercent: 22, memPercent: 50, diskPercent: 94, url: `${BASE}/servers/sv1` });
     });
 
-    // A state we cannot interpret must not be drawn as healthy — the safe direction is "unreachable".
+    // A state we cannot interpret must not be drawn as healthy: the safe direction is "unreachable".
     test("anything that is not Ok or Disabled reads as unreachable", () => {
         expect(serverEntry(BASE, server({ state: "NotOk" })).state).toBe("unreachable");
         expect(serverEntry(BASE, server({ state: "SomethingNew" })).state).toBe("unreachable");

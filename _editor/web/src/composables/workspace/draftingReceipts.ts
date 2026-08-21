@@ -80,7 +80,7 @@ export const startDraftingReceipts = (): void => {
             const report = current?.landedMessageDraft;
             const refused = report?.steps.filter((step) => step.status === `refused`) ?? [];
             const blame = refused.length > 0 ? `${refused.map((step) => step.model).join(`, `)} refused` : report?.reason;
-            say(`Couldn't write a commit message for ${titleOf(agent.id)}${blame === undefined ? `` : ` — ${blame}`}. Name the commit yourself.`);
+            say(`Couldn't write a commit message for ${titleOf(agent.id)}${blame === undefined ? `` : `, ${blame}`}. Name the commit yourself.`);
         }
     });
 

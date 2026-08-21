@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 //
 // jsdom because the subject is A CLAIM THIS TAB MAKES ABOUT THE WORLD, and the bug was that it made it too early.
-// "Nothing running — open a panel from the sidebar" and "the lists have not arrived" are the same two empty
+// "Nothing running: open a panel from the sidebar" and "the lists have not arrived" are the same two empty
 // arrays, so a cold cache told every reader their dev servers were down on the one tab whose entire job is
-// saying what is up. None of that is visible in the derivation (useRunning is correct either way) — it is only
+// saying what is up. None of that is visible in the derivation (useRunning is correct either way): it is only
 // visible in what the component PUTS ON SCREEN at each moment of the read, which is why this mounts it.
 import type { CapabilitySummary, PanelSummary } from "@intentic-app/api-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
-// What this component's import chain reads at module eval — the same edge SandboxComputers.test.ts cuts.
+// What this component's import chain reads at module eval: the same edge SandboxComputers.test.ts cuts.
 
 const panels = ref<PanelSummary[]>([]);
 const capabilities = ref<CapabilitySummary[]>([]);
@@ -88,7 +88,7 @@ it(`paints no outline at all for an answer that lands within the reveal delay`, 
     expect(el.textContent).toContain(`api`);
 });
 
-// Past the delay the wait is worth showing, and what is shown is the shape of the list — with the sentence a
+// Past the delay the wait is worth showing, and what is shown is the shape of the list: with the sentence a
 // screen reader gets instead of the bars.
 it(`draws the list's outline once the wait is long enough to be worth showing`, async () => {
     const el = mount();
@@ -101,7 +101,7 @@ it(`draws the list's outline once the wait is long enough to be worth showing`, 
 });
 
 /* Both reads, not either: the list spans dev servers and services, so one landing alone still leaves half the
- * answer missing — and the empty state would then be as wrong as it ever was. */
+ * answer missing, and the empty state would then be as wrong as it ever was. */
 it(`keeps waiting when only one of the two reads has landed`, async () => {
     const el = mount();
     vi.advanceTimersByTime(250);
@@ -111,7 +111,7 @@ it(`keeps waiting when only one of the two reads has landed`, async () => {
     expect(el.querySelectorAll(`.skeleton`).length).toBeGreaterThan(0);
 });
 
-// And once it is true, it is said — the empty state is not lost, only deferred until it is honest.
+// And once it is true, it is said: the empty state is not lost, only deferred until it is honest.
 it(`says nothing is running once both reads land empty`, async () => {
     const el = mount();
     vi.advanceTimersByTime(250);

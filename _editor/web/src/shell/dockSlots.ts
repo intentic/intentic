@@ -5,7 +5,7 @@ import { shallowRef } from "vue";
  * The chat and the sandbox-global terminal are mounted ABOVE the router (shell/PoppablePanels.vue), not inside
  * the workspace shell, because a popped-out panel is a PAGE-level surface: its DOM lives in another window and
  * its lifetime is this page's, not the current route's. They used to be children of ShellDesktop, and that made
- * every route outside the shell — /setup, which is where "Add sandbox" goes, an invite link, the desktop
+ * every route outside the shell: /setup, which is where "Add sandbox" goes, an invite link, the desktop
  * sign-in handoff, tear the chrome down and close the floating window with it, mid-conversation.
  *
  * So the shell no longer OWNS the panels; it publishes a place for them. An empty element in the chat grid

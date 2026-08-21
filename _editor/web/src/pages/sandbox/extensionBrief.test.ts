@@ -2,7 +2,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { describe, expect, test } from "vitest";
 import { auditBrief, extensionBrief, publishBrief, tightenBrief, updateBrief } from "./extensionBrief";
 
-/* What the brief must not lose. These are not assertions about wording — they are the four things an agent
+/* What the brief must not lose. These are not assertions about wording: they are the four things an agent
  * cannot recover on its own, each of which produced a directory that stopped loading when it was missing. */
 
 const brief = extensionBrief({
@@ -33,7 +33,7 @@ describe(`the brief handed to an authoring agent`, () => {
     });
 
     test(`ends on something the agent can check rather than claim`, () => {
-        // "It still loads" is readable off the Extensions tab, which names a directory that stopped parsing —
+        // "It still loads" is readable off the Extensions tab, which names a directory that stopped parsing:
         // so finishing is verifiable without the author being there.
         expect(brief).toContain(`Not loadable`);
         expect(brief).toContain(`workspace.release-notes`);
@@ -138,7 +138,7 @@ describe(`the brief for reading an update`, () => {
         path: ``,
     });
 
-    test(`reads the diff, not the tree — the installed commit was already approved`, () => {
+    test(`reads the diff, not the tree: the installed commit was already approved`, () => {
         expect(update).toContain(`read the diff between the two commits`);
         expect(update).toContain(`what is between them is the whole subject`);
     });

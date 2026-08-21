@@ -2,7 +2,7 @@
 // twelve could be switched and the rest were cheatsheets that arrived with an account. Four of those rows were
 // the same Product Hunt skill under four connected logins, and the two the reader had written themselves were
 // somewhere in the middle of it. What is pinned here is the line the fold is drawn on and the order either side
-// of it — plus the reason the filter reads more than the name.
+// of it: plus the reason the filter reads more than the name.
 import type { SkillSummary } from "@intentic-app/api-contract";
 import { expect, it } from "vitest";
 import { bySection, isTunable, matchesSkill } from "./skillList";
@@ -21,7 +21,7 @@ const skill = (over: Partial<SkillSummary> & Pick<SkillSummary, `name`>): SkillS
 it(`counts a skill as tunable exactly when this surface can do something about it`, () => {
     const own = skill({ name: `notes`, switchable: true, editable: true, removable: true });
     const builtin = skill({ name: `lsp`, origin: `builtin`, switchable: true });
-    // Nobody's to switch, but absolutely the owner's to clear out — which is a thing you can do here.
+    // Nobody's to switch, but absolutely the owner's to clear out, which is a thing you can do here.
     const loose = skill({ name: `scratch`, origin: `dropped`, removable: true });
     // On because the thing that ships it is on; the row names that owner instead of offering a dead switch.
     const fromConnection = skill({ name: `github`, origin: `capability`, owner: `github` });
@@ -53,6 +53,6 @@ it(`finds a folded row by where it came from, not only by its name`, () => {
     expect(matchesSkill(row, `connection`)).toBe(true);
     expect(matchesSkill(row, `publishes`)).toBe(true);
     expect(matchesSkill(row, `discord`)).toBe(false);
-    // An empty query is not a filter — every row survives it.
+    // An empty query is not a filter: every row survives it.
     expect(matchesSkill(row, ``)).toBe(true);
 });

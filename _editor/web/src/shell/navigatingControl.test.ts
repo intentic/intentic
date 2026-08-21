@@ -1,32 +1,32 @@
-/* A CONTROL THAT GOES SOMEWHERE HAS TO BE A LINK — everywhere in the app and in every extension that ships
+/* A CONTROL THAT GOES SOMEWHERE HAS TO BE A LINK: everywhere in the app and in every extension that ships
  * with it.
  *
  * WHAT HAPPENED. Dozens of destinations were drawn as `<button @click="router.push('/sandbox')">`. On screen
  * that is indistinguishable from a link, and every one of them was reported the same way: hover it and the
- * status bar says nothing, right-click it and the browser offers no "Open link in new tab", and Ctrl/⌘-click —
- * the gesture everybody uses to keep the page they are on — moved the current tab instead of opening a second
+ * status bar says nothing, right-click it and the browser offers no "Open link in new tab", and Ctrl/⌘-click:
+ * the gesture everybody uses to keep the page they are on: moved the current tab instead of opening a second
  * one. "Sandbox settings" in the sandbox switcher was the example that started this; it was one of about thirty.
  *
  * WHY A COMPILE-LEVEL TEST. Nothing about that code is type-incorrect, lint-worthy or untested: it typechecks,
  * it lints, and a mounted test asserting "the press navigates" passes, because it does. What is missing is a
  * capability of the ELEMENT, and only reading the source shows which element was used. Reading the templates
- * directly also covers every view at once — this app's and the extensions' — with no fixture, no mocks, and
+ * directly also covers every view at once (this app's and the extensions') with no fixture, no mocks, and
  * nothing to keep up to date as views are added.
  *
  * THE RULE IS DELIBERATELY NARROW, so it can have no allowlist. It fires on two shapes only, both of which are
  * unambiguous and both of which are how the whole class got written:
  *
  *   1. A non-anchor element whose own `@click` expression navigates.
- *   2. A handler that does NOTHING BUT navigate — a single-expression arrow — which is what such a `@click`
+ *   2. A handler that does NOTHING BUT navigate: a single-expression arrow, which is what such a `@click`
  *      points at once the expression is lifted out of the template.
  *
  * A handler with a body (dismiss a popover, then navigate) is not matched, because a guard cannot tell which
- * of those the click is really for. Those are links too — see <ActionLink> and ContextMenu's `url` — but the
+ * of those the click is really for. Those are links too: see <ActionLink> and ContextMenu's `url`, but the
  * judgement is a reviewer's.
  *
  * WHAT TO DO WHEN IT FIRES. Use `<RouterLink :to>`, or `<Button :as="RouterLink" :to>` where the thing is
- * shaped like a button. Where a plain click legitimately does something better than a page load — pointing the
- * docked chat at an agent rather than leaving for its page — use `<ActionLink :to @activate>`, which keeps the
+ * shaped like a button. Where a plain click legitimately does something better than a page load: pointing the
+ * docked chat at an agent rather than leaving for its page: use `<ActionLink :to @activate>`, which keeps the
  * address for the browser and gives the app only the unmodified click. In a context menu, put the address on
  * the row's `url` (see ContextMenu, and `useMenuLink`). In an extension, which has no router to reach, use
  * `appLink(api.href(path), () => api.navigate(path))`. */
@@ -38,7 +38,7 @@ import { parse } from "vue/compiler-sfc";
 
 const ROOT = repoRoot(import.meta.url);
 
-// This app's views, plus every extension that ships in the repo — the extensions navigate through their host
+// This app's views, plus every extension that ships in the repo: the extensions navigate through their host
 // (`api.navigate`) and had the identical class of bug, and their own packages carry no guard like this one.
 const ROOTS = [
     join(ROOT, `_editor/web/src`),
@@ -62,11 +62,11 @@ function existsDir(path: string): boolean {
  *
  * `router.replace` is deliberately not in it. A replace erases the entry you came from, which is the whole
  * point of it on a dead-end gate ("sign in again" after a handoff failed, "retry" after the platform was
- * unreachable) — Back must not return to the page that just refused you. A link cannot express that, so those
+ * unreachable): Back must not return to the page that just refused you. A link cannot express that, so those
  * controls are correctly buttons and this rule must not claim otherwise. */
 const NAVIGATES = /(?:\brouter\.push|\bnavigate)\s*\(/;
 
-// The elements that ARE links already. `component` is the dynamic tag — a row that switches between a button
+// The elements that ARE links already. `component` is the dynamic tag: a row that switches between a button
 // and a RouterLink resolves at runtime, so the source cannot judge it and does not try.
 const LINKS = new Set([`a`, `RouterLink`, `router-link`, `ActionLink`, `component`]);
 
@@ -115,7 +115,7 @@ const clickNavigations = (file: string, source: string): Offence[] => {
 
 /* A handler that is nothing but a navigation: `const openThing = (): void => void router.push(...)`. Whatever
  * calls it is a control that only goes somewhere, so the control should have been the link and this indirection
- * is what hides that. Multi-statement bodies are left alone on purpose — see the header. */
+ * is what hides that. Multi-statement bodies are left alone on purpose: see the header. */
 const PURE_NAVIGATOR =
     /const\s+([A-Za-z_$][\w$]*)\s*=\s*\([^)]*\)\s*(?::\s*[^=]+?)?=>\s*(?:void\s+)?(?:router\.push|api\.navigate|host\(\)\.navigate)\s*\(/g;
 

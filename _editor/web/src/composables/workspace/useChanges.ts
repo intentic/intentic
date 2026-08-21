@@ -422,8 +422,8 @@ const syncRepo = (repo: string, action: "fetch" | "pull", label: string): Promis
 // so a repo that needs only one gets only one, and a set whose repos disagree still resolves each on its own.
 export interface SyncTarget {
     readonly repo: string;
-    readonly pull: boolean; // behind its upstream — fast-forward it first
-    readonly push: boolean; // ahead, or a branch with no upstream yet — send (publishing it when unpublished) after
+    readonly pull: boolean; // behind its upstream, fast-forward it first
+    readonly push: boolean; // ahead, or a branch with no upstream yet, send (publishing it when unpublished) after
 }
 
 const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>

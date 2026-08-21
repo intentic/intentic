@@ -10,13 +10,13 @@ import { imageLabel, STATE_TONE } from "./stateVisual";
  * row that can expand to its services.
  *
  * THE ROW DRAWS NO BOX. It used to carry its own `rounded-lg border bg-card` inside a <RowGroup> that already
- * draws exactly that — a bordered card per row, nested in a bordered card per host, so the board read as forty
+ * draws exactly that: a bordered card per row, nested in a bordered card per host, so the board read as forty
  * boxes and the borders stopped meaning anything. What separates rows now is the group's own hairline, and what
  * a row says about itself it says in COLOUR, on the left edge: ext-pipelines' `rowBorder` stripe, scannable
  * down the whole column without reading a word.
  *
  * ONE PRIMARY VERB, chosen by state. Five icon-only buttons per row shipped here, two of which were circular
- * arrows a millimetre apart (redeploy and restart) — a coin flip during an incident, which is the one moment
+ * arrows a millimetre apart (redeploy and restart): a coin flip during an incident, which is the one moment
  * this surface exists for. What is left is the verb that is right for the state the row is in, spelled out,
  * plus the recovery verb beside it. The rest live in the expander, where the reader has already stopped to
  * look at one resource rather than scanning forty. */
@@ -37,7 +37,7 @@ const emit = defineEmits<{
 }>();
 
 /* Which model this row's fix will spend, and the caret that re-points it for this container alone. Seeded from
- * the sandbox's agent-run list — asked of the host rather than read here, so the button and the daemon cannot
+ * the sandbox's agent-run list: asked of the host rather than read here, so the button and the daemon cannot
  * disagree about what a click costs. Per row, because the choice belongs to the failure you are looking at. */
 const fixModel = useAgentRunPick(() => host().models);
 const startFix = (): void => {
@@ -49,7 +49,7 @@ const tone = computed(() => STATE_TONE[props.resource.state]);
 const expanded = ref(false);
 
 // One toggle for both halves of "show me more": the services a stack is made of, and its log tail. Fetched
-// only on the way open — a board of thirty rows must not fetch thirty logs to render.
+// only on the way open: a board of thirty rows must not fetch thirty logs to render.
 const toggle = (): void => {
     expanded.value = !expanded.value;
     if (expanded.value && props.logs === undefined) {
@@ -62,7 +62,7 @@ const toggle = (): void => {
  * `pull` WINS over `deploy` whenever a newer image exists, and that is the whole reason this is computed rather
  * than a fixed button: with an update waiting, "Redeploy" quietly ships the image you already have, which is
  * almost never what the click meant. One slot, and the verb in it is the one that does what the reader wants.
- * A resource mid-deploy gets nothing — its state is about to change on its own. */
+ * A resource mid-deploy gets nothing: its state is about to change on its own. */
 const primary = computed<{ action: DeployAction; label: string } | undefined>(() => {
     if (props.resource.state === `deploying`) {
         return undefined;
@@ -174,7 +174,7 @@ const logText = computed(() => {
             <div class="mb-3 flex flex-wrap items-center gap-2">
                 <!-- The one thing this surface can do that Komodo's own UI cannot: put an agent on the failure
                      with the repo that holds the bug already open. It is the only primary button on the row,
-                     and it IS Pipelines' "Fix with agent" — the same component, because it is the same act:
+                     and it IS Pipelines' "Fix with agent": the same component, because it is the same act:
                      one click on the standing model, a caret for the container that wants a bigger one. -->
                 <AgentRunButton
                     label="Ask the agent to fix"

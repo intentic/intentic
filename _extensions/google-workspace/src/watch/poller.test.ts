@@ -51,7 +51,7 @@ describe("addressedTo", () => {
 describe("pruneAnnounced", () => {
     const now = Date.parse("2026-08-09T12:00:00Z");
 
-    /* Unpruned this map is the only thing in the watcher that grows forever — a year of meetings in a file
+    /* Unpruned this map is the only thing in the watcher that grows forever: a year of meetings in a file
      * re-read every few minutes. */
     it("forgets events whose start is well past the window that could surface them", () => {
         expect(

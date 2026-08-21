@@ -4,14 +4,14 @@ import { Button, ui, Icon, Notice, noticeOf, Picker, StatusBadge, type PickerOpt
 import { computed, ref } from "vue";
 
 /* One workspace repo that ships a compose file, and the Komodo stack it belongs to. A hairline row inside the
- * "Your repos" <RowGroup> — it draws no border of its own, for the reason spelled out in ResourceRow.
+ * "Your repos" <RowGroup>: it draws no border of its own, for the reason spelled out in ResourceRow.
  *
  * The daemon suggests by name; this is where the owner accepts or overrules. It is deliberately a SUGGESTION
- * and never an automatic binding — only the owner knows that `atlas` is this repo's staging stack, and a guess
+ * and never an automatic binding: only the owner knows that `atlas` is this repo's staging stack, and a guess
  * that silently becomes a fact is worse than no guess. So the accept is one click, the override is a picker
  * over every stack, and unlink is always available. */
 
-// `error` is whatever the link call refused with, shown on this row rather than in a page banner — the same
+// `error` is whatever the link call refused with, shown on this row rather than in a page banner: the same
 // rule ResourceRow follows, and for the same reason.
 const props = defineProps<{ link: DeployRepoLink; stacks: readonly string[]; busy: boolean; error: string | undefined }>();
 const emit = defineEmits<{ link: [repo: string, stack: string] }>();

@@ -1,6 +1,6 @@
 # @intentic/ext-connectors
 
-The systems an agent can be wired to — GitHub, GitLab, npm, Sentry, Redmine, Outline, Notion, SharePoint, SigNoz,
+The systems an agent can be wired to: GitHub, GitLab, npm, Sentry, Redmine, Outline, Notion, SharePoint, SigNoz,
 Komodo, Cloudflare, Firecrawl, Postgres, MySQL.
 
 Connecting one does two things at once: it turns on the capability other surfaces gate on (Pipelines appears when
@@ -15,15 +15,15 @@ a skill alongside the credential.
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json) — the fifteen connectors, and what each one grants. This
+- [intentic-extension.json](intentic-extension.json): the fifteen connectors, and what each one grants. This
   file IS the package; there is no `src/`.
-- [skills/github](skills/github) — a worked example of the shipped-skill half.
-- [env/postgres.Dockerfile](env/postgres.Dockerfile) — a connector that needs a client installed in the sandbox,
+- [skills/github](skills/github): a worked example of the shipped-skill half.
+- [env/postgres.Dockerfile](env/postgres.Dockerfile): a connector that needs a client installed in the sandbox,
   not just a credential.
 
 ## How it fits
 
-Purely declarative — a manifest and a directory of skills, no code. That is the point: a connector is a
+Purely declarative, a manifest and a directory of skills, no code. That is the point: a connector is a
 *contribution*, and anything that needed logic would be a different kind of extension. Capability facts flow from
 here to every view that gates on them.
 
@@ -33,12 +33,12 @@ here to every view that gates on them.
 - Two connectors of the same kind are two estates. Surfaces that gate on these facts generally want one tile per
   connection rather than one per extension.
 - npm's `totpSecret` field is marked `totp`: the daemon mints one-time codes from it (the agent's `otp` command)
-  and the seed never enters the agent's environment — a manifest whose `env` referenced it would fail to parse.
+  and the seed never enters the agent's environment: a manifest whose `env` referenced it would fail to parse.
 - npm is two cards on purpose: the `npm` cli connector (token → the npm CLI) and the `npmjs` browser card, the
-  only connector of `browser` kind here. The browser half exists for what no token can do anymore — WebAuthn
-  2FA and publish approvals — which the sandbox answers with its own enrolled passkey (the daemon's browser
+  only connector of `browser` kind here. The browser half exists for what no token can do anymore: WebAuthn
+  2FA and publish approvals: which the sandbox answers with its own enrolled passkey (the daemon's browser
   passkey store).
-- The webhook automations for these services are declared here too (`contributes.automationTemplates`) — a
+- The webhook automations for these services are declared here too (`contributes.automationTemplates`): a
   GitHub or GitLab push, a Sentry alert, a Komodo deployment alert. A template that fires on the generic
   webhook has no trigger source to sit beside, so it goes with the pack carrying the card it needs connected,
   which is the same card the user had to connect for it to work at all. The automations surface names none of

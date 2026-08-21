@@ -8,7 +8,7 @@ import { type WorkspaceTab } from "./workspaceTabs";
 import { basename } from "@intentic/ui/path";
 
 /* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or generated workspace surface.
- * Presentational — selection/close are emitted up to Workspace.vue by tab id, which drives the tab list +
+ * Presentational: selection/close are emitted up to Workspace.vue by tab id, which drives the tab list +
  * active id (useWorkspaceTabs), and embeds this strip in its tab row (which provides the bar's
  * border/background). A file tab shows its type icon, basename, and a close ×; a dirty file shows a dot in
  * the close slot (→ × on hover). A diff tab shows its status letter + basename and is never dirty. The one tab
@@ -19,7 +19,7 @@ import { basename } from "@intentic/ui/path";
 // to be replaced by the next file the user looks at.
 const { tabs, active, preview } = defineProps<{ tabs: readonly WorkspaceTab[]; active?: string | null; preview?: string | null }>();
 // `contextmenu` carries the right-clicked tab's id, or undefined when the click landed on the strip's empty
-// space — the parent owns both menus, so it decides which rows a tab-less right-click deserves. `keep` is the
+// space: the parent owns both menus, so it decides which rows a tab-less right-click deserves. `keep` is the
 // double-click that makes a preview tab permanent.
 const emit = defineEmits<{
     select: [id: string];
@@ -69,7 +69,7 @@ const onClose = (event: Event, id: string): void => {
 };
 
 /* Overlay scrollbar. The native bar is hidden (it would eat 6px of the fixed-height row and shove the tab
- * text up); instead the strip scrolls via scrollLeft — mouse wheel, or dragging this thumb — and a thin thumb
+ * text up); instead the strip scrolls via scrollLeft: mouse wheel, or dragging this thumb, and a thin thumb
  * floats over the bottom edge, revealed on hover. `thumbWidth === 0` means no overflow (thumb hidden). */
 const scroller = ref<HTMLElement>();
 const thumbLeft = ref(0); // %
@@ -91,7 +91,7 @@ const updateThumb = (): void => {
 const onWheel = (event: WheelEvent): void => {
     const el = scroller.value;
     if (el === undefined || el.scrollWidth <= el.clientWidth) {
-        return; // nothing to scroll horizontally — let the event bubble (page scroll)
+        return; // nothing to scroll horizontally: let the event bubble (page scroll)
     }
     event.preventDefault();
     el.scrollLeft += event.deltaY + event.deltaX;
@@ -125,8 +125,8 @@ const onThumbUp = (event: PointerEvent): void => {
     (event.target as HTMLElement).releasePointerCapture(event.pointerId);
 };
 
-/* Keeping the focused tab in view. Almost nothing that focuses a tab is inside this strip — a row in the file
- * tree, a Changes or Checkpoints row, a restored strip on reload — so once the strip overflows, the tab any of
+/* Keeping the focused tab in view. Almost nothing that focuses a tab is inside this strip: a row in the file
+ * tree, a Changes or Checkpoints row, a restored strip on reload, so once the strip overflows, the tab any of
  * them opens can sit past its right edge, and a strip that stays put reads as a click that did nothing.
  * `nearest` moves the least it can and no-ops on a tab already visible, so clicking a tab here never shifts it
  * out from under the pointer. */
@@ -201,7 +201,7 @@ watch(
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
                 <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />
                 <!-- The provider's own glyph, an open string like every extension-supplied icon (a bundle may name
-                     one this app has never heard of) — an unknown name renders the set's fallback, never an error. -->
+                     one this app has never heard of): an unknown name renders the set's fallback, never an error. -->
                 <Icon v-else-if="tab.kind === 'document'" :name="tab.icon as IconName" class="text-2xs text-link" />
                 <ChangeStatusMark v-else :status="tab.status" />
                 <span class="max-w-40 truncate" :class="{ italic: tab.id === preview }">{{ tabLabel(tab) }}</span>

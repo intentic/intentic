@@ -25,7 +25,7 @@ describe(`matchesSearch`, () => {
     });
 
     /* EVERY WORD MUST MATCH, BUT ANY FIELD MAY BE THE ONE THAT MATCHES IT. This is the rule that makes searching
-     * a log feel right — people remember a fragment of the message and a fragment of who wrote it, not two
+     * a log feel right: people remember a fragment of the message and a fragment of who wrote it, not two
      * fragments of the same field. */
     it(`requires every word, across any mix of fields`, () => {
         expect(find(`lane colours`)).toBe(true); // both in the subject
@@ -38,7 +38,7 @@ describe(`matchesSearch`, () => {
         expect(find(`Renée`)).toBe(true);
     });
 
-    // Punctuation becomes a word break rather than vanishing, so `feat(graph)` is reachable as two words — and
+    // Punctuation becomes a word break rather than vanishing, so `feat(graph)` is reachable as two words, and
     // typing the punctuation back in still works.
     it(`treats punctuation as a separator in both the term and the text`, () => {
         expect(find(`feat graph`)).toBe(true);

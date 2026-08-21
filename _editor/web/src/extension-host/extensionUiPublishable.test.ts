@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 /* THE KIT IS PUBLISHED, and that is a different set of obligations from every other package in `_editor`.
  *
  * An extension author outside this monorepo installs `@intentic/extension-ui` to compile a screen against.
- * What they get is declarations plus a bridge to the host's own components — deliberately no source, because
+ * What they get is declarations plus a bridge to the host's own components: deliberately no source, because
  * the components live in `@intentic/ui`, which is the whole app design system and is not published (doing so
  * would put a semver promise on all of it instead of on the curated slice this kit IS).
  *
@@ -31,7 +31,7 @@ describe(`the published shape of @intentic/extension-ui`, () => {
     /* A `workspace:` RUNTIME dependency is the trap. It resolves here, packs as a version specifier npm cannot
      * satisfy, and the failure lands on the installer rather than on the release. `@intentic/ui` belongs in
      * devDependencies precisely because the published artifact carries its DECLARATIONS rather than importing
-     * it — if it ever climbs back into `dependencies`, this is the sentence that says why it must not. */
+     * it: if it ever climbs back into `dependencies`, this is the sentence that says why it must not. */
     test(`declares no workspace package as a runtime dependency`, () => {
         const workspaceDeps = Object.entries({ ...manifest.dependencies, ...manifest.peerDependencies })
             .filter(([, spec]) => spec.startsWith(`workspace:`))
@@ -65,11 +65,11 @@ describe(`the published shape of @intentic/extension-ui`, () => {
         expect(published.filter((path) => !packed(path))).toEqual([]);
     });
 
-    /* EVERYTHING IT PUBLISHES IS BUILT, AND `dist/` IS GITIGNORED — so a pack that runs without the build
+    /* EVERYTHING IT PUBLISHES IS BUILT, AND `dist/` IS GITIGNORED, so a pack that runs without the build
      * having happened produces a valid tarball containing `src/` and `names.mjs` and NOTHING ELSE. No error, no
      * warning, a real version on the registry, and an install whose `main` resolves to a file that is not
      * there. That is measured rather than imagined: it is exactly what `pnpm pack` did here before `prepack`
-     * existed. The release does build first, so this is normally a three-second no-op — it exists so that
+     * existed. The release does build first, so this is normally a three-second no-op: it exists so that
      * "normally" is not what the correctness of a published artifact rests on. */
     test(`builds itself at pack time, so a tarball cannot ship without its dist`, () => {
         expect(manifest.scripts[`prepack`]).toBe(manifest.scripts[`build`]);

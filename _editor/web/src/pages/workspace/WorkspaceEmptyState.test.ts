@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // THE TWO SILENCES THIS PANE COVERS. An empty workspace is somebody who has just finished setup and has no code
-// in yet — for them this pane is the whole product, and every way in has to be on it. A workspace with code and
+// in yet: for them this pane is the whole product, and every way in has to be on it. A workspace with code and
 // no file open is a reader between files, who needs the drop target and nothing else. Showing either screen in
 // the other's state is the failure worth a test: the newcomer offered only a file upload (what this replaced),
 // or a working developer greeted by a get-started pitch every time they close their last tab.
@@ -29,7 +29,7 @@ it(`offers every way of getting code in while the workspace is empty`, () => {
     const el = mount(true);
 
     expect(el.textContent).toContain(`Get your code in`);
-    // All three doors — a repository, this machine's files, and the agent for everything else.
+    // All three doors: a repository, this machine's files, and the agent for everything else.
     expect(buttonSaying(el, `Clone a repository`)).toBeDefined();
     expect(buttonSaying(el, `Upload files or a folder`)).toBeDefined();
     expect(buttonSaying(el, `Ask an agent to fetch it`)).toBeDefined();
@@ -49,7 +49,7 @@ it(`opens the clone field in place, and refuses to submit an empty address`, asy
     expect(buttonSaying(el, `Clone`)!.disabled).toBe(true);
 });
 
-it(`shows a workspace that HAS code only the drop target — this pane is not a tutorial for people mid-work`, () => {
+it(`shows a workspace that HAS code only the drop target: this pane is not a tutorial for people mid-work`, () => {
     const el = mount(false);
 
     expect(el.textContent).toContain(`Drop your work here`);

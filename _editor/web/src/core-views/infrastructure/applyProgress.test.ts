@@ -4,7 +4,7 @@ import { type ApplyProgressState, initialApplyState, reduceApplyLine } from "./a
 const reduceAll = (lines: Record<string, unknown>[]): ApplyProgressState => lines.reduce(reduceApplyLine, initialApplyState());
 
 // A representative apply → adopt run: start marker, two resources (one still in flight), a readiness gate that
-// goes live, two reconcile iterations converging, the result summary, then both commands' exits — apply's ends
+// goes live, two reconcile iterations converging, the result summary, then both commands' exits: apply's ends
 // the per-resource phase, adopt's ends the whole job.
 const RUN: Record<string, unknown>[] = [
     { kind: `start`, startedAt: 1 },
@@ -56,11 +56,11 @@ describe(`reduceApplyLine`, () => {
         expect(failed.error).toContain(`Resolve failed`);
     });
 
-    it(`rebuilds identical state on replay — a refresh mid-apply re-reads the file from its start`, () => {
+    it(`rebuilds identical state on replay: a refresh mid-apply re-reads the file from its start`, () => {
         // The daemon tail replays from {kind:"start"}; reducing the same lines is deterministic.
         expect(reduceAll(RUN)).toEqual(reduceAll(RUN));
         // A page refreshed mid-run holds partial state; replaying the full run (which begins with the start
-        // marker) on top of it rebuilds the identical full state — no double-counting, no stale rows.
+        // marker) on top of it rebuilds the identical full state: no double-counting, no stale rows.
         const cut = reduceAll(RUN.slice(0, 5));
         expect(cut.nodes.size).toBe(2);
         expect(cut.applyPhaseDone).toBe(false);

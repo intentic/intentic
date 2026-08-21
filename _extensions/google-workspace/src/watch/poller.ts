@@ -178,7 +178,7 @@ export const startWatcher = (
                 throw error;
             });
             if (page === undefined) {
-                ctx.log.info({ account: connection.name }, "gmail history cursor expired — re-baselining");
+                ctx.log.info({ account: connection.name }, "gmail history cursor expired, re-baselining");
                 // The cursor is dropped, not blanked: the next tick's "no cursor" branch takes a fresh
                 // baseline from the account itself.
                 await save(mark.announced === undefined ? {} : { announced: mark.announced });

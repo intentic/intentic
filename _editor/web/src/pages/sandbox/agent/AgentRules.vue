@@ -10,20 +10,20 @@ import RuleForm from "./RuleForm.vue";
 import RulesInfo from "./RulesInfo.vue";
 import { momentOf, type RuleDraft } from "./ruleWords";
 
-/* EVERY OTHER STANDING INSTRUCTION — the rules that don't have a row of their own further up this tab.
+/* EVERY OTHER STANDING INSTRUCTION: the rules that don't have a row of their own further up this tab.
  *
  * The bet this whole group makes is that a rule is a SENTENCE: at this moment, if this is true, do this. The
  * form (RuleForm.vue) asks for those three things in that order and nothing else, and a row here is that same
- * sentence read back — out of the same vocabulary (ruleWords.ts), not out of a second table that agrees with
- * the first until the day it doesn't. The moment a form here needs a fourth concept, the answer is an agent —
- * which is already one of the things a rule can do — rather than another field.
+ * sentence read back: out of the same vocabulary (ruleWords.ts), not out of a second table that agrees with
+ * the first until the day it doesn't. The moment a form here needs a fourth concept, the answer is an agent:
+ * which is already one of the things a rule can do: rather than another field.
  *
  * A ROW IS SCANNED, NOT READ. What used to be one grey run-on sentence per rule is now typeset: the moment as
  * a chip, the command in the type a command is written in, the paths as the globs they are. A list of ten is
  * something you look down for the one you meant; a list of ten identical grey paragraphs is something you
  * read, and nobody does.
  *
- * ONE FORM, TWO JOBS. Editing a rule opens the same form in the row's place, keeping its id — which is what
+ * ONE FORM, TWO JOBS. Editing a rule opens the same form in the row's place, keeping its id, which is what
  * the activity feed names and what the firing stamps are keyed by, so renaming a rule does not orphan its
  * history. Before this, changing a command meant deleting the rule and typing all of it again. */
 
@@ -51,7 +51,7 @@ const startEdit = (id: string): void => {
     editingId.value = id;
 };
 
-/* The form writes the words; identity and the switch stay here. A rule being edited keeps BOTH — a relabel
+/* The form writes the words; identity and the switch stay here. A rule being edited keeps BOTH: a relabel
  * that minted a new id would hand the feed a new name for the same rule and leave its firing history behind,
  * and one that reset `enabled` would quietly turn a rule back on that the owner had turned off. */
 const saveDraft = (draft: RuleDraft): void => {
@@ -88,7 +88,7 @@ const menuModel = computed<MenuItem[]>(() => {
     ];
 });
 
-// The three halves of the sentence's tail, each asked for separately so the row can typeset them differently —
+// The three halves of the sentence's tail, each asked for separately so the row can typeset them differently:
 // a command is read as a command, an instruction is read as words.
 const commandOf = (rule: Rule): string | undefined => (rule.action.kind === `command` ? rule.action.command : undefined);
 const textOf = (rule: Rule): string | undefined => (rule.action.kind === `instruct` ? rule.action.text : undefined);
@@ -169,7 +169,7 @@ const firedOf = (rule: Rule): string => {
             v-else-if="listed.length === 0 && !adding"
             icon="shield"
             density="compact"
-            description="No rules yet — the three above are the common ones, written the same way."
+            description="No rules yet: the three above are the common ones, written the same way."
         />
 
         <Row v-if="adding" icon="plus" density="compact" title="New rule">

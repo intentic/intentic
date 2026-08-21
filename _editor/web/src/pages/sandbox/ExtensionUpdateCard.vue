@@ -14,17 +14,17 @@ import { reloadExtensions } from "../../extension-host/useExtensionHost";
 import { router } from "../../router";
 import { updateBrief } from "./extensionBrief";
 
-/* THE UPDATE STORY of one git-installed extension, below its row's fold — everything between "the registry
+/* THE UPDATE STORY of one git-installed extension, below its row's fold: everything between "the registry
  * lists a newer commit" and "this browser runs it".
  *
  * The card leads with whatever demands the most: an advisory (its registry blocked it), then an unhealthy
  * update (came up wrong after a swap), then the update offer itself. The offer is a TWO-CLICK shape on
- * purpose: the first click stages the offered commit and renders the powers diff — the mechanical answer to
- * "what would I be approving" — and only the second click, now labelled by what the diff found ("Update" when
+ * purpose: the first click stages the offered commit and renders the powers diff, the mechanical answer to
+ * "what would I be approving", and only the second click, now labelled by what the diff found ("Update" when
  * nothing grew, "Approve new powers & update" when something did), performs the transaction. Nothing here
  * auto-applies; the unattended rungs live in the policy control at the bottom, per extension, owner-set.
  *
- * Reverting is ordinary and visible whenever a previous version is kept, not only when something is on fire —
+ * Reverting is ordinary and visible whenever a previous version is kept, not only when something is on fire:
  * "the last update made it worse" needs no failing health probe to be true. */
 
 const { extension } = defineProps<{ extension: ExtensionSummary }>();
@@ -68,7 +68,7 @@ const stage = (): Promise<void> =>
         preview.value = await previewUpdate(extension.id);
     });
 
-// Applied, then the host runs again so THIS browser finishes on the new code — the same reconcile the tab's
+// Applied, then the host runs again so THIS browser finishes on the new code: the same reconcile the tab's
 // toggle performs. A pending image rebuild is reported, not implied away.
 const rebuildNote = ref(false);
 const apply = (): Promise<void> =>
@@ -86,7 +86,7 @@ const revert = (): Promise<void> =>
     });
 
 // The agent's diff-read: link the finished one when the agent-prepared policy already ran it, offer to start
-// it otherwise. An unregistered conversation still has a route — the chat screen resolves it by id.
+// it otherwise. An unregistered conversation still has a route: the chat screen resolves it by id.
 const reviewAt = (conversationId: string): string => `/agents/${encodeURIComponent(conversationId)}`;
 const openReview = (conversationId: string): void => {
     const { agentById, open } = useAgents();
@@ -121,7 +121,7 @@ const confirmLabel = computed(() =>
 const policy = computed<ExtensionUpdatePolicy>(() => extension.updatePolicy ?? { updates: `notify`, advisories: `auto-disable` });
 const POLICY_CAPTIONS: Record<ExtensionUpdatePolicy["updates"], string> = {
     notify: `New releases badge this row and wait for you.`,
-    agent: `Your agent reads the diff the moment a release is listed — you open a finished review and decide.`,
+    agent: `Your agent reads the diff the moment a release is listed, you open a finished review and decide.`,
     auto: `A human-verified release whose powers didn't grow applies unattended, health-watched, auto-reverted if it comes up wrong. Anything less falls back to notify.`,
 };
 const setPolicy = (updates: ExtensionUpdatePolicy["updates"]): Promise<void> => act(() => setUpdatePolicy(extension.id, { updates }));
@@ -131,7 +131,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
 
 <template>
     <div class="flex flex-col gap-3">
-        <!-- The alarm, when there is one. It stays until the registry unblocks the listing — an advisory is a
+        <!-- The alarm, when there is one. It stays until the registry unblocks the listing: an advisory is a
              standing fact about the code, not a notification to swipe away. -->
         <div v-if="extension.advisory" class="rounded border border-danger/40 bg-danger/5 p-2.5">
             <p class="text-xs font-medium text-danger">Blocked by its registry</p>
@@ -139,9 +139,9 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
             <p class="mt-1 text-2xs text-subtle">
                 {{
                     extension.advisory.autoDisabled
-                        ? `It was switched off automatically — the switch above turns it back on if you disagree.`
+                        ? `It was switched off automatically: the switch above turns it back on if you disagree.`
                         : extension.enabled
-                          ? `It is still running because its advisory policy is set to notify — the switch above is the way out.`
+                          ? `It is still running because its advisory policy is set to notify: the switch above is the way out.`
                           : `It is switched off.`
                 }}
             </p>
@@ -169,7 +169,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
                 <StatusBadge v-if="update.securityFix" variant="danger" label="security fix" size="xs" />
                 <StatusBadge
                     :variant="update.trust === `verified` ? `success` : `neutral`"
-                    :label="update.trust === `verified` ? `verified` : `listed — no human review`"
+                    :label="update.trust === `verified` ? `verified` : `listed, no human review`"
                     size="xs"
                 />
                 <span class="text-2xs text-subtle">listed {{ timeAgo(Date.parse(update.at)) }}</span>
@@ -180,7 +180,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
             <!-- The staged read: what this click would approve, mechanically. -->
             <div v-if="preview" class="mt-2 flex flex-col gap-1.5 border-t border-line pt-2">
                 <p v-if="!preview.compatible" class="text-2xs text-warning">
-                    It asks for app {{ preview.engines }} — this app can't run it yet, so updating would leave it inactive until the app updates.
+                    It asks for app {{ preview.engines }}: this app can't run it yet, so updating would leave it inactive until the app updates.
                 </p>
                 <template v-if="preview.powers.added.length > 0">
                     <p class="text-2xs font-medium text-warning">New powers this version asks for:</p>
@@ -188,7 +188,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
                         <li v-for="power in preview.powers.added" :key="power" class="text-2xs text-content">+ {{ power }}</li>
                     </ul>
                 </template>
-                <p v-else class="text-2xs text-success">Same powers as the installed version — nothing new to approve.</p>
+                <p v-else class="text-2xs text-success">Same powers as the installed version: nothing new to approve.</p>
                 <ul v-if="preview.powers.removed.length > 0" class="flex flex-col gap-0.5">
                     <li v-for="power in preview.powers.removed" :key="power" class="text-2xs text-subtle">− {{ power }}</li>
                 </ul>
@@ -211,14 +211,14 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
                     :class="ui.linkButton(`text-2xs`)"
                     @activate="openReview(update.review.conversationId)"
                 >
-                    Your agent already read this diff — open its review
+                    Your agent already read this diff: open its review
                 </ActionLink>
                 <button v-else type="button" :class="ui.linkButton(`text-2xs`)" @click="readDiff">Have an agent read the diff first</button>
             </div>
         </div>
 
         <p v-if="rebuildNote" class="text-2xs text-warning">
-            This update extends the sandbox image — a one-time rebuild is needed. Open the Sandbox page's Environment card for the command.
+            This update extends the sandbox image: a one-time rebuild is needed. Open the Sandbox page's Environment card for the command.
         </p>
 
         <!-- The way back, ordinary and visible: "the last update made it worse" needs no failing probe. -->

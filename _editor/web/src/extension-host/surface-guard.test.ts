@@ -10,17 +10,17 @@ import { expect, test } from "vitest";
  *
  * `engines.intentic` is an author's only way to say which host they need, and it is worth exactly as much as
  * extensionApiVersion is true. Twice it wasn't: `contributes.connectors` became `contributes.capabilities` and
- * `api.documents.open` was added, both without a bump — so a manifest written against the published SDK named a
+ * `api.documents.open` was added, both without a bump, so a manifest written against the published SDK named a
  * contribution point the host had renamed, and the schema DROPPED it silently (unknown keys are not an error).
  * An author got no view, no warning, and a version number that said they were compatible.
  *
  * So the surface is recorded here per version, and this fails when the live one stops matching. Changing the
- * surface then costs a new entry in surface.json — which is the bump, made unavoidable rather than remembered.
+ * surface then costs a new entry in surface.json, which is the bump, made unavoidable rather than remembered.
  * Editing an existing entry instead would also pass; that is deliberate and sufficient, because it turns a
  * silent omission into a diff that visibly rewrites history, which review catches.
  *
  * It lives in the web app rather than beside the SDK because this is where the extension-contract conformance
- * tests already run (permissions.conformance.test.ts, engines.test.ts) — extension-api itself ships no test
+ * tests already run (permissions.conformance.test.ts, engines.test.ts): extension-api itself ships no test
  * harness, and giving it one to hold a single snapshot would be the more expensive half of this.
  *
  * The grain is TOP-LEVEL KEYS on purpose. That is precisely where a mismatch is silent: an unknown key inside a
@@ -33,23 +33,23 @@ interface RecordedSurface {
     readonly contributes: readonly string[];
     readonly api: readonly string[];
     readonly listener?: readonly string[];
-    // api.sandbox's own members, recorded from 2.3.0 on — the sub-surface where drift actually happened (rpc
+    // api.sandbox's own members, recorded from 2.3.0 on: the sub-surface where drift actually happened (rpc
     // arrived unrecorded; role() is why this exists). Optional because earlier entries predate it.
     readonly sandboxApi?: readonly string[];
-    /* What the PACKAGE exports, recorded from 2.6.0 on — the third grain, and the last one that was still
+    /* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still
      * unrecorded.
      *
      * `IntenticApi` is what an extension is HANDED, and everything above tracks it. But some of the contract
      * cannot be handed over, because it is needed before `activate(api)` has run: `hostSlot` binds the handle
      * itself, and `sandboxRef` declares module state at import time. Those are imported from the package, they
-     * are every bit as breakable as a member of the api object, and nothing here could see them — `hostSlot`
+     * are every bit as breakable as a member of the api object, and nothing here could see them: `hostSlot`
      * arrived, and later so did the whole scope primitive, with no record either way. */
     readonly moduleExports?: readonly string[];
 }
 
 const recorded: Record<string, RecordedSurface> = JSON.parse(readFileSync(resolve(sdkRoot, `src/surface.json`), `utf8`));
 
-// IntenticApi is a type, so there is nothing to enumerate at runtime — its members come off the source. Depth is
+// IntenticApi is a type, so there is nothing to enumerate at runtime: its members come off the source. Depth is
 // the indent: prettier holds this file at four spaces, so a top-level member is the only `readonly` at column 4.
 const apiMembers = (): string[] => {
     const text = readFileSync(resolve(sdkRoot, `src/api.ts`), `utf8`);
@@ -118,7 +118,7 @@ test(`every earlier version keeps its own record`, () => {
 
 test(`the SDK README names exactly the contribution points the schema has`, () => {
     // The README's list is what an author reads before they read the schema, and it is the copy that went stale
-    // last time — it still said `connectors` long after the host had stopped reading it.
+    // last time: it still said `connectors` long after the host had stopped reading it.
     const readme = readFileSync(resolve(sdkRoot, `README.md`), `utf8`);
     const sentence = /Contribution points:([\s\S]*?), plus the/.exec(readme);
     expect(sentence).not.toBeNull();
@@ -128,7 +128,7 @@ test(`the SDK README names exactly the contribution points the schema has`, () =
 
 test(`every file the SDK README points at exists`, () => {
     /* The package split moved the manifest schema and the permissions matcher out of this package, and the
-     * README went on linking `src/manifest.ts` and `src/permissions.ts` — two dead links in the first document
+     * README went on linking `src/manifest.ts` and `src/permissions.ts`: two dead links in the first document
      * an extension author reads. Nothing catches a stale relative link but a check like this: it is still valid
      * markdown, still renders, and only fails for the reader.
      *

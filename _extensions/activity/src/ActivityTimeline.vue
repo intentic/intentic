@@ -6,7 +6,7 @@ import EpisodeRow from "./EpisodeRow.vue";
 
 /* The selected source's story, newest first. Sectioned by day rather than run as one undifferentiated column:
  * "when" is the second question after "who", and a divider answers it for a whole run of rows at the cost of one
- * line. Nothing here is virtualised — the rail and the window are what keep the list short, and a bounded list of
+ * line. Nothing here is virtualised: the rail and the window are what keep the list short, and a bounded list of
  * real rows beats an unbounded one with a scrollbar as its only affordance. */
 
 const { episodes, source, window, truncated, isLoading } = defineProps<{
@@ -46,14 +46,14 @@ const ROW_WIDTHS = [`w-64`, `w-48`, `w-56`, `w-40`, `w-52`, `w-44`];
         <template v-if="source?.lastError || source?.gateway === `idle`" #strips>
             <Notice v-if="source?.lastError" :of="noticeOf(source.lastError)" class="mx-4 mt-3" />
             <p v-else class="mx-4 mt-3 text-2xs text-muted">
-                Idle — no enabled listener automation for {{ source.label }} yet, so nothing is being listened for.
+                Idle: no enabled listener automation for {{ source.label }} yet, so nothing is being listened for.
             </p>
         </template>
 
         <div class="px-4 py-2">
             <!-- THE FEED'S OWN SHAPE WHILE IT IS FETCHED, rather than a blank box that fills in one jump: a day
                  divider and a run of rows, at the row's real spacing, so the panel is the height it is going to
-                 be. Only on the FIRST load — a poll or a widened window refetches with rows already on screen,
+                 be. Only on the FIRST load: a poll or a widened window refetches with rows already on screen,
                  and replacing them with an outline would be the flicker this exists to remove. -->
             <div v-if="isLoading && episodes.length === 0" role="status" aria-busy="true" aria-label="Loading activity">
                 <div class="flex items-center gap-2 py-1">
@@ -94,7 +94,7 @@ const ROW_WIDTHS = [`w-64`, `w-48`, `w-56`, `w-40`, `w-52`, `w-44`];
                  has to admit it rather than imply the window was quiet. -->
             <p v-if="truncated" class="flex items-center justify-center gap-1.5 py-3 text-2xs text-muted">
                 <Icon name="info-circle" />
-                Showing the most recent entries only — this window holds more than the feed fetches at once.
+                Showing the most recent entries only: this window holds more than the feed fetches at once.
             </p>
         </div>
     </ScrollFrame>

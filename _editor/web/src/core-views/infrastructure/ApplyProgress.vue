@@ -7,7 +7,7 @@ import { ProgressRing } from "@intentic/ui";
 import type { useApplyProgress } from "./useApplyProgress";
 
 /* The live apply progress, replacing the old spinner + "follow progress in the terminal": per-resource rows
- * (creating → created), readiness gates with their URL as services come up, and the convergence summary — all
+ * (creating → created), readiness gates with their URL as services come up, and the convergence summary: all
  * from the useApplyProgress instance InfraDeclare owns (fed by the durable /intentic/apply/events tail, so it
  * survives a refresh). The terminal stays the detailed log surface, reachable via "View logs". */
 const { progress } = defineProps<{ progress: ReturnType<typeof useApplyProgress> }>();
@@ -35,9 +35,9 @@ const applyNotice = computed<NoticeModel | undefined>(() =>
             </Button>
         </div>
 
-        <!-- The progress stream dropped and is being re-opened — the job itself is unaffected (it runs in tmux). -->
+        <!-- The progress stream dropped and is being re-opened: the job itself is unaffected (it runs in tmux). -->
         <p v-if="reattaching" class="flex items-center gap-1.5 text-2xs text-warning">
-            <Icon name="refresh" spin /> Progress stream dropped — reconnecting… (the apply itself keeps running)
+            <Icon name="refresh" spin /> Progress stream dropped: reconnecting… (the apply itself keeps running)
         </p>
 
         <!-- Per-resource apply progress: a spinner + present-tense label while in flight, the action badge once done. -->
@@ -94,7 +94,7 @@ const applyNotice = computed<NoticeModel | undefined>(() =>
             {{
                 converged
                     ? `Converged in ${iterations.length} iteration${iterations.length === 1 ? "" : "s"}.`
-                    : "Didn't fully converge — a re-apply may be needed."
+                    : "Didn't fully converge, a re-apply may be needed."
             }}
         </p>
 

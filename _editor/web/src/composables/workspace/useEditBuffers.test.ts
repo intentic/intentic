@@ -12,7 +12,7 @@ describe(`useEditBuffers`, () => {
         edit.setBaseline(`a.ts`, `one\n`);
         expect(edit.baselineOf(`a.ts`)).toBe(`one\n`);
 
-        // User edits then saves — the reconcile compares the echoed disk read against this baseline.
+        // User edits then saves: the reconcile compares the echoed disk read against this baseline.
         edit.setBuffer(`a.ts`, `two\n`);
         expect(edit.isDirty(`a.ts`)).toBe(true);
         edit.markSaved(`a.ts`, `two\n`);
@@ -34,12 +34,12 @@ describe(`useEditBuffers`, () => {
     it(`a save echo racing markSaved matches the live buffer, so the reconcile adopts it instead of warning`, () => {
         const edit = useEditBuffers();
         // New file: created empty, then typed into. The upload finished (disk = "typed\n") but markSaved hasn't
-        // run yet — the echoed read differs from the baseline while equalling the buffer.
+        // run yet: the echoed read differs from the baseline while equalling the buffer.
         edit.setBaseline(`c.ts`, ``);
         edit.setBuffer(`c.ts`, `typed\n`);
         expect(`typed\n` === edit.baselineOf(`c.ts`)).toBe(false);
         expect(`typed\n` === edit.bufferOf(`c.ts`)).toBe(true);
-        // The reconcile's adoption is markSaved with the disk text — idempotent with the save's own markSaved.
+        // The reconcile's adoption is markSaved with the disk text: idempotent with the save's own markSaved.
         edit.markSaved(`c.ts`, `typed\n`);
         expect(edit.isDirty(`c.ts`)).toBe(false);
     });

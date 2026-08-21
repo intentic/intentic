@@ -11,17 +11,17 @@ import { apiClient } from "../../composables/useApi";
 import { environment } from "../../environments/environment";
 
 /* Membership: the one paid thing on the platform, bought and managed on Stripe's pages. The card only ever
- * states where things stand and opens the right door — but WHICH card is a different question before and
+ * states where things stand and opens the right door, but WHICH card is a different question before and
  * after the money, and the two used to be one paragraph apart.
  *
  * THIS IS A BUYING PAGE, and it is the only one in the product. A member arrives to check a number; a
  * non-member arrives to decide, and the decision is the whole event: nothing else in the app asks anyone for
- * twenty dollars a month. So the offer branch is laid out like an offer — what you get in figures, the price
- * as a price, one action, and the objections answered where they occur — and the member branch is laid out
+ * twenty dollars a month. So the offer branch is laid out like an offer: what you get in figures, the price
+ * as a price, one action, and the objections answered where they occur, and the member branch is laid out
  * like a meter, because "how much have I got left today" is the only question it is ever opened with.
  *
  * EVERY NUMBER ON SCREEN IS THE PLATFORM'S. The price, the share, the daily allowance and what an install
- * donates all arrive on the membership state, and what a day's credits COME TO — five installs — is
+ * donates all arrive on the membership state, and what a day's credits COME TO (five installs) is
  * arithmetic done here rather than a sentence somebody typed. A written "five installs a day" survives the
  * config change that makes it false, and nothing fails to warn anybody; a division cannot.
  *
@@ -29,7 +29,7 @@ import { environment } from "../../environments/environment";
  * pool's promise is transparency, and the buying surface is the cheapest place in the product to keep it. */
 
 /* The state, and the credit meter's arithmetic, both come from the app's ONE membership read
- * (composables/membership) — the same entry the account menu, the premium install dialog and the chat composer
+ * (composables/membership), the same entry the account menu, the premium install dialog and the chat composer
  * observe. This card is no longer the only place credits appear, so it must not be the place they are computed:
  * a second copy of "what percent is left" is how four surfaces start disagreeing. */
 const { state: membership, meter: credits, donationCredits, dailyCredits, error, refetch } = useMembership();
@@ -40,7 +40,7 @@ const actionError = ref<string | undefined>(undefined);
 const loadError = computed(() => (error.value === null ? undefined : errorMessage(error.value, `Couldn't load the membership state.`)));
 
 /* The membership read is SHARED (the account menu is usually already holding its answer by the time this tab
- * opens), so the common case here is no wait at all — which is exactly the case an ungated outline would ruin
+ * opens), so the common case here is no wait at all, which is exactly the case an ungated outline would ruin
  * with a flash of grey where the meter belongs. */
 const outline = useLoadingReveal(
     computed(() => membership.value === undefined && error.value === null),
@@ -48,7 +48,7 @@ const outline = useLoadingReveal(
 );
 
 /* THE POST-CHECKOUT GAP. Stripe sends the browser back with ?membership=welcome, but the webhook that makes
- * the membership real can land seconds later — so the first read after a completed payment often still says
+ * the membership real can land seconds later, so the first read after a completed payment often still says
  * "not a member". This used to be a sentence asking the reader to reload, which is the app handing its own
  * race back to the person who just paid. It polls instead, and gives up after a bounded wait rather than
  * spinning forever: a webhook that has not arrived in half a minute is a problem a refresh will not fix. */
@@ -100,22 +100,22 @@ const renewsOn = computed(() => {
 
 const resetsAt = computed(() => resetsAtLocal(credits.value));
 
-// What is LEFT, in installs — the same arithmetic as the offer, against today's remainder rather than the
+// What is LEFT, in installs: the same arithmetic as the offer, against today's remainder rather than the
 // allowance. A member reading a meter wants to know what they can still do, not what they could have done.
 const installsLeft = computed(() => installsFor(credits.value?.remaining ?? 0, donationCredits.value));
 
 /* ---- LAPSED IS NOT THE SAME AS NEVER ------------------------------------------------------------------
  *
  * The platform's premium rule (pool-membership.ts) counts `active` and `trialing` and nothing else, so a
- * member whose card was declined arrives here with `member: false` — the same answer as somebody who has
+ * member whose card was declined arrives here with `member: false`, the same answer as somebody who has
  * never paid. Rendered as one branch, that put the cold sales pitch in front of the person who is already
  * paying and whose card merely expired, under a button that would have opened a SECOND subscription beside
  * the one Stripe is still retrying.
  *
  * So the two are told apart by whether a payment can still rescue what exists. `past_due` and `unpaid` are
  * Stripe retrying a live subscription, and `incomplete` is a first charge that never confirmed: all three
- * want the card fixed, not the product sold. Anything else that is not premium — `canceled`,
- * `incomplete_expired` — really is over, and its reader is a prospect again, greeted rather than lectured. */
+ * want the card fixed, not the product sold. Anything else that is not premium (`canceled`,
+ * `incomplete_expired`) really is over, and its reader is a prospect again, greeted rather than lectured. */
 const RECOVERABLE = new Set([`past_due`, `unpaid`, `incomplete`]);
 
 const lapsed = computed(() => {
@@ -123,7 +123,7 @@ const lapsed = computed(() => {
     return membership.value?.member === false && status !== undefined && RECOVERABLE.has(status) ? status : undefined;
 });
 
-// A previous membership that ended. Only changes the offer's greeting — the reasons to join are the same
+// A previous membership that ended. Only changes the offer's greeting. The reasons to join are the same
 // ones, and someone deciding a second time deserves to read them rather than a shorter version.
 const returning = computed(() => membership.value?.member === false && membership.value.status !== undefined && lapsed.value === undefined);
 
@@ -134,7 +134,7 @@ const onTrial = computed(() => membership.value?.status === `trialing`);
 // The action's own name, phrased in creditMeter.ts so /join says it identically.
 const buyLabel = computed(() => joinLabel(membership.value, returning.value));
 
-// The public ledger, served by the platform for anyone — members are exactly who should read it.
+// The public ledger, served by the platform for anyone. Members are exactly who should read it.
 const transparencyUrl = `${environment.api.url}/pool/transparency`;
 
 const open = async (door: `checkout` | `portal`): Promise<void> => {
@@ -174,7 +174,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
 
                 <!-- The meter. The number is the headline because it is the answer; the bar exists to make
                      "a lot left" and "nearly out" readable without reading, and carries no colour meaning of
-                     its own — a low meter is not a fault, it is a day's work done. -->
+                     its own: a low meter is not a fault, it is a day's work done. -->
                 <div v-if="credits" class="mt-4 flex flex-col gap-2">
                     <div class="flex flex-wrap items-baseline gap-x-2">
                         <span class="text-3xl font-semibold leading-none tabular-nums text-content">{{ n(credits.remaining) }}</span>
@@ -185,7 +185,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                         <div class="h-full rounded-full bg-primary-fill transition-[width]" :style="{ width: `${credits.remainingPercent}%` }" />
                     </div>
                     <!-- What is left, and where to put it. An unspent allowance pays nobody and reads, a month
-                         later, as a membership that bought nothing — so the meter names the next step instead
+                         later, as a membership that bought nothing, so the meter names the next step instead
                          of leaving the reader to go and find it. Withheld when there is nothing left to spend:
                          an invitation to buy what today cannot afford is not a helpful one. -->
                     <p class="text-xs text-muted">
@@ -197,7 +197,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                             </RouterLink>
                         </template>
                         <template v-else
-                            >Spent for today. The allowance comes back in full at the reset — nothing rolls over, nothing is owed.</template
+                            >Spent for today. The allowance comes back in full at the reset. Nothing rolls over, nothing is owed.</template
                         >
                     </p>
                 </div>
@@ -222,12 +222,12 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                 icon="exclamation-circle"
                 tone="warning"
                 title="Your membership needs a working card"
-                description="Stripe couldn't take the last payment, so premium extensions are switched off until one goes through. Nothing else has changed — what you've installed stays installed, and your allowance comes back the moment the charge clears."
+                description="Stripe couldn't take the last payment, so premium extensions are switched off until one goes through. Nothing else has changed: what you've installed stays installed, and your allowance comes back the moment the charge clears."
             >
                 <template #below>
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                         <Button label="Update payment on Stripe" :loading="working" class="ui-button-loud" @click="open(`portal`)" />
-                        <p class="text-2xs text-subtle">Stripe reports this membership as “{{ lapsed }}”.</p>
+                        <p class="text-2xs text-subtle">Stripe reports this membership as "{{ lapsed }}".</p>
                     </div>
                 </template>
             </Row>
@@ -242,7 +242,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                 icon="spinner"
                 spin
                 tone="info"
-                title="Payment received — activating your membership"
+                title="Payment received, activating your membership"
                 description="This takes a few seconds. The page updates itself; there's nothing to click."
             />
         </Card>
@@ -256,7 +256,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                 :of="{
                     tone: `info`,
                     title: `Your payment went through, but the membership hasn't come back from Stripe yet.`,
-                    detail: `This is unusual. Reload in a minute — if it still isn't here, get in touch and nothing will be charged twice.`,
+                    detail: `This is unusual. Reload in a minute. If it still isn't here, get in touch and nothing will be charged twice.`,
                 }"
             />
 
@@ -269,7 +269,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                 }"
             />
 
-            <!-- The pitch itself lives in components/MembershipOffer.vue, shared with /join — the buying
+            <!-- The pitch itself lives in components/MembershipOffer.vue, shared with /join. The buying
                  surface for somebody who arrived from a terminal and has no sandbox to put a settings tab in.
                  One copy, because two would drift about what a membership is, on the one page where being
                  wrong costs trust rather than a rerender. -->
@@ -277,15 +277,15 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
         </template>
 
         <!-- ══ THE WAIT ════════════════════════════════════════════════════════════════════════════════════
-             Every branch above needs the membership state, so before it lands this tab is an empty column —
+             Every branch above needs the membership state, so before it lands this tab is an empty column,
              and this is the tab reached by a member who came to check one number, which makes the blank beat
              the most conspicuous one in the hub.
 
              ONE MODEST CARD, NOT EITHER REAL ONE. The two outcomes are a compact meter and a full sales page,
              and there is no way to know which is coming: outlining the offer would flash a hero at a paying
              member, and outlining the meter would promise a number to somebody about to be sold to. So this
-             promises only what BOTH open with — a masthead row, one large figure or headline, and a couple of
-             supporting lines — and stops there rather than guessing at the half that differs. -->
+             promises only what BOTH open with: a masthead row, one large figure or headline, and a couple of
+             supporting lines, and stops there rather than guessing at the half that differs. -->
         <Card v-else-if="outline" role="status" aria-busy="true">
             <span class="sr-only">Reading your membership…</span>
             <Row flush :heading="2" aria-hidden="true">

@@ -76,6 +76,6 @@ const listContacts: Command = {
 
 export const contactsGroup: CommandGroup = {
     name: "contacts",
-    summary: "Contacts — find an address before writing to it",
+    summary: "Contacts, find an address before writing to it",
     commands: [search, listContacts],
 };

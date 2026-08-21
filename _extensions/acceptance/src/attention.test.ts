@@ -5,7 +5,7 @@ const failed: AcceptanceFinding = { runId: `rabc`, slug: `login`, verdict: `fail
 
 /* What the tile counts, as a pure function over "the findings" and "what has been acknowledged".
  *
- * The ledger's own reading and writing is the host's now (extension-api background.ts, and tested there) — what
+ * The ledger's own reading and writing is the host's now (extension-api background.ts, and tested there): what
  * is left here is the judgement this extension owns: which of the findings in front of it are NEWS. */
 
 describe(`acceptance attention`, () => {
@@ -34,7 +34,7 @@ describe(`acceptance attention`, () => {
         expect(unseenFindings([rerun], seen)).toEqual([rerun]);
     });
 
-    it(`never lets an empty ledger hide a failure — the safe direction for bookkeeping that could not be read`, () => {
+    it(`never lets an empty ledger hide a failure: the safe direction for bookkeeping that could not be read`, () => {
         expect(unseenFindings([failed], {})).toEqual([failed]);
     });
 });

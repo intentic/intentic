@@ -1,7 +1,7 @@
-<!-- FULL-SCREEN CHAT — the /chat area: the rail-docked chat's whole surface, desktop only.
+<!-- FULL-SCREEN CHAT, the /chat area: the rail-docked chat's whole surface, desktop only.
 
      The panel itself is mounted once per page by shell/WorkspaceRuntime's PoppablePanels and TELEPORTED to
-     whichever slot is published (shell/dockSlots.ts) — this route publishes the full-window one. With the rail
+     whichever slot is published (shell/dockSlots.ts): this route publishes the full-window one. With the rail
      as the chat's home (useLayout.chatHome, claimed below), this area is the only place in the main window the
      chat appears at all: every other view leaves it parked behind the rail's Chat tile, never as a side
      column. Nothing chat-shaped is duplicated here, and a streaming turn survives every trip exactly as it
@@ -12,7 +12,7 @@
 
      WHILE THE CHAT FLOATS IN ITS OWN WINDOW this area does not steal it: the pop-out outranks this slot, so the
      grid stands empty and the notice below says where the chat is, with the one explicit way to recall it. An
-     automatic recall here would race the reload path — a surviving pop-out window is re-adopted on load, and a
+     automatic recall here would race the reload path: a surviving pop-out window is re-adopted on load, and a
      URL that happens to be /chat must not close it under the user. Every move of the panel is a button. -->
 <script setup lang="ts">
 import Button from "primevue/button";
@@ -24,7 +24,7 @@ import { chatFullDock } from "../shell/dockSlots";
 const { poppedOut, restoring, dock } = useChatPopout();
 
 /* STANDING HERE IS CHOOSING THE RAIL AS THE CHAT'S HOME. Every control that leads here sets the home first,
- * but a bookmark or a hand-typed /chat arrives without one — and this area with the home still on `side` would
+ * but a bookmark or a hand-typed /chat arrives without one, and this area with the home still on `side` would
  * be a screen whose own tile is missing from the rail beside it. Claiming it in setup keeps the invariant (on
  * /chat ⇒ the rail is home ⇒ its tile is lit) whatever the door; a no-op through every ordinary one. */
 useLayout().setChatHome(`rail`);
@@ -41,7 +41,7 @@ onUnmounted(() => {
 <template>
     <div class="relative h-full w-full">
         <!-- Published even while the pop-out holds the panel, so "Bring it back here" lands the panel in this
-             slot the instant the dock happens — no remount, no intermediate hop through the side column. -->
+             slot the instant the dock happens: no remount, no intermediate hop through the side column. -->
         <div class="grid h-full w-full" style="grid-template-areas: &quot;chat&quot;; grid-template-columns: 1fr; grid-template-rows: 1fr">
             <div ref="slot" class="contents"></div>
         </div>

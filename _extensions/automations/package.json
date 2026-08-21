@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-automations",
     "version": "1.0.0",
-    "description": "Automations — scheduled/webhook/listener agent wake-ups, as a first-party intentic extension",
+    "description": "Automations, scheduled/webhook/listener agent wake-ups, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

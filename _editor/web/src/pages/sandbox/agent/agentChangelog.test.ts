@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 //
 // THE ONE CLAIM: a repo keeps a changelog only because somebody said so, per repo, and the switch writes exactly
-// that. Everything downstream of this setting — whether the commit drafter asks for a `Release-Note:` line at
-// all — reads the list this component writes, and the daemon runs on the user's own repositories, so a switch
+// that. Everything downstream of this setting, whether the commit drafter asks for a `Release-Note:` line at
+// all: reads the list this component writes, and the daemon runs on the user's own repositories, so a switch
 // that wrote the wrong name (or wrote every name) would turn a convention on in somebody else's project.
 //
 // Mounted rather than projected, on the same reasoning as agentRules.test.ts next door: what is under test is
-// the round trip a person performs — press the switch, read what the settings object now holds.
+// the round trip a person performs: press the switch, read what the settings object now holds.
 import type { SandboxSettings } from "@intentic-app/api-contract";
 import { SandboxSettingsSchema } from "@intentic-app/api-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, computed, createApp, defineComponent, h, ref } from "vue";
 
-// Same app-wide singletons the sibling test stands in for — read at import time, before any test runs.
+// Same app-wide singletons the sibling test stands in for: read at import time, before any test runs.
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const patch = vi.fn((fields: Partial<SandboxSettings>) => {
@@ -65,7 +65,7 @@ const toggleAt = (host: HTMLElement, index: number): HTMLElement => {
     return control as HTMLElement;
 };
 
-test(`every repo starts off — nothing changes in anybody's repository until they ask for it`, () => {
+test(`every repo starts off: nothing changes in anybody's repository until they ask for it`, () => {
     const host = mount(AgentChangelog);
     expect(settings.value.changelogRepos).toEqual([]);
     // One row per repo, "root" first.

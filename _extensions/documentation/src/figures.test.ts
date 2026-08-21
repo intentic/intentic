@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DocIndex, RepoDoc } from "./docModel.js";
 import { packageFigures } from "./figures.js";
 
-/* The figures a page never writes. What matters here is not how they look — the app draws them — but that they
+/* The figures a page never writes. What matters here is not how they look: the app draws them, but that they
  * are built from the index and therefore cannot disagree with it, and that each one declines to render when it
  * would say nothing. */
 
@@ -92,7 +92,7 @@ describe(`packageFigures`, () => {
     });
 
     it(`says nothing at all about a directory the index does not know`, () => {
-        // The ordinary state of a page whose index has not been regenerated yet — it must cost the figures, not
+        // The ordinary state of a page whose index has not been regenerated yet: it must cost the figures, not
         // the page.
         expect(packageFigures(`_libs/unknown`, index, repoDoc)).toBe(``);
         expect(packageFigures(`_deploy/graph`, undefined, repoDoc)).toBe(``);

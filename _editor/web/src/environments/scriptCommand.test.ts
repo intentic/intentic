@@ -13,7 +13,7 @@ const load = async (production: boolean): Promise<typeof import("./scriptCommand
     return import("./scriptCommand");
 };
 
-test("local dev renders the repo-path form — never a curl of the deployed site", async () => {
+test("local dev renders the repo-path form: never a curl of the deployed site", async () => {
     const { bashCommand } = await load(false);
     expect(bashCommand(`cleanupHost`, `sudo `, ``)).toBe(`sudo sh _site/site/public/scripts/cleanup-host.sh`);
 });
@@ -42,7 +42,7 @@ test("local dev runs the PowerShell script by path, arguments appended", async (
 });
 
 // The dialog that hands out a connect command is read on the dev machine and PASTED on another one, where the
-// checkout does not exist — so a dev build has to be able to ask for the released form.
+// checkout does not exist, so a dev build has to be able to ask for the released form.
 test("a dev build renders the published form when the developer asks for it", async () => {
     const { bashCommand, psCommand, scriptSource } = await load(false);
     scriptSource.value = `published`;
@@ -50,7 +50,7 @@ test("a dev build renders the published form when the developer asks for it", as
     expect(psCommand(`computerPs1`, `$env:PAIR_TOKEN='t'; `)).toBe(`$env:PAIR_TOKEN='t'; irm https://intentic.dev/computer.ps1 | iex`);
 });
 
-// The switch is a dev affordance, not a second production mode — production has only the fetched delivery, so
+// The switch is a dev affordance, not a second production mode: production has only the fetched delivery, so
 // leaving the preference on "checkout" there must not produce a path a deployed browser could never run.
 test("a deployed build ignores the preference entirely", async () => {
     const { bashCommand, scriptSource } = await load(true);

@@ -2,7 +2,7 @@
 //
 // THE PRICE DISCLOSURE, which is the part of this change that is not a convenience. A premium install spends real
 // money on a click, so what is pinned here is that the figure, the balance and the after-figure are all actually
-// PRINTED — and, just as deliberately, that a short balance is never stated as a refusal: the donation is
+// PRINTED, and, just as deliberately, that a short balance is never stated as a refusal: the donation is
 // idempotent per month, so a reader whose balance looks too small may still be installing for free, and only the
 // platform knows which. See the component's own block comment.
 import type { MembershipState } from "@intentic-app/api-contract";
@@ -67,7 +67,7 @@ describe(`PremiumCost`, () => {
     });
 
     it(`says the charge happens once a month and using it never costs again`, () => {
-        // The two facts that stop an install reading as a subscription — and the reason it is worth saying yes to.
+        // The two facts that stop an install reading as a subscription, and the reason it is worth saying yes to.
         const text = render(membership()).textContent ?? ``;
         expect(text).toContain(`Once a month per extension`);
         expect(text).toContain(`a reinstall this month is free`);
@@ -104,7 +104,7 @@ describe(`PremiumCost`, () => {
     });
 
     it(`says nothing where the platform gives its extensions away`, () => {
-        // No charge means nothing to warn anybody about — and no zero-price block pretending otherwise.
+        // No charge means nothing to warn anybody about, and no zero-price block pretending otherwise.
         expect(render(membership({ donationCredits: 0 })).textContent).toBe(``);
     });
 });

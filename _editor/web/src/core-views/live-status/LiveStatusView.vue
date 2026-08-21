@@ -17,8 +17,8 @@ import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 
 /* The live-status extension: the outcome half of the infrastructure story, a plan-vs-reality board. LEFT is
- * Planned — the resolved desired-state dependency graph (desired-state.json, each node colored by its last
- * reconcile status). RIGHT is Running now — the realized world: live Komodo deployments (snapshot) plus an
+ * Planned: the resolved desired-state dependency graph (desired-state.json, each node colored by its last
+ * reconcile status). RIGHT is Running now, the realized world: live Komodo deployments (snapshot) plus an
  * on-demand "live check" that streams the in-sandbox `intentic deploy plan` to re-read live infrastructure and report
  * per-resource drift. Read-only; everything is relayed THROUGH the sandbox. */
 
@@ -83,7 +83,7 @@ const refresh = async (): Promise<void> => {
 const envList = (deployment: Deployment): { key: string; label: string }[] =>
     Object.entries(deployment.env).map(([key, value]) => ({ key, label: value === `` ? key : `${key}=${value}` }));
 
-// Provisioned-services access — URLs + admin logins from the last apply (status.json, value-free), the "how do
+// Provisioned-services access: URLs + admin logins from the last apply (status.json, value-free), the "how do
 // I log into what's live" companion to the deployments board. A generated password's value is fetched on click
 // through the daemon's owner-gated reveal; members see the secret's name instead.
 const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
@@ -107,7 +107,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 <template>
     <div class="scrollbar-thin h-full min-h-0 overflow-auto">
         <Page width="full">
-            <PageHeader title="Live status" description="The realized state of your infrastructure — planned resources and live deployments.">
+            <PageHeader title="Live status" description="The realized state of your infrastructure: planned resources and live deployments.">
                 <template #info>
                     <InfoHint label="Live status">
                         <span class="block text-sm font-medium text-content">Live status</span>
@@ -132,11 +132,11 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                 class="mb-4 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning"
             >
                 <Icon name="exclamation-triangle" class="shrink-0" />
-                <span>Your deployment engine (Komodo) is unreachable on your server — live states below reflect desired config only.</span>
+                <span>Your deployment engine (Komodo) is unreachable on your server: live states below reflect desired config only.</span>
             </div>
 
             <div class="flex flex-col gap-4">
-                <!-- TOP — desired state: the dependency graph, nodes colored by their last reconcile status. -->
+                <!-- TOP, desired state: the dependency graph, nodes colored by their last reconcile status. -->
                 <section class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="ui.sectionLabel('mb-3 flex items-center gap-2')">
                         Planned
@@ -167,7 +167,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     />
                 </section>
 
-                <!-- BOTTOM — actual state: live Komodo deployments + an on-demand live "intentic deploy plan" read. -->
+                <!-- BOTTOM, actual state: live Komodo deployments + an on-demand live "intentic deploy plan" read. -->
                 <section class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="ui.sectionLabel('mb-3 flex items-baseline gap-2')">Running now</h3>
 
@@ -256,7 +256,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     </div>
                 </section>
 
-                <!-- Access — the URLs + admin logins for what's provisioned (from the last apply's status.json).
+                <!-- Access: the URLs + admin logins for what's provisioned (from the last apply's status.json).
                      A generated password reveals on click through the daemon (owner only); members see its name. -->
                 <section v-if="access.length > 0" class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="ui.sectionLabel('mb-3')">Access</h3>

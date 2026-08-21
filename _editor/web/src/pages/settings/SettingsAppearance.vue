@@ -12,7 +12,7 @@ import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
 import { type Skin, useSkin } from "../../skins/useSkin";
 
-/* Appearance: how the workspace looks for this account — color scheme (data-mode), the one colour the whole app
+/* Appearance: how the workspace looks for this account: the color scheme (data-mode), the one colour the whole app
  * is built out of, file-tree treatment, which tabs the terminal strip carries, and an imported VSCode/OpenVSX
  * theme. Each recolors/re-renders the whole UI
  * live, so most of the app is the preview; the Explorer gets a small inline sample because its tree isn't on
@@ -24,12 +24,12 @@ const { textSize, setTextSize } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
-// The review lists' reading — the same preference the Changes panel's own header toggle flips.
+// The review lists' reading, the same preference the Changes panel's own header toggle flips.
 const { groupByModule } = useChangeGrouping();
-// How much of an agent's working-out a transcript shows — the same preference the chat's own readout row flips,
+// How much of an agent's working-out a transcript shows, the same preference the chat's own readout row flips,
 // which is where somebody staring at a run mark will reach for it; this is where they'll look to decide it once.
 const { showToolCalls } = useToolCalls();
-// The explorer's two filters — the same preferences the workspace toolbar's funnel flips, which is where someone
+// The explorer's two filters, the same preferences the workspace toolbar's funnel flips, which is where someone
 // already staring at node_modules will reach for them; this is where they'll look for them afterwards.
 // skipImports has no such second home: it decides where a diff OPENS, so a control on the diff itself would look
 // like it did nothing at all. This page is the only place it can be asked for.
@@ -49,7 +49,7 @@ const applyImport = (): void => {
     }
 };
 
-// SegmentedControl option lists — labels capitalized, values are the raw token strings the composables store.
+// SegmentedControl option lists: labels capitalized, values are the raw token strings the composables store.
 const cap = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1);
 
 /* ── SKINS ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ const cap = (value: string): string => value.charAt(0).toUpperCase() + value.sli
  * looking for the switch that undoes it.
  *
  * So the value is the skin when one is on and the colour scheme otherwise, and picking a scheme drops the
- * skin — one row, one answer, no state you can get into that the row cannot show you.
+ * skin: one row, one answer, no state you can get into that the row cannot show you.
  *
  * TO REMOVE SKINS ENTIRELY: delete this block and the `useSkin` import, leave `light`/`dark` in the options, and
  * put `:model-value="scheme"` / `@update:model-value="setScheme"` back on the row's control. */
@@ -68,7 +68,7 @@ type ThemeChoice = "light" | "dark" | Skin;
 const themeOptions = [
     { label: `Light`, value: `light` as const },
     { label: `Dark`, value: `dark` as const },
-    { label: `HUD`, value: `hud` as const, title: `A heads-up display — glass panels, lit edges and a survey grid, in the colour you picked below.` },
+    { label: `HUD`, value: `hud` as const, title: `A heads-up display: glass panels, lit edges and a survey grid, in the colour you picked below.` },
     {
         label: `Sanctum`,
         value: `sanctum` as const,
@@ -80,7 +80,7 @@ const THEME_ICON: Record<ThemeChoice, IconName> = { light: `sun`, dark: `moon`, 
 const themeChoice = computed<ThemeChoice>(() => (skin.value === `none` ? scheme.value : skin.value));
 const setThemeChoice = (value: ThemeChoice): void => {
     // Both skins are built for a near-black canvas and PrimeVue keys its own dark components off the scheme, so
-    // useSkin flips it — nothing to do here beyond naming the skin.
+    // useSkin flips it, so nothing to do here beyond naming the skin.
     if (value !== `light` && value !== `dark`) {
         setSkin(value);
         return;
@@ -116,31 +116,31 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 
 <template>
     <div class="flex flex-col gap-6">
-        <!-- Look — whole-workspace appearance choices. -->
+        <!-- Look: whole-workspace appearance choices. -->
         <RowGroup label="Look">
             <Row
                 :icon="THEME_ICON[themeChoice]"
                 title="Theme"
-                description="The workspace's whole look — plain light and dark, the HUD's lit glass over a survey grid, or the Sanctum's gilded stone."
+                description="The workspace's whole look: plain light and dark, the HUD's lit glass over a survey grid, or the Sanctum's gilded stone."
             >
                 <template #control
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
                 /></template>
             </Row>
             <!-- The colour the rest of the workspace is built out of. In #below rather than #control because it
-                 is two rails and a row of swatches, and because the app around it repaints as they move — a
+                 is two rails and a row of swatches, and because the app around it repaints as they move, a
                  control this wide beside a title would push the description into a column. -->
             <Row
                 icon="palette"
                 title="Colour"
-                description="The accent everything is built from — links, buttons, highlights and the tint of every surface."
+                description="The accent everything is built from: links, buttons, highlights and the tint of every surface."
             >
                 <template #below>
                     <ColorPicker :model-value="accent" @update:model-value="setAccent" />
                 </template>
             </Row>
             <!-- Above the rail row on purpose: this one moves the whole workspace, that one moves a column of it. -->
-            <Row icon="expand" title="Text size" description="How large everything reads — text, spacing and controls together.">
+            <Row icon="expand" title="Text size" description="How large everything reads: text, spacing and controls together.">
                 <template #control
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
                 /></template>
@@ -156,7 +156,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- File tree — the explorer's look, with its live preview flush under the row (no boxed inset). -->
+        <!-- File tree: the explorer's look, with its live preview flush under the row (no boxed inset). -->
         <RowGroup label="File tree">
             <Row icon="sitemap" title="Explorer" description="Size, colour and emphasis of the file tree.">
                 <template #control>
@@ -184,7 +184,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 as="label"
                 icon="eye"
                 title="Show ignored files"
-                description="List node_modules, build output and .gitignore'd paths in the explorer, grayed — the whole filesystem the agent sees."
+                description="List node_modules, build output and .gitignore'd paths in the explorer, grayed out. This is the whole filesystem the agent sees."
             >
                 <template #control>
                     <ToggleSwitch :model-value="showIgnored" @update:model-value="toggleShowIgnored()" />
@@ -194,7 +194,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 as="label"
                 icon="filter"
                 title="Hide tests"
-                description="Leave test and spec files out of the explorer — the .test / .spec files and the __tests__ folders beside them."
+                description="Leave test and spec files out of the explorer: the .test and .spec files and the __tests__ folders beside them."
             >
                 <template #control>
                     <ToggleSwitch :model-value="hideTests" @update:model-value="toggleHideTests()" />
@@ -202,7 +202,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Changes — how a review reads: its list of files, and where each diff opens. Grouping is here as well
+        <!-- Changes: how a review reads: its list of files, and where each diff opens. Grouping is here as well
              as on the panel itself (the Changes header's own toggle writes the same preference), for the same
              reason the explorer's switches are in both places: this is where someone looks for it once they know
              it exists. Both apply to the workspace's Changes tab and an agent's review alike. -->
@@ -227,7 +227,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Chat — how much of an agent's working-out a transcript shows. Off, each turn's run of calls sits
+        <!-- Chat: how much of an agent's working-out a transcript shows. Off, each turn's run of calls sits
              behind one mark you can open; on, every call is a row, which is what someone debugging an agent
              rather than reading its answer wants. Also flipped from the chat itself, for the same reason the
              explorer's switches are in both places. -->
@@ -242,8 +242,8 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Terminal — what the panel's strip carries. The terminals work runs in are hidden by default (they're
-             evidence about something that ran, not tabs you keep — useWorkTerminals); this is the sticky way
+        <!-- Terminal: what the panel's strip carries. The terminals work runs in are hidden by default (they're
+             evidence about something that ran, not tabs you keep (useWorkTerminals). This is the sticky way
              back. The same preference is a checked row in the panel's own right-click menu and the
              work-terminals popover's footer, which is where someone irritated by it will actually reach. -->
         <RowGroup label="Terminal">
@@ -252,7 +252,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Theme import — the one row that needs a full-width editor; its body lives in #below. -->
+        <!-- Theme import: the one row that needs a full-width editor. Its body lives in #below. -->
         <RowGroup label="Theme import">
             <Row icon="palette" title="Import a VSCode theme" description="Paste a VSCode / OpenVSX color theme JSON to recolor the workspace.">
                 <template #control>

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { dateIn, defaultEnd, offsetOf, parseWhen, toInstant } from "./time.js";
 
 /* A fixed instant, mid-summer so the Berlin cases exercise a DST offset, and late enough in the UTC evening
- * that Berlin is ALREADY ON THE NEXT DAY — which is the whole condition the zone handling exists for. */
+ * that Berlin is ALREADY ON THE NEXT DAY, which is the whole condition the zone handling exists for. */
 const NOW = new Date("2026-08-09T22:30:00Z");
 const BERLIN = "Europe/Berlin";
 
@@ -19,7 +19,7 @@ describe("parseWhen", () => {
     });
 
     /* THE ONE THAT MATTERS. 22:30 UTC is already tomorrow in Berlin, so "today" answered from the process
-     * clock would book the meeting a day early — every evening, for every owner east of UTC. */
+     * clock would book the meeting a day early: every evening, for every owner east of UTC. */
     it("reads `today` in the calendar's zone, not the container's", () => {
         expect(parseWhen("today", NOW, BERLIN)).toEqual({ date: "2026-08-10" });
         expect(parseWhen("today", NOW, "UTC")).toEqual({ date: "2026-08-09" });
@@ -30,7 +30,7 @@ describe("parseWhen", () => {
         expect(parseWhen("2026-08-12 14:00", NOW, BERLIN)).toEqual({ dateTime: "2026-08-12T14:00:00", timeZone: BERLIN });
     });
 
-    it("passes a full timestamp through untouched — it already says which moment it is", () => {
+    it("passes a full timestamp through untouched: it already says which moment it is", () => {
         expect(parseWhen("2026-08-12T14:00:00+02:00", NOW, BERLIN)).toEqual({ dateTime: "2026-08-12T14:00:00+02:00" });
         expect(parseWhen("2026-08-12T12:00:00Z", NOW, BERLIN)).toEqual({ dateTime: "2026-08-12T12:00:00Z" });
     });

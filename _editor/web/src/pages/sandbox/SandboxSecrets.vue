@@ -15,27 +15,27 @@ import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSecretInventory } from "../../composables/secrets/useSecrets";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 
-/* THE ONE PLACE EVERY CREDENTIAL IN THIS SANDBOX IS VISIBLE — and, past a dozen of them, a list built to be
+/* THE ONE PLACE EVERY CREDENTIAL IN THIS SANDBOX IS VISIBLE, and, past a dozen of them, a list built to be
  * scanned rather than read. It is the Extensions tab's four rules over a different subject, because it is the
  * same problem: a tab whose length is the number of things you own.
  *
  * IT HOLDS TWO KINDS OF THING AND ONLY ONE OF THEM IS WORK (see ./secretRows). The owner's own values can be
  * missing, are set and rotated and removed here, and a deploy fails without them. Everything under "Connected
  * accounts" is a credential belonging to a connection or a subscription: connected by construction, unsettable
- * from here, and already managed one click away. That half is what grows without limit — one row per account —
+ * from here, and already managed one click away. That half is what grows without limit: one row per account:
  * so it is FOLDED once it is big enough to bury the half that is work. It is still here, still searchable,
  * still one click from its value; it just stops setting the length of the page.
  *
  * WHAT IS OWED IS PINNED, AND THE BANNER IS GONE. A strip at the top saying "3 required secrets are not set"
  * named a number and then left the reader to find three rows scattered down five groups. The rows themselves
- * rise into one group above everything instead — the extension tab's precedent, and the same argument: a
+ * rise into one group above everything instead, the extension tab's precedent, and the same argument: a
  * summary of a problem is worth less than the problem, in a place you can act on it.
  *
  * THE INSTRUMENT ARRIVES WHEN IT IS EARNED. Below a handful of secrets the list IS the overview and a filter
  * box is more chrome than the thing it filters; past that, finding beats scrolling, and the box matches what a
  * row SHOWS (the account, the brand, what uses it) rather than only the key the daemon stored it under.
  *
- * Values stay in the sandbox — the only value-returning action anywhere here is the owner-only reveal. */
+ * Values stay in the sandbox: the only value-returning action anywhere here is the owner-only reveal. */
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // Below this many rows the list is its own overview; below this many accounts the fold saves nothing. Both are
@@ -49,7 +49,7 @@ const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
 
 // DevOps scaffolds the desired-state repo the env/generated secrets live in; until its capability reports
-// `active`, those groups are empty and every /secrets write 412s — so gate them on this signal (state, not
+// `active`, those groups are empty and every /secrets write 412s, so gate them on this signal (state, not
 // mere presence: a scaffolding devops sits at `pending`).
 const devopsActive = computed(() => capabilities.value.some((entry) => entry.kind === `devops` && entry.status.state === `active`));
 
@@ -58,7 +58,7 @@ const rows = computed<SecretRow[]>(() => secretRows(inventory.value, { capabilit
 
 const query = ref(``);
 const scope = ref<`all` | `missing`>(`all`);
-// One row open at a time — the list must not grow unpredictably under the pointer while it is being scanned.
+// One row open at a time: the list must not grow unpredictably under the pointer while it is being scanned.
 const opened = ref<string | undefined>(undefined);
 
 const filterable = computed(() => rows.value.length >= FILTERABLE_FROM);
@@ -88,8 +88,8 @@ const groupVisible = (list: readonly SecretRow[]): boolean => !filtering.value |
 /* The accounts fold: open while small, open while anything is being looked for, shut when it would otherwise
  * bury the half of this tab that is actually work.
  *
- * A READER WHO OPENS IT KEEPS IT OPEN. Searching forces it open — the matches are inside, and a filter that
- * silently omitted them would make this tab lie about what the sandbox holds — and clearing that search used to
+ * A READER WHO OPENS IT KEEPS IT OPEN. Searching forces it open: the matches are inside, and a filter that
+ * silently omitted them would make this tab lie about what the sandbox holds, and clearing that search used to
  * fold it back over the reader who had opened it by hand a minute earlier. Their own answer is remembered
  * instead, and only recorded when it IS their answer: a fold opened by a search is not a preference. */
 const accountCount = computed(() => credentials.value.length + providers.value.length);
@@ -282,7 +282,7 @@ const pushToCi = async (): Promise<void> => {
 
                 <RowGroup v-if="devopsActive && groupVisible(generated)" label="Generated by intentic" :count="generated.length">
                     <p v-if="generated.length === 0" class="px-4 py-2.5 text-xs text-subtle">
-                        Nothing generated yet — these appear after your first deploy.
+                        Nothing generated yet: these appear after your first deploy.
                     </p>
                     <SecretEntryRow
                         v-for="row in generated"
@@ -296,13 +296,13 @@ const pushToCi = async (): Promise<void> => {
 
             <!-- AND THE HALF THAT IS NOT WORK: one line at rest once there are enough of them to bury the rest
                  of the tab, exactly as a mass change folds in the deploy preview. Open, it is the inventory the
-                 Capabilities page shows — same names, same marks, same one click back to where they are set up. -->
+                 Capabilities page shows: same names, same marks, same one click back to where they are set up. -->
             <details v-if="accountCount > 0" class="group/fold" :open="accountsOpen" @toggle="rememberFold">
                 <summary class="flex cursor-pointer list-none items-center gap-2 py-1 [&::-webkit-details-marker]:hidden">
                     <Icon name="chevron-right" aria-hidden="true" class="text-xs text-subtle transition-transform group-open/fold:rotate-90" />
                     <span :class="ui.sectionLabel()">Connected accounts</span>
                     <span class="text-2xs font-medium text-subtle">{{ accountCount }}</span>
-                    <span class="min-w-0 text-2xs text-subtle">held by your connections — set up where they were added</span>
+                    <span class="min-w-0 text-2xs text-subtle">held by your connections: set up where they were added</span>
                 </summary>
 
                 <div class="mt-3 flex flex-col gap-6">

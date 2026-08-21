@@ -7,14 +7,14 @@ afterwards.
 
 ## The one decision everything else follows from
 
-**A package's document is its own `README.md`.** Not a page in a parallel tree that mirrors the repo — that
+**A package's document is its own `README.md`.** Not a page in a parallel tree that mirrors the repo: that
 layout existed here, and it rotted: 61 of its 69 pages were stale, one of them 203 commits behind, while the
 package READMEs beside the code stayed current because they are in the diff already. Proximity is the whole
 mechanism. A page you have open while editing gets fixed; a page two directories away gets a staleness badge.
 
 Only the repository-level map lives apart, because it is the one thing that is about no single package.
 
-The document is **markdown with typed figure fences** — not HTML, and not a JSON document model.
+The document is **markdown with typed figure fences**: not HTML, and not a JSON document model.
 
 - **Not HTML.** Agent-authored HTML renders in a locked-down `srcdoc` iframe (the `DirectoryUiHost` path), which is
   an opaque origin: it cannot see the design tokens, dark mode, or fonts, so every page becomes a separate little
@@ -29,16 +29,16 @@ The document is **markdown with typed figure fences** — not HTML, and not a JS
 
 | Layer | Produced by | Why there |
 | --- | --- | --- |
-| **Facts** — package graph, sizes, revisions, every one-liner, every anchor, every measured figure | `bin/intentic-docs` | a script is exact and free; a model is plausible and wrong |
-| **Judgement** — what a thing is for, which packages form a component, what to read first, what surprises | the agent, in `README.md` / `repo.md` | the only part that needs a mind, and the only part worth reviewing |
-| **Presentation** — theme, layout, dark mode, dagre, a11y | the app (`@intentic/ui`) | nothing authored carries a colour, a coordinate or a size |
+| **Facts**: package graph, sizes, revisions, every one-liner, every anchor, every measured figure | `bin/intentic-docs` | a script is exact and free; a model is plausible and wrong |
+| **Judgement**: what a thing is for, which packages form a component, what to read first, what surprises | the agent, in `README.md` / `repo.md` | the only part that needs a mind, and the only part worth reviewing |
+| **Presentation**: theme, layout, dark mode, dagre, a11y | the app (`@intentic/ui`) | nothing authored carries a colour, a coordinate or a size |
 
 That line moved once, and it is the most valuable change in this package's history: **the measurable figures used
 to be authored.** Agents hand-wrote line counts, file counts and neighbour lists as JSON fences into every page.
 They were 62% of the bytes in the document tree and its single largest source of rot, because a number typed into
 a page is wrong the next time anyone commits and nothing about reviewing a page catches it. They are computed now
 ([src/figures.ts](src/figures.ts)) and drawn above the prose. An author writes a `dag` only for something the
-dependency graph cannot say — a request's path, a state machine, an ordering.
+dependency graph cannot say: a request's path, a state machine, an ordering.
 
 ## Where documents live
 
@@ -52,14 +52,14 @@ dependency graph cannot say — a request's path, a state machine, an ordering.
 .intentic/config/docs/<repo>/…           STAGED — the same tails, a draft awaiting the owner
 ```
 
-Staging still mirrors, so publishing is a copy per tail and never a translation — a staged
+Staging still mirrors, so publishing is a copy per tail and never a translation: a staged
 `.intentic/config/docs/intentic/_deploy/graph/README.md` lands at `intentic/_deploy/graph/README.md`. It is a workspace-root
 path so N isolated agents can write into it at once and it can ride the daemon's file-change push
 (`contributes.files`); an in-repo path cannot, because a manifest is static and repo names are not known when it
 is written. [src/paths.ts](src/paths.ts) holds the one function that decides a tail's destination, and it is the
 only place the two-destination layout is expressed.
 
-A staging directory counts as a **draft** only if it holds something an agent wrote — `index.json` alone does not,
+A staging directory counts as a **draft** only if it holds something an agent wrote: `index.json` alone does not,
 because that file is derived and `intentic-docs check --write` regenerates it for whichever tree it is pointed at,
 staged by default. One flagless run after editing a published README used to leave an index there, and the area
 then opened on a draft with no map and no pages while the repository's real documents sat behind the toggle. The
@@ -68,10 +68,10 @@ not already there.
 
 ## Generation is map-first
 
-1. **Map phase** — one agent runs `intentic-docs facts`, then writes `repo.json` + `repo.md`: the logical
+1. **Map phase**, one agent runs `intentic-docs facts`, then writes `repo.json` + `repo.md`: the logical
    components, the repo's vocabulary, the reading order. Nothing else can decide those; they are cross-package
    judgements, and 42 agents deciding independently produce 42 vocabularies and no map.
-2. **Fan-out** — one isolated agent per package, each handed *its* component and the shared glossary inline, each
+2. **Fan-out**: one isolated agent per package, each handed *its* component and the shared glossary inline, each
    writing exactly one file: that package's README. A package that already has one is revised, not replaced.
 
 Advancing between the phases is **idempotent and derived**: a package's agent starts only when there is neither a
@@ -81,7 +81,7 @@ orphan it, and nothing is ever started twice.
 ## Rot is detected, not assumed
 
 There is no provenance field on a package page, because a field an author must remember to bump is a field that
-goes wrong — which is exactly how the previous layout reached 61 stale pages. Staleness is a git range instead:
+goes wrong: which is exactly how the previous layout reached 61 stale pages. Staleness is a git range instead:
 
 **the commits that touched `<pkg>/` since the last commit that touched `<pkg>/README.md`.**
 
@@ -89,11 +89,11 @@ Every commit in that range is, by construction, one that changed the package wit
 the README in the same commit as the code moves the revision forward with it, so the count returns to zero with
 nothing to remember. `intentic-docs check` writes the verdict to `index.json`, catching two kinds of decay:
 
-- **behind** — commits have touched the package since its page last moved
-- **dead anchor** — a `## Key files` link no longer resolves (the one signal that needs no git history and cannot
+- **behind**: commits have touched the package since its page last moved
+- **dead anchor**: a `## Key files` link no longer resolves (the one signal that needs no git history and cannot
   be argued with)
 
-The third kind the old layout had — an **orphan**, a page whose package is gone — is now structurally impossible
+The third kind the old layout had (an **orphan**, a page whose package is gone) is now structurally impossible
 on the published side: the page lives *in* the directory whose disappearance would orphan it. One class of rot
 deleted rather than detected. It still applies to a staged draft, which can name a package that has since gone.
 
@@ -107,9 +107,9 @@ README in the same commit as the change that invalidated it.** The checker is th
 
 A README is prose, and two parts of it are also data:
 
-- **the lead sentence** — the first sentence of the first paragraph under the `# H1`, which becomes the package's
+- **the lead sentence**: the first sentence of the first paragraph under the `# H1`, which becomes the package's
   one-liner in the package list, the tree row's tooltip, and everywhere else it is named without being opened
-- **`## Key files`** — three to six package-relative markdown links with a reason each, which become the
+- **`## Key files`**: three to six package-relative markdown links with a reason each, which become the
   clickable anchors and the thing `validate` proves still resolves
 
 Package-relative on purpose: the same link has to work on GitHub, in the file tree, and in the documentation
@@ -119,59 +119,59 @@ view. The tool returns them repo-relative, which is what every reader of the ind
 
 | Surface | Subject | Why it exists |
 | --- | --- | --- |
-| Rail tile (`/ext/documentation`) | the workspace | reading the MAP — a system is rarely one repository |
+| Rail tile (`/ext/documentation`) | the workspace | reading the MAP: a system is rarely one repository |
 | Directory panel (a repo's cog) | one repository | its overview beside that repo's other panels |
 | **Tree row icon** | one **directory** | "what is this package?" is asked while looking at the package |
 
 The third is the one the other two cannot reach. A view's `detect()` answers per repo off the daemon's facts, and
-a document is per package — dozens of them in this monorepo, each mirroring a directory already sitting in the
+a document is per package: dozens of them in this monorepo, each mirroring a directory already sitting in the
 file tree. So it rides `contributes.documents` (a path-keyed contribution point in the extension API), and it opens
 in the Workspace's own editor area as a tab rather than navigating away from the files it describes.
 
 **That icon stays on the row when the pointer is elsewhere** (`evidence: true` on the offer), which is the one
 place this surface departs from every other icon in the tree. The rest are revealed on hover, rightly: they are
 things you can DO to a repository, and a permanent column of them is what stops the eye reading the names. This
-one is not an action but a FACT — there is a page about this package — and a fact only visible under the mouse is
+one is not an action but a FACT (there is a page about this package) and a fact only visible under the mouse is
 a fact nobody has. Hidden, a documented monorepo looked exactly like an undocumented one: the repository's row got
 found because there is one of it, and the per-package layer under it was invisible. Standing, the tree also reads
-as coverage — a package with no page is now the row without a mark.
+as coverage: a package with no page is now the row without a mark.
 
 The presence of a document is module state on a slow poll ([src/docPresence.ts](src/docPresence.ts)), not a query:
-the host asks `detect(path)` while nothing of this extension is mounted, and nothing observes an unmounted view —
+the host asks `detect(path)` while nothing of this extension is mounted, and nothing observes an unmounted view:
 so neither a vue-query nor the file-change push could answer. One index read per repository covers every package it
 documents, tooltips included, because `index.json` already carries the one-liners. A repository's *own* row asks a
-different question — does its map exist — because an index is derived bookkeeping that can be written for a
+different question (does its map exist) because an index is derived bookkeeping that can be written for a
 directory nobody wrote an overview for, and a row that promises a document has to open one.
 
 [src/DocTab.vue](src/DocTab.vue) is a separate component from `DocsView` rather than a mode of it, for one reason:
-`DocsView` keeps the open page in the URL query, which is right for a routed area and wrong for a tab — the route
+`DocsView` keeps the open page in the URL query, which is right for a routed area and wrong for a tab: the route
 belongs to the Workspace, and two open document tabs would fight over one key. A tab's subject is a prop.
 
 **The page itself draws no box.** Whether a document wants a frame is a fact about where it is being read, so
 [src/DocPage.vue](src/DocPage.vue) is content and each surface says how to hold it: in the area it is the body
 beside a contents rail and takes the framed panel every index-and-body screen here uses; in a tab it is the whole
-pane, and reads like the README beside it opened as a file — the canvas, a centred measure, a scrollbar that is a
+pane, and reads like the README beside it opened as a file: the canvas, a centred measure, a scrollbar that is a
 whisper until you point at it. A card there would box a document inside a pane that is already a box, and charge
 the prose two sets of padding for it.
 
 ## Key files
 
-- [src/paths.ts](src/paths.ts) — the trees, the tails, and where publishing sends each one; the convention *is* the API
-- [src/docModel.ts](src/docModel.ts) — the map's types and the derived index's, and their total parsers
-- [src/figures.ts](src/figures.ts) — every figure nobody writes, built from the index
-- [src/brief.ts](src/brief.ts) — the two briefs; where documentation quality actually lives
-- [src/useRuns.ts](src/useRuns.ts) — map-first orchestration and the derived, idempotent advance
-- [src/usePublish.ts](src/usePublish.ts) — write → stage → commit, and the index caveat it cannot rule out
-- [src/docPresence.ts](src/docPresence.ts) — which directories have a page, for the tree's row icon
-- [bin/intentic-docs](bin/intentic-docs) — facts / validate / check, and the README parsing all three rest on
-- [plugin/skills/documenting/SKILL.md](plugin/skills/documenting/SKILL.md) — the conventions, taught to every turn
+- [src/paths.ts](src/paths.ts): the trees, the tails, and where publishing sends each one; the convention *is* the API
+- [src/docModel.ts](src/docModel.ts): the map's types and the derived index's, and their total parsers
+- [src/figures.ts](src/figures.ts): every figure nobody writes, built from the index
+- [src/brief.ts](src/brief.ts): the two briefs; where documentation quality actually lives
+- [src/useRuns.ts](src/useRuns.ts): map-first orchestration and the derived, idempotent advance
+- [src/usePublish.ts](src/usePublish.ts): write → stage → commit, and the index caveat it cannot rule out
+- [src/docPresence.ts](src/docPresence.ts): which directories have a page, for the tree's row icon
+- [bin/intentic-docs](bin/intentic-docs): facts / validate / check, and the README parsing all three rest on
+- [plugin/skills/documenting/SKILL.md](plugin/skills/documenting/SKILL.md): the conventions, taught to every turn
 
 The figure vocabulary itself lives in the design system, since the app renders it:
 [`_editor/ui/src/markdown/figures.ts`](../../_editor/ui/src/markdown/figures.ts) and `MarkdownFigure.vue`.
 
 ## The URL is the state
 
-`/ext/documentation?repo=<repo>&doc=<package-dir>` — which document is open lives in the query, so a page can be
+`/ext/documentation?repo=<repo>&doc=<package-dir>`: which document is open lives in the query, so a page can be
 linked to and a reload lands where you were. The view *derives* its selection from the URL rather than mirroring it
 into a ref: mirroring needs one watcher to follow the URL and another to write it, and those two fight (the
 classic symptom being Back moving the URL while the view stays put). Selecting a page pushes a history entry;
@@ -181,17 +181,17 @@ repository.
 The published/draft toggle is deliberately **not** in the URL. A draft is one person's unreviewed work in progress,
 so a link carrying "show me your draft" would either mislead the recipient or show them nothing.
 
-**When the URL names no repository** — which is always, from the rail's tile, since its link has to stay stable —
+**When the URL names no repository**: which is always, from the rail's tile, since its link has to stay stable:
 the area opens on the one this browser last had in the URL ([src/repoChoice.ts](src/repoChoice.ts)), so leaving for
 another view and coming back does not throw the reader's choice away. A remembered name that the workspace no
 longer has is ignored rather than honoured. With nothing remembered, the opening repository is the first one that
 *has documents*, read off the presence map: most repos have none, so discovery order would usually open on an empty
 state offering to generate while the set the reader came for sat one dropdown away. Only a repository the URL names
-is remembered — a fallback is not a choice, and writing one back would freeze whichever repo happened to be first
+is remembered: a fallback is not a choice, and writing one back would freeze whichever repo happened to be first
 before the presence map had answered.
 
 This rides on `api.route` in the public extension API, added for this view because `/ext/:ext/:key?` has exactly one
-free path segment and it already means "which activation" — a view with internal navigation has nowhere else to put
+free path segment and it already means "which activation": a view with internal navigation has nowhere else to put
 it. See `_sandbox/extension-api/src/route.ts` for the query rules and `route.test.ts` for the invariant that matters:
 patching your own key never disturbs another view's.
 
@@ -199,11 +199,11 @@ patching your own key never disturbs another view's.
 
 - `--repo` is a path under `--root`, and `--root` defaults to the workspace rather than the caller's directory, so
   the two ways of getting it wrong are an absolute path and `.`. The first is refused outright. The second is a
-  valid spelling of the workspace itself, which documents nothing — it answered about the wrong tree, left the
+  valid spelling of the workspace itself, which documents nothing: it answered about the wrong tree, left the
   repository's index unrefreshed and dropped an all-empty one at the top of the workspace, thirteen times before
   anyone traced it. `check --write` now refuses any index with no packages, no pages and no orphans, which is the
   same nothing a single-package repository produces and is never worth a file either way.
-- `bin/intentic-docs` duplicates three path constants from `src/paths.ts` — it is plain ESM executed directly by
+- `bin/intentic-docs` duplicates three path constants from `src/paths.ts`: it is plain ESM executed directly by
   the agent's shell, so it cannot import TypeScript. `paths.test.ts` pins them together so the duplication cannot
   drift; `README_TAIL` matters most, since the tool decides what is documented by looking for that filename and
   the browser reads the page back from it.

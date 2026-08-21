@@ -11,14 +11,14 @@ import { desktopVersion, signInThroughBrowser } from "../environments/desktop";
 /* The browser→sandbox sign-in surface. useGoogleIdentity raises `needsSignIn` whenever a Google ID token is
  * needed; this overlay then offers the way to mint one. A credential resolves the awaiting sandbox call
  * automatically; "Back to setup" instead settles the awaiting mint and leaves for the setup screen.
- * Presentational over the composable — no token ever touches the platform.
+ * Presentational over the composable: no token ever touches the platform.
  *
  * TWO SURFACES, BECAUSE GOOGLE'S BUTTON IS DEAD IN THE DESKTOP APP'S WINDOW. Google refuses OAuth from an
- * embedded webview and Identity Services is FedCM-based, which that webview does not implement — so the
+ * embedded webview and Identity Services is FedCM-based, which that webview does not implement, so the
  * button rendered here fine and did NOTHING when clicked, on the one screen standing between a fresh install
  * and a working workspace. The login screen has always answered this by handing sign-in to the real browser
  * (environments/desktop.ts); this gate had not, and the same hole was open here every time the sandbox needed
- * Google again — a month away, an account switch, an adopted token that expired before a daemon existed to
+ * Google again: a month away, an account switch, an adopted token that expired before a daemon existed to
  * spend it on. Same link, same round trip: the app signs in outside, comes back, and adopts the credential. */
 
 const { needsSignIn, renderButton, cancelSignIn } = useGoogleIdentity();
@@ -35,7 +35,7 @@ const desktop = computed(() => desktopVersion() !== undefined);
  * Depends on the color scheme too, so toggling theme while the gate is open re-renders it in the right theme.
  *
  * The CONTAINER is what this watches, not just the flag. Watching the flag alone assumed the gate was always
- * mounted before anything raised it — true when a mint starts from a click, false when one is already in
+ * mounted before anything raised it: true when a mint starts from a click, false when one is already in
  * flight as this component mounts (a reload lands mid-establish). In that ordering the flag never changed, so
  * nothing ever rendered and the card came up empty: a sign-in gate with no way to sign in. */
 watch(
@@ -49,12 +49,12 @@ watch(
 );
 
 /* Sign in the only way this window can. The app opens the platform's page in the default browser and returns
- * over its deep link, which reloads this SPA at the completion route — so the mint currently awaiting here
+ * over its deep link, which reloads this SPA at the completion route, so the mint currently awaiting here
  * goes with the page rather than being resolved, and the adopted credential answers the call that follows. */
 const signInOutside = (): void => signInThroughBrowser();
 
 // Instead of signing in: settle the awaiting mint and return to setup for the active sandbox (the registry
-// keeps its daemon-reported address — there is nothing to sever).
+// keeps its daemon-reported address: there is nothing to sever).
 const backToSetup = async (): Promise<void> => {
     cancelSignIn();
     const active = sandbox.activeSandboxId.value;
@@ -74,12 +74,12 @@ const backToSetup = async (): Promise<void> => {
                     <template v-if="desktop">Intentic signs you in through your browser, then brings you straight back here.</template>
                     <template v-else>Continue with Google to securely connect the browser directly to your sandbox.</template>
                     <template v-if="user?.email">
-                        Use your intentic account — <span class="font-medium text-content">{{ user.email }}</span
+                        Use your intentic account: <span class="font-medium text-content">{{ user.email }}</span
                         >.
                     </template>
                 </p>
                 <!-- Inside the desktop app Google's own button renders and then does nothing when clicked, so
-                     that window gets the hand-off to the real browser instead — the same one the login screen
+                     that window gets the hand-off to the real browser instead: the same one the login screen
                      offers there, and the only sign-in this webview can actually complete. -->
                 <Button
                     v-if="desktop"

@@ -15,10 +15,10 @@ const { resource, resources, deployments } = defineProps<{
     resources: readonly ResourceView[];
     deployments: readonly Deployment[];
 }>();
-// Same selection model as the graph — setting it re-selects (and re-highlights) a dependency.
+// Same selection model as the graph: setting it re-selects (and re-highlights) a dependency.
 const selectedId = defineModel<string | undefined>();
 
-// The resources that list this one in their dependsOn — the reverse of the edges the graph draws.
+// The resources that list this one in their dependsOn: the reverse of the edges the graph draws.
 const requiredBy = computed(() => resources.filter((r) => r.dependsOn.includes(resource.id)).map((r) => r.id));
 const configEntries = computed(() => Object.entries(resource.config));
 // The live Komodo deployment for this node, matched by name === id.
@@ -82,7 +82,7 @@ const logoFailed = reactive(new Set<string>());
         <!-- Why it's out of sync (present only for drift). -->
         <p v-if="resource.reason" class="text-sm text-muted"><span class="font-medium text-subtle">Reason:</span> {{ resource.reason }}</p>
 
-        <!-- Resolved non-secret inputs — the "what does this resolve to" answer, shown nowhere else. -->
+        <!-- Resolved non-secret inputs: the "what does this resolve to" answer, shown nowhere else. -->
         <div v-if="configEntries.length > 0">
             <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Config</h4>
             <div class="flex flex-wrap gap-1">

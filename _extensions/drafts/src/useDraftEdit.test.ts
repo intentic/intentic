@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDraftEdit } from "./useDraftEdit";
 
 /* Save-as-you-type, tested where losing a keystroke costs something. The debounce is real time, so it is faked
- * — what matters is not how long it waits but that nothing leaves the editor without the last words going with
+ *: what matters is not how long it waits but that nothing leaves the editor without the last words going with
  * it, and that reading a post never writes it. */
 
 // A reply, which is what this queue is almost entirely made of: a URL target means no published headline, so
@@ -67,7 +67,7 @@ describe("useDraftEdit", () => {
         expect(written[1]?.draft.id).toBe(`two`);
     });
 
-    // Opening a post to re-read it before approving must not dirty the file — that is what makes a short
+    // Opening a post to re-read it before approving must not dirty the file: that is what makes a short
     // debounce safe, and what stops the queue flashing under someone who only looked.
     it("never writes when nothing changed", async () => {
         const edit = useDraftEdit(write);
@@ -88,7 +88,7 @@ describe("useDraftEdit", () => {
         expect(written).toHaveLength(1);
     });
 
-    /* The count in the row's footer reads the FIELD while one is open — it is the fact that decides whether the
+    /* The count in the row's footer reads the FIELD while one is open: it is the fact that decides whether the
      * post can go out at all, so it has to move with the words rather than with the last save. */
     it("counts the words being typed, not the ones on disk", async () => {
         const edit = useDraftEdit(write);
@@ -111,7 +111,7 @@ describe("useDraftEdit", () => {
     });
 
     it("carries a published headline, and never blanks one", async () => {
-        // A post with a real title, not a reply — the one shape where the editor draws a second box.
+        // A post with a real title, not a reply: the one shape where the editor draws a second box.
         const article = draft({ target: `r/webdev`, title: `Ship it on Friday` });
         const edit = useDraftEdit(write);
         await edit.open(article);

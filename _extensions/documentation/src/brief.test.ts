@@ -29,7 +29,7 @@ describe(`mapBrief`, () => {
         expect(brief).toContain(`the \`head\` field of the \`intentic-docs facts\` output`);
     });
 
-    it(`asks for components, vocabulary and reading order — and for no package prose`, () => {
+    it(`asks for components, vocabulary and reading order, and for no package prose`, () => {
         expect(brief).toContain(`Logical components`);
         expect(brief).toContain(`Vocabulary`);
         expect(brief).toContain(`Reading order`);
@@ -67,7 +67,7 @@ describe(`packageBrief`, () => {
     });
 
     it(`names the one file it may write, staged under the package's own path`, () => {
-        // The page IS the package's README. It still STAGES, though — publishing is what puts it in the package.
+        // The page IS the package's README. It still STAGES, though: publishing is what puts it in the package.
         expect(brief).toContain(`.intentic/config/docs/intentic/_libs/contract/README.md`);
         expect(brief).toContain(`## Write exactly one file`);
     });
@@ -85,7 +85,7 @@ describe(`packageBrief`, () => {
 
     it(`inlines the glossary rather than pointing at the map`, () => {
         // A path to go read costs a turn and invites the agent to drift; the vocabulary is small enough to hand over.
-        expect(brief).toContain(`**panel** — A repo's dev server.`);
+        expect(brief).toContain(`**panel**: A repo's dev server.`);
     });
 
     it(`protects the map and the sibling packages from a fan-out agent`, () => {
@@ -93,7 +93,7 @@ describe(`packageBrief`, () => {
         expect(brief).toContain(`repo.json\` belongs to the map`);
     });
 
-    /* A package page has NO provenance to write — its date is the commit that lands it and its staleness is a
+    /* A package page has NO provenance to write: its date is the commit that lands it and its staleness is a
      * commit count, both computed. Asking an agent for a field it cannot get right is how the previous layout
      * ended up with 61 stale pages out of 69. */
     it(`asks for no provenance, and says why there is none to give`, () => {

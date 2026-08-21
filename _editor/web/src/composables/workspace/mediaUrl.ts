@@ -2,7 +2,7 @@ import { sandboxRpc } from "../sandbox/sandboxRpc";
 import { useEndpoint } from "../sandbox/useEndpoint";
 import { scopeQuery, workspaceAgent } from "./workspaceScope";
 
-/* THE ONE DAEMON URL THE BROWSER HANDS TO AN ELEMENT — /workspace/media, for a <video>/<audio> that fetches
+/* THE ONE DAEMON URL THE BROWSER HANDS TO AN ELEMENT: /workspace/media, for a <video>/<audio> that fetches
  * its own byte ranges.
  *
  * Everything else in this app reaches the daemon through an authenticated fetch and, when the result has to
@@ -27,7 +27,7 @@ export const mediaUrl = async (path: string, options: { readonly download?: true
     const { ticket } = await sandboxRpc.workspace.mediaTicket({ path, agent });
     const base = useEndpoint().daemonBase.value;
     if (base === undefined || base === ``) {
-        throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
+        throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
     }
     const query = scopeQuery(new URLSearchParams({ path, ticket }));
     // Asks the daemon for Content-Disposition: attachment. The `download` ATTRIBUTE cannot do this job, the

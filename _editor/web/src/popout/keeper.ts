@@ -13,7 +13,7 @@
  *
  * WHEN IT ASKS, which is the whole of what makes those three answers worth anything. The interval is the
  * BACKSTOP, not the mechanism: a window the user is not looking at has its timers throttled to one a second and
- * eventually to one a MINUTE, and a handshake that only rides the clock inherits that delay wholesale — the app
+ * eventually to one a MINUTE, and a handshake that only rides the clock inherits that delay wholesale: the app
  * docks the panel, this window keeps the last frame it was handed, and the veil that would have given it away
  * is itself something the tick paints (popout/handshake.ts has the report this comes from). So the asking is
  * event-driven first:
@@ -108,7 +108,7 @@ const ask = (): void => {
     }
 };
 
-/* THE FAST PATH. The app posts a nudge the moment its answer would change — and, crucially, once on every page
+/* THE FAST PATH. The app posts a nudge the moment its answer would change, and, crucially, once on every page
  * load, which is how a window that outlived a reload is picked back up in a millisecond instead of on whatever
  * tick the browser next allows this window. Without it the app's own wait for the window ran out first and the
  * panel went back to its column with the window still standing there. */

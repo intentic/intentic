@@ -22,7 +22,7 @@ const { savings } = useSavings({});
 // Search teaching is session state, so this holdout flips whole conversations and never individual turns.
 const iqSearchHoldoutPercent = computed<number>(() => asPercent(settings.value?.iqSearchHoldout));
 
-/* WHAT THE EXPERIMENT SAYS SO FAR, worded exactly as the Savings card words it — the two screens read the same
+/* WHAT THE EXPERIMENT SAYS SO FAR, worded exactly as the Savings card words it: the two screens read the same
  * report and a settings row that paraphrased it would be a second opinion.
  *
  * Through `verdictsOf` rather than mapping every metric as a peer: this experiment reports TWO readings of one
@@ -45,7 +45,7 @@ const searchReadings = computed<PanelReading[]>(() => {
     <RowGroup label="Code search">
         <template #info><CodeSearchInfo /></template>
 
-        <!-- iq code search — loads the iq plugin (skill + nudge) so the assistant reaches for the iq CLI instead
+        <!-- iq code search: loads the iq plugin (skill + nudge) so the assistant reaches for the iq CLI instead
              of grep/find/glob. Opt-in per sandbox; the browser Search box uses iq regardless. -->
         <Row icon="search" title="iq code search" description="Let the assistant use the iq search CLI instead of grep / find / glob.">
             <template #control>
@@ -57,7 +57,7 @@ const searchReadings = computed<PanelReading[]>(() => {
             </template>
             <!-- The same measurement block the terse steer carries, and the same one line about it. Why the arm
                  has to stay pinned for a whole conversation is a paragraph, and it now lives in the (i) where a
-                 paragraph can be read — on the row it was three lines of 11px text between a switch and its
+                 paragraph can be read: on the row it was three lines of 11px text between a switch and its
                  own result. -->
             <template v-if="settings?.iqSearch === true" #below>
                 <MeasurementPanel
@@ -71,7 +71,7 @@ const searchReadings = computed<PanelReading[]>(() => {
             </template>
         </Row>
 
-        <!-- The project map — one question earlier than search. Search answers "where is this thing"; this
+        <!-- The project map: one question earlier than search. Search answers "where is this thing"; this
              answers "what is this and which part of it am I in", which every new conversation has to buy for
              itself and, left to itself, buys with a folder listing. Read off disk each time a conversation
              opens rather than written down anywhere, which is the whole reason it is a switch here and not a
@@ -89,7 +89,7 @@ const searchReadings = computed<PanelReading[]>(() => {
                 />
             </template>
             <!-- Nothing below the switch. No holdout, unlike its neighbour: what the map removes is the opening
-                 look around, one or two calls on the first message of a conversation — too small a slice of too
+                 look around, one or two calls on the first message of a conversation: too small a slice of too
                  few turns for a split to say anything before the layout it describes has changed. And nothing to
                  say in 11px text either; where the map lands and which project it follows are both facts about
                  the feature rather than about the click, and the (i) gives them a paragraph each. -->

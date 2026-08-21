@@ -2,8 +2,8 @@
 //
 // HOW LONG THIS PAGE MAKES SOMEONE WAIT, which is the whole subject: the screen is one person watching a
 // spinner, and everything on it is either the wait or a way to end it. The page used to hide Google's button
-// behind a five-second timer that only ran out AFTER the silent attempt failed to say anything — the ordinary
-// case in a browser that suppresses the prompt — so the first frame offered nothing and the fifth second
+// behind a five-second timer that only ran out AFTER the silent attempt failed to say anything: the ordinary
+// case in a browser that suppresses the prompt, so the first frame offered nothing and the fifth second
 // offered a button. These mount the real page and read the FIRST frame: the button is there, and the mint it
 // races was asked for without the shared overlay that timer existed to raise.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -92,8 +92,8 @@ afterEach(() => {
 it(`puts Google's button up the moment the platform says it holds nothing, with no timer between`, async () => {
     await mount();
 
-    // No fake clock is advanced anywhere in this test. The button waits on one answer — does the platform
-    // already hold this credential — and on nothing else; the five-second guard it used to sit behind ran
+    // No fake clock is advanced anywhere in this test. The button waits on one answer: does the platform
+    // already hold this credential, and on nothing else; the five-second guard it used to sit behind ran
     // AFTER a silent Google attempt that says nothing in most browsers, so the wait was never informative.
     expect(renderButton).toHaveBeenCalledTimes(1);
     expect(renderButton.mock.calls[0]?.[0]).toBeInstanceOf(HTMLElement);
@@ -106,7 +106,7 @@ it(`asks for the token without the shared sign-in overlay, and only one with rea
     // button on a page whose own button is already up.
     //
     // `usableFor` is the other half, and it is about what happens AFTER this page. The credential leaves for
-    // another process that cannot spend it until it has a daemon to spend it on — a whole setup away after a
+    // another process that cannot spend it until it has a daemon to spend it on: a whole setup away after a
     // fresh install. A cached token a minute from death satisfies this page and strands the app.
     expect(getIdToken).toHaveBeenCalledWith({ gate: false, usableFor: expect.any(Number) });
     expect(getIdToken.mock.calls[0]?.[0]?.usableFor).toBeGreaterThanOrEqual(10 * 60 * 1000);
@@ -116,13 +116,13 @@ it(`says what the button is for while the sign-in is outstanding`, async () => {
     const el = await mount();
 
     expect(el.textContent).toContain(`Continue with Google`);
-    // The handoff line belongs to the LATER wait — showing it now described a step that has not started.
+    // The handoff line belongs to the LATER wait: showing it now described a step that has not started.
     expect(el.textContent).not.toContain(`Handing your sign-in`);
 });
 
 /* THE SECOND ASK, GONE. Someone here pressed sign in inside the app and is already signed in in this browser.
  * A Google button on top of that is a third act of consent for something twice agreed to, and it is the step
- * people were stalling on — so the credential is asked of the platform, and Google is never shown. */
+ * people were stalling on, so the credential is asked of the platform, and Google is never shown. */
 it(`finishes with no Google surface at all when the platform already holds the credential`, async () => {
     googleIdToken.mockResolvedValue({ idToken: credential(60 * 60 * 1000) });
     handoff.mockResolvedValue({ handoff: `row-1` });
@@ -150,7 +150,7 @@ it(`keeps the platform's credential for this browser too`, async () => {
 });
 
 /* This token LEAVES for a process that may not spend it for a whole setup, so one the daemon would reject on
- * arrival is worth no more than none at all — take Google's button instead, where a fresh one can be had. */
+ * arrival is worth no more than none at all: take Google's button instead, where a fresh one can be had. */
 it(`treats a nearly-dead held credential as nothing held`, async () => {
     googleIdToken.mockResolvedValue({ idToken: credential(60 * 1000) });
 
@@ -162,7 +162,7 @@ it(`treats a nearly-dead held credential as nothing held`, async () => {
     expect(el.textContent).toContain(`Continue with Google`);
 });
 
-// A platform that does not answer this at all — an older build, a self-hosted one — is not an error state.
+// A platform that does not answer this at all (an older build, a self-hosted one) is not an error state.
 // It holds nothing, which is precisely the case the button already covered.
 it(`falls back to Google's button when the platform cannot answer`, async () => {
     googleIdToken.mockRejectedValue(new Error(`no such route`));
@@ -175,7 +175,7 @@ it(`falls back to Google's button when the platform cannot answer`, async () => 
     expect(el.textContent).not.toContain(`Couldn't finish signing in`);
 });
 
-/* The failure nothing on this page can see: Google's button renders, takes the click, and does nothing —
+/* The failure nothing on this page can see: Google's button renders, takes the click, and does nothing:
  * a blocked frame, an extension, an origin Google has stopped accepting. Without a way out that needs none of
  * that machinery, the screen is indistinguishable from one that is simply broken. */
 it(`always offers Google's own page while the embedded button is up`, async () => {

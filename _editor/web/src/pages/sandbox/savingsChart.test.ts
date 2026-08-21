@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { compositionOf, meanLabel, savedByCleaner, stageLabel, verdictsOf } from "./savingsChart";
 
 // The composition bar's one invariant: its segments are a decomposition of the raw output, so they sum to it
-// exactly. Everything else on the card is read against that — a stack whose parts don't add up to the whole is
+// exactly. Everything else on the card is read against that: a stack whose parts don't add up to the whole is
 // not a budget, it's a picture.
 
 const report = (overrides: Partial<InputSavings> = {}): InputSavings => ({
@@ -30,7 +30,7 @@ describe(`compositionOf`, () => {
         expect(segments.reduce((sum, segment) => sum + segment.tokens, 0)).toBe(rawTokens);
         expect(segments.at(-1)?.key).toBe(`reached`);
         // Raw − everything the mechanisms removed, which is exactly the emitted total minus the footers the
-        // filter added back — the reason the footer is disclosed separately instead of stacked.
+        // filter added back: the reason the footer is disclosed separately instead of stacked.
         expect(segments.at(-1)?.tokens).toBe(2100);
     });
 
@@ -64,7 +64,7 @@ describe(`stageLabel`, () => {
     });
 });
 
-// The three savings cards are only scannable if every one of them puts an ANSWER in the headline slot — a
+// The three savings cards are only scannable if every one of them puts an ANSWER in the headline slot: a
 // figure when there is one, a word when there isn't. So the states a card can be in are enumerated here rather
 // than trusted to three templates that drifted apart once already.
 
@@ -90,7 +90,7 @@ describe(`verdictsOf`, () => {
         expect(verdict.detail).toBe(`±4pp (95%) · ~91K chars saved in this range`);
     });
 
-    it(`states an increase without alarm — an experiment that says the mechanism cost more is working`, () => {
+    it(`states an increase without alarm: an experiment that says the mechanism cost more is working`, () => {
         expect(headlineOf([reading({ deltaPct: 7, marginPct: 3 })])).toMatchObject({ value: `↑7%`, tone: `content` });
     });
 
@@ -104,7 +104,7 @@ describe(`verdictsOf`, () => {
     });
 
     // Two readings, one coin flip: the headline counts every search, the second only the ones before the turn
-    // opened a file. Both come back, in the order the daemon put them in — a screen must not have to sort them.
+    // opened a file. Both come back, in the order the daemon put them in: a screen must not have to sort them.
     it(`returns every reading an experiment carries, headline first`, () => {
         const verdicts = verdictsOf(
             experiment([
@@ -121,17 +121,17 @@ describe(`verdictsOf`, () => {
         const verdict = headlineOf([reading()]);
         expect(verdict).toMatchObject({ value: `Measuring`, tone: `muted` });
         // The shorter arm is the control's 14, against a threshold of 30.
-        expect(verdict.detail).toBe(`needs 30 turns per arm — 16 more on the shorter one`);
+        expect(verdict.detail).toBe(`needs 30 turns per arm, 16 more on the shorter one`);
     });
 
     it(`names conversations when the teaching experiment randomizes sessions rather than turns`, () => {
         const verdict = headlineOf([reading({ on: { turns: 18, mean: 3 }, off: { turns: 11, mean: 4 } })], {
             sampleUnit: `conversations`,
         });
-        expect(verdict.detail).toBe(`needs 30 conversations per arm — 19 more on the shorter one`);
+        expect(verdict.detail).toBe(`needs 30 conversations per arm, 19 more on the shorter one`);
     });
 
-    /* MEASURED, NO EFFECT — its own verdict, because the reader's next move differs from "Measuring". The steer
+    /* MEASURED, NO EFFECT: its own verdict, because the reader's next move differs from "Measuring". The steer
      * crossed thirty control turns and published +31.2% ± 35.1pp: an interval from −3.4% to +66.7%, rendered as
      * an alarming number pointing the wrong way. The daemon now withholds the delta and sends the margin alone. */
     it(`says so when the arms are big enough and the effect still isn't resolvable`, () => {
@@ -140,7 +140,7 @@ describe(`verdictsOf`, () => {
         expect(verdict.detail).toBe(`±35.1pp (95%) · keep collecting`);
     });
 
-    /* "Keep collecting" is not advice a reader can act on — three more days and three more years look the same
+    /* "Keep collecting" is not advice a reader can act on: three more days and three more years look the same
      * in it. The estimate is coarse and says so by being an order of magnitude, but it is the difference between
      * waiting and changing the holdout. */
     it(`says how much more control data a withheld delta would need`, () => {
@@ -155,7 +155,7 @@ describe(`verdictsOf`, () => {
     });
 });
 
-// The bars carry the arms' own units, and the two experiments' units are not interchangeable — a chart that
+// The bars carry the arms' own units, and the two experiments' units are not interchangeable: a chart that
 // labelled searches as characters would be a picture of the wrong quantity.
 describe(`meanLabel`, () => {
     it(`prints prose compact and searches to the tenth, the same split the daemon rounds on`, () => {

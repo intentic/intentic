@@ -35,7 +35,7 @@ describe(`claim targets`, () => {
     it(`matches a remote whose case differs from the listing, and ignores hosts the proof can't be read from`, () => {
         const targets = claimTargets(challenge([`acme/one`, `acme/two`]), [
             { repo: `one`, host: `github.com`, project: `Acme/One` },
-            // Listed under the publisher, checked out here, but the proof is read back off github — so this is
+            // Listed under the publisher, checked out here, but the proof is read back off github, so this is
             // not somewhere the file can be published, however well the slug matches.
             { repo: `two`, host: `gitlab.com`, project: `acme/two` },
         ]);
@@ -54,7 +54,7 @@ describe(`a publish that did not land`, () => {
             `wouldn't take the push`,
         );
         expect(publishFailureNotice(`acme/one`, published({ wrote: true, reason: `git refused` })).title).toContain(`couldn't be recorded`);
-        // A refusal before anything was touched — the wrong-branch case, which is the common one.
+        // A refusal before anything was touched: the wrong-branch case, which is the common one.
         const untouched = publishFailureNotice(`acme/one`, published({ reason: `you're on fix/x and this has to land on main` }));
         expect(untouched.title).toContain(`Nothing was changed`);
         expect(untouched.detail).toContain(`has to land on main`);

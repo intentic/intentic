@@ -4,14 +4,14 @@ import { to16kMonoPcm } from "./audio.js";
 
 /* The Opus decoder contract voice.ts depends on, pinned here because nothing else does.
  *
- * voice.ts uses exactly two things from the binding — `new OpusEncoder(48_000, 2)` and `decode(packet)` — and
+ * voice.ts uses exactly two things from the binding: `new OpusEncoder(48_000, 2)` and `decode(packet)`, and
  * feeds the result straight into Buffer.concat and then to16kMonoPcm, which reads it as 48kHz stereo s16le. All
  * three of those are assumptions about a native dependency rather than about our own code, so they break on an
  * upgrade rather than on an edit, and they break in the one place we have no test coverage: a live voice call.
  * That is what this file is for. It replaced @discordjs/opus, whose installer compiled or unpacked a binary at
  * install time; the receive path is identical, and these are the properties that had to stay identical with it. */
 
-// 20ms at 48kHz stereo — the frame Discord actually sends, and what the receiver hands us packet by packet.
+// 20ms at 48kHz stereo: the frame Discord actually sends, and what the receiver hands us packet by packet.
 const FRAME_SAMPLES = 960;
 const FRAME_BYTES = FRAME_SAMPLES * 2 * 2;
 
@@ -65,6 +65,6 @@ test("a corrupt frame costs one frame, never the rest of the utterance", () => {
     } catch {
         // Exactly what voice.ts does with it.
     }
-    // The decoder is still usable afterwards — the claim the comment in voice.ts makes.
+    // The decoder is still usable afterwards: the claim the comment in voice.ts makes.
     expect(decoder.decode(source).length).toBe(FRAME_BYTES);
 });

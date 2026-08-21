@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GitCommit } from "@intentic/sandbox-contract";
 import { computeGraphLayout } from "./graphLayout";
 
-// A minimal commit — only sha/parents drive the layout; the rest is render-only.
+// A minimal commit: only sha/parents drive the layout; the rest is render-only.
 const commit = (sha: string, parents: string[]): GitCommit => ({
     sha,
     short: sha,
@@ -58,16 +58,16 @@ describe(`computeGraphLayout`, () => {
             commit(`e`, [`x`]),
             commit(`x`, []),
         ]);
-        // Two branch events, but never more than two lanes wide — `e` reused a hole.
+        // Two branch events, but never more than two lanes wide: `e` reused a hole.
         expect(layout.laneCount).toBe(2);
         expect(layout.rows.find((row) => row.sha === `e`)?.col).toBe(0);
     });
 
-    /* COLOUR IS A PROPERTY OF THE BRANCH, NOT OF THE COLUMN — the whole point of the lane model carrying a
+    /* COLOUR IS A PROPERTY OF THE BRANCH, NOT OF THE COLUMN: the whole point of the lane model carrying a
      * colour at all. These two are the failures that made the earlier column-keyed version misleading, and
      * neither is visible in a structural assertion about `col`. */
     it(`keeps one branch's colour constant even where it changes column`, () => {
-        // `b` opens lane 1 as the merge's second parent, then lane 0 frees up and later work reuses it — the
+        // `b` opens lane 1 as the merge's second parent, then lane 0 frees up and later work reuses it: the
         // colour must track the branch across that move rather than flipping with the column.
         const layout = computeGraphLayout([commit(`m`, [`a`, `b`]), commit(`a`, [`c`]), commit(`b`, [`c`]), commit(`c`, [])]);
         const bySha = new Map(layout.rows.map((row) => [row.sha, row]));
@@ -78,7 +78,7 @@ describe(`computeGraphLayout`, () => {
 
     it(`gives a later, unrelated branch a different colour from the one whose column it reuses`, () => {
         // Same shape as the column-reuse case above: `e` takes the column `b`'s branch vacated. Sharing a column
-        // with a finished branch must not mean sharing its colour — that is exactly the "two unrelated branches
+        // with a finished branch must not mean sharing its colour: that is exactly the "two unrelated branches
         // look like one" failure.
         const layout = computeGraphLayout([
             commit(`d`, [`a`, `b`]),

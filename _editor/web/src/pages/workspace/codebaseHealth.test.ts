@@ -12,7 +12,7 @@ const hotspot = (path: string, score: number): WorkspaceHotspot => ({
     latestMs: 0,
 });
 
-// `latestMs: 0` above is the epoch, so a fixture row is dormant unless it says otherwise — the honest default
+// `latestMs: 0` above is the epoch, so a fixture row is dormant unless it says otherwise, the honest default
 // for a file with no history behind it.
 const NOW = 1_700_000_000_000;
 
@@ -22,7 +22,7 @@ describe(`hotspotRows`, () => {
         expect(rows.map((row) => row.share)).toEqual([1, 0.5, 0.25]);
     });
 
-    it(`keeps the tail visible — a file that placed at all still draws a bar`, () => {
+    it(`keeps the tail visible: a file that placed at all still draws a bar`, () => {
         // 1/1000 of the leader would round to nothing on screen, and an empty track reads as "no risk" rather
         // than "far less than the leader".
         const [, tail] = hotspotRows([hotspot(`a.ts`, 1000), hotspot(`b.ts`, 1)], [], `all`, NOW);

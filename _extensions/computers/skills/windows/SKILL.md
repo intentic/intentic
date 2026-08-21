@@ -1,19 +1,19 @@
 ---
 name: windows
-description: Operate "${id}", the user's own Windows computer — run commands, read and write files, capture its screen. Use whenever the user says "my machine", "my laptop", "my PC", "my desktop", "locally", or names this computer, and for anything that has to happen on their computer rather than in the sandbox.
+description: Operate "${id}", the user's own Windows computer, run commands, read and write files, capture its screen. Use whenever the user says "my machine", "my laptop", "my PC", "my desktop", "locally", or names this computer, and for anything that has to happen on their computer rather than in the sandbox.
 ---
 
 ${tools}
 ## This machine runs Windows
 
 `run_command` gives you **PowerShell 7** (`pwsh`) when it is installed, otherwise Windows PowerShell 5.1. Both
-are PowerShell — `cmd.exe` builtins (`dir /s`, `copy`, `&&`) are not what you are typing into.
+are PowerShell: `cmd.exe` builtins (`dir /s`, `copy`, `&&`) are not what you are typing into.
 
 ### Quoting and paths
 - Paths with spaces: `& "C:\Program Files\Git\bin\git.exe" status`. The `&` call operator is required whenever
   the command itself is quoted.
 - Prefer forward slashes in arguments you pass to cross-platform tools; PowerShell accepts both.
-- `$env:USERPROFILE`, `$env:APPDATA`, `$env:LOCALAPPDATA` — use these, never a hardcoded `C:\Users\<name>`.
+- `$env:USERPROFILE`, `$env:APPDATA`, `$env:LOCALAPPDATA`: use these, never a hardcoded `C:\Users\<name>`.
 - Chain with `;` (always runs) or `-and`; `&&` works only in PowerShell 7.
 
 ### Exit codes
@@ -43,15 +43,15 @@ $outlook = New-Object -ComObject Outlook.Application
 $inbox = $outlook.Session.GetDefaultFolder(6)   # 6 = olFolderInbox
 $inbox.Items | Select-Object -First 5 Subject, SenderName, ReceivedTime
 ```
-COM objects hold the app open — finish with `[System.Runtime.InteropServices.Marshal]::ReleaseComObject($x)`.
+COM objects hold the app open: finish with `[System.Runtime.InteropServices.Marshal]::ReleaseComObject($x)`.
 
 ### Driving the Windows GUI
-Input goes through user32 (`SendInput`-class calls), so it behaves like a real keyboard and mouse — including
+Input goes through user32 (`SendInput`-class calls), so it behaves like a real keyboard and mouse: including
 that it lands on **whatever window has focus**. `Start-Process` then a click on the new window is more reliable
 than assuming focus followed. `super+e` opens Explorer, `super+r` the Run box; both work here even though
 Windows' own SendKeys cannot press that key.
 
-A UAC prompt appears on a SECURE DESKTOP that no injected input can reach — if one opens, the GUI route is over
+A UAC prompt appears on a SECURE DESKTOP that no injected input can reach: if one opens, the GUI route is over
 and the user has to click it themselves. Say so rather than retrying.
 
 ### Elevation

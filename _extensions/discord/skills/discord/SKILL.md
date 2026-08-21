@@ -6,10 +6,10 @@ description: Read, post, and react in the connected Discord server via the Disco
 # Discord (connected)
 
 Authenticated with a bot token in `$DISCORD_BOT_TOKEN`. Talk to Discord's REST API with `curl`.
-Base URL: `https://discord.com/api/v10` — Auth header: `-H "Authorization: Bot $DISCORD_BOT_TOKEN"`.
+Base URL: `https://discord.com/api/v10`, Auth header: `-H "Authorization: Bot $DISCORD_BOT_TOKEN"`.
 
 ## Setup & invite (do this when the bot isn't in the user's server yet)
-Discord only lets a server admin add a bot via an OAuth consent link — generate that link for them:
+Discord only lets a server admin add a bot via an OAuth consent link: generate that link for them:
 1. Confirm the token works and get the bot user:
    `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" https://discord.com/api/v10/users/@me | jq '{id, username}'`
 2. Get the application id (needed for the invite URL):
@@ -35,19 +35,19 @@ Then confirm it landed: `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" http
   `curl -s -X POST -H "Authorization: Bot $DISCORD_BOT_TOKEN" -H "Content-Type: application/json" -d '{"content":"hello"}' https://discord.com/api/v10/channels/<CHANNEL_ID>/messages`
 
 ## Voice (listen & transcribe)
-Use the `discord-voice` command-line tool (on your PATH) — not curl. It drives the long-lived gateway that holds
+Use the `discord-voice` command-line tool (on your PATH): not curl. It drives the long-lived gateway that holds
 the call across turns:
-- `discord-voice join <channelId>` — join a voice channel and transcribe the conversation per speaker (local whisper).
-- `discord-voice leave` — leave now and finalize the transcript.
-- `discord-voice status` — current session: channel, duration, participants, utterances, live transcript path.
-The transcript under `.intentic/records/artifacts/voice/` updates live after every utterance — read it mid-call to follow
+- `discord-voice join <channelId>`: join a voice channel and transcribe the conversation per speaker (local whisper).
+- `discord-voice leave`: leave now and finalize the transcript.
+- `discord-voice status`, current session: channel, duration, participants, utterances, live transcript path.
+The transcript under `.intentic/records/artifacts/voice/` updates live after every utterance: read it mid-call to follow
 the conversation. Each transcribed utterance also fires a `voice_utterance` listener event (batched), and when
 the call ends (everyone leaves, or `discord-voice leave`) a `voice_transcript` event fires with the finalized
-transcript — those wakes are where you turn it into notes/action items. Voice channel ids come from the channel
+transcript: those wakes are where you turn it into notes/action items. Voice channel ids come from the channel
 list command (`type: 2` = voice).
 
 Voice needs whisper.cpp, which was added to this sandbox's environment automatically when Discord was
-connected. If `discord-voice join` reports whisper-cli missing, the sandbox just hasn't been rebuilt yet — ask
+connected. If `discord-voice join` reports whisper-cli missing, the sandbox just hasn't been rebuilt yet: ask
 the owner to run the rebuild command on the Sandbox page's Environment card. Don't propose an overlay for this
 yourself.
 

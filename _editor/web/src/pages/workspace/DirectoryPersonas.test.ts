@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // jsdom because the two things that can go wrong here are things the surface DOES, and both are silent. The panel
-// writes cards through a whole-card upsert, so an edit that forgets a field it never showed does not fail — it
+// writes cards through a whole-card upsert, so an edit that forgets a field it never showed does not fail: it
 // quietly strips the accounts off somebody's persona. And a folder holds several cards, so a panel that listed the
 // wrong ones would send an edit to a persona belonging somewhere else.
 import type { Persona } from "@intentic/sandbox-contract";
@@ -96,7 +96,7 @@ it(`saves a new persona that starts in the clicked folder`, async () => {
     });
 });
 
-// Permissions are behind Advanced, so an untouched panel must commit no powers block at all — otherwise every
+// Permissions are behind Advanced, so an untouched panel must commit no powers block at all: otherwise every
 // card added from the tree writes ten fields meaning "yes" into a tracked file.
 it(`asks for a name and nothing else, and commits no powers`, async () => {
     mount(`docs`);
@@ -120,7 +120,7 @@ it(`reveals the permissions under Advanced`, async () => {
 });
 
 /* A FOLDER HOLDS SEVERAL. Both cards that start here are listed, and neither the card of a subfolder nor one that
- * merely prefers the repo is — an edit sent to the wrong card is invisible until something stops posting. */
+ * merely prefers the repo is: an edit sent to the wrong card is invisible until something stops posting. */
 it(`lists every persona starting in this folder and no others`, async () => {
     personas.value = [
         { id: `docs-bot`, capabilities: [], workspace: { startIn: `intentic/_editor` } },
@@ -137,7 +137,7 @@ it(`lists every persona starting in this folder and no others`, async () => {
 });
 
 /* THE SAVE IS AN UPSERT OF THE WHOLE CARD. Editing a name from the tree must carry over everything this panel
- * never shows — the accounts it speaks through, the projects that prefer it, the folders it is fenced to —
+ * never shows: the accounts it speaks through, the projects that prefer it, the folders it is fenced to:
  * because a field left out of the payload is a field taken off the card. */
 it(`keeps the rest of a card when it is renamed from the tree`, async () => {
     personas.value = [
@@ -194,8 +194,8 @@ it(`keeps the powers of a bounded card`, async () => {
     });
 });
 
-/* THE HEADER IS THE FOLDER'S QUESTION. "Personas in docs" claimed a list on a folder that has none — which is
- * every folder somebody opens this from the first time — and read as cards stored in that folder besides. */
+/* THE HEADER IS THE FOLDER'S QUESTION. "Personas in docs" claimed a list on a folder that has none, which is
+ * every folder somebody opens this from the first time, and read as cards stored in that folder besides. */
 it(`asks who works in the folder rather than announcing a list`, async () => {
     mount(`docs`);
     await nextTick();
@@ -254,7 +254,7 @@ it(`offers a persona that starts nowhere, and says so`, async () => {
     expect(save.mock.calls[0]![0]).toEqual({ id: `free-agent`, capabilities: [], workspace: { startIn: `docs` } });
 });
 
-/* A PERSONA HAS ONE STARTING FOLDER, so this MOVES it — and the folder losing it is not on this screen, which
+/* A PERSONA HAS ONE STARTING FOLDER, so this MOVES it, and the folder losing it is not on this screen, which
  * is the only place the change would otherwise be noticed. */
 it(`warns that pointing a card here takes it off the folder it starts in`, async () => {
     personas.value = [{ id: `docs-bot`, label: `Docs bot`, capabilities: [], workspace: { startIn: `docs` } }];
@@ -307,7 +307,7 @@ it(`switches cleanly between naming a new persona and picking an existing one`, 
     expect(nameField().value).toBe(``);
 });
 
-/* A new card landing on a name already taken would upsert that card instead — including one belonging to a
+/* A new card landing on a name already taken would upsert that card instead: including one belonging to a
  * different folder, which is the case this panel makes easy to hit. */
 it(`refuses a name another persona already has`, async () => {
     personas.value = [{ id: `docs-bot`, capabilities: [], workspace: { startIn: `elsewhere` } }];

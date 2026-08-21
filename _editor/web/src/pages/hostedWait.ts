@@ -42,7 +42,7 @@ const STEPS: readonly { key: WaitStep; label: string }[] = [
 // (setupReport.ts names the same one on the command lane), so its first step SAYS so. "Starting the machine"
 // over a download reads as a hang; the same minutes with the download named read as work.
 const coldSteps = (steps: readonly { key: WaitStep; label: string }[]): readonly { key: WaitStep; label: string }[] =>
-    steps.map((step) => (step.key === `machine` ? { ...step, label: `Starting the machine — downloading your sandbox` } : step));
+    steps.map((step) => (step.key === `machine` ? { ...step, label: `Starting the machine, downloading your sandbox` } : step));
 
 /* What went wrong, in the words the card renders. `problem` is the state of the world; `remedy` is what
  * happens next, always present, because a failure with no next move is the spinner with extra steps.
@@ -114,7 +114,7 @@ const MACHINE_STUCK_MS = 10 * MINUTE_MS;
 // is up, how long it has been, which is the difference between a page that is counting and one that froze.
 const noteFor = (warm: boolean | undefined, waitedMs: number): string => {
     const minutes = Math.floor(waitedMs / MINUTE_MS);
-    const inFor = minutes >= 1 ? `${minutes} min in — ` : ``;
+    const inFor = minutes >= 1 ? `${minutes} min in, ` : ``;
     if (warm === false) {
         return waitedMs > COLD_SPENT_MS
             ? `${inFor}longer than usual, but still going. You'll be taken in as soon as it's ready.`
@@ -124,7 +124,7 @@ const noteFor = (warm: boolean | undefined, waitedMs: number): string => {
     // must behave exactly as this page behaved before origins existed.
     return waitedMs > WARM_SPENT_MS
         ? `${inFor}taking longer than usual, but still going. You'll be taken in as soon as it's ready.`
-        : `Usually under a minute. Nothing to install, nothing to paste — you'll be taken in as soon as it's ready.`;
+        : `Usually under a minute. Nothing to install, nothing to paste, you'll be taken in as soon as it's ready.`;
 };
 
 // Machine states that mean the box is not coming up on its own. `failed` is Fly saying so outright; a machine
@@ -154,8 +154,8 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
             steps: at(steps, `connecting`),
             note,
             failure: {
-                problem: `Your sandbox is running, but it's checking in from ${input.refusal.announced} — we expect it at ${input.refusal.expected}.`,
-                remedy: `We won't hand you an address we can't vouch for. Start it over below — a fresh machine comes up on the right one.`,
+                problem: `Your sandbox is running, but it's checking in from ${input.refusal.announced}, we expect it at ${input.refusal.expected}.`,
+                remedy: `We won't hand you an address we can't vouch for. Start it over below, a fresh machine comes up on the right one.`,
                 // The wrong address is built into this machine, so booting it again would reproduce it exactly.
                 action: `remake`,
             },
@@ -171,7 +171,7 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
             note,
             failure: {
                 problem: `The machine we started for you isn't running.`,
-                remedy: `Start it over below. If it stops again, that's ours to fix — nothing on your side causes this.`,
+                remedy: `Start it over below. If it stops again, that's ours to fix, nothing on your side causes this.`,
                 action: `reboot`,
             },
             reachable,
@@ -193,7 +193,7 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
             note,
             failure: {
                 problem: input.boot.detail ?? `Your sandbox is running, but it can't be reached at its address.`,
-                remedy: `The sandbox itself is fine — it's the connection to it that didn't come up. Starting it over sets that up again; nothing on it is lost.`,
+                remedy: `The sandbox itself is fine, it's the connection to it that didn't come up. Starting it over sets that up again; nothing on it is lost.`,
                 // The box and its files are healthy; it is the boot's networking half that needs rerunning.
                 action: `reboot`,
             },
@@ -209,7 +209,7 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
             note,
             failure: {
                 problem: `The machine is running, but your sandbox hasn't checked in yet.`,
-                remedy: `It keeps trying on its own — leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
+                remedy: `It keeps trying on its own, leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
                 action: `reboot`,
             },
             reachable,
@@ -226,7 +226,7 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
             note,
             failure: {
                 problem: `The machine is taking far longer to come up than it should.`,
-                remedy: `It keeps trying on its own — leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
+                remedy: `It keeps trying on its own, leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
                 action: `reboot`,
             },
             reachable,

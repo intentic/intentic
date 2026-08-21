@@ -21,7 +21,7 @@ export const daySpan = (from: string, to: string): number => Math.round((dayToMs
 // ---- the window ------------------------------------------------------------------------------------------
 
 export type RangePreset = "7d" | "30d" | "90d" | "all";
-// Mutable by design — <SegmentedControl> takes its options array as-is.
+// Mutable by design: <SegmentedControl> takes its options array as-is.
 export const RANGE_PRESETS: { label: string; value: RangePreset }[] = [
     { label: `7 days`, value: `7d` },
     { label: `30 days`, value: `30d` },
@@ -97,7 +97,7 @@ export const totalTokens = (totals: UsageTotals): number =>
 
 // The share of PROMPT input that came off the provider's cache, how well prefix caching is working. Cache
 // creation is excluded from the denominator on purpose: it is the cost of filling the cache, not a lookup that
-// could have hit. Undefined when nothing was sent, so an idle window reads as "—" rather than a confident 0%.
+// could have hit. Undefined when nothing was sent, so an idle window reads as "-" rather than a confident 0%.
 export const cacheHitRate = (totals: UsageTotals): number | undefined => {
     const lookups = totals.cacheReadTokens + totals.inputTokens;
     return lookups === 0 ? undefined : (100 * totals.cacheReadTokens) / lookups;

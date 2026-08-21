@@ -79,7 +79,7 @@ describe(`presence reporter`, () => {
         const bodies = requestMock.mock.calls.map(([, init]) => JSON.parse(init?.body as string) as { clientId: string });
         expect(bodies.at(-1)?.clientId).toBe(`conn-2`);
         requestMock.mockClear();
-        // The reconnect: same activity, fresh connection — must re-send under the new id.
+        // The reconnect: same activity, fresh connection, must re-send under the new id.
         presenceStreamOpened(`conn-3`);
         await vi.runAllTimersAsync();
         expect(requestMock).toHaveBeenCalledTimes(1);
@@ -91,7 +91,7 @@ describe(`presence reporter`, () => {
         reportView(`workspace`);
         await vi.runAllTimersAsync();
         requestMock.mockClear();
-        // The daemon's snapshot shows OUR connection with no view — the report was dropped; expect a re-send.
+        // The daemon's snapshot shows OUR connection with no view: the report was dropped; expect a re-send.
         setPresenceUsers([tab({ clientId: `conn-4`, email: `me@x.com` })]);
         await vi.runAllTimersAsync();
         expect(requestMock).toHaveBeenCalledTimes(1);

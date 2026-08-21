@@ -132,7 +132,7 @@ export const openImapConnection = async (
     } catch (error) {
         if ((error as { authenticationFailed?: boolean }).authenticationFailed === true) {
             throw new FatalConnectionError(
-                `IMAP login failed for ${config.username} at ${config.host} — check the username/password (Gmail and Outlook need an app password, not the account password)`,
+                `IMAP login failed for ${config.username} at ${config.host}: check the username/password (Gmail and Outlook need an app password, not the account password)`,
             );
         }
         throw error;
@@ -144,7 +144,7 @@ export const openImapConnection = async (
     } catch (error) {
         ctx.log.error({ err: error, capabilityId }, "imap mailbox open failed");
         await client.logout().catch(() => undefined);
-        throw new FatalConnectionError(`IMAP mailbox "${mailbox}" can't be opened on ${config.host} — check the Watched mailbox field`);
+        throw new FatalConnectionError(`IMAP mailbox "${mailbox}" can't be opened on ${config.host}: check the Watched mailbox field`);
     }
 
     const uidValidity = String(box.uidValidity);

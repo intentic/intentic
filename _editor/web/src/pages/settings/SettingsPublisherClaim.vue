@@ -10,15 +10,15 @@ import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { apiClient } from "../../composables/useApi";
 import { claimCommand, claimTargets, domainClaimUrl, isDomainChallenge, publishFailureNotice } from "./publisherClaim";
 
-/* PROVING A PUBLISHER NAME IS YOURS — rebuilt around what the creator actually has in front of them.
+/* PROVING A PUBLISHER NAME IS YOURS. Rebuilt around what the creator actually has in front of them.
  *
  * WHAT WAS WRONG. The screen asked for a name in an empty box, then answered with a token and a comma-separated
  * list of every repository the registry lists under it: "commit a file called .intentic-claim containing this
- * token to the default branch of A, B, C, D, E, F — any one of them is enough". Three things a creator could
+ * token to the default branch of A, B, C, D, E, F, and any one of them is enough". Three things a creator could
  * not tell from that, all of which decide whether they succeed:
  *
  *   1. THAT THE LIST IS NOT A CHOICE THEY MAKE. It is every repository the official registry already ties to
- *      the name, and push access to one of them IS the proof. A fresh empty repository proves nothing — so the
+ *      the name, and push access to one of them IS the proof. A fresh empty repository proves nothing, so the
  *      obvious "just make me a repo for it" shortcut cannot exist, and the screen has to say why the list is
  *      what it is instead of presenting six unexplained options.
  *   2. THAT WHICH ONE THEY PICK DOES NOT MATTER. Any of them proves the same thing, so asking is a decision
@@ -31,20 +31,20 @@ import { claimCommand, claimTargets, domainClaimUrl, isDomainChallenge, publishF
  * lives online, so: the names those repositories publish under are offered as buttons (no typing), the
  * repository open here is the one proposed, and one button writes the file, commits it, pushes it and verifies
  * the claim. The typed box and the paste-one-line path both remain, for a name whose repositories are not open
- * here — which is the ordinary case for a team name. */
+ * here, which is the ordinary case for a team name. */
 
 const emit = defineEmits<{ claimed: [] }>();
 
 const publisher = ref(``);
 const challenge = ref<ClaimChallenge | null>(null);
 const suggestions = ref<readonly ClaimableName[]>([]);
-// Where each workspace repo lives online — what turns "one of six slugs" into "the one you have open".
+// Where each workspace repo lives online: what turns "one of six slugs" into "the one you have open".
 const localRepos = ref<GitRemoteRepos[`repos`]>([]);
 const chosen = ref<string | undefined>(undefined);
 const showAll = ref(false);
 const copied = ref(false);
 
-/* THREE ACTIONS, THREE BUSY FLAGS — the card's existing rule, for its existing reason: one shared flag made
+/* THREE ACTIONS, THREE BUSY FLAGS: the card's existing rule, for its existing reason: one shared flag made
  * every button spin whenever any of them was pressed, which reads as "the whole card is doing something". */
 const { busy: checking, notice: checkNotice, run: runCheck } = useAsyncAction();
 const proving = ref(false);
@@ -58,7 +58,7 @@ const step = ref<string | undefined>(undefined);
 const published = ref(false);
 
 /* The workspace's repositories, and the names they publish under. Both are best-effort: a sandbox that is not
- * reachable, or a registry that is down, costs the creator the suggestions and the one-click path — never the
+ * reachable, or a registry that is down, costs the creator the suggestions and the one-click path, never the
  * ability to claim, which is why nothing here surfaces a failure. */
 const loadSuggestions = async (): Promise<void> => {
     const repos = await sandboxJson<GitRemoteRepos>(`/git/remote-repos`)
@@ -135,14 +135,14 @@ const succeeded = async (): Promise<void> => {
 };
 
 /* THE WHOLE CLAIM AS ONE PRESS: push the proof, then verify it. Two steps rather than two buttons because the
- * creator has no decision to make between them — the only reason the old screen made them press twice is that
+ * creator has no decision to make between them. The only reason the old screen made them press twice is that
  * it could not do the first half at all.
  *
  * A repository that is NOT open here skips straight to the verify, which is what the pasted line leads to. */
 const prove = async (): Promise<void> => {
     const active = challenge.value;
     const where = target.value;
-    // The domain lane has no repository on purpose — its "push" is the creator serving a file, so the only
+    // The domain lane has no repository on purpose: its "push" is the creator serving a file, so the only
     // step left here is the verify.
     if (proving.value || active === null || (where === undefined && !domainLane.value)) {
         return;
@@ -174,7 +174,7 @@ const prove = async (): Promise<void> => {
         // detail under this line rather than being replaced by it.
         proveNotice.value = noticeFrom(
             caught,
-            published.value ? `Pushed — but GitHub isn't serving it yet.` : `That claim couldn't be verified yet.`,
+            published.value ? `Pushed, but GitHub isn't serving it yet.` : `That claim couldn't be verified yet.`,
         );
     } finally {
         proving.value = false;
@@ -187,7 +187,7 @@ const prove = async (): Promise<void> => {
     <div class="flex flex-col gap-2">
         <h3 class="text-xs font-semibold">Claim a publisher name</h3>
         <p class="text-xs text-muted">
-            Earnings add up against the publisher name in your extension's manifest — or, for a paid service with no extension, against your
+            Earnings add up against the publisher name in your extension's manifest, or, for a paid service with no extension, against your
             domain. Prove it's yours and they become payable to you.
         </p>
 
@@ -222,14 +222,14 @@ const prove = async (): Promise<void> => {
         <template v-if="challenge">
             <p v-if="challenge.claimedByYou" class="text-xs text-muted">You already hold this name.</p>
             <p v-else-if="challenge.claimedByOther" class="text-xs text-muted">
-                Another account already holds this name. If that's wrong, get in touch — a name is settled by who proved it first.
+                Another account already holds this name. If that's wrong, get in touch. A name is settled by who proved it first.
             </p>
-            <!-- THE DOMAIN LANE: a dotted name proves itself from its own well-known path — no registry, no
+            <!-- THE DOMAIN LANE: a dotted name proves itself from its own well-known path, with no registry, no
                  repositories. The same why-before-what rule as the repo lane below. -->
             <template v-else-if="domainLane">
                 <p class="text-xs text-muted">
                     Only someone who controls <span class="font-medium text-content">{{ challenge.publisher }}</span> could serve a file at its
-                    well-known path — that's the proof. Serve this exact line as plain text at
+                    well-known path. That's the proof. Serve this exact line as plain text at
                     <span class="font-mono text-content break-all">{{ domainUrl }}</span
                     >:
                 </p>
@@ -240,7 +240,7 @@ const prove = async (): Promise<void> => {
                     <Button :label="copied ? `Copied` : `Copy`" severity="secondary" size="small" @click="copyToken" />
                 </div>
                 <div class="flex items-center gap-2">
-                    <Button label="I'm serving it — verify" size="small" :loading="proving" @click="prove" />
+                    <Button label="I'm serving it, verify" size="small" :loading="proving" @click="prove" />
                     <span v-if="step" class="text-2xs text-muted">{{ step }}</span>
                 </div>
                 <p class="text-2xs text-muted">
@@ -259,15 +259,15 @@ const prove = async (): Promise<void> => {
                      the list of repositories below reads as an arbitrary demand. -->
                 <p class="text-xs text-muted">
                     Only someone who can push to a repository <span class="font-medium text-content">{{ challenge.publisher }}</span> publishes from
-                    could put a file in one — that's the proof.
+                    could put a file in one. That's the proof.
                     <template v-if="targets.length > 1">Any of its {{ targets.length }} repositories works equally well.</template>
                 </p>
 
                 <!-- The one repository this will use, and how it was chosen. -->
                 <p class="text-xs text-muted">
                     Using <span class="font-mono text-content">{{ target.project }}</span>
-                    <template v-if="target.repo"> — it's open in your workspace, so this can do the whole thing for you.</template>
-                    <template v-else> — it isn't open here, so this last bit is yours to run.</template>
+                    <template v-if="target.repo">. It's open in your workspace, so this can do the whole thing for you.</template>
+                    <template v-else>. It isn't open here, so this last bit is yours to run.</template>
                 </p>
 
                 <!-- IN-WORKSPACE: write, commit, push and verify, on one press. -->
@@ -290,7 +290,7 @@ const prove = async (): Promise<void> => {
                         <Button :label="copied ? `Copied` : `Copy`" severity="secondary" size="small" @click="copyCommand" />
                     </div>
                     <div class="flex items-center gap-2">
-                        <Button label="I've run it — verify" size="small" :loading="proving" @click="prove" />
+                        <Button label="I've run it, verify" size="small" :loading="proving" @click="prove" />
                         <span v-if="step" class="text-2xs text-muted">{{ step }}</span>
                     </div>
                 </template>

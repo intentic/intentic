@@ -6,34 +6,34 @@ import { sandboxBlob } from "../../../composables/sandbox/sandboxClient";
 import { useLayout } from "../../../composables/useLayout";
 
 /* WHAT CHANGED, WHEN THE CHANGE ISN'T TEXT. Monaco's diff editor is the right tool for a file made of lines and
- * the wrong one for a screenshot, so every review surface used to stop at "Binary file — no text diff to show."
- * — over a PNG the workspace's own file view renders without trouble two clicks away. This is the viewer that
+ * the wrong one for a screenshot, so every review surface used to stop at "Binary file: no text diff to show."
+ *: over a PNG the workspace's own file view renders without trouble two clicks away. This is the viewer that
  * takes that slot: the same before/after framing DiffView gives text, with the bytes rendered instead of read.
  *
- * SEEING BOTH IS THE WHOLE POINT, so a modified image gets two panes and one caption per side — an icon
+ * SEEING BOTH IS THE WHOLE POINT, so a modified image gets two panes and one caption per side: an icon
  * changing shade, a screenshot regaining a cropped edge, a logo swapped for another logo are all invisible in
  * "binary, 41 KB → 43 KB". An added or deleted file has only the one side it ever had, and gets the pane to
  * itself rather than half a screen of blank next to it: the caller passes only the URLs its row's status says
  * exist, so absence here is information, not a failed fetch.
  *
  * The bytes come from the daemon's /diff/raw (one side per request, resolved server-side from the same diff the
- * JSON came from), fetched through the sandbox client rather than put straight in an <img src> — every daemon
+ * JSON came from), fetched through the sandbox client rather than put straight in an <img src>: every daemon
  * route is Bearer-authenticated, which a browser-issued image request cannot be. Hence the blob: URL, and hence
  * the revoke on the watcher's cleanup: same lifecycle FileViewer runs for the file tree's images, leak-safe
  * across a fast walk through a list of them.
  *
- * Only images render inline. A font, an archive, a .wasm has no visual form to compare — for those the pane
+ * Only images render inline. A font, an archive, a .wasm has no visual form to compare: for those the pane
  * states what it is and offers the bytes, which is the honest end of the road rather than a placeholder. */
 
 const { path, before, after } = defineProps<{ path: string; before?: string; after?: string }>();
 
 const { mobile } = useDevice();
 const { diffLayout } = useLayout();
-// Two panes need the width for two: on a phone (or under the reader's Unified setting — the same one DiffView
+// Two panes need the width for two: on a phone (or under the reader's Unified setting, the same one DiffView
 // obeys, set from DiffToolbar) they stack instead, so each side still gets the full column rather than two
 // unreadable thumbnails.
 const split = computed(() => !mobile.value && diffLayout.value === `split` && before !== undefined && after !== undefined);
-/* The path decides how the bytes are shown — not their content. Asked of the KIT (isRenderableImage), beside
+/* The path decides how the bytes are shown, not their content. Asked of the KIT (isRenderableImage), beside
  * the component that would draw them, rather than of the workspace's file-type resolver: showing a picture in
  * a diff is a review capability and must not be able to disappear because a viewers extension was switched
  * off. A .png in a diff and a .png in the tree still agree, because the extension's manifest claims the same
@@ -92,7 +92,7 @@ watch(
 );
 
 // Save one side's bytes. The blob is already in memory, so this is a link click over the object URL that is
-// already rendering it — no second fetch, and nothing extra to revoke.
+// already rendering it: no second fetch, and nothing extra to revoke.
 const download = (side: Side, label: string): void => {
     if (side.url === undefined) {
         return;
@@ -123,7 +123,7 @@ const panes = computed(() =>
             class="flex min-h-0 min-w-0 flex-1 flex-col"
             :class="split && index > 0 ? 'border-line md:border-l' : index > 0 ? 'border-t border-line' : ''"
         >
-            <!-- Which side this is, and how big it is — the one number a binary diff can always report, and the
+            <!-- Which side this is, and how big it is: the one number a binary diff can always report, and the
                  only thing that distinguishes two images that look alike. -->
             <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-line/60 px-2">
                 <span class="text-2xs font-medium uppercase tracking-wide" :class="pane.key === 'before' ? 'text-danger' : 'text-success'">
@@ -155,7 +155,7 @@ const panes = computed(() =>
                 <!-- Not an image: nothing to compare visually, so say what it is and hand over the bytes. -->
                 <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                     <Icon name="box" class="text-3xl text-subtle" />
-                    <p class="max-w-sm text-xs text-muted">Binary file — no preview for this type.</p>
+                    <p class="max-w-sm text-xs text-muted">Binary file: no preview for this type.</p>
                     <button
                         v-if="pane.side.url"
                         type="button"
@@ -171,6 +171,6 @@ const panes = computed(() =>
 
         <!-- Neither side exists: the daemon reported a binary change whose bytes are on neither end of it. Rare
              (a mode-only change, a path that vanished between the diff and this fetch) but not an error. -->
-        <p v-if="panes.length === 0" class="p-4 text-xs text-subtle">Binary file — neither side has content to show.</p>
+        <p v-if="panes.length === 0" class="p-4 text-xs text-subtle">Binary file: neither side has content to show.</p>
     </div>
 </template>

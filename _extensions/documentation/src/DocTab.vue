@@ -1,4 +1,4 @@
-<!-- ONE DIRECTORY'S PAGE, OPENED IN THE WORKSPACE — the same document DocsView renders, next to the code it
+<!-- ONE DIRECTORY'S PAGE, OPENED IN THE WORKSPACE: the same document DocsView renders, next to the code it
      explains instead of in an area you have to navigate to. This is the whole point of the document contribution:
      the question "what is this package?" is asked while looking at the package.
 
@@ -16,7 +16,7 @@ import { host } from "./host.js";
 import { splitRepo } from "./paths.js";
 import { useDocs, type DocSource } from "./useDocs.js";
 
-// The directory this tab explains, workspace-root-relative — the identity the tree row and the stored tab share.
+// The directory this tab explains, workspace-root-relative: the identity the tree row and the stored tab share.
 const { path } = defineProps<{ path: string }>();
 
 const api = host();
@@ -50,7 +50,7 @@ const outline = useLoadingReveal(
 const packageQuery = usePackage(dir);
 
 // A page that exists only as a draft has to show the draft, or the tab renders empty for the one document that is
-// actually there. Published stays the default everywhere else — it is what the repository says.
+// actually there. Published stays the default everywhere else: it is what the repository says.
 watch([hasStaged, set, packageQuery.data], ([staged, repoSet, page]) => {
     const published = dir.value === undefined ? repoSet?.prose !== undefined : page !== undefined;
     if (staged && !published && source.value === `published`) {
@@ -85,7 +85,7 @@ const areaLink = computed(() => {
         <DocSkeleton v-if="isLoading && outline" />
         <div v-else-if="isLoading" class="min-h-0 flex-1" />
 
-        <!-- Undocumented is the ordinary state of most directories, so it is an invitation rather than an error —
+        <!-- Undocumented is the ordinary state of most directories, so it is an invitation rather than an error:
              and the invitation goes where generation actually lives, because a run needs a scope and choosing one
              is a decision this tab has no business taking. -->
         <div
@@ -101,9 +101,9 @@ const areaLink = computed(() => {
 
         <!-- NO CARD HERE. In the routed area the document is a body beside a contents rail and takes the frame
              that says so; in a tab it IS the pane, and boxing it draws a lit border a few pixels inside the
-             pane's own — a card in a card, paying for it twice in padding and handing the prose a narrower
+             pane's own: a card in a card, paying for it twice in padding and handing the prose a narrower
              column than the same text has when the README beside it is opened as a file. So this reads exactly
-             like that file preview: the canvas, a centred measure, and `ui-softscroll` — a whisper of a
+             like that file preview: the canvas, a centred measure, and `ui-softscroll`, a whisper of a
              scrollbar until the pointer is in the column, which is right for a surface being read.
 
              The scroll area is the TAB's rather than the page's, and can be: the host keys a document tab by its

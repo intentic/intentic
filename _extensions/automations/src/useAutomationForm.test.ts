@@ -9,7 +9,7 @@ import { useAutomationForm } from "./useAutomationForm";
  * exist for shipped: a starter was seeded when the trigger CARD was clicked, so picking Listen (live) and then
  * switching the source to CI/CD left the row telling the agent to answer Discord messages.
  *
- * Every case below is the same question — whose text is in the box. The form's own (a starter, a template) may be
+ * Every case below is the same question, whose text is in the box. The form's own (a starter, a template) may be
  * rewritten for whatever fires now; the user's may not, ever. */
 
 const DISCORD: AvailableSource = {
@@ -106,7 +106,7 @@ describe(`a template's own text`, () => {
         const { form, loadTemplate } = formState();
         loadTemplate(fixCi);
         await nextTick();
-        // Filling the form from a template moves the trigger AND the prompt in one go — without that being told
+        // Filling the form from a template moves the trigger AND the prompt in one go: without that being told
         // apart from a trigger change, the template's own words are the first thing overwritten.
         expect(form.prompt).toBe(fixCi.prompt);
         expect(form.prompt).not.toBe(CI.starterPrompt);
@@ -139,7 +139,7 @@ describe(`editing a stored automation`, () => {
     it(`names a starter that belongs to another source, and swaps it on request`, () => {
         const { form, load, staleStarter, applyStarter } = formState();
         // Exactly what the shipped bug saved: a CI trigger carrying Discord's briefing. Nothing may rewrite it
-        // now — it is a stored prompt — so the form names the mismatch and offers the swap.
+        // now: it is a stored prompt, so the form names the mismatch and offers the swap.
         load({
             id: `on-failed-ci`,
             trigger: { kind: `listener`, provider: `ci`, eventType: `pipeline_failed` },
@@ -200,7 +200,7 @@ describe(`editing preserves fields outside the changed control`, () => {
     });
 
     /* A Front Desk is driven by a stranger with nobody watching, so it is the one automation that must never end
-     * up unbounded. Naming no persona means the full toolbox everywhere else in the product — here it is filled
+     * up unbounded. Naming no persona means the full toolbox everywhere else in the product: here it is filled
      * in with the front desk, the read-only card the daemon writes on save. */
     it(`gives a Front Desk that names no persona the front desk`, () => {
         const { form, build } = formState();

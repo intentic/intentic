@@ -7,12 +7,12 @@ import { ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@intentic/
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "./workspaceTabs";
 
-/* The restore-point timeline — a quieter mode of the workspace's ONE left sidebar (Workspace.vue owns the
+/* The restore-point timeline: a quieter mode of the workspace's ONE left sidebar (Workspace.vue owns the
  * aside, resize handle, Files|Changes switch and history button): the daemon's checkpoints of /work, NOT git
- * history — agent turns (titled with the turn's prompt), user changes, and restore markers; hidden interval
+ * history: agent turns (titled with the turn's prompt), user changes, and restore markers; hidden interval
  * captures dissolve into the next checkpoint's diff. Selecting a checkpoint lazy-loads everything it changed
  * since the previous one; a changed file opens a side-by-side diff as a tab in the main editor area (emitted up
- * to Workspace.vue); Restore (two-step confirm) rewrites /work to that point — files created since are removed,
+ * to Workspace.vue); Restore (two-step confirm) rewrites /work to that point: files created since are removed,
  * secrets and git branches untouched, and a safety checkpoint is saved first, so a restore is itself
  * restorable. */
 
@@ -27,7 +27,7 @@ const diffLoading = ref(false);
 const confirmRestoreId = ref<string | undefined>(undefined);
 
 // Fallback title + icon per trigger; a snapshot's own label (the turn's prompt) wins as the row title.
-// "interval" never surfaces in the list — the daemon keeps those captures off the timeline.
+// "interval" never surfaces in the list: the daemon keeps those captures off the timeline.
 const TRIGGER_META: Record<SnapshotTrigger, { title: string; icon: IconName }> = {
     turn: { title: `Agent turn`, icon: `sparkles` },
     user: { title: `Your changes`, icon: `user` },
@@ -56,7 +56,7 @@ const select = (snapshot: WorkspaceSnapshot): void => {
         .finally(() => (diffLoading.value = false));
 };
 
-// The tab opens on the click and the content fills it when the read lands — see DiffPayload's `pending`. A
+// The tab opens on the click and the content fills it when the read lands: see DiffPayload's `pending`. A
 // checkpoint's diff is two blob reads on the daemon like any other, and the wait belongs in the tab it is for.
 const openDiff = (change: SnapshotChange, mode: OpenMode): void => {
     const snapshotId = selectedId.value;
@@ -69,7 +69,7 @@ const openDiff = (change: SnapshotChange, mode: OpenMode): void => {
         label: changeLabel(change),
         status: change.status,
         path: change.path,
-        // A checkpoint over an image ships no text either — the bytes come from /diff/raw, against this
+        // A checkpoint over an image ships no text either: the bytes come from /diff/raw, against this
         // same checkpoint so the preview shows what the row is about, not the file's state on disk.
         ...diffRawUrls({ source: `checkpoint`, snapshot: snapshotId, scope: change.scope }, change.path, change.status),
     };
@@ -99,7 +99,7 @@ const confirmRestore = (id: string): void => {
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
             <p v-if="snapshots.length === 0" class="px-3 py-2 text-2xs text-subtle">
-                No restore points yet — file history is saved automatically as you and your agents work.
+                No restore points yet: file history is saved automatically as you and your agents work.
             </p>
             <div v-for="snapshot in snapshots" :key="snapshot.id" class="cv-row border-b border-line/50">
                 <button
@@ -159,7 +159,7 @@ const confirmRestore = (id: string): void => {
                             :disabled="busy"
                             @click="confirmRestoreId = snapshot.id"
                             v-tooltip.right="
-                                'Files only — secrets and branches untouched. A safety restore point is saved first, and open chats are told.'
+                                'Files only: secrets and branches untouched. A safety restore point is saved first, and open chats are told.'
                             "
                         >
                             <Icon name="history" class="mr-1 text-2xs" />Restore

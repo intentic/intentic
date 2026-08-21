@@ -101,7 +101,7 @@ const writeTranscript = async (
     ended?: { durationSeconds: number; reason: string },
 ): Promise<void> => {
     const header = [
-        `# Voice session — #${channelName}`,
+        `# Voice session: #${channelName}`,
         "",
         `- Started: ${new Date(startedAt).toISOString()}`,
         ...(ended === undefined
@@ -187,7 +187,7 @@ const endSession = async (s: VoiceSession, reason: string): Promise<string | und
         id: `voice-${s.startedAt}`,
         channelId: s.channel.id,
         author: { id: s.client.user?.id ?? "", name: s.client.user?.username ?? "intentic" },
-        content: `voice session in #${s.channel.name} ended (${participants.length} participants, ${Math.round(durationSeconds / 60)} min) — transcript at ${relPath}`,
+        content: `voice session in #${s.channel.name} ended (${participants.length} participants, ${Math.round(durationSeconds / 60)} min), transcript at ${relPath}`,
         timestamp: new Date().toISOString(),
         extra: { path: relPath, participants, durationSeconds },
     });
@@ -197,7 +197,7 @@ const endSession = async (s: VoiceSession, reason: string): Promise<string | und
 // The CLI-facing surface (human-readable strings, `discord-voice` prints them for the model to read).
 export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: DiscordConnectorConfig): Promise<string> => {
     if (session !== undefined) {
-        return `Already in #${session.channel.name} — run \`discord-voice leave\` first.`;
+        return `Already in #${session.channel.name}: run \`discord-voice leave\` first.`;
     }
     if (await whisperCliMissing()) {
         return WHISPER_MISSING;
@@ -213,7 +213,7 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if (channel === null || !channel.isVoiceBased()) {
         releaseDiscordClient(config.botToken, "voice");
-        return `Channel ${channelId} is not a voice channel the bot can see — check the id and the bot's Connect permission.`;
+        return `Channel ${channelId} is not a voice channel the bot can see: check the id and the bot's Connect permission.`;
     }
     const connection = joinVoiceChannel({
         channelId,
@@ -227,7 +227,7 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
     } catch {
         connection.destroy();
         releaseDiscordClient(config.botToken, "voice");
-        return "Couldn't establish the voice connection within 15s — try again.";
+        return "Couldn't establish the voice connection within 15s: try again.";
     }
 
     const startedAt = Date.now();
@@ -285,7 +285,7 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
     });
     client.on("voiceStateUpdate", s.onVoiceState);
     return (
-        `Joined #${channel.name} and started transcribing live to ${relPath} — the file updates after every utterance ` +
+        `Joined #${channel.name} and started transcribing live to ${relPath}: the file updates after every utterance ` +
         `(read it any time), each utterance fires a voice_utterance listener event, and when the call ends (or on ` +
         `\`discord-voice leave\`) the finalized transcript fires a voice_transcript event.`
     );
@@ -298,8 +298,8 @@ export const leaveVoice = async (): Promise<string> => {
     const name = session.channel.name;
     const path = await endSession(session, "leave");
     return path === undefined
-        ? `Left #${name} — nothing was transcribed.`
-        : `Left #${name} — transcript at ${path}; the Discord listener automation is firing with it.`;
+        ? `Left #${name}: nothing was transcribed.`
+        : `Left #${name}, transcript at ${path}; the Discord listener automation is firing with it.`;
 };
 
 export const voiceStatus = (): string => {
@@ -310,7 +310,7 @@ export const voiceStatus = (): string => {
     const participants = [...session.participants];
     const transcribed = session.transcriber.transcribed();
     return (
-        `In #${session.channel.name} for ${minutes} min — ${transcribed} utterances transcribed, speaking now: ` +
+        `In #${session.channel.name} for ${minutes} min, ${transcribed} utterances transcribed, speaking now: ` +
         `${session.speaking.size}, participants so far: ${participants.length > 0 ? participants.join(", ") : "none yet"}.` +
         (transcribed > 0 ? ` Live transcript at ${session.relPath}.` : "")
     );

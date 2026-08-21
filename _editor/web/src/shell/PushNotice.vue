@@ -4,24 +4,24 @@ import Button from "primevue/button";
 import SuggestedSessionBox from "../agents/SuggestedSessionBox.vue";
 import { usePushFlow } from "../composables/workspace/usePushFlow";
 
-/* THE ONE THING A PUSH INTERRUPTS YOU FOR — a check that said no, or a push the remote refused.
+/* THE ONE THING A PUSH INTERRUPTS YOU FOR: a check that said no, or a push the remote refused.
  *
  * WHY IT IS MOUNTED ABOVE THE ROUTER. The question is raised minutes after the click that caused it, and by
- * then the user is somewhere else — that is not a failure mode, it is the design: the check runs in a terminal
+ * then the user is somewhere else, that is not a failure mode, it is the design: the check runs in a terminal
  * and the app tells them to get on with something. A notice that lived in the Changes panel could only be seen
  * by someone who had stayed put, which is precisely the person who least needs telling. So it rides with the
  * session (shell/WorkspaceRuntime.vue) and is on screen wherever they happen to be standing.
  *
- * RED ONLY. A pass sends the push and says so in the panel, quietly, where the click was — being interrupted to
+ * RED ONLY. A pass sends the push and says so in the panel, quietly, where the click was: being interrupted to
  * be told that nothing is wrong is how a notice teaches people to dismiss it unread. What is here is a decision
  * the user still owes: push it anyway, hand it to an agent, or let it go.
  *
  * NOT A DIALOG, and no mask. It sits at the top of the viewport over whatever the user is doing, and everything
- * underneath keeps working — including the terminal the suite ran in, which a modal would dim and freeze at the
+ * underneath keeps working: including the terminal the suite ran in, which a modal would dim and freeze at the
  * exact moment its output became the interesting thing on screen. It holds no output for the same reason: the
  * whole of it is one click away in the terminal, in colour (composables/terminal/useTerminalPanel.ts).
  *
- * It waits. Nothing dismisses it but the user — a question that timed out would be a decision nobody made. */
+ * It waits. Nothing dismisses it but the user: a question that timed out would be a decision nobody made. */
 
 const pushFlow = usePushFlow();
 </script>
@@ -55,7 +55,7 @@ const pushFlow = usePushFlow();
             </button>
         </div>
 
-        <!-- The proposal: the whole turn composed from the failure — text, model, effort — and editable to the
+        <!-- The proposal: the whole turn composed from the failure, text, model, effort, and editable to the
              last character before it costs anything (composables/agents/sessionSuggestion.ts). Absent for a
              check that could not run and for one the user stopped: nothing was learned about the code either
              way, so an agent sent after it would be hunting a bug that isn't there. -->
@@ -78,7 +78,7 @@ const pushFlow = usePushFlow();
             </button>
             <!-- Push anyway, and it never asks twice. The user knows things the check does not: that this IS the
                  fix for the failure, that the suite is flaky, that they want it on a branch to look at in CI.
-                 After a failed PUSH there is nothing to override — the send itself is what refused — so the same
+                 After a failed PUSH there is nothing to override: the send itself is what refused, so the same
                  button becomes the retry, which is the only useful thing left to offer. -->
             <Button
                 size="small"

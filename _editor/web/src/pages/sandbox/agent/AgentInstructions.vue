@@ -16,34 +16,34 @@ import InstructionsInfo from "./InstructionsInfo.vue";
 import MeasurementPanel, { type PanelReading } from "./MeasurementPanel.vue";
 
 /* WHAT THE ASSISTANT IS TOLD, before the user types anything: how much it writes back, and which prompt it IS.
- * The two are one group because the second SUPERSEDES the first — a custom prompt drops the terse steer along
- * with everything else the daemon appends — and a setting that can silently switch off the setting above it
+ * The two are one group because the second SUPERSEDES the first: a custom prompt drops the terse steer along
+ * with everything else the daemon appends, and a setting that can silently switch off the setting above it
  * belongs next to it, saying so. */
 
 const { settings, patch, save } = useSandboxSettings();
 const { savings } = useSavings({});
 
 /* --- System prompt -------------------------------------------------------------------------------------------
- * Three bases: Intentic's own (the default), Claude Code's, or one the owner writes. The first two are peers —
- * a base plus the harness wiring this app appends — and picking between them is a one-click preference. The
+ * Three bases: Intentic's own (the default), Claude Code's, or one the owner writes. The first two are peers:
+ * a base plus the harness wiring this app appends, and picking between them is a one-click preference. The
  * third replaces everything, which is why it is the only one that argues back.
  *
  * A prompt picker is a trap unless you can READ what each option is, so either built-in text is one click away
  * and either can be forked into a custom one. They are fetched ON DEMAND: Claude's costs a throwaway CLI turn
- * daemon-side (preset-prompt.ts) — cheap, but not something every visit to this tab should pay for.
+ * daemon-side (preset-prompt.ts): cheap, but not something every visit to this tab should pay for.
  *
  * The draft is LOCAL rather than a computed over settings: saving is a whole-object POST that every other
  * control on this page renders from, and the text is a system prefix every live conversation is caching, so a
  * per-keystroke save would thrash both. It commits on blur (the textarea's own `change`) or from the Save
  * button, which is there because a save nobody can see is a save nobody trusts. */
-const PROMPT_MAX = 20000; // SandboxSettingsSchema.systemPrompt's cap — the daemon rejects more.
+const PROMPT_MAX = 20000; // SandboxSettingsSchema.systemPrompt's cap: the daemon rejects more.
 const PROMPT_MODES: { label: string; value: SystemPromptMode }[] = [
     { label: `Intentic`, value: `intentic` },
     { label: `Claude`, value: `claude` },
     { label: `Custom`, value: `custom` },
 ];
 const promptMode = computed<SystemPromptMode>(() => settings.value?.systemPromptMode ?? `intentic`);
-// Seeded from the saved prompt, followed across other windows' saves, never over an edit here — see useDraft,
+// Seeded from the saved prompt, followed across other windows' saves, never over an edit here: see useDraft,
 // whose seeding rule was extracted from the bug this row hit (an empty draft blocking its own initial seed).
 const prompt = useDraft(() => settings.value?.systemPrompt);
 const promptDirty = computed(() => settings.value !== undefined && prompt.value !== settings.value.systemPrompt);
@@ -56,7 +56,7 @@ const savePrompt = (): void => {
         patch({ systemPrompt: prompt.value });
     }
 };
-// Switching base saves at once — it is a picker, not a draft. An unsaved custom edit is carried along rather
+// Switching base saves at once: it is a picker, not a draft. An unsaved custom edit is carried along rather
 // than discarded: coming back to Custom finds the text still there, and it is only committed by Save.
 const setPromptMode = (mode: string): void => patch({ systemPromptMode: mode as SystemPromptMode });
 
@@ -77,7 +77,7 @@ const viewBuiltin = async (base: `intentic` | `claude`): Promise<void> => {
     viewingBase.value = base;
     await loadBuiltin(base);
 };
-/* COMPARING IS DONE IN THE READER, not from the row. It used to be a third link beside "View this prompt" —
+/* COMPARING IS DONE IN THE READER, not from the row. It used to be a third link beside "View this prompt":
  * which put two ways to open one dialog next to each other and made the row's action cluster read as three
  * peers, when it is really "read them" and "fork one". Comparison also cannot happen on a settings row: the
  * two prompts are thousands of words each, so it is inherently a thing you do inside the thing that shows
@@ -105,7 +105,7 @@ const forkBuiltin = async (base: `intentic` | `claude`): Promise<void> => {
 // arms can be compared.
 const terseHoldoutPercent = computed<number>(() => asPercent(settings.value?.terseHoldout));
 
-/* What the experiment says so far, worded exactly as the Savings card words it — same report, same sentence.
+/* What the experiment says so far, worded exactly as the Savings card words it: same report, same sentence.
  * The steer is judged on the PROSE it steers, not on the turn's output tokens, which are nine parts tool-call
  * arguments and could never show it; this row used to name the tokens and was reporting the wrong quantity.
  *
@@ -128,8 +128,8 @@ const terseReadings = computed<PanelReading[]>(() => {
  * runtime that ignored the prompt looked exactly like one that honoured it. Derived from the same record the
  * daemon composes against (promptReach.ts), so the sentence cannot drift from the behaviour.
  *
- * ONE LINE, not the three sentences it was. The third — that an agent you install yourself keeps its own
- * prompt — is said in two better places already: the (i)'s table, and the model picker on the very chat it
+ * ONE LINE, not the three sentences it was. The third: that an agent you install yourself keeps its own
+ * prompt, is said in two better places already: the (i)'s table, and the model picker on the very chat it
  * would affect. Repeating it here bought nothing and cost the row its scannability. */
 const reach = promptReach();
 /* Assembled here rather than in the template. Written inline it needs a `<template v-if>` mid-sentence and the
@@ -145,12 +145,12 @@ const reachLine =
     <RowGroup label="Instructions">
         <template #info><InstructionsInfo /></template>
 
-        <!-- Terse responses — steers the assistant to answer concisely (no restating context/tool output),
+        <!-- Terse responses: steers the assistant to answer concisely (no restating context/tool output),
              cutting its own output tokens. A stable system-prompt suffix, so it doesn't hurt prompt-cache hits. -->
         <Row
             icon="align-left"
             title="Terse responses"
-            description="Ask the assistant to answer concisely without restating context — fewer output tokens per reply."
+            description="Ask the assistant to answer concisely without restating context: fewer output tokens per reply."
         >
             <template #control>
                 <ToggleSwitch
@@ -164,13 +164,13 @@ const reachLine =
                  nothing is worse than one that is off. -->
             <template #below>
                 <!-- A LINE, NOT A BOX. The row below already raises a tinted notice about the same decision, and
-                     two warning panels stacked inside one group read as an alarm rather than as a hierarchy —
+                     two warning panels stacked inside one group read as an alarm rather than as a hierarchy:
                      the colour alone carries a sentence this short. -->
                 <p v-if="promptMode === `custom`" class="text-2xs text-warning">
-                    Not applied while your own system prompt is set — say it in the prompt below instead.
+                    Not applied while your own system prompt is set: say it in the prompt below instead.
                 </p>
                 <!-- The steer's measurement control. Unlike a cleaned command, which carries its own raw
-                     baseline, a turn cannot be re-run to see what it would have said unsteered — so the only
+                     baseline, a turn cannot be re-run to see what it would have said unsteered, so the only
                      way to know what this switch is worth is to leave a slice of turns unsteered and compare.
                      WHY that is so is the (i)'s job; the row says only what the box does. -->
                 <MeasurementPanel
@@ -185,17 +185,17 @@ const reachLine =
             </template>
         </Row>
 
-        <!-- System prompt — which prompt the agent IS. Two built-in bases the app maintains, and an escape
+        <!-- System prompt, which prompt the agent IS. Two built-in bases the app maintains, and an escape
              hatch that replaces them. It sits directly under Terse responses because Custom SUPERSEDES it:
              that mode drops the steer along with everything else, and the row above says so when it does.
 
              THE ACTIONS COME FIRST under the control, and the reach fact is a footnote under them. It was the
-             other way round — three sentences of provider facts, then three same-sized text links — so the
+             other way round: three sentences of provider facts, then three same-sized text links, so the
              only things on the row you can actually DO were the last thing found, in the weakest affordance
              the page has. -->
         <Row icon="pencil" title="System prompt">
             <template #description>
-                <template v-if="promptMode === `custom`">Your own prompt — the agent runs on this text alone.</template>
+                <template v-if="promptMode === `custom`">Your own prompt: the agent runs on this text alone.</template>
                 <template v-else-if="promptMode === `claude`">Claude Code's own prompt, as shipped in your sandbox's CLI.</template>
                 <template v-else>Intentic's own prompt, tuned for this app.</template>
             </template>
@@ -204,7 +204,7 @@ const reachLine =
             </template>
             <template #below>
                 <!-- A base is read, not edited: these two are the whole surface. Real buttons rather than
-                     inline links — they are the row's actions, and a text link at 11px under a paragraph of
+                     inline links: they are the row's actions, and a text link at 11px under a paragraph of
                      11px text is indistinguishable from the paragraph. -->
                 <template v-if="promptMode !== `custom`">
                     <div class="flex flex-wrap items-center gap-2">
@@ -231,10 +231,10 @@ const reachLine =
 
                     <!-- What Custom actually costs, shown while they are in it rather than discovered later
                          when the chat's cards quietly stop appearing. Trimmed to the consequence and the
-                         inventory — the full kept/lost tables are the (i)'s, which has room to lay them out
+                         inventory: the full kept/lost tables are the (i)'s, which has room to lay them out
                          side by side instead of running them together in a tinted paragraph. -->
                     <Notice tone="warning" class="mt-2 text-2xs">
-                        Your text becomes the whole prompt on {{ spokenList(reach.replaces) }} — including what this app tells the assistant about its
+                        Your text becomes the whole prompt on {{ spokenList(reach.replaces) }}: including what this app tells the assistant about its
                         own question cards, checklist panel and browser tools. Terse responses stops applying.
                         <template v-if="reach.adds.length > 0">On {{ spokenList(reach.adds) }} it is added to their prompt instead.</template>
                     </Notice>
@@ -281,7 +281,7 @@ const reachLine =
          be READ and forked, not admired; Claude's version is on show because a fork taken today is a snapshot,
          and knowing which build it came from is the only way to tell how old one is.
 
-         The base switcher is what "compare" means here — two prompts of a few thousand words each are compared
+         The base switcher is what "compare" means here: two prompts of a few thousand words each are compared
          by reading one and then the other, which is a thing that can only happen inside the reader. -->
     <Modal :open="viewingBase !== undefined" size="lg" header="Built-in system prompts" @update:open="viewingBase = undefined">
         <SegmentedControl
@@ -300,11 +300,11 @@ const reachLine =
             <p class="mt-3 text-xs text-muted">
                 <template v-if="viewingBase === `claude`">
                     Claude Code's own prompt, read out of the CLI in your sandbox
-                    <span class="font-mono text-content">{{ builtinPrompts[viewingBase]?.version }}</span> — not a copy kept by this app. Choose
+                    <span class="font-mono text-content">{{ builtinPrompts[viewingBase]?.version }}</span>, not a copy kept by this app. Choose
                     Claude and it keeps updating with the sandbox; fork it and you own it from here.
                 </template>
                 <template v-else>
-                    Intentic's own prompt — the default, and the one we tune for this app. Choose Intentic and it keeps updating with the app; fork it
+                    Intentic's own prompt: the default, and the one we tune for this app. Choose Intentic and it keeps updating with the app; fork it
                     and you own it from here.
                 </template>
                 Either way, this app's own guidance about its question cards, checklist panel and browser tools is added on top; only a custom prompt

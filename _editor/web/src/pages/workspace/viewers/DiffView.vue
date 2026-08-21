@@ -10,21 +10,21 @@ import { firstChangeBeyondImports, type ImportSide } from "../../../composables/
 import { editorType, useMonaco, watchEditorType } from "../../../composables/workspace/useMonaco";
 import { highlightLangFor } from "../fileType";
 
-/* Diff of one file across a snapshot (before = parent, after = the snapshot) on Monaco's diff editor — the
+/* Diff of one file across a snapshot (before = parent, after = the snapshot) on Monaco's diff editor: the
  * same engine VSCode uses, so it brings its own minimap, change overview ruler, and diff computation. Side-by-side
  * with a minimap per pane on desktop; inline/unified on mobile, where two panes can't fit (chunk navigation moves
- * to prev/next buttons there). Read-only; an absent side (added/deleted file) is an empty pane. Uncontrolled —
+ * to prev/next buttons there). Read-only; an absent side (added/deleted file) is an empty pane. Uncontrolled:
  * the parent remounts per file via :key.
  *
  * Comments are stripped from both sides unless the reader asks for them (useLayout.showComments, off by default):
  * the diff is then computed on code alone, so comment churn stops registering as change at all. Both reading
  * settings are the reader's, held in useLayout and driven by DiffToolbar, which every host renders above this.
- * A third — where the diff OPENS (useLayout.skipImports) — is set in Settings rather than up there: it decides
+ * A third, where the diff OPENS (useLayout.skipImports), is set in Settings rather than up there: it decides
  * where this lands the reader on the way in, so a control over the code would look like it did nothing. */
 
 const { before, after, path } = defineProps<{ before?: string; after?: string; path: string }>();
 /* How much this pane is actually showing, for the bar above it. Reported from HERE because here is the one place
- * that has already stripped both sides — a toolbar working it out for itself would tokenize the same two files a
+ * that has already stripped both sides: a toolbar working it out for itself would tokenize the same two files a
  * second time, and could reach a different answer than the panes underneath it. Undefined for a file with no
  * grammar: it renders whole, so git's own counts are the true ones. */
 const emit = defineEmits<{ stat: [LineStat | undefined] }>();
@@ -41,11 +41,11 @@ let original: Monaco.editor.ITextModel | undefined;
 let modified: Monaco.editor.ITextModel | undefined;
 /* TWO LANGUAGE IDS, and they are not the same question.
  *
- * `modelLang` is what MONACO is told these models are — it has to be a grammar this editor has actually bridged,
+ * `modelLang` is what MONACO is told these models are: it has to be a grammar this editor has actually bridged,
  * so it comes back through ensureLanguage and is undefined when that could not be done (the file then renders
  * uncoloured, which is the honest outcome).
  *
- * `stripLang` is what the COMMENT STRIP is computed on, resolved from the path alone — the same call, with the same
+ * `stripLang` is what the COMMENT STRIP is computed on, resolved from the path alone: the same call, with the same
  * arguments, that the count store makes (codeStat's codeLineStat). That identity is the point: the analysis client
  * caches by (text, lang), so the pane and the row beside it now share one cache entry and cannot reach two
  * different answers about what a comment is. Passing Monaco's id here instead made the pane's reading depend on
@@ -58,7 +58,7 @@ let importSides: readonly [ImportSide, ImportSide] = [
     { lines: [], imports: new Set() },
 ];
 /* WHY THERE IS NOTHING TO LOOK AT, when there is nothing to look at. A diff with no hunks renders as either an
- * unmarked file or — once stripping empties both models — two blank panes, and neither says which of the two
+ * unmarked file or (once stripping empties both models) two blank panes, and neither says which of the two
  * reasons it is. `comments` has a way out and offers it; `identical` does not, and saying so is the whole fix:
  * the daemon genuinely answers with two equal sides (a file staged and then opened from the unstaged row, a
  * worktree compared against a HEAD that already contains it), and that used to arrive as a blank panel. */
@@ -72,7 +72,7 @@ const CONTEXT_LINES = 3;
 const step = (forward: boolean): void => diff.value?.goToDiff(forward ? `next` : `previous`);
 
 // One side as its pane should show it. Stripping shortens the model, so the gutter has to render the source line
-// each kept line came from — Monaco's own numbering would be off by every comment above it.
+// each kept line came from: Monaco's own numbering would be off by every comment above it.
 interface DisplaySide {
     readonly text: string;
     readonly lineNumbers: Monaco.editor.LineNumbersType;
@@ -121,18 +121,18 @@ const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
         { lines: right.text.split(`\n`), imports: right.imports },
     ];
     changeless.value = (before ?? ``) === (after ?? ``) ? `identical` : left.text === right.text ? `comments` : undefined;
-    // Unstripped means the reader asked for the comments back, or the file has no grammar — either way what is
+    // Unstripped means the reader asked for the comments back, or the file has no grammar: either way what is
     // on screen is the whole file, which is what git already counted.
     emit(`stat`, left.stripped && right.stripped ? lineStat(left.text, right.text) : undefined);
 };
 
 /* Land the reader on a change instead of line 1: the change is often mid-file, and Monaco opens at the top,
- * leaving it to be found by scrolling. WHICH change is the reader's preference — the first one, or (skipImports)
+ * leaving it to be found by scrolling. WHICH change is the reader's preference: the first one, or (skipImports)
  * the first that touches something other than an import, since a file's import list is the change a review keeps
- * opening on and never the one it came for. A change-less result — an identical file, or a diff whose every
- * change was a comment — reveals nothing either way. Call this straight after `render` fills the models. */
+ * opening on and never the one it came for. A change-less result: an identical file, or a diff whose every
+ * change was a comment: reveals nothing either way. Call this straight after `render` fills the models. */
 const reveal = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void> => {
-    /* Monaco diffs in a worker, so the hunks are not there yet — its own revealFirstDiff waits that out
+    /* Monaco diffs in a worker, so the hunks are not there yet: its own revealFirstDiff waits that out
      * internally, and choosing a hunk instead means waiting for it here. Subscribed before this function awaits
      * anything, so the update it resolves on is the one the models `render` just filled scheduled: a worker's
      * answer can only arrive in a later task, and the scan below is what we spend the wait on. */
@@ -151,13 +151,13 @@ const reveal = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
     if (target === undefined) {
         return;
     }
-    // A deleted run has no line of its own on the right — Monaco reports the line it followed, which is 0 when
+    // A deleted run has no line of its own on the right: Monaco reports the line it followed, which is 0 when
     // the file lost its very first lines.
     const line = Math.max(target.modifiedStartLineNumber, 1);
     const pane = editor.getModifiedEditor();
     pane.setPosition({ lineNumber: line, column: 1 }); // and F7 carries on from there
     /* Scrolled to, rather than revealed: every reveal Monaco offers buys a gap above the change out of the
-     * viewport — half of it for revealInCenter (which is what its own diff navigation uses), a fifth for
+     * viewport: half of it for revealInCenter (which is what its own diff navigation uses), a fifth for
      * revealNearTop. That gap is unchanged code the reader has no reason to be looking at, and on a tall pane it
      * is most of the screen. The change goes to the top with the same few lines of context the collapsed regions
      * keep, so what fills the viewport under it is the change itself. */
@@ -167,10 +167,10 @@ const reveal = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
 onMounted(async () => {
     const m = await ensureMonaco();
     /* The SAME call the file viewer settles its tokenizer with, so a file colors identically whether it is being
-     * read or reviewed — extension table first, then the shebang for an extensionless script, and nothing at all
+     * read or reviewed: extension table first, then the shebang for an extensionless script, and nothing at all
      * over the highlight cap. Both panes hold the same file, so whichever side is present names the language (an
      * added or deleted file has only one). The cap sees the larger side, since both get tokenized; character
-     * count stands in for the byte size it wants — these props are already-decoded text, and the cap is a guard
+     * count stands in for the byte size it wants: these props are already-decoded text, and the cap is a guard
      * against tokenizing something enormous, not a byte-exact budget. */
     stripLang = highlightLangFor(path, Math.max(before?.length ?? 0, after?.length ?? 0), after ?? before ?? ``);
     modelLang = await ensureLanguage(m, stripLang);
@@ -184,7 +184,7 @@ onMounted(async () => {
         automaticLayout: true,
         renderSideBySide: split.value,
         minimap: { enabled: true },
-        // Wrap both panes, on the file viewer's terms (CodeView) — a review pane is HALF the width, so a line
+        // Wrap both panes, on the file viewer's terms (CodeView): a review pane is HALF the width, so a line
         // that merely fit there now folds instead of hiding its tail behind a horizontal scroll. Monaco passes
         // this to each side through diffWordWrap, whose default is `inherit`; in unified mode it wraps the one
         // visible pane and leaves the hidden original alone. Alignment across the panes is Monaco's own.
@@ -211,7 +211,7 @@ onMounted(async () => {
         return; // unmounted (fast file-switch) while the sides were stripped
     }
     // VSCode's diff-navigation keys, on the focused (modified) pane. Registered before the reveal, which may
-    // wait on the diff computation — these are the way through a file that is still settling.
+    // wait on the diff computation: these are the way through a file that is still settling.
     const modifiedEditor = editor.getModifiedEditor();
     modifiedEditor.addCommand(m.KeyCode.F7, () => editor.goToDiff(`next`));
     modifiedEditor.addCommand(m.KeyMod.Shift | m.KeyCode.F7, () => editor.goToDiff(`previous`));
@@ -219,7 +219,7 @@ onMounted(async () => {
 });
 
 // Crossing the breakpoint (rotation, split-screen) or flipping the toolbar's toggle swaps side-by-side ↔
-// unified in place — no rebuild.
+// unified in place: no rebuild.
 watch(split, (on) => diff.value?.updateOptions({ renderSideBySide: on }));
 
 // The app's text size, in place: the diff is the surface most worth resizing and the least willing to do it on
@@ -231,7 +231,7 @@ watch(showComments, async () => {
         return;
     }
     // Revealing on every toggle would yank a scroll position the reader chose. Out of a changeless diff there is
-    // no such position — the pane held no change at all — so land on the hunks the toggle un-hid.
+    // no such position: the pane held no change at all, so land on the hunks the toggle un-hid.
     const wasChangeless = changeless.value !== undefined;
     await render(diff.value);
     if (wasChangeless) {
@@ -261,14 +261,14 @@ onBeforeUnmount(() => {
                 @click="toggleShowComments()"
             >
                 <Icon name="eye-slash" class="text-2xs" />
-                Only comments changed — show them
+                Only comments changed: show them
             </button>
             <p
                 v-else
                 class="flex items-center gap-1.5 rounded-full border border-line bg-card/95 px-3 py-1 text-2xs text-muted shadow-sm backdrop-blur"
             >
                 <Icon name="info-circle" class="text-2xs" />
-                No changes — both sides are identical
+                No changes: both sides are identical
             </p>
         </div>
         <!-- Touch chunk navigation (side-by-side collapses to unified on mobile). -->

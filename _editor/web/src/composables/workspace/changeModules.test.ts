@@ -42,8 +42,8 @@ describe(`moduleGroups`, () => {
         expect(groups[0]?.packaged).toBe(true);
     });
 
-    // Grouping is ON by default (useChangeGrouping), so this is what a Rust/Python/Go tree — or any repo with no
-    // package manifests at all — reads as: one unclaimed bucket the panels leave unnamed, which is the path list.
+    // Grouping is ON by default (useChangeGrouping), so this is what a Rust/Python/Go tree, or any repo with no
+    // package manifests at all, reads as: one unclaimed bucket the panels leave unnamed, which is the path list.
     it(`puts a manifest-less repo's every path in one unnamed bucket, in order`, () => {
         const bare = moduleGroups([`src/main.rs`, `Cargo.toml`, `docs/design.md`], (path) => path, [], `engine`);
         expect(bare).toHaveLength(1);
@@ -71,7 +71,7 @@ describe(`moduleView`, () => {
     });
 
     // The case the whole `named` flag exists for: one bucket of files no package claims would print the repo's
-    // own name directly under the repo's own heading, saying nothing — so it says nothing, and its rows keep
+    // own name directly under the repo's own heading, saying nothing, so it says nothing, and its rows keep
     // their paths.
     it(`leaves a lone unclaimed bucket unnamed`, () => {
         const view = moduleView([`src/main.rs`, `Cargo.toml`], (path) => path, [], `engine`, true);
@@ -87,7 +87,7 @@ describe(`moduleView`, () => {
         expect(view.buckets[0]?.name).toBe(`@shop/cli`);
     });
 
-    it(`collapses to one unnamed bucket — the plain path list — with grouping off`, () => {
+    it(`collapses to one unnamed bucket (the plain path list) with grouping off`, () => {
         const view = moduleView(paths, (path) => path, MODULES, `shop`, false);
         expect(view.named).toBe(false);
         expect(view.buckets).toHaveLength(1);

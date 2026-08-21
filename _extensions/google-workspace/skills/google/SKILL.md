@@ -1,12 +1,12 @@
 ---
 name: google
-description: Gmail, Google Calendar, Drive, Docs, Sheets and Contacts for a connected Google account — read and search mail, send and reply, book and move meetings, find and fetch files, read and write documents and spreadsheets, look people up. Use whenever the user mentions their email, inbox, calendar, meetings, Drive, a Google Doc or a Google Sheet.
+description: Gmail, Google Calendar, Drive, Docs, Sheets and Contacts for a connected Google account, read and search mail, send and reply, book and move meetings, find and fetch files, read and write documents and spreadsheets, look people up. Use whenever the user mentions their email, inbox, calendar, meetings, Drive, a Google Doc or a Google Sheet.
 ---
 
 # Google Workspace (connected)
 
 Everything goes through **`gw`**, already authenticated for this account. Run `gw` for the groups, `gw <group>`
-for a group's commands and their flags — that help is generated from the tool itself, so it is never stale.
+for a group's commands and their flags: that help is generated from the tool itself, so it is never stale.
 
 This connection is `${id}` (`$GOOGLE_EMAIL`). If several Google accounts are connected, every command takes
 `--account ${id}`; with only one, leave it off. `gw accounts` lists them.
@@ -17,7 +17,7 @@ This connection is `${id}` (`$GOOGLE_EMAIL`). If several Google accounts are con
 gw [--account NAME] [--json] <group> <command> [flags]
 ```
 
-`--json` gives Google's own response instead of the summary lines — reach for it when you need a field the
+`--json` gives Google's own response instead of the summary lines: reach for it when you need a field the
 summary does not print. Otherwise prefer the default: it is one line per thing and far cheaper to read.
 
 ## Mail
@@ -35,7 +35,7 @@ gw mail attachments <messageId> [--download ./dir]
 gw mail labels
 ```
 
-- The search string is **Gmail's own syntax** — `from:`, `to:`, `subject:`, `has:attachment`, `is:unread`,
+- The search string is **Gmail's own syntax**: `from:`, `to:`, `subject:`, `has:attachment`, `is:unread`,
   `newer_than:7d`, `label:…`. Use it; it is far more precise than filtering afterwards.
 - A body with newlines belongs in a file: `--body-file draft.txt`. Shell quoting mangles multi-line text.
 - `reply` keeps the thread and the subject for you. `--all` keeps everyone who was on it.
@@ -55,7 +55,7 @@ gw cal busy --emails ana@x.com,sam@x.com --from now --to +3d
 
 Times accept `now`, `+2h` / `-30m` / `+3d` / `+1w`, `today 14:00`, `tomorrow`, `2026-08-12`,
 `2026-08-12 14:00`, or a full RFC-3339 timestamp. **A bare time means the calendar's own timezone**, not the
-sandbox's — so `--start "tomorrow 09:00"` is 9am where the owner is. A bare date makes an all-day event.
+sandbox's: so `--start "tomorrow 09:00"` is 9am where the owner is. A bare date makes an all-day event.
 
 Guests are notified automatically on create (when there are any), update and delete. Say so before you do it.
 
@@ -97,7 +97,7 @@ gw sheets create --title "Tracking"
 Sheet writes go in as if typed: `=SUM(A1:A9)` becomes a formula, `2026-08-12` becomes a date. Pass `--raw` to
 store text exactly as given instead.
 
-Docs editing is read, create, append and find-replace — not styling, tables or images. For anything past that,
+Docs editing is read, create, append and find-replace: not styling, tables or images. For anything past that,
 write the content and let the owner format it.
 
 ## Contacts
@@ -112,7 +112,7 @@ Use this before writing to someone whose address you are unsure of. Never guess 
 ## When this connection is read-only
 
 The card has a Read & write / Read only setting. On a read-only connection every command that sends, edits,
-moves or deletes refuses with a sentence saying so — that is the owner's choice, not a fault. Say what you
+moves or deletes refuses with a sentence saying so: that is the owner's choice, not a fault. Say what you
 would have done and let them change the setting if they want it.
 
 ## Acting as someone else
@@ -140,4 +140,4 @@ it to `In production` in the Google Cloud console and get a fresh token.
 ## Watching
 
 If the owner has an automation with Google as its source, new inbox mail and imminent calendar events start
-agent runs on their own. Nothing needs to be polled from here — this tool is for acting, not for waiting.
+agent runs on their own. Nothing needs to be polled from here: this tool is for acting, not for waiting.

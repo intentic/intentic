@@ -8,7 +8,7 @@ import { apiClient } from "../../composables/useApi";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 
-/* Data & privacy: GDPR self-service — export everything the platform stores about the account, or delete it. */
+/* Data & privacy: GDPR self-service: export everything the platform stores about the account, or delete it. */
 
 const { deleteAccount } = useAuth();
 const { sandboxes } = useSandbox();

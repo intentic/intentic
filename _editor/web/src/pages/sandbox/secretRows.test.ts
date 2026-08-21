@@ -1,7 +1,7 @@
 // WHAT THE TAB LOOKED LIKE BEFORE: nineteen rows reading `radarsuspam2, radarsuspam3, …` down a column, each
 // with the same four buttons on it, none of them sayable apart and none of them settable here. What is pinned
-// here is the two things that fixed it — a credential wearing the name and brand of the card it came from, and
-// the line between a value the owner keeps and one that merely lives in the box — plus the rule that keeps this
+// here is the two things that fixed it: a credential wearing the name and brand of the card it came from, and
+// the line between a value the owner keeps and one that merely lives in the box: plus the rule that keeps this
 // tab from shouting about another page's errand.
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
@@ -70,7 +70,7 @@ it(`splits what the owner keeps from what merely lives in the box`, () => {
     expect(groups.map((row) => row.editable)).toEqual([true, true, false, false]);
 });
 
-it(`owes attention for a required value nobody set and for a copy CI never got — and for nothing else`, () => {
+it(`owes attention for a required value nobody set and for a copy CI never got, and for nothing else`, () => {
     const missingRequired = secretRow(
         entry({ key: `CF_TOKEN`, kind: `env`, status: `missing`, requiredBy: [{ resourceId: `s`, type: `d` }] }),
         sources(),
@@ -84,7 +84,7 @@ it(`owes attention for a required value nobody set and for a copy CI never got �
 });
 
 it(`leaves another page's errand off this tab, while still sorting it to the top of its own group`, () => {
-    // A browser account whose session expired is a real problem — and one only the Capabilities page can fix.
+    // A browser account whose session expired is a real problem, and one only the Capabilities page can fix.
     const rows = secretRows(
         [entry({ key: `reddit-work`, kind: `capability`, status: `connected` }), entry({ key: `github`, kind: `capability`, status: `connected` })],
         {

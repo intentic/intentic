@@ -10,7 +10,7 @@ import ExtensionView from "../core-views/ExtensionView.vue";
 
 /* Hosts one extension activation (/ext/:ext/:key?): re-runs the registry's detection over the live repo facts
  * and capability manifest, and renders the matched activation via ExtensionView. An activation that no longer
- * detects (repo deleted, marker removed, capability disconnected) shows a plain empty state — its rail tile
+ * detects (repo deleted, marker removed, capability disconnected) shows a plain empty state: its rail tile
  * disappears on the same poll. A switched-off extension's views are disposed the same way, so the two are
  * indistinguishable from the registry alone: name that case from the extension list rather than telling
  * someone their content left the workspace when they turned it off themselves (a bookmark still resolves here). */
@@ -42,6 +42,6 @@ const found = computed(() => {
         <RouterLink to="/sandbox/extensions" class="text-link hover:underline">Turn it back on in Sandbox → Extensions</RouterLink>
     </div>
     <div v-else-if="!isLoading" class="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted">
-        <p>Nothing here — this view's content is no longer in the workspace.</p>
+        <p>Nothing here: this view's content is no longer in the workspace.</p>
     </div>
 </template>

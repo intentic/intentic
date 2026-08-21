@@ -7,25 +7,25 @@ import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSandboxQuery } from "../../composables/sandbox/useSandboxQuery";
 
-/* PICKING A FOLDER BY LOOKING AT THE FOLDERS — the control behind both of a persona's location questions.
+/* PICKING A FOLDER BY LOOKING AT THE FOLDERS: the control behind both of a persona's location questions.
  *
  * Both of them used to be a bare text input with a greyed-out sentence in it, which asks the reader to know two
  * things the screen was not telling them: what the workspace actually contains, and how this field wants a path
- * spelled. A typo produced a persona fenced to a folder that does not exist — silently, because a fence naming
- * nothing refuses everything — and the comma-separated variant made that failure mode plural.
+ * spelled. A typo produced a persona fenced to a folder that does not exist: silently, because a fence naming
+ * nothing refuses everything, and the comma-separated variant made that failure mode plural.
  *
  * SO THE TREE IS THE FIELD. Directories only: this is a question about WHERE, and a file in the list is a row
  * that cannot be picked and still costs a line. Ignored ones (node_modules, .git, anything gitignored) are out
- * for the same reason — the daemon already knows which they are, nobody fences a persona to a dependency tree,
+ * for the same reason: the daemon already knows which they are, nobody fences a persona to a dependency tree,
  * and on a workspace with four repos they are most of what a walk returns.
  *
  * IT SHOWS WHAT IS STORED, not what it can resolve. A card naming `app/api` keeps that chip whether or not this
- * workspace has that folder — a persona written against a repo nobody has cloned here yet is an ordinary thing,
+ * workspace has that folder: a persona written against a repo nobody has cloned here yet is an ordinary thing,
  * and dropping the chip would quietly rewrite what the card fences the next time somebody pressed Save. Same
  * rule the account chips follow one section up, for the same reason.
  *
  * THE EXPANSION STATE IS THIS COMPONENT'S OWN, deliberately. The obvious economy is to reach for
- * useWorkspaceTree, which already walks /work — but its expanded set is the file EXPLORER's, persisted per
+ * useWorkspaceTree, which already walks /work, but its expanded set is the file EXPLORER's, persisted per
  * sandbox, and drilling into a folder here would silently reorganise the sidebar the user left open behind
  * this page. What is shared is the cache entry the walk lands in, which costs nothing and is the same bytes. */
 
@@ -36,7 +36,7 @@ const {
 } = defineProps<{
     /** Several folders (a fence), or exactly one (where a session starts). */
     multiple?: boolean;
-    /** What no selection MEANS — never "pick something", because empty is a valid, common answer to both. */
+    /** What no selection MEANS: never "pick something", because empty is a valid, common answer to both. */
     placeholder: string;
     /** Names the trigger for a screen reader; the visible label is the form row's. */
     label: string;
@@ -44,7 +44,7 @@ const {
 
 const picked = defineModel<string[]>({ required: true });
 
-/* The shared workspace's own walk, under the key the explorer's shared-tree read uses — so opening this picker
+/* The shared workspace's own walk, under the key the explorer's shared-tree read uses, so opening this picker
  * on a page that has already drawn the tree costs no request at all. Pointedly NOT scoped through scopeQuery: a
  * card's folders are workspace-relative and mean the same thing in every copy, so the tree to choose them from
  * is the real one, not whichever conversation's checkout the workspace view happens to be pointed at. */
@@ -57,7 +57,7 @@ const { query } = useSandboxQuery<WorkspaceTreeResponse>({
  * sandboxes drops the outline rather than holding one workspace's shape over another's. */
 const outline = useSandboxOutline(query.isPending);
 
-// Only what can be picked, and only what is worth showing — see the header for why ignored dirs are out.
+// Only what can be picked, and only what is worth showing: see the header for why ignored dirs are out.
 const foldersIn = (entries: readonly WorkspaceTreeEntry[]): readonly WorkspaceTreeEntry[] =>
     entries.filter((entry) => entry.type === `dir` && entry.ignored !== true);
 
@@ -158,7 +158,7 @@ const remove = (path: string): void => {
 <template>
     <div class="flex min-w-0 flex-1 flex-col gap-1">
         <!-- THE ANSWER IS THE CONTROL. What is chosen sits in the trigger as removable chips, so the common
-             journey — see it, drop one — never opens the tree at all. -->
+             journey (see it, drop one) never opens the tree at all. -->
         <div ref="anchor" :class="ui.input('flex min-h-[2.25rem] flex-wrap items-center gap-1.5 py-1.5')" role="group" :aria-label="label">
             <button
                 v-for="path in picked"
@@ -186,7 +186,7 @@ const remove = (path: string): void => {
             </button>
         </div>
 
-        <!-- Drops DOWN from the field, the way a form control opens — the overlay's own default is above, which
+        <!-- Drops DOWN from the field, the way a form control opens: the overlay's own default is above, which
              is right for a toolbar pill hanging off the top of a panel and wrong here: it lands the tree over
              the section heading the field belongs to. It still flips up by itself when the window is too short
              for it, which is the one case above is better. -->

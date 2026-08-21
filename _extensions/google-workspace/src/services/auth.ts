@@ -37,7 +37,7 @@ const codeFrom = (input: string): string => {
     }
     const code = new URL(value).searchParams.get("code");
     if (code === null) {
-        throw new Error("That URL carries no ?code= — copy the whole address the browser landed on after you approved.");
+        throw new Error("That URL carries no ?code=: copy the whole address the browser landed on after you approved.");
     }
     return code;
 };
@@ -47,7 +47,7 @@ const waitForCode = async (port: number): Promise<string | undefined> =>
         const server = createServer((request, response) => {
             const code = new URL(request.url ?? "/", redirectUri(port)).searchParams.get("code");
             response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-            response.end(code === null ? "No code in that request." : "Done — you can close this tab and go back to the chat.");
+            response.end(code === null ? "No code in that request." : "Done, you can close this tab and go back to the chat.");
             if (code !== null) {
                 server.close();
                 resolve(code);
@@ -82,7 +82,7 @@ const login: RootCommand = {
         ctx.out("");
         const code = await waitForCode(port);
         if (code === undefined) {
-            ctx.out("Nothing arrived on the loopback — use the exchange command above with the address the browser landed on.");
+            ctx.out("Nothing arrived on the loopback: use the exchange command above with the address the browser landed on.");
             return;
         }
         const { refreshToken, scopes: granted } = await exchangeCode(clientId, clientSecret, code, redirectUri(port));
@@ -112,7 +112,7 @@ const exchange: RootCommand = {
 
 const token: Command = {
     name: "token",
-    summary: "Mint an access token — for checking a connection works, not for storing",
+    summary: "Mint an access token, for checking a connection works, not for storing",
     usage: "gw auth token [--account name]",
     run: async (ctx) => {
         const value = await ctx.session.token();

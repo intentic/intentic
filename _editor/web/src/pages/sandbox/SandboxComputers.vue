@@ -45,18 +45,18 @@ import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 import { desktopApp } from "../../environments/desktop";
 
-/* The Sandbox hub's "Computers" tab — what is on the other end of this sandbox.
+/* The Sandbox hub's "Computers" tab: what is on the other end of this sandbox.
  *
  * It replaces the old "Sync" tab, which was a single enrollment card, and the replacement is the point. That card
- * answered "is a machine paired" and then, for everything a person actually arrives asking — which folder is this
- * syncing into, which ports did I get on localhost, why is my dev server not there — printed the name of a
+ * answered "is a machine paired" and then, for everything a person actually arrives asking, which folder is this
+ * syncing into, which ports did I get on localhost, why is my dev server not there: printed the name of a
  * terminal command. A machine-level view is also the only honest shape for the facts: one laptop pairing three
  * sandboxes used to render as three partial cards on three different pages, and its ports contend across all of
  * them.
  *
  * ONE COMPUTER, ONE ROW; ONE SANDBOX, ONE ROW INSIDE IT. The tab shipped with each machine's sandboxes printed
- * twice — folders and ports under "Desktop sync", containers and their buttons under "Sandboxes on this
- * computer" — under two different names for the same box, each in its own filled and bordered block inside the
+ * twice: folders and ports under "Desktop sync", containers and their buttons under "Sandboxes on this
+ * computer": under two different names for the same box, each in its own filled and bordered block inside the
  * page's own card. Two of everything, three surfaces deep, all of it the same grey. <MachineDetail> now joins the
  * two halves and this page hands it the containers and the verbs; what is left here is what a row says about the
  * MACHINE, which is the half that view cannot know.
@@ -69,7 +69,7 @@ import { desktopApp } from "../../environments/desktop";
 const route = useRoute();
 const highlight = ref(false);
 const { computers, error, isLoading, refetch } = useComputers();
-/* Until the list lands, "no computer is paired" is a guess dressed as a fact — and the wrong one for anybody who
+/* Until the list lands, "no computer is paired" is a guess dressed as a fact, and the wrong one for anybody who
  * has a laptop paired, who then reads an invitation to pair the laptop they already paired. The outline holds
  * the row's shape instead. Only the first read: this query polls, and an outline that returned every ten
  * seconds would be worse than the empty state ever was. */
@@ -80,10 +80,10 @@ const computersNotice = computed<NoticeModel | undefined>(() =>
 );
 
 // One clock for the whole render, so every row's staleness is judged against the same instant rather than each
-// against the moment its own computed happened to run — and the app's one clock, so it stops with this tab.
+// against the moment its own computed happened to run, and the app's one clock, so it stops with this tab.
 const now = useNow();
 
-/* The release this sandbox knows about — the SAME value behind its own update badge, because one release stamps
+/* The release this sandbox knows about: the SAME value behind its own update badge, because one release stamps
  * the daemon, the image and both machine agents alike. It rides the shared /info query, so putting agent
  * staleness on these rows costs no request: the answer is already in the cache this tab's chip reads.
  *
@@ -98,27 +98,27 @@ onMounted(() => {
 });
 
 /* Each gap is a different errand, so each gets its own sentence rather than one "unavailable". `scope-off` is the
- * only one the reader closes in a single click, so it says which switch — the same way the host agent's own
+ * only one the reader closes in a single click, so it says which switch: the same way the host agent's own
  * refusals name the control rather than reporting a broken sandbox. */
 const GAP_TEXT: Record<NonNullable<Computer[`gap`]>, string> = {
-    offline: `Asleep or offline — nothing to read from it right now.`,
+    offline: `Asleep or offline. Nothing to read from it right now.`,
     "scope-off": `Turn on "Run commands" in this computer's capability card to see what it is running.`,
-    "no-agent": `Reachable, but it has no sync agent — so nothing here knows about its folders or ports.`,
-    unreported: `Enrolled, but it hasn't reported yet. An agent from before machine reports never will — re-run its install to update it.`,
+    "no-agent": `Reachable, but it has no sync agent, so nothing here knows its folders or ports.`,
+    unreported: `Enrolled, but it hasn't reported yet. An agent from before machine reports never will. Re-run its install to update it.`,
 };
 
 /* THIS TAB USES THREE SIZES, as a rule rather than a habit: 14px for the one thing that names an entry (the
- * computer), 12px for everything a person READS — a path, a port, a sentence, a verb — and 11px for the labels
+ * computer), 12px for everything a person READS: a path, a port, a sentence, a verb, and 11px for the labels
  * and ids that only have to be findable. It shipped with nearly all of it at 11px, paths and sentences included,
  * which is what "the sizes feel off" turns out to mean once measured: there was no scale, just one small size
  * with two exceptions.
  *
  * The smallest of the three, shaped like a heading: it divides ONE computer's entry rather than the page, so it
- * stays under the group's own label (ui.sectionLabel) — but it has to read as a heading, which the plain
+ * stays under the group's own label (ui.sectionLabel), but it has to read as a heading, which the plain
  * `text-2xs text-muted` it replaced did not. */
 const SUBHEAD = `text-2xs font-semibold uppercase tracking-wide text-subtle`;
 
-/* HOW THIS SANDBOX REACHES THE MACHINE — one tag per door, tinted rather than outlined. A border here put a
+/* HOW THIS SANDBOX REACHES THE MACHINE: one tag per door, tinted rather than outlined. A border here put a
  * third rectangle inside a card that already had two, for two words; a wash of the ink says "this is a tag" with
  * no edge to add to the pile. */
 const DOOR = `inline-flex items-center gap-1.5 rounded-md bg-content/5 px-2 py-0.5 text-2xs text-muted`;
@@ -132,16 +132,16 @@ const tone = (computer: Computer): StatusVariant => {
     if (computer.gap !== undefined) {
         return computer.gap === `offline` ? `neutral` : `warning`;
     }
-    // A stalled watcher is the same errand as a stopped one — nothing is reaching that machine's ports or clones
-    // — and it is the one a green row hides best, because the process it names is alive.
+    // A stalled watcher is the same errand as a stopped one: nothing is reaching that machine's ports or clones
+    //, and it is the one a green row hides best, because the process it names is alive.
     if (reportStale(computer, now.value) || computer.report?.watcher.running === false || watcherHalted(computer)) {
         return `warning`;
     }
     return `success`;
 };
 
-/* THE BADGE'S WORD, and it now agrees with the badge's COLOUR. A machine whose sync agent has died is amber —
- * `tone` has always said so, because nothing is reaching its folders or ports — and said "live" in that amber,
+/* THE BADGE'S WORD, and it now agrees with the badge's COLOUR. A machine whose sync agent has died is amber:
+ * `tone` has always said so, because nothing is reaching its folders or ports, and said "live" in that amber,
  * which is the one pairing of word and colour a reader cannot act on. It is the same errand as a gap: something
  * on that computer wants attention. */
 const label = (computer: Computer): string => {
@@ -155,7 +155,7 @@ const label = (computer: Computer): string => {
 };
 
 /* THE MACHINES WORTH READING, FIRST. Sorting the list by name alone put an offline box and a stale one above the
- * laptop actually serving folders and ports — three screens of "nothing to read from it right now" before the
+ * laptop actually serving folders and ports: three screens of "nothing to read from it right now" before the
  * card the reader came for. State leads, name breaks ties, so the order only ever changes when a machine's state
  * does, which is a change worth noticing rather than a list that reshuffles under the cursor.
  *
@@ -172,8 +172,8 @@ const sorted = computed(() => computers.value.toSorted((a, b) => (RANK[label(a)]
  * somebody came for was somewhere in the middle of it. Three machines was a page nobody could scan.
  *
  * So a machine is a LINE that says what is under it, and the list under it opens when it is asked for. That
- * turns "what does this row say" into a real derivation — how many sandboxes, how many running, how many want
- * something — and it is done once here rather than four times in the template, because the same grouping the
+ * turns "what does this row say" into a real derivation: how many sandboxes, how many running, how many want
+ * something, and it is done once here rather than four times in the template, because the same grouping the
  * view is about to draw has to be counted to say any of it. */
 const machineGroups = (computer: Computer): MachineSandboxGroup[] =>
     computer.report === undefined ? [] : sandboxGroups(computer.report.pairings, computer.report.ports, computer.report.sandboxes);
@@ -194,12 +194,12 @@ interface ComputerRow {
     readonly facts: readonly string[];
     /** The folded line's reasons to open it. */
     readonly warnings: readonly string[];
-    /** Sandbox ids this machine should unfold on arrival — the one you are using, and anything the filter hit. */
+    /** Sandbox ids this machine should unfold on arrival: the one you are using, and anything the filter hit. */
     readonly open: readonly string[];
 }
 
 /* WHICH ROW IS THE SANDBOX YOU ARE LOOKING AT. The container's slug on its machine is the leading label of the
- * daemon's own hostname — the same derivation the sandbox switcher uses for its teardown command, and the same
+ * daemon's own hostname: the same derivation the sandbox switcher uses for its teardown command, and the same
  * one the setup CLI applies when it names the container.
  *
  * It matters because this view can stop and delete the very sandbox serving it. That is a legitimate thing to
@@ -208,7 +208,7 @@ const { daemonUrl } = useSandbox();
 const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
 const isSelf = (computer: Computer, group: MachineSandboxGroup): boolean => computer.hostId !== undefined && group.sandbox?.slug === ownSlug.value;
 
-// What the reader typed. Lower-cased once here rather than per comparison, and blank until they type — an empty
+// What the reader typed. Lower-cased once here rather than per comparison, and blank until they type: an empty
 // filter must never narrow anything.
 const query = ref(``);
 const needle = computed(() => query.value.trim().toLowerCase());
@@ -230,7 +230,7 @@ const rows = computed<ComputerRow[]>(() =>
             warnings.push(attention === 1 ? `1 needs attention` : `${attention} need attention`);
         }
         /* The watcher is a fact about the MACHINE rather than any row under it, so it belongs on the machine's
-         * own line — and it is the failure this whole area exists to surface: a dead watcher leaves every row
+         * own line, and it is the failure this whole area exists to surface: a dead watcher leaves every row
          * beneath it reading exactly as it did the moment before. */
         if (computer.report !== undefined && (computer.report.watcher.running === false || watcherHalted(computer))) {
             warnings.push(`sync agent stopped`);
@@ -247,7 +247,7 @@ const rows = computed<ComputerRow[]>(() =>
     }),
 );
 
-/* THE FILTER NARROWS MACHINES AND UNFOLDS ROWS — it does not hide rows inside a machine.
+/* THE FILTER NARROWS MACHINES AND UNFOLDS ROWS: it does not hide rows inside a machine.
  *
  * A port that did not reach localhost is explained by naming the sandbox that took it, and that sentence links
  * to the taker's own row. Filtering rows out from under a machine would cut exactly those links, so a search for
@@ -271,7 +271,7 @@ const shown = computed<ComputerRow[]>(() => {
 const FILTER_FLOOR = 3;
 const showFilter = computed(() => rows.value.length > 2 || rows.value.reduce((total, row) => total + row.groups.length, 0) > FILTER_FLOOR);
 
-/* THE ORIENTATION LINE — "is anything wrong right now", answered before a single row is parsed. One measure
+/* THE ORIENTATION LINE: "is anything wrong right now", answered before a single row is parsed. One measure
  * (sandboxes) split by state, which is what this component is for; the machine count is the group's own, beside
  * its label. Running is `always` because a board that renders as nothing at all reads as broken. */
 const tally = computed<TallyItem[]>(() => {
@@ -286,8 +286,8 @@ const tally = computed<TallyItem[]>(() => {
 /* WHICH MACHINES ARE UNFOLDED. The same two-set rule the sandbox rows use, for the same reason: this list
  * re-derives itself every ten seconds and must not move under the pointer.
  *
- * What opens itself is the machine running the sandbox you are reading this in — failing that, the first one
- * with anything to show — plus anything the filter matched. Deliberately not "every machine with a warning": the
+ * What opens itself is the machine running the sandbox you are reading this in: failing that, the first one
+ * with anything to show, plus anything the filter matched. Deliberately not "every machine with a warning": the
  * folded line already states the warning, and opening three machines to say so is the wall again. */
 const openMachines = ref(new Set<string>());
 const foldedMachines = ref(new Set<string>());
@@ -318,7 +318,7 @@ watch(
 
 /* The management buttons, shown only where they can work: the machine is reachable as a connected computer right
  * now, and the row in front of us is a container rather than a pairing nothing on that machine answers for. The
- * daemon adds no judgement and neither does this — a click travels to the machine, and the machine's own refusal
+ * daemon adds no judgement and neither does this: a click travels to the machine, and the machine's own refusal
  * (the "Manage sandboxes on this computer" switch is off, say) is shown under the row verbatim. */
 const manageable = (computer: Computer, group: MachineSandboxGroup): boolean =>
     computer.hostId !== undefined && computer.online === true && group.sandbox !== undefined;
@@ -328,7 +328,7 @@ const manageable = (computer: Computer, group: MachineSandboxGroup): boolean =>
  * This tab and the desktop app's manager window draw the same containers with the same verbs from the same kit,
  * and a reader with a machine paired by the desktop app still saw none of it here: desktop sync never reports a
  * box's containers, so the row arrived with folders, ports, and an empty list where the sandboxes should be. The
- * remedy — connect the machine as a computer, grant it the sandbox switch — was already built and nowhere named,
+ * remedy (connect the machine as a computer, grant it the sandbox switch) was already built and nowhere named,
  * which is the whole of the gap between the two apps.
  *
  * The switches are read from the capability the daemon already put an id on, so "Manage sandboxes is off" is said
@@ -342,11 +342,11 @@ const scopesOf = (computer: Computer): ComputerScopes | undefined =>
 const blocks = computed(() => new Map(sorted.value.map((computer) => [computer.key, manageBlock(computer, scopesOf(computer))])));
 const blockOf = (computer: Computer): ManageBlock | undefined => blocks.value.get(computer.key);
 
-/* Each block is a different errand, so each gets its own sentence — the same rule GAP_TEXT follows above. The
+/* Each block is a different errand, so each gets its own sentence: the same rule GAP_TEXT follows above. The
  * first names what desktop sync IS rather than what is broken, because nothing is: a machine syncing files
  * perfectly well is exactly the row this reaches. */
 const BLOCK_TEXT: Record<ManageBlock[`kind`], string> = {
-    connect: `Desktop sync carries folders and ports, never containers — so its sandboxes can't be started, updated or removed from here. Connect it as a computer for the same buttons the desktop app's own window has.`,
+    connect: `Desktop sync carries folders and ports, never containers, so its sandboxes can't be started, updated or removed from here. Connect it as a computer for the same buttons the desktop app's own window has.`,
     "sandboxes-off": `Turn on "Manage sandboxes on this computer" in this computer's capability card to use the buttons below.`,
     "remove-off": `Removing a sandbox needs "Remove sandboxes from this computer" on this computer's capability card. Everything else below already works.`,
 };
@@ -358,7 +358,7 @@ const BLOCK_ACTION: Record<ManageBlock[`kind`], string> = {
 
 /* WHERE THE FIX IS. A `connect` block opens the card that ADDS a computer of this kind; the other two open the
  * connection that already exists, at its own form. Undefined when this build has no card for the machine's
- * platform (a Mac, today) — the sentence is still worth saying, and a button pointing nowhere is not. */
+ * platform (a Mac, today): the sentence is still worth saying, and a button pointing nowhere is not. */
 const blockTarget = (block: ManageBlock | undefined): RouteLocationRaw | undefined => {
     if (block?.card === undefined) {
         return undefined;
@@ -368,7 +368,7 @@ const blockTarget = (block: ManageBlock | undefined): RouteLocationRaw | undefin
 };
 
 // What the row says and what its button offers, both keyed off the row rather than off a block the template
-// would have to hold — a Vue template narrows nothing across elements, and four non-null assertions on one
+// would have to hold: a Vue template narrows nothing across elements, and four non-null assertions on one
 // `v-if` is the kind of thing that stays correct only until somebody moves a line.
 const blockText = (computer: Computer): string | undefined => {
     const block = blockOf(computer);
@@ -380,12 +380,12 @@ const blockAction = (computer: Computer): string | undefined => {
     const block = blockOf(computer);
     return block === undefined || blockTarget(block) === undefined ? undefined : BLOCK_ACTION[block.kind];
 };
-// Only ever read where `blockAction` already said there is somewhere to go, so the fallback is unreachable —
+// Only ever read where `blockAction` already said there is somewhere to go, so the fallback is unreachable:
 // it exists because a template cannot narrow one call's result against another's.
 const fixAt = (computer: Computer): RouteLocationRaw => blockTarget(blockOf(computer)) ?? { name: `capabilities` };
 
 /* THE OTHER HALF OF THE CROSS-LINK. Read inside the desktop app, this page is one of two screens showing the same
- * machines — and the app's own is the one that needs no capability at all, because it is ON the computer it
+ * machines, and the app's own is the one that needs no capability at all, because it is ON the computer it
  * manages. It cannot be linked to per row (nothing here knows which of these machines the reader is sitting at),
  * so it is said once, where the list is named. */
 const inDesktopApp = desktopApp() !== undefined;
@@ -397,8 +397,8 @@ const actionDone = ref<{ key: string; message: string } | undefined>();
 // The running operation's output, keyed by row so leaving a log on screen while reading another row's is fine.
 const runLines = ref<Record<string, string[]>>({});
 
-/* WHICH ROW'S PANE STAYS OPEN once nothing is running. Every other op is watched and then done with — its lines
- * were progress — but `logs` is read AFTER it finishes, so the pane it filled has to survive its own run. One at a
+/* WHICH ROW'S PANE STAYS OPEN once nothing is running. Every other op is watched and then done with: its lines
+ * were progress, but `logs` is read AFTER it finishes, so the pane it filled has to survive its own run. One at a
  * time, keyed by row, because that is already how many ops this view will run at once. */
 const openLog = ref<string | undefined>();
 const logShown = (computer: Computer, group: MachineSandboxGroup): boolean => openLog.value === rowKey(computer, group);
@@ -432,7 +432,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
     const asked = sandboxVerbPrompt(op, group.title);
     // The self-warning rides the confirmation rather than replacing it: "this deletes everything" and "this also
     // closes the page you are on" are two different things to know, and the second never cancels the first.
-    const severing = isSelf(computer, group) && SEVERING.has(op) ? `\n\nThis is the sandbox you are using right now — this page will lose it.` : ``;
+    const severing = isSelf(computer, group) && SEVERING.has(op) ? `\n\nThis is the sandbox you are using right now, this page will lose it.` : ``;
     if ((asked !== undefined || severing !== ``) && !globalThis.confirm(`${asked ?? `${group.title}: ${op}?`}${severing}`)) {
         return;
     }
@@ -471,23 +471,23 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
     <div class="flex flex-col gap-4">
         <RowGroup label="Computers" :count="sorted.length === 0 ? undefined : sorted.length">
             <!-- The other half of the cross-link the Ports tab now carries. Both tabs are about "ports" and they
-                 mean opposite directions — out to the internet there, in to the machine on your desk here — so
+                 mean opposite directions: out to the internet there, in to the machine on your desk here, so
                  each says which it is rather than leaving the index's two similar words to be told apart by
                  opening both. -->
             <template #info>
                 <InfoHint label="Computers">
                     <span class="block text-sm font-medium text-content">Your own machines</span>
                     <span class="mt-1 block text-xs text-muted">
-                        Every computer paired with this sandbox — the folder it syncs, the ports it mirrors onto its own <b>localhost</b>, and the
-                        sandboxes running on it.
+                        Every computer paired with this sandbox: the folder it syncs, the ports it mirrors to your <b>localhost</b>, and the sandboxes
+                        running on it.
                     </span>
                     <span class="mt-2 block text-xs text-muted">
-                        A port that couldn't be mirrored is listed under the sandbox that wanted it, with the name of whichever sandbox got there
-                        first. Exposing a port to the public internet instead is the <b>Ports</b> tab.
+                        A port that couldn't be mirrored shows under the sandbox that claimed it first. To expose a port to the public internet, use the
+                        <b>Ports</b> tab.
                     </span>
                 </InfoHint>
             </template>
-            <!-- READ INSIDE THE DESKTOP APP, this is one of two screens showing the same machines — and the
+            <!-- READ INSIDE THE DESKTOP APP, this is one of two screens showing the same machines, and the
                  app's own is the one that needs no capability at all, because it runs ON the computer it
                  manages. Said once rather than per row: nothing here knows which of these machines the reader
                  is actually sitting at. -->
@@ -495,7 +495,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                 <Icon name="desktop" class="mt-0.5 shrink-0" />
                 <span>This computer's own sandboxes are also in <b>This computer</b>, from the Intentic icon in your tray.</span>
             </p>
-            <!-- IS ANYTHING WRONG RIGHT NOW — answered before a single row is parsed, which is what this view
+            <!-- IS ANYTHING WRONG RIGHT NOW: answered before a single row is parsed, which is what this view
                  had no way of saying. One measure split by state; the machine count is the group's own label. -->
             <template #actions>
                 <StatusTally v-if="!isLoading && sorted.length > 0" :items="tally" />
@@ -522,11 +522,11 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                 No computer is paired with this sandbox yet. Enable desktop sync below to work on it from your own editor, or add a Linux/Windows PC
                 from Capabilities to let the agent work there.
             </div>
-            <!-- ONE GUTTER PER COMPUTER. The glyph sits in a column of its own and everything else — the name,
-                 the facts, the machine's whole sandbox list — starts at the same x underneath it, so three
+            <!-- ONE GUTTER PER COMPUTER. The glyph sits in a column of its own and everything else: the name,
+                 the facts, the machine's whole sandbox list: starts at the same x underneath it, so three
                  computers read as three entries rather than as nine indents. -->
             <div v-for="row in shown" :key="row.computer.key" class="border-b border-line last:border-b-0">
-                <!-- WHO THIS IS, AND WHETHER ANYTHING UNDER IT WANTS YOU — the whole of a machine until it is
+                <!-- WHO THIS IS, AND WHETHER ANYTHING UNDER IT WANTS YOU: the whole of a machine until it is
                      asked for. An offline computer used to cost a full block, a gutter and a 14px name to say
                      nothing was there; three of them pushed the machine you came for off the screen.
                      The name and the chevron are one hit area, so the disclosure is the row rather than a 12px
@@ -553,7 +553,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                     <span class="min-w-0 truncate text-sm font-semibold text-content">{{ row.computer.label }}</span>
                     <!-- WHICH COMPUTER THIS IS. Beside the name rather than down in the detail line because it
                          is the fact that tells two rows apart at a glance, and the one the rows were missing:
-                         three machines used to differ only by the word somebody typed when they added them —
+                         three machines used to differ only by the word somebody typed when they added them:
                          and two of them can genuinely carry the same name. -->
                     <span v-if="osLabel(row.computer)" class="shrink-0 truncate text-xs text-muted" :title="osTitle(row.computer)">
                         {{ osLabel(row.computer) }}
@@ -598,7 +598,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                         </span>
                     </div>
 
-                    <!-- WHAT THE ROW WANTS FROM YOU, if anything — each on its own line, in the tone it earns. -->
+                    <!-- WHAT THE ROW WANTS FROM YOU, if anything: each on its own line, in the tone it earns. -->
                     <div
                         v-if="
                             syncAgentBehind(row.computer, latest) ||
@@ -608,7 +608,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                         "
                         class="flex flex-col gap-1"
                     >
-                        <!-- An agent that has fallen behind is not an error — sync keeps working — so this is a
+                        <!-- An agent that has fallen behind is not an error: sync keeps working, so this is a
                              quiet line rather than a warning, and it names the one command that fixes it instead
                              of sending anyone to the browser for a pairing token. -->
                         <p v-if="syncAgentBehind(row.computer, latest)" class="text-xs text-subtle">
@@ -617,7 +617,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                         <!-- The reading's own age, not its arrival's: a report is a snapshot of a computer that
                              may since have closed its lid, so it is presented as of when the machine took it. -->
                         <p v-if="row.computer.report && reportStale(row.computer, now)" class="text-xs text-warning">
-                            Last heard from {{ timeAgo(row.computer.report.capturedAt) }} — what follows is what it looked like then.
+                            Last heard from {{ timeAgo(row.computer.report.capturedAt) }}. What follows is what it looked like then.
                         </p>
                         <p v-if="row.computer.gap" class="text-xs text-muted">{{ GAP_TEXT[row.computer.gap] }}</p>
                         <!-- WHY THE SANDBOX LIST BELOW HAS NO BUTTONS, and the one click that changes it. Quiet
@@ -653,7 +653,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                             :watcher="{ ...row.computer.report.watcher, stalled: watcherStalled(row.computer.report.watcher, now) }"
                             :open="row.open"
                         >
-                            <!-- What the list is, and the state of the agent behind it, on one line — the
+                            <!-- What the list is, and the state of the agent behind it, on one line: the
                                  watcher is a fact about the MACHINE rather than about any row under it. -->
                             <template #heading><span :class="SUBHEAD">Sandboxes on this computer</span></template>
                             <!-- The one row on this page that can close the page. Said beside the name rather
@@ -683,7 +683,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                                     :lines="runLines[rowKey(row.computer, group)] ?? []"
                                     :running="busy?.startsWith(`${rowKey(row.computer, group)}:`) === true"
                                     empty="Starting on that computer…"
-                                    note="Running on that computer — it keeps going even if you leave this page."
+                                    note="Running on that computer. It keeps going even if you leave this page."
                                 />
                                 <Notice v-if="actionError?.key === rowKey(row.computer, group)" :of="actionError.notice" />
                                 <p v-else-if="actionDone?.key === rowKey(row.computer, group)" class="text-xs text-muted">
@@ -697,7 +697,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
             <!-- A filter that matched nothing says so where the rows would have been, rather than leaving a
                  group that looks like it has lost its contents. -->
             <div v-if="shown.length === 0 && sorted.length > 0" class="px-4 py-6 text-center text-xs text-muted">
-                No computer or sandbox here matches “{{ query }}”.
+                No computer or sandbox here matches "{{ query }}".
             </div>
         </RowGroup>
 

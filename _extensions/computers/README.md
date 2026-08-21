@@ -1,6 +1,6 @@
 # @intentic/ext-computers
 
-The user's own machines — Windows and Linux — as something the agent can operate.
+The user's own machines (Windows and Linux) as something the agent can operate.
 
 ## Responsibilities
 
@@ -9,9 +9,9 @@ The user's own machines — Windows and Linux — as something the agent can ope
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json) — the two capabilities. This file IS the package; there is no `src/`.
-- [skills/linux](skills/linux) — how an agent operates a Linux machine.
-- [skills/windows](skills/windows) — the same for Windows, and where the two genuinely differ.
+- [intentic-extension.json](intentic-extension.json): the two capabilities. This file IS the package; there is no `src/`.
+- [skills/linux](skills/linux): how an agent operates a Linux machine.
+- [skills/windows](skills/windows): the same for Windows, and where the two genuinely differ.
 
 ## How it fits
 

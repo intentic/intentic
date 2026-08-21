@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /* The base text size ships as a DEFAULT, so what these pin is mostly what happens when nobody has chosen: a
  * fresh window is the 110% the interface is drawn at, and it says so by carrying no attribute at all (the
- * stylesheet's own value — see tokens.css). The attribute only ever appears for the two sizes that are a
+ * stylesheet's own value: see tokens.css). The attribute only ever appears for the two sizes that are a
  * departure from it, which is also the contract index.html's anti-flash script is written against. */
 
 const load = () => import("@intentic/ui/text-size");

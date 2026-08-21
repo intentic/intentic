@@ -46,7 +46,7 @@ export function useOperation(repo: Ref<string>) {
                 queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `log`, repo.value) }),
                 queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `branches`, repo.value) }),
             ]);
-        }, `Could not abort — try it in a terminal.`);
+        }, `Could not abort: try it in a terminal.`);
 
     return {
         operation: computed<GitOperation | undefined>(() => query.data.value?.operation),

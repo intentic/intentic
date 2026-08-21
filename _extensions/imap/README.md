@@ -11,16 +11,16 @@ Email as a place the agent works: it watches a mailbox over IMAP and turns new m
 
 ## Key files
 
-- [src/connection.ts](src/connection.ts) — the IMAP connection and its lifecycle.
-- [src/watermark.ts](src/watermark.ts) — how far it has read; the thing that stops a reconnect becoming a flood.
-- [src/normalize.ts](src/normalize.ts) — a raw message into the shape a turn receives.
-- [src/gateway.ts](src/gateway.ts) — what IMAP plugs into the shared connector runtime: open/close an account's connection, and when a failure is fatal.
+- [src/connection.ts](src/connection.ts): the IMAP connection and its lifecycle.
+- [src/watermark.ts](src/watermark.ts): how far it has read; the thing that stops a reconnect becoming a flood.
+- [src/normalize.ts](src/normalize.ts): a raw message into the shape a turn receives.
+- [src/gateway.ts](src/gateway.ts), what IMAP plugs into the shared connector runtime: open/close an account's connection, and when a failure is fatal.
 
 ## How it fits
 
 A **daemon-side** extension: a listener, a process and capabilities, no views. The process shell is
-`@intentic/connector-runtime`, shared with the chat connectors; what lives here — a connection, a normaliser, a
-watermark — is IMAP against a protocol that predates all of them.
+`@intentic/connector-runtime`, shared with the chat connectors; what lives here: a connection, a normaliser, a
+watermark: is IMAP against a protocol that predates all of them.
 
 ## Conventions & gotchas
 

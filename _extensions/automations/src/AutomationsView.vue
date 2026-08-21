@@ -34,24 +34,24 @@ import { useAutomations } from "./useAutomations";
  * The page is a LIST, not a gallery: one dense line per automation under two labelled groups (chores watch
  * this codebase, integrations are fired from outside it), because the question this page answers at any size
  * is "what is on, what fired, what broke". Everything that used to be a paragraph is now either a column, a
- * hover, or the row's own disclosure — the explanation of how automations fire lives in the header hint, and
+ * hover, or the row's own disclosure: the explanation of how automations fire lives in the header hint, and
  * each stock chore's explanation on its suggestion pill.
  *
  * The chore SUGGESTIONS sit under the list rather than above it: they are the one kind of automation a user is
  * expected to want without knowing it exists, so they must stay visible, but they are an offer and the list is
  * the content. Turning one on writes a REAL automation into the list above, with its prompt, model and guard
- * editable like any other — there is deliberately no chore toggle that isn't an automation: a second place to
+ * editable like any other, there is deliberately no chore toggle that isn't an automation: a second place to
  * turn something on is a second place for it to disagree with itself.
  *
  * NOTHING ON THIS PAGE AUTHORS AN AUTOMATION IN A DIALOG. Creating opens a panel at the top of the list and
- * editing opens one inside the row, both at page width and both rendering the same <AutomationFields> — an
+ * editing opens one inside the row, both at page width and both rendering the same <AutomationFields>: an
  * automation is the largest form in the app, and the modal that used to hold it had already been widened once
  * and had its template gallery folded away to cope. Keeping the list on screen is the other half: the questions
  * asked while writing one are "do I already have this?" and "what did the last one say?", and a modal covers
  * the only thing that answers them. */
 
 const { automations, isLoading, pending, error: listError, save, setEnabled, remove, run, approve, reject } = useAutomations();
-// Only draw the wait once it has lasted long enough to be worth seeing — see useLoadingReveal.
+// Only draw the wait once it has lasted long enough to be worth seeing: see useLoadingReveal.
 const outline = useLoadingReveal(
     isLoading,
     computed(() => `automations`),
@@ -70,7 +70,7 @@ const FILTER_FROM = 6;
 type View = `all` | `on` | `off` | `failing`;
 
 const createOpen = ref(false);
-// List-action errors (toggle/delete/approve/reject) — the dialog carries its own submit error.
+// List-action errors (toggle/delete/approve/reject): the dialog carries its own submit error.
 const actionError = ref<string | undefined>(undefined);
 // Rows with their detail unfolded.
 const expanded = reactive(new Set<string>());
@@ -80,14 +80,14 @@ const installId = ref<string | undefined>(undefined);
 const installing = computed(() => automations.value.find((automation) => automation.id === installId.value));
 // The chore pill mid-create, so its pill alone shows the wait.
 const enabling = ref<string | undefined>(undefined);
-// The automation awaiting a confirmed delete — a wake's whole run history goes with it, and nothing restores it.
+// The automation awaiting a confirmed delete: a wake's whole run history goes with it, and nothing restores it.
 const confirmRemoveId = ref<string | undefined>(undefined);
 const search = ref(``);
 const view = ref<View>(`all`);
 
 const topError = computed(() => actionError.value ?? listError.value ?? catalogError.value);
 
-/* The countdown holds' clock. One ticking ref for the whole section rather than a timer per row — it exists
+/* The countdown holds' clock. One ticking ref for the whole section rather than a timer per row: it exists
  * only while a hold with a deadline is on screen, and a second's granularity is the reading a person does.
  * The daemon releases on its own coarser tick, so "starting…" (past-due, fleet busy or scan pending) is a
  * real state and gets said rather than showing a negative number. */
@@ -113,7 +113,7 @@ const counts = computed(() => ({
     off: searched.value.filter((automation) => !automation.enabled).length,
     failing: searched.value.filter(failing).length,
 }));
-// Errors appears only once something IS failing — the tab showing up is itself the alert, where a permanent
+// Errors appears only once something IS failing: the tab showing up is itself the alert, where a permanent
 // "Errors 0" would be a filter that only ever leads to an empty list. It survives while it is the active tab so
 // a fixed run can't strand the user on a vanished filter.
 const viewOptions = computed<{ label: string; value: View; badge: number }[]>(() => [
@@ -137,13 +137,13 @@ const shown = computed(() =>
 // are both `schedule`, and only one of them is about this codebase.
 const chores = computed(() => shown.value.filter((automation) => automation.chore === true));
 const integrations = computed(() => shown.value.filter((automation) => automation.chore !== true));
-// A chore recipe with no automation of that id yet — what the suggestion strip offers. Matching on id (not on
+// A chore recipe with no automation of that id yet: what the suggestion strip offers. Matching on id (not on
 // trigger) keeps a user's own second review chore from hiding the stock one.
 const availableChores = computed(() =>
     offered.value.filter((template) => template.offer === `create` && !automations.value.some((automation) => automation.id === template.id)),
 );
 
-/* The same offer for templates marked `configure` — today just the Front Desk, which nobody arrives at this page
+/* The same offer for templates marked `configure`: today just the Front Desk, which nobody arrives at this page
  * looking for. Unlike a `create` one, picking it opens the composer prefilled rather than saving: a Front Desk
  * with no allowed sites admits nobody, so silently creating the row would be creating a row that does nothing. */
 const availableSuggestions = computed(() =>
@@ -171,7 +171,7 @@ const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<
 };
 
 /* Fire one by hand. The daemon acks the moment the fire starts and runs the turn detached, so what lands here is
- * whether it STARTED — the outcome shows up in the row's run history, which the mutation refetches. A schedule
+ * whether it STARTED: the outcome shows up in the row's run history, which the mutation refetches. A schedule
  * fires exactly as its cron would (headless, main tree): a test that proved something else ran would prove
  * nothing about the 3 a.m. one it stands in for. */
 const runNow = async (automation: AutomationSummary): Promise<void> => {
@@ -185,7 +185,7 @@ const runNow = async (automation: AutomationSummary): Promise<void> => {
     }
 };
 
-// Turning a chore on for the first time: create it from its recipe, enabled. From here it is an ordinary row —
+// Turning a chore on for the first time: create it from its recipe, enabled. From here it is an ordinary row:
 // the pill is gone because the thing it offered now exists.
 const enableChore = async (recipe: AutomationTemplate): Promise<void> => {
     const trigger = recipe.trigger;
@@ -277,12 +277,12 @@ const toggleDetail = (id: string): void => {
                     <Icon name="lock" class="text-2xs text-warning" />
                     <span :class="ui.sectionLabel('text-warning')">Waiting for you</span>
                     <span class="text-2xs font-medium text-subtle">{{ pending.length }}</span>
-                    <span class="text-2xs text-subtle">These fired and are held — the agent hasn't run yet.</span>
+                    <span class="text-2xs text-subtle">These fired and are held: the agent hasn't run yet.</span>
                 </div>
                 <div class="divide-y divide-line overflow-hidden rounded-lg border border-warning/40 bg-card">
                     <div v-for="item in pending" :key="item.id" class="flex items-center gap-2 px-2.5 py-1.5">
                         <span class="shrink-0 truncate text-xs font-medium text-content">{{ item.automationId }}</span>
-                        <!-- A countdown hold runs ITSELF when the timer passes — the row's job is to say so
+                        <!-- A countdown hold runs ITSELF when the timer passes: the row's job is to say so
                              and keep the cancel in reach. An approval hold waits for the reader, as ever. -->
                         <span v-if="item.autoRunAt !== undefined" class="shrink-0 text-2xs font-medium text-warning">{{
                             startsIn(item.autoRunAt)
@@ -339,8 +339,8 @@ const toggleDetail = (id: string): void => {
             </div>
 
             <!-- AN UNREAD LIST IS NOT AN EMPTY ONE. `automations` is `[]` both before the read lands and after
-                 it lands empty, so the sentence below used to greet every single visit — including the ones
-                 where the reader already has a page of automations — and then be replaced a moment later by the
+                 it lands empty, so the sentence below used to greet every single visit: including the ones
+                 where the reader already has a page of automations, and then be replaced a moment later by the
                  list it had just denied. The outline says the same thing the empty state does about how many
                  rows are coming (nothing), without claiming anything about whether there are any. -->
             <template v-if="isLoading">
@@ -352,7 +352,7 @@ const toggleDetail = (id: string): void => {
             </template>
 
             <div v-else-if="automations.length === 0" :class="ui.emptyState('py-5')">
-                No automations yet — turn on a code chore below, or build your own with New automation.
+                No automations yet: turn on a code chore below, or build your own with New automation.
             </div>
             <div v-else-if="shown.length === 0" :class="ui.emptyState('py-5')">
                 Nothing matches this filter.
@@ -432,7 +432,7 @@ const toggleDetail = (id: string): void => {
             <section v-if="availableChores.length > 0">
                 <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
                     <span :class="ui.sectionLabel()">Add a code chore</span>
-                    <span class="text-2xs text-subtle">Their check runs for free first — a turn is spent only when it finds something.</span>
+                    <span class="text-2xs text-subtle">Their check runs for free first: a turn is spent only when it finds something.</span>
                 </div>
                 <div class="flex flex-wrap gap-1.5">
                     <button
@@ -467,7 +467,7 @@ const toggleDetail = (id: string): void => {
             @update:visible="installId = undefined"
         />
 
-        <!-- Deleting takes the run history with it and the daemon keeps no copy — the one action here with no undo. -->
+        <!-- Deleting takes the run history with it and the daemon keeps no copy: the one action here with no undo. -->
         <ConfirmDialog
             :open="confirmRemoveId !== undefined"
             header="Delete automation"

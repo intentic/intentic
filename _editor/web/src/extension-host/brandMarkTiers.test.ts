@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // THE LADDER, AS THE COMPONENT ACTUALLY CLIMBS IT. brandMark.test.ts asserts what the artwork gate ACCEPTS;
-// this asserts what <BrandMark> then DRAWS, which is the half a passing gate cannot promise on its own — a tier
+// this asserts what <BrandMark> then DRAWS, which is the half a passing gate cannot promise on its own: a tier
 // that resolves and is never reached looks identical, from the gate's side, to one that works.
 //
 // Mounted with plain Vue rather than @vue/test-utils, as ReviewStat.test.ts and markdownFigures.test.ts do.
@@ -12,7 +12,7 @@ import { createApp, h, nextTick } from "vue";
 const MARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#6C4FE0"/></svg>`;
 
 /* The tiers as a caller supplies them. Spelled out rather than taken as a loose bag, because `h()` checks what
- * it is handed against the component's own props — so a typo in a tier name here would otherwise mount a mark
+ * it is handed against the component's own props, so a typo in a tier name here would otherwise mount a mark
  * that declares nothing and quietly assert the fallback it was meant to be testing the absence of. */
 interface MarkProps {
     readonly name: string;
@@ -23,7 +23,7 @@ interface MarkProps {
 }
 
 /* No network, ever. The brand tier fetches, and a suite that reached a CDN would be slow when it worked and red
- * on a train — the same argument extensionMarks.test.ts makes for not checking slugs at all. Stubbed to never
+ * on a train: the same argument extensionMarks.test.ts makes for not checking slugs at all. Stubbed to never
  * resolve rather than to fail, so the "art beats logo" case cannot pass merely because the fetch lost a race. */
 const mount = async (props: MarkProps): Promise<HTMLElement> => {
     globalThis.fetch = (() => new Promise(() => {})) as typeof fetch;
@@ -50,7 +50,7 @@ describe(`BrandMark tiers`, () => {
     });
 
     it(`falls to the glyph when the artwork would not draw, rather than leaving a hole`, async () => {
-        // A truncated document — the realistic failure, and the one that would otherwise paint a broken image.
+        // A truncated document: the realistic failure, and the one that would otherwise paint a broken image.
         const host = await mount({ name: `intentic.example`, art: `<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#6C`, icon: `sparkles` });
         expect(host.querySelector(`img`)).toBeNull();
         expect(host.textContent?.trim(), `a declared glyph should carry the row, not its initials`).toBe(``);
@@ -63,8 +63,8 @@ describe(`BrandMark tiers`, () => {
     });
 
     /* WHICH TIER DRAWS AND WHICH SHAPE IT DRAWS IN ARE INDEPENDENT, and this is here because the two arrived
-     * from different branches and met for the first time in a merge. `flush` governs the outline — the caller's
-     * card already has a border, so the mark drops its own — and it must have no opinion at all about artwork.
+     * from different branches and met for the first time in a merge. `flush` governs the outline: the caller's
+     * card already has a border, so the mark drops its own, and it must have no opinion at all about artwork.
      * Folding either into the other reads as a tidy-up and silently costs a whole shape somebody asks for. */
     it(`still draws artwork as a flush band, where the outline belongs to the card around it`, async () => {
         const host = await mount({ name: `intentic.example`, art: MARK, flush: true });

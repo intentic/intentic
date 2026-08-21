@@ -4,7 +4,7 @@ import { computed, ref } from "vue";
 import { useBranches } from "./useBranches.js";
 
 /* The graph header's branch control: the checked-out branch as a pill, and a popover to switch, create or
- * delete. Deliberately not a bare `<select>` — a branch row carries more than a name (its upstream, how far
+ * delete. Deliberately not a bare `<select>`: a branch row carries more than a name (its upstream, how far
  * ahead/behind it is, whether that upstream is gone), and the destructive verb needs a confirm step a native
  * select can't host.
  *
@@ -20,12 +20,12 @@ const creating = ref(false);
 const newName = ref(``);
 // Two-step delete, matching the Changes panel's discard: the first click arms one branch, the second runs it.
 const armedDelete = ref<string | undefined>(undefined);
-// A branch git refused to delete because its commits are unmerged — the force retry is offered only after
+// A branch git refused to delete because its commits are unmerged: the force retry is offered only after
 // git itself has said no, never up front.
 const forceFor = ref<string | undefined>(undefined);
 
 /* The filter matches the group's shared name, so typing "main" keeps the row that is `main` locally and
- * `origin/main` on two remotes — one row, not three. Already ordered (current first, then newest tip) by
+ * `origin/main` on two remotes: one row, not three. Already ordered (current first, then newest tip) by
  * groupBranches, so nothing here re-sorts. */
 const shown = computed(() => {
     const needle = filter.value.trim().toLowerCase();
@@ -33,7 +33,7 @@ const shown = computed(() => {
 });
 
 /* CHECKING OUT A REMOTE-ONLY BRANCH creates the local branch that tracks it, which is what `git checkout <name>`
- * does on its own when exactly one remote has that name — so the same verb serves both rows and the reader does
+ * does on its own when exactly one remote has that name, so the same verb serves both rows and the reader does
  * not have to know which case they are in. */
 const pick = async (name: string): Promise<void> => {
     if (name === current.value?.name) {
@@ -59,7 +59,7 @@ const submitCreate = async (): Promise<void> => {
     if (name === ``) {
         return;
     }
-    // From HEAD, and switch to it — "new branch from here", the gesture people actually mean.
+    // From HEAD, and switch to it: "new branch from here", the gesture people actually mean.
     await create(name, { checkout: true });
     if (actionError.value === undefined) {
         newName.value = ``;
@@ -80,7 +80,7 @@ const confirmDelete = async (name: string): Promise<void> => {
         forceFor.value = undefined;
         return;
     }
-    // git refused (unmerged commits) — offer the deliberate force retry on this branch only.
+    // git refused (unmerged commits): offer the deliberate force retry on this branch only.
     forceFor.value = name;
 };
 </script>
@@ -168,7 +168,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                         </div>
                         <div v-if="armedDelete === branch.name" class="flex items-center gap-2 px-1.5 pb-1">
                             <span class="flex-1 text-2xs text-warning">
-                                {{ forceFor === branch.name ? "Unmerged — force delete?" : `Delete ${branch.name}?` }}
+                                {{ forceFor === branch.name ? "Unmerged, force delete?" : `Delete ${branch.name}?` }}
                             </span>
                             <button type="button" class="text-2xs text-muted hover:text-content" @click="armedDelete = undefined">Cancel</button>
                             <button

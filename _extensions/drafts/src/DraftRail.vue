@@ -1,28 +1,28 @@
-<!-- WHICH PLATFORM'S QUEUE — the drafts view's index, and the reason the queue can stay one readable column.
+<!-- WHICH PLATFORM'S QUEUE: the drafts view's index, and the reason the queue can stay one readable column.
 
      The page was a single scroll with every section stacked down it, which is fine for a handful of posts on one
      platform and unreadable the moment an agent is drafting for several: five sections deep in X posts is five
      sections you scroll past to reach the one Reddit thread waiting on a yes. The rail is bounded by how many
-     platforms a workspace posts to — a handful, and a number that grows far slower than the queue behind it.
+     platforms a workspace posts to: a handful, and a number that grows far slower than the queue behind it.
 
      IT NARROWS, IT DOES NOT SELECT. "All drafts" is where the page opens and where it returns to, because the
      first question this queue answers is "is anything waiting on me anywhere". So <SplitView> folds it above the
      body on a phone rather than covering it, and this swaps itself to a Picker at that width.
 
-     ONE NUMBER PER ROW — how many drafts the slice holds, so the row says how big the list it opens is — and
+     ONE NUMBER PER ROW: how many drafts the slice holds, so the row says how big the list it opens is, and
      what is WAITING is its colour rather than a second number. Two numbers in a 16rem column read as "3 12" with
      nothing saying which is which, and a reader scanning the rail wants one glance, not an arithmetic. Red where
      something failed to post, amber where something wants a decision, quiet where the slice is on rails; the
      tooltip is where the split is spelled out, because that is a question you ask of one row at a time. -->
 <script lang="ts">
 export interface DraftScope {
-    /** The platform id, and `` is the spelling of "every platform" — the URL simply omits the parameter. */
+    /** The platform id, and `` is the spelling of "every platform": the URL simply omits the parameter. */
     readonly key: string;
     readonly label: string;
     /** Brand slug from the posting capability's catalog entry; absent for a platform with no connector installed. */
     readonly logo?: string;
     readonly total: number;
-    /** Proposed — waiting for a yes. */
+    /** Proposed: waiting for a yes. */
     readonly waiting: number;
     readonly failed: number;
 }
@@ -33,7 +33,7 @@ import { BrandMark, type NavGroup, NavRail, Picker, type PickerOptions, Row, use
 import { computed } from "vue";
 
 const { all, platforms } = defineProps<{
-    /** The pinned everything row — the state the rail returns to. */
+    /** The pinned everything row: the state the rail returns to. */
     all: DraftScope;
     platforms: readonly DraftScope[];
 }>();
@@ -66,7 +66,7 @@ const note = (scope: DraftScope): string => {
 const { mobile } = useDevice();
 
 // The same model as options, with the row's number as the quiet right-hand annotation. The brand marks come
-// through the Picker's #icon slot — a platform's logo is not something the icon set has.
+// through the Picker's #icon slot: a platform's logo is not something the icon set has.
 const options = computed<PickerOptions<string>>(() => [
     { options: [{ value: ``, label: all.label, description: String(all.total), icon: `file-edit` }] },
     { label: `Platforms`, options: platforms.map((scope) => ({ value: scope.key, label: scope.label, description: String(scope.total) })) },

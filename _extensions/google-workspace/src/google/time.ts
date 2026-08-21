@@ -77,7 +77,7 @@ export const parseWhen = (text: string, now: Date, timeZone: string): EventTime 
         const time = naive[2] as string;
         return { dateTime: `${naive[1]}T${time.length === 5 ? `${time}:00` : time}`, timeZone };
     }
-    throw new UsageError(`"${text}" is not a time this understands — ${ACCEPTED_WHEN}`);
+    throw new UsageError(`"${text}" is not a time this understands: ${ACCEPTED_WHEN}`);
 };
 
 /* What an event ends at when nobody said: an hour later, or, for an all-day event, the next day, because

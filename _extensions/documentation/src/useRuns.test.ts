@@ -1,5 +1,5 @@
 // THE TEST THAT WAS MISSING. Every other test in this package exercises pure functions, so the composables were
-// typechecked but never CALLED — and `useRuns` shipped a synchronous ReferenceError: its `refetchInterval` read a
+// typechecked but never CALLED, and `useRuns` shipped a synchronous ReferenceError: its `refetchInterval` read a
 // `const` declared further down the same function, which vue-query resolves while it builds the observer, i.e.
 // inside that const's temporal dead zone. The view crashed with "Cannot access 'live' before initialization" and
 // nothing in CI noticed, because a type-level cycle had been broken with annotations while the runtime cycle stayed.
@@ -14,8 +14,8 @@ import { useDocs } from "./useDocs.js";
 import { usePublish } from "./usePublish.js";
 import { useRuns } from "./useRuns.js";
 
-/* A host that answers nothing. The composables must survive an unreachable sandbox — which is also the real first
- * state of every browser that opens the view before the daemon has registered — so every read here returns a
+/* A host that answers nothing. The composables must survive an unreachable sandbox, which is also the real first
+ * state of every browser that opens the view before the daemon has registered, so every read here returns a
  * rejection and `reachable()` is false, keeping the queries disabled and the test free of network. */
 const stubHost = () =>
     ({
@@ -41,15 +41,15 @@ const stubHost = () =>
         theme: { mode: () => `light` as const, onDidChange: () => ({ dispose: () => {} }) },
     }) as unknown as Parameters<typeof bindHost>[0];
 
-/* A renderer over nothing, in place of a DOM. What is under test is what SETUP does — the composables and the
- * plugin backing them — and the host component's output is incidental to that, so it renders into stub nodes and
+/* A renderer over nothing, in place of a DOM. What is under test is what SETUP does: the composables and the
+ * plugin backing them, and the host component's output is incidental to that, so it renders into stub nodes and
  * this package needs no browser environment at all.
  *
  * That is not a saving of milliseconds. Vitest builds a file's environment INSIDE the fork's start budget, and
  * that budget is 60s hardcoded in the pool, with no config to raise it; jsdom on a runner with every core busy
  * has measured ~45s of it (the number is recorded in _editor/web/vitest.config.ts). This file and
  * docPresence.test.ts were the only two here that asked for jsdom, and they are the only two that have ever
- * failed to START a worker in CI — twice, while the six node suites beside them ran to completion. A budget
+ * failed to START a worker in CI: twice, while the six node suites beside them ran to completion. A budget
  * nobody can raise is one to stop spending. */
 type StubNode = Record<string, unknown>;
 const stubRenderer = createRenderer<StubNode, StubNode>({

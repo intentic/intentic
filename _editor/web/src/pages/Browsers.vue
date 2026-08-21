@@ -11,19 +11,19 @@ import { relativeTime } from "../composables/chat/catalog";
 import { postTurnControl } from "../composables/chat/turnStream";
 
 /* THE AGENT'S BROWSER, AS A BROWSER. A live screencast of the Chromium a turn is driving through its
- * @playwright/mcp tools, with the pages it has open as a tab strip across the top — because the agent's browser
+ * @playwright/mcp tools, with the pages it has open as a tab strip across the top, because the agent's browser
  * IS a browser, and the shape a person already knows how to read is the shape it should be shown in.
  *
  * It is a route rather than a pane in the terminal panel, which is the whole point of the surface: a browser
  * holds several pages at once, and a strip that can only show one stream has no way to ask which. The rail tile
  * appears when a turn starts browsing (ShellDesktop's browserTile) and this is where it lands.
  *
- * TWO STRIPS, TWO QUESTIONS. The session pills answer "which browser?" — there is one per conversation that has
+ * TWO STRIPS, TWO QUESTIONS. The session pills answer "which browser?": there is one per conversation that has
  * browsed, and they only render when more than one exists, since a row of one pill is furniture. The page tabs
  * answer "which page?" and are always there while a browser has any.
  *
  * A FINISHED BROWSER IS A RECORD, NOT A BROKEN ONE. The daemon keeps a session listable for a couple of hours
- * after its Chromium goes away, and switches its strip from the tabs it had OPEN to every tab it ever had —
+ * after its Chromium goes away, and switches its strip from the tabs it had OPEN to every tab it ever had:
  * which is the answer to the only question left about a browser that has stopped. So the stage below becomes
  * that record rather than a socket dialling something that isn't there. */
 
@@ -43,18 +43,18 @@ const selected = computed<string | undefined>(() => {
 const current = computed(() => sessions.value.find((session) => session.name === selected.value));
 
 /* ONLY A RUNNING BROWSER IS DIALLED. A finished one is kept listable for a couple of hours because its tab list
- * is the record of where the agent went — but there is no Chromium behind it, so opening a socket could only ask
+ * is the record of where the agent went, but there is no Chromium behind it, so opening a socket could only ask
  * a dead question and get an error chip over a black rectangle back. Passing undefined here is what turns the
  * stage into that record instead: the composable tears its socket down and stops trying. */
 const watchable = computed(() => (current.value?.running === true ? current.value.name : undefined));
 const view = useBrowserView(watchable);
 
-// The page the user picked. Cleared whenever the browser changes — a page id is only meaningful inside its own
+// The page the user picked. Cleared whenever the browser changes: a page id is only meaningful inside its own
 // session, and carrying one across would bind to a stranger.
 const pickedPage = ref<string | undefined>();
 watch(selected, () => (pickedPage.value = undefined));
 
-// Which tab reads as selected — see activePageOf for the rule.
+// Which tab reads as selected: see activePageOf for the rule.
 const activePage = computed<BrowserPage | undefined>(() => activePageOf(current.value?.pages ?? [], pickedPage.value));
 
 const pickPage = (page: BrowserPage): void => {
@@ -62,12 +62,12 @@ const pickPage = (page: BrowserPage): void => {
     view.bindPage(page.id);
 };
 
-// Each browser is a URL of its own — that is how a reload, a chat card and the rail all reach one — so the
+// Each browser is a URL of its own: that is how a reload, a chat card and the rail all reach one, so the
 // pills and the queue rows are links rather than buttons that pushed the router. Ctrl/⌘-click then opens a
 // second browser beside the one on screen, which is exactly what a strip of them invites.
 const sessionAt = (name: string): string => `/browsers/${name}`;
 
-// A tab's text: the page's own title, else its host, else the raw url — the same ladder the daemon uses for the
+// A tab's text: the page's own title, else its host, else the raw url, the same ladder the daemon uses for the
 // session label, so a tab and its pill never disagree about what a page is called.
 const hostOf = (url: string): string => {
     try {
@@ -93,12 +93,12 @@ const close = (name: string): void => void closeBrowser(name);
 /* THE HELP REQUEST'S ANSWERING END. The agent parked its turn on `request_help` and the daemon flagged this
  * session; the banner below renders that flag, and these two buttons settle the parked card over the same
  * /agent/reply side channel the chat's cards use. The banner comes down when the daemon publishes the cleared
- * flag — the same push that raised it — so nothing here mutates the list. `helpNote` rides back to the agent
+ * flag: the same push that raised it, so nothing here mutates the list. `helpNote` rides back to the agent
  * either way ("typed the password, don't touch remember-me"). */
 const helpNote = ref(``);
 watch(selected, () => (helpNote.value = ``));
 
-/* THE QUEUE OF ASKS. One browser's request renders as the banner over its own stage — but the agent can be
+/* THE QUEUE OF ASKS. One browser's request renders as the banner over its own stage, but the agent can be
  * stuck in several browsers at once (two identities mid-signup, each on its own captcha), and the pills' warning
  * dots are too quiet to say so. So every OTHER browser waiting for hands lists here, message and all, one click
  * from its stage. The selected browser's own ask stays out of it: that one is the banner right below. */
@@ -120,13 +120,13 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <!-- Nothing has browsed yet. Not an error — most turns never open a browser — so this reads as a
+        <!-- Nothing has browsed yet. Not an error: most turns never open a browser, so this reads as a
              description of the surface rather than as something having gone wrong. -->
         <div v-if="sessions.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
             <Icon name="globe" class="text-2xl text-muted" />
             <div class="text-sm text-content">No browsers open</div>
             <div class="max-w-sm text-xs text-muted">
-                When an agent opens a page with its browser tools, it appears here — live, with every page it has open as a tab.
+                When an agent opens a page with its browser tools, it appears here: live, with every page it has open as a tab.
             </div>
         </div>
 
@@ -143,7 +143,7 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                 >
                     <!-- A dot rather than a word: liveness is the only thing that separates two otherwise
                          identical pills, and it has to read at a glance. A browser asking for help outranks
-                         "running" — that pill is the one the reader came to find. -->
+                         "running": that pill is the one the reader came to find. -->
                     <span
                         class="size-1.5 rounded-full"
                         :class="session.help !== undefined ? 'bg-warning' : session.running ? 'bg-success' : 'bg-muted'"
@@ -190,14 +190,14 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                     v-if="current?.running"
                     type="button"
                     class="shrink-0 rounded border border-line px-1.5 py-0.5 transition-colors hover:text-danger"
-                    v-tooltip.bottom="`Close this browser — the agent's next browser tool call will fail`"
+                    v-tooltip.bottom="`Close this browser: the agent's next browser tool call will fail`"
                     @click="close(current.name)"
                 >
                     Close
                 </button>
             </div>
 
-            <!-- Other browsers waiting for hands — the queue. Each row is one parked ask, one click from the
+            <!-- Other browsers waiting for hands: the queue. Each row is one parked ask, one click from the
                  stage it is parked over; the selected browser's own ask is the banner below, not a row here. -->
             <div v-if="queuedHelp.length > 0" class="flex shrink-0 flex-col border-b border-line">
                 <RouterLink
@@ -213,8 +213,8 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                 </RouterLink>
             </div>
 
-            <!-- The agent asked for hands. The banner sits between the controls and the picture — over the very
-                 stage the user is about to act on — and its buttons settle the parked request; it comes down on
+            <!-- The agent asked for hands. The banner sits between the controls and the picture: over the very
+                 stage the user is about to act on, and its buttons settle the parked request; it comes down on
                  the daemon's own push, the same one that raised it. -->
             <div v-if="current?.help" class="flex shrink-0 flex-col gap-2 border-b border-line bg-warning/10 px-3 py-2">
                 <div class="flex items-start gap-2">
@@ -222,7 +222,7 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                     <div class="min-w-0 flex-1 text-xs text-content">
                         <span class="font-medium">The agent needs your help:</span>
                         {{ current.help.message }}
-                        <span class="text-muted"> — take control, fix that step, then hand back.</span>
+                        <span class="text-muted">: take control, fix that step, then hand back.</span>
                     </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -238,7 +238,7 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                         class="shrink-0 rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90"
                         @click="resolveHelp(true)"
                     >
-                        Done — hand back
+                        Done: hand back
                     </button>
                     <button
                         type="button"
@@ -269,7 +269,7 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                 <div v-if="view.status.value" class="absolute inset-0 flex items-center justify-center px-4">
                     <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.status.value }}</span>
                 </div>
-                <!-- An open drop-down, which the picture itself can never show — see BrowserSelectMenu. -->
+                <!-- An open drop-down, which the picture itself can never show: see BrowserSelectMenu. -->
                 <BrowserSelectMenu
                     v-if="view.select.value && view.driving.value"
                     :menu="view.select.value"
@@ -281,7 +281,7 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                 />
             </div>
 
-            <!-- A browser that has closed. Not a failed stream — there is nothing to stream — so it reads as the
+            <!-- A browser that has closed. Not a failed stream: there is nothing to stream, so it reads as the
                  record it is, and the strip above it (which lists every tab a finished session ever had, not just
                  the ones open at the end) is the actual content. -->
             <div v-else class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
@@ -289,7 +289,7 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                 <div class="text-sm text-content">This browser has closed</div>
                 <div class="max-w-sm text-xs text-muted">
                     <template v-if="current?.finishedAt !== undefined">Closed {{ relativeTime(current.finishedAt) }}. </template>
-                    Every page it opened is still listed above, with the one it ended on selected — the record of where the agent went.
+                    Every page it opened is still listed above, with the one it ended on selected: the record of where the agent went.
                 </div>
             </div>
         </template>

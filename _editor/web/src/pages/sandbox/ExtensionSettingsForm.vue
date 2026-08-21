@@ -20,7 +20,7 @@ const store = () => extensionSettingsStore(extensionId);
 
 // This component only mounts inside an OPEN row, so mounting is the lazy load: opening the tab no longer costs
 // one daemon round-trip per settings-bearing extension. The store is shared with the extension host, which has
-// already loaded it for any UI extension it activated — hence the guard rather than an unconditional fetch.
+// already loaded it for any UI extension it activated: hence the guard rather than an unconditional fetch.
 onMounted(() => {
     if (store().values.value === undefined) {
         void store().load();
@@ -33,7 +33,7 @@ const setValue = (setting: SettingContribution, value: SettingValue): void => {
     void store().save({ ...store().values.value, [setting.key]: value });
 };
 
-// A secret setting's value is never sent to the browser — the form only knows whether one is stored.
+// A secret setting's value is never sent to the browser: the form only knows whether one is stored.
 const secretIsSet = (setting: SettingContribution): boolean => store().secretsSet.value.includes(setting.key);
 </script>
 
@@ -43,7 +43,7 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
             <div class="min-w-0 pt-1">
                 <p class="text-xs text-content">{{ setting.title }}</p>
                 <p v-if="setting.description" class="text-2xs text-muted">{{ setting.description }}</p>
-                <!-- The setting the agent's shell will see under this name — the reason a value here reaches a
+                <!-- The setting the agent's shell will see under this name: the reason a value here reaches a
                      CLI tool at all, and invisible everywhere else. -->
                 <p v-if="setting.env" class="text-2xs text-subtle">
                     reaches the agent as <span class="font-mono">{{ setting.env }}</span>

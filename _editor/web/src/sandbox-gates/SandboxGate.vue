@@ -19,7 +19,7 @@ import SandboxWarming from "./SandboxWarming.vue";
  * context for the absolute mismatch bar.
  *
  * Every one of these is a GATE: the view behind it is unusable, which is what earns an interruption. The
- * sandbox's non-blocking errands (rebuild, proposal, secrets, a new release) used to ride here as bars too —
+ * sandbox's non-blocking errands (rebuild, proposal, secrets, a new release) used to ride here as bars too:
  * they now badge the rail's sandbox chip, where a standing condition belongs. The mismatch nudge stays because
  * it fires in the pre-bind window, before there is a bound sandbox for a chip to be about. */
 
@@ -27,7 +27,7 @@ const { user } = useAuth();
 const { clearCredential } = useGoogleIdentity();
 const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
 const { reachable, connection } = useSandbox();
-// The daemon answered and refused this Google account (403) — its own screen, distinct from every reason the
+// The daemon answered and refused this Google account (403): its own screen, distinct from every reason the
 // daemon simply didn't answer. Read off the failure's tag rather than a separate sticky boolean.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 // A hydrated (IndexedDB-restored) tree marks the sandbox as previously visited: paint it stale-while-

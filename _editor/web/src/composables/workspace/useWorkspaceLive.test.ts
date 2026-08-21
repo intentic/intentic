@@ -3,7 +3,7 @@ import { queryClient } from "../queryPersistence";
 import { changeEpochOf, isRecentlyChanged, markWorkspaceChanged } from "./useWorkspaceLive";
 
 // Regression guard: the live-refresh invalidation must work with NO component mounted. It used to ride a
-// component-scoped watch behind an install-once flag — the /setup round-trip unmounted the installing shell,
+// component-scoped watch behind an install-once flag: the /setup round-trip unmounted the installing shell,
 // Vue disposed the watch, and live refresh silently died for the rest of the session.
 describe(`markWorkspaceChanged`, () => {
     const key = [`workspace`, `tree`, `filtered`, `sb`];
@@ -32,7 +32,7 @@ describe(`markWorkspaceChanged`, () => {
     });
 
     /* The package layout the review lists group under. It is held for minutes, so nothing but this push can end
-     * a wrong grouping — and the case that makes it wrong (a package created mid-session) is also the case
+     * a wrong grouping, and the case that makes it wrong (a package created mid-session) is also the case
      * where every one of its files is on screen in the Changes panel at once. */
     it(`re-reads the package layout when a manifest lands`, () => {
         markWorkspaceChanged([`_libs/new-pkg/package.json`]);

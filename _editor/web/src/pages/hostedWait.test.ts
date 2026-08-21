@@ -2,7 +2,7 @@ import type { BootReport } from "@intentic-app/api-contract";
 import { describe, expect, it } from "vitest";
 import { hostedWaitView, type HostedWaitInput } from "./hostedWait";
 
-// A wait with nothing known yet — every case below is this plus the one fact it is about.
+// A wait with nothing known yet: every case below is this plus the one fact it is about.
 const wait = (over: Partial<HostedWaitInput> = {}): HostedWaitInput => ({
     machine: undefined,
     boot: null,
@@ -15,7 +15,7 @@ const wait = (over: Partial<HostedWaitInput> = {}): HostedWaitInput => ({
 
 const boot = (reach: BootReport[`reach`], detail?: string): BootReport => ({ reach, at: `2026-08-13T10:00:00.000Z`, ...(detail ? { detail } : {}) });
 
-// Which step the list is sitting on — the card's whole progress claim in one value.
+// Which step the list is sitting on: the card's whole progress claim in one value.
 const active = (input: HostedWaitInput): string | undefined => hostedWaitView(input).steps.find((step) => step.state === `active`)?.key;
 
 describe(`hostedWaitView`, () => {
@@ -48,7 +48,7 @@ describe(`hostedWaitView`, () => {
             waitedMs: 6 * 60_000,
         });
         const view = hostedWaitView(stuck);
-        // The box's own words, verbatim — it is the only thing that knows.
+        // The box's own words, verbatim: it is the only thing that knows.
         expect(view.failure?.problem).toContain(`could not be reached`);
         // Its files are fine; it is the boot's networking half that needs running again.
         expect(view.failure?.action).toBe(`reboot`);
@@ -63,7 +63,7 @@ describe(`hostedWaitView`, () => {
     });
 
     it(`names a refused check-in with both halves, and outranks every other reading`, () => {
-        // A machine that looks perfectly healthy AND is being turned away every time it speaks — the shape a
+        // A machine that looks perfectly healthy AND is being turned away every time it speaks: the shape a
         // half-migrated sandbox takes, and the one where waiting can never help.
         const view = hostedWaitView(
             wait({
@@ -109,13 +109,13 @@ describe(`hostedWaitView`, () => {
     });
 
     /* THE CLOCK MAY COUNT, NEVER DIAGNOSE: minutes on the note prove the page is counting rather than frozen,
-     * and once an origin's own promise is spent the note switches to patience — still no failure invented. */
+     * and once an origin's own promise is spent the note switches to patience: still no failure invented. */
     it(`counts the minutes and switches to reassurance once the promise is spent`, () => {
         const midPull = hostedWaitView(wait({ warm: false, machine: `created`, waitedMs: 2 * 60_000 }));
         expect(midPull.failure).toBeUndefined();
         expect(midPull.note).toContain(`2 min in`);
         expect(midPull.note).toContain(`3 to 5 minutes`);
-        // Past its own estimate the estimate would be a lie in the other direction — patience instead.
+        // Past its own estimate the estimate would be a lie in the other direction: patience instead.
         const past = hostedWaitView(wait({ warm: false, machine: `created`, waitedMs: 6 * 60_000 }));
         expect(past.failure).toBeUndefined();
         expect(past.note).toContain(`still going`);
@@ -125,7 +125,7 @@ describe(`hostedWaitView`, () => {
     });
 
     it(`offers a way out of a machine that never comes up, without calling the pull broken early`, () => {
-        // Ten minutes in `created` is not a pull any more — SILENT_MS deliberately never fires on
+        // Ten minutes in `created` is not a pull any more: SILENT_MS deliberately never fires on
         // `starting`/`created`, so without this ceiling the note would reassure forever with nothing to press.
         const view = hostedWaitView(wait({ warm: false, machine: `created`, waitedMs: 11 * 60_000 }));
         expect(view.failure?.problem).toContain(`far longer`);
@@ -135,7 +135,7 @@ describe(`hostedWaitView`, () => {
     });
 
     /* THE HANDOVER GATE. `reachable` is the only thing the wizard is allowed to hold the door on, and
-     * `undefined` — a sandbox that has said nothing, which is every sandbox older than this reporting — must
+     * `undefined` (a sandbox that has said nothing, which is every sandbox older than this reporting) must
      * read as "don't hold", or this would wedge the flows it exists to unwedge. */
     it(`reports reachability as a verdict, never as an assumption`, () => {
         expect(hostedWaitView(wait()).reachable).toBeUndefined();

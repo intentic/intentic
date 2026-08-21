@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-google-workspace",
     "version": "1.0.0",
-    "description": "Google Workspace — Gmail, Calendar, Drive, Docs, Sheets and Contacts as one authenticated agent CLI, plus the polling watcher as a baked extension process",
+    "description": "Google Workspace, Gmail, Calendar, Drive, Docs, Sheets and Contacts as one authenticated agent CLI, plus the polling watcher as a baked extension process",
     "license": "MIT",
     "private": true,
     "type": "module",

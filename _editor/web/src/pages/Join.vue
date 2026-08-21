@@ -10,17 +10,17 @@ import { useMembership } from "../composables/membership/useMembership";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
 
-/* BUYING A MEMBERSHIP WITHOUT THE PRODUCT — the door for somebody whose agent asked for a paid run and who
+/* BUYING A MEMBERSHIP WITHOUT THE PRODUCT: the door for somebody whose agent asked for a paid run and who
  * has never opened this app in their life.
  *
  * The membership was always an ACCOUNT's, never a machine's: the credit meter is per account, the catalogue is
  * the platform's, and the ledger pays creators out of what accounts spend. But the only place to buy one was a
  * tab inside the workspace shell, and the shell's guard bounces anybody without a sandbox to /setup. So
- * "owns a machine" had quietly become a precondition for paying us — which it never was, and which is exactly
+ * "owns a machine" had quietly become a precondition for paying us, which it never was, and which is exactly
  * the wrong toll to charge somebody who arrived from a terminal thirty seconds ago holding a link.
  *
- * THIS PAGE IS OUTSIDE THE SHELL for that reason and no other. Same offer, same figures, same Stripe — the
- * pitch is one shared component (components/MembershipOffer.vue) precisely so the two cannot drift — but no
+ * THIS PAGE IS OUTSIDE THE SHELL for that reason and no other. Same offer, same figures, same Stripe: the
+ * pitch is one shared component (components/MembershipOffer.vue) precisely so the two cannot drift, but no
  * rail, no sandbox switcher, no setup redirect, and a finish line that says "go back to your terminal" rather
  * than dropping somebody into a workspace they did not ask for and cannot use.
  *
@@ -146,7 +146,7 @@ const view = computed(() => {
                 <Card class="border-primary-fill/25 bg-primary-fill/[0.07]">
                     <h1 class="text-2xl font-semibold leading-tight tracking-tight">Join intentic</h1>
                     <p class="mt-2 max-w-prose text-sm text-muted">
-                        A membership lets your coding agent run the platform's paid services — priced in credits, approved by you one run at a time,
+                        A membership lets your coding agent run the platform's paid services: priced in credits, approved by you one run at a time,
                         and refunded whenever a service doesn't answer. No sandbox and no install needed.
                     </p>
                     <Button label="Continue with Google" severity="secondary" class="mt-5 justify-center" @click="signIn">
@@ -165,14 +165,14 @@ const view = computed(() => {
                     icon="spinner"
                     spin
                     tone="info"
-                    title="Payment received — activating your membership"
+                    title="Payment received: activating your membership"
                     description="This takes a few seconds. The page updates itself; there's nothing to click."
                 />
             </Card>
 
             <!-- ══ DONE ═════════════════════════════════════════════════════════════════════════════════════
                  THE FINISH LINE, and the one screen this page exists to get right. Somebody who came from a
-                 terminal must be sent back to it — not dropped into a workspace shell they never asked for,
+                 terminal must be sent back to it, not dropped into a workspace shell they never asked for,
                  which is what every other "you're a member" surface in this product does. -->
             <template v-else-if="view === 'member'">
                 <Card class="border-success/40 bg-success/[0.07]">
@@ -182,7 +182,7 @@ const view = computed(() => {
                         icon="check-circle"
                         tone="success"
                         :title="justJoined ? `You're in.` : `You're a member.`"
-                        description="Head back to your terminal — your agent can use the services catalogue now."
+                        description="Head back to your terminal: your agent can use the services catalogue now."
                     />
                     <div v-if="credits" class="mt-4 flex flex-col gap-2">
                         <div class="flex flex-wrap items-baseline gap-x-2">
@@ -230,7 +230,7 @@ const view = computed(() => {
                     :of="{
                         tone: `info`,
                         title: `Your payment went through, but the membership hasn't come back from Stripe yet.`,
-                        detail: `This is unusual. Reload in a minute — if it still isn't here, get in touch and nothing will be charged twice.`,
+                        detail: `This is unusual. Reload in a minute, if it still isn't here, get in touch and nothing will be charged twice.`,
                     }"
                 />
                 <Notice
@@ -244,7 +244,7 @@ const view = computed(() => {
                 <MembershipOffer :return-to="`join`" :join-label="buyLabel" :working="working" @checkout="checkout">
                     <template #headline>Let your agent run paid services.</template>
                     <template #promise>
-                        One membership, a day's credits, and an approval link for every run — so your agent can ask for paid research, data and
+                        One membership, a day's credits, and an approval link for every run, so your agent can ask for paid research, data and
                         compute without ever being able to spend on its own.
                     </template>
                 </MembershipOffer>

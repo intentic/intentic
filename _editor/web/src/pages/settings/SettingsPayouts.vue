@@ -9,7 +9,7 @@ import { apiClient } from "../../composables/useApi";
 import SettingsPublisherClaim from "./SettingsPublisherClaim.vue";
 
 /* Getting paid: the creator's side of the same pool the membership card buys into. Two things happen here and
- * nothing else — proving a publisher name is yours, and connecting somewhere the money can land. Both are
+ * nothing else: proving a publisher name is yours, and connecting somewhere the money can land. Both are
  * deliberately thin surfaces over work done elsewhere: the proof is a file in a repository the registry already
  * lists, and the payout details are collected by Stripe on its own pages, so this card never asks for a bank
  * account, a document or a tax form.
@@ -21,7 +21,7 @@ import SettingsPublisherClaim from "./SettingsPublisherClaim.vue";
 const state = ref<CreatorState | null>(null);
 const loadError = ref<NoticeModel | undefined>(undefined);
 
-// Stripe returns the browser here after its hosted onboarding. `done` is informational — the status read below
+// Stripe returns the browser here after its hosted onboarding. `done` is informational. The status read below
 // refreshes through to Stripe while an account is unfinished, so the answer on screen is already the fresh one.
 const route = useRoute();
 const justReturned = computed(() => route.query[`payouts`] === `done`);
@@ -50,7 +50,7 @@ const monthName = (month: string): string =>
     new Date(`${month}-01T00:00:00Z`).toLocaleDateString(undefined, { year: `numeric`, month: `long`, timeZone: `UTC` });
 const day = (stamp: string): string => new Date(stamp).toLocaleDateString(undefined, { year: `numeric`, month: `long`, day: `numeric` });
 
-/* Closed months only, newest first — and a total, because a creator holding several names wants the answer to
+/* Closed months only, newest first, and a total, because a creator holding several names wants the answer to
  * "what am I owed" without adding up rows themselves. */
 const statements = computed(() => state.value?.statements ?? []);
 const owedTotal = computed(() => statements.value.reduce((sum, statement) => sum + statement.amountCents, 0));
@@ -64,7 +64,7 @@ const payments = computed(() => state.value?.payments ?? []);
 const payoutLine = computed(() => {
     const current = payouts.value;
     if (current === undefined || !current.connected) {
-        return `Not set up yet — nothing can be paid out until this is connected.`;
+        return `Not set up yet. Nothing can be paid out until this is connected.`;
     }
     if (current.payoutsEnabled) {
         return `Connected and ready. Earnings are paid to this account.`;
@@ -72,7 +72,7 @@ const payoutLine = computed(() => {
     if (current.detailsSubmitted) {
         return `Stripe has your details and is still reviewing them.`;
     }
-    return `Started but not finished — Stripe still needs a few answers.`;
+    return `Started but not finished. Stripe still needs a few answers.`;
 });
 
 /* Connecting is hand-rolled rather than another useAsyncAction for one reason: on success the browser leaves
@@ -108,7 +108,7 @@ const connect = async (): Promise<void> => {
 
             <template v-else-if="outline">
                 <!-- THE WAIT IS DRAWN, NOT SKIPPED. The masthead above renders from the first frame, so what the
-                     status read leaves blank is the whole body under it — a titled card with nothing in it, which
+                     status read leaves blank is the whole body under it, a titled card with nothing in it, which
                      reads as "you have nothing here" for as long as the round-trip takes and then contradicts
                      itself. The two sections below are the two that ALWAYS land once the read does (claiming a
                      name, and the payout account); earnings and receipts are not promised here because a creator
@@ -140,7 +140,7 @@ const connect = async (): Promise<void> => {
                 <div v-if="state.claims.length > 0" class="flex flex-col gap-1.5">
                     <h3 class="text-xs font-semibold">Your publisher names</h3>
                     <p v-for="claim in state.claims" :key="claim.publisher" class="text-xs text-muted">
-                        <span class="font-medium text-content">{{ claim.publisher }}</span> — proved with
+                        <span class="font-medium text-content">{{ claim.publisher }}</span>, proved with
                         <span class="font-mono">{{ claim.repo }}</span>
                     </p>
                 </div>
@@ -153,7 +153,7 @@ const connect = async (): Promise<void> => {
                         {{ money(owedTotal) }} across {{ statements.length }} closed {{ statements.length === 1 ? `month` : `months` }}.
                     </p>
                     <p v-for="statement in statements" :key="`${statement.month}-${statement.publisher}`" class="text-xs text-muted">
-                        <span class="font-medium text-content">{{ monthName(statement.month) }}</span> — {{ money(statement.amountCents) }} for
+                        <span class="font-medium text-content">{{ monthName(statement.month) }}</span>, {{ money(statement.amountCents) }} for
                         <span class="font-mono">{{ statement.publisher }}</span
                         >, payable {{ day(statement.payableAt) }}
                     </p>
@@ -172,13 +172,13 @@ const connect = async (): Promise<void> => {
                             <span v-if="payment.reference" class="font-mono text-2xs"> · {{ payment.reference }}</span>
                         </template>
                         <template v-else>
-                            <span class="font-medium text-content">{{ money(payment.amountCents) }}</span> on its way — started
+                            <span class="font-medium text-content">{{ money(payment.amountCents) }}</span> on its way, started
                             {{ day(payment.createdAt) }}. If it doesn't land, it's retried until it does.
                         </template>
                     </p>
                 </div>
 
-                <!-- The claim step, which is a screen of its own (SettingsPublisherClaim) — it reads the
+                <!-- The claim step, which is a screen of its own (SettingsPublisherClaim). It reads the
                      workspace's repositories and pushes to one, which is far more than this card does. -->
                 <SettingsPublisherClaim @claimed="load" />
 
@@ -186,12 +186,12 @@ const connect = async (): Promise<void> => {
                 <div class="flex flex-col gap-2 border-t border-line pt-3">
                     <h3 class="text-xs font-semibold">Payout account</h3>
                     <p v-if="justReturned && !payouts?.payoutsEnabled" class="text-xs text-muted">
-                        Thanks — Stripe is still finishing up. This page updates itself as soon as it's done.
+                        Thanks. Stripe is still finishing up. This page updates itself as soon as it's done.
                     </p>
                     <p class="text-xs text-muted">{{ payoutLine }}</p>
                     <p v-if="payouts?.disabledReason" class="text-xs text-muted">Stripe is holding payouts for: {{ payouts.disabledReason }}.</p>
                     <p class="text-2xs text-muted">
-                        Bank details, identity and tax forms are collected by Stripe on its own pages — this platform never sees or stores them.
+                        Bank details, identity and tax forms are collected by Stripe on its own pages. This platform never sees or stores them.
                     </p>
                     <div>
                         <Button

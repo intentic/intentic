@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
-// jsdom because the subject is an AFFORDANCE. The logo used to be reachable only from inside name-edit mode — a
-// tile that looked decorative until you pressed a button labelled "Edit" — so the properties worth pinning are
+// jsdom because the subject is an AFFORDANCE. The logo used to be reachable only from inside name-edit mode: a
+// tile that looked decorative until you pressed a button labelled "Edit", so the properties worth pinning are
 // about both identity controls: the logo is live at rest, while rename is a compact affordance attached to the
 // name rather than a separate card-level form. The writes stay independent even though the controls share one
 // identity row.
@@ -10,7 +10,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // The sandbox singletons are the component's whole world (identity, reachability, the write), and the version
-// card + update prompt below the header are separate surfaces with their own daemon calls — stubbed so this
+// card + update prompt below the header are separate surfaces with their own daemon calls: stubbed so this
 // mounts the identity block and nothing else.
 const active = ref<SandboxSummary | undefined>(undefined);
 const update = vi.fn<(sandboxId: string, input: { name?: string; image?: string | null }) => Promise<void>>().mockResolvedValue(undefined);
@@ -64,7 +64,7 @@ const mount = (sandbox: SandboxSummary): HTMLElement => {
         }),
     );
     // The upgrade card on a hosted sandbox links onward with a RouterLink, and this mount installs no router
-    // — a stand-in that renders the anchor keeps the card in the tree instead of warning on every mount.
+    //: a stand-in that renders the anchor keeps the card in the tree instead of warning on every mount.
     app.component(
         `RouterLink`,
         defineComponent({
@@ -145,8 +145,8 @@ it(`renames from the inline field without sending the logo`, async () => {
     expect(update.mock.calls[0]?.[1]).not.toHaveProperty(`image`);
 });
 
-// An empty tile has exactly one thing to do, so pressing it does it. Charging a menu for the first-run case —
-// the case in front of every new sandbox — is the cost this asymmetry exists to avoid.
+// An empty tile has exactly one thing to do, so pressing it does it. Charging a menu for the first-run case:
+// the case in front of every new sandbox: is the cost this asymmetry exists to avoid.
 it(`goes straight to the file dialog when there is no logo yet`, () => {
     const el = mount(sandboxRow());
     const opened = vi.spyOn(fileField(el), `click`);
@@ -163,7 +163,7 @@ it(`says the tile does two things once a logo is set, and one thing before that`
 });
 
 // A member sees the identity block but cannot change it, and the tile has to say so by being unreachable rather
-// than by failing on press — including for a keyboard, which is what `disabled` buys that a no-op handler does not.
+// than by failing on press: including for a keyboard, which is what `disabled` buys that a no-op handler does not.
 it(`keeps a member out of the tile entirely`, () => {
     const tile = anyLogoTile(mount(sandboxRow({ role: `collaborator` })));
     expect(tile.disabled).toBe(true);
@@ -178,7 +178,7 @@ it(`saves the picked file on its own, fitted rather than cropped`, async () => {
     expect(update).toHaveBeenCalledWith(`s1`, { image: `data:image/webp;base64,NEW` });
 });
 
-// A rename must not ride along with a logo, and a logo must not ride along with a rename — the two controls are
+// A rename must not ride along with a logo, and a logo must not ride along with a rename: the two controls are
 // independent now, so each sends only its own field.
 it(`sends the logo without the name`, async () => {
     const el = mount(sandboxRow());
@@ -193,11 +193,11 @@ it(`takes a logo back off with an explicit null`, async () => {
     const el = mount(sandboxRow({ image: `data:image/webp;base64,OLD` }));
     const removeRow = (): HTMLButtonElement | undefined =>
         [...document.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.includes(`Remove logo`));
-    // Behind the press, not sitting in the DOM waiting — otherwise the assertion below would hold with the menu
+    // Behind the press, not sitting in the DOM waiting: otherwise the assertion below would hold with the menu
     // never opening at all.
     expect(removeRow()).toBeUndefined();
     /* THE TILE HAS TO HAVE A BOX. The menu is an <AnchoredOverlay>, which closes itself on an anchor measuring
-     * 0×0 — an element that is display:none or has been unmounted mid-open has nothing left to point at. jsdom
+     * 0×0: an element that is display:none or has been unmounted mid-open has nothing left to point at. jsdom
      * lays nothing out, so EVERY element measures 0×0 there and the panel would open and shut in one tick.
      * Same stub, same reason, as composables/anchoredOverlay.test.ts. */
     const tile = logoTile(el);
@@ -213,7 +213,7 @@ it(`takes a logo back off with an explicit null`, async () => {
     await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`s1`, { image: null }));
 });
 
-// An unreadable file is the FILE's fault, and it has to be reported as that rather than as a failed save — and
+// An unreadable file is the FILE's fault, and it has to be reported as that rather than as a failed save, and
 // it must not reach the platform at all.
 it(`reports an unreadable file without writing anything`, async () => {
     fileToSquareDataUrl.mockRejectedValueOnce(new Error(`nope`));

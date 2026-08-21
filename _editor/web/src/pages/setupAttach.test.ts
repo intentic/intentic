@@ -5,7 +5,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-test("a bare hostname is accepted — https is assumed, not demanded of the user", () => {
+test("a bare hostname is accepted: https is assumed, not demanded of the user", () => {
     expect(normalizeDaemonUrl(`sandbox.example.com`)).toBe(`https://sandbox.example.com`);
     expect(normalizeDaemonUrl(`  sandbox.example.com  `)).toBe(`https://sandbox.example.com`);
 });
@@ -17,7 +17,7 @@ test("a pasted address bar is stripped back to what daemon paths append to", () 
     expect(normalizeDaemonUrl(`https://example.com/sandbox/`)).toBe(`https://example.com/sandbox`);
 });
 
-test("http and dotless hosts are rejected — the app is HTTPS, so the browser would block those calls", () => {
+test("http and dotless hosts are rejected: the app is HTTPS, so the browser would block those calls", () => {
     expect(normalizeDaemonUrl(`http://sandbox.example.com`)).toBeUndefined();
     expect(normalizeDaemonUrl(`localhost:8787`)).toBeUndefined();
     expect(normalizeDaemonUrl(`not a domain`)).toBeUndefined();
@@ -51,7 +51,7 @@ test("a healthy daemon that authorizes the caller is ok, and the connect token r
         "https://sandbox.example.com/environment": { status: 200, body: {} },
     });
     expect(await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok`, connectToken: `connect-tok` })).toEqual({ kind: `ok` });
-    // /health is deliberately unauthenticated — only the authorize probe carries the first-bind token.
+    // /health is deliberately unauthenticated: only the authorize probe carries the first-bind token.
     expect(calls.map((call) => call.connect)).toEqual([null, `connect-tok`]);
 });
 
@@ -73,7 +73,7 @@ test("every probe request carries a deadline, so a hang can never outlive it", a
 
 test("a hang is reported as a timeout, not folded into the generic nothing-answered case", async () => {
     // What AbortSignal.timeout rejects with once the deadline fires. The two must stay distinguishable: one
-    // means "wrong address", the other means "something is there but silent" — different next steps.
+    // means "wrong address", the other means "something is there but silent": different next steps.
     vi.stubGlobal(`fetch`, () => Promise.reject(new DOMException(`signal timed out`, `TimeoutError`)));
     expect(await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` })).toEqual({ kind: `timeout` });
 });
@@ -87,7 +87,7 @@ test("a tunnel with no sandbox behind it is named as such, not quoted back as a 
     expect(await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` })).toMatchObject({ kind: `no-origin` });
 });
 
-test("401 means the daemon is up but unclaimed — the actionable answer is its connection token", async () => {
+test("401 means the daemon is up but unclaimed: the actionable answer is its connection token", async () => {
     stubFetch({
         "https://sandbox.example.com/health": { status: 200 },
         "https://sandbox.example.com/environment": { status: 401, body: { error: `unauthorized` } },
@@ -95,7 +95,7 @@ test("401 means the daemon is up but unclaimed — the actionable answer is its 
     expect(await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` })).toEqual({ kind: `needs-token` });
 });
 
-test("403 carries the daemon's own reason — it names the account the sandbox belongs to", async () => {
+test("403 carries the daemon's own reason, it names the account the sandbox belongs to", async () => {
     stubFetch({
         "https://sandbox.example.com/health": { status: 200 },
         "https://sandbox.example.com/environment": { status: 403, body: { error: `this sandbox is registered to someone@else.com` } },

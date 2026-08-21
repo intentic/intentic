@@ -61,7 +61,7 @@ test("the transcriber serializes whisper runs, drops blanks, reports lines live,
     const exec: ExecFn = async (command, args) => {
         expect(command).toBe("whisper-cli");
         expect(args.slice(0, 2)).toEqual(["-m", "/model.bin"]);
-        // whisper-cli defaults to -l en — the language must always be passed explicitly.
+        // whisper-cli defaults to -l en: the language must always be passed explicitly.
         expect(args.slice(4, 6)).toEqual(["-l", "pl"]);
         active += 1;
         maxActive = Math.max(maxActive, active);
@@ -82,7 +82,7 @@ test("the transcriber serializes whisper runs, drops blanks, reports lines live,
         (error) => errors.push(error),
         exec,
     );
-    // Pushed out of speech order (utterance ends don't arrive chronologically) — flush sorts by start.
+    // Pushed out of speech order (utterance ends don't arrive chronologically): flush sorts by start.
     transcriber.push("bob", startedAt + 65_000, stereoFrames(6, 1));
     transcriber.push("alice", startedAt + 30_000, stereoFrames(6, 1));
     transcriber.push("alice", startedAt + 5_000, stereoFrames(6, 1));
