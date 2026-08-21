@@ -1211,8 +1211,10 @@
  * The border is left in the layer on purpose: `border-line` sets that one, and `--color-line` is already this
  * skin's own gold, so there is nothing to win. */
 [data-skin="sanctum"] .icon-rail {
-    background-color: var(--sanctum-shadow);
-    background-image: none;
+    background-color: #060606;
+    background-image: var(--sanctum-pit-lip), var(--sanctum-pit), var(--sanctum-tooth-cut), var(--sanctum-mottle), linear-gradient(180deg, rgba(255, 250, 238, 0.05), transparent 46%, rgba(0, 0, 0, 0.07));
+    background-size: 123%;
+    background-repeat: repeat;
 }
 
 /* ── THE PICKED CARD, IN THE SAME METAL AS THE PICKED ROW ──────────────────────────────────────────────────
