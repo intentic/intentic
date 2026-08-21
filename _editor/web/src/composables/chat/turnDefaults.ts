@@ -1,7 +1,6 @@
 import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type NativeProvider, type PermissionMode } from "@intentic/sandbox-contract";
 import { ref, watch } from "vue";
-import { providerReady } from "./access";
-import { accountsLoaded } from "./providerAccounts";
+import { accessKnown, providerReady } from "./access";
 import { defaultModelFor, perProvider } from "./providerCatalog";
 
 /* WHAT A NEW CONVERSATION STARTS WITH, the turn prefs the last one left behind, persisted across reloads as one
@@ -93,10 +92,12 @@ watch(
  *
  * The unloaded case rides the pick untouched: before the connection lists have been READ, an empty list is
  * "we haven't asked", not "you have nothing connected", and resolving against it would open every session on
- * whichever provider's read happened to answer first. */
+ * whichever provider's read happened to answer first. BOTH halves of that picture have to be in (accessKnown):
+ * the endpoints land later than the accounts, and substituting against the accounts alone moved a fresh chat off
+ * the user's pick a beat before the free trial arrived to say it could have stayed. */
 export const rememberedProviderFor = (): AgentProvider => {
     const picked = turnDefaults.provider.value;
-    if (!accountsLoaded.value || providerReady(picked)) {
+    if (!accessKnown.value || providerReady(picked)) {
         return picked;
     }
     return NATIVE_PROVIDERS.find((provider) => providerReady(provider)) ?? picked;

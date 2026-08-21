@@ -3,14 +3,12 @@ import {
     type AccessKind,
     type AgentHarness,
     type AgentProvider,
-    FREE_PROVIDERS,
     isTrialProvider,
-    PROVIDER_ACCESS,
     type ProviderAccess,
-    providerLabel,
 } from "@intentic/sandbox-contract";
-import { providerAccounts, translatorAccounts } from "./providerAccounts";
-import { acpProviders, endpointProviders, trialStatus } from "./providerCatalog";
+import { computed, type ComputedRef } from "vue";
+import { accountsLoaded, providerAccounts, translatorAccounts } from "./providerAccounts";
+import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from "./providerCatalog";
 
 /* CAN THIS PROVIDER ACTUALLY RUN, and what does it take to unlock it, one rule, read by every surface that
  * offers a provider (the model picker's rows and rail, the connect gate above the composer, the account panel).
@@ -143,38 +141,21 @@ export const trialBadge = (provider: AgentProvider): string | undefined => {
 export const trialExhausted = (provider: AgentProvider): boolean =>
     isTrialProvider(provider) && trialStatus.value.available && trialStatus.value.remaining <= 0;
 
-export interface FreeOffer {
-    readonly provider: AgentProvider;
-    readonly headline: string;
-    readonly copy: string;
-    readonly action: string;
-}
-
-/* THE FREE WAY IN, phrased for the gate a user with nothing connected actually meets, and the reason it is a
- * separate helper from connectPitch rather than a nicer string inside it.
+/* WHETHER THIS SANDBOX'S ACCESS PICTURE IS KNOWN, and the one guard every surface must pass before it says
+ * "there is nothing here to send with".
  *
- * connectPitch answers "what does the provider you are POINTED AT need", which is the right question once a
- * provider has been chosen and the wrong one before that: a user who has connected nothing has not chosen
- * anything, and the gate was answering for whichever provider happened to be selected, usually a paid one.
- * This answers "what can you do right now for free", which is the only question that changes their next minute.
+ * It is two reads, not one, and that is the whole reason this exists. `accountsLoaded` covers the providers'
+ * own accounts and the translator's subscriptions; `endpointsLoaded` covers the installed model endpoints and,
+ * with them, the free trial's allowance. The account half comes back off the daemon in one hop, the endpoint
+ * half takes a capability read, a catalog fetch per endpoint and a round-trip to the platform.
  *
- * Every word is derived. The provider comes from FREE_PROVIDERS, the name from the provider's own label, the
- * sentence from the access table's own `runs`. Nothing about Google is written here, so a second free channel
- * would be offered without an edit, and a channel that stops being free stops being offered.
+ * Voting on the first half alone is what greeted a brand-new user with a Google sign-in wall: a fresh sandbox
+ * has no accounts, so the moment that read landed the product was free to conclude the user could do nothing,
+ * and it said so on the biggest surface it had, seconds before the free trial arrived to contradict it. Waiting
+ * for both means the first screen makes one claim rather than two.
  *
- * Undefined means there is nothing free left to OFFER, the catalog has no free row, or the user already
- * connected the one it had. A gate still pitching "try free" to someone who has just done that is a gate
- * arguing with its own state, so the panel falls back to naming what the selected provider needs. */
-export const freeOffer = (): FreeOffer | undefined => {
-    const provider = FREE_PROVIDERS.find((candidate) => !providerReady(candidate));
-    if (provider === undefined) {
-        return undefined;
-    }
-    const label = providerLabel(provider);
-    return {
-        provider,
-        headline: `Try free with ${label}`,
-        copy: `No subscription needed, runs ${PROVIDER_ACCESS[provider].runs}.`,
-        action: `Continue with ${label}`,
-    };
-};
+ * `freeOffer` used to live here: a headline, a sentence and a button name for pitching the free Google channel
+ * at a user who had connected nothing. Nothing pitches it any more. The model picker promotes it by ORDER (the
+ * cheapest access leads the locked band, see modelPicker.pickerSections) under the badge `accessBadge` already
+ * derives from the same table, which says the same thing without a wall to read past first. */
+export const accessKnown: ComputedRef<boolean> = computed(() => accountsLoaded.value && endpointsLoaded.value);

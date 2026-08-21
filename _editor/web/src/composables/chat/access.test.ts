@@ -1,16 +1,18 @@
-/* THE ONE RULE THAT DECIDES WHETHER A TURN CAN BE SENT, on the axis the free trial added.
+/* THE ONE RULE THAT DECIDES WHETHER A TURN CAN BE SENT, on the axis the free trial added, and the guard that
+ * decides whether anything may say so yet.
  *
- * Two things are asserted here and they are the two that were wrong. First, an endpoint provider is ready: the
- * composer used to keep its own copy of this rule that knew nothing about endpoints, so a sandbox running the
- * free trial listed a trial row with an allowance badge on it and refused to send the moment anybody chose it.
- * Second, the trial is the one endpoint whose readiness is a MEASUREMENT: a spent allowance is not ready, which
- * is what hands the screen back to the connect offer instead of letting a user type into a box that can only
- * answer with a 429. */
+ * Three things are asserted here and each was wrong once. First, an endpoint provider is ready: the composer
+ * used to keep its own copy of this rule that knew nothing about endpoints, so a sandbox running the free trial
+ * listed a trial row with an allowance badge on it and refused to send the moment anybody chose it. Second, the
+ * trial is the one endpoint whose readiness is a MEASUREMENT: a spent allowance is not ready, so the chat says
+ * so rather than letting a user type into a box that can only answer with a 429. Third, `accessKnown`: WHEN any
+ * of this may be stated as fact, which is a different question and the one that put a sign-in wall in front of
+ * every new user. */
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { beforeEach, expect, it } from "vitest";
-import { providerReady, providerReadyOn } from "./access";
-import { providerAccounts, translatorAccounts } from "./providerAccounts";
-import { acpProviders, endpointProviders, perProvider, trialStatus } from "./providerCatalog";
+import { accessKnown, providerReady, providerReadyOn } from "./access";
+import { accountsLoaded, providerAccounts, translatorAccounts } from "./providerAccounts";
+import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "./providerCatalog";
 
 const OLLAMA = `endpoint/ollama`;
 
@@ -20,6 +22,8 @@ beforeEach(() => {
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
     acpProviders.value = [];
     endpointProviders.value = [];
+    accountsLoaded.value = false;
+    endpointsLoaded.value = false;
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
 });
 
@@ -56,4 +60,20 @@ it(`does not invent a trial the daemon never provisioned`, () => {
     trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
 
     expect(providerReady(TRIAL_PROVIDER)).toBe(false);
+});
+
+/* BOTH READS, OR NEITHER, and the asymmetry between them is the point. The accounts come back off the daemon in
+ * one hop; the endpoints take a capability read, a catalog fetch each and a round-trip to the platform for the
+ * allowance. A surface voting on the accounts alone therefore concludes "this user can do nothing" on every
+ * fresh sandbox, for as long as the slower half takes, and the first screen of the product used to spend that
+ * window drawing a Google sign-in wall over a free trial that was already on its way. */
+it(`withholds the whole access picture until the slower half has landed too`, () => {
+    expect(accessKnown.value).toBe(false);
+
+    // The half that lands first, and the exact moment the old gate spoke.
+    accountsLoaded.value = true;
+    expect(accessKnown.value).toBe(false);
+
+    endpointsLoaded.value = true;
+    expect(accessKnown.value).toBe(true);
 });

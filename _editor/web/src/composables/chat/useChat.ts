@@ -31,6 +31,7 @@ import {
     acpProviders,
     type CatalogLoadState,
     endpointProviders,
+    endpointsLoaded,
     type ModelOption,
     perProvider,
     providerCommands,
@@ -40,7 +41,7 @@ import {
     trialStatus,
 } from "./providerCatalog";
 import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
-import { providerReady, providerReadyOn } from "./access";
+import { accessKnown, providerReady, providerReadyOn } from "./access";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "./transcript";
 import { readAccountPreference, writeAccountPreference } from "./accountPreference";
 import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
@@ -921,11 +922,11 @@ const claudeConnected = computed(() => hasAccount(`claude`));
  * the pass runs again on the completed picture rather than being lost with the partial one.
  *
  * THE TRIAL IS PART OF THAT PICTURE and lands on its own seam (loadCapabilityProviders, which discovers the
- * endpoint and then reads the allowance), so both are sources too. Without them a sandbox whose accounts
- * settled before the trial arrived would sit on the connect offer with a perfectly good free channel one
- * column over, which is the first screen this whole pass exists to get right. */
-watch([providerAccounts, translatorAccounts, accountsLoaded, endpointProviders, trialStatus], () => {
-    if (!accountsLoaded.value) {
+ * endpoint and then reads the allowance), so it is a source too AND half of the guard (accessKnown). Without
+ * that a sandbox whose accounts settled before the trial arrived would sit on a dead provider with a perfectly
+ * good free channel on its way, which is the first screen this whole pass exists to get right. */
+watch([providerAccounts, translatorAccounts, accessKnown, endpointProviders, trialStatus], () => {
+    if (!accessKnown.value) {
         return;
     }
     for (const conversation of conversations.value) {
@@ -1224,6 +1225,10 @@ export const resetChat = (): void => {
     providerCommands.value = perProvider<readonly AgentCommand[]>(() => []);
     providerDefaultModel.value = perProvider(() => ``);
     providerModelsState.value = perProvider<CatalogLoadState>(() => `idle`);
+    // Which endpoints the INCOMING sandbox has, the free trial among them, is unknown until its own daemon
+    // answers: the same wait `accountsLoaded` above declares, for the other half of the same picture.
+    endpointProviders.value = [];
+    endpointsLoaded.value = false;
     managedProvider.value = turnDefaults.provider.value;
     cancelConnect();
     clearTimeout(translatorPollTimer);
@@ -2064,6 +2069,13 @@ const loadCapabilityProviders = async (): Promise<void> => {
      * conversation moved there before the trial's models landed would take an empty model id and keep it, since
      * nothing repoints a chat that can already send. */
     await loadTrialStatus();
+    /* AND ONLY NOW MAY ANYTHING SAY "you have nothing to send with". Set at the very end, after the endpoints
+     * are known AND the allowance has been asked for, because those two together are what decide whether the
+     * free trial can serve this sandbox: the one channel a brand-new user has before they connect anything.
+     *
+     * Not set on the early return above: a failed capability read means we still do not know, and the reachable
+     * seam asks again. Same rule `accountsLoaded` follows, for the same reason. */
+    endpointsLoaded.value = true;
 };
 
 // Step 2 of the native paste-back connect: exchange the code Anthropic showed against the PKCE handshake.

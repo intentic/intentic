@@ -20,7 +20,9 @@ import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import { revealConversation } from "../composables/agents/agentActions";
 import { track } from "../composables/analytics";
+import { composingConversation } from "../composables/chat/useChat";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
@@ -875,6 +877,25 @@ const status = ref<string | undefined>(undefined);
 // automatic poll flipped that button's label and icon every third second for as long as the user sat there.
 const checking = ref(false);
 
+/* WHERE SETUP LETS GO OF THE USER, both lanes through one function, because where a finished setup lands is one
+ * decision and it was made twice.
+ *
+ * `/` is the shell's own answer per form factor: desktop opens the workspace, where the code is and where the
+ * docked chat is already sitting to be typed at. MOBILE HAS NO DOCKED CHAT, so `/` lands it on the agents
+ * board, and a board is not a thing you can type into: the first screen of the product was a list with nothing
+ * in it. So the hand-off goes one step further there, into the chat the user will actually use, with whatever
+ * this sandbox can send with already selected, the free trial on a fresh box.
+ *
+ * `revealConversation` is the board's OWN push (agentActions), the one its starter chips make, so this opens
+ * exactly the screen every other door to a mobile chat opens, and it is a no-op on desktop by construction.
+ *
+ * After the navigation, never before: selecting the sandbox above re-scopes the chat store (sandboxScope), which
+ * rebuilds the conversation list, so a conversation read on this side of that flush is one that still exists. */
+const enterWorkspace = async (): Promise<void> => {
+    await router.push(`/`);
+    revealConversation(composingConversation());
+};
+
 /* Poll the platform registry for the daemon's boot registration (POST /sandbox/announce writes daemonUrl +
  * lastSeenAt). When lastSeenAt advances past the baseline, a daemon has come up for this sandbox: open the
  * workspace. Same-origin, no DNS resolution of the sandbox hostname.
@@ -962,7 +983,7 @@ const check = async (): Promise<void> => {
             // opening someone's older sandbox at the end of setting up a new one is the same wrong answer
             // arriving one step later.
             sandbox.select(pending.id);
-            await router.push(`/`);
+            await enterWorkspace();
         }
     } catch {
         status.value = `Can't reach the platform to check. Retrying…`;
@@ -1221,7 +1242,7 @@ const connectDomain = async (): Promise<void> => {
         track(`sandbox_connected`, { resuming: resuming.value, attached: true });
         finished.value = true;
         sandbox.select(row.id);
-        await router.push(`/`);
+        await enterWorkspace();
     } catch (err) {
         error.value = noticeFrom(err, `Could not connect your sandbox.`);
     } finally {

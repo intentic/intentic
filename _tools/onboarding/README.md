@@ -50,8 +50,9 @@ seeded credential the platform accepted with a 401 on every call. Nothing is bro
 cannot reach a box that verifies for real. The stand-in Google that signs tokens properly is what unblocks it,
 and `SIGN_IN_IS_SEEDED` in [src/seed.ts](src/seed.ts) is the single line that turns the test on when it lands.
 
-The **Google free channel** (the "Try free with Google" card a new user meets first) needs a real Google
-account inside the box and is not covered by this tier at all. The free agent here is the trial.
+The **Google free channel** (the free sign-in the model picker leads its locked rows with) needs a real Google
+account inside the box and is not covered by this tier at all. The free agent here is the trial, which is what
+a new user actually lands on: no card asks them to sign in to anything before they can type.
 
 ## Conventions & gotchas
 

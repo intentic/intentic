@@ -76,7 +76,7 @@ const newChat = () => {
 
 const { usageStatusByAccount } = await import("./usageStatus");
 const { Conversation } = await import("./conversation");
-const { endpointProviders, trialStatus } = await import("./providerCatalog");
+const { endpointProviders, endpointsLoaded, trialStatus } = await import("./providerCatalog");
 const { turnDefaults } = await import("./turnDefaults");
 
 beforeEach(() => {
@@ -90,6 +90,7 @@ beforeEach(() => {
 afterEach(async () => {
     vi.clearAllMocks();
     endpointProviders.value = [];
+    endpointsLoaded.value = false;
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
     turnDefaults.provider.value = `claude`;
     // Let the reconciliation and tab-snapshot watches settle before the next test clears their stores.
@@ -212,10 +213,14 @@ describe(`useChat provider reconciliation`, () => {
         resetChat();
         const chat = useChat();
 
-        // The account read settles with nothing connected, then the platform's trial capability arrives.
+        /* The account read settles with nothing connected, then the platform's trial capability arrives. Both
+         * halves are declared because the repoint pass waits for both (access.accessKnown): the endpoint read is
+         * the slower one, and acting on the account read alone is what used to move a chat off the user's pick a
+         * beat before the trial landed. `resetChat` above cleared it, as a sandbox switch does. */
         mockConnections();
         await refreshConnections(true);
         endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
+        endpointsLoaded.value = true;
         trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
         await nextTick();
         expect(chat.provider.value).toBe(TRIAL_PROVIDER);

@@ -1,36 +1,51 @@
 // @vitest-environment jsdom
 //
-// WHEN THE GATE ABOVE THE COMPOSER IS THERE AT ALL: what the card SAYS is ConnectOffer's own test. Three
-// states decide it and each one has a way of going wrong that a user notices immediately: claiming "nothing is
-// connected" before the daemon has answered puts a pitch in front of somebody with a perfectly good
-// subscription, and NOT standing down for the empty board puts the same offer on screen twice, a hand's width
-// apart, where it reads as two different offers.
+/* THE STRIP ABOVE THE COMPOSER WHEN THIS CHAT HAS NOTHING TO SEND WITH, and the three states that decide what
+ * it says. Each has a way of going wrong that a user notices immediately.
+ *
+ * It used to be a PITCH: a card headlined "Try free with Google" with the four subscriptions under it, shown
+ * here and, at twice the size, in the middle of the empty agents board. So a brand-new user's first screen was
+ * a sign-in wall, right after they had signed in with Google. That is what these tests hold shut: the strip
+ * names what this chat is pointed at and opens the model list, and it pitches nothing.
+ *
+ * And it does not speak too early. "You have nothing connected" is TWO reads, the accounts and the endpoints,
+ * and the endpoints land later. Voting on the accounts alone is what painted a wall over a free trial that was
+ * already on its way. */
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
-// The kit's barrel reaches for matchMedia at import time (its device tracker), which jsdom does not have.
-// matches:false keeps the device DESKTOP: the one form factor where the board and this gate share a screen.
-
 const connected = ref(false);
 const accountsLoaded = ref(true);
-// The panel's three homes collapse to one question here: is the chat on a WIDE surface (its own pop-out window
-// or the /chat area filling this one), where there is no board beside it to be making the offer already?
-const chatWide = ref(false);
-const nativeConnectFlow = ref<undefined>(undefined);
+const endpointsLoaded = ref(true);
+const nativeConnectFlow = ref<{ provider: AgentProvider; url: string; code: string } | undefined>(undefined);
 const translatorConnectFlow = ref<undefined>(undefined);
+const provider = ref<AgentProvider>(`claude`);
+const selectModel = vi.fn();
+const startConnect = vi.fn();
+const connectTranslator = vi.fn();
+
+// The two reads the panel's "is this settled" question is made of, mocked where they live so `accessKnown`
+// itself is the real computed under test.
+vi.mock(`../composables/chat/providerAccounts`, async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    accountsLoaded,
+}));
+vi.mock(`../composables/chat/providerCatalog`, async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    endpointsLoaded,
+}));
 
 // The pane's view, which the real panel injects from its ChatPane: mounted bare here, so it is handed over.
 // The connect surface underneath it reads the live handshake off the same store, so the flows come along.
 vi.mock(`../composables/chat/useChat`, () => ({
     useChat: () => ({
-        accountsLoaded,
         nativeConnectFlow,
         translatorConnectFlow,
-        startConnect: () => {},
-        connectTranslator: () => {},
+        startConnect,
+        connectTranslator,
         setManagedProvider: () => {},
-        cancelConnect: () => {},
+        cancelConnect: () => (nativeConnectFlow.value = undefined),
         cancelTranslatorConnect: () => {},
         accountBusy: ref(undefined),
         translatorKey: (target: string) => `translator:${target}`,
@@ -40,20 +55,21 @@ vi.mock(`../composables/chat/useChat`, () => ({
     }),
     usePaneView: () => ({
         connected,
-        provider: ref<AgentProvider>(`claude`),
+        provider,
         harness: ref(`claude-code`),
-        selectProvider: () => {},
+        model: ref(`claude-opus-4-6`),
+        selectModel,
+        selectHarness: () => {},
+        selectAccount: () => {},
     }),
 }));
-vi.mock(`../composables/chat/chatSurface`, () => ({ chatWide }));
-// The card's way out to the accounts page is a link, so the mock carries a router-free stand-in for it.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRouter: () => ({ push: vi.fn() }) as never,
     RouterLink: (await import(`../testing/routerLinkStub`)).RouterLinkStub as never,
 }));
 
-const { offerOnBoard } = await import("../composables/chat/connectOffer");
+const { modelRequest, settleModelPick } = await import("../composables/chat/hostModelPicker");
 const { default: ChatAccountPanel } = await import("./ChatAccountPanel.vue");
 
 let app: App | undefined;
@@ -73,11 +89,19 @@ const mount = (): HTMLElement => {
     return element;
 };
 
+const buttonNamed = (element: HTMLElement, label: string): HTMLButtonElement | undefined =>
+    [...element.querySelectorAll(`button`)].find((button) => button.textContent?.includes(label));
+
 beforeEach(() => {
     connected.value = false;
     accountsLoaded.value = true;
-    chatWide.value = false;
-    offerOnBoard.value = false;
+    endpointsLoaded.value = true;
+    provider.value = `claude`;
+    nativeConnectFlow.value = undefined;
+    selectModel.mockClear();
+    startConnect.mockClear();
+    connectTranslator.mockClear();
+    settleModelPick(undefined);
 });
 
 afterEach(() => {
@@ -86,66 +110,92 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`offers the way in when this chat has nothing to send with`, () => {
+it(`names what this chat is pointed at, and pitches nothing`, () => {
     const element = mount();
 
-    expect(element.textContent).toContain(`Try free with Google`);
+    expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
+    // The pitch that used to live here, in the words a new user actually read.
+    expect(element.textContent).not.toContain(`Try free with Google`);
+    expect(buttonNamed(element, `Continue with Google`)).toBeUndefined();
+    // What is offered instead: the list, plus this provider's own sign-in for whoever pointed the chat here.
+    expect(buttonNamed(element, `Choose a model`)).toBeDefined();
+    expect(buttonNamed(element, `Connect Claude subscription`)).toBeDefined();
 });
 
-it(`says nothing about connections until the daemon has answered`, async () => {
+/* THE GAP THAT PUT A WALL IN FRONT OF EVERY NEW USER. The account reads come back off the daemon in one hop;
+ * the endpoints take a capability read, a catalog fetch each and a round-trip to the platform. In between, a
+ * fresh sandbox looks exactly like a sandbox with nothing in it, and the free trial is one of those endpoints. */
+it(`says nothing about connections until BOTH halves of the picture have landed`, async () => {
     accountsLoaded.value = false;
+    endpointsLoaded.value = false;
     const element = mount();
 
-    // One quiet line, no pitch and no button to press on a question that isn't settled.
     expect(element.textContent).toContain(`Checking your AI accounts…`);
-    expect(element.textContent).not.toContain(`Try free with Google`);
+    expect(element.textContent).not.toContain(`isn't connected`);
 
+    // The accounts land first, as they do in the app. This is the moment the old gate spoke; this one waits.
     accountsLoaded.value = true;
     await nextTick();
-    expect(element.textContent).toContain(`Try free with Google`);
+    expect(element.textContent).toContain(`Checking your AI accounts…`);
+    expect(element.textContent).not.toContain(`isn't connected`);
+
+    endpointsLoaded.value = true;
+    await nextTick();
+    expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
 });
 
-it(`stands down while the empty board is making the same offer, without going silent`, async () => {
-    offerOnBoard.value = true;
+// The list is where every free option lives, so reaching it is this strip's main job. It opens the SHELL's
+// picker, anchored to its own button: the composer is not rendered while this strip is up, so the model pill a
+// composer-side picker would hang off does not exist.
+it(`opens the model list, anchored to its own button`, async () => {
     const element = mount();
 
-    // The board owns the whole empty screen this gate would sit against, so it takes the ARGUMENT: the pitch,
-    // the button, and the wait in front of them, or the two columns would spin at each other.
-    expect(element.textContent).not.toContain(`Try free with Google`);
-    // But standing down is not the same as saying nothing, and it used to be: the composer below this is behind
-    // the same `connected`, so an empty line here left the bottom half of a brand-new sandbox's chat as blank
-    // space with no word anywhere in the column about what it was waiting for.
-    expect(element.textContent).toContain(`Waiting on an AI account`);
-
-    accountsLoaded.value = false;
+    const press = buttonNamed(element, `Choose a model`)!;
+    press.click();
     await nextTick();
-    // "Nothing is connected" is a claim, and an unanswered one is not this column's to make either way.
-    expect(element.textContent).toBe(``);
 
-    offerOnBoard.value = false;
-    accountsLoaded.value = true;
+    expect(modelRequest.value?.anchor).toBe(press);
+    expect(modelRequest.value?.provider).toBe(`claude`);
+
+    // A picked row is applied to THIS pane's conversation, so choosing here is choosing from the composer.
+    settleModelPick({ provider: `gemini`, model: `gemini-3-pro`, label: `Gemini 3 Pro` });
     await nextTick();
-    expect(element.textContent).toContain(`Try free with Google`);
+    expect(selectModel).toHaveBeenCalledWith({ provider: `gemini`, value: `gemini-3-pro` });
 });
 
-it(`keeps its own offer on a wide surface, where there is no board beside it`, async () => {
-    offerOnBoard.value = true;
-    // Either of the panel's two wide homes: its own pop-out window, or the /chat area filling this one. Both
-    // leave the board with nothing on screen to be duplicating, so the gate has to carry the offer itself.
-    chatWide.value = true;
+// Picking a locked model points the chat at it, so the sign-in has to be finishable from the chat it was
+// started for. It takes the whole strip: a line reading "not connected" over a live sign-in argues with itself.
+it(`runs the sign-in in place, and puts the line back when it is abandoned`, async () => {
     const element = mount();
 
-    expect(element.textContent).toContain(`Try free with Google`);
-    // Docked again, and the board it is now beside is the one making the offer.
-    chatWide.value = false;
+    buttonNamed(element, `Connect Claude subscription`)!.click();
+    expect(startConnect).toHaveBeenCalled();
+
+    nativeConnectFlow.value = { provider: `claude`, url: `https://claude.ai/oauth`, code: `` };
     await nextTick();
-    expect(element.textContent).not.toContain(`Try free with Google`);
-    expect(element.textContent).toContain(`Waiting on an AI account`);
+    expect(element.textContent).toContain(`Connecting Claude`);
+    expect(element.textContent).not.toContain(`isn't connected`);
+
+    buttonNamed(element, `Cancel`)!.click();
+    await nextTick();
+    expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
+});
+
+// Google authenticates through the bundled translator rather than a daemon-stored account: the same split the
+// daemon makes, so the one press starts the right handshake.
+it(`starts the routed handshake for a provider that authenticates through the translator`, () => {
+    provider.value = `gemini`;
+    const element = mount();
+
+    expect(element.textContent).toContain(`Google isn't connected in this sandbox`);
+    buttonNamed(element, `Connect Google sign-in`)!.click();
+    expect(connectTranslator).toHaveBeenCalledWith(`gemini`);
+    expect(startConnect).not.toHaveBeenCalled();
 });
 
 it(`goes on its own the moment this chat can send`, async () => {
     const element = mount();
-    expect(element.textContent).toContain(`Try free with Google`);
+    expect(element.textContent).toContain(`isn't connected`);
 
     connected.value = true;
     await nextTick();

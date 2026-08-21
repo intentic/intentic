@@ -117,6 +117,17 @@ export const trialStatus = ref<{
 // come from the endpoint's own server, so they land in providerModels like every other provider's.
 export const endpointProviders = ref<readonly { id: string; label: string }[]>([]);
 
+/* Whether the CAPABILITY half of the picture has been read: which endpoints exist, and, for the trial, how much
+ * of today's allowance is left. `accountsLoaded` is the same flag for the other half, and the two are not one
+ * because they land on different reads, at very different speeds.
+ *
+ * That gap is what put a sign-in wall in front of every new user. The account reads come back off the daemon
+ * quickly and flip `accountsLoaded`; the trial takes a capability read, a per-endpoint catalog fetch and a
+ * round-trip to the platform. In between, "you have connected nothing" was allowed to be true, and the first
+ * screen of the product painted a Google pitch over a free channel that was already on its way. A claim that
+ * has to be retracted a second later is worse than a spinner, so both halves vote (see accessKnown). */
+export const endpointsLoaded = ref(false);
+
 // The display label for any provider: a capability-derived provider's own name when known (an ACP agent's
 // configured display name, an endpoint's capability id), else the shared static label, which itself falls back
 // to the raw id.

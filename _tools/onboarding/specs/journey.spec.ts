@@ -99,8 +99,9 @@ test(`the free agent answers`, async ({ page }) => {
     await expect(page.getByText(/Connecting to/i)).toHaveCount(0, { timeout: 180_000 });
 
     /* The trial is the free channel this tier walks (the world switches it on and points it at the stand-in
-     * model). The Google free channel, the "Try free with Google" card a new user meets first, needs a real
-     * Google account inside the box and is deliberately not covered here. */
+     * model), and it is what a new user lands on: nothing asks them to sign in to anything first. The Google
+     * free channel, which the model picker leads its locked rows with, needs a real Google account inside the
+     * box and is deliberately not covered here. */
     await page.goto(`${world.webUrl ?? ``}/agents`);
     const composer = page.locator(`textarea[name="draft"]`);
     // The composer only renders once something is connected, so waiting for it IS the assertion that the

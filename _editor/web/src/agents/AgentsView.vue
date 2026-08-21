@@ -20,7 +20,6 @@ import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedi
 import { relativeTime } from "../composables/chat/catalog";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { chatWide } from "../composables/chat/chatSurface";
-import { offerOnBoard } from "../composables/chat/connectOffer";
 import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { summonChat } from "../composables/chat/summon";
@@ -28,7 +27,6 @@ import { agentTabOf, useChat } from "../composables/chat/useChat";
 import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import MatchLine from "../components/MatchLine.vue";
-import ConnectOffer from "../chat/ConnectOffer.vue";
 import { BUILD_IDEAS, buildPrompt } from "./buildIdeas";
 import AgentCard from "./AgentCard.vue";
 import HeldWakeCard from "./HeldWakeCard.vue";
@@ -679,21 +677,25 @@ const noMatches = computed(() => filtering.value && !archiveOpen.value && kept.v
 const clearable = computed(() => lanes.value.finished.length);
 
 /* --- The first run --------------------------------------------------------------------------------------
- * A BARE BOARD IS THE ONE SCREEN THAT HAS TO TEACH. Mobile lands here (router/index.ts), and on desktop it is
- * the first thing anyone curious about what "agents" are presses, so what stands here is a first impression.
+ * A BARE BOARD IS THE ONE SCREEN THAT HAS TO TEACH, and on desktop it is the first thing anyone curious about
+ * what "agents" are presses, so what stands here is a first impression.
  *
  * IT ASKS FOR A TASK, IT IS NOT A PLACE TO TYPE ONE. There was a composer in the middle of this screen: its
  * own box, its own send, and it was wrong twice over. There is exactly one composer in this product and it is
  * the chat: docked on the right, or floating in its own window. A second one an inch from the first, in a
- * column that is otherwise a board, teaches a shape the app does not have. And on the screen it was built for
- * it could not even send: a brand-new sandbox has no AI account connected yet, so the first thing the first
- * user ever met was a box that swallows a sentence and a button that goes nowhere.
+ * column that is otherwise a board, teaches a shape the app does not have.
  *
- * So this screen answers the question the user is actually at: what do I need before an agent can run. With
- * nothing connected it IS the connect offer: the same card the chat's own gate shows (ConnectOffer), taken
- * over from it while this stands (connectOffer.ts), because two copies of one offer side by side read as two
- * different offers. Once something can send, it goes back to asking for the task, and the suggestions write
- * themselves into the real composer one column over.
+ * AND IT NO LONGER ASKS ANYONE TO SIGN IN. This screen used to become the connect offer whenever nothing could
+ * send: a Google sign-in card, full width, in the middle of the board, with a row of subscriptions under it. It
+ * was the first thing a brand-new user saw after signing in WITH GOOGLE, and it read as either a failed sign-in
+ * or a product that needs a subscription, which is false on both counts. It was also frequently a lie about the
+ * moment: the account reads land before the endpoint reads, so the wall was painted in the gap before the free
+ * trial arrived (see access.accessKnown, which closed that gap).
+ *
+ * So the first screen asks for a task, always, and what a chat can send with is answered where the choice is
+ * made: the model picker's own rows, with the free channel leading them, and one strip above the composer for
+ * the sandbox that genuinely has nothing (ChatAccountPanel). This board makes no claim about accounts at all,
+ * which is why it needs no spinner while they load.
  *
  * A chip FILLS that composer, it does not send: it leaves the text there to be edited, which is the point of
  * suggesting it rather than doing it.
@@ -740,29 +742,6 @@ const starters = computed<readonly { readonly label: string; readonly prompt: st
         },
     ];
 });
-/* WHETHER THIS SCREEN IS THE ONE ANSWERING "what can this chat send with", which is what the chat's own gate
- * stands down for. It covers the WAIT as well as the offer: "you have nothing connected" is a claim, and until
- * the daemon has answered neither surface may make it (accountsLoaded, below), but two "Checking your AI
- * accounts…" lines a hand's width apart are the same duplication as two offers, so the board takes both halves.
- *
- * Held while that screen is up and dropped the moment it isn't: this route left, something connected, an agent
- * started, so the docked gate comes back on its own without anything having to remember to hand it back. */
-const offering = computed(() => !started.value && !archiveOpen.value && !connected.value);
-/* THE SAME OFFER, DEMOTED, the state this screen is in when the platform serves a free trial: the chat one
- * column over can already send, so the offer is no longer the only thing that can happen here and must not be
- * drawn as if it were. It goes below the starters, at the size the docked panel uses.
- *
- * It does not go AWAY, and that is the point of keeping it: the trial is a metered courtesy that runs through
- * intentic's servers, and the free Google sign-in is the rung above it: no daily cap, still no subscription.
- * A screen that hid it until the allowance ran out would be hiding the better deal.
- *
- * `isTrialProvider` rather than a count of connected accounts, because the repoint pass (useChat) prefers a
- * real account over the trial in every case: a chat sitting ON the trial is exactly a chat with nothing else
- * to run. Once the allowance is spent the trial stops being ready, `connected` drops, and `offering` above
- * takes the screen back, which is how the card comes forward at the moment it becomes the only way on. */
-const trialOnly = computed(() => !started.value && !archiveOpen.value && connected.value && isTrialProvider(chat.provider.value));
-watch(offering, (on) => (offerOnBoard.value = on), { immediate: true });
-onUnmounted(() => (offerOnBoard.value = false));
 // Card click FOCUSES, it does not navigate: on desktop it only points the chat surface, this window's docked
 // panel and, through the summons channel, every other window's, the floating chat included: at this agent
 // and highlights the card. Cheap and reversible, so the user can click down a lane to skim. The view-change to
@@ -1104,9 +1083,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         <!-- Nothing on the board AND nothing archived is the only true empty state. With an archive behind it,
              the same screen would otherwise be a dead end: every agent the user ever ran, and no door to it. -->
         <div v-if="(!started || total === 0) && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
-            <!-- THE FIRST RUN. One heading and one sentence, whichever half of the screen follows them: what
-                 comes next depends on a daemon read that lands a beat later, and a title that rewrote itself
-                 mid-glance would make the first screen of the product look unsure of itself. -->
+            <!-- THE FIRST RUN. One heading and one sentence, and nothing under them waits on a daemon read any
+                 more: this screen used to swap its whole lower half once the accounts came back, which is how it
+                 came to flash a sign-in wall at everybody who had just signed up. It says the same thing from
+                 the first frame now. -->
             <template v-if="!started">
                 <div class="flex w-full max-w-xl flex-col gap-2">
                     <h2 class="text-sm font-semibold text-content">Start your first agent</h2>
@@ -1124,44 +1104,23 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     reviewable on its own branch.
                 </p>
             </template>
-            <template v-if="!started">
-                <!-- THE WAY IN, on the screen that asks for a first agent: the chat's own card, in the middle
-                     of the board rather than tucked into a side panel, because until it is answered nothing
-                     else on this screen can happen. The chat drops its copy while this stands: the wait in
-                     front of it included, which is why the spinner is inside this branch and not beside it. -->
-                <!-- `prominent`, and wider than the card it used to be: on this screen the offer is not one
-                     thing among several, it is the only thing that can happen, and it was drawn as the
-                     smallest: a `small` button on a 24rem card. The sign-in also runs inside this card now
-                     rather than pushing the router at the settings tab, so it has a flow's worth of room to
-                     grow into. -->
-                <div v-if="offering" class="w-full max-w-md rounded-xl border border-line bg-card px-5 py-6">
-                    <p v-if="!accountsLoaded" class="flex items-center justify-center gap-2 text-xs text-muted">
-                        <Icon name="spinner" spin />Checking your AI accounts…
-                    </p>
-                    <ConnectOffer v-else :view="chat" prominent />
-                </div>
-                <!-- Tasks worth pressing, read off what is actually in the workspace (see `starters`). They fill
-                     the chat's composer rather than dispatching, so the user sends their own first turn. An
-                     empty workspace has none, and the row goes with them rather than leaving its gap behind. -->
-                <div v-else-if="starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
-                    <button
-                        v-for="starter in starters"
-                        :key="starter.label"
-                        type="button"
-                        class="rounded-full border border-line px-2.5 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
-                        @click="composeAgent(starter.prompt)"
-                    >
-                        {{ starter.label }}
-                    </button>
-                </div>
-                <!-- Running on the free trial: the chat beside this one works, so the way in is no longer the
-                     screen: it is a footnote under it, at the docked panel's own size. Not `prominent`, and
-                     deliberately below the starters: the first thing a user should do here is type, and the
-                     better deal is the second. -->
-                <div v-if="trialOnly" class="w-full max-w-sm rounded-xl border border-line bg-card/60 px-4 py-4">
-                    <ConnectOffer :view="chat" />
-                </div>
-            </template>
+            <!-- Tasks worth pressing, read off what is actually in the workspace (see `starters`). They fill
+                 the chat's composer rather than dispatching, so the user sends their own first turn. An empty
+                 workspace has none, and the row goes with them rather than leaving its gap behind.
+                 UNCONDITIONAL NOW, where a sign-in card used to take this slot whenever nothing could send. A
+                 first screen that asks a question the user can answer beats one that asks them to go and buy
+                 something, and what a chat can send with is answered where the model is chosen. -->
+            <div v-if="!started && starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
+                <button
+                    v-for="starter in starters"
+                    :key="starter.label"
+                    type="button"
+                    class="rounded-full border border-line px-2.5 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
+                    @click="composeAgent(starter.prompt)"
+                >
+                    {{ starter.label }}
+                </button>
+            </div>
             <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too: it is
                  the only archive affordance left on screen once the board is bare. -->
             <button

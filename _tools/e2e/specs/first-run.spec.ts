@@ -18,25 +18,30 @@ test(`the first landing is the workspace`, async ({ page }) => {
     await expect(page).toHaveURL(/\/workspace$/);
 });
 
-test(`the agent board offers the way in rather than a box it cannot send from`, async ({ page }) => {
+test(`the agent board asks for a task rather than for a sign-in`, async ({ page }) => {
     await page.goto(`/agents`);
 
     await expect(page.getByRole(`heading`, { name: `Start your first agent` })).toBeVisible();
 
-    /* NOTHING IS CONNECTED ON A FRESH SANDBOX, so the first screen is the way in rather than a task box that
-     * could not send. It is the chat's own card (ConnectOffer), and it stands in the middle of the board, the
-     * free channel as the headline, the subscriptions as a quiet row under it. */
-    await expect(page.getByText(`Try free with Google`)).toBeVisible();
-    await expect(page.getByRole(`button`, { name: /Continue with Google/ })).toBeVisible();
-    await expect(page.getByRole(`button`, { name: /Claude — Connect Claude subscription/ })).toBeVisible();
+    /* NOTHING IS CONNECTED ON A FRESH SANDBOX, and this screen used to answer that with a sign-in card: "Try
+     * free with Google" as a headline, a Continue button, and the paid subscriptions as a row under it, filling
+     * the middle of the board. It was the first thing a new user saw after signing in WITH GOOGLE, so it read
+     * as a failed sign-in or as a product needing a subscription, and neither is true. */
+    await expect(page.getByText(`Try free with Google`)).toHaveCount(0);
+    await expect(page.getByRole(`button`, { name: /Continue with Google/ })).toHaveCount(0);
+
+    // What stands here instead: tasks to press. This world has no repositories, so it is the build ladder.
+    await expect(page.getByRole(`button`, { name: `A page for my business` })).toBeVisible();
 
     // THE ONE COMPOSER IN THIS PRODUCT IS THE CHAT'S. The board used to carry a second one here.
     await expect(page.getByRole(`textbox`, { name: `What should the first agent do?` })).toHaveCount(0);
     await expect(page.getByRole(`button`, { name: `Start agent` })).toHaveCount(0);
 
-    // And the docked chat drops its copy of the same card while the board is making the offer, one offer on
-    // screen, not two a hand's width apart.
-    await expect(page.getByText(`Try free with Google`)).toHaveCount(1);
+    /* And what a chat can send with is said once, in the chat, as one line with the model list behind it: the
+     * offer now lives where the choice is made (the picker leads its locked rows with the free Google sign-in)
+     * rather than in front of everybody who signs up. */
+    await expect(page.getByText(`Claude isn't connected in this sandbox`)).toBeVisible();
+    await expect(page.getByRole(`button`, { name: `Choose a model` })).toBeVisible();
 });
 
 test(`an empty workspace offers every way of getting code in, repository first`, async ({ page }) => {

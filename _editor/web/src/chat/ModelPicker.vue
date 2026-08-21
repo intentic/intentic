@@ -482,6 +482,24 @@ onMounted(() => {
                         Search all providers
                     </button>
                 </div>
+                <!-- THE DOOR TO EVERYTHING THIS LIST CAN ONLY BADGE: a second account on a provider, an account
+                     to drop, the mechanics behind each sign-in. It sits at the foot of the list because that is
+                     where a reader ends up who has read every row and found nothing they can run: this panel is
+                     now the only place the app makes that offer, so it must carry the way out of it as well as
+                     the way in. It came from the connect card that used to greet every new user; the pitch went,
+                     this line stayed.
+                     A place, so a real link: hovering shows where it goes and Ctrl/⌘-click sets it up in another
+                     tab while the picker stays where it is (closeOnPlainClick). Hidden while searching, where the
+                     list is a flat result set and a standing footer reads as a result. -->
+                <RouterLink
+                    v-if="!searching"
+                    to="/sandbox/agent"
+                    class="ui-row-select flex w-full items-center gap-2 border-t border-line px-3 py-2 text-2xs text-subtle hover:text-content max-md:min-h-11"
+                    @click="closeOnPlainClick"
+                >
+                    <Icon name="key" class="shrink-0 text-2xs" aria-hidden="true" />
+                    <span>All AI accounts</span>
+                </RouterLink>
             </div>
         </div>
 

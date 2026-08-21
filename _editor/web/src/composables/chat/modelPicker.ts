@@ -1,4 +1,4 @@
-import { type AgentProvider, type ModelBadge, PROVIDERS, compareModelIds, familyOf, providerLabel } from "@intentic/sandbox-contract";
+import { ACCESS_COST, type AgentProvider, type ModelBadge, PROVIDERS, accessFor, compareModelIds, familyOf, providerLabel } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor } from "./providerCatalog";
 
@@ -197,13 +197,27 @@ export const pickerBlocks = (groups: readonly FamilyGroup[], selected: string | 
     return [{ key: `latest`, entries: pinned === undefined ? latest : [...latest, pinned] }];
 };
 
+/* WHAT A LOCKED PROVIDER COSTS, as a sort key. `free` before `subscription` before `key` (ACCESS_COST, the
+ * contract's own ordering), and everything the table says nothing about last: an ACP agent and a model endpoint
+ * carry their own credentials, so they are never in the locked band to begin with.
+ *
+ * This is the whole of the free channel's promotion, and it replaced a card. The free Google sign-in used to be
+ * pitched by a headline and a button on the first screen anyone saw after signing up, which read as a wall; and
+ * in this list, where the choice is actually made, it sat LAST of five locked rows purely because `gemini` comes
+ * last in PROVIDERS. Now the cheapest way in leads the band it belongs to, under the badge accessBadge already
+ * derives from the same table. A channel that stops being free stops leading, from one edit to PROVIDER_ACCESS. */
+const accessRank = (provider: AgentProvider): number => {
+    const access = accessFor(provider);
+    return access === undefined ? Object.keys(ACCESS_COST).length : ACCESS_COST[access.kind];
+};
+
 // Browse-mode grouping: one section per provider (respecting the rail filter), the active provider hoisted
 // first, the models pickable without a session restart sit nearest, then every CONNECTED provider, then the
-// ones that still need a credential, each band in stable PROVIDERS order. Sorting on `isReady` is what stops the
-// list from opening on models the user cannot send to: every provider's catalog is non-empty by construction
-// (the daemon serves a seed floor), so without it an unconnected Kimi outranks a connected Claude purely by
-// sitting earlier in PROVIDERS. Empty sections are kept: the component renders their loading/error/empty state
-// row under the header.
+// ones that still need a credential, cheapest first. Sorting on `isReady` is what stops the list from opening on
+// models the user cannot send to: every provider's catalog is non-empty by construction (the daemon serves a
+// seed floor), so without it an unconnected Kimi outranks a connected Claude purely by sitting earlier in
+// PROVIDERS. Empty sections are kept: the component renders their loading/error/empty state row under the
+// header.
 export const pickerSections = (
     entries: readonly PickerEntry[],
     activeProvider: AgentProvider,
@@ -215,9 +229,18 @@ export const pickerSections = (
         ...endpointProviders.value.map((endpoint) => endpoint.id),
         ...acpProviders.value.map((agent) => agent.id),
     ].filter((provider) => rail === undefined || provider === rail);
-    // The active provider leads whether or not it is connected, it is the one the composer will send on, so
-    // burying it under the connected band would hide the selection the user is actually sitting on.
-    const rest = providers.filter((provider) => provider !== activeProvider).toSorted((a, b) => Number(isReady(b)) - Number(isReady(a)));
+    /* The active provider leads whether or not it is connected, it is the one the composer will send on, so
+     * burying it under the connected band would hide the selection the user is actually sitting on.
+     *
+     * Then: connected first, and WITHIN the locked band, cheapest first. The cost only ever separates locked
+     * rows, a connected provider costs the user nothing to pick whatever its badge would have said, so ranking
+     * the connected band by price would reorder working providers for no reason a reader could see. */
+    const rest = providers
+        .filter((provider) => provider !== activeProvider)
+        .toSorted((a, b) => {
+            const ready = Number(isReady(b)) - Number(isReady(a));
+            return ready !== 0 || isReady(a) ? ready : accessRank(a) - accessRank(b);
+        });
     const order = providers.includes(activeProvider) ? [activeProvider, ...rest] : rest;
     return order.map((provider) => {
         const owned = entries.filter((entry) => entry.provider === provider);

@@ -2,17 +2,16 @@
 //
 // THE EMPTY BOARD, MOUNTED. Out of setup the desktop lands on the workspace, and this board is the first
 // screen most new users deliberately open, and on a box with nothing on it the things that make it work are
-// easy to break silently: that it offers the way in rather than a composer it cannot send from, that the
-// docked chat then drops its copy of that offer, that an empty workspace is offered the one task needing no
-// code and none of the ones that need some, and that a starter fills the chat's composer rather than
-// dispatching an agent. All are asserted against the real component.
+// easy to break silently: that it asks for a task rather than for a sign-in, whatever this sandbox can send
+// with, that an empty workspace is offered the one task needing no code and none of the ones that need some,
+// and that a starter fills the chat's composer rather than dispatching an agent. All are asserted against the
+// real component.
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
-import { offerOnBoard } from "../composables/chat/connectOffer";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../composables/chat/providerAccounts";
-import { endpointProviders, trialStatus } from "../composables/chat/providerCatalog";
+import { endpointProviders, endpointsLoaded, trialStatus } from "../composables/chat/providerCatalog";
 import { useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
 import { PANELS } from "../composables/queryKeys";
@@ -43,6 +42,7 @@ afterEach(() => {
 // account, and no free trial either, which is what most platforms serve (it is off unless an operator sets keys).
 beforeEach(() => {
     accountsLoaded.value = true;
+    endpointsLoaded.value = true;
     providerAccounts.value = { ...providerAccounts.value, claude: [], grok: [] };
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
     endpointProviders.value = [];
@@ -65,35 +65,42 @@ const mount = (component: unknown): HTMLElement => {
 const starterNamed = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label);
 
-it(`offers the way in rather than a box it cannot send from, and the docked chat stands down`, async () => {
+/* NO SIGN-IN WALL, EVER, which is what this screen used to be whenever nothing could send: a "Try free with
+ * Google" card, full width, in the middle of the board, with a row of subscriptions under it. It was the first
+ * thing a new user saw after signing in WITH GOOGLE, so it read as a failed sign-in or as a product that needs
+ * a subscription, and it was frequently a wall over nothing besides (see the trial's own case below).
+ *
+ * This mount is the harshest version of that state: the reads have landed, and the answer is genuinely
+ * "nothing", no account and no trial either. The board still asks for a task. */
+it(`asks for a task rather than for a sign-in, even with nothing connected`, async () => {
     const board = mount(AgentsView);
     await nextTick();
 
-    // The free channel, in the middle of the board: the same card the chat's gate shows (ConnectOffer).
-    expect(board.textContent).toContain(`Try free with Google`);
-    expect([...board.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Continue with Google`))).toBe(true);
-    // And the subscriptions under it, for a user who already pays for one.
-    expect(starterNamed(board, `Claude`)).toBeDefined();
+    expect(board.textContent).toContain(`Start your first agent`);
+    expect(board.textContent).not.toContain(`Try free with Google`);
+    expect([...board.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Continue with Google`))).toBe(false);
+    // Nor the subscription row that came with it: what a chat can send with is answered in the model picker.
+    expect(starterNamed(board, `Claude`)).toBeUndefined();
+    // And something to press: the build ladder, since this mount has no repositories.
+    expect(starterNamed(board, BUILD_IDEAS[0]!.label)).toBeDefined();
 
     // THE COMPOSER IS GONE. There is one composer in this product and it is the chat's; a second one here could
     // not even send, because a fresh sandbox has nothing connected yet.
     expect(board.querySelector(`textarea`)).toBeNull();
     expect([...board.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Start agent`))).toBe(false);
-
-    // The claim the docked gate reads, so the same offer is never argued twice on one screen.
-    expect(offerOnBoard.value).toBe(true);
 });
 
-it(`waits for the daemon before claiming nothing is connected`, async () => {
+// This board makes no claim about accounts at all now, so it needs no wait in front of one: an unanswered
+// daemon is the chat's business (ChatAccountPanel), and a spinner here would be a second copy of it.
+it(`says nothing about accounts while the daemon is still being read`, async () => {
     accountsLoaded.value = false;
+    endpointsLoaded.value = false;
     const board = mount(AgentsView);
     await nextTick();
 
-    // "You have nothing connected" is a claim, and until the read lands it is one this screen may not make:
-    // but the wait belongs to it too, or the chat would spin beside it saying the same thing.
-    expect(board.textContent).toContain(`Checking your AI accounts…`);
+    expect(board.textContent).toContain(`Start your first agent`);
+    expect(board.textContent).not.toContain(`Checking your AI accounts…`);
     expect(board.textContent).not.toContain(`Try free with Google`);
-    expect(offerOnBoard.value).toBe(true);
 });
 
 /* AN EMPTY WORKSPACE OFFERS THE ONE TASK THAT NEEDS NO CODE, and nothing that needs some. The distinction is
@@ -108,8 +115,6 @@ it(`offers building on an empty workspace, and nothing that points at code which
     const board = mount(AgentsView);
     await nextTick();
 
-    expect(board.textContent).not.toContain(`Try free with Google`);
-    expect(offerOnBoard.value).toBe(false);
     expect(board.textContent).toContain(`Start your first agent`);
 
     // No repos and no changes in this mount, so every code-pointing suggestion is absent.
@@ -159,14 +164,10 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     expect(board.textContent).toContain(`Start your first agent`);
 });
 
-/* THE PLATFORM SERVES A FREE TRIAL, which is the case this whole screen used to get wrong: the product could
- * already answer a question with nothing connected, and the first thing it showed anybody was a wall of
- * sign-ins. A user who has just finished setup should be able to type.
- *
- * What the trial changes here is which of the two shapes this screen takes, so both halves are asserted: the
- * offer stops being the screen (the chat one column over has a live composer, so the board goes back to asking
- * for a task and hands the gate back), and it does NOT leave the screen: the free Google sign-in is the rung
- * above the trial, with no daily cap, and hiding it until the allowance ran out would hide the better deal. */
+/* THE PLATFORM SERVES A FREE TRIAL, which is what a new user on the hosted product actually gets, and the
+ * reason the wall this screen used to raise was wrong even when it was raised: the product can answer a
+ * question before anything is connected at all. What is pinned is the whole point of the trial: the chat lands
+ * ON it, so there is something to send with the moment setup finishes. */
 it(`chats on the free trial rather than demanding a sign-in first`, async () => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
     trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
@@ -178,16 +179,13 @@ it(`chats on the free trial rather than demanding a sign-in first`, async () => 
 
     expect(useChat().active.value.provider.value).toBe(TRIAL_PROVIDER);
     expect(useChat().connected.value).toBe(true);
-    // The board asks for the task, and gives the docked chat its gate back.
     expect(board.textContent).toContain(`Start your first agent`);
-    expect(offerOnBoard.value).toBe(false);
-    // Demoted, not gone.
-    expect(board.textContent).toContain(`Try free with Google`);
+    expect(board.textContent).not.toContain(`Try free with Google`);
 });
 
-// And the moment the allowance is spent the trial stops being a way to send, so the offer takes the screen
-// back: the one press that removes the daily cap, at the moment it becomes the only way on.
-it(`hands the screen back to the offer once the trial is used up`, async () => {
+// A SPENT ALLOWANCE IS STILL NOT A WALL. The chat can no longer send, and that is the chat's own strip to say;
+// this screen keeps asking for a task, because the way out of it is a model choice and not a press on this board.
+it(`keeps asking for a task once the trial is used up`, async () => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
     trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0, health: `healthy` };
     await nextTick();
@@ -196,6 +194,6 @@ it(`hands the screen back to the offer once the trial is used up`, async () => {
     await nextTick();
 
     expect(useChat().connected.value).toBe(false);
-    expect(offerOnBoard.value).toBe(true);
-    expect([...board.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Continue with Google`))).toBe(true);
+    expect(board.textContent).toContain(`Start your first agent`);
+    expect([...board.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Continue with Google`))).toBe(false);
 });

@@ -17,16 +17,17 @@ import ProviderLogo from "../../chat/ProviderLogo.vue";
  * read-only; a redirect flow hands the user something to paste back (Anthropic's authorization code or the
  * address Google dead-ends on).
  *
- * `prominent` is the same panel with room to breathe: the first screen of a fresh sandbox, where this is not
- * a row in a settings list but the only thing being asked. It changes size and nothing else, deliberately: the
- * words a first-time user needs are the words the settings row needed too, and a second copy of them written
- * for one surface is the drift above, growing back.
+ * ONE SIZE, since there is one kind of place this stands: inside the row or the strip that started the
+ * sign-in. It used to have a `prominent` variant for the first screen of a fresh sandbox, back when that screen
+ * was a sign-in card taking the middle of the agents board. That card is gone (a new user lands on a chat that
+ * can already send, and the free channel is discovered in the model picker), and with it the only caller that
+ * ever asked for the big version.
  *
  * Cancel deliberately does NOT live here: it belongs in the single action slot of whatever started this
- * sign-in: see AiAccountSection's row and ConnectOffer's card. useChat is a module singleton, so this reads
- * the live handshake with nothing threaded through props but which row it is unfolding under. */
+ * sign-in: see AiAccountSection's row and ChatAccountPanel's strip. useChat is a module singleton, so this
+ * reads the live handshake with nothing threaded through props but which row it is unfolding under. */
 
-const { kind, provider, prominent = false } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider; prominent?: boolean }>();
+const { kind, provider } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider }>();
 
 const { nativeConnectFlow, translatorConnectFlow, accountBusy, translatorKey, connectLabel, completeConnect, completeTranslator } = useChat();
 
@@ -208,13 +209,13 @@ watch(flow, (live) => {
 </script>
 
 <template>
-    <div v-if="flow" class="flex flex-col" :class="prominent ? `gap-3` : `gap-2.5`">
+    <div v-if="flow" class="flex flex-col gap-2.5">
         <!-- `self-start`: in a column the button would stretch edge to edge, which reads as a banner rather than
-             as the first step of three. Prominent it IS the screen's one action, so it takes the full width. -->
+             as the first step of three. -->
         <Button
             as="a"
-            :class="prominent ? `w-full` : `self-start`"
-            :size="prominent ? undefined : `small`"
+            class="self-start"
+            size="small"
             :href="flow.url"
             target="_blank"
             rel="noopener"
@@ -240,7 +241,7 @@ watch(flow, (live) => {
                  looking at the real thing, and what they need then is to RECOGNIZE it. Only for the redirect
                  that actually dead-ends; Anthropic's paste-back lands on a real page and needs none of this. -->
             <template v-if="kind === `routed`">
-                <p :class="prominent ? `text-xs text-content` : `text-2xs text-muted`">
+                <p class="text-2xs text-muted">
                     After {{ destination }}, the <span class="font-semibold text-content">page won't load</span>. That's normal, it points back inside
                     your sandbox.
                 </p>

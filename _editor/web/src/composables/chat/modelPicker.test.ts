@@ -227,6 +227,23 @@ test("keeps the ACTIVE provider first even when it is the locked one", () => {
     expect(pickerSections(MIXED, `kimi`, undefined, readyOnly(`claude`))[0]?.provider).toBe(`kimi`);
 });
 
+/* AND THE CHEAPEST WAY IN LEADS THE LOCKED BAND, which is this list's whole share of a job that used to be done
+ * by a card: the free Google channel was pitched by a headline and a button on the first screen after signing
+ * up, which read as a sign-in wall, while HERE, where the choice is actually made, it sat last of four locked
+ * rows purely because `gemini` comes last in PROVIDERS.
+ *
+ * Cost only ever separates LOCKED rows. A connected provider costs the user nothing to pick whatever its price
+ * would have been, so ranking the connected band by price would reorder working providers for no reason a
+ * reader could see: `claude` stays above `gemini` here on readiness alone. */
+test("leads the locked band with the provider that costs nothing", () => {
+    const sections = pickerSections(MIXED, `codex`, undefined, readyOnly(`claude`));
+
+    // The active one, then the connected one, then free (a Google sign-in) ahead of the paid subscriptions,
+    // which keep PROVIDERS order among themselves: equal cost, so nothing here has an opinion about them.
+    // `grok` rides along with no rows of its own: an empty section still renders its header and state row.
+    expect(sections.map((section) => section.provider)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`]);
+});
+
 test("ranks a runnable match above a locked one, however well the locked id matched", () => {
     // A model-specific query can hit Kimi head-on; "5" hits both rows below. Match quality still decides WITHIN a band.
     const matched = filterEntries(MIXED, `5`, undefined, readyOnly(`codex`));

@@ -50,6 +50,9 @@ const update = vi.fn<(id: string, input: { name?: string }) => Promise<SandboxSu
 const refresh = vi.fn<() => Promise<SandboxSummary[]>>();
 // The discard rule's one observable act: leaving without committing deletes the draft this page minted.
 const remove = vi.fn<(id: string) => Promise<void>>();
+// `activeSandboxId` and `reachable` are not this page's own reads: they are the chat store's, which arrives in
+// this graph because finishing setup now HANDS OVER to a chat (see `enterWorkspace`). The store reads them at
+// module scope, so leaving them out is an import-time crash rather than a missing feature.
 vi.mock(`../composables/sandbox/useSandbox`, () => ({
     useSandbox: () => ({
         sandboxes,
@@ -62,6 +65,8 @@ vi.mock(`../composables/sandbox/useSandbox`, () => ({
         remove,
         select: vi.fn(),
         attach: vi.fn(),
+        activeSandboxId: ref<string | undefined>(undefined),
+        reachable: ref(false),
     }),
 }));
 
