@@ -131,6 +131,60 @@ describe(`reconcileHostedPool`, () => {
         expect(update).toHaveBeenCalledWith({ where: { id: `p1` }, data: { state: `ready` } });
     });
 
+    /* THE LANDMINE THIS PINS SHUT: a `ready` row used to be trusted for life, so a machine Fly destroyed under
+     * one stayed in the pool as stock that does not exist, filled a slot so nothing replaced it, and (claims
+     * take the oldest row first) was handed to the next arrival BEFORE any live machine. */
+    it(`replaces standing stock Fly no longer has: a ready row is a claim about a machine, not proof of one`, async () => {
+        const del = vi.fn().mockResolvedValue({});
+        const calls = stubFetch([
+            { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ error: `machine not found` }, 404) },
+            ...builderRoutes,
+        ]);
+        const prisma = fakePrisma({ hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow()]), delete: del } });
+        await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`intentic-sbx-pool-abc123`))).toBe(true);
+        expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
+        // …and the slot it was squatting is refilled in the same pass, which is the half that was missing.
+        expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(1);
+    });
+
+    // A pulled rootfs is the thing the pool is for, so it is banked whenever it is noticed. A build the
+    // reconcile did not witness for an hour (a restart, a wedged tick) finished all the same, and tearing it
+    // down for being late would pay for the same pull twice.
+    it(`banks a build that finished while nobody was watching, however late it is noticed`, async () => {
+        const update = vi.fn().mockResolvedValue({});
+        const del = vi.fn().mockResolvedValue({});
+        const calls = stubFetch([
+            { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `stopped` }) },
+            ...builderRoutes,
+        ]);
+        const stale = new Date(Date.now() - 60 * 60 * 1000);
+        const prisma = fakePrisma({
+            hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow({ state: `building`, createdAt: stale })]), update, delete: del },
+        });
+        await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
+        expect(update).toHaveBeenCalledWith({ where: { id: `p1` }, data: { state: `ready` } });
+        expect(del).not.toHaveBeenCalled();
+        expect(calls.some((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toBe(false);
+    });
+
+    /* The other side of that check, and the more dangerous one to get wrong: "we could not ask Fly" is not
+     * "the machine is gone". Spending the first as the second turns one bad minute at the provider into a
+     * drained pool and a queue of cold builds. */
+    it(`keeps standing stock when Fly cannot be asked, and while a machine is mid-transition`, async () => {
+        for (const respond of [() => json({ error: `internal` }, 500), () => json({ id: `m1`, state: `started` })]) {
+            const del = vi.fn().mockResolvedValue({});
+            const calls = stubFetch([{ match: (method, url) => method === `GET` && url.includes(`/machines/`), respond }, ...builderRoutes]);
+            const prisma = fakePrisma({ hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow()]), delete: del } });
+            // oxlint-disable-next-line eslint/no-await-in-loop -- two readings of the same row, one at a time
+            await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
+            expect(del).not.toHaveBeenCalled();
+            expect(calls.some((entry) => entry.method === `DELETE`)).toBe(false);
+            // The row still counts as stock, so the target is met and nothing is built beside it.
+            expect(calls.some((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toBe(false);
+        }
+    });
+
     it(`replaces a machine whose image drifted from config: its warm rootfs is the wrong rootfs`, async () => {
         const del = vi.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);

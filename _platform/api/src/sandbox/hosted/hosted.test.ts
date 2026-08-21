@@ -243,6 +243,38 @@ describe(`provisionHosted`, () => {
         // stays `claimed` for the reconcile job to collect rather than becoming someone else's "warm" machine.
         expect(poolDelete).not.toHaveBeenCalled();
     });
+
+    /* THE REGRESSION THIS PINS SHUT: the claim used to abandon the pool at the first refusal, so a machine Fly
+     * had destroyed under its row cost a reader the whole cold build while a live warm machine sat unclaimed
+     * beside it, in their own region, for every minute of the wait. Candidates come oldest-first, which is
+     * exactly the order that hands out the longest-standing (most likely dead) row before any healthy one. */
+    it(`tries the next warm machine when the first one is gone: one dead row must not cost a cold build`, async () => {
+        const created = vi.fn().mockResolvedValue({});
+        const poolDelete = vi.fn().mockResolvedValue({});
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ error: `machine not found` }, 404) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m8`), respond: () => json({ id: `m8`, state: `stopped` }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m8/start`), respond: () => json({ ok: true }) },
+        ]);
+        const second = { ...poolRow, id: `p2`, appName: `intentic-sbx-pool-def456`, machineId: `m8`, volumeId: `vol_8` };
+        const prisma = fakePrisma({
+            hostedMachine: { create: created },
+            hostedPoolMachine: {
+                findMany: vi.fn().mockResolvedValue([poolRow, second]),
+                updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+                delete: poolDelete,
+            },
+        });
+        const result = await provisionHosted(prisma as never, config(), logger, args);
+        // The reader gets the SECOND warm machine, in seconds, and the cold path is never touched.
+        expect(result).toEqual({ appName: `intentic-sbx-pool-def456`, region: `iad` });
+        expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(false);
+        expect(calls.some((entry) => entry.url.endsWith(`/machines/m8/start`))).toBe(true);
+        expect(created).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m8` }) }));
+        // Only the claimed row goes; the dead one stays `claimed` for the reconcile to collect.
+        expect(poolDelete).toHaveBeenCalledTimes(1);
+        expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p2` } });
+    });
 });
 
 describe(`wakeHosted`, () => {

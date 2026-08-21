@@ -82,10 +82,16 @@ const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineN
  * policy's residency promise breaks. `wokeAt` opens the hour meter here, at claim, the pool's own no-op boot
  * was the platform's cost, not this user's.
  *
- * Every failure is caught and answered as a miss: the pool is an accelerator, and a reader who pressed the
- * button is owed a machine, not an explanation of why the fast path stumbled. A row won and then stranded
- * (update or start failed) stays `claimed` with its app intact for the reconcile job to collect, it must not
- * go back to `ready`, because a half-branded machine already carries this sandbox's tokens. */
+ * Every failure is caught and answered by trying the NEXT candidate, and only a pool with nothing left in it
+ * is answered as a miss: the pool is an accelerator, and a reader who pressed the button is owed a machine,
+ * not an explanation of why the fast path stumbled. Giving up on the whole pool at the first stumble is what
+ * made one machine Fly had destroyed under its row cost a reader the full cold build while a perfectly warm
+ * second machine sat unclaimed beside it, in their own region, for the entire wait. The candidate list is
+ * this region's stock (a handful), so the worst case is a handful of cheap refusals before the cold path.
+ *
+ * A row won and then stranded (update or start failed) stays `claimed` with its app intact for the reconcile
+ * job to collect, it must not go back to `ready`, because a half-branded machine already carries this
+ * sandbox's tokens. */
 const claimPoolMachine = async (
     prisma: PrismaClient,
     config: Config,
@@ -123,8 +129,7 @@ const claimPoolMachine = async (
             ]);
             return { appName: row.appName, region: row.region };
         } catch (error) {
-            logger.warn({ err: error, app: row.appName }, `hosted pool: claim failed; falling back to a cold build`);
-            return undefined;
+            logger.warn({ err: error, app: row.appName }, `hosted pool: claim failed; trying the next warm machine`);
         }
     }
     return undefined;

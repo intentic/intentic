@@ -27,9 +27,22 @@ const BASE = `https://api.machines.dev/v1`;
 export const FLY_ROLE_WARM = { intentic_role: `warm` } as const;
 export const flySandboxRole = (sandboxId: string): Record<string, string> => ({ intentic_role: `sandbox`, intentic_sandbox: sandboxId });
 
-// The operator misconfigured the platform (bad/expired token, wrong org), nothing a user can fix, and the
-// route surfaces it as a gateway failure. Named so hosted.ts can log it apart from capacity weather.
-export class FlyError extends Error {}
+/* The operator misconfigured the platform (bad/expired token, wrong org), nothing a user can fix, and the
+ * route surfaces it as a gateway failure. Named so hosted.ts can log it apart from capacity weather.
+ *
+ * `status` carries Fly's own HTTP code, because one caller needs the difference between two failures this
+ * class would otherwise flatten: 404 is Fly ANSWERING that a thing does not exist, while a 5xx or a socket
+ * that never opened is Fly not answering at all. The pool's health check turns that difference into "replace
+ * this dead machine" or "ask again next tick", and reading the second as the first destroys healthy stock
+ * every time the provider has a bad minute. Undefined where the failure never reached an HTTP response. */
+export class FlyError extends Error {
+    readonly status: number | undefined;
+
+    constructor(message: string, status?: number) {
+        super(message);
+        this.status = status;
+    }
+}
 
 // Fly's error envelope on a non-2xx: { error: "…" }.
 const errorSchema = z.object({ error: z.string() });
@@ -53,13 +66,16 @@ const call = async (token: string, method: string, path: string, body?: unknown)
         return text === `` ? undefined : (JSON.parse(text) as unknown);
     }
     if (response.status === 401 || response.status === 403) {
-        throw new FlyError(`Fly rejected the platform's API token (HTTP ${response.status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`);
+        throw new FlyError(
+            `Fly rejected the platform's API token (HTTP ${response.status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`,
+            response.status,
+        );
     }
     const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
     if (failure.success) {
-        throw new FlyError(`Fly refused ${method} ${path}: ${failure.data.error}`);
+        throw new FlyError(`Fly refused ${method} ${path}: ${failure.data.error}`, response.status);
     }
-    throw new FlyError(`Fly API ${method} ${path} failed with HTTP ${response.status}`);
+    throw new FlyError(`Fly API ${method} ${path} failed with HTTP ${response.status}`, response.status);
 };
 
 // The app is the sandbox's outer identity on Fly. `network: name` is the isolation move, each app gets its
@@ -80,11 +96,15 @@ export const deleteApp = async (token: string, name: string): Promise<void> => {
         return;
     }
     if (response.status === 401 || response.status === 403) {
-        throw new FlyError(`Fly rejected the platform's API token (HTTP ${response.status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`);
+        throw new FlyError(
+            `Fly rejected the platform's API token (HTTP ${response.status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`,
+            response.status,
+        );
     }
     const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
     throw new FlyError(
         failure.success ? `Fly refused DELETE /apps/${name}: ${failure.data.error}` : `Fly DELETE /apps/${name} failed with HTTP ${response.status}`,
+        response.status,
     );
 };
 

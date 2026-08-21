@@ -4,7 +4,7 @@ import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
-import { createApp, createMachine, createVolume, deleteApp, FLY_ROLE_WARM, getMachine } from "./fly.js";
+import { createApp, createMachine, createVolume, deleteApp, FLY_ROLE_WARM, FlyError, getMachine } from "./fly.js";
 import { hostedEnabled } from "./hosted.js";
 
 /* THE WARM POOL'S LIFECYCLE, everything except the claim, which lives beside provisionHosted (hosted.ts)
@@ -17,8 +17,9 @@ import { hostedEnabled } from "./hosted.js";
  * rootfs. It never runs the sandbox, carries no identity, and costs only its volume while it waits.
  *
  * The reconcile below is the pool's whole management: build up to the target per region, notice builds that
- * finished (or died), rebuild machines whose image drifted from config, collect claims that crashed, and
- * drain everything when the pool is switched off. It runs on the shared advisory lock so replicas never
+ * finished (or died), CHECK THE STANDING STOCK IS STILL THERE (a row is a claim about a machine on Fly, not
+ * proof of one), rebuild machines whose image drifted from config, collect claims that crashed, and drain
+ * everything when the pool is switched off. It runs on the shared advisory lock so replicas never
  * double-build, and every action is one row's, a failure logs and moves on, the next tick retries. */
 
 // The no-op the pool machine's first boot runs instead of the sandbox: the pull happens before exec does, and
@@ -62,11 +63,41 @@ const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Lo
     }
 };
 
-// Tear one pool machine down, row and app together. App first: a row without an app is harmless (the next
-// claim skips it as gone), while an app without a row is a day away from the reaper anyway.
+// Tear one pool machine down, row and app together. App first: a row without an app is harmless (the health
+// check below reads it as gone next tick), while an app without a row is a day away from the reaper anyway.
 const destroyPoolMachine = async (prisma: PrismaClient, config: Config, row: { id: string; appName: string }): Promise<void> => {
     await deleteApp(config.hosted.flyApiToken, row.appName);
     await prisma.hostedPoolMachine.delete({ where: { id: row.id } });
+};
+
+/* WHAT FLY SAYS ABOUT A STANDING POOL ROW, in the three answers the reconcile can act on. Every row is asked
+ * about, not just the ones still building: a `ready` row used to be trusted for the rest of its life, so a
+ * machine that vanished under one (a lost host, a hand-deleted machine, an app torn down while its row
+ * survived a DB blip) stayed in the pool as stock that does not exist. That row filled a slot, so the
+ * reconcile built no replacement for it, AND claims take the oldest row first, so the dead one was handed out
+ * FIRST: one vanished machine quietly cost the next arrival the exact cold build the pool exists to spare.
+ *
+ *   • `warm`  the machine is there and claimable: our no-op boot leaves it stopped, and Fly may suspend a
+ *             long-idle one later, which starts again just as fast on the same warm rootfs
+ *   • `dead`  Fly says there is no such machine (or reports it failed/destroyed): the row is stock that
+ *             isn't, and the slot is worth more empty than occupied
+ *   • `wait`  no verdict: mid-transition, or Fly could not be asked at all. The row is kept and re-read next
+ *             tick, because "we could not ask" must never be spent as "it is gone", the reading that turns a
+ *             bad minute at the provider into a drained pool. */
+type PoolHealth = "warm" | "dead" | "wait";
+
+const WARM_STATES = new Set([`stopped`, `suspended`]);
+const DEAD_STATES = new Set([`failed`, `destroyed`]);
+
+const poolMachineHealth = async (config: Config, row: { appName: string; machineId: string }): Promise<PoolHealth> => {
+    try {
+        const { state } = await getMachine(config.hosted.flyApiToken, row.appName, row.machineId);
+        return WARM_STATES.has(state) ? `warm` : DEAD_STATES.has(state) ? `dead` : `wait`;
+    } catch (error) {
+        // A 404 covers both halves of "gone": the machine deleted under its app, and the whole app deleted
+        // under its row. Every other failure is the provider, not the machine.
+        return error instanceof FlyError && error.status === 404 ? `dead` : `wait`;
+    }
 };
 
 /* One reconcile pass. Deliberately sequential and per-row-guarded: the pool is small (a handful of machines),
@@ -117,29 +148,28 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
             );
             continue;
         }
-        if (row.state === `building`) {
-            // oxlint-disable-next-line eslint/no-await-in-loop
-            const machine = await getMachine(config.hosted.flyApiToken, row.appName, row.machineId).catch(() => undefined);
-            if (machine?.state === `stopped`) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one small read per standing row, every five minutes
+        const health = await poolMachineHealth(config, row);
+        // Warm first, and before any clock: a machine holding a pulled rootfs is the thing this pool is FOR,
+        // so a build that finished while nobody was reconciling is banked, never billed twice for being late.
+        if (health === `warm`) {
+            if (row.state === `building`) {
                 // oxlint-disable-next-line eslint/no-await-in-loop
                 await prisma.hostedPoolMachine.update({ where: { id: row.id }, data: { state: `ready` } });
                 logger.info({ app: row.appName, region: row.region }, `hosted pool: machine ready`);
-                live.set(row.region, [...(live.get(row.region) ?? []), row]);
-                continue;
             }
-            // Unreadable, failed, or stuck past the pull's worst case, rebuild rather than wait on it.
-            if (
-                machine === undefined ||
-                machine.state === `failed` ||
-                machine.state === `destroyed` ||
-                now - row.createdAt.getTime() > BUILD_TIMEOUT_MS
-            ) {
-                // oxlint-disable-next-line eslint/no-await-in-loop
-                await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
-                    logger.error({ err: error, app: row.appName }, `hosted pool: collecting a dead build failed`),
-                );
-                continue;
-            }
+            live.set(row.region, [...(live.get(row.region) ?? []), row]);
+            continue;
+        }
+        // A build that has still not settled past the pull's worst case is not pulling any more. Only a build
+        // can be stuck this way: a `ready` row is waiting on nothing, so time alone says nothing about it.
+        const stuck = row.state === `building` && now - row.createdAt.getTime() > BUILD_TIMEOUT_MS;
+        if (health === `dead` || stuck) {
+            // oxlint-disable-next-line eslint/no-await-in-loop
+            await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
+                logger.error({ err: error, app: row.appName, state: row.state }, `hosted pool: replacing a machine that is gone failed`),
+            );
+            continue;
         }
         live.set(row.region, [...(live.get(row.region) ?? []), row]);
     }
