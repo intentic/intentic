@@ -73,18 +73,10 @@
 [data-skin="sanctum"] {
     color-scheme: dark;
 
-    --color-surface-0: oklch(99% 0.003 78);
-    --color-surface-50: oklch(98% 0.004 78);
-    --color-surface-100: oklch(96% 0.005 78);
-    --color-surface-200: oklch(92% 0.006 78);
-    --color-surface-300: oklch(87% 0.007 78);
-    --color-surface-400: oklch(71% 0.008 78);
-    --color-surface-500: oklch(58% 0.009 78);
-    --color-surface-600: oklch(48% 0.009 78);
-    --color-surface-700: oklch(40% 0.009 78);
-    --color-surface-800: oklch(30% 0.008 78);
-    --color-surface-900: oklch(23% 0.008 78);
-    --color-surface-950: oklch(16% 0.007 78);
+    /* SURFACES NOW FOLLOW THE PICKER. The ramp is no longer pinned to hue 78: themeColor.ts generates
+     * `--color-neutral-*` from the picked accent, and semantic-colors.css maps those to `--color-surface-*`.
+     * With the default orange that is still warm stone; with a blue pick it is cool slate. The lightness
+     * ladder is unchanged — the picker scales chroma, not lightness — so every contrast promise holds. */
 
     /* THE METAL, AND IT IS THE SITE'S — `--color-gold` / `--color-gold-bright` from global.css, to the digit.
      * Fixed rather than mixed from `--color-primary-*`: see the header. The picker still lights the app; it no
@@ -227,7 +219,7 @@
      * plates are lit and stand off the wall, so a panel that goes the other way — below the wall, unlit — is
      * unmistakably not one of them, and needs no translucency to say so. And a rail that recedes is a rail
      * whose icons are the only thing in it. */
-    --sanctum-shadow: #181716;
+    --sanctum-shadow: color-mix(in oklab, var(--color-surface-950) 90%, black);
 
     /* THE DRAG MARKS OF A WIRE BRUSH, which is what turns a swatch of yellow into a piece of metal. Generated
      * rather than drawn as striped gradients, for the reason the site gives: a repeating gradient off-axis has
@@ -287,9 +279,9 @@
      * cost the plates most of their step off it. 13.5% is what renders at roughly the app's 17% once the grain
      * is on. Card and overlay are untouched, so the ladder is now a nine-point climb from wall to plate rather
      * than a six-point one, which is most of why a card stopped reading as a pane of glass over the wall. */
-    --role-canvas: oklch(13.5% 0.006 78);
-    --role-card: oklch(23% 0.008 78);
-    --role-overlay: oklch(28% 0.009 78);
+    --role-canvas: color-mix(in oklab, var(--color-surface-950) 84%, black);
+    --role-card: var(--color-surface-900);
+    --role-overlay: color-mix(in oklab, var(--color-surface-800) 93%, var(--color-surface-900));
     --role-line: var(--sanctum-rule);
     --role-line-strong: var(--sanctum-rule-strong);
 
@@ -302,7 +294,7 @@
     /* HEADINGS ARE CUT STONE, NOT WRITTEN PAPER, and one value is the whole difference: a paler, less yellow
      * ink than the body's cream. Set beside the other inks rather than inside the type rules, because it is one
      * of the four colours a word in this app can be. */
-    --sanctum-stone-ink: oklch(93.5% 0.011 82);
+    --sanctum-stone-ink: var(--color-surface-50);
 
     /* A link is GOLD going ember under the pointer — the site's `.link`, exactly. Which also takes the app's
      * commonest coloured text off the accent and onto the structural metal, and that alone removes a great deal
@@ -349,7 +341,7 @@
     --role-success-fill: var(--role-success);
     --role-warning-fill: var(--role-warning);
     --role-danger-fill: var(--role-danger);
-    --role-fill-content: oklch(18% 0.007 78);
+    --role-fill-content: var(--color-surface-950);
 
     /* The terminal takes the ground's own value, or it sits in the wall as a rectangle of a different rock.
      * Must stay a hex literal: xterm.js reads this through getComputedStyle and its parser rejects oklch(). */
@@ -541,7 +533,7 @@
      * of. A recess is stated by being darker than the wall; the rule gives the recess a lip; that is the end. */
     [data-skin="sanctum"] .lane,
     [data-skin="sanctum"] .lane-header {
-        --lane-fill: oklch(10.5% 0.005 78);
+        --lane-fill: color-mix(in oklab, var(--color-surface-950) 66%, black);
     }
     [data-skin="sanctum"] .lane {
         background-image: var(--sanctum-tooth);
@@ -641,7 +633,7 @@
     [data-skin="sanctum"] input[type="email"]:not(.field-bare),
     [data-skin="sanctum"] input[type="password"]:not(.field-bare),
     [data-skin="sanctum"] input[type="number"]:not(.field-bare) {
-        background-color: oklch(10.5% 0.005 78);
+        background-color: color-mix(in oklab, var(--color-surface-950) 66%, black);
         border-color: var(--sanctum-rule-strong);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
     }
@@ -683,7 +675,7 @@
      * sets, so it lands — and it lands on the rule the reader is already looking at, instead of adding a
      * fourth edge to a panel that just lost its second and third. */
     [data-skin="sanctum"] .ui-search-row {
-        background-color: oklch(10.5% 0.005 78);
+        background-color: color-mix(in oklab, var(--color-surface-950) 66%, black);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
     }
     /* Three quarters of the gold rather than all of it: at full strength this one line is the brightest thing
@@ -1035,7 +1027,7 @@
      * plate like a field, and the ticked one is the metal filling it. */
     [data-skin="sanctum"] .p-checkbox-box,
     [data-skin="sanctum"] .p-radiobutton-box {
-        background-color: oklch(10.5% 0.005 78);
+        background-color: color-mix(in oklab, var(--color-surface-950) 66%, black);
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
     }
 
@@ -1054,7 +1046,7 @@
     }
 
     [data-skin="sanctum"] .p-progressbar {
-        background-color: oklch(10.5% 0.005 78);
+        background-color: color-mix(in oklab, var(--color-surface-950) 66%, black);
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.55);
     }
 
@@ -1211,7 +1203,7 @@
  * The border is left in the layer on purpose: `border-line` sets that one, and `--color-line` is already this
  * skin's own gold, so there is nothing to win. */
 [data-skin="sanctum"] .icon-rail {
-    background-color: #060606;
+    background-color: color-mix(in oklab, var(--color-surface-950) 40%, black);
     background-image: var(--sanctum-pit-lip), var(--sanctum-pit), var(--sanctum-tooth-cut), var(--sanctum-mottle), linear-gradient(180deg, rgba(255, 250, 238, 0.05), transparent 46%, rgba(0, 0, 0, 0.07));
     background-size: 123%;
     background-repeat: repeat;
