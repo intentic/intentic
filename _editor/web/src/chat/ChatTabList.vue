@@ -837,9 +837,9 @@ const closeTab = (event: Event, id: string): void => {
                                 </span>
                             </template>
                             <!-- The crucial facts, one wrapping line: what the turn is doing and for how long
-                                 (the card's `tight` form puts the live readout at the head of this line rather
-                                 than on a row of its own), why it needs you or that it's unread, where it came
-                                 from, the model, and the age of a settled chat, right-aligned. Drawn from the
+                                 (the card's `tight` form ends this line with the live readout rather than
+                                 spending a row of its own on it), why it needs you or that it's unread, where
+                                 it came from, the model, and the age of a settled chat, right-aligned. Drawn from the
                                  fleet entry where there is one and from the conversation where there isn't
                                  (see "What the card knows"), so an off-roster chat keeps a populated card. -->
                             <template v-if="hasMeta({ conversation: c, agent })" #meta>

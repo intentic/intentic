@@ -37,9 +37,9 @@ import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 
 /* One fleet agent, mock-level hierarchy: provider mark + title + status/attention chip; model · session meta;
- * the live activity line while running, which carries what the turn is doing AND how long it has been at it
- * (the chat rail's line, to the letter); and one closing summary line that carries the stats
- * (cost · +ins −dels · subagents · context ring) with the settled card's date pinned to its right.
+ * and one closing summary line that carries the stats (cost · +ins −dels · subagents · context ring) with the
+ * card's "when" pinned to its right: for a running card what the turn is doing and how long it has been at it
+ * (the chat rail's readout, to the letter), for a settled one its date.
  * `now` ticks from AgentsView so every card's elapsed readout advances together without per-card timers. The
  * title renames in place (hover pencil → inline input); the drill-in rides beside it as a hover glyph, except
  * on a card that needs the user, where it is spelled out on the summary line. The root is a div-button, not a
@@ -223,7 +223,7 @@ const stats = computed(
 // (nothing is running, nothing is owed) and knows nothing about how it ended; its chip already says what it is.
 const completed = computed(() => lane.value === `finished` && !unregistered(props.agent.status));
 // Whether this card can date itself at all: a draft that has never been touched cannot, and neither can a
-// RUNNING one — its clock is the elapsed on the activity line, so the summary row must not be opened for it.
+// RUNNING one — its own readout is the ticking elapsed that takes the same slot.
 const dated = computed(() => props.agent.archivedAt !== undefined || (!turnInFlight(props.agent) && props.agent.updatedAt > 0));
 /* WHETHER THE CLOSING LINE HAS ANYTHING TO SAY. The stats and the time-ago used to be two rows, and the second
  * of them held four characters and an affordance that only appears under the pointer: a full row of card
@@ -231,7 +231,7 @@ const dated = computed(() => props.agent.archivedAt !== undefined || (!turnInFli
  * wrapping line now: tallies from the left, the standing and the time pinned to the right, and a lane too
  * narrow for both wraps them rather than buying the row outright. Gated on everything it draws and nothing
  * else, so a card with no numbers, no date and nothing to drill into opens no empty strip of padding. */
-const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value);
+const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || turnInFlight(props.agent));
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 /* The card says WHO RUNS IT exactly once. While the tile wears the provider mark (no category yet), this
  * line needs no floor; once the category glyph takes the tile, a card with no recorded model would say the
@@ -546,29 +546,13 @@ const grab = (event: PointerEvent): void => {
                 </span>
             </div>
 
-            <!-- THE LOOP LINE. Above the activity line and never instead of it: the activity says what the
-                 agent is doing this second, this says what it is doing it TOWARDS, and a looping agent without
-                 the second one is a spinner with no end in sight. Survives the loop's end on purpose: how a
+            <!-- THE LOOP LINE. Never instead of the live readout below: that says what the agent is doing this
+                 second, this says what it is doing it TOWARDS, and a looping agent without the second one is a
+                 spinner with no end in sight. Survives the loop's end on purpose: how a
                  loop stopped is the thing the card is read for afterwards. -->
             <p v-if="agent.loop !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs" :class="loopLine?.class">
                 <Icon name="repeat" class="shrink-0 text-2xs" :class="loopLine?.spin ? 'animate-spin' : ''" />
                 <span class="truncate">{{ loopLine?.text }}</span>
-            </p>
-
-            <!-- The live line and the summary both claim the row's leftovers, so a wide board splits them and a
-                 narrow one wraps the summary onto its own line rather than shaving the activity to an ellipsis. -->
-            <p v-if="turnInFlight(agent)" class="flex min-w-0 items-center gap-1.5 text-2xs text-link" :class="dense ? 'min-w-32 flex-1' : ''">
-                <!-- The glyph follows whichever fact leads the line: the children when they are the work, else
-                     the tool the agent itself is on. -->
-                <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
-                <!-- WHAT IT IS DOING AND HOW LONG IT HAS BEEN AT IT, ON ONE LINE, which is the chat rail's own
-                     line to the letter. The clock used to sit at the far right of the summary row instead, a
-                     line below and half a card away from the tool it was timing, so the two facts that only
-                     mean anything together ("Bash", "4m 12s") had to be read as two. A turn with no frame yet
-                     still says `Working…` rather than dropping the line, because dropping it takes the clock
-                     with it and a running card with no clock is the one a reader cannot triage. -->
-                <span class="min-w-0 flex-1 truncate">{{ activityText ?? "Working…" }}</span>
-                <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>
             </p>
 
             <!-- THE CONFLICTED CARD'S WAY OUT, ON THE CARD. A refused land is the one state on this board that
@@ -745,7 +729,7 @@ const grab = (event: PointerEvent): void => {
                 <!-- The standing and the clock, held to the END of the line by their own margin rather than by a
                      spacer element: a spacer is an item, and on a lane narrow enough to wrap it would take the
                      whole first line with it and leave the numbers stranded above an empty row. -->
-                <span class="ml-auto inline-flex shrink-0 items-center gap-2 text-subtle">
+                <span class="ml-auto inline-flex min-w-0 items-center gap-2 text-subtle">
                     <!-- The deliberate view-change, spelled out for the one card that has earned the width: an
                          agent waiting on the user, whose label IS the instruction ("Answer", "Approve spend",
                          "See what blocked it"). Every other card carries the same press as the arrow up in the
@@ -761,14 +745,32 @@ const grab = (event: PointerEvent): void => {
                     <span v-else-if="review === undefined && completed" class="inline-flex shrink-0 items-center gap-1">
                         <Icon name="check" class="text-2xs" />Completed
                     </span>
-                    <!-- THE CLOCK HERE IS THE SETTLED CARD'S ONLY. A running turn's elapsed is on the activity
-                         line above, beside the tool it is timing, and two clocks on one card disagree by
-                         construction — the rail's rule, now the board's.
+                    <!-- THE SETTLED CARD'S DATE, in the corner the running card puts its elapsed in: the two
+                         are the same slot answering "when", and a card is never both.
                          An archived card is read as a record, so it dates itself by when it LEFT the board:
                          "last active 3d ago" is the same fact its neighbours already show and answers a question
                          nobody in an archive is asking. -->
                     <span v-if="agent.archivedAt !== undefined" class="shrink-0"> Archived {{ relativeTime(agent.archivedAt) }} </span>
                     <span v-else-if="!turnInFlight(agent) && agent.updatedAt > 0" class="shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
+
+                    <!-- WHAT IT IS DOING AND HOW LONG IT HAS BEEN AT IT, at the end of the line the settled
+                         card ends with its date: the running card's clock in the same corner as the stopped
+                         card's, so the eye finds one readout down a lane instead of two at two heights. It
+                         used to be a ROW of its own above the numbers, which cost every running card a line of
+                         height to carry two short words and a timer, and pushed the spend and the diff a line
+                         further down the card. The three parts stay in the rail's order (glyph, tool, elapsed)
+                         because a board card and a rail row are one card in two frames.
+                         A turn with no frame yet still says `Working…` rather than dropping out, because
+                         dropping it takes the clock with it and a running card with no clock is the one a
+                         reader cannot triage. The tool name gives way to an ellipsis before the numbers on its
+                         left do: it is the one part of this line that comes back a second later. -->
+                    <span v-if="turnInFlight(agent)" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link">
+                        <!-- The glyph follows whichever fact leads: the children when they are the work, else
+                             the tool the agent itself is on. -->
+                        <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
+                        <span class="min-w-0 truncate">{{ activityText ?? "Working…" }}</span>
+                        <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>
+                    </span>
                 </span>
             </div>
         </div>

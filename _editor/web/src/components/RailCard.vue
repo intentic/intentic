@@ -61,9 +61,9 @@ const props = defineProps<{
     now?: number;
     /* THE LIVE READOUT SHARES THE FACTS LINE INSTEAD OF TAKING ONE OF ITS OWN, for a list that has to stay
      * thin: the popped-out chat's rail, where the card's own line of facts is short (the model, and little
-     * else) and a second row for "Bash · 12s" bought a third of a card's height per running chat. It leads
-     * that line rather than trailing it, because on a running card it is the fact being read. Everywhere with
-     * room for it (the board's card, the Subagents list) the readout keeps its own row. */
+     * else) and a second row for "Bash · 12s" bought a third of a card's height per running chat. It TRAILS
+     * that line, in the corner a settled card puts its age in, so the clock sits in one place whether or not
+     * the turn has ended. Everywhere with room for it (the Subagents list) the readout keeps its own row. */
     tight?: boolean;
     /* A card whose chat has a COLUMN on screen: a ring and a lifted surface.
      *
@@ -135,17 +135,20 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
                 v-if="$slots[`meta`] || (tight && live !== undefined)"
                 class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
             >
-                <!-- The tight card's live readout, at the head of its own facts: what the turn is doing and how
-                     long it has been at it, in the one accent that makes a working card findable in a column of
-                     stopped ones. Same three parts, same order, same colour as the full-height line below. -->
-                <span v-if="tight && live !== undefined" class="flex min-w-0 items-center gap-1 font-medium text-link">
+                <slot name="meta" />
+                <!-- The tight card's live readout, held to the END of its facts line: what the turn is doing
+                     and how long it has been at it, in the one accent that makes a working card findable in a
+                     column of stopped ones. Same three parts, same order, same colour as the full-height line
+                     below. It sits in the corner the settled card's age sits in, which is the board card's
+                     rule (AgentCard): the "when" of a card has ONE place on it, and a readout that led the
+                     line put the clock at a different corner depending on whether the turn had ended. -->
+                <span v-if="tight && live !== undefined" class="ml-auto flex min-w-0 items-center gap-1 font-medium text-link">
                     <Icon :name="live.icon" class="shrink-0 text-2xs" />
                     <span class="min-w-0 truncate">{{ live.text }}</span>
                     <span v-if="live.since !== undefined && now !== undefined" class="shrink-0 tabular-nums">{{
                         formatElapsed(live.since, now)
                     }}</span>
                 </span>
-                <slot name="meta" />
             </span>
 
             <!-- Held through a stop's unwind by whoever passes it (turnInFlight, not `running`): the turn is
