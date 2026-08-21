@@ -11,9 +11,9 @@ import { type RouteLocationRaw, RouterLink } from "vue-router";
  * tone, because the card's primary answer is the one-off allow and a second filled button beside it would make
  * the pair a coin flip. So: primary is the answer the card is asking for, secondary is everything else.
  *
- * `compact` is the question card's Submit/Dismiss, which sit inline with the option rows and the Other field and
- * would out-weigh them at full size. Desktop only: the touch targets below stay 2.75rem in every tone, since a
- * finger has the same width whatever the button is next to.
+ * Every decision button is now `small` by default — the same density as the rest of the app's action buttons.
+ * Desktop only: the touch targets below stay 2.75rem in every tone, since a finger has the same width whatever
+ * the button is next to.
  *
  * IT IS THE APP'S BUTTON UNDERNEATH, which it did not used to be. This component drew itself on a bare <button>
  * with the accent tint's exact numbers typed out by hand: `border-primary-fill/20 bg-primary-fill/10
@@ -33,10 +33,9 @@ import { type RouteLocationRaw, RouterLink } from "vue-router";
  * and could not open beside the conversation it belongs to. Given `to` the same button renders as a real link
  * and keeps every pixel of its appearance; the decisions around it stay buttons, because they are decisions. */
 
-const { tone, icon, compact, to } = defineProps<{
+const { tone, icon, to } = defineProps<{
     tone: "primary" | "secondary";
     icon?: IconName;
-    compact?: boolean;
     /** Renders this answer as a link to somewhere in the app, instead of as a button. */
     to?: RouteLocationRaw;
 }>();
@@ -48,7 +47,7 @@ const { tone, icon, compact, to } = defineProps<{
     <Button
         :as="to === undefined ? undefined : RouterLink"
         :to="to"
-        :size="compact ? `small` : undefined"
+        size="small"
         :severity="tone === `primary` ? undefined : `secondary`"
         class="font-semibold max-md:h-11 max-md:px-5"
     >

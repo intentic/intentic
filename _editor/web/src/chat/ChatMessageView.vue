@@ -1234,12 +1234,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     </div>
 
                     <div v-if="message.question.status === 'pending'" class="flex items-center gap-2 pt-1">
-                        <ChatDecisionButton tone="primary" icon="check" compact :disabled="!canSubmit" @click="submitAnswers"
+                        <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit" @click="submitAnswers"
                             >Submit</ChatDecisionButton
                         >
                         <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
                              does not say, so the tooltip does, before the click rather than after it. -->
-                        <ChatDecisionButton tone="secondary" compact v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)"
+                        <ChatDecisionButton tone="secondary" v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)"
                             >Dismiss</ChatDecisionButton
                         >
                     </div>
