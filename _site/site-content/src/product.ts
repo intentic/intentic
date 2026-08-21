@@ -60,8 +60,10 @@ export interface ProductPage {
     slug: string;
     /** Menu label and page eyebrow: the verb. */
     navLabel: string;
-    /** The one line of scent under the label in the mega-menu. */
+    /** The one line of scent under the label in the mega-menu: kept to a few words. */
     menuBlurb: string;
+    /** The mega-menu row's icon key, resolved by the site's `navIcons`. */
+    icon: string;
     heading: string;
     sub: string;
     /**
@@ -111,7 +113,8 @@ export const productPages: ProductPage[] = [
     {
         slug: "run",
         navLabel: "Run",
-        menuBlurb: "Run ten agents at once and see which one needs you",
+        menuBlurb: "Many agents, one board",
+        icon: "play",
         heading: "Run many agents. See which one needs you.",
         sub: "A chat window works for one agent. The board shows the status, changes and cost of every agent at once.",
         hero: {
@@ -160,7 +163,8 @@ export const productPages: ProductPage[] = [
     {
         slug: "connect",
         navLabel: "Connect",
-        menuBlurb: "Connect agents to the systems they need",
+        menuBlurb: "Wire in outside systems",
+        icon: "link",
         heading: "Connect agents to the systems they need.",
         sub: "Connect GitHub, Postgres, Stripe, Discord or any MCP server. Every key stays in your sandbox.",
         hero: {
@@ -226,7 +230,8 @@ export const productPages: ProductPage[] = [
     {
         slug: "automate",
         navLabel: "Automate",
-        menuBlurb: "Start an agent automatically from a schedule or event",
+        menuBlurb: "Start on schedule or event",
+        icon: "zap",
         heading: "Start an agent automatically.",
         sub: "Choose a schedule or event. Add an optional check command that decides whether each run should start.",
         /* Diagram-led BY CHOICE, not for want of a screen. This used to say there was no automations screen to
@@ -282,7 +287,8 @@ export const productPages: ProductPage[] = [
     {
         slug: "review",
         navLabel: "Review",
-        menuBlurb: "It proposes, you approve, and nothing is merged unread",
+        menuBlurb: "Approve every change first",
+        icon: "circle-check",
         heading: "It proposes. You approve. Nothing is merged until you read the diff.",
         sub: "Every agent plans first, then waits. Review each file before you accept the change.",
         menuShot: {
@@ -350,7 +356,8 @@ export const productPages: ProductPage[] = [
     {
         slug: "host",
         navLabel: "Host",
-        menuBlurb: "Run the sandbox on a server you control",
+        menuBlurb: "Run on hardware you own",
+        icon: "server",
         heading: "Host the work. Keep control.",
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Move it to a server so agents can keep working when your laptop is off.",
         menuShot: {

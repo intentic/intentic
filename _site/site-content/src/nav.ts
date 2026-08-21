@@ -36,8 +36,10 @@ import { DEMO_PATH } from "./site";
 export interface MenuItem {
     label: string;
     href: string;
-    /** One line under the label: what the page answers. */
-    description: string;
+    /** One short line under the label: what the page answers. Omitted for a menu that shows labels alone. */
+    description?: string;
+    /** Icon key drawn to the left of the label, resolved by the site's `navIcons`. */
+    icon?: string;
     external?: boolean;
     /** Previewed in the panel's rail while this row is hovered. Product rows only. */
     shot?: ShotImage;
@@ -80,6 +82,7 @@ const productItems = (): MenuItem[] =>
             label: page.navLabel,
             href: productHref(page.slug),
             description: page.menuBlurb,
+            icon: page.icon,
             ...(shot ? { shot } : {}),
         };
     });

@@ -33,7 +33,8 @@ export const developersBook: Book = {
     sections: [
         {
             label: "Build",
-            audience: "The code: one format, the APIs it reaches, a working extension.",
+            tagline: "One format, every surface",
+            icon: "code",
             entry: "",
             groups: [
                 {
@@ -108,11 +109,8 @@ export const developersBook: Book = {
              * category; "Ship" tells them the rows under it are in order and that following them is the point.
              * list it, understand what the trust words claim, then keep it alive release after release. */
             label: "Ship",
-            /* The audience line names BOTH artifacts, because this shelf holds both and it is the only place
-             * in the top bar either of them is described. It read "From your repo to the marketplace, and
-             * staying listed", which is an extension's sentence: a provider with an endpoint to sell was told
-             * by the one nav surface that could have caught them that this shelf was not about their thing. */
-            audience: "Getting listed and staying listed: a free extension, or a paid service.",
+            tagline: "Get listed, stay listed",
+            icon: "rocket",
             entry: "publish",
             groups: [
                 {
@@ -211,7 +209,10 @@ if (servicesPage === undefined) throw new Error("The api book has no services pa
 export const developersServicesDestination = {
     label: servicesPage.title,
     href: developersHref(servicesPage.id),
-    description: servicesPage.blurb,
+    // A short scent line of its own rather than the page blurb, held to the same few-word budget as every
+    // other menu row.
+    description: "One endpoint, priced in credits",
+    icon: "circle-dollar-sign",
 };
 
 /* THE SEVEN STEPS, in order, with the page that owns each: the cycle the API overview draws as a diagram and

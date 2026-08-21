@@ -39,7 +39,7 @@ const PUBLISHED = "2026-08-21";
  * knows a route's shape and knows nothing about where the sandbox lives or what a 409 means. */
 const startHere: BookSection = {
     label: "Start here",
-    audience: "Where your sandbox is, what a call carries, and what comes back.",
+    icon: "flag",
     entry: "",
     groups: [
         {
@@ -123,9 +123,22 @@ const groupPage = (group: { name: string; label: string; summary: string; descri
     },
 });
 
+/* The menu icon for each shelf, by its stable name. This menu shows its shelves as labels with no scent line
+ * (the reference is looked up, not browsed), so the icon is the one bit of ornament each row carries; a shelf
+ * with no entry here simply draws none. */
+const SHELF_ICONS: Record<string, string> = {
+    agents: "bot",
+    workspace: "folder",
+    kit: "briefcase",
+    connections: "network",
+    models: "cpu",
+    ship: "share-2",
+    daemon: "hard-drive",
+};
+
 const referenceSections: BookSection[] = shelves.map(({ shelf, groups }) => ({
     label: shelf.label,
-    audience: shelf.audience,
+    icon: SHELF_ICONS[shelf.name],
     // The shelf's first group: a nav row has to land on a real page, and a shelf heading is not one.
     entry: groups[0]?.name ?? "",
     groups: [{ items: groups.map(groupPage) }],

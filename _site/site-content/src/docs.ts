@@ -22,7 +22,8 @@ export const docsBook: Book = {
     sections: [
         {
             label: "Understand",
-            audience: "What this is, before you install anything.",
+            tagline: "What this is",
+            icon: "book-open",
             entry: "",
             groups: [
                 {
@@ -70,7 +71,8 @@ export const docsBook: Book = {
         },
         {
             label: "Run a sandbox",
-            audience: "You own the machine: install it, keep it, share it.",
+            tagline: "Install, keep, share",
+            icon: "box",
             entry: "quickstart",
             groups: [
                 {
@@ -146,7 +148,8 @@ export const docsBook: Book = {
         },
         {
             label: "Integrations",
-            audience: "Outside systems, extensions and your own computer, wired into a sandbox.",
+            tagline: "Outside systems and machines",
+            icon: "layers",
             entry: "capabilities",
             groups: [
                 {
@@ -195,7 +198,8 @@ export const docsBook: Book = {
         },
         {
             label: "Drive agents",
-            audience: "The everyday work, and whole things built out of it.",
+            tagline: "The everyday work",
+            icon: "workflow",
             entry: "parallel-agents",
             groups: [
                 {

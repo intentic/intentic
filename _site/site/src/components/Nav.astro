@@ -22,6 +22,7 @@ import type { NavEntry } from "@intentic-dev/site-content/nav";
 import { navEntries } from "@intentic-dev/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
 import { GITHUB_MARK } from "../lib/marks";
+import { NAV_ICONS } from "../lib/navIcons";
 import DiscordIcon from "./DiscordIcon.astro";
 import Lotus from "./Lotus.astro";
 import MobileNav from "./MobileNav.astro";
@@ -81,12 +82,27 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                                     <li>
                                                         <a
                                                             href={item.href}
-                                                            class:list={["menu-item", { current: isCurrentPage(item.href) }]}
+                                                            class:list={["menu-item", { current: isCurrentPage(item.href), flat: !item.description }]}
                                                             target={item.external ? "_blank" : undefined}
                                                             rel={item.external ? "noopener" : undefined}
                                                         >
-                                                            <span class="menu-item-label">{item.label}</span>
-                                                            <span class="menu-item-blurb">{item.description}</span>
+                                                            {item.icon && NAV_ICONS[item.icon] && (
+                                                                <svg
+                                                                    class="menu-item-icon"
+                                                                    viewBox="0 0 24 24"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    stroke-width="1.6"
+                                                                    stroke-linecap="round"
+                                                                    stroke-linejoin="round"
+                                                                    aria-hidden="true"
+                                                                    set:html={NAV_ICONS[item.icon]}
+                                                                />
+                                                            )}
+                                                            <span class="menu-item-text">
+                                                                <span class="menu-item-label">{item.label}</span>
+                                                                {item.description && <span class="menu-item-blurb">{item.description}</span>}
+                                                            </span>
                                                         </a>
                                                     </li>
                                                 ))}
@@ -391,58 +407,58 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         padding: 0;
         list-style: none;
     }
-    /* ── A ROW UNDER THE POINTER IS BEING CARVED AND LIT ─────────────────────────────────────────────
+    /* ── A ROW IS AN ICON AND A LABEL, LIT TOGETHER ──────────────────────────────────────────────────
      *
-     * It was a grey block and a left-hand bar: the hover every framework ships, and the one gesture in
-     * this bar that could have come off any site. What replaces it is made of the two things this whole
-     * page is made of — a lozenge and an incised rule — and it happens as ONE movement rather than three
-     * effects fired at once.
+     * Each row wears a line drawing at its left (see `navIcons`), a label in the brand face, and, on the
+     * authored menus, a few words of scent under it. The reference menu carries no scent — it is looked up,
+     * not browsed — so its rows are the icon and the label alone.
      *
-     * The lozenge is stamped into the margin: it arrives rotated 45°, which is the shape at rest, and it
-     * overshoots very slightly on the way in, the way a punch bites and settles. Its space is reserved
-     * whether or not it is showing, so nothing on the row moves — a menu that shifts its labels under the
-     * pointer is a menu you misclick.
-     *
-     * And the ground is RAKING LIGHT, not a fill. A flat translucent block is a highlight; a warm wash
-     * that is strongest at the left and gone by two thirds across is light falling on stone from the side,
-     * which is the one light this entire page is lit by.
-     *
-     * THERE WAS A THIRD THING AND IT IS GONE: a gold rule incised along the row's foot, drawn on from the
-     * left as the pointer arrived. Two rows deep in a list it stopped reading as a chisel stroke and started
-     * reading as a BORDER switching on — an underline under one item in a column of items, which is the
-     * closest thing this panel had to a line it did not mean. The panel already draws a great many gold
-     * lines (its own double rule, the action's divider); one more, appearing and disappearing under the
-     * pointer, was the one that made the menu feel busy. Two effects, not three. */
+     * The ground under a hovered or current row is RAKING LIGHT, not a fill: a warm wash strongest at the
+     * left and gone by two thirds across, light falling on stone from the side, which is the one light this
+     * whole page is lit by. Icon and label warm to ember at once, so the row reads as a single lit object
+     * rather than a marker switching on beside static text — and the icon gives the smallest of springs, the
+     * bite-and-settle the old stamped lozenge had, without moving anything around it. */
     .menu-item {
-        position: relative;
-        display: block;
-        padding: 0.45rem 0.6rem 0.45rem 1.4rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.7rem;
+        padding: 0.5rem 0.6rem;
         text-decoration: none;
         transition: background-color 0.24s ease;
     }
-    /* The stamped lozenge. */
-    .menu-item::before {
-        content: "";
-        position: absolute;
-        top: 0.85rem;
-        left: 0.5rem;
-        width: 0.32rem;
-        height: 0.32rem;
-        background: var(--color-primary-500);
-        box-shadow: 0 0 0.5rem rgba(224, 123, 39, 0.55);
-        transform: rotate(45deg) scale(0);
-        transition: transform 0.26s cubic-bezier(0.34, 1.5, 0.64, 1);
+    /* Label-only rows (the reference menu) have one line to sit against, so the icon centres on it. */
+    .menu-item.flat {
+        align-items: center;
     }
     .menu-item:hover,
     .menu-item.current {
         background: linear-gradient(90deg, rgba(224, 123, 39, 0.13) 0%, rgba(224, 123, 39, 0.05) 34%, transparent 72%);
     }
-    .menu-item:hover::before,
-    .menu-item.current::before {
-        transform: rotate(45deg) scale(1);
+    .menu-item-icon {
+        flex: none;
+        width: 1.15rem;
+        height: 1.15rem;
+        /* Dropped a hair so the glyph sits on the label's cap line once a blurb makes the text two lines tall. */
+        margin-top: 0.08rem;
+        color: var(--color-gold);
+        transition:
+            color 0.2s ease,
+            transform 0.26s cubic-bezier(0.34, 1.5, 0.64, 1);
+    }
+    .menu-item.flat .menu-item-icon {
+        margin-top: 0;
+    }
+    .menu-item:hover .menu-item-icon,
+    .menu-item.current .menu-item-icon {
+        color: var(--color-primary-400);
+        transform: scale(1.08);
+    }
+    .menu-item-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
     }
     .menu-item-label {
-        display: block;
         font-family: var(--font-mark);
         font-size: 0.9375rem;
         font-weight: 600;
@@ -453,11 +469,10 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         color: var(--color-primary-400);
     }
     .menu-item-blurb {
-        display: block;
         margin-top: 0.1rem;
-        max-width: 34ch;
+        max-width: 30ch;
         font-size: 0.75rem;
-        line-height: 1.5;
+        line-height: 1.45;
         color: var(--color-subtle);
     }
 
@@ -591,10 +606,9 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         .menu-panel {
             transition: none;
         }
-        /* The mark still ARRIVES — it is what says which row the pointer is on — it just stops being
-           stamped, and appears at its finished size. */
-        .menu-item::before {
-            transition: none;
+        /* The icon still warms with its row; it just stops springing when it does. */
+        .menu-item-icon {
+            transition: color 0.2s ease;
         }
         .bar[data-cta-managed] .bar-cta {
             transform: none;

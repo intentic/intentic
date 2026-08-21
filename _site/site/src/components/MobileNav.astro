@@ -2,6 +2,7 @@
 import { navEntries } from "@intentic-dev/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
 import { GITHUB_MARK } from "../lib/marks";
+import { NAV_ICONS } from "../lib/navIcons";
 import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
 ---
@@ -49,6 +50,19 @@ import ExternalIcon from "./ExternalIcon.astro";
                                                         target={item.external ? "_blank" : undefined}
                                                         rel={item.external ? "noopener" : undefined}
                                                     >
+                                                        {item.icon && NAV_ICONS[item.icon] && (
+                                                            <svg
+                                                                class="mobile-nav-icon"
+                                                                viewBox="0 0 24 24"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                stroke-width="1.6"
+                                                                stroke-linecap="round"
+                                                                stroke-linejoin="round"
+                                                                aria-hidden="true"
+                                                                set:html={NAV_ICONS[item.icon]}
+                                                            />
+                                                        )}
                                                         {item.label}
                                                         {item.external && <ExternalIcon />}
                                                     </a>
@@ -197,6 +211,18 @@ import ExternalIcon from "./ExternalIcon.astro";
         font-size: 0.975rem;
         padding: 12px 16px 12px 28px;
         color: var(--color-subtle);
+    }
+
+    /* The row's line drawing, warming to ember with the row the way the desktop panel's does. */
+    .mobile-nav-icon {
+        flex: none;
+        width: 1.05rem;
+        height: 1.05rem;
+        color: var(--color-gold);
+        transition: color 0.15s;
+    }
+    .mobile-nav-link:hover .mobile-nav-icon {
+        color: var(--color-primary-400);
     }
 
     .mobile-nav-link.sub.action {

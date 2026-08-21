@@ -49,8 +49,11 @@ export interface BookGroup {
 
 export interface BookSection {
     label: string;
-    /** Who arrives at this shelf and what they want: rendered under the label, in the rail and on the index. */
-    audience: string;
+    /** The nav menu's scent line for this shelf: a few words at most, or omitted for a menu that shows its
+     *  rows as labels alone (the generated API menu does exactly that). */
+    tagline?: string;
+    /** The nav menu's icon key for this shelf: resolved to a drawing in the site's `navIcons`. */
+    icon?: string;
     /** The page this shelf's nav row points at. Always a real page, so no menu row is a dead heading. */
     entry: string;
     groups: BookGroup[];
@@ -104,11 +107,14 @@ export function bookPlacement(book: Book, id: string): BookPlacement | undefined
  * disagree when this was nineteen hand-written rows. Each href is the shelf's own entry page, so no row is a
  * dead heading.
  */
-export function bookDestinations(book: Book): { label: string; href: string; description: string }[] {
+export function bookDestinations(book: Book): { label: string; href: string; description?: string; icon?: string }[] {
     return book.sections.map((section) => ({
         label: section.label,
         href: bookHref(book, section.entry),
-        description: section.audience,
+        // The short scent line, carried by the authored books and omitted by the generated API menu, which
+        // shows its shelves as labels alone.
+        description: section.tagline,
+        icon: section.icon,
     }));
 }
 
