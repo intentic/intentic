@@ -724,6 +724,10 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
     if (shot.mode !== undefined) {
         await context.addInitScript((mode) => window.sessionStorage.setItem(`intentic.demo.mode`, mode), shot.mode);
     }
+    /* THE SKIN, seeded into localStorage before the first navigation so the anti-flash script in index.html
+     * picks it up and sets `data-skin` on <html> before the Vue app mounts. Without this, the skin's CSS never
+     * matches and every shot comes back in the default look. */
+    await context.addInitScript(() => window.localStorage.setItem(`ui-skin`, `sanctum`));
     const page = await context.newPage();
     page.on("pageerror", (error) => console.warn(`  [pageerror ${shot.name}] ${error.message.split("\n")[0]}`));
     try {
