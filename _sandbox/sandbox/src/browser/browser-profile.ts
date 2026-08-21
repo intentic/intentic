@@ -13,8 +13,9 @@ import {
     type Screencast,
     type ScreencastClientMessage,
 } from "./screencast.js";
+import { browserFingerprint } from "./fingerprint.js";
 import { acquireProfileLock, markConnected, passkeyPath, profileOwner, releaseProfileLock, sessionDir } from "./session-store.js";
-import { STEALTH_INIT } from "./stealth.js";
+import { stealthInit } from "./stealth.js";
 import type { Services } from "../composition.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
 import { browserUrls, contributionKey, contributionRegistry } from "../capabilities/contributions.js";
@@ -150,19 +151,25 @@ export const createBrowserProfileRoute = (services: Services) =>
                     // Run HEADED on a virtual display: the headless shell is fingerprinted and blocked by anti-bot
                     // WAFs (Reddit's "network security"). Xvfb rides the capability's Dockerfile fragment.
                     const display = await ensureXvfb();
+                    /* THE SAME DEVICE THE AGENT'S BROWSER PRESENTS, derived from the same seed for the same
+                     * profile owner (fingerprint.ts). This window and @playwright/mcp share one profile, so a
+                     * site watches the owner sign in here and then meets the agent later on what has to be the
+                     * same machine: a device that changes underneath a live cookie is precisely what
+                     * session-binding checks are built to catch, and the answer is a logout or a captcha. */
+                    const fingerprint = await browserFingerprint(services.workspace.root, profile);
                     context = await playwright.chromium.launchPersistentContext(sessionDir(services.workspace.root, profile), {
                         headless: false,
                         env: { ...process.env, DISPLAY: display },
                         viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT },
                         // Look like a normal desktop browser (headed full Chromium already has a real UA / window.chrome).
-                        locale: "en-US",
-                        timezoneId: "America/New_York",
+                        locale: fingerprint.locale,
+                        timezoneId: fingerprint.timezoneId,
                         // --no-sandbox: Chromium runs as root and the container IS the isolation boundary. --disable-dev-shm-usage:
                         // a container's tiny /dev/shm crashes Chromium. The blink flag drops navigator.webdriver.
                         args: ["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage"],
                     });
-                    // Patch the residual GPU/WebGL tell (SwiftShader) before the first navigation.
-                    await context.addInitScript(STEALTH_INIT);
+                    // Patch the residual server tells (SwiftShader GPU, a host's core count) before the first navigation.
+                    await context.addInitScript(stealthInit(fingerprint));
                     const ctx = context;
                     // A persistent context opens with one page; make sure it exists BEFORE the screencast starts,
                     // so the stream has something to bind to (it follows every later page, popups included,

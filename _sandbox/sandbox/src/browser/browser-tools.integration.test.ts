@@ -5,10 +5,14 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { browserServerSpec, browserServersOf, isolatedBrowserSpec, writeBrowserConfig } from "./browser-tools.js";
+import { browserFingerprint } from "./fingerprint.js";
 import { acquireProfileLock, markConnected, releaseProfileLock } from "./session-store.js";
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-tools-"));
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
+
+// The device a spec is built around. Any owner will do where the test is about wiring rather than values.
+const anyDevice = async (): Promise<Awaited<ReturnType<typeof browserFingerprint>>> => browserFingerprint(tempRoot(), "reddit");
 
 // Whether the image actually has Chromium decides what browserServersOf can return, and CI images may not.
 // Asserting the SHAPE of each spec is version-independent; the wiring test below adapts.
@@ -16,7 +20,7 @@ const chromiumInstalled = async (): Promise<boolean> => Object.keys((await brows
 
 test("browser MCP configs live in a private directory, each one written exclusively", async () => {
     const server = `permissions-${process.hrtime.bigint()}`;
-    const path = await writeBrowserConfig(server, 41_237);
+    const path = await writeBrowserConfig(server, 41_237, await anyDevice());
     expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
     expect(statSync(path).mode & 0o777).toBe(0o600);
 });
@@ -28,8 +32,9 @@ test("browser MCP configs live in a private directory, each one written exclusiv
  * second write hit `wx` and threw EEXIST out of turn planning, killing the turn before the model ran. */
 test("a recycled port writes its own config instead of colliding with the old one", async () => {
     const server = `recycled-${process.hrtime.bigint()}`;
-    const first = await writeBrowserConfig(server, 41_237);
-    const second = await writeBrowserConfig(server, 41_237);
+    const device = await anyDevice();
+    const first = await writeBrowserConfig(server, 41_237, device);
+    const second = await writeBrowserConfig(server, 41_237, device);
     expect(second).not.toBe(first);
     expect(existsSync(first)).toBe(true);
     expect(statSync(second).mode & 0o777).toBe(0o600);
@@ -91,7 +96,7 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
 test("every browser server bounds a single tool call", () => {
     const specs = [
         browserServerSpec("cli.js", "/ms/chrome", "/profile", "/stealth.js", ":99", "/tmp/cfg.json"),
-        isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", "/tmp/cfg.json"),
+        isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", "/stealth.js", ":99", "/tmp/cfg.json"),
     ] as { timeout?: number }[];
     for (const spec of specs) {
         expect(spec.timeout).toBeGreaterThan(60_000); // clears @playwright/mcp's own 60s navigation timeout
@@ -99,19 +104,40 @@ test("every browser server bounds a single tool call", () => {
     }
 });
 
-// The credential-free browser carries no identity at all: that is what lets it exist without a login, and
-// what lets two turns run one at once.
-test("isolatedBrowserSpec keeps the profile in memory and needs no display", () => {
-    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`, "/tmp/cfg.json") as {
+/* The credential-free browser carries no identity at all: that is what lets it exist without a login, and what
+ * lets two turns run one at once. It is HEADED all the same, because a docs site behind a WAF turns the
+ * headless shell away whether or not the visitor is signed in, and it carries the same init script because a
+ * SwiftShader GPU is a server tell that has nothing to do with having an account. */
+test("isolatedBrowserSpec keeps the profile in memory and still passes for a real browser", () => {
+    const spec = isolatedBrowserSpec(
+        "cli.js",
+        "/ms/chrome",
+        `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
+        `${WORKSPACE_ROOT}/${STATE_DIR}/local/browser/web.stealth.js`,
+        ":99",
+        "/tmp/cfg.json",
+    ) as { args: string[]; env: Record<string, string> };
+    expect(spec.args).toContain("--isolated");
+    expect(spec.args).not.toContain("--headless");
+    expect(spec.args).toContain("--init-script");
+    expect(spec.args).toContain("/work/.intentic/local/browser/web.stealth.js");
+    expect(spec.args).toContain("--output-dir");
+    expect(spec.args).toContain("/work/.intentic/records/artifacts/browser");
+    // In memory: no profile on disk to lock, which is what lets two concurrent turns each have one.
+    expect(spec.args).not.toContain("--user-data-dir");
+    expect(spec.env["DISPLAY"]).toBe(":99");
+});
+
+/* …but a sandbox whose owner has never connected an account has no Xvfb (it rides the browser capability's
+ * Dockerfile fragment), and "read this URL" has to keep working there. No display means headless, and DISPLAY
+ * STRIPPED rather than merely absent: an inherited one sends Chromium at an X server that isn't there. */
+test("with no display the credential-free browser falls back to headless rather than vanishing", () => {
+    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", "/stealth.js", undefined, "/tmp/cfg.json") as {
         args: string[];
         env: Record<string, string>;
     };
-    expect(spec.args).toContain("--isolated");
     expect(spec.args).toContain("--headless");
-    expect(spec.args).toContain("--output-dir");
-    expect(spec.args).toContain("/work/.intentic/records/artifacts/browser");
-    expect(spec.args).not.toContain("--user-data-dir");
-    expect(spec.args).not.toContain("--init-script");
+    expect(spec.args).toContain("--isolated");
     expect(spec.env["DISPLAY"]).toBeUndefined();
 });
 

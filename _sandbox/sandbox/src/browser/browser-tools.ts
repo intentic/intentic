@@ -11,6 +11,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { workloadStamp } from "../platform/leftovers.js";
 import { browserOutputDir } from "./browser-artifacts.js";
 import { ensureXvfb } from "./display.js";
+import { browserFingerprint, type BrowserFingerprint } from "./fingerprint.js";
 import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
@@ -172,13 +173,22 @@ const freePort = async (): Promise<number> => {
  * executable the child would trust), and the EEXIST propagates out of turn planning, which happens BEFORE the
  * model is asked anything: the whole turn dies with a raw filesystem error and no browser was even involved.
  * The name never had to be derivable, so it isn't. Owner and port stay in it for reading a directory by eye. */
-export const writeBrowserConfig = async (server: string, port: number): Promise<string> => {
+export const writeBrowserConfig = async (server: string, port: number, fingerprint: BrowserFingerprint): Promise<string> => {
     await mkdir(configDir, { recursive: true, mode: 0o700 });
     const path = join(configDir, `${server}-${port}-${randomBytes(4).toString("hex")}.json`);
-    await writeFile(path, JSON.stringify({ browser: { launchOptions: { args: [`--remote-debugging-port=${port}`] } } }), {
-        flag: "wx",
-        mode: 0o600,
-    });
+    /* `contextOptions` is the same seam as `launchOptions` and carries the half of the device that is the
+     * CONTEXT's to set rather than the page's: the clock and the language. They cannot go in the init script,
+     * because `Accept-Language` and the timezone are read below JavaScript, and a header that disagrees with
+     * `navigator.languages` is the kind of contradiction detectors look for first. The owner's own login window
+     * passes the identical pair to launchPersistentContext (browser-profile.ts) — they share a profile, so a
+     * site must meet the same machine whichever of the two is driving. */
+    const config = {
+        browser: {
+            launchOptions: { args: [`--remote-debugging-port=${port}`] },
+            contextOptions: { locale: fingerprint.locale, timezoneId: fingerprint.timezoneId },
+        },
+    };
+    await writeFile(path, JSON.stringify(config), { flag: "wx", mode: 0o600 });
     return path;
 };
 
@@ -220,11 +230,28 @@ export const browserServerSpec = (
     alwaysLoad: true,
 });
 
-// The credential-free browser. HEADLESS and `--isolated` (profile in memory): it needs no persisted identity,
-// so it needs neither Xvfb nor a --user-data-dir, which also means two concurrent turns can each have one,
-// where a shared profile directory would deadlock on Chromium's lock. Screenshots and traces land in the
-// workspace under .intentic so the agent can Read them straight back.
-export const isolatedBrowserSpec = (cli: string, executablePath: string, outputDir: string, configPath: string): McpServerConfig => ({
+/* The credential-free browser. `--isolated` (profile in memory) is what makes it credential-free and what lets
+ * two concurrent turns each have one, where a shared profile directory would deadlock on Chromium's lock.
+ *
+ * IT IS HEADED, on the same Xvfb as the logged-in browsers, and that is a change from what it was. The
+ * reasoning that made it headless was that a browser holding no identity has no identity to protect, which is
+ * true and beside the point: the headless shell is refused by anti-bot WAFs on sight, and the pages an agent
+ * reaches for here are ordinary web pages behind ordinary WAFs. A docs site that answers a logged-in browser
+ * and turns this one away is a difference with no reason behind it. It carries the same init script as the
+ * others for the same reason — a SwiftShader GPU is a server tell whether or not anyone is signed in.
+ *
+ * `display` is optional alone in this file: Xvfb rides the browser capability's Dockerfile fragment, so a
+ * sandbox that has never connected an account may not have it, and this browser must still work there. Absent,
+ * it falls back to headless rather than refusing to exist. Screenshots and traces land in the workspace under
+ * .intentic so the agent can Read them straight back. */
+export const isolatedBrowserSpec = (
+    cli: string,
+    executablePath: string,
+    outputDir: string,
+    stealthPath: string,
+    display: string | undefined,
+    configPath: string,
+): McpServerConfig => ({
     type: "stdio",
     command: process.execPath,
     args: [
@@ -237,15 +264,21 @@ export const isolatedBrowserSpec = (cli: string, executablePath: string, outputD
         executablePath,
         "--no-sandbox",
         "--isolated",
-        "--headless",
+        ...(display === undefined ? ["--headless"] : []),
+        "--init-script",
+        stealthPath,
         "--output-dir",
         outputDir,
         "--viewport-size",
         "1280,800",
     ],
-    // DISPLAY is stripped, not merely unset: a headless Chromium that inherits one from the daemon's own
-    // environment will try to talk to that X server and fail on a display it was never meant to touch.
-    env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "DISPLAY")) as Record<string, string>,
+    // With no display, DISPLAY is STRIPPED rather than merely unset: a headless Chromium that inherits one from
+    // the daemon's own environment will try to talk to that X server and fail on a display it was never meant
+    // to touch.
+    env:
+        display === undefined
+            ? (Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "DISPLAY")) as Record<string, string>)
+            : { ...process.env, DISPLAY: display },
     timeout: BROWSER_CALL_TIMEOUT_MS,
     // NOT alwaysLoad: @playwright/mcp carries ~20 tools, and pinning them into every turn's prompt taxes the
     // turns that never browse. Deferred, they cost nothing until ToolSearch pulls them in, the system append
@@ -362,10 +395,25 @@ export const browserServersOf = async (
     const ports: Record<string, number> = {};
     const passkeys: Record<string, string> = {};
     const servers: Record<string, McpServerConfig> = {};
+    /* One display for every browser this turn starts, headed being the point of it (display.ts). It is asked
+     * for ONCE and shared, and it is asked for even by a turn that logs into nothing, because the
+     * credential-free browser is headed too now. Failure is not fatal: Xvfb rides the browser capability's
+     * Dockerfile fragment, so a sandbox whose owner has never connected an account has no Xvfb, and "read this
+     * URL" must keep working there. `undefined` sends the isolated browser back to headless; the logged-in
+     * path, which cannot fall back (its whole job is to pass for a person), refuses below instead. */
+    const display = await ensureXvfb().catch(() => undefined);
     if (anonymous) {
         const webPort = await freePort();
         ports["web"] = webPort;
-        servers["web"] = isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root), await writeBrowserConfig("web", webPort));
+        const fingerprint = await browserFingerprint(root, "web");
+        servers["web"] = isolatedBrowserSpec(
+            runtime.cli,
+            runtime.executablePath,
+            browserOutputDir(root),
+            await ensureStealthScript(root, "web", fingerprint),
+            display,
+            await writeBrowserConfig("web", webPort, fingerprint),
+        );
     }
     const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");
     const owners = new Set(granted.map((capability) => profileOwner(capability)).filter((owner) => !isProfileOpen(owner)));
@@ -384,22 +432,29 @@ export const browserServersOf = async (
             accounts[owner] = owner;
         }
     }
-    // Only the persisted-profile path pays for Xvfb and the stealth script, a turn that never logs in anywhere
-    // must not start a virtual display just to have a browser available.
-    const display = await ensureXvfb();
-    const stealthPath = await ensureStealthScript(root);
+    /* The logged-in path REQUIRES the display, where the credential-free one merely prefers it. Its whole job
+     * is to act as a person on a site that is watching for one, and the headless shell is the single loudest
+     * way to fail that, so a missing Xvfb stands the logged-in browsers down (the agent still has `web`, and
+     * the Environment card is where the owner installs the pack) rather than quietly shipping a browser that
+     * every WAF turns away. */
+    if (display === undefined) {
+        return { ...NO_BROWSER_TOOLS, servers, ports };
+    }
     const backends: Record<string, { command: string; args: readonly string[]; env: Record<string, string> }> = {};
     for (const owner of owners) {
         const port = await freePort();
         ports[owner] = port;
         passkeys[owner] = passkeyPath(root, owner);
+        // One device per owner, derived (fingerprint.ts) rather than shared: the GPU string is the signal that
+        // survives an IP change, so handing every profile the same one would link an owner's accounts for free.
+        const fingerprint = await browserFingerprint(root, owner);
         const spec = browserServerSpec(
             runtime.cli,
             runtime.executablePath,
             sessionDir(root, owner),
-            stealthPath,
+            await ensureStealthScript(root, owner, fingerprint),
             display,
-            await writeBrowserConfig(owner, port),
+            await writeBrowserConfig(owner, port, fingerprint),
         );
         if (spec.type !== "stdio") {
             return { ...NO_BROWSER_TOOLS, servers, ports };
