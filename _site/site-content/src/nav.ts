@@ -103,7 +103,7 @@ export const navEntries: NavEntry[] = [
         // The extension gallery is NOT a row here: it is already "Extensions" in this same bar, two items to
         // the right, and a menu whose neighbour duplicates it teaches the reader that the bar has no shape.
         sections: [{ items: productItems() }],
-        action: { label: "Try the live workspace", href: DEMO_PATH },
+        action: { label: "Try the demo workspace", href: DEMO_PATH },
     },
     {
         type: "menu",

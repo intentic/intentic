@@ -278,7 +278,6 @@ const { payload } = Astro.props;
         padding: 0.7rem 1rem;
         cursor: pointer;
         list-style: none;
-        scroll-margin-top: 5rem;
     }
     .api-op-summary::-webkit-details-marker {
         display: none;
@@ -354,7 +353,7 @@ const { payload } = Astro.props;
         font-size: 0.8125rem;
     }
     .api-table th {
-        padding: 0.3rem 0.5rem 0.3rem 0;
+        padding: 0.4rem 1.5rem 0.4rem 0;
         border-bottom: 1px solid var(--color-line);
         font-family: var(--font-mark);
         font-size: 0.7rem;
@@ -365,10 +364,17 @@ const { payload } = Astro.props;
         color: var(--color-subtle);
     }
     .api-table td {
-        padding: 0.35rem 0.5rem 0.35rem 0;
+        padding: 0.6rem 1.5rem 0.6rem 0;
         border-bottom: 1px solid var(--color-line);
         vertical-align: top;
         color: var(--color-muted);
+    }
+    /* The type/where columns are narrow, so their own text is the right edge; a trailing gap on the last cell
+       would only push them off it. The separation belongs BETWEEN the columns, which is the right padding on
+       every cell before the last. */
+    .api-table th:last-child,
+    .api-table td:last-child {
+        padding-right: 0;
     }
     /* Nesting, and the rule that draws it has to sit at the same weight as the padding above or it loses. A
        hairline down the left of an indented run is what makes four levels legible: the indent alone reads as

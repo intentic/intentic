@@ -56,6 +56,19 @@ export interface RefOperation {
 
 const SANDBOX = "https://sandbox-a1b2c3d4e5f6.intentic.dev";
 
+/* A field note is a LABEL in a narrow cell, not prose. The contract's own descriptions run to full sentences,
+ * which crowd a column built for a word or two, so a note is cut to the first handful of words: the first
+ * sentence, then a hard word cap, with an ellipsis when the source ran longer so a reader knows the whole of
+ * it lives in the OpenAPI document. */
+const FEW_WORDS = 6;
+const terse = (text: string | undefined): string | undefined => {
+    const trimmed = text?.trim();
+    if (trimmed === undefined || trimmed === "") return undefined;
+    const firstSentence = trimmed.split(/(?<=[.!?])\s/u)[0] ?? trimmed;
+    const words = firstSentence.replace(/[.,;:]+$/u, "").split(/\s+/u);
+    return words.length <= FEW_WORDS ? words.join(" ") : `${words.slice(0, FEW_WORDS).join(" ")}…`;
+};
+
 /* Loaded once for the whole build rather than once per page. Astro imports this module a single time and the
  * 37 group pages all await the same promise, so the generator runs once for 255 operations instead of 37
  * times, which is the difference between a build step and a build problem. */
@@ -172,7 +185,7 @@ const schemaRows = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): R
                 name: `… and ${named.length - SHOWN} more shapes`,
                 type: "shape",
                 required: false,
-                description: "Every one of them is in the OpenAPI document.",
+                description: "In the OpenAPI document",
             });
         }
         return rows;
@@ -191,7 +204,7 @@ const schemaRows = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): R
             name,
             type: typeLabel(child, root),
             required: required.has(name),
-            description: resolved.description,
+            description: terse(resolved.description),
         };
         const nested = firstType(resolved) === "array" ? resolve(resolved.items, root) : resolved;
         const goesDeeper = nested !== undefined && (nested.properties !== undefined || nested.anyOf !== undefined || nested.oneOf !== undefined);
@@ -258,7 +271,7 @@ const paramFrom = (raw: Omit<SpecParam, "schema"> & { schema?: SchemaNode }, roo
         in: raw.in === "path" ? "path" : "query",
         required: raw.required === true,
         type: typeLabel(schema, root),
-        description: raw.description ?? schema.description,
+        description: terse(raw.description ?? schema.description),
         // Everything on the wire is text: a query value and a path segment are strings even when the schema
         // calls them numbers, so the playground's field holds a string and this matches it.
         example: value === undefined || value === null ? "" : String(value),

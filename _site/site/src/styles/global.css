@@ -281,6 +281,11 @@
         background: var(--color-canvas);
         color: var(--color-content);
         scroll-behavior: smooth;
+        /* Every in-page jump — a fragment link, a table-of-contents click, a scrollIntoView — lands this far
+           below the top, so the fixed bar never sits over the heading you asked for. Without it a click in the
+           on-page nav parked the target under the bar, which read as the page throwing your place away. One
+           rule on the scroller covers native anchors and scripted scrolls alike, so no target needs its own. */
+        scroll-padding-top: calc(var(--bar-height) + 1rem);
     }
     body {
         min-height: 100vh;
@@ -361,7 +366,9 @@
     .display {
         font-family: var(--font-display);
         font-weight: 600;
-        letter-spacing: -0.005em;
+        /* Positive tracking, because Playfair at these sizes sets tight enough that adjacent letters kiss;
+           the stone fill makes any touching pair read as one blotched glyph, so the letters are given air. */
+        letter-spacing: 0.02em;
         line-height: 1.24;
         background-image:
             url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='70'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.78' intercept='0.11'/%3E%3CfeFuncG type='linear' slope='0.78' intercept='0.11'/%3E%3CfeFuncB type='linear' slope='0.78' intercept='0.11'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='70' height='70' filter='url(%23g)'/%3E%3C/svg%3E"),
@@ -1089,7 +1096,6 @@
         font-size: 1.5rem;
         font-weight: 600;
         color: var(--color-content);
-        scroll-margin-top: 6rem;
     }
     .docs-body > h2:first-child {
         margin-top: 0;
@@ -1103,7 +1109,6 @@
         font-size: 1.125rem;
         font-weight: 600;
         color: var(--color-content);
-        scroll-margin-top: 6rem;
     }
 
     /* ── Section anchors ─────────────────────────────────────

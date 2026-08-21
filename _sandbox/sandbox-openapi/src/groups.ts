@@ -43,7 +43,7 @@ export const SPEC_SHELVES: readonly SpecShelf[] = [
     },
     {
         name: "kit",
-        label: "What an agent carries",
+        label: "Agent setup",
         audience: "The instructions, characters and add-ons that decide how an agent behaves.",
     },
     {
@@ -180,7 +180,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         description: "The ports something is answering on, and giving one an address on the outside or taking that away.",
     },
 
-    // ── What an agent carries ─────────────────────────────────────────────────────────────────────────
+    // ── Agent setup ───────────────────────────────────────────────────────────────────────────────────
     {
         name: "personas",
         shelf: "kit",
