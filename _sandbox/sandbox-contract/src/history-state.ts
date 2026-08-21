@@ -78,6 +78,12 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
         portability: "derived",
         note: "Each conversation re-attaches its checkout from its branch on its next turn.",
     },
+    /* The phrase index over what every conversation said, which both search boxes read (sessions/search-index.ts).
+     * Derived in the strict sense: every row in it was extracted from `transcripts/`, which travels, so a
+     * restored sandbox rebuilds it on its first boot rather than carrying tens of megabytes of index that its
+     * own backfill would produce anyway. Until that pass finishes the searches answer from what is indexed so
+     * far and say so, which is the behaviour they already have on any first run. */
+    { path: "said-index/", portability: "derived", note: "Rebuilt from the carried transcripts by the first boot's backfill." },
     { path: "overlays/", portability: "derived" },
     { path: "logs/", portability: "derived" },
     { path: "trash/", portability: "derived" },

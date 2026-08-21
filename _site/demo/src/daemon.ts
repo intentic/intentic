@@ -773,7 +773,8 @@ const searchAgents = (query: string, caseSensitive: boolean): AgentSearchResult 
         needle === ``
             ? []
             : roster.agents.filter((agent) => folded(agent.title ?? ``, caseSensitive).includes(needle)).map((agent) => ({ id: agent.id }));
-    return { matches, scanned: roster.agents.length };
+    // The demo has no phrase index behind it (it matches titles only), so nothing is ever still being read.
+    return { matches, scanned: roster.agents.length, indexing: false };
 };
 
 const searchSessions = (query: string, caseSensitive: boolean): ReturnType<typeof sessions> => {

@@ -155,21 +155,18 @@ import { createPushSender, type PushSender } from "./push/push.js";
 import { type PortForwards, createPortForwards } from "./ports/port-forwards.js";
 import { type ListeningPort, scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
 import {
+    createRecentSessions,
     listWorkspaceSessions,
     readWorkspaceSession,
     searchWorkspaceSessions,
     type SessionSummary,
     workspaceSessionExists,
 } from "./sessions/sessions.js";
-import { transcriptSearchMetrics, type SpokenLine } from "./sessions/transcript-search.js";
+import { readSessionLines, spokenLinesOf, transcriptSearchMetrics } from "./sessions/transcript-search.js";
 import { fileThreadSessionsStore, type ThreadSessionsStore } from "./sessions/thread-sessions.js";
-import {
-    agentTranscript,
-    type AgentTranscriptDeps,
-    createSpokenLinesReader,
-    storedTranscript,
-    type TranscriptAgent,
-} from "./sessions/agent-transcript.js";
+import { openSearchIndex, type SearchIndex } from "./sessions/search-index.js";
+import { backfillSearchIndex, type BackfillSource } from "./sessions/search-backfill.js";
+import { agentTranscript, type AgentTranscriptDeps, spokenTranscript, storedTranscript, type TranscriptAgent } from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { fileShareStore, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
@@ -644,7 +641,10 @@ export interface Services {
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
         readonly read: (dir: string, id: string) => Promise<RestoredMessage[]>;
-        readonly search: (dir: string, query: string, caseSensitive: boolean) => Promise<SessionSummary[]>;
+        // No `dir`, unlike its neighbours: a search reads the phrase index and a listing bound to this
+        // workspace's root, both of which the daemon built once. A parameter the implementation is free to
+        // ignore is a trap for the next caller who passes something else and is quietly obeyed.
+        readonly search: (query: string, caseSensitive: boolean) => Promise<SessionSummary[]>;
         readonly exists: (dir: string, id: string) => Promise<boolean>;
     };
     /* A CONVERSATION's transcript, as opposed to a SESSION's, keyed by conversationId, which is the identity
@@ -660,14 +660,31 @@ export interface Services {
         // from. Same no-op-if-already-opened rule as `open`.
         readonly fork: (agent: TranscriptAgent, source: string, keep: number) => Promise<void>;
         readonly append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => Promise<void>;
-        // What the conversation said, per side, cached against the record's size, what /agents/search matches
-        // per entry per keystroke, instead of re-reading the whole store (see createSpokenLinesReader).
-        readonly lines: (agent: TranscriptAgent) => Promise<readonly SpokenLine[]>;
         // How many messages are stored, the position the next turn starts at, which its checkpoint is filed
         // under so a rewind can address it (see transcript-record.ts).
         readonly count: (agent: TranscriptAgent) => Promise<number>;
         // Drop everything after the message a rewind went back to; returns how many went.
         readonly truncate: (agent: TranscriptAgent, keep: number) => Promise<number>;
+    };
+    /* WHAT WAS SAID, INDEXED, the substrate both phrase searches answer from: the fleet filter over the board
+     * and the archive (/agents/search) and the chat-history box (/sessions?query=). On disk, written forward as
+     * turns settle, so a query reads an index and never a transcript. See sessions/search-index.ts for the
+     * numbers that made this durable rather than a heap cache built on the query path. */
+    readonly saidIndex: {
+        /* One query, one round trip: which sources said this and the line that proves it.
+         *
+         * Async at this seam though the index itself answers synchronously (it is one SQL statement). The seam
+         * is what a test harness substitutes, and a harness has to read the fake transcripts it was given
+         * before it can answer; forcing that to be synchronous is how a double ends up diverging from the
+         * thing it stands for. One microtask on a path that used to take seconds. */
+        readonly search: (...args: Parameters<SearchIndex["search"]>) => Promise<ReturnType<SearchIndex["search"]>>;
+        // Bring the index level with the stores. Detached at boot and after an archive sweep; a no-op once
+        // there is nothing behind.
+        readonly backfill: (signal?: AbortSignal) => Promise<void>;
+        /* Whether a backfill is running right now, which is the same question as "can this answer still grow".
+         * Both search routes report it, so a screen showing a partial list can say that it is partial instead
+         * of implying it is everything. */
+        readonly indexing: () => boolean;
     };
     /* Which conversations have been published as pages anyone with the link can read (historyRoot/shares.json).
      * The index only, the pages themselves live in the workspace's outbox. See share/share-store.ts. */
@@ -974,7 +991,79 @@ export const createServices = (config: Config, logger: Logger): Services => {
         sessionIdOf: agents.sessionIdOf,
         readClaudeSession: readWorkspaceSession,
     };
-    const transcriptLines = createSpokenLinesReader(transcriptDeps);
+    /* THE PHRASE INDEX, on the history volume beside the records it is derived from, daemon-private and outside
+     * the agent's reach like the journal and the activity ledger. A pure cache: it is deleted and rebuilt on a
+     * schema bump, and every line in it can be re-extracted from a record. */
+    const saidIndex = openSearchIndex(join(config.historyRoot, "said-index"));
+    // One listing of the history menu's window, shared by the search that filters it and the backfill that
+    // indexes it, so a keystroke burst costs one stat pass over the session store rather than one per query.
+    const recentSessions = createRecentSessions(workspace.root);
+    /* The version an indexed conversation is pinned to: its record's byte size, one stat. Append-only plus
+     * rewind's truncate, so any change to what the conversation said moves this. `undefined` (no record at all)
+     * is a version too, so a conversation that has genuinely said nothing is not re-read on every pass. */
+    const recordVersion = async (id: string): Promise<string | undefined> => {
+        const size = await transcriptDeps.record.size(id);
+        return size === undefined ? undefined : String(size);
+    };
+    /* Bring the index level with both stores, ONE PASS. The conversation half is the ROSTER's own list, live and
+     * archived together, which is exactly the set /agents/search answers over. The session half is the history
+     * list's window, which is what /sessions can return, and it prunes: a session that has fallen out of that
+     * window can never be answered with, so its rows are dead weight. */
+    const runSaidBackfill = async (signal?: AbortSignal): Promise<void> => {
+        const roster = [...agents.list(), ...agents.listArchived()].flatMap((summary) => {
+            const entry = agents.entry(summary.id);
+            return entry === undefined ? [] : [entry];
+        });
+        await backfillSearchIndex(
+            saidIndex,
+            {
+                kind: "conversation",
+                prune: false,
+                sources: roster.map((entry): BackfillSource => ({
+                    key: entry.id,
+                    version: () => recordVersion(entry.id),
+                    lines: () => spokenTranscript(transcriptDeps, entry),
+                })),
+            },
+            logger,
+            signal,
+        );
+        if (signal?.aborted === true) {
+            return;
+        }
+        const listed = await recentSessions().catch(() => []);
+        await backfillSearchIndex(
+            saidIndex,
+            {
+                kind: "session",
+                prune: true,
+                sources: listed.map((session): BackfillSource => ({
+                    key: session.id,
+                    // The session file's own mtime, which the list already read: a session the SDK appended
+                    // to moves it, and nothing else has to be opened to find out.
+                    version: async () => String(session.updatedAt),
+                    lines: () => readSessionLines(workspace.root, session.id),
+                })),
+            },
+            logger,
+            signal,
+        );
+    };
+    /* Reentrancy guard AND the flag both search routes report. Two passes over the same sources at once would
+     * race for no gain, and a search taken during either is legitimately partial, which is the thing the board
+     * needs told rather than hidden. */
+    let backfillingSaid = false;
+    const backfillSaidIndex = async (signal?: AbortSignal): Promise<void> => {
+        if (backfillingSaid) {
+            return;
+        }
+        backfillingSaid = true;
+        try {
+            await runSaidBackfill(signal);
+        } finally {
+            backfillingSaid = false;
+        }
+    };
     /* A COLD INDEX REBUILD USED TO ANNOUNCE ITSELF NOWHERE, and that silence was the whole bug report.
      *
      * Rebuilding every vector in the workspace is ~30 minutes at four cores. Nothing said so: the machine simply
@@ -1042,7 +1131,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             const operations = perf.ranked();
             return {
                 transcriptSearch: transcriptSearchMetrics(),
-                conversationTranscriptSearch: transcriptLines.metrics(),
+                saidIndex: saidIndex.metrics(),
                 agentOrigins: agentOrigins.metrics(),
                 landedPresences: landedPresences.metrics(),
                 landingExpiry: landingExpiry.metrics(),
@@ -1240,7 +1329,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         sessions: {
             list: listWorkspaceSessions,
             read: readWorkspaceSession,
-            search: searchWorkspaceSessions,
+            // Bound to this daemon's one index: the history box and the fleet board answer from the same rows.
+            search: (query, caseSensitive) =>
+                searchWorkspaceSessions(recentSessions, query, caseSensitive, async (...args) => saidIndex.search(...args)),
             exists: workspaceSessionExists,
         },
         transcripts: {
@@ -1252,14 +1343,51 @@ export const createServices = (config: Config, logger: Logger): Services => {
             // No provider-store fallback here, unlike `open`: a branch's opening history is by definition the
             // source conversation's record, and no provider knows this conversation exists yet.
             fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),
-            append: (agent, messages) => transcriptDeps.record.append(agent.id, messages),
-            lines: transcriptLines,
+            /* THE INDEX IS WRITTEN HERE, on the same call that records the turn, because this is the moment the
+             * conversation's words become durable and every road a turn can be started down ends at it (see
+             * turn-transcript's recordTurnTranscript). Appending the turn's own lines rather than re-extracting
+             * the conversation is what keeps this at ~1.4 ms on the settle path.
+             *
+             * The index write is best-effort and deliberately AFTER the record's: the record is the truth and
+             * must not be held hostage to a cache. An index write that fails leaves the conversation's last turn
+             * unsearchable until the next boot's backfill notices the version moved and re-reads it. */
+            append: async (agent, messages) => {
+                await transcriptDeps.record.append(agent.id, messages);
+                try {
+                    saidIndex.extend(agent.id, "conversation", (await recordVersion(agent.id)) ?? "none", spokenLinesOf(messages));
+                } catch (error) {
+                    logger.warn({ err: error, conversationId: agent.id }, "search index: turn not indexed");
+                }
+            },
             count: (agent) => transcriptDeps.record.count(agent.id),
-            truncate: (agent, keep) => transcriptDeps.record.truncate(agent.id, keep),
+            /* A rewind is the one thing that SHORTENS a record, so the index cannot be appended to here: it is
+             * re-stated whole from what the record now holds. Rare enough (a person clicking back to a turn)
+             * that reading one conversation is the right trade against tracking positions in the index. */
+            truncate: async (agent, keep) => {
+                const dropped = await transcriptDeps.record.truncate(agent.id, keep);
+                try {
+                    saidIndex.put(agent.id, "conversation", (await recordVersion(agent.id)) ?? "none", await spokenTranscript(transcriptDeps, agent));
+                } catch (error) {
+                    logger.warn({ err: error, conversationId: agent.id }, "search index: rewind not reindexed");
+                }
+                return dropped;
+            },
+        },
+        saidIndex: {
+            search: async (needle, kind, caseSensitive) => saidIndex.search(needle, kind, caseSensitive),
+            backfill: backfillSaidIndex,
+            indexing: () => backfillingSaid,
         },
         shares: fileShareStore(join(config.historyRoot, "shares.json")),
         speech: createSpeech({ workspaceRoot: workspace.root, log: (message) => logger.info(`speech: ${message}`) }),
-        purgeConversationState: (removed, retained) => purgeConversationState(workspace.root, config.historyRoot, removed, retained),
+        // The index goes with the state: a purged conversation's rows would otherwise keep it findable by
+        // phrase after everything it said was deleted.
+        purgeConversationState: async (removed, retained) => {
+            await purgeConversationState(workspace.root, config.historyRoot, removed, retained);
+            for (const entry of removed) {
+                saidIndex.forget(entry.id);
+            }
+        },
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),
         members,
         auth,

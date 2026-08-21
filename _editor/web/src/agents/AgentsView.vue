@@ -164,7 +164,18 @@ const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
  * `Aa` sits INSIDE the field, where every editor puts its match switches, and it is a preference rather than
  * part of this query, see useAgentFilter. Its whole visible consequence is on the cards: results, and the
  * marks explaining them, both follow it. */
-const { query, needle, matchCase, active: filtering, matches, snippetOf, archivedMatches, sessionMatches, searching } = useAgentFilter();
+const {
+    query,
+    needle,
+    matchCase,
+    active: filtering,
+    matches,
+    snippetOf,
+    archivedMatches,
+    sessionMatches,
+    searching,
+    partial: searchPartial,
+} = useAgentFilter();
 const filterField = ref<InstanceType<typeof SearchBar> | undefined>(undefined);
 // The Finished lane's two extra states. Both live here rather than in the store: they are how this ONE board
 // is being looked at, and a second surface opening the fleet should not inherit a scroll-position-like choice.
@@ -668,10 +679,16 @@ const started = computed(
 // The header's tally. Summed over the same cardsFor and runsFor the lanes render, so it can never disagree
 // with the `n of m` counts under it.
 const kept = computed(() => LANES.reduce((sum, lane) => sum + keptIn(lane.key), 0));
-const matchTally = computed(() => `${kept.value} of ${total.value}`);
+/* THE TALLY, WHICH MUST NOT CLAIM MORE THAN IT KNOWS. "3 of 40" is an assertion that all forty were looked at,
+ * and while the daemon's half of the filter is still outstanding it is simply false: what is on screen is the
+ * chats this tab already had open, with the rest of the fleet and the whole archive still to come. Users read
+ * the count, believed it, and moved on from a search that had not finished. So while the answer is partial the
+ * tally stands down and says what is actually true instead. */
+const matchTally = computed(() => (searchPartial.value ? `searching the rest…` : `${kept.value} of ${total.value}`));
 // Nothing on the board AND nothing beyond it: the filter's own empty state, which is a different thing from
-// an empty fleet (there ARE agents; none of them is this one).
-const noMatches = computed(() => filtering.value && !archiveOpen.value && kept.value === 0 && beyondCount.value === 0);
+// an empty fleet (there ARE agents; none of them is this one). Never while the answer is still partial: "no
+// matches" is the one message a half-finished search must not show, since the match may be in the other half.
+const noMatches = computed(() => filtering.value && !searchPartial.value && !archiveOpen.value && kept.value === 0 && beyondCount.value === 0);
 // "Clear" only appears when it would do something: the Finished lane holds the archivable set exactly (it is
 // landed-or-idle by construction), so its length is the answer.
 const clearable = computed(() => lanes.value.finished.length);
@@ -1056,8 +1073,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             />
             <div class="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
                 <!-- The tally, so an empty board under a query reads as "nothing matched" rather than as a board
-                     that broke. Only while filtering: the lane headers already carry the unfiltered counts. -->
-                <span v-if="filtering" class="shrink-0 text-2xs text-muted">{{ matchTally }}</span>
+                     that broke. Only while filtering: the lane headers already carry the unfiltered counts.
+                     While the answer is still partial this says so instead of counting (see matchTally): a
+                     number here is a claim to have looked at everything, and half a search has not. -->
+                <span v-if="filtering" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
                 <!-- The panes on screen ARE the selection (the ringed cards), so this appears exactly when two
                      or more chats sit side by side: press it and a fresh draft chat opens over their full
                      transcripts, composed but NOT sent (synthesizeSessions.ts). -->

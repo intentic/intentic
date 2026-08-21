@@ -112,25 +112,37 @@ export const createAgentsRoutes = (services: Services) => {
          */
         search: i.search.handler(async ({ input }) => {
             // The field's Aa switch, applied by FOLDING once here: the needle and every line it is tested against
-            // meet in the same case, so the whole scan is one substring test either way.
+            // meet in the same case, so the whole title test is one substring test either way. The index folds
+            // its own side by the same rule (see search-index.ts on why that fold is JS's and not sqlite's).
             const caseSensitive = input.caseSensitive === true;
             const needle = caseSensitive ? input.query : input.query.toLowerCase();
             const entries = [...services.agents.list(), ...services.agents.listArchived()];
-            const matches = await Promise.all(
-                entries.map(async (agent) => {
-                    const title = caseSensitive ? agent.title : agent.title?.toLowerCase();
-                    if (title?.includes(needle) === true) {
-                        return { id: agent.id };
-                    }
-                    const entry = services.agents.entry(agent.id);
-                    if (entry === undefined) {
-                        return undefined;
-                    }
-                    const snippet = matchLines(conversationLines(agent.id, await services.transcripts.lines(entry)), needle, caseSensitive);
-                    return snippet === undefined ? undefined : { id: agent.id, snippet };
-                }),
-            );
-            return { matches: matches.filter((match) => match !== undefined), scanned: entries.length };
+            /* ONE QUERY FOR THE WHOLE FLEET, rather than a read per entry. This used to be a Promise.all over
+             * every registry entry, each awaiting that conversation's extracted lines: on a real workspace
+             * (1418 entries, 545 MB of records) the first such query was seconds of blocking parse and every
+             * one after it re-scanned 30 572 lines in memory. The index answers all of them at once. */
+            const said = await services.saidIndex.search(input.query, "conversation", caseSensitive);
+            const matches = entries.flatMap((agent) => {
+                const title = caseSensitive ? agent.title : agent.title?.toLowerCase();
+                if (title?.includes(needle) === true) {
+                    return [{ id: agent.id }];
+                }
+                const indexed = said.get(agent.id);
+                /* The WRITE-LAG OVERLAY: prompts this daemon has routed but no turn has settled yet, so the
+                 * index cannot hold them. Small, in memory, and only for conversations touched since boot.
+                 * Without it the words a user just sent are unsearchable for as long as the turn runs, which is
+                 * precisely when they are most likely to be searched for. */
+                const pending = matchLines(conversationLines(agent.id, []), needle, caseSensitive);
+                /* THE USER'S OWN WORDS WIN, and among theirs the OLDEST, which is the index's rule too. A
+                 * recorded user line therefore beats a just-sent prompt (it is older), a just-sent prompt beats
+                 * anything the agent said, and with neither the agent's line stands as the evidence. */
+                const snippet = indexed?.speaker === "user" ? indexed : pending?.speaker === "user" ? pending : (indexed ?? pending);
+                return snippet === undefined ? [] : [{ id: agent.id, snippet }];
+            });
+            /* `indexing` is the honest half of the answer: while the backfill is still working the index does
+             * not yet hold everything said in this workspace, so this result can still grow. The board says so
+             * rather than presenting a partial list as the whole one. */
+            return { matches, scanned: entries.length, indexing: services.saidIndex.indexing() };
         }),
         get: i.get.handler(({ input }) => {
             const summary = services.agents.get(input.id);

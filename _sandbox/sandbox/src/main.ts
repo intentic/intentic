@@ -658,8 +658,9 @@ const main = async (): Promise<void> => {
         const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
         // A live llama-server is adopted for the dockerd reason, with a heavier price for getting it wrong:
         // killing one throws away a loaded model, and reloading a large one costs minutes of dead picker.
-        const modelKeys = (await services.capabilities.list().catch(() => []))
-            .flatMap((capability) => (capability.kind === "localmodel" ? [localModelPanelKey(capability.id)] : []));
+        const modelKeys = (await services.capabilities.list().catch(() => [])).flatMap((capability) =>
+            capability.kind === "localmodel" ? [localModelPanelKey(capability.id)] : [],
+        );
         const modelsAlive: string[] = [];
         for (const key of modelKeys) {
             if (await services.processes.adopt(key, {}).catch(() => false)) {
@@ -759,6 +760,26 @@ const main = async (): Promise<void> => {
     const invariantSweep = setInterval(() => void services.invariants.run("sweep"), 300_000);
     shutdown.push(() => clearInterval(invariantSweep));
     shutdown.push(onTurnSettled(() => void services.invariants.run("turn-settled")));
+
+    /* BRING THE PHRASE INDEX LEVEL, detached and AFTER the gate, which is the whole point of it existing.
+     *
+     * Settling turns write this index forward, so in steady state this pass finds nothing to do and says
+     * nothing. It is here for the first run (or a schema bump), for turns recorded while this daemon was not
+     * running, and for the runtime sessions, which are the SDK's files and so can only be checked by looking.
+     *
+     * Detached because a search does not need it to have finished: the routes answer from what is indexed and
+     * report `indexing` so a screen can say the list can still grow. Holding the gate on it would trade a fast
+     * incomplete search for a slow boot, which is the trade this change exists to stop making.
+     *
+     * The interval catches session files the SDK appends to without telling us, on the same cadence as the
+     * other standing patrols. `unref` so it never keeps the process up on its own. */
+    const backfillSaid = (): void => {
+        void services.saidIndex.backfill().catch((error: unknown) => logger.warn({ err: error }, "search index backfill failed"));
+    };
+    backfillSaid();
+    const saidSweep = setInterval(backfillSaid, 600_000);
+    saidSweep.unref();
+    shutdown.push(() => clearInterval(saidSweep));
 
     /* The worktree sweeps, DETACHED: archive entries whose checkout vanished, prune orphaned dirs and stale
      * admin entries, park the branches of off-board agents. This is the spawn-heaviest part of a boot (git per

@@ -18,7 +18,9 @@ const sessionsClient = (sessions: Partial<SessionsRoutesDeps["sessions"]>) =>
 test("sessions.list returns the full list, and routes to search when a query is given", async () => {
     const all = [{ id: "a", title: "Deploy pipeline", updatedAt: 2 }];
     const matches = [{ id: "b", title: "Auth bug", updatedAt: 1 }];
-    const client = sessionsClient({ list: async () => all, search: async (_root, query) => (query === "auth" ? matches : []) });
+    // No root on `search`, unlike `list`: it reads the phrase index and a listing already bound to this
+    // workspace, so the query is the first thing it takes (see Services.sessions).
+    const client = sessionsClient({ list: async () => all, search: async (query) => (query === "auth" ? matches : []) });
 
     expect(await client.list({})).toEqual({ sessions: all });
     expect(await client.list({ query: "auth" })).toEqual({ sessions: matches });

@@ -2,7 +2,9 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
-import { listWorkspaceSessions, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
+import { createRecentSessions, listWorkspaceSessions, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
+import { IN_MEMORY, openSearchIndex } from "./search-index.js";
+import { readSessionLines } from "./transcript-search.js";
 
 // Fake the SDK store the sessions module reads through. `listSessions` is newest-first; `getSessionMessages`
 // returns Anthropic-shaped turns (content is a string here for brevity).
@@ -16,30 +18,49 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({ listSessions, getSessionMessa
 /* N sessions newest-first: <tag>0..<tag>{n-1}. Titles are "chat 0".. so a title needle can target one
  * precisely, and each transcript holds one user turn reading "body <id>" so a prompt needle can too.
  *
- * The `tag` is not decoration: the prompt index caches a session's prompts by id for the life of the process
- * (they are append-only, so nothing invalidates them), which means two tests sharing an id would share a
- * transcript. Each test seeds its own namespace instead of the module exporting a reset nothing in production
- * would ever call.
+ * The `tag` keeps each test in its own namespace, so two of them cannot end up asserting about the same
+ * session id from different fixtures.
  */
 const seed = (tag: string, n: number): void => {
     listSessions.mockResolvedValue(Array.from({ length: n }, (_, i) => ({ sessionId: `${tag}${i}`, customTitle: `chat ${i}`, lastModified: n - i })));
     getSessionMessages.mockImplementation(async (id: string) => [{ type: "user", message: { content: `body ${id}` } }]);
 };
 
-test("title match returns without reading the transcript", async () => {
+/* The two steps production runs, in the order it runs them. The BACKFILL reads the SDK store into the index
+ * (detached at boot there, inline here); the SEARCH then reads the index and nothing else. Both get fresh
+ * instances per call, so no test inherits another's rows and the list's own short TTL cannot answer one test
+ * with another's sessions.
+ */
+const indexed = async (dir: string) => {
+    const index = openSearchIndex(IN_MEMORY);
+    const recent = createRecentSessions(dir);
+    for (const session of await recent()) {
+        index.put(session.id, "session", String(session.updatedAt), await readSessionLines(dir, session.id));
+    }
+    return { index, recent };
+};
+
+const searchSessions = async (dir: string, query: string, caseSensitive: boolean) => {
+    const { index, recent } = await indexed(dir);
+    return searchWorkspaceSessions(recent, query, caseSensitive, async (...args) => index.search(...args));
+};
+
+test("a title match reads no session file at all", async () => {
     seed("t", 3);
+    const { index, recent } = await indexed(WORKSPACE_ROOT);
+    // Everything the store had is in the index now. From here a query must not touch the store again.
     getSessionMessages.mockClear();
-    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "chat 1", false);
+    const hits = await searchWorkspaceSessions(recent, "chat 1", false, async (...args) => index.search(...args));
     expect(hits.map((s) => s.id)).toEqual(["t1"]);
-    // t1 matched by title; the other two are read for prompts, t1 is not.
-    expect(getSessionMessages).not.toHaveBeenCalledWith("t1", expect.anything());
+    // Not "not for t1", which is all the scan could promise: not for ANY row, matched or skipped.
+    expect(getSessionMessages).not.toHaveBeenCalled();
     // …and a title match carries no snippet: the row already shows the title it matched on.
     expect(hits[0]?.snippet).toBeUndefined();
 });
 
 test("a prompt match is found and reports the line it hit, and whose it was", async () => {
     seed("p", 3);
-    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "body p2", false);
+    const hits = await searchSessions(WORKSPACE_ROOT, "body p2", false);
     expect(hits.map((s) => s.id)).toEqual(["p2"]);
     expect(hits[0]?.snippet).toEqual({ text: "body p2", speaker: "user" });
 });
@@ -49,7 +70,7 @@ test("a prompt match is found and reports the line it hit, and whose it was", as
 // tenth chat, which is precisely where "the one I'm looking for" tends to live.
 test("a prompt match past the tenth-newest session is still found", async () => {
     seed("w", 12);
-    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "body w11", false);
+    const hits = await searchSessions(WORKSPACE_ROOT, "body w11", false);
     expect(hits.map((s) => s.id)).toEqual(["w11"]);
 });
 
@@ -72,12 +93,12 @@ test("assistant prose matches as the agent's; thinking and tool output never mat
         },
         { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "grep found landAgent 214 times" }] } },
     ]);
-    expect((await searchWorkspaceSessions("/work", "landAgent", false)).map((s) => s.snippet)).toEqual([
+    expect((await searchSessions("/work", "landAgent", false)).map((s) => s.snippet)).toEqual([
         { text: "landAgent lives in laneDrop.ts", speaker: "agent" },
     ]);
-    expect((await searchWorkspaceSessions("/work", "check the config", false)).map((s) => s.id)).toEqual(["r0"]);
-    expect(await searchWorkspaceSessions("/work", "readWorkspaceSession", false)).toEqual([]);
-    expect(await searchWorkspaceSessions("/work", "214 times", false)).toEqual([]);
+    expect((await searchSessions("/work", "check the config", false)).map((s) => s.id)).toEqual(["r0"]);
+    expect(await searchSessions("/work", "readWorkspaceSession", false)).toEqual([]);
+    expect(await searchSessions("/work", "214 times", false)).toEqual([]);
 });
 
 // Both sides can hold the term, and only one line is shown. It is the USER's: a query is typed from memory,
@@ -88,7 +109,7 @@ test("the user's own words are the snippet when both sides said the term", async
         { type: "assistant", message: { content: [{ type: "text", text: "the lane drop is in laneDrop.ts" }] } },
         { type: "user", message: { content: "explain the lane drop" } },
     ]);
-    expect((await searchWorkspaceSessions("/work", "lane drop", false))[0]?.snippet).toEqual({ text: "explain the lane drop", speaker: "user" });
+    expect((await searchSessions("/work", "lane drop", false))[0]?.snippet).toEqual({ text: "explain the lane drop", speaker: "user" });
 });
 
 // The daemon staples a readiness/delegation preamble on the front of a prompt and an attachment note on the
@@ -105,9 +126,9 @@ test("the injected preamble and attachment note are not searchable text", async 
             },
         },
     ]);
-    expect(await searchWorkspaceSessions("/work", "Dependencies are NOT", false)).toEqual([]);
-    expect(await searchWorkspaceSessions("/work", "shot.png", false)).toEqual([]);
-    expect((await searchWorkspaceSessions("/work", "rename the lane", false)).map((s) => s.id)).toEqual(["i0"]);
+    expect(await searchSessions("/work", "Dependencies are NOT", false)).toEqual([]);
+    expect(await searchSessions("/work", "shot.png", false)).toEqual([]);
+    expect((await searchSessions("/work", "rename the lane", false)).map((s) => s.id)).toEqual(["i0"]);
 });
 
 /* THE FIELD'S Aa SWITCH reaches these rows too: they are listed under the board's own cards, so a query
@@ -116,11 +137,11 @@ test("the injected preamble and attachment note are not searchable text", async 
 test("match case narrows both the title and the transcript", async () => {
     listSessions.mockResolvedValue([{ sessionId: "c0", customTitle: "FROM the top", lastModified: 2 }]);
     getSessionMessages.mockResolvedValue([{ type: "user", message: { content: "the landAgent bug" } }]);
-    expect((await searchWorkspaceSessions(WORKSPACE_ROOT, "from the top", false)).map((s) => s.id)).toEqual(["c0"]);
-    expect(await searchWorkspaceSessions(WORKSPACE_ROOT, "from the top", true)).toEqual([]);
-    expect((await searchWorkspaceSessions(WORKSPACE_ROOT, "FROM the top", true)).map((s) => s.id)).toEqual(["c0"]);
-    expect(await searchWorkspaceSessions(WORKSPACE_ROOT, "landagent", true)).toEqual([]);
-    expect((await searchWorkspaceSessions(WORKSPACE_ROOT, "landAgent", true))[0]?.snippet).toEqual({
+    expect((await searchSessions(WORKSPACE_ROOT, "from the top", false)).map((s) => s.id)).toEqual(["c0"]);
+    expect(await searchSessions(WORKSPACE_ROOT, "from the top", true)).toEqual([]);
+    expect((await searchSessions(WORKSPACE_ROOT, "FROM the top", true)).map((s) => s.id)).toEqual(["c0"]);
+    expect(await searchSessions(WORKSPACE_ROOT, "landagent", true)).toEqual([]);
+    expect((await searchSessions(WORKSPACE_ROOT, "landAgent", true))[0]?.snippet).toEqual({
         text: "the landAgent bug",
         speaker: "user",
     });
@@ -132,7 +153,7 @@ test("a long prompt is windowed around the hit rather than cut from the start", 
     const long = `${"filler ".repeat(40)}\n\nthe landAgent bug\n\n${"more ".repeat(40)}`;
     listSessions.mockResolvedValue([{ sessionId: "n0", customTitle: "chat", lastModified: 1 }]);
     getSessionMessages.mockResolvedValue([{ type: "user", message: { content: long } }]);
-    const snippet = (await searchWorkspaceSessions(WORKSPACE_ROOT, "landagent", false))[0]?.snippet?.text ?? "";
+    const snippet = (await searchSessions(WORKSPACE_ROOT, "landagent", false))[0]?.snippet?.text ?? "";
     expect(snippet).toContain("landAgent");
     expect(snippet).not.toContain("\n");
     expect(snippet.startsWith("…")).toBe(true);
@@ -327,13 +348,13 @@ test("runtime-handoff search indexes what both sides said before the switch, but
         },
     ]);
 
-    expect((await searchWorkspaceSessions("/work", "blank chat", false)).map((session) => session.id)).toEqual(["handoff-search"]);
+    expect((await searchSessions("/work", "blank chat", false)).map((session) => session.id)).toEqual(["handoff-search"]);
     // The carried-over reply comes back under the agent, not folded into the user prompt that transported it.
-    expect((await searchWorkspaceSessions("/work", "replayStoredSession", false))[0]?.snippet).toEqual({
+    expect((await searchSessions("/work", "replayStoredSession", false))[0]?.snippet).toEqual({
         text: "I will inspect replayStoredSession.",
         speaker: "agent",
     });
-    expect(await searchWorkspaceSessions("/work", "another AI runtime", false)).toEqual([]);
+    expect(await searchSessions("/work", "another AI runtime", false)).toEqual([]);
 });
 
 test("restores runtime-handoff history as ordinary bubbles", async () => {

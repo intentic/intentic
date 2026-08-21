@@ -41,6 +41,7 @@ import { createBootTracker } from "./platform/boot.js";
 import { createPerfTracker } from "./platform/perf.js";
 
 import { spokenLinesOf } from "./sessions/transcript-search.js";
+import { IN_MEMORY, openSearchIndex } from "./sessions/search-index.js";
 import type { ThreadSession, ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { SecretUse } from "./secrets/secret-uses.js";
@@ -315,6 +316,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) },
     );
     const workspace = workspacePaths(WORKSPACE_ROOT);
+    // The phrase index these suites search through: the production schema and the production SQL, on nothing.
+    const testSaid = openSearchIndex(IN_MEMORY);
     /* Completed by `unstubbed`, not spelled out. What follows is only what these suites RELY on; every other
      * member of Services answers with its own name if a route reaches it. That is what takes this file off the
      * breakage path of the daemon growing a service: it used to enumerate all seventy members, so every feature
@@ -669,9 +672,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             // with a bare "Internal server error". There is no record behind the fake to copy a prefix out of.
             fork: async () => {},
             append: async () => {},
-            // The same extraction production's cached reader applies over agentTranscript, minus the cache,
-            // a test double re-reading per call is exactly the behavior the cache exists to avoid paying for.
-            lines: async (agent) => spokenLinesOf(await merged.transcripts.read(agent)),
             // Both derived from `read`, so the fake's three answers cannot disagree with each other the way a
             // hand-written constant would. `count` is on the TURN path (it files each checkpoint's index), so
             // omitting it here is the failure mode this fake's comment above describes: every agent.run test in
@@ -680,6 +680,29 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             // Inert: there is no store behind this fake to shorten. It still answers what a real truncate WOULD
             // have dropped, so a rewind test can assert on the count without standing up a transcript file.
             truncate: async (agent, keep) => Math.max(0, (await merged.transcripts.read(agent)).length - keep),
+        },
+        /* THE REAL INDEX, in memory, not a fake of it. The phrase search is one SQL query now, so a stand-in
+         * here would mean no suite ever runs the query, the folding, or the user-words-win ordering that the
+         * routes' whole behaviour rests on: exactly the way this file's other fakes have rotted before.
+         *
+         * `search` syncs from `transcripts.read` first because the fake's `append` is inert (production's index
+         * is written by settling turns, and here nothing settles into a store). A handful of registry entries
+         * per test makes that free, and it keeps `read` the fake's single source of truth, which is the property
+         * every comment above is protecting. */
+        saidIndex: {
+            search: async (needle, kind, caseSensitive) => {
+                if (kind === "conversation") {
+                    for (const id of merged.agents.ids()) {
+                        const entry = merged.agents.entry(id);
+                        if (entry !== undefined) {
+                            testSaid.put(id, "conversation", "test", spokenLinesOf(await merged.transcripts.read(entry)));
+                        }
+                    }
+                }
+                return testSaid.search(needle, kind, caseSensitive);
+            },
+            backfill: async () => {},
+            indexing: () => false,
         },
         purgeConversationState: async () => {},
         ...rest,

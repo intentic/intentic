@@ -176,6 +176,29 @@ export function useAgentFilter() {
         );
     });
 
+    /* WHETHER THE ANSWER ON SCREEN IS THE WHOLE ANSWER, which is a different question from "is a request in
+     * flight" and the one the board was getting wrong.
+     *
+     * Matching is two tiers: this browser matches open conversations and titles instantly, then merges the
+     * daemon's answer for everything it does not hold (the rest of the fleet, and the whole archive). In
+     * between, the board showed a confident list with a "N of M" tally beside it, which asserts completeness
+     * about a list that was missing every chat this tab had never opened. Users searched, saw three results and
+     * moved on: a wrong answer, delivered with no sign it was provisional.
+     *
+     * So it reports the gap instead. Two ways to have one, and they read the same to the user:
+     *   - the daemon has not answered for what is currently typed (debounce, or a request in flight)
+     *   - it has answered, but said its own index is still being filled (`indexing`), so its answer can grow
+     */
+    const partial = computed(() => {
+        if (!active.value) {
+            return false;
+        }
+        if (settled.value !== needle.value || fleetSearch.isFetching.value || sessionSearch.isFetching.value) {
+            return true;
+        }
+        return fleetSearch.data.value?.indexing === true;
+    });
+
     // One agent against the current query, local tier first, a hit this browser can prove costs nothing and
     // is already correct while the daemon's answer is still in flight.
     const hitOf = (agent: FleetAgent): AgentHit | undefined => {
@@ -236,5 +259,8 @@ export function useAgentFilter() {
         // "The daemon has not answered for what is currently typed", the field's icon spins on it. True both
         // while the debounce runs and while the request is in flight, so the indicator never blinks between them.
         searching: computed(() => active.value && (settled.value !== needle.value || fleetSearch.isFetching.value || sessionSearch.isFetching.value)),
+        // "…and what you can see is therefore not all of it", which is what the board says out loud instead of
+        // counting a partial list as if it were the whole fleet.
+        partial,
     };
 }

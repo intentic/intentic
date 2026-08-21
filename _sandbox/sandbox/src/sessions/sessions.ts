@@ -5,7 +5,12 @@ import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { unwrapStoredPrompt } from "../agent/turn-preamble.js";
-import { matchLines, readSessionLines } from "./transcript-search.js";
+import type { SearchIndex } from "./search-index.js";
+import { matchLines, sessionOverlay } from "./transcript-search.js";
+
+// The index's own search, passed in rather than imported: this module knows how to ask what a session said, not
+// where the answer is kept, and the daemon owns exactly one index (see composition.ts).
+type SaidLookup = (...args: Parameters<SearchIndex["search"]>) => Promise<ReturnType<SearchIndex["search"]>>;
 
 // A past conversation in this workspace, for the platform's chat-history list. `title` is the SDK's
 // resolved display summary (custom title / auto-summary / first prompt); `updatedAt` is its last-modified ms.
@@ -63,36 +68,77 @@ export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary
     }));
 };
 
+/* THE LIST, CACHED FOR A MOMENT, because a filter re-asks for it on every settled keystroke and the answer
+ * cannot meaningfully change between two of them.
+ *
+ * `listSessions` stats every session file in the project to order them. On the sandbox this was measured
+ * against (677 sessions, 1.5 GB) that is 42-128 ms warm and 2.4 s with a cold page cache, and the search path
+ * asked for it unconditionally, per query. A window slightly longer than the field's own debounce collapses a
+ * burst of keystrokes onto one listing while still noticing a new chat within a moment of it appearing.
+ *
+ * Deliberately NOT invalidated on anything: a TTL this short cannot go stale in a way anybody sees, and the
+ * alternatives (watching the store, hooking every place a session is created) buy nothing for the cost of a
+ * second thing that has to stay correct.
+ *
+ * A FACTORY, not a module-level cache. Held state that outlives a call and answers by the clock is the kind of
+ * thing that leaks between two callers who never agreed to share, and a suite cannot get a straight answer out
+ * of it at all. The daemon builds exactly one and hands it to the search (see composition.ts). */
+export type RecentSessions = () => Promise<SessionSummary[]>;
+
+const LIST_TTL_MS = 400;
+
+export const createRecentSessions = (dir: string): RecentSessions => {
+    let listed: { at: number; sessions: SessionSummary[] } | undefined;
+    return async () => {
+        const held = listed;
+        if (held !== undefined && Date.now() - held.at < LIST_TTL_MS) {
+            return held.sessions;
+        }
+        const sessions = await listWorkspaceSessions(dir);
+        listed = { at: Date.now(), sessions };
+        return sessions;
+    };
+};
+
 /* Filter the history list by a keyword, for the chat-history search box, by the SAME rule the fleet board's
  * filter runs (agents.search): the session's title, and what either side SAID in it. Two search boxes in one
  * window that disagree about what "matches" means is worse than one of them not existing, and the board is
  * literally showing rows from this list underneath its own cards.
  *
- * That rule is also what let the old per-session content cap go. This used to read transcripts for the ten
- * most recent sessions only, because each hit cost a full readWorkspaceSession (tool cards, call-time diffs,
- * result settling, all of it thrown away by a substring test). readSessionLines reads the spoken text alone
- * and holds it, so scanning the whole listed set costs one pass per session for the life of the daemon.
+ * BOTH BOXES NOW READ ONE INDEX (sessions/search-index.ts), which is what finally makes that shared rule a
+ * shared implementation rather than two that have to be kept in step. It also removes what made this the
+ * slowest route in the daemon: it used to read the SDK's session files on the query path, and those carry every
+ * tool call and result, so the spoken few KB came wrapped in tens of megabytes. Measured on a real workspace,
+ * the 50 listed sessions were 124 MB and 8.1 s of blocking reads for the first phrase typed after a boot.
  *
- * Result keeps the newest-first order of `list`. A session whose TITLE matched carries no snippet: the title
+ * Result keeps the newest-first order of the list. A session whose TITLE matched carries no snippet: the title
  * is the row's own heading, and repeating it under itself is noise rather than evidence.
  *
  * `caseSensitive` is that same shared rule's other half, the Aa switch in the field, which the board applies to
  * its cards and these rows in one pass, so one query cannot come back matched two ways.
  */
-export const searchWorkspaceSessions = async (dir: string, query: string, caseSensitive: boolean): Promise<SessionSummary[]> => {
+export const searchWorkspaceSessions = async (
+    recent: RecentSessions,
+    query: string,
+    caseSensitive: boolean,
+    said: SaidLookup,
+): Promise<SessionSummary[]> => {
     const needle = caseSensitive ? query : query.toLowerCase();
-    const sessions = await listWorkspaceSessions(dir);
-    const matched = await Promise.all(
-        sessions.map(async (session): Promise<SessionSummary | undefined> => {
-            if ((caseSensitive ? session.title : session.title.toLowerCase()).includes(needle)) {
-                return session;
-            }
-            const snippet = matchLines(await readSessionLines(dir, session.id), needle, caseSensitive);
-            // Object.assign, not a spread, these summaries are this call's own, built fresh by the list above.
-            return snippet === undefined ? undefined : Object.assign(session, { snippet });
-        }),
-    );
-    return matched.filter((session) => session !== undefined);
+    const sessions = await recent();
+    const hits = await said(query, "session", caseSensitive);
+    return sessions.flatMap((session): SessionSummary[] => {
+        if ((caseSensitive ? session.title : session.title.toLowerCase()).includes(needle)) {
+            return [session];
+        }
+        const indexed = hits.get(session.id);
+        // The write-lag overlay, the same one the fleet search unions in: a prompt routed into this session
+        // since boot that no settled turn has recorded yet, and so cannot be in the index.
+        const pending = matchLines(sessionOverlay(session.id), needle, caseSensitive);
+        // The user's own words win, and among theirs the oldest, which is the index's own ordering rule.
+        const snippet = indexed?.speaker === "user" ? indexed : pending?.speaker === "user" ? pending : (indexed ?? pending);
+        // Object.assign, not a spread, these summaries are this call's own, built fresh by the list above.
+        return snippet === undefined ? [] : [Object.assign(session, { snippet })];
+    });
 };
 
 // Cheap existence probe for the pre-flight resume check: getSessionInfo reads only that session's file

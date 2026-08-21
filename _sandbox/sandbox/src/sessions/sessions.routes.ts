@@ -14,7 +14,7 @@ export const createSessionsRoutes = (services: SessionsRoutesDeps) => {
             const query = input.query?.trim();
             const root = services.workspace.root;
             return {
-                sessions: query ? await services.sessions.search(root, query, input.caseSensitive === true) : await services.sessions.list(root),
+                sessions: query ? await services.sessions.search(query, input.caseSensitive === true) : await services.sessions.list(root),
             };
         }),
         get: i.get.handler(async ({ input }) => {

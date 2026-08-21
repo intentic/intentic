@@ -245,9 +245,9 @@ test("agents.search matches titles and later lines, across the archive", async (
     expect(await errorCode(client.agents.search({ query: "a" }))).toBe("BAD_REQUEST");
 
     // A title hit needs no transcript, so it reports no snippet: the card already shows what it matched on.
-    expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2 });
+    expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2, indexing: false });
     // The title is the first prompt, so a hit there needs no transcript either.
-    expect(await client.agents.search({ query: "readme" })).toEqual({ matches: [{ id: "conv2" }], scanned: 2 });
+    expect(await client.agents.search({ query: "readme" })).toEqual({ matches: [{ id: "conv2" }], scanned: 2, indexing: false });
     // …and a hit in a LATER line reports it, with the side of the chat that said it: the whole reason a
     // filtered card is believable.
     expect(await client.agents.search({ query: "changelog" })).toMatchObject({
@@ -265,15 +265,15 @@ test("agents.search matches titles and later lines, across the archive", async (
     expect(await client.agents.search({ query: "landAgent", caseSensitive: "true" })).toMatchObject({
         matches: [{ id: "conv1", snippet: { text: "landAgent lives in laneDrop.ts", speaker: "agent" } }],
     });
-    expect(await client.agents.search({ query: "landagent", caseSensitive: "true" })).toEqual({ matches: [], scanned: 2 });
-    expect(await client.agents.search({ query: "Login", caseSensitive: "true" })).toEqual({ matches: [], scanned: 2 });
+    expect(await client.agents.search({ query: "landagent", caseSensitive: "true" })).toEqual({ matches: [], scanned: 2, indexing: false });
+    expect(await client.agents.search({ query: "Login", caseSensitive: "true" })).toEqual({ matches: [], scanned: 2, indexing: false });
 
     // Archiving takes conv1 off the roster; the filter must still find it.
     await client.agents.archive({ ids: ["conv1"] });
     expect((await client.agents.list()).agents.map((agent) => agent.id)).toEqual(["conv2"]);
-    expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2 });
+    expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2, indexing: false });
 
-    expect(await client.agents.search({ query: "nothing here" })).toEqual({ matches: [], scanned: 2 });
+    expect(await client.agents.search({ query: "nothing here" })).toEqual({ matches: [], scanned: 2, indexing: false });
 });
 
 test("agents.search reads the daemon transcript for a provider with no SDK prompt store", async () => {
@@ -293,15 +293,14 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 yield { kind: "done" };
             },
             // Native Codex has no Claude SDK session to search. The daemon transcript is the provider-neutral
-            // source, and includes a later prompt that is deliberately absent from the card title. `lines`
-            // extracts from the same record through the real spokenLinesOf, so the assertions below exercise
-            // the extraction rather than a hand-picked list.
+            // source, and includes a later prompt that is deliberately absent from the card title. The harness
+            // fills the phrase index from this `read` through the real spokenLinesOf, so the assertions below
+            // exercise the extraction and the index's own query rather than a hand-picked list.
             transcripts: {
                 read: async (agent) => codexSearchTranscript(agent.id),
                 open: async () => {},
                 fork: async () => {},
                 append: async () => {},
-                lines: async (agent) => spokenLinesOf(codexSearchTranscript(agent.id)),
                 // Derived from the same record `read` answers from, so the fake cannot contradict itself.
                 count: async (agent) => codexSearchTranscript(agent.id).length,
                 truncate: async (agent, keep) => Math.max(0, codexSearchTranscript(agent.id).length - keep),
@@ -472,7 +471,6 @@ test("agents.place appends the user's words as the agent's, retires the session,
                     open: async (agent) => void (records.has(agent.id) || records.set(agent.id, [])),
                     fork: async () => {},
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
-                    lines: async (agent) => spokenLinesOf(records.get(agent.id) ?? []),
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
                 },
@@ -529,7 +527,6 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
                     open: async (agent) => void (records.has(agent.id) || records.set(agent.id, [])),
                     fork: async () => {},
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
-                    lines: async (agent) => spokenLinesOf(records.get(agent.id) ?? []),
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
                 },

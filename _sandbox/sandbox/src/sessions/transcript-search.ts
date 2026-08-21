@@ -21,18 +21,19 @@ import { stripTurnPreamble } from "../agent/turn-preamble.js";
  * cards, call-time diffs, result settling, all of which a substring test throws away. Here each message is
  * reduced to its text, a few KB per session against the megabytes the full rebuild carries.
  *
- * CACHING is what makes searching the whole fleet affordable: one query scans every registered agent, live
- * and archived, and typing is a burst of queries. Lines are immutable once written, a turn only ever APPENDS
- *, so a session's file read stays valid for the life of the daemon.
+ * THIS MODULE NO LONGER HOLDS AN INDEX. It extracts, and sessions/search-index.ts keeps what it extracted, on
+ * disk, written forward as turns settle. The extraction used to be cached in this process instead: 24 MB of
+ * heap for 1254 conversations, built on the query path, which made the first phrase search after a boot read
+ * every transcript in the workspace. See search-index.ts for what that cost and what replaced it.
  *
- * Which leaves exactly one hole, and it is the case that matters most: the prompt you JUST sent. The SDK
- * writes it as the turn starts, so a search landing in that window would read a transcript without it, cache
- * that, and go on missing it for as long as the turn runs. So the daemon records every prompt it routes
- * (`recordPrompt`, from the turn's begin and from mid-turn steering) into a second list that is unioned with
- * the file read rather than replacing it. A line that appears in both simply matches twice, which is free,
- * whereas the alternatives (mtime probes, TTLs, re-reading per keystroke) all buy the same correctness with
- * work on the query path. The REPLY a live turn is streaming needs no such record: the browser matches the tab
- * it is holding open without asking anyone (useAgentFilter), and the transcript grows the moment it settles.
+ * What stays here is the WRITE-LAG OVERLAY, and it is the case that matters most: the prompt you JUST sent.
+ * The durable record is written when a turn SETTLES, so between the send and the settle the index cannot know
+ * about the words the user is most likely to search for, and a long turn holds that window open for minutes.
+ * So the daemon records every prompt it routes (`recordPrompt`, from the turn's begin and from mid-turn
+ * steering) into a small in-memory list that a search UNIONS with the index rather than replacing it. It is
+ * bounded per conversation and only holds conversations touched since boot, so scanning it is free. The REPLY a
+ * live turn is streaming needs no such record: the browser matches the tab it is holding open without asking
+ * anyone (useAgentFilter), and the index grows the moment the turn settles.
  */
 
 // One thing someone said, whole, a prompt or a chat bubble, before any windowing. The same pair the wire's
@@ -42,14 +43,10 @@ export interface SpokenLine {
     readonly speaker: Speaker;
 }
 
-// sessionId → the lines read out of that session's stored transcript, oldest first.
-const stored = new Map<string, SpokenLine[]>();
-
-// sessionId → the lines this daemon routed into that session since it started. Unioned with `stored`, never
-// invalidated by it. Bounded per session because a long-lived conversation is otherwise unbounded, and the
-// oldest lines are the ones the file read is certain to have.
+// sessionId → the prompts this daemon routed into that session since it started. Bounded per session because
+// a long-lived conversation is otherwise unbounded, and the oldest lines are the ones the record already has.
 const routed = new Map<string, SpokenLine[]>();
-// conversationId → lines routed since boot. Unlike the session-keyed map above, this survives provider and
+// conversationId → prompts routed since boot. Unlike the session-keyed map above, this survives provider and
 // runtime switches and is therefore what the unified fleet search joins against while a turn is still live.
 const conversations = new Map<string, SpokenLine[]>();
 const ROUTED_PER_SESSION = 200;
@@ -59,7 +56,6 @@ interface LineTotals {
     textCharacters: number;
 }
 
-const storedTotals: LineTotals = { lines: 0, textCharacters: 0 };
 const routedTotals: LineTotals = { lines: 0, textCharacters: 0 };
 const conversationTotals: LineTotals = { lines: 0, textCharacters: 0 };
 
@@ -72,12 +68,9 @@ const replaceLines = (target: Map<string, SpokenLine[]>, key: string, lines: Spo
     target.set(key, lines);
 };
 
-// Cheap ownership counters for the periodic resource series. Character counts are intentionally not encoded
-// byte estimates: they track growth without serializing the cache (which would itself create a large spike).
+// Cheap ownership counters for the periodic resource series, the write-lag overlay only: what the daemon has
+// routed but not yet recorded. Everything else it can search lives on disk (see search-index.ts).
 export const transcriptSearchMetrics = (): Readonly<Record<string, number>> => ({
-    storedSessions: stored.size,
-    storedLines: storedTotals.lines,
-    storedTextCharacters: storedTotals.textCharacters,
     routedSessions: routed.size,
     routedLines: routedTotals.lines,
     routedTextCharacters: routedTotals.textCharacters,
@@ -86,16 +79,25 @@ export const transcriptSearchMetrics = (): Readonly<Record<string, number>> => (
     conversationTextCharacters: conversationTotals.textCharacters,
 });
 
+/* One line, NORMALIZED ONCE, here, at the single point where a line is constructed.
+ *
+ * Whitespace is collapsed at ingest rather than per query. A message is usually several lines and a snippet
+ * that kept them would push every other card down the lane, so the collapse has to happen somewhere; doing it
+ * on the query path meant a regex and a fresh allocation per line per keystroke over the whole fleet (~100 ms
+ * of event-loop time per settled keystroke, on data that cannot change). Collapsing here also makes the
+ * durable index and the in-memory overlay agree character for character, which is what lets a search union
+ * them without one of them windowing a hit differently from the other.
+ *
+ * Copied out of its parent, never sliced from it: the strip/parse steps above answer with V8 slices, views
+ * that pin the WHOLE original message (a prompt with its preamble and history envelope runs to hundreds of KB)
+ * for as long as one line lives. Same mechanics as git/changes.ts materializedPaths.
+ */
 const spoken = (text: string, speaker: Speaker): SpokenLine[] => {
-    const trimmed = text.trim();
-    if (trimmed.length === 0) {
+    const collapsed = text.replace(/\s+/gu, " ").trim();
+    if (collapsed.length === 0) {
         return [];
     }
-    /* Copied out of its parent, never sliced from it: every line here reaches a process-lifetime cache, and
-     * the strip/parse steps above answer with V8 slices, views that pin the WHOLE original message (a prompt
-     * with its preamble and history envelope runs to hundreds of KB) for as long as one cached line lives.
-     * Same mechanics as git/changes.ts materializedPaths, at this module's own single point of construction. */
-    return [{ text: Buffer.from(trimmed, "utf8").toString("utf8"), speaker }];
+    return [{ text: Buffer.from(collapsed, "utf8").toString("utf8"), speaker }];
 };
 
 /* A stored USER message, cleaned of daemon protocol. A runtime handoff carries the earlier conversation inside
@@ -134,9 +136,10 @@ export const recordConversationPrompt = (conversationId: string, prompt: string)
     replaceLines(conversations, conversationId, held, conversationTotals);
 };
 
-// What was said in a restored transcript, the extraction the fleet filter matches on, shared with the cached
-// per-conversation read in agent-transcript.ts. A `notice` row is neither side speaking (it is something that
-// HAPPENED to the turn), and a message's thinking and tool cards are not speech, so only the text survives.
+// What was said in a restored transcript, the extraction the index is filled from (search-index.ts), for a
+// conversation's record and for one settling turn alike. A `notice` row is neither side speaking (it is
+// something that HAPPENED to the turn), and a message's thinking and tool cards are not speech, so only the
+// text survives.
 export const spokenLinesOf = (messages: readonly RestoredMessage[]): SpokenLine[] =>
     messages.flatMap((message) => {
         if (message.role === "user") {
@@ -180,29 +183,34 @@ const storedLines = (messages: readonly { type: string; message?: unknown }[]): 
     return out;
 };
 
-// What was said in this session. `dir` scopes the SDK's lookup to this workspace and its LIVE worktrees; an
-// archived agent's transcript is keyed by a worktree path `git worktree list` no longer names, so the
-// all-projects search by id is the fallback that keeps the archive searchable (the same two-step
-// readWorkspaceSession makes, and ids are UUIDs so the widened search can only find the one asked for).
+/* What was said in this session, READ, not cached: the index is what remembers it (search-index.ts), and this
+ * is the extraction that fills the index for a runtime session. `dir` scopes the SDK's lookup to this
+ * workspace and its LIVE worktrees; an archived agent's transcript is keyed by a worktree path
+ * `git worktree list` no longer names, so the all-projects search by id is the fallback that keeps the archive
+ * searchable (the same two-step readWorkspaceSession makes, and ids are UUIDs so the widened search can only
+ * find the one asked for).
+ *
+ * This is the expensive one and always was: the SDK's session files carry every tool call and result, so they
+ * run to tens of megabytes each where the spoken text is a few KB. It is now called by the BACKFILL, off the
+ * request path, once per session per change, rather than by a search.
+ */
 export const readSessionLines = async (dir: string, sessionId: string): Promise<readonly SpokenLine[]> => {
-    const live = routed.get(sessionId) ?? [];
-    const held = stored.get(sessionId);
-    if (held !== undefined) {
-        return live.length === 0 ? held : [...held, ...live];
-    }
     const scoped = await getSessionMessages(sessionId, { dir });
     const messages = scoped.length > 0 ? scoped : await getSessionMessages(sessionId);
-    const lines = storedLines(messages);
-    replaceLines(stored, sessionId, lines, storedTotals);
-    return live.length === 0 ? lines : [...lines, ...live];
+    return storedLines(messages);
 };
 
+// The write-lag overlay for a runtime session, the counterpart of `conversationLines` on the fleet side.
+export const sessionOverlay = (sessionId: string): readonly SpokenLine[] => routed.get(sessionId) ?? [];
+
 // How much of the matched line a card shows. Wide enough to carry the sentence the term sits in, short
-// enough that the line never outgrows the card it explains.
+// enough that the line never outgrows the card it explains. Must equal search-index.ts's own, or a snippet
+// would be cut to a different width depending on which of the two found it.
 const SNIPPET_CHARS = 120;
 
 const windowed = (line: SpokenLine, needle: string, caseSensitive: boolean): MatchSnippet | undefined => {
-    const text = line.text.replace(/\s+/gu, " ").trim();
+    // Already collapsed, by `spoken`, at construction. Nothing to normalize here.
+    const text = line.text;
     const at = (caseSensitive ? text : text.toLowerCase()).indexOf(needle);
     if (at === -1) {
         return undefined;
@@ -220,8 +228,11 @@ const windowed = (line: SpokenLine, needle: string, caseSensitive: boolean): Mat
 
 /* The matched line, windowed around the hit, the EVIDENCE a filtered card shows. Without it a card matching
  * on message #7 is unexplained, and an unexplained result is what teaches people not to trust a search.
- * Whitespace is collapsed first: a message is usually several lines, and a snippet that kept them would push
- * every other card down the lane.
+ *
+ * SCOPE: this now runs over the WRITE-LAG OVERLAY only, the handful of prompts routed since boot that the
+ * durable index cannot know about yet. The index answers the same question in SQL for everything else, by the
+ * same two rules (see search-index.ts's query), because a search unions the two and one query must not come
+ * back ranked two ways.
  *
  * THE USER'S OWN WORDS WIN when both sides match, which is why this is two passes rather than one. A query is
  * typed from memory, and what a person remembers is their own phrasing; the agent repeating the same term back

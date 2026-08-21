@@ -1417,6 +1417,11 @@ export const AgentSearchResultSchema = z.object({
         .describe(
             "How many conversations were actually read, so a screen can say when a search saw less than everything rather than implying it saw all of it.",
         ),
+    indexing: z
+        .boolean()
+        .describe(
+            "Whether what was said is still being read in the background. True means this answer can still grow, so a screen must say it is incomplete rather than presenting it as the whole list.",
+        ),
 });
 export type AgentSearchResult = z.infer<typeof AgentSearchResultSchema>;
 // rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).

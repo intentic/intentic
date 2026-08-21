@@ -81,49 +81,14 @@ export const agentTranscript = async (deps: AgentTranscriptDeps, agent: Transcri
     return stamped;
 };
 
-/* What a conversation SAID, cached, because /agents/search asks for it for every registry entry, live and
- * archived, on every settled keystroke. Answering that from agentTranscript meant re-reading and
- * re-validating the entire transcript store (plus the provider-store backfill for pre-record conversations)
- * per keystroke: measured multi-second event-loop stalls that wedged every other request behind the search,
- * including the transcript read of the very chat the user then clicked.
+/* What a conversation SAID, for the search index to store. Read on the BACKFILL and on a rewind, never on a
+ * query: /agents/search asks the index, which already holds this.
  *
- * The record's byte size is the cache key. The file is append-only, so an unchanged size is an unchanged
- * record; a turn settling grows it and the next probe re-reads. A conversation still on the backfill has no
- * record and so no size, and stays cached against `undefined` until one exists, which the first settled turn
- * creates by appending (a turn whose adoption came back empty deliberately does not, see transcript-record's
- * `open`). So the backfill's prompts can be served for the length of one turn after the provider store behind
- * them moved; the window closes the moment anything is recorded. The prompt a LIVE turn is running on is not
- * this function's problem either: the route unions it in from the routed-prompt index (conversationLines),
- * the same way the session search covers its own write-lag window. */
-export interface SpokenLinesReaderMetrics {
-    readonly conversations: number;
-    readonly lines: number;
-    readonly textCharacters: number;
-}
-
-export interface SpokenLinesReader {
-    (agent: TranscriptAgent): Promise<readonly SpokenLine[]>;
-    readonly metrics: () => SpokenLinesReaderMetrics;
-}
-
-export const createSpokenLinesReader = (deps: AgentTranscriptDeps): SpokenLinesReader => {
-    const cache = new Map<string, { size: number | undefined; lines: readonly SpokenLine[] }>();
-    let cachedLines = 0;
-    let cachedTextCharacters = 0;
-    const read = async (agent: TranscriptAgent): Promise<readonly SpokenLine[]> => {
-        const size = await deps.record.size(agent.id);
-        const held = cache.get(agent.id);
-        if (held !== undefined && held.size === size) {
-            return held.lines;
-        }
-        const lines = spokenLinesOf(await agentTranscript(deps, agent));
-        cachedLines += lines.length - (held?.lines.length ?? 0);
-        cachedTextCharacters +=
-            lines.reduce((total, line) => total + line.text.length, 0) - (held?.lines.reduce((total, line) => total + line.text.length, 0) ?? 0);
-        cache.set(agent.id, { size, lines });
-        return lines;
-    };
-    return Object.assign(read, {
-        metrics: (): SpokenLinesReaderMetrics => ({ conversations: cache.size, lines: cachedLines, textCharacters: cachedTextCharacters }),
-    });
-};
+ * There used to be a process-lifetime cache here, keyed on the record's byte size, because the search read
+ * this for every registry entry on every settled keystroke. It fixed the repeat and not the first hit: the
+ * first phrase search after a boot still re-read and re-validated every transcript in the workspace (measured:
+ * 545 MB of records, ~2.6 s of blocking parse, on top of 8 s of session files) and it held 24 MB of extracted
+ * text in the heap forever afterwards. The index made both unnecessary, so the cache is gone rather than
+ * layered on top of a second one. */
+export const spokenTranscript = async (deps: AgentTranscriptDeps, agent: TranscriptAgent): Promise<readonly SpokenLine[]> =>
+    spokenLinesOf(await agentTranscript(deps, agent));
