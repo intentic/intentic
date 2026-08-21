@@ -108,7 +108,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         // machine this was cannot tell those two apart afterwards.
         const runtimeBefore = await webView2();
         harness.section(`the machine, before`);
-        harness.pass(`WebView2 runtime: ${runtimeBefore ?? `absent — the installer's bootstrapper has to fetch one`}`);
+        harness.pass(`WebView2 runtime: ${runtimeBefore ?? `absent, the installer's bootstrapper has to fetch one`}`);
 
         const already = await findInstalledApp(PRODUCT_NAME);
         if (already !== undefined) {
@@ -179,7 +179,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         if (registered === undefined) {
             harness.fail(
                 `nothing is registered for ${SCHEME}://`,
-                `Every ${SCHEME}:// link would go nowhere for a user who has just installed and not yet run the app — which is every first-time user.`,
+                `Every ${SCHEME}:// link would go nowhere for a user who has just installed and not yet run the app, which is every first-time user.`,
             );
         } else if (registered.includes(installed.installLocation)) {
             harness.pass(`${SCHEME}:// resolves to the installed app: ${registered}`);

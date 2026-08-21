@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
  * Two dozen files used to work out where the monorepo root was by counting how deep they sat: `../..` from a
  * package's own directory, `../../..` from its `src/`, `../../../..` from the installer scripts. Every one of
  * those numbers is correct only for the file's CURRENT depth, and nothing anywhere checks it. Move the file
- * one directory and it silently resolves somewhere else — no import fails, no type breaks; you find out when
+ * one directory and it silently resolves somewhere else: no import fails, no type breaks; you find out when
  * something reads the wrong .env at runtime, or reads nothing and falls back to a default.
  *
  * Walking up until a marker appears has none of that coupling. A file can sit at any depth, move between
@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
  *
  * A caller that runs before `pnpm install` has one more constraint: `@intentic/constants/node` is a BARE
  * specifier and bare specifiers resolve through node_modules, which a bare checkout has none of. Those callers
- * — `prepass.mjs`, run by the pre-push hook and by CI's preflight job — import THIS FILE by relative path
+ * (`prepass.mjs`, run by the pre-push hook and by CI's preflight job) import THIS FILE by relative path
  * instead. Still one walk; only the way in differs.
  *
  * NOT EXPORTED FROM THE PACKAGE INDEX, and that is deliberate: the index is imported by browser code
@@ -51,7 +51,7 @@ const startDir = (from) => {
 };
 
 // Walk up from `dir` until `marker` is found beside us, or we run out of parents. Returns "" for not-found so
-// each caller decides whether that is fatal — the installers treat it as "not run from a checkout" and carry
+// each caller decides whether that is fatal: the installers treat it as "not run from a checkout" and carry
 // on, while everything inside the repo treats it as impossible and throws.
 const walkUp = (dir, marker) => {
     let current = dir;
@@ -63,7 +63,7 @@ const walkUp = (dir, marker) => {
     }
 };
 
-/* THE MONOREPO ROOT, from anywhere inside it. Pass `import.meta.url` — the caller's own location is the only
+/* THE MONOREPO ROOT, from anywhere inside it. Pass `import.meta.url`: the caller's own location is the only
  * thing this needs, and it is the one thing every module already knows about itself.
  *
  * Throws when the marker is nowhere above the caller, which inside this repo means the checkout is broken. The
@@ -71,11 +71,11 @@ const walkUp = (dir, marker) => {
  * wrong directory is how a config loader silently reads no .env and every credential arrives empty. */
 export const repoRoot = (from) => {
     const found = walkUp(startDir(from), REPO_MARKER);
-    if (found === "") throw new Error(`repoRoot: no ${REPO_MARKER} above ${startDir(from)} — is this a complete checkout?`);
+    if (found === "") throw new Error(`repoRoot: no ${REPO_MARKER} above ${startDir(from)}, is this a complete checkout?`);
     return found;
 };
 
-/* THE CALLING PACKAGE'S OWN ROOT — the directory its package.json sits in. The other thing the dot-counting
+/* THE CALLING PACKAGE'S OWN ROOT: the directory its package.json sits in. The other thing the dot-counting
  * was reaching for: `createRequire(import.meta.url)("../../package.json")` in three different version.ts files,
  * each with a different number of dots because each sat at a different depth, all of them meaning "mine".
  *

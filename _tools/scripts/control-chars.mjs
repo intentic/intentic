@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-/* NO CONTROL CHARACTERS IN TRACKED TEXT — the byte-level invariant that keeps this repo readable.
+/* NO CONTROL CHARACTERS IN TRACKED TEXT: the byte-level invariant that keeps this repo readable.
  *
  * A NUL typed straight into a string literal is invisible in an editor and decisive everywhere else: git, grep,
  * `file`, code review and every diff viewer sniff for one and call the whole file binary. It is an easy thing to
- * write on purpose — a separator that cannot occur in the data is a real technique — and it cost this repo five
+ * write on purpose: a separator that cannot occur in the data is a real technique, and it cost this repo five
  * files, one of which spent six days and eighteen commits with no reviewable diff before anyone noticed.
  *
  * The technique is fine; the spelling is not. The escape (backslash-u-0000) is the same code point at runtime
@@ -78,7 +78,7 @@ for (const path of tracked) {
 if (findings.length > 0) {
     for (const { path, line, byte } of findings) {
         const name = byte === 0x00 ? `NUL` : `0x${byte.toString(16).padStart(2, `0`)}`;
-        console.error(`${path}:${line}  literal ${name} — write it as an escape (\\u${byte.toString(16).padStart(4, `0`)}) so the file stays text`);
+        console.error(`${path}:${line}  literal ${name}: write it as an escape (\\u${byte.toString(16).padStart(4, `0`)}) so the file stays text`);
     }
     console.error(`\n${findings.length} file(s) carry a literal control character. Git, grep and every diff viewer read those as binary.`);
     process.exit(1);

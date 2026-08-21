@@ -235,7 +235,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     {
         id: `cnv_dep_audit`,
         sessionId: `ses_01j9audit`,
-        title: `Nightly dependency audit — 3 advisories, 2 patched`,
+        title: `Nightly dependency audit, 3 advisories, 2 patched`,
         status: `idle`,
         provider: `claude`,
         harness: `claude-code`,

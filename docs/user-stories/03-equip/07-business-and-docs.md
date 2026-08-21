@@ -2,7 +2,7 @@
 
 As someone connecting payments and a knowledge base, I want a card that needs something else first to say so up front, so that I do not fill in a form whose save can only be refused.
 
-Some capabilities are not standalone. Payments here ride on the DevOps capability, because the credential is read from the sandbox's environment when it next provisions. That is a real dependency and a strange one to guess at, so the card carries it in the catalog — visible before I open it — and the form refuses to render its fields until the prerequisite is active, saying which one it is and where to activate it.
+Some capabilities are not standalone. Payments here ride on the DevOps capability, because the credential is read from the sandbox's environment when it next provisions. That is a real dependency and a strange one to guess at, so the card carries it in the catalog (visible before I open it) and the form refuses to render its fields until the prerequisite is active, saying which one it is and where to activate it.
 
 The wiki side has no such dependency and should not pretend to: it is an instance URL and a key, like any other connector. What both share is that the payoff is in a conversation, where the agent reads a document or looks up a customer without me copying anything across.
 

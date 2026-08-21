@@ -40,6 +40,6 @@ export const readWorldFile = (): WorldFile => {
     try {
         return JSON.parse(readFileSync(FILE, `utf8`)) as WorldFile;
     } catch {
-        return { standDown: `the onboarding world was never written — global setup did not run` };
+        return { standDown: `the onboarding world was never written, global setup did not run` };
     }
 };

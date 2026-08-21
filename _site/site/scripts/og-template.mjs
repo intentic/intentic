@@ -1,5 +1,5 @@
 // @ts-check
-// The site's OpenGraph card — brand colours, a section eyebrow, and the page's own title/description.
+// The site's OpenGraph card: brand colours, a section eyebrow, and the page's own title/description.
 // Everything AROUND the picture (reading the built page, running satori/resvg, naming the PNG, asserting the
 // og:image tag agrees with it) belongs to astro-opengraph-images; this module is only what the card looks like.
 //
@@ -14,7 +14,7 @@ const REGULAR = fileURLToPath(new URL("./fonts/Inter-Regular.ttf", import.meta.u
 const BOLD = fileURLToPath(new URL("./fonts/Inter-Bold.ttf", import.meta.url));
 
 /* The card's ink, taken from global.css: warm near-black, cream, the muted step under it, and ember for the
- * two accents. The FACE stays Inter, and that is a constraint rather than a choice — satori reads ttf/otf/woff
+ * two accents. The FACE stays Inter, and that is a constraint rather than a choice: satori reads ttf/otf/woff
  * and the site's three faces are shipped as woff2 only, which it cannot parse. A card 1200px wide, seen at
  * thumbnail size in a chat client, carries the brand in its colour far more than in its typeface. */
 const BG = "#0c0907";
@@ -24,7 +24,7 @@ const ACCENT = "#e07b27";
 
 /**
  * The two Inter faces satori needs, or undefined when they are not on disk. The TTFs are not committed, so a
- * checkout without them still builds — the site falls back to the static logo card (see BaseLayout).
+ * checkout without them still builds: the site falls back to the static logo card (see BaseLayout).
  * @returns {import("astro-opengraph-images").SatoriFontOptions[] | undefined}
  */
 export function ogFonts() {
@@ -39,7 +39,7 @@ export function ogFonts() {
 
 /**
  * The line above the title, naming the section the page belongs to. Astro hands the hook a pathname with no
- * leading slash ("docs/quickstart/"), so normalize before matching — prefix tests silently fail otherwise and
+ * leading slash ("docs/quickstart/"), so normalize before matching: prefix tests silently fail otherwise and
  * every card falls through to the site name.
  * @param {string} pathname
  */
@@ -84,7 +84,7 @@ export function ogCard({ pathname, title, description }) {
         [
             box({ fontSize: 24, color: ACCENT, letterSpacing: 4, textTransform: "uppercase", fontWeight: 600 }, eyebrowFor(pathname)),
             box({ fontSize: 64, fontWeight: 700, marginTop: 32, lineHeight: 1.15, maxWidth: 1040 }, title),
-            // A page whose description repeats its title arrives here without one — drop the block rather than
+            // A page whose description repeats its title arrives here without one: drop the block rather than
             // rendering the same sentence twice at two sizes.
             ...(description === undefined ? [] : [box({ fontSize: 26, color: MUTED, marginTop: 32, lineHeight: 1.4, maxWidth: 1040 }, description)]),
             box({ marginTop: "auto", fontSize: 24, color: ACCENT, fontWeight: 600 }, "intentic.dev"),

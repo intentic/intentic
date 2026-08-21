@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-/* NO HAND-SPELLED ROOTS, AND NO COUNTING THE WAY UP TO ONE — the two habits that made every path in this repo
+/* NO HAND-SPELLED ROOTS, AND NO COUNTING THE WAY UP TO ONE: the two habits that made every path in this repo
  * quietly position-dependent.
  *
  * COUNTING. Two dozen files worked out where the monorepo root was by counting how deep they sat: `../..` from
  * a package directory, `../../..` from its src, `../../../..` from the installer scripts. Each number is right
- * for exactly one location and is checked by nothing, so moving a file resolves it somewhere else in silence —
+ * for exactly one location and is checked by nothing, so moving a file resolves it somewhere else in silence:
  * no import fails, no type breaks, and you find out when a config loader reads no .env and hands back empty
  * credentials. `repoRoot()` / `packageRoot()` from @intentic/constants/node walk up to a marker instead, which
  * has no such coupling. In shell, `_tools/scripts/repo-root.sh` does the same.
@@ -44,12 +44,12 @@ const MAY_SPELL_A_ROOT = new Set([
     `_extensions/documentation/bin/intentic-docs`, // ships as a raw dir on the agent's PATH, no node_modules
     // The scaffolded extension template. It is copied OUT of this repo into a user's own project and must stay
     // installable from npm with the one dependency it declares, so it cannot reach an intentic internal for a
-    // string — the same bargain the file's own header already makes about @intentic/sandbox-contract.
+    // string: the same bargain the file's own header already makes about @intentic/sandbox-contract.
     `_tools/extension-example/seed/src/notes.ts`,
 ]);
 
 /* Committed BUILD OUTPUT. The site ships a bundled copy of the demo, so these are minified artifacts of source
- * that is itself checked here — flagging them would be flagging the same line twice, once where it can be
+ * that is itself checked here: flagging them would be flagging the same line twice, once where it can be
  * fixed and once where it cannot. */
 const GENERATED = [`_apps/site/public/`, `_apps/site/dist/`, `_editor/web/public/ext-shims/`, `_sandbox/sandbox/operator-templates/`];
 
@@ -57,7 +57,7 @@ const GENERATED = [`_apps/site/public/`, `_apps/site/dist/`, `_editor/web/public
 // letters, so the boundary after the root is required rather than assumed.
 const SPELLED_ROOT = /(["'`])(\/work|\/history|\/opt\/intentic)(\/[^"'`${\n]*)?\1/;
 
-/* `/history/...` IS ALSO AN HTTP ROUTE PREFIX — the snapshot surface answers on /history/snapshots, /history/diff
+/* `/history/...` IS ALSO AN HTTP ROUTE PREFIX: the snapshot surface answers on /history/snapshots, /history/diff
  * and friends. Those are a different namespace that happens to share a spelling: they are wire paths the browser
  * and the daemon agree on, not directories, and pointing them at HISTORY_ROOT would mean a rename of the history
  * VOLUME silently moved the API. Recognised by the company they keep, since the strings themselves are
@@ -68,15 +68,15 @@ const SPELLED_STATE = /(["'`])\.intentic(\/[^"'`${\n]*)?\1/;
 
 /* WHERE A SPELLED-OUT `.intentic/…` IS THE STRONGER MECHANISM, NOT A WEAKER ONE.
  *
- * `statePath(root, path)` takes `WorkspaceStatePath` — the literal-union type produced by the `as const` state
+ * `statePath(root, path)` takes `WorkspaceStatePath`: the literal-union type produced by the `as const` state
  * table in the contract. A caller can therefore only name a file the table declares, and renaming an entry
  * breaks the build until both move together. Swapping in `${STATE_DIR}/…` would turn each of those checked
  * literals into an ordinary string and throw that guarantee away, which is the opposite of what this check is
  * for: STATE_DIR exists for callers OUTSIDE the table, and the table's own members stay literal so the compiler
- * keeps its hold on them. The table's declaring files are exempt for the same reason — they ARE the union. */
+ * keeps its hold on them. The table's declaring files are exempt for the same reason: they ARE the union. */
 const TYPED_STATE_PATH = /state(?:Rel)?Path\(/;
 const STATE_TABLE_FILES = new Set([`_sandbox/sandbox-contract/src/workspace-state.ts`, `_sandbox/sandbox-contract/src/history-state.ts`]);
-// Counting up to a root from the running file's own location — the position claim, in each spelling that
+// Counting up to a root from the running file's own location: the position claim, in each spelling that
 // reaches PAST the file's own directory (a single `..` inside a package is a sibling, not a root claim).
 const COUNTED_JS = [
     /new URL\(\s*(["'`])\.\.\/\.\./,
@@ -119,12 +119,12 @@ const isComment = (line) => {
 };
 
 /* THE ONE ESCAPE HATCH, for the case the rules above genuinely cannot see: a string that LOOKS like a path but
- * IS the text under test — shell source a rewriter must leave byte-for-byte alone, a simulated stderr line, a
+ * IS the text under test: shell source a rewriter must leave byte-for-byte alone, a simulated stderr line, a
  * fixture transcript. Substituting a constant there does not move a location, it edits the subject of the test.
  *
  * Deliberately per-line and deliberately requiring a reason, rather than a per-file exemption: a whole file
  * waved through stops being checked the day someone adds a real path to it. Write it as
- *   // path-literals: content — <why this is text, not a location>
+ *   // path-literals: content, <why this is text, not a location>
  * on the offending line or the one above it. */
 const CONTENT_PRAGMA = /path-literals: content/;
 
@@ -161,8 +161,8 @@ for (const path of tracked) {
                 findings.push({
                     at,
                     why: shell
-                        ? `counts its way to the repo root — source _tools/scripts/repo-root.sh and call repo_root`
-                        : `counts its way to a root — use repoRoot()/packageRoot() from @intentic/constants/node`,
+                        ? `counts its way to the repo root: source _tools/scripts/repo-root.sh and call repo_root`
+                        : `counts its way to a root, use repoRoot()/packageRoot() from @intentic/constants/node`,
                 });
                 break;
             }
@@ -176,10 +176,10 @@ for (const path of tracked) {
             continue;
         }
         if (SPELLED_ROOT.test(line) && !ROUTE_CONTEXT.test(line)) {
-            findings.push({ at, why: `spells a root — import WORKSPACE_ROOT / HISTORY_ROOT / HOST_STATE_ROOT from @intentic/constants` });
+            findings.push({ at, why: `spells a root, import WORKSPACE_ROOT / HISTORY_ROOT / HOST_STATE_ROOT from @intentic/constants` });
         }
         if (SPELLED_STATE.test(line) && !line.includes(`homedir`) && !TYPED_STATE_PATH.test(line) && !STATE_TABLE_FILES.has(path)) {
-            findings.push({ at, why: `spells the state dir — import STATE_DIR from @intentic/constants (or use the daemon's statePath())` });
+            findings.push({ at, why: `spells the state dir, import STATE_DIR from @intentic/constants (or use the daemon's statePath())` });
         }
     }
 }

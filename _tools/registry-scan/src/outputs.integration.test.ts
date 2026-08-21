@@ -34,7 +34,7 @@ const result = (over: Partial<ScanResult> = {}): ScanResult => ({
 const root = (): string => mkdtempSync(join(tmpdir(), "registry-outputs-"));
 
 describe(`writeScanOutputs`, () => {
-    it(`writes the summary when nothing is proposed — the steady state once every tagged repo is listed`, async () => {
+    it(`writes the summary when nothing is proposed: the steady state once every tagged repo is listed`, async () => {
         const dir = root();
         await writeScanOutputs(
             dir,

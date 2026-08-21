@@ -45,7 +45,7 @@ export const PUBLISH_REFUSAL = {
     pushed: false,
     branch: `main`,
     defaultBranch: `main`,
-    reason: `this is the demo workspace — there is no remote to push to`,
+    reason: `this is the demo workspace, there is no remote to push to`,
 } as const;
 
 /* What is dirty in the main tree BEFORE anything lands: the checkout agent's first pass, already applied, plus
@@ -404,7 +404,7 @@ const README = `# acme-shop
 A two-repo product: the storefront (\`web\`) and its API (\`api\`).
 
 This workspace is a **recording**. Every panel around it is the real intentic UI, wired to a fixture
-instead of a daemon — so you can open anything, but nothing here runs.
+instead of a daemon, so you can open anything, but nothing here runs.
 
 Start a sandbox on your own machine and the same surfaces point at your repos.
 `;
@@ -602,7 +602,7 @@ export const sessions = (now: number): SessionSummary[] => {
         { id: `ses_01j9latency`, title: `Investigate the p99 latency spike on /checkout`, updatedAt: now - 60_000 },
         { id: `ses_01j9soft`, title: `Migrate the users table to soft deletes`, updatedAt: now - 18 * 60_000 },
         { id: `ses_01j9notes`, title: `Draft the release notes for 2.4`, updatedAt: now - 34 * 60_000 },
-        { id: `ses_01j9audit`, title: `Nightly dependency audit — 3 advisories, 2 patched`, updatedAt: now - 7 * hour },
+        { id: `ses_01j9audit`, title: `Nightly dependency audit, 3 advisories, 2 patched`, updatedAt: now - 7 * hour },
         { id: `ses_01j9seo`, title: `Add structured data to the product pages`, updatedAt: now - 26 * hour },
         { id: `ses_01j9emails`, title: `Move transactional emails to the queue`, updatedAt: now - 2 * 24 * hour },
         { id: `ses_01j9upgrade`, title: `Upgrade to Vite 8 and drop the CJS shims`, updatedAt: now - 3 * 24 * hour },
@@ -666,7 +666,7 @@ const matcher = (query: string, options: SearchOptions): { regex: RegExp; note?:
     try {
         return { regex: new RegExp(wrap(query), flags) };
     } catch {
-        return { regex: new RegExp(wrap(escaped), flags), note: `Pattern isn't a valid regular expression — searched for it as literal text.` };
+        return { regex: new RegExp(wrap(escaped), flags), note: `Pattern isn't a valid regular expression, searched for it as literal text.` };
     }
 };
 
@@ -700,7 +700,7 @@ export const searchWorkspace = (query: string, options: SearchOptions): Workspac
             total += hits.length;
         }
     }
-    const smartNote = `This recording answers Smart like Text — ranking by meaning needs your own sandbox's index.`;
+    const smartNote = `This recording answers Smart like Text: ranking by meaning needs your own sandbox's index.`;
     return {
         mode: options.smart ? `q` : `find`,
         total,

@@ -2,9 +2,9 @@
 
 As someone wiring the agent to GitHub, GitLab or Redmine, I want the card to tell me where the token is made and which permissions it needs, so that I am not alt-tabbing between a settings page and a scopes list guessing at checkboxes.
 
-Getting a token wrong is the single most common way this step fails, and the failure is silent — a token with the wrong scopes connects fine and then cannot read an issue. So the card links straight to the page where the token is created, names the scopes it needs on the same line, and can walk me through it step by step if I want that.
+Getting a token wrong is the single most common way this step fails, and the failure is silent: a token with the wrong scopes connects fine and then cannot read an issue. So the card links straight to the page where the token is created, names the scopes it needs on the same line, and can walk me through it step by step if I want that.
 
-A connection is an instance, not a switch. The name is mine, it is suggested for me, and a second connection to a second organisation is a new name rather than an overwrite — the card warns me when a name I have typed would update an existing connection instead of adding one. Once it is connected I want the proof to be the agent using it, not a green dot.
+A connection is an instance, not a switch. The name is mine, it is suggested for me, and a second connection to a second organisation is a new name rather than an overwrite: the card warns me when a name I have typed would update an existing connection instead of adding one. Once it is connected I want the proof to be the agent using it, not a green dot.
 
 ## Acceptance criteria
 

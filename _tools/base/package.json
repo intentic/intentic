@@ -1,7 +1,7 @@
 {
     "name": "@intentic/base",
     "version": "0.0.0",
-    "description": "Runtime primitives every tier shares — when-expressions, disposal, and the async schedulers",
+    "description": "Runtime primitives every tier shares, when-expressions, disposal, and the async schedulers",
     "license": "MIT",
     "type": "module",
     "repository": {

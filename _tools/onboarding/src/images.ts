@@ -36,7 +36,7 @@ const exec = async (command: string, args: string[], cwd: string, what: string):
         await run(command, args, { cwd, timeout: 20 * 60_000, maxBuffer: 64 * 1024 * 1024 });
     } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        throw new Error(`${what} failed — ${message}`, { cause });
+        throw new Error(`${what} failed: ${message}`, { cause });
     }
 };
 

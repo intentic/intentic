@@ -6,7 +6,7 @@ description: Leave a short note for the owner in the Example rail view, using th
 # Leaving a note
 
 This sandbox has the `intentic-example` CLI on your PATH. It appends to `.intentic/example-notes.json`, which the
-owner reads in the **Example** tile in the left rail — the view updates the moment you write, so a note lands in
+owner reads in the **Example** tile in the left rail: the view updates the moment you write, so a note lands in
 front of them without you interrupting anything.
 
 ```sh
@@ -18,4 +18,4 @@ Keep a note to one sentence. It is a breadcrumb, not a report: the place for rea
 place for durable knowledge is the repository's own documentation.
 
 Do not use this to ask a question. A note is written to be read later, so a question left here waits for however
-long it takes the owner to glance at the rail — ask in your reply instead.
+long it takes the owner to glance at the rail: ask in your reply instead.

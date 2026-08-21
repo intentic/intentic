@@ -1,6 +1,6 @@
 /* Where the development root and the certificate under it live.
  *
- * BOTH LIVE OUTSIDE THE REPOSITORY, TOGETHER, in the OS's own per-user data directory — and the two halves of
+ * BOTH LIVE OUTSIDE THE REPOSITORY, TOGETHER, in the OS's own per-user data directory, and the two halves of
  * that sentence fix two different bugs.
  *
  * OUTSIDE, because the root is the thing you put in a trust store, and a trust store belongs to a machine. A
@@ -12,7 +12,7 @@
  * shared with every container mounted on it; each container has its own home directory, so each resolves its own
  * root. One agent running the installer inside a sandbox minted a root in the container, re-signed the
  * certificate in the shared folder with it, and left the host's dev server serving a chain whose root died with
- * the container — a browser warning with nothing on the machine able to explain it. Now a container writes only
+ * the container: a browser warning with nothing on the machine able to explain it. Now a container writes only
  * its own pair in its own home, and the host's is untouched.
  *
  * The consequence is that no consumer can hardcode the location any more, since it differs per user and per OS.

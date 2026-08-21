@@ -68,12 +68,12 @@ const SOFT_DELETES: AgentTranscript = {
     messages: [
         {
             role: `user`,
-            text: `Migrate the users table to soft deletes. Nothing should hard-delete a user row again — reads filter the retired ones out.`,
+            text: `Migrate the users table to soft deletes. Nothing should hard-delete a user row again, reads filter the retired ones out.`,
         },
         {
             role: `assistant`,
             text: `Three places touch users directly: the schema, the delete route, and the web client's typed row. I'll start with the schema and let the rest follow from it.`,
-            thinking: `A soft delete is only safe if every read path filters it. Better to add one exported helper the routes share than to sprinkle isNull() at each call site — the next route that forgets is the bug.`,
+            thinking: `A soft delete is only safe if every read path filters it. Better to add one exported helper the routes share than to sprinkle isNull() at each call site, the next route that forgets is the bug.`,
             tools: [
                 {
                     id: `tc_soft_read`,
@@ -96,7 +96,7 @@ const SOFT_DELETES: AgentTranscript = {
         },
         {
             role: `assistant`,
-            text: `Schema first — the column plus a \`liveUsers()\` helper, so filtering is one import rather than a rule everyone has to remember.`,
+            text: `Schema first, the column plus a \`liveUsers()\` helper, so filtering is one import rather than a rule everyone has to remember.`,
             tools: [
                 {
                     id: `tc_soft_schema`,
@@ -129,7 +129,7 @@ const SOFT_DELETES: AgentTranscript = {
         },
         {
             role: `assistant`,
-            text: `The purge job is the one place a hard delete still belongs — it runs on rows retired more than 30 days ago — so I left it alone and covered it with a test instead.`,
+            text: `The purge job is the one place a hard delete still belongs, it runs on rows retired more than 30 days ago, so I left it alone and covered it with a test instead.`,
             tools: [
                 {
                     id: `tc_soft_tests`,
@@ -148,7 +148,7 @@ const SOFT_DELETES: AgentTranscript = {
         },
         {
             role: `assistant`,
-            text: `Done — **4 files, +210 / −55**, held on \`agent/soft-deletes\`.\n\nOne thing to decide when you read it: the API still returns retired users to admin tokens (that's what the \`includeRetired\` flag does). If you'd rather they were invisible everywhere, say so and I'll drop the flag.`,
+            text: `Done, **4 files, +210 / −55**, held on \`agent/soft-deletes\`.\n\nOne thing to decide when you read it: the API still returns retired users to admin tokens (that's what the \`includeRetired\` flag does). If you'd rather they were invisible everywhere, say so and I'll drop the flag.`,
         },
     ],
 };
@@ -165,11 +165,11 @@ const MAYA_SUPPORT: AgentTranscript = {
         },
         {
             role: `assistant`,
-            text: `On it. I found 18 new conversations: 14 routine, three that need a personal reply, and one renewal at risk. I’m handling the routine queue first, then I’ll check the renewal in its account context.`,
+            text: `On it. I found 18 new conversations: 14 routine, three that need a personal reply, and one renewal at risk. I'm handling the routine queue first, then I'll check the renewal in its account context.`,
         },
         {
             role: `assistant`,
-            text: `Seventeen are handled — 11 replies sent, four duplicates merged, and two refunds issued for **$68 total**.\n\nThe one judgment call is Northwind’s renewal. Their SSO rollout is blocked on SCIM mapping. I drafted a reply, but held it because it offers hands-on setup time.`,
+            text: `Seventeen are handled, 11 replies sent, four duplicates merged, and two refunds issued for **$68 total**.\n\nThe one judgment call is Northwind's renewal. Their SSO rollout is blocked on SCIM mapping. I drafted a reply, but held it because it offers hands-on setup time.`,
         },
         {
             role: `user`,
@@ -187,7 +187,7 @@ const MAYA_SUPPORT: AgentTranscript = {
                     content: [{ type: `image`, path: SUPPORT_SWEEP_PATH }],
                 },
             ],
-            text: `Done. Jordan booked **10:30 tomorrow**. I attached their SSO logs to the account and scheduled a Friday check-in. The queue is clear; there’s nothing else you need to decide.`,
+            text: `Done. Jordan booked **10:30 tomorrow**. I attached their SSO logs to the account and scheduled a Friday check-in. The queue is clear; there's nothing else you need to decide.`,
         },
     ],
 };
@@ -201,11 +201,11 @@ const OWEN_LAUNCH: AgentTranscript = {
     messages: [
         {
             role: `user`,
-            text: `2.4 ships Thursday. Draft the launch thread — lead with soft deletes, keep it to five posts, and don't announce a date for the audit log.`,
+            text: `2.4 ships Thursday. Draft the launch thread, lead with soft deletes, keep it to five posts, and don't announce a date for the audit log.`,
         },
         {
             role: `assistant`,
-            text: `Drafted five posts. The first opens on the restore, not the schema — "delete a customer, change your mind, get them back" tested better in the 2.2 thread than any feature framing did.\n\nNo date on the audit log; it's one line saying it's next.`,
+            text: `Drafted five posts. The first opens on the restore, not the schema, "delete a customer, change your mind, get them back" tested better in the 2.2 thread than any feature framing did.\n\nNo date on the audit log; it's one line saying it's next.`,
         },
         {
             role: `user`,
@@ -231,7 +231,7 @@ const PRIYA_PAYOUTS: AgentTranscript = {
         },
         {
             role: `assistant`,
-            text: `412 payouts, **$186,340** settled. All but three reconcile to the cent.\n\nThe three are the same shape: a refund issued after the payout closed, so August paid out on revenue September took back. Two are under $40. The third is **$2,180** — Northwind's annual, refunded on the 29th.`,
+            text: `412 payouts, **$186,340** settled. All but three reconcile to the cent.\n\nThe three are the same shape: a refund issued after the payout closed, so August paid out on revenue September took back. Two are under $40. The third is **$2,180**, Northwind's annual, refunded on the 29th.`,
         },
         {
             role: `assistant`,

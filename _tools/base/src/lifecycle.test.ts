@@ -15,7 +15,7 @@ describe(`DisposableStore`, () => {
     });
 
     /* The property the daemon's shutdown depends on. One subsystem throwing on the way out must not strand
-     * the ports, child processes and watchers behind it in the list — every other member still gets its call,
+     * the ports, child processes and watchers behind it in the list: every other member still gets its call,
      * and the failure is reported once everything that could be released has been.
      */
     it(`keeps disposing after a member throws, then reports the failures`, () => {

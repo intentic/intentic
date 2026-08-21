@@ -10,7 +10,7 @@ import { expect, test } from "@playwright/test";
 // The frames the daemon's Grok adapter emits (see intentic/_sandbox/sandbox/src/grok/grok-agent.ts), split so each
 // accumulated prefix is INVALID/partial markdown at the moment it renders.
 const DELTA_CHUNKS = [
-    "Yes — I'm here and wired into chat. Quick status:\n\n| Piece | St", // mid table header
+    "Yes, I'm here and wired into chat. Quick status:\n\n| Piece | St", // mid table header
     "ate |\n|-------|---", // mid separator row
     "----|\n| Grok  | live  |\n\n```ts\nconst ok", // opened, unclosed code fence
     " = true;\n``", // fence almost closed

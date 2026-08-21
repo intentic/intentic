@@ -49,7 +49,7 @@ test(`packageRoot: the nearest manifest wins over the root's`, () => {
 });
 
 /* Loud, not lenient. The counting version's failure mode was to return a confident wrong directory, which is
- * how a config loader reads no .env and hands every credential back empty — a failure that surfaces far from
+ * how a config loader reads no .env and hands every credential back empty: a failure that surfaces far from
  * its cause. Nothing above the system's temp dir carries the marker, so this is a genuine miss. */
 test(`repoRoot: throws rather than guessing when the marker is nowhere above`, () => {
     expect(() => repoRoot(mkdtempSync(join(tmpdir(), `no-marker-`)))).toThrow(/pnpm-workspace\.yaml/);

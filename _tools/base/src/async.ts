@@ -15,7 +15,7 @@ import { type IDisposable } from "./lifecycle.js";
  *   Coalescer  , the clock starts on the FIRST call of a window and later calls join it. "Do it at most every
  *                 N ms, with everything that arrived." A file watcher under a running agent, which never goes
  *                 quiet and so would starve a Delayer forever.
- *   SingleFlight— concurrent callers for the same key share one run. "Only one of these at a time; everybody
+ *   SingleFlight- concurrent callers for the same key share one run. "Only one of these at a time; everybody
  *                 else waits for the answer that is already coming."
  *   retry      , the loop, with the delay in it.
  *

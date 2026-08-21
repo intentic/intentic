@@ -8,7 +8,7 @@ Where I land afterwards depends on what I already have. With no sandbox yet I go
 
 ## Acceptance criteria
 
-- [ ] The sign-in screen names the product and offers a single action, "Continue with Google" — no password field and no registration form
+- [ ] The sign-in screen names the product and offers a single action, "Continue with Google": no password field and no registration form
 - [ ] The Terms and Privacy links are present, open in a new tab, and resolve to real pages
 - [ ] Visiting a signed-in area while signed out lands on the sign-in screen rather than a blank page or an error
 - [ ] Signing in with an account that has no sandbox opens the setup flow, not an empty workspace

@@ -93,7 +93,7 @@ export const verifySession = async (apiUrl: string, session: SeededSession): Pro
     const body = (await response.json().catch(() => undefined)) as { user?: { email?: string } } | null | undefined;
     if (body?.user?.email !== SEED.email) {
         throw new Error(
-            `the seeded session cookie was rejected by ${apiUrl}/api/auth/get-session (HTTP ${response.status}) — ` +
+            `the seeded session cookie was rejected by ${apiUrl}/api/auth/get-session (HTTP ${response.status}): ` +
                 `the Better Auth cookie recipe in seed.ts no longer matches the server`,
         );
     }

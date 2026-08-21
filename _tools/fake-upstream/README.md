@@ -1,6 +1,6 @@
 # @intentic/fake-upstream
 
-A stand-in for the model the free trial spends — Google's two surfaces, served locally and deterministically.
+A stand-in for the model the free trial spends: Google's two surfaces, served locally and deterministically.
 
 ## Responsibilities
 
@@ -13,7 +13,7 @@ A stand-in for the model the free trial spends — Google's two surfaces, served
 
 The trial is the one place this product sits on the command path: a user with no model account of their own
 chats through the platform, which spends intentic's own key upstream. Until now that path was covered by unit
-tests with an injected `fetch` — which proves the routing and proves nothing about the wire. This package is the
+tests with an injected `fetch`: which proves the routing and proves nothing about the wire. This package is the
 other end of the wire, so the onboarding journey can drive a real message from a real browser to a rendered
 reply without a real key, a real quota, or a network.
 
@@ -45,13 +45,13 @@ whole chain that would otherwise need a credential nobody can commit.
   strip on the platform side ship.
 - **No dependencies and no build.** Node 24 runs TypeScript by erasing its types, so the image is the stock node
   base with these files copied in. That is why relative imports here name `.ts` rather than the `.js` every
-  other package writes — node resolves the specifier literally and will not rewrite one extension into the
+  other package writes: node resolves the specifier literally and will not rewrite one extension into the
   other.
 - `refuseKeys` makes named keys answer 429, which is what drives the platform's pool walk without a real quota.
 
 ## Key files
 
-- [src/server.ts](src/server.ts) — the server: both surfaces, the two dialects, streamed and plain replies.
-- [src/main.ts](src/main.ts) — the container entrypoint, configured entirely from the environment.
-- [src/server.test.ts](src/server.test.ts) — what the platform sends, and every refusal that matters.
-- [Dockerfile](Dockerfile) — the image the journey harness stands up beside the platform.
+- [src/server.ts](src/server.ts), the server: both surfaces, the two dialects, streamed and plain replies.
+- [src/main.ts](src/main.ts): the container entrypoint, configured entirely from the environment.
+- [src/server.test.ts](src/server.test.ts): what the platform sends, and every refusal that matters.
+- [Dockerfile](Dockerfile): the image the journey harness stands up beside the platform.

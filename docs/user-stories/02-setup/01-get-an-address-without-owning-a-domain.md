@@ -2,16 +2,16 @@
 
 As someone who has just signed in and owns no infrastructure, I want the product to hand me a working address for a machine I have not started yet, so that "pick a name, then find a domain and a tunnel" is not the first thing standing between me and a workspace.
 
-Setup opens as a numbered spine, and step one is already done when I get there: the sandbox exists, under a name it chose for me. That is not a decision taken away — a name only tells sandboxes apart in the switcher, and my first one has nothing to be told apart from — and it stays mine to change, from that same card, at any point, without holding anything up.
+Setup opens as a numbered spine, and step one is already done when I get there: the sandbox exists, under a name it chose for me. That is not a decision taken away, a name only tells sandboxes apart in the switcher, and my first one has nothing to be told apart from, and it stays mine to change, from that same card, at any point, without holding anything up.
 
 Step two is where most products would ask for a Cloudflare account. This one does not: it prepares a domain under its own zone and shows me the hostname it just provisioned, read-only, because there is no decision left for me in it.
 
-The bring-your-own path is still there, one line away, for someone who wants their sandbox on their own zone — and it asks for exactly what it needs, says what the token is scoped for, links to where to create it, and promises the token is never stored.
+The bring-your-own path is still there, one line away, for someone who wants their sandbox on their own zone: and it asks for exactly what it needs, says what the token is scoped for, links to where to create it, and promises the token is never stored.
 
 ## Acceptance criteria
 
 - [ ] Setup opens outside the workspace, titled for the task, with numbered steps and a promise line about what is coming
-- [ ] Step one asks for nothing — the sandbox is created on arrival, the step reads as done, and it carries the name it was given
+- [ ] Step one asks for nothing: the sandbox is created on arrival, the step reads as done, and it carries the name it was given
 - [ ] A first sandbox is named `workspace`, and a later one counts up rather than colliding with a name the account already holds
 - [ ] Arriving with a sandbox I started setting up earlier resumes that one instead of creating another
 - [ ] Renaming from step one is one action, keeps what I typed, and leaves the rest of setup exactly where it was

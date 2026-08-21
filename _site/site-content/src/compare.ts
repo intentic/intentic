@@ -636,7 +636,7 @@ export const comparePages: ComparePage[] = [
         differences: [
             {
                 title: "Whose machine the cloud runs on",
-                body: "Claude Code on the web runs each session in an Anthropic-managed VM and clones your repo into it. Anthropic documents the isolation and offers a self-hosted option. An intentic sandbox is a container on a machine you choose: yours by default, with the platform holding only your identity and a URL, or a free starter box we run for you if you would rather not host one — the difference being that moving off ours is a lane switch rather than a migration.",
+                body: "Claude Code on the web runs each session in an Anthropic-managed VM and clones your repo into it. Anthropic documents the isolation and offers a self-hosted option. An intentic sandbox is a container on a machine you choose: yours by default, with the platform holding only your identity and a URL, or a free starter box we run for you if you would rather not host one, the difference being that moving off ours is a lane switch rather than a migration.",
             },
             {
                 title: "One harness, or the workshop around it",

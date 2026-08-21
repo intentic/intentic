@@ -355,7 +355,7 @@ export const productPages: ProductPage[] = [
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Move it to a server so agents can keep working when your laptop is off.",
         menuShot: {
             name: "menu-host",
-            alt: "The sandbox hub: the acme-shop box online with its installed version and its own URL, over the list of what it holds — environment, secrets, agent account, extensions, access, personas and computers.",
+            alt: "The sandbox hub: the acme-shop box online with its installed version and its own URL, over the list of what it holds, environment, secrets, agent account, extensions, access, personas and computers.",
         },
         hero: {
             name: "sandbox-overview",

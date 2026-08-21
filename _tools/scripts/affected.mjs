@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Which parts of this repository a push actually touched — computed from the workspace dependency graph
+/* Which parts of this repository a push actually touched: computed from the workspace dependency graph
  * rather than asserted by a regex.
  *
  *   node _tools/scripts/affected.mjs <base-sha> <head-sha>          # GitHub job-output lines on stdout
@@ -12,12 +12,12 @@
  *     # package (checked against the four apps' workspace: deps); re-check that claim when moving a package
  *     # between groups.
  *
- * A regex that stops matching does not fail — it SKIPS, and a skipped check reports exactly like a passing
+ * A regex that stops matching does not fail: it SKIPS, and a skipped check reports exactly like a passing
  * one. The file recorded that happening: "hand-enumerating subdirs is how iq/lsp/_extensions silently fell
  * out of the trigger last time". Across 84 packages changing daily, "re-check that claim when moving a
  * package" is a note, not a control.
  *
- * The dependency graph is already written down — in every package.json's `workspace:` specifiers — and it is
+ * The dependency graph is already written down, in every package.json's `workspace:` specifiers, and it is
  * what turbo itself reads. So this walks that graph instead: changed files → the packages that contain them →
  * every package that transitively depends on one of those. A package added, moved between groups, or given a
  * new dependency is then correct by construction, with nothing to remember.
@@ -26,7 +26,7 @@
  * deliberately runs BEFORE any install (it is ~23 seconds and it is a DAG root that gates the whole pipeline),
  * and turbo lives in node_modules. Putting a 2m21s-3m43s frozen-lockfile install on that root to ask a
  * question the manifests already answer is the wrong trade. This reads the same manifests turbo reads, with
- * node and git and nothing else — the same reasoning that has prepass.mjs line-scanning pnpm-lock.yaml rather
+ * node and git and nothing else: the same reasoning that has prepass.mjs line-scanning pnpm-lock.yaml rather
  * than importing a YAML parser it cannot have yet.
  *
  * THE REGEXES THAT REMAIN ARE THE ONES A PACKAGE GRAPH CANNOT ANSWER, and they are listed together at the
@@ -53,7 +53,7 @@ const note = (line) => explain && console.error(line);
 
 /* ── the changed paths ────────────────────────────────────────────────────────────────────────────────────
  * A first push to a branch, a force-push, or a manual dispatch has no usable base. Treat everything as
- * changed rather than silently skipping the jobs that decide whether anything is checked at all — the same
+ * changed rather than silently skipping the jobs that decide whether anything is checked at all: the same
  * fallback the shell block here used to carry, and the same zero-SHA case. */
 const usable = base && !/^0+$/.test(base) && (() => {
     try {
@@ -64,7 +64,7 @@ const usable = base && !/^0+$/.test(base) && (() => {
     }
 })();
 const changed = (usable ? git("diff", "--name-only", base, head) : git("ls-files")).split("\n").filter(Boolean);
-note(usable ? `base ${base} → head ${head}: ${changed.length} changed paths` : `no usable base (${base}) — treating every tracked path as changed`);
+note(usable ? `base ${base} → head ${head}: ${changed.length} changed paths` : `no usable base (${base}), treating every tracked path as changed`);
 
 /* ── the workspace graph ──────────────────────────────────────────────────────────────────────────────────
  * Every package.json outside node_modules, and the `workspace:` edges between them. Dev and peer edges count
@@ -119,7 +119,7 @@ const globalHit = changed.find((path) => GLOBAL.has(path));
 
 const affected = new Set();
 if (globalHit) {
-    note(`${globalHit} changed — every package is affected`);
+    note(`${globalHit} changed: every package is affected`);
     for (const name of packages.keys()) {
         affected.add(name);
     }
@@ -132,7 +132,7 @@ if (globalHit) {
         }
     }
     note(`directly changed packages (${seeds.size}): ${[...seeds].sort().join(", ") || "none"}`);
-    // Breadth-first up the reverse edges — a package is affected when anything it depends on is.
+    // Breadth-first up the reverse edges: a package is affected when anything it depends on is.
     const queue = [...seeds];
     while (queue.length > 0) {
         const name = queue.pop();
@@ -151,13 +151,13 @@ if (globalHit) {
  * prepare-image-trees.sh already writes this set down once and derives its own turbo filter from it, with a
  * comment explaining that keeping a third list beside those two is how an extension joined the payload twice
  * without the filter noticing. ci.yml's `images` regex WAS that third list. Reading the two variables back is
- * what keeps this from becoming a fourth — and a shape this stops recognizing is reported as drift rather
+ * what keeps this from becoming a fourth, and a shape this stops recognizing is reported as drift rather
  * than passed over in silence, the same contract prepass.mjs's lockfile scanner holds itself to. */
 const payloadScript = readFileSync(join(root, "_tools/scripts/prepare-image-trees.sh"), "utf8");
 const treesBlock = payloadScript.match(/^TREES="\n([\s\S]*?)^"/m);
 const bundlesLine = payloadScript.match(/^BUNDLES="([^"]*)"/m);
 if (!treesBlock || !bundlesLine) {
-    console.error("affected.mjs: cannot read TREES/BUNDLES out of _tools/scripts/prepare-image-trees.sh — the shape changed, so the `images` trigger can no longer be derived from it");
+    console.error("affected.mjs: cannot read TREES/BUNDLES out of _tools/scripts/prepare-image-trees.sh, the shape changed, so the `images` trigger can no longer be derived from it");
     process.exit(1);
 }
 const imagePayload = new Set([
@@ -173,19 +173,19 @@ for (const name of imagePayload) {
 note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", ")}`);
 
 /* ── what the graph cannot answer ─────────────────────────────────────────────────────────────────────────
- * Everything below is a real input with NO manifest edge, so it stays a path rule — and they are together
+ * Everything below is a real input with NO manifest edge, so it stays a path rule, and they are together
  * here rather than scattered, because the whole point of this file is that the package closure above is
  * computed and this list is the small remainder that is not.
  *
  *   ic          a Rust crate (_sandbox/ic/Cargo.toml), not a workspace package at all.
  *   shims       _site/site/public/scripts holds the connect/recreate one-liners. They are BUNDLED into the
- *               desktop installer by stage-desktop-scripts.sh — an input to the desktop build with no
+ *               desktop installer by stage-desktop-scripts.sh: an input to the desktop build with no
  *               package edge, and deliberately narrower than "the site package changed", which would drag
  *               every marketing copy edit into a Tauri build.
  *   recipes     Dockerfiles and feature packs: the image's own contents, invisible to pnpm.
  *   assembly    the shell scripts that build, verify and publish the artifacts.
  *   workflows   the CI definition itself, which is an input to what CI produces.
- *   ci images   _tools/ci-base and _tools/ci-desktop are Dockerfiles for the containers the JOBS run in —
+ *   ci images   _tools/ci-base and _tools/ci-desktop are Dockerfiles for the containers the JOBS run in:
  *               nothing in the workspace depends on them, and their second trigger ("the tag is not in the
  *               registry at all") is a docker probe the caller runs, because it needs a credential this
  *               script has no business holding. So they are answered here as PATHS only, and ci.yml ORs each

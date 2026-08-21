@@ -54,7 +54,7 @@ test("the model picker lists Grok's live catalog and shows the real Grok logo", 
     await page.getByRole("button", { name: "Provider and model" }).click();
 
     // The Grok group lists every model from the live catalog; the current selection is marked in its row's
-    // accessible name (rowAriaLabel appends "— current model").
+    // accessible name (rowAriaLabel appends "- current model").
     await expect(page.getByRole("option", { name: "Grok 4 — current model" })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("option", { name: "Grok 3", exact: true })).toBeVisible();
 

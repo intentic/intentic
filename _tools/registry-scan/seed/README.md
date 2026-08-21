@@ -1,6 +1,6 @@
 # The intentic extension registry
 
-A list of pointers. This repository holds no extension code, builds none, and signs none — every entry names
+A list of pointers. This repository holds no extension code, builds none, and signs none: every entry names
 somebody else's repository at a commit, and installing follows that pointer from your own sandbox straight to
 their git host.
 
@@ -25,14 +25,14 @@ registry decision.
 
 ## Getting listed
 
-Two ways in, and they end in the same place — a pull request against
+Two ways in, and they end in the same place: a pull request against
 [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json).
 
 **Add the topic.** Put `intentic-extension` on your GitHub repository, with an `intentic-extension.json` at
 its root. A nightly job resolves the latest commit first, checks the manifest and shipped bundle at that exact
 sha, and opens the pull request for you. This is the whole submission process; there is nowhere to log in.
 
-**Or open it yourself.** Required if your extension lives in a subdirectory or isn't on GitHub — there is
+**Or open it yourself.** Required if your extension lives in a subdirectory or isn't on GitHub: there is
 nowhere for the scan to look. Copy the shape of an existing entry.
 
 ## What an entry looks like
@@ -49,14 +49,14 @@ nowhere for the scan to look. Copy the shape of an existing entry.
 }
 ```
 
-`name` is `publisher.name` from your manifest, not a label you choose — that is the identity the app installs
+`name` is `publisher.name` from your manifest, not a label you choose: that is the identity the app installs
 under, so two publishers can both ship an `incidents` extension and a repository that copies somebody else's
 manifest collides with their listing instead of shadowing it.
 
 `logo` (a simple-icons slug, e.g. `"linear"`) and `icon` (a glyph from the app's own set) are how the row is
 drawn in the gallery and in the app's browse list. The scanner copies whichever the manifest declares, so an
 author sets it once in the file they own; an entry with neither shows the extension's initials. Both are
-editable here, which is the point of them riding the curated file — a reviewer can correct a mark, or strike
+editable here, which is the point of them riding the curated file: a reviewer can correct a mark, or strike
 one, in the same pull request that lists it.
 
 `source` also accepts `{ "source": "url", "url": … }` and `{ "source": "git-subdir", "url": …, "path": … }`
@@ -80,11 +80,11 @@ intentic extensions together.
 | | What it means | What it does not mean |
 | --- | --- | --- |
 | `listed` | The exact source passed Trivy and the intentic agent audit. | That a human read the code, or that future commits are safe. |
-| `verified` | Both automated checks passed and somebody here also read the source. Sorted first and badged. | An ongoing audit — every claim speaks for that source only. |
-| `blocked` | Known malicious or known broken, with the reason in `trustReason`. | — |
+| `verified` | Both automated checks passed and somebody here also read the source. Sorted first and badged. | An ongoing audit: every claim speaks for that source only. |
+| `blocked` | Known malicious or known broken, with the reason in `trustReason`. |: |
 
 A blocked entry **stays in this file**. Deleting the row would hide it from people browsing and tell the
-people who already installed it nothing, which is backwards — they are the ones at risk.
+people who already installed it nothing, which is backwards: they are the ones at risk.
 
 The honest summary: installing an extension is trusting its author, the same way installing an editor plugin
 is. A browser bundle shares the app's page, browser storage and network access; its manifest gates cooperative
@@ -103,7 +103,7 @@ advertising "there's a newer commit over there" would invite a click that skips 
 
 ## Running your own
 
-Nothing here is special. Add `.claude-plugin/marketplace.json` to any repository and it is a registry — point
+Nothing here is special. Add `.claude-plugin/marketplace.json` to any repository and it is a registry: point
 a sandbox's **Capabilities → Add → Extension → From a registry** field at it, with a token if it's private,
 and you have an internal catalogue that never touches this one. The official registry is a default, not a
 gate.

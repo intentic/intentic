@@ -44,11 +44,11 @@ const standDown = (reason: string): void => {
 
 export default async (): Promise<(() => Promise<void>) | void> => {
     if (!tier.runs) {
-        standDown(`${tier.title} — not asked for (set INTENTIC_E2E_ONBOARDING=1)`);
+        standDown(`${tier.title}, not asked for (set INTENTIC_E2E_ONBOARDING=1)`);
         return;
     }
     if (!(await dockerAvailable())) {
-        standDown(`${tier.title} — this machine has no Docker daemon`);
+        standDown(`${tier.title}: this machine has no Docker daemon`);
         return;
     }
 

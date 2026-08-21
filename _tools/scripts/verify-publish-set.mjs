@@ -4,7 +4,7 @@
  * PUB in packages.sh is hand-maintained, and every package split re-litigates it by hand. The failure it
  * invites is quiet until publish day: a listed package depending on an unlisted workspace package packs a
  * version specifier nothing on npm satisfies, and the release either 403s mid-way (half-published, the worst
- * outcome) or ships a package nobody can install. Three gaps existed the day this was written — the
+ * outcome) or ships a package nobody can install. Three gaps existed the day this was written: the
  * extension-manifest split left the new package unlisted, and local-agent and sandbox-run had been unlisted
  * dependencies of listed packages all along, unnoticed because no release had shipped since they were added.
  *
@@ -34,9 +34,9 @@ for (const dir of dirs) {
             continue;
         }
         if (!position.has(dep)) {
-            problems.push(`${pkg.name} depends on ${dep}, which is not in PUB — it would publish an unresolvable specifier`);
+            problems.push(`${pkg.name} depends on ${dep}, which is not in PUB: it would publish an unresolvable specifier`);
         } else if (position.get(dep) > position.get(pkg.name)) {
-            problems.push(`${dep} publishes after ${pkg.name}, which depends on it — reorder PUB`);
+            problems.push(`${dep} publishes after ${pkg.name}, which depends on it: reorder PUB`);
         }
     }
 }

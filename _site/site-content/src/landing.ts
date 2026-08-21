@@ -187,7 +187,7 @@ export const landingContent: LandingContent = {
                 },
                 {
                     name: "hero-changes",
-                    alt: "The workspace's Changes tab: the working tree grouped by repository — three files under web, two under api, each with its branch and its own insertions and deletions — beside a side-by-side diff of CheckoutPanel.tsx.",
+                    alt: "The workspace's Changes tab: the working tree grouped by repository, three files under web, two under api, each with its branch and its own insertions and deletions, beside a side-by-side diff of CheckoutPanel.tsx.",
                     frameLabel: "acme-shop · /workspace",
                 },
                 {

@@ -92,16 +92,16 @@ export const SUPPORT_SWEEP_SHOT = `<svg xmlns="http://www.w3.org/2000/svg" width
 
     <circle cx="372" cy="215" r="17" fill="#d8e9fc"/>
     <rect x="401" y="191" width="335" height="69" rx="13" fill="#f4f5f8"/>
-    <text x="419" y="215" font-size="12" fill="#343a4e">We’re stuck mapping our SCIM groups.</text>
+    <text x="419" y="215" font-size="12" fill="#343a4e">We're stuck mapping our SCIM groups.</text>
     <text x="419" y="235" font-size="12" fill="#343a4e">Could someone help before the rollout?</text>
     <text x="704" y="250" font-size="9" fill="#969bad">08:17</text>
 
     <circle cx="762" cy="307" r="17" fill="url(#violet)"/>
     <text x="762" y="313" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">M</text>
     <rect x="390" y="278" width="342" height="94" rx="13" fill="#eeeafb"/>
-    <text x="410" y="303" font-size="12" fill="#30364a">I can get you unstuck. I’ve reviewed the logs</text>
+    <text x="410" y="303" font-size="12" fill="#30364a">I can get you unstuck. I've reviewed the logs</text>
     <text x="410" y="324" font-size="12" fill="#30364a">and reserved 20 minutes with our setup specialist</text>
-    <text x="410" y="345" font-size="12" fill="#30364a">tomorrow at 10:30. Here’s the invite.</text>
+    <text x="410" y="345" font-size="12" fill="#30364a">tomorrow at 10:30. Here's the invite.</text>
     <text x="410" y="361" font-size="9" font-weight="650" fill="#7655d7">Draft ready · approved by Ada</text>
 
     <rect x="350" y="401" width="432" height="58" rx="13" fill="#fafbfe" stroke="#e6e8ef"/>

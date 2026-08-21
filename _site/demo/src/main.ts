@@ -87,7 +87,7 @@ installSwitcher();
 
 const served = coverage();
 console.info(
-    `[demo] ${demoMode.id} — fixture daemon serving ${served.served} routes of the contract's ${served.contract}; anything else answers 404 and logs here.`,
+    `[demo] ${demoMode.id}: fixture daemon serving ${served.served} routes of the contract's ${served.contract}; anything else answers 404 and logs here.`,
 );
 
 await import("@intentic-app/web/main");

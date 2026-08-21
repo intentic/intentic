@@ -3,7 +3,7 @@
 Measured on a live sandbox, 2026-08-20, from the daemon's own instrumentation
 (`_sandbox/sandbox/src/platform/perf.ts`, `/history/logs/daemon.log`,
 `/history/logs/resource-metrics.jsonl`) after ~4.1 h of uptime. Nothing here is
-inferred from reading code alone — every claim below has a number behind it.
+inferred from reading code alone: every claim below has a number behind it.
 
 ## The headline
 
@@ -13,7 +13,7 @@ compound. In descending order of how much they cost the user:
 1. **The daemon's event loop is stalled for seconds at a time**, so *every*
    request pays it. This is not a git problem and not a commit problem.
 2. **Per-file attribution is re-derived sequentially, once per landing, on the
-   commit's own response path** — and this workspace has 1028 recorded landings
+   commit's own response path**: and this workspace has 1028 recorded landings
    in one repo.
 3. **The land's commit subject is written by a model call that averages 10 s**,
    which is the part of a land the user actually sits and watches.
@@ -60,7 +60,7 @@ status --porcelain=v2 -z -uall (root)       5.1ms / 4.1ms
 ```
 
 `branch --show-current` is a 2 ms command that the daemon measures at 709 ms
-mean. That is a ~250× gap, and it is uniform across every trivial command —
+mean. That is a ~250× gap, and it is uniform across every trivial command:
 which is the signature of a shared queue, not of per-command cost.
 
 The gap is the event loop. `git.run` is timed in the parent, around an IPC
@@ -91,7 +91,7 @@ Swap: 32768 MB total, 4136 MB IN USE
 
 The daemon (pid 7): `VmRSS 1.97 GB`, `VmSwap 902 MB`, `VmHWM 4.71 GB`. V8 heap
 limit is 4.5 GB; `old_space` reports 244 MB used of 247 MB sized with 1.7 MB
-available — permanently at the edge, with GC bursts up to 3 s per minute.
+available: permanently at the edge, with GC bursts up to 3 s per minute.
 
 CPU is not the constraint: 16 cores, load 3.78, `/proc/pressure/cpu` full
 avg300 = 0. IO pressure is real but modest (full avg300 = 1.12), and it is
@@ -99,7 +99,7 @@ mostly *swap* IO.
 
 So the floor under every user action is: 20–40 ms of loop delay in the good
 case, multiple seconds when a GC pass or a major fault lands. The observed
-slow-request table is exactly what that predicts — endpoints with nothing to do
+slow-request table is exactly what that predicts: endpoints with nothing to do
 with git are just as slow:
 
 | endpoint | slow count | mean ms | max ms |
@@ -123,7 +123,7 @@ inside the repo lock:
 1. optional `stagePaths`
 2. `commitAll` / `commitIndex`
 3. `invalidateScan()`
-4. **`scanRepo(repo, dir)`** — the repo's fresh rows, carried back on the
+4. **`scanRepo(repo, dir)`**: the repo's fresh rows, carried back on the
    commit's own response
 
 Step 4 is the deliberate optimisation that replaced a workspace-wide rescan,
@@ -142,7 +142,7 @@ of them archived**, and **1144 recorded landings**:
 | `registry` | 1 |
 
 `forRepo` short-circuits *spent* landings from a memo, and that memo is doing
-real work — `agentOrigins` metrics report `spent: 872`. But that leaves ~156
+real work, `agentOrigins` metrics report `spent: 872`. But that leaves ~156
 unspent landings in `intentic`, and for each one the loop does:
 
 ```ts
@@ -158,14 +158,14 @@ Three of the four reads are cached on fixed shas and cost nothing on a repeat
 scan. `committedSince` is not: it is keyed `${repo} ${landedHead}` and
 **replaced whenever `head` changes**. A commit is precisely a head change. So
 every commit in `intentic` invalidates ~156 expiry entries and re-derives them
-as ~156 `git diff --name-only --no-renames <landedHead> <head>` calls —
+as ~156 `git diff --name-only --no-renames <landedHead> <head>` calls:
 **sequentially**, in a `for…of` with awaits, **inside the repo lock, on the
 commit's own response path.**
 
 That is the `diff --name-only --no-renames` row in the slow table: 247 slow
 calls at 426 ms mean. 156 of those in series is 60+ s at the slow rate; most
 resolve faster, which is why the observed commit mean is 7.3 s rather than a
-minute — but the shape matches, and the 34 s worst case is this.
+minute: but the shape matches, and the 34 s worst case is this.
 
 The same loop shape exists in `landed-presence.ts:182` (sequential over
 entries, then over repos) but that cache is nearly empty here (`spans: 0`,
@@ -174,7 +174,7 @@ entries, then over repos) but that cache is nearly empty here (`spans: 0`,
 Two further consequences of the same design:
 
 - **The memo is process-lifetime.** After a restart, the first Changes scan
-  re-derives all 1028 `intentic` landings — the 10–20 s panel the code comment
+  re-derives all 1028 `intentic` landings: the 10–20 s panel the code comment
   at `origins.ts:83` describes. It is amortised, not gone.
 - **`agents.ids()` walks all 1367 entries** on every `forRepo`, i.e. once per
   repo per scan. Cheap per call, but it is 551 scans × 7 repos × 1367 entries.
@@ -182,7 +182,7 @@ Two further consequences of the same design:
 
 ## 3. The land-specific cost: a 10-second sentence
 
-`landing.subject` — 17 calls, **mean 9 940 ms**, max 24 866 ms. Underneath it
+`landing.subject`: 17 calls, **mean 9 940 ms**, max 24 866 ms. Underneath it
 `quick.model` runs at 7 074 ms mean over 35 calls, with 5 failures (the failures
 are the expensive ones: a refused provider is a full round trip before the walk
 tries the next rung).
@@ -194,7 +194,7 @@ sentence is what fills the commit box, so the user's actual experience of
 "land, then commit" includes a ~10 s wait with a "writing…" chip. And the pass
 itself is not free to the rest of the daemon:
 
-- `claimedDiff` calls `agentOrigins.forRepo` per repo — the same expiry
+- `claimedDiff` calls `agentOrigins.forRepo` per repo: the same expiry
   re-derivation as above, on a background task.
 - On success it calls `publishRuntimeChange("landings")`, which triggers a
   **workspace-wide rescan** (`git.scan`: 646 ms mean, 30.7 s max).
@@ -215,7 +215,7 @@ deltas and quadratic-feeling on large ones:
 
 Per repo per scan, `scanRepo` fires roughly 11 git spawns. Five of them are
 `remoteState` (`git/remote.ts:35`): `remote`, `branch --show-current`,
-`for-each-ref` for upstream — plus `remote -v` and `rev-parse --git-dir` from
+`for-each-ref` for upstream: plus `remote -v` and `rev-parse --git-dir` from
 adjacent readers. Those five account for 3 032 of the 5 205 slow `git.run`
 lines. Almost all of what they return is repo *configuration* that changes on
 the order of days, not the 646 ms it costs to re-read every scan.
@@ -227,7 +227,7 @@ the order of days, not the 646 ms it costs to re-read every scan.
 
 Ordered by expected user-visible win per unit of work.
 
-### A. Take attribution off the commit's response path — small, immediate
+### A. Take attribution off the commit's response path: small, immediate
 
 `scanRepo`'s own comment already grants that attribution "decorates the rows,
 it isn't the rows", and it already degrades to `{}` on failure. When `scanRepo`
@@ -237,9 +237,9 @@ disappear on the response; the chips arrive a beat later.
 
 This removes ~156 sequential git spawns from the critical path of every commit
 in the busiest repo. Expected: the 7.3 s commit mean drops to roughly the cost
-of `commitIndex` plus one `status` — sub-second on an unloaded loop.
+of `commitIndex` plus one `status`: sub-second on an unloaded loop.
 
-### B. Batch the expiry read — one spawn instead of N
+### B. Batch the expiry read: one spawn instead of N
 
 `committedSince` asks "which paths did history touch between `landedHead` and
 `head`" once per landing. Every landing shares `head`, and every `landedHead`
@@ -268,7 +268,7 @@ scan) without changing a single verdict.
 
 1326 archived conversations and 1144 landings are retained with no policy. A
 landing whose claim is spent *and* whose agent has been archived for N days
-carries no information any surface reads — the chip is gone, the branch is
+carries no information any surface reads: the chip is gone, the branch is
 parked, the paths are committed. Dropping `landedTip`/`landedHead` from those
 entries (or the entries themselves) makes attribution proportional to active
 work rather than to everything the sandbox has ever done.
@@ -276,7 +276,7 @@ work rather than to everything the sandbox has ever done.
 ### E. Cache `remoteState`'s config half
 
 Split it: `remote`, `remote -v` and the branch's configured remote are
-configuration — cache them per repo, invalidated on the verbs that can change
+configuration: cache them per repo, invalidated on the verbs that can change
 them (`fetch`, `push`, `pull`, `createBranch`, `checkout`) plus a generous TTL.
 Only ahead/behind needs to be live, and that is the one `for-each-ref`. Five
 spawns per repo per scan → one. On seven repos and 551 scans that is ~15 000
@@ -285,7 +285,7 @@ spawns saved.
 Same treatment for `git.discover`: the repo set is already watched for other
 reasons; a scan should read a memo, not re-walk the tree.
 
-### F. Deal with the memory pressure — the biggest win, and the least local
+### F. Deal with the memory pressure: the biggest win, and the least local
 
 902 MB of the daemon swapped out, a 4.71 GB high-water mark against a 4.5 GB
 heap limit, `old_space` permanently full, GC bursts to 3 s. This is what turns a
@@ -294,7 +294,7 @@ amount of git tuning will touch it.
 
 Visible holders worth auditing, from the resource series:
 
-- `agentOrigins.pathCharacters: 51 351 541` — **51 MB of path strings** in the
+- `agentOrigins.pathCharacters: 51 351 541`, **51 MB of path strings** in the
   attribution memo alone. Recommendation D shrinks this directly.
 - `conversationTranscriptSearch`: 1359 conversations, 11.5 MB of text, in-process.
 - `globalHandles: 1 028 168`.
@@ -308,7 +308,7 @@ Two structural options, in rough order of leverage:
    engine are the two obvious candidates.
 2. **Bound the caches by bytes, not by entry count.** Every cache here is
    bounded by cardinality ("proportional to the unspent landings"), which is a
-   proxy that failed — 534 spans became 51 MB of strings.
+   proxy that failed: 534 spans became 51 MB of strings.
 
 ## Summary table
 

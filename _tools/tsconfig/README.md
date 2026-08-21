@@ -9,14 +9,14 @@ Shared **TypeScript base configurations** for the monorepo. Every workspace pack
 
 ## How it fits
 
-A leaf dev dependency of every package — no runtime code. Change compiler-wide behavior here; individual packages keep only their `include`/`outDir`/references.
+A leaf dev dependency of every package: no runtime code. Change compiler-wide behavior here; individual packages keep only their `include`/`outDir`/references.
 
 ## Conventions & gotchas
 
-- Editing a base config affects the whole repo — verify a full `pnpm build` after changes.
+- Editing a base config affects the whole repo: verify a full `pnpm build` after changes.
 
 ## Key files
 
-- [tsconfig.base.json](tsconfig.base.json) — the settings every package inherits.
-- [tsconfig.vue.json](tsconfig.vue.json) — the Vue/`vue-tsc` variant.
-- [tsconfig.astro.json](tsconfig.astro.json) — the Astro variant, for the site.
+- [tsconfig.base.json](tsconfig.base.json): the settings every package inherits.
+- [tsconfig.vue.json](tsconfig.vue.json): the Vue/`vue-tsc` variant.
+- [tsconfig.astro.json](tsconfig.astro.json): the Astro variant, for the site.

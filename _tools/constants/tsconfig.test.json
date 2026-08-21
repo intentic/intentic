@@ -1,4 +1,4 @@
-/* Type-checks this package's TESTS along with its source — the build config excludes them so they never reach
+/* Type-checks this package's TESTS along with its source: the build config excludes them so they never reach
  * dist. noEmit, so it never writes anything. */
 {
     "extends": "./tsconfig.json",

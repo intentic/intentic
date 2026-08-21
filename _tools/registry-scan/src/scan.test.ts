@@ -88,7 +88,7 @@ describe(`scanRegistry`, () => {
                     stars: 40,
                     pushedAt: `2026-07-29T00:00:00Z`,
                     // The pinned commit holds no manifest in this fixture, and the fact says so instead of
-                    // borrowing the branch's copy — the checks describe what an installer would get.
+                    // borrowing the branch's copy: the checks describe what an installer would get.
                     checks: { sha: sha(`a`), manifest: `no intentic-extension.json at the pinned commit`, bundle: `unchecked` },
                 },
             ],
@@ -194,7 +194,7 @@ describe(`scanRegistry`, () => {
 
     it(`re-derives the publishability checks at the PINNED sha, not at the branch`, async () => {
         // The branch has moved on to a broken manifest; the pinned commit is fine. The checks must describe the
-        // commit installs follow — reading the branch here would report a working listing as broken.
+        // commit installs follow: reading the branch here would report a working listing as broken.
         const result = await scanRegistry(
             file([{ name: `acme.incidents`, kind: `extension`, source: { source: `github`, repo: `acme/incidents`, sha: sha(`a`) } }]),
             fakeGithub({

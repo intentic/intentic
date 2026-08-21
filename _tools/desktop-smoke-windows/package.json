@@ -3,7 +3,7 @@
     "version": "0.0.0",
     "private": true,
     "type": "module",
-    "description": "The Windows counterpart of @intentic/desktop-smoke — installs the shipped NSIS installer on a real Windows machine, runs the setup it ships, and drives one /agents session",
+    "description": "The Windows counterpart of @intentic/desktop-smoke, installs the shipped NSIS installer on a real Windows machine, runs the setup it ships, and drives one /agents session",
     "scripts": {
         "build": "tsgo",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",

@@ -26,7 +26,7 @@ const docker = async (args: string[], what: string, timeoutMs = 120_000): Promis
         return stdout.trim();
     } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        throw new Error(`${what} failed — ${message}`, { cause });
+        throw new Error(`${what} failed: ${message}`, { cause });
     }
 };
 

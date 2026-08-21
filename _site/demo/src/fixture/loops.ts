@@ -19,7 +19,7 @@ export const demoLoops = (): LoopDesign[] => [
     {
         id: `until-green`,
         name: `Until the suite is green`,
-        description: `Fix, run, fix again — the classic. Ends on the test command, not on the agent's opinion of it.`,
+        description: `Fix, run, fix again, the classic. Ends on the test command, not on the agent's opinion of it.`,
         context: `fresh`,
         output: { kind: `none` },
         checks: [{ kind: `command`, command: `pnpm test` }],
@@ -30,7 +30,7 @@ export const demoLoops = (): LoopDesign[] => [
     {
         id: `until-reviewed`,
         name: `Until a reviewer agrees`,
-        description: `For the goals no command can check — "the README explains the auth flow". A second model reads the work each round.`,
+        description: `For the goals no command can check, "the README explains the auth flow". A second model reads the work each round.`,
         context: `continue`,
         output: { kind: `claim` },
         checks: [{ kind: `judge`, rubric: `The stated goal is met, and a newcomer could tell it was met without asking.` }],

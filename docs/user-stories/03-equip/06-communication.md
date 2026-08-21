@@ -2,7 +2,7 @@
 
 As someone who wants the agent to read and answer in the places work actually happens, I want to connect chat, mail and the accounts I post from, so that it is a colleague rather than a tab.
 
-Two different things live in this section and they connect in two different ways. A chat or mail connector takes a credential and then relies on a gateway process that has to keep running — so the card shows me that process, whether it is running, and lets me restart it and read its log. "My bot went quiet" sends people to the connector, and the answer is on the connector.
+Two different things live in this section and they connect in two different ways. A chat or mail connector takes a credential and then relies on a gateway process that has to keep running: so the card shows me that process, whether it is running, and lets me restart it and read its log. "My bot went quiet" sends people to the connector, and the answer is on the connector.
 
 The accounts I post from are not a token at all. They are a real browser session I sign into myself, in a window the product opens, because that is the only honest way to hold a session for a service that never issued me an API key. A session that has expired says so and offers me the way to log in again, in place, rather than reading as a broken connection.
 

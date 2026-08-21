@@ -13,7 +13,7 @@ import {
 
 /* These are the only assertions in this package that can be made without a Windows machine, which is exactly
  * why every decision the tiers make was pushed into a pure function to begin with. What is left unasserted here
- * is real IO — an installer running, a window mapping — and no unit test was ever going to reach it. */
+ * is real IO: an installer running, a window mapping, and no unit test was ever going to reach it. */
 
 test("ConvertTo-Json's three shapes all read as a list", () => {
     // The footgun that fails on the machine with ONE match and passes on the developer's with two.
@@ -56,7 +56,7 @@ test("the installed app is found by display name, across hives", () => {
 });
 
 test("the quotes Windows stores around InstallLocation are stripped, and the ones around UninstallString are not", () => {
-    // What the real registry holds — and the install tier reads the location with readdir, which treats a
+    // What the real registry holds, and the install tier reads the location with readdir, which treats a
     // leading quote as an ordinary path character and resolves the lot relative to the working directory.
     // The uninstall string keeps its quotes: that one goes to a shell, which needs them to survive a space.
     const entries = [
@@ -79,7 +79,7 @@ test("an entry whose InstallLocation is only quotes is no location at all", () =
     expect(installedApp([{ DisplayName: `Intentic`, InstallLocation: `""` }], `Intentic`)).toBeUndefined();
 });
 
-test("an entry with no InstallLocation is not the install — a guessed path would name the wrong cause", () => {
+test("an entry with no InstallLocation is not the install: a guessed path would name the wrong cause", () => {
     // Windows lists plenty of rows with no location. Treating one as the install turns a bundler regression
     // into a set of "file not found" failures that point at the app instead of at the package.
     expect(installedApp([{ DisplayName: `Intentic` }], `Intentic`)).toBeUndefined();
@@ -107,7 +107,7 @@ test("the container name follows the slug rule every later flow addresses", () =
 });
 
 test("a title matches on its distinctive half, so reworded copy does not go red", () => {
-    const open = [`Intentic — Setting up your sandbox`, `Program Manager`];
+    const open = [`Intentic, Setting up your sandbox`, `Program Manager`];
     expect(titled(open, `Setting up`)).toBe(true);
     expect(titled(open, `Intentic`)).toBe(true);
     expect(titled(open, `Set up a sandbox on this computer`)).toBe(false);

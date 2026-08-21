@@ -225,7 +225,7 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
     const vanity = url.pathname !== "/" && url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname;
 
     /* The interactive demo (@intentic-dev/demo, built into public/demo/) is a history-mode SPA sharing this
-     * origin, so its routes — /demo/agents, /demo/workspace/api/src/stripe.ts, are paths no asset answers.
+     * origin, so its routes: /demo/agents, /demo/workspace/api/src/stripe.ts, are paths no asset answers.
      * Serve its document for any navigation under /demo/ that isn't a real file, which is the same rule its
      * dev server runs. Keyed on the request wanting html: a workspace route legitimately ends in `.ts`, and
      * the demo's own chunks never ask for a document. */

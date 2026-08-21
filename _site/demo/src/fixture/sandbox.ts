@@ -273,7 +273,7 @@ export const setExtensionEnabled = (id: string, enabled: boolean): void => {
 /* The image overlay: the layer of the environment everyone else keeps closed. What's applied is what the
  * container was built from; the proposal is the agent asking for one more tool, approved by the owner, never
  * by the agent, which is the whole point of showing a Dockerfile diff instead of installing behind your back. */
-const APPLIED_OVERLAY = `# intentic:custom — approved 3 days ago
+const APPLIED_OVERLAY = `# intentic:custom: approved 3 days ago
 RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \\
  && rm -rf /var/lib/apt/lists/*
 
@@ -312,7 +312,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             tools: [{ name: `psql`, version: `16.4` }],
             purpose: `Reads the production replica directly, so a schema question is a query rather than a guess.`,
             detail:
-                `Pinned to 16 to match the managed database — a newer client warns on every connect and its \\copy output drifts ` +
+                `Pinned to 16 to match the managed database: a newer client warns on every connect and its \\copy output drifts ` +
                 `from what the runbooks show.`,
             commands: `RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \\\n && rm -rf /var/lib/apt/lists/*`,
         },

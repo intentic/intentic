@@ -46,28 +46,28 @@ Notice what is *not* connected: sign-in and the website sit to one side, the dep
 sandbox as a tool it can run, and your own computer is reached only when you grant it. None of them are in the
 way of you and your code.
 
-Every part below is one top-level directory — the layout *is* this map, so a package's path tells you which
+Every part below is one top-level directory: the layout *is* this map, so a package's path tells you which
 part it belongs to before you open it.
 
 ## What each part is for
 
-**The editor** (`_editor/`) — The screen you actually look at — files, chat, terminals. · 4 packages, 105.0k lines
+**The editor** (`_editor/`) (The screen you actually look at) files, chat, terminals. · 4 packages, 105.0k lines
 
-**The sandbox** (`_sandbox/`) — One private box per project, where your code and the agents live. · 11 packages, 116.8k lines
+**The sandbox** (`_sandbox/`): One private box per project, where your code and the agents live. · 11 packages, 116.8k lines
 
-**Extensions** (`_extensions/`) — How features are added without touching the core. · 21 packages, 29.4k lines
+**Extensions** (`_extensions/`): How features are added without touching the core. · 21 packages, 29.4k lines
 
-**Your computer** (`_computers/`) — How an agent reaches your own machine — with your permission, within your switches. · 4 packages, 4.8k lines
+**Your computer** (`_computers/`) (How an agent reaches your own machine) with your permission, within your switches. · 4 packages, 4.8k lines
 
-**Code search** (`_search/`) — How an agent finds the right file instead of reading everything. · 5 packages, 14.5k lines
+**Code search** (`_search/`): How an agent finds the right file instead of reading everything. · 5 packages, 14.5k lines
 
-**Deployment engine** (`_deploy/`) — A bundled tool that turns 'what I want' into running servers. Not part of the product. · 8 packages, 27.5k lines
+**Deployment engine** (`_deploy/`): A bundled tool that turns 'what I want' into running servers. Not part of the product. · 8 packages, 27.5k lines
 
-**Account** (`_platform/`) — Sign-in and the sandbox registry. Off to one side of everything else. · 4 packages, 22.1k lines
+**Account** (`_platform/`): Sign-in and the sandbox registry. Off to one side of everything else. · 4 packages, 22.1k lines
 
-**The website** (`_site/`) — The public site and its playable demo. · 4 packages, 9.8k lines
+**The website** (`_site/`): The public site and its playable demo. · 4 packages, 9.8k lines
 
-**Plumbing** (`_tools/`) — Shared config and test harnesses. · 9 packages, 3.0k lines
+**Plumbing** (`_tools/`): Shared config and test harnesses. · 9 packages, 3.0k lines
 
 ```bars
 { "title": "Size of each part",
@@ -124,22 +124,22 @@ A shared rulebook and a shared config sit at the bottom of everything. Break eit
 
 ## Where to start reading
 
-1. **_editor/web** — The browser app — the whole editor you see and click.
-2. **_sandbox/sandbox-contract** — The rulebook both sides of the wire agree on.
-3. **_sandbox/sandbox** — The daemon — the program running inside your project's box.
-4. **_sandbox/extension-api** — The contract an extension is written against.
-5. **_search/iq** — One search command an agent can actually use.
+1. **_editor/web** (The browser app) the whole editor you see and click.
+2. **_sandbox/sandbox-contract**: The rulebook both sides of the wire agree on.
+3. **_sandbox/sandbox** (The daemon) the program running inside your project's box.
+4. **_sandbox/extension-api**: The contract an extension is written against.
+5. **_search/iq**: One search command an agent can actually use.
 
 ## Words used here in a particular way
 
-- **sandbox** — One private box per project. Your files, your agents, your terminals — nobody else's.
-- **the daemon** — The program running inside a sandbox that owns the files and answers the editor.
-- **agent** — One AI conversation doing one job. Several can run at once, each on its own copy of the code.
-- **turn** — One round of an agent working: you ask, it acts, it reports.
-- **worktree** — A private copy of the code an isolated agent works in, so parallel agents cannot collide.
-- **the rail** — The strip of icons down the left of the editor. Space there is scarce and earned.
-- **extension** — A package that adds screens, commands or agent tools without changing the core app.
-- **capability** — Something you have connected — a GitHub account, a database, an API key.
-- **panel** — A repo's own dev server, run by the sandbox and shown in a frame.
-- **intent** — A description of what you want to exist. The deployment engine's input, not the product's.
-- **the app plane** — The product you look at. Separate from the deployment engine, which is a bundled tool.
+- **sandbox** (One private box per project. Your files, your agents, your terminals) nobody else's.
+- **the daemon**: The program running inside a sandbox that owns the files and answers the editor.
+- **agent**: One AI conversation doing one job. Several can run at once, each on its own copy of the code.
+- **turn**, One round of an agent working: you ask, it acts, it reports.
+- **worktree**: A private copy of the code an isolated agent works in, so parallel agents cannot collide.
+- **the rail**: The strip of icons down the left of the editor. Space there is scarce and earned.
+- **extension**: A package that adds screens, commands or agent tools without changing the core app.
+- **capability** (Something you have connected) a GitHub account, a database, an API key.
+- **panel**: A repo's own dev server, run by the sandbox and shown in a frame.
+- **intent**: A description of what you want to exist. The deployment engine's input, not the product's.
+- **the app plane**: The product you look at. Separate from the deployment engine, which is a bundled tool.

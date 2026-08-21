@@ -18,7 +18,7 @@ describe(`truthiness`, () => {
         expect(holds(`!neverPublished`, {})).toBe(true);
     });
 
-    // Empty string and zero are the "nothing here" a surface actually publishes, so they are false — this is
+    // Empty string and zero are the "nothing here" a surface actually publishes, so they are false: this is
     // what lets `selectionSize` be written without a `> 0` everywhere it is read.
     it(`treats empty string and zero as false`, () => {
         expect(holds(`tabSurface`, { tabSurface: `` })).toBe(false);
@@ -35,7 +35,7 @@ describe(`comparison`, () => {
         expect(holds(`enabled == true`, { enabled: true })).toBe(true);
     });
 
-    // A context value and an author's literal do not have to agree on type — `enabled == 'true'` is a thing
+    // A context value and an author's literal do not have to agree on type: `enabled == 'true'` is a thing
     // people write, and the only reading of it that isn't a silent no is the string comparison.
     it(`compares across types by string form`, () => {
         expect(holds(`enabled == 'true'`, { enabled: true })).toBe(true);
@@ -43,7 +43,7 @@ describe(`comparison`, () => {
     });
 
     /* Ordering against a non-number is false, not a coercion. `'10' > '9'` is false in JavaScript and
-     * `undefined > 3` is false-by-NaN — both are traps, and neither is a comparison anyone meant to write. */
+     * `undefined > 3` is false-by-NaN: both are traps, and neither is a comparison anyone meant to write. */
     it(`refuses to order anything but numbers`, () => {
         expect(holds(`depth > 2`, { depth: `10` })).toBe(false);
         expect(holds(`depth > 2`, {})).toBe(false);
@@ -80,7 +80,7 @@ describe(`composition`, () => {
 
 describe(`syntax`, () => {
     // Keys may contain the characters a namespaced context key needs, and a word that merely STARTS with an
-    // operator word is a key — `notify` and `inbox` are not `not` and `in`.
+    // operator word is a key: `notify` and `inbox` are not `not` and `in`.
     it(`accepts dotted, dashed and operator-prefixed keys`, () => {
         expect(holds(`chat.tab-active`, { "chat.tab-active": true })).toBe(true);
         expect(holds(`notify && inbox`, { notify: true, inbox: true })).toBe(true);

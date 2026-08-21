@@ -92,11 +92,11 @@ export const waitForHttp = async (url: string, what: string, timeoutMs: number, 
             last = error instanceof Error ? error.message : String(error);
         }
         if (container !== undefined && !(await isRunning(container))) {
-            throw new Error(`${what} exited before it answered at ${url} — last attempt: ${last}${await tail()}`);
+            throw new Error(`${what} exited before it answered at ${url}, last attempt: ${last}${await tail()}`);
         }
         await new Promise((resolveWait) => setTimeout(resolveWait, 500));
     }
-    throw new Error(`${what} never answered at ${url} within ${Math.round(timeoutMs / 1000)}s — last attempt: ${last}${await tail()}`);
+    throw new Error(`${what} never answered at ${url} within ${Math.round(timeoutMs / 1000)}s, last attempt: ${last}${await tail()}`);
 };
 
 export const startWorld = async (): Promise<World> => {

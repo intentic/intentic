@@ -50,7 +50,7 @@ const waitUp = async (url: string, what: string, logHint: string | undefined, ti
         }
         await new Promise((resolvePoll) => setTimeout(resolvePoll, 1_000));
     }
-    throw new Error(`${what} never came up at ${url}${logHint === undefined ? `` : ` — see ${logHint}`}`);
+    throw new Error(`${what} never came up at ${url}${logHint === undefined ? `` : `, see ${logHint}`}`);
 };
 
 // Detached so the whole process group can be torn down (vite/bun spawn children), logging to .cache/<name>.log.
@@ -133,7 +133,7 @@ export default async (): Promise<void> => {
     const session = (await response.json().catch(() => undefined)) as { user?: { email?: string } } | null | undefined;
     if (session?.user?.email !== SEED.email) {
         throw new Error(
-            `the seeded session cookie was rejected by ${API_URL}/api/auth/get-session (status ${response.status}) — the Better Auth cookie recipe in stack.ts no longer matches the server`,
+            `the seeded session cookie was rejected by ${API_URL}/api/auth/get-session (status ${response.status}): the Better Auth cookie recipe in stack.ts no longer matches the server`,
         );
     }
 

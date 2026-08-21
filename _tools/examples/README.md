@@ -1,6 +1,6 @@
 # @intentic/examples
 
-Worked `deploy.config.ts` files — what a real one looks like, and the thing the SDK's types are checked against.
+Worked `deploy.config.ts` files: what a real one looks like, and the thing the SDK's types are checked against.
 
 ## Responsibilities
 
@@ -9,9 +9,9 @@ Worked `deploy.config.ts` files — what a real one looks like, and the thing th
 
 ## Key files
 
-- [deploy.config.ts](deploy.config.ts) — the general example.
-- [deploy.github.config.ts](deploy.github.config.ts) — the GitHub-hosted variant.
-- [deploy.gitlab.config.ts](deploy.gitlab.config.ts) — the GitLab-hosted variant.
+- [deploy.config.ts](deploy.config.ts): the general example.
+- [deploy.github.config.ts](deploy.github.config.ts): the GitHub-hosted variant.
+- [deploy.gitlab.config.ts](deploy.gitlab.config.ts): the GitLab-hosted variant.
 
 ## How it fits
 

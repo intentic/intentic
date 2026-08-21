@@ -1,4 +1,4 @@
-// intentic web-chat widget — a single-file embed that drops a support chat onto any website and streams the
+// intentic web-chat widget: a single-file embed that drops a support chat onto any website and streams the
 // sandbox agent's reply. Add with:
 //   <script src="https://intentic.dev/widget.js"
 //           data-daemon="https://sandbox-<id>.<zone>" data-automation="<automation-id>"></script>
@@ -49,7 +49,7 @@ const readSSE = async (body, onFrame, onActivity) => {
         localStorage.setItem(KEY, conversationId);
     }
 
-    // The client keeps recent turns and replays them with each request — the daemon injects them as thread
+    // The client keeps recent turns and replays them with each request: the daemon injects them as thread
     // context (server-side session threading is a later step).
     const history = [];
     const HISTORY_MAX = 20;
@@ -136,7 +136,7 @@ const readSSE = async (body, onFrame, onActivity) => {
                 signal: controller.signal,
             });
             if (!res.ok || !res.body) {
-                const msg = res.status === 429 ? "You're sending messages too fast — please slow down." : "Sorry, something went wrong.";
+                const msg = res.status === 429 ? "You're sending messages too fast, please slow down." : "Sorry, something went wrong.";
                 addMsg("note", msg);
                 return;
             }

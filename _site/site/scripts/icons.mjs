@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════════
- * THE FAVICON LADDER — every icon the site hands a browser, drawn from the mark in the top-left corner.
+ * THE FAVICON LADDER: every icon the site hands a browser, drawn from the mark in the top-left corner.
  *
  * Run: `node scripts/icons.mjs`  (from _site/site). Its output is committed.
  *
@@ -10,11 +10,11 @@
  * WHY THERE IS NO PLATE, AND ONLY FIVE PETALS. The mark shipped on the site's own warm ground with a glow
  * behind it, on the theory that ember needs a guaranteed backdrop. At 16px that reasoning inverted: the
  * plate ate four fifths of the square, the flower was left at 68% of what was left, and a browser tab
- * showed a dark chip with an orange smudge in it — the mark was the smallest thing in its own icon.
+ * showed a dark chip with an orange smudge in it: the mark was the smallest thing in its own icon.
  *
  * So the ground goes and the drawing grows into the whole square. The two leaves go with it: they are
  * drawn at .42 opacity, which is a tonal step the eye reads at 32px and mud at 16, and they are the widest
- * part of the silhouette — carrying them cost the PETALS about a fifth of their size for a shape nobody
+ * part of the silhouette: carrying them cost the PETALS about a fifth of their size for a shape nobody
  * could resolve. Five petals fill the box, and the outline that is left is unmistakably this flower.
  *
  * Transparent is also the honest answer to a tab strip that is white on most machines and near-black on
@@ -48,7 +48,7 @@ if (!viewBox) throw new Error("The LOTUS drawing has no viewBox to scale from");
 const allPaths = lotusSvg.match(/<path\b[^>]*\/>/gu) ?? [];
 /* The two leaves, dropped: they are the only paths the kit draws at .42, which is what makes them
  * identifiable here without the icon holding its own copy of the drawing. If the lotus is ever redrawn at
- * different opacities, this stops matching and the icon gets the whole flower again — visibly wrong at a
+ * different opacities, this stops matching and the icon gets the whole flower again: visibly wrong at a
  * glance, which is the failure mode to want. */
 const petals = allPaths.filter((path) => !path.includes('opacity=".42"'));
 if (petals.length !== allPaths.length - 2) {
@@ -71,8 +71,8 @@ const png = (size) =>
         .png({ compressionLevel: 9 })
         .toBuffer();
 
-/* ICO is a directory of images bolted to a header. Every entry is 16 bytes — the size byte is 0 for 256,
- * which is the format's way of fitting 256 into eight bits — and the payloads are ordinary PNGs, which
+/* ICO is a directory of images bolted to a header. Every entry is 16 bytes: the size byte is 0 for 256,
+ * which is the format's way of fitting 256 into eight bits, and the payloads are ordinary PNGs, which
  * every browser still in use reads. */
 const buildIco = (images) => {
     const header = Buffer.alloc(6);

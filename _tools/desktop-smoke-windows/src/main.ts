@@ -31,7 +31,7 @@ const flag = (argv: readonly string[], name: string): string | undefined => {
 
 const present = (argv: readonly string[], name: string): boolean => argv.includes(`--${name}`);
 
-const USAGE = `usage: main.js doctor|install|setup|agents|teardown [flags] — see the package README`;
+const USAGE = `usage: main.js doctor|install|setup|agents|teardown [flags], see the package README`;
 
 const main = async (): Promise<number> => {
     const [command, ...argv] = process.argv.slice(2);

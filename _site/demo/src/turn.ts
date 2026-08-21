@@ -75,10 +75,10 @@ const FEATURED: Beat[] = [
             requestId: `req_plan_checkout`,
             text: `## Add Stripe checkout
 
-1. **\`api/src/routes/checkout.ts\`** — a \`POST /checkout/session\` route that creates a Stripe Checkout session for the requested price and returns its URL.
-2. **\`web/src/lib/checkout.ts\`** — replace the \`NotImplemented\` stub with a call to that route, then redirect.
-3. **\`web/src/pricing/CheckoutPanel.tsx\`** — surface the pending + failed states on the CTA.
-4. **Test** — cover the redirect and the failure path in \`web/tests/checkout.spec.ts\`.
+1. **\`api/src/routes/checkout.ts\`**: a \`POST /checkout/session\` route that creates a Stripe Checkout session for the requested price and returns its URL.
+2. **\`web/src/lib/checkout.ts\`**: replace the \`NotImplemented\` stub with a call to that route, then redirect.
+3. **\`web/src/pricing/CheckoutPanel.tsx\`**: surface the pending + failed states on the CTA.
+4. **Test**: cover the redirect and the failure path in \`web/tests/checkout.spec.ts\`.
 
 Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs provisioning.`,
         },
@@ -86,7 +86,7 @@ Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs 
     },
     { after: 200, event: { kind: `mode`, mode: `acceptEdits` } },
     { after: 300, event: todos(0, 0) },
-    { after: 500, event: { kind: `delta`, text: `Approved — writing the endpoint first.` } },
+    { after: 500, event: { kind: `delta`, text: `Approved, writing the endpoint first.` } },
     { after: 400, event: { kind: `text_end` } },
     { after: 300, event: todos(1, 1) },
     {
@@ -174,7 +174,7 @@ Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs 
                             label: `Inline spinner (Recommended)`,
                             description: `Keep the button in place, swap the label for a spinner. No layout shift.`,
                         },
-                        { label: `Full-page overlay`, description: `Block the page while redirecting — heavier, but nothing else is clickable.` },
+                        { label: `Full-page overlay`, description: `Block the page while redirecting, heavier, but nothing else is clickable.` },
                         { label: `Optimistic navigate`, description: `Move to /welcome immediately and reconcile when Stripe answers.` },
                     ],
                 },
@@ -183,7 +183,7 @@ Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs 
         park: `req_question_cta`,
     },
     { after: 400, event: todos(4, -1) },
-    { after: 300, event: { kind: `delta`, text: `Done — the CTA shows an inline spinner, and the whole flow is covered.` } },
+    { after: 300, event: { kind: `delta`, text: `Done, the CTA shows an inline spinner, and the whole flow is covered.` } },
     { after: 300, event: { kind: `text_end` } },
     { after: 300, event: { kind: `usage`, account: `ada@acme.dev`, costUsd: 1.84, inputTokens: 184_320, outputTokens: 21_460 } },
     { after: 200, event: { kind: `worktree`, branch: `agent/checkout-stripe`, base: `4f1c8ab` } },
@@ -219,14 +219,14 @@ const replyScript = (prompt: string): Beat[] => [
             kind: `tool_call_update`,
             id: `tc_demo_read`,
             status: `completed`,
-            content: [{ type: `text`, text: `acme-shop — a two-repo demo workspace.` }],
+            content: [{ type: `text`, text: `acme-shop, a two-repo demo workspace.` }],
         },
     },
     {
         after: 500,
         event: {
             kind: `delta`,
-            text: `This is a **recorded workspace** — I can show you every surface, but I can't run your code from here.\n\nStart a sandbox on your own machine and the same agent works on your repos, with your keys, under your branch protection.`,
+            text: `This is a **recorded workspace**, I can show you every surface, but I can't run your code from here.\n\nStart a sandbox on your own machine and the same agent works on your repos, with your keys, under your branch protection.`,
         },
     },
     { after: 300, event: { kind: `text_end` } },
@@ -358,6 +358,6 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
 };
 
 export const featuredRun = (conversationId: string, now: number): Run =>
-    createRun(conversationId, `Add Stripe checkout to the pricing page — the CTA is already there, it just throws.`, FEATURED, now);
+    createRun(conversationId, `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`, FEATURED, now);
 
 export const visitorRun = (conversationId: string, prompt: string, now: number): Run => createRun(conversationId, prompt, replyScript(prompt), now);

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/fake-upstream",
     "version": "0.0.0",
-    "description": "A stand-in for the model the free trial spends — Google's two surfaces, served locally and deterministically",
+    "description": "A stand-in for the model the free trial spends, Google's two surfaces, served locally and deterministically",
     "license": "MIT",
     "private": true,
     "type": "module",

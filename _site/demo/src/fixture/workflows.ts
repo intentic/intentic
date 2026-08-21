@@ -134,7 +134,7 @@ export const demoRuns = (now: number): WorkflowRun[] => [
                 iterations: 5,
                 costUsd: 1.96,
                 loopState: `done`,
-                document: { done: true, reason: `Suite is green after the third fix.`, evidence: `pnpm test — 1,412 passed` },
+                document: { done: true, reason: `Suite is green after the third fix.`, evidence: `pnpm test, 1,412 passed` },
                 report: `Implemented the plan; the suite went green once the webhook idempotency key was added.`,
             },
             {

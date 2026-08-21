@@ -1,4 +1,4 @@
-# Article mentions — the pages answer engines quote
+# Article mentions: the pages answer engines quote
 
 The third off-site channel, and the one with no coverage until now.
 [awesome-lists.md](awesome-lists.md) covers curated GitHub directories, [directories.md](directories.md)
@@ -26,12 +26,12 @@ The five guides under `/guides/` are the on-site half of this. This page is the 
 *named in someone else's* answer to the same question.
 
 > **Live and verified 2026-08-12.** All five slugs and the index return **200**, and the deployed sitemap is
-> up from 54 to 60 URLs with every guide listed — so this channel is unblocked and the outreach below can go.
+> up from 54 to 60 URLs with every guide listed: so this channel is unblocked and the outreach below can go.
 > (They were 404 earlier the same day, unmerged on an agent branch; shipped since.) The page the outreach
 > links, [`/guides/run-multiple-coding-agents-in-parallel/`](https://intentic.dev/guides/run-multiple-coding-agents-in-parallel/),
 > checks out against what this page claims for it: it opens with a direct answer, recommends **git worktrees
-> first**, tables five approaches with an honest "breaks when" column for each — including the one for
-> containers ("The work is a one-line fix. The setup cost is real and a worktree would have done") — and
+> first**, tables five approaches with an honest "breaks when" column for each: including the one for
+> containers ("The work is a one-line fix. The setup cost is real and a worktree would have done"): and
 > reaches intentic only as the second step, in one paragraph. That is why it is safe to send to a writer:
 > it reads as a peer's write-up because it argues against itself where the argument deserves it.
 
@@ -50,15 +50,15 @@ Ranked by how directly the page owns a query we want, then by whether the author
 
 | # | Page | Why it matters | Route |
 | --- | --- | --- | --- |
-| 1 | [aq.dev — Run Multiple AI Coding Agents in Parallel (2026)](https://aq.dev/guides/run-multiple-ai-coding-agents-in-parallel/) | Rank 1 for the primary category query. Names 8 tools (Claude Code, Codex, Cursor, Kimi, Grok, dmux, tmux, AQ) and has an FAQ block, which is the structure engines lift from. Covers worktrees and "the isolation rule" and stops exactly where a container per agent begins. | [@aqdotdev](https://x.com/aqdotdev) |
-| 2 | [codeagentswarm — The Best Tools to Run Multiple AI Coding Agents in Parallel (2026)](https://www.codeagentswarm.com/en/guides/best-tools-to-run-multiple-ai-coding-agents) | An explicit best-tools roundup, which is the single most-quoted format for "what should I use". Rate-limited us on 2026-08-12; retry before writing. | Find on page after a successful fetch |
-| 3 | [agentsroom.dev — How to Run 3 to 8 Coding Agents in Parallel Without Losing Track](https://agentsroom.dev/blog/run-coding-agents-in-parallel) | The "without losing track" framing is the fleet board's exact argument, and the star count of the author's own project suggests a peer rather than a publisher. | [@AgentsRoomDev](https://x.com/AgentsRoomDev), [github.com/jeapostrophe](https://github.com/jeapostrophe) |
-| 4 | [Towards Data Science — How to Run Coding Agents in Parallel](https://towardsdatascience.com/how-to-run-coding-agents-in-parallell/) | The only mainstream publication in the result set. Highest authority per mention, slowest route, and the one worth a written pitch rather than a message. | Publication submission process |
-| 5 | [runfreetools — How to Run Multiple AI Coding Agents in Parallel (2026)](https://runfreetools.com/blog/run-multiple-ai-coding-agents-parallel) | Ranks on the same query with a tools angle. | [@Runfreetools](https://x.com/Runfreetools) |
-| 6 | [vibecoding.app — Agentmaxxing: Run Multiple AI Agents in Parallel (2026)](https://vibecoding.app/blog/agentmaxxing) | Same query, larger audience, less technical framing. | [github.com/Dicklesworthstone](https://github.com/Dicklesworthstone), [github.com/Vibe-Coding-app](https://github.com/Vibe-Coding-app) |
-| 7 | [zenvanriel.com — Running Multiple AI Coding Agents in Parallel](https://zenvanriel.com/ai-engineer-blog/running-multiple-ai-coding-agents-parallel) | Individual engineer blog, ranks on the query, likely to reply. | Site contact |
-| 8 | [shreyshahh — How to run multiple coding agents without breaking everything](https://shreyshahh.substack.com/p/how-to-run-multiple-coding-agents) | Substack, "without breaking everything" is the isolation argument verbatim. | Substack reply |
-| 9 | [codex.danielvaughan.com — Running Multiple Codex Agent Instances](https://codex.danielvaughan.com/2026/04/18/running-multiple-codex-agents-parallel-orchestration/) | Codex-specific, narrower, but a clean fit for "intentic runs Codex too". | Site contact |
+| 1 | [aq.dev: Run Multiple AI Coding Agents in Parallel (2026)](https://aq.dev/guides/run-multiple-ai-coding-agents-in-parallel/) | Rank 1 for the primary category query. Names 8 tools (Claude Code, Codex, Cursor, Kimi, Grok, dmux, tmux, AQ) and has an FAQ block, which is the structure engines lift from. Covers worktrees and "the isolation rule" and stops exactly where a container per agent begins. | [@aqdotdev](https://x.com/aqdotdev) |
+| 2 | [codeagentswarm: The Best Tools to Run Multiple AI Coding Agents in Parallel (2026)](https://www.codeagentswarm.com/en/guides/best-tools-to-run-multiple-ai-coding-agents) | An explicit best-tools roundup, which is the single most-quoted format for "what should I use". Rate-limited us on 2026-08-12; retry before writing. | Find on page after a successful fetch |
+| 3 | [agentsroom.dev: How to Run 3 to 8 Coding Agents in Parallel Without Losing Track](https://agentsroom.dev/blog/run-coding-agents-in-parallel) | The "without losing track" framing is the fleet board's exact argument, and the star count of the author's own project suggests a peer rather than a publisher. | [@AgentsRoomDev](https://x.com/AgentsRoomDev), [github.com/jeapostrophe](https://github.com/jeapostrophe) |
+| 4 | [Towards Data Science: How to Run Coding Agents in Parallel](https://towardsdatascience.com/how-to-run-coding-agents-in-parallell/) | The only mainstream publication in the result set. Highest authority per mention, slowest route, and the one worth a written pitch rather than a message. | Publication submission process |
+| 5 | [runfreetools: How to Run Multiple AI Coding Agents in Parallel (2026)](https://runfreetools.com/blog/run-multiple-ai-coding-agents-parallel) | Ranks on the same query with a tools angle. | [@Runfreetools](https://x.com/Runfreetools) |
+| 6 | [vibecoding.app, Agentmaxxing: Run Multiple AI Agents in Parallel (2026)](https://vibecoding.app/blog/agentmaxxing) | Same query, larger audience, less technical framing. | [github.com/Dicklesworthstone](https://github.com/Dicklesworthstone), [github.com/Vibe-Coding-app](https://github.com/Vibe-Coding-app) |
+| 7 | [zenvanriel.com: Running Multiple AI Coding Agents in Parallel](https://zenvanriel.com/ai-engineer-blog/running-multiple-ai-coding-agents-parallel) | Individual engineer blog, ranks on the query, likely to reply. | Site contact |
+| 8 | [shreyshahh: How to run multiple coding agents without breaking everything](https://shreyshahh.substack.com/p/how-to-run-multiple-coding-agents) | Substack, "without breaking everything" is the isolation argument verbatim. | Substack reply |
+| 9 | [codex.danielvaughan.com: Running Multiple Codex Agent Instances](https://codex.danielvaughan.com/2026/04/18/running-multiple-codex-agents-parallel-orchestration/) | Codex-specific, narrower, but a clean fit for "intentic runs Codex too". | Site contact |
 
 None of the nine mention intentic as of 2026-08-12.
 
@@ -80,7 +80,7 @@ being useful about that problem.
 
 ## Two of the nine are competitors, and the ranking should say so
 
-Added 2026-08-12. Targets 1 and 2 are not neutral editorial — they are vendor content marketing, and the
+Added 2026-08-12. Targets 1 and 2 are not neutral editorial: they are vendor content marketing, and the
 table above ranks them first without saying so:
 
 - **aq.dev** is published by **AgentQueue / BetterLeap, Inc.** ("© 2026 BetterLeap, Inc.", by "the AQ team"),
@@ -88,14 +88,14 @@ table above ranks them first without saying so:
 - **codeagentswarm.com** is likewise a product site publishing a roundup that its own product sits in.
 
 Asking a competitor to add you to their comparison converts at roughly zero, and the ask itself tells them
-what to defend against. Both stay on the list as *intelligence* — they show which queries the category is
-being won on, and what shape of answer wins — but they should be worked last, if at all. **The yield is in
+what to defend against. Both stay on the list as *intelligence*: they show which queries the category is
+being won on, and what shape of answer wins: but they should be worked last, if at all. **The yield is in
 targets 3 and 5–9: individual engineers writing under their own names**, who reply to their own mentions and
 have no product to protect.
 
 ## The messages, ready to send
 
-Gated on the guides shipping (see the blocker at the top). Each is short on purpose — the opener is the
+Gated on the guides shipping (see the blocker at the top). Each is short on purpose: the opener is the
 whole pitch, and every one leads with a specific thing that page actually says.
 
 **The shared middle**, reused in all of them, adjusted only in length:
@@ -106,26 +106,26 @@ whole pitch, and every one leads with a specific thing that page actually says.
 > Two agents get their own branches and still share one port, one dev database and one `node_modules`, so
 > the failure that actually costs you an afternoon is a migration race that never shows up in a diff, because
 > the code was clean. The dividing line I ended up with is whether the agent needs to change the environment
-> rather than the code — an `apt install`, a pinned runtime, a service the others are not running. Below that
+> rather than the code: an `apt install`, a pinned runtime, a service the others are not running. Below that
 > line a port offset and a schema per agent is genuinely enough; above it, a container per agent is the only
 > thing that holds.
 
 **Openers, per target:**
 
-- **agentsroom.dev (#3)** — "Your 'without losing track' framing is the part most of these pieces skip: the
+- **agentsroom.dev (#3)**, "Your 'without losing track' framing is the part most of these pieces skip: the
   hard bit at 3–8 agents is not starting them, it is knowing which one is blocked on you. One thing I would
-  add under it —"
-- **runfreetools (#5)** — "Your piece lists the tools; the thing readers hit next is the runtime collision
-  underneath all of them —"
-- **vibecoding.app (#6)** — "Agentmaxxing holds right up until the agents need to *run* what they built —"
-- **zenvanriel.com (#7)** — "You stop at worktrees, which is the right first recommendation. The failure
-  after it is the one worth a paragraph —"
-- **shreyshahh (#8)** — "'Without breaking everything' is exactly the isolation argument, and there is a
-  second half to it that bit me —"
-- **codex.danielvaughan.com (#9)** — "Codex-specific, so worth saying: the parallel-instance problem is
-  identical to the Claude Code one, and the fix is not Codex-specific either —"
+  add under it -"
+- **runfreetools (#5)**: "Your piece lists the tools; the thing readers hit next is the runtime collision
+  underneath all of them -"
+- **vibecoding.app (#6)**: "Agentmaxxing holds right up until the agents need to *run* what they built -"
+- **zenvanriel.com (#7)**: "You stop at worktrees, which is the right first recommendation. The failure
+  after it is the one worth a paragraph -"
+- **shreyshahh (#8)**: "'Without breaking everything' is exactly the isolation argument, and there is a
+  second half to it that bit me -"
+- **codex.danielvaughan.com (#9)**, "Codex-specific, so worth saying: the parallel-instance problem is
+  identical to the Claude Code one, and the fix is not Codex-specific either -"
 
-**Close, identical everywhere** — no ask, and it survives being forwarded:
+**Close, identical everywhere**: no ask, and it survives being forwarded:
 
 > Wrote the long version up here if it is useful for that section: `<guide URL>`. Not asking for anything,
 > it just seemed like the paragraph your piece stops one step short of.

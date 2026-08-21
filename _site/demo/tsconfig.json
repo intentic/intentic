@@ -5,11 +5,11 @@
         "types": ["vite/client"],
         /* This is the one project that type-checks a Vite config (`./vite.config.ts` below, and the app's
          * `vite.shared.ts` it reaches through). A config's relative imports must carry `.ts`: Vite's native
-         * config loader — the default in a coming major — resolves them on disk with no extension guessing,
+         * config loader: the default in a coming major, resolves them on disk with no extension guessing,
          * and warns today about every extensionless one. Nothing is emitted here (`vue-tsc --noEmit`), so
          * letting the checker read the extension it is looking at costs nothing. */
         "allowImportingTsExtensions": true,
-        /* The app's own path map, verbatim — this checks the app's source, so a mapping that differs from
+        /* The app's own path map, verbatim: this checks the app's source, so a mapping that differs from
          * _editor/web/tsconfig.json gives one module two identities and every type crossing between them reads
          * as "two different types with this name exist". `@intentic/sandbox-contract` is deliberately NOT here
          * for exactly that reason: web resolves it through node_modules, so the fixture must too.

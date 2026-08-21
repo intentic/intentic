@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* CAN A STRANGER ACTUALLY SIGN IN TO THE DEPLOYED SITE? — the one question no other check in this repo asks.
+/* CAN A STRANGER ACTUALLY SIGN IN TO THE DEPLOYED SITE?: the one question no other check in this repo asks.
  *
  * The browser e2e tier covers the login journey with a SEEDED session and no real Google ("no real Google" is
  * the first line of its config, and it is the right call for a suite that must run offline and hermetically).
@@ -10,11 +10,11 @@
  * WHY A REAL BROWSER, when a curl would be a hundred times cheaper. It was tried. Requesting Google's button
  * endpoint with the right origin, referer, user-agent, fetch-metadata headers and even the page's own `cas`
  * value answers 200 while a real Chromium loading the real page is answered 400 for the identical URL. A curl
- * check would therefore have been GREEN through the whole outage — worse than no check, because it would have
+ * check would therefore have been GREEN through the whole outage: worse than no check, because it would have
  * been believed. Google decides this inside the browser, so it has to be asked inside one.
  *
  * WHAT IT ASSERTS, and why it is these two things:
- *   1. Google's button reaches a real size. A rejected button still exists in the DOM at 0×0 — "is it there"
+ *   1. Google's button reaches a real size. A rejected button still exists in the DOM at 0×0: "is it there"
  *      is not the question, "can it be pressed" is.
  *   2. The escape link is on the page. Some ways that button can fail are invisible to the page itself, so
  *      the way in that depends on none of Google's frame machinery must never quietly disappear.
@@ -76,7 +76,7 @@ try {
     const refused = consoleErrors.filter((text) => ORIGIN_REFUSED.test(text));
 
     if (refused.length > 0) {
-        fail("Google is refusing this origin for the sign-in client — the front door is shut.", [
+        fail("Google is refusing this origin for the sign-in client: the front door is shut.", [
             "",
             `Google said: ${refused[0]}`,
             "",
@@ -88,7 +88,7 @@ try {
             `     responses refuses every origin, including a correctly-listed one. Check it with:`,
             `         curl -sSI ${origin}/login | grep -i referrer-policy`,
             `     Anything sending the origin cross-origin is fine (strict-origin-when-cross-origin);`,
-            `     no-referrer is the bug, and it is ours — see _editor/web/nginx.conf.`,
+            `     no-referrer is the bug, and it is ours: see _editor/web/nginx.conf.`,
             "",
             `  2. GOOGLE STOPPED ACCEPTING IT. In the Google Cloud console, open the OAuth client the`,
             `     deployment uses and make sure this exact origin is listed under Authorized JavaScript`,
@@ -104,7 +104,7 @@ try {
     }
 
     /* The way in that survives everything above. Whichever way Google's own button fails, some of those ways
-     * cannot be detected from the page — so this link is the difference between a sign-in page that is having
+     * cannot be detected from the page, so this link is the difference between a sign-in page that is having
      * a bad day and one that is simply a wall. It is not allowed to go missing quietly. */
     const escape = await page.getByText(/Google's own page/i).count();
     if (escape === 0) {
@@ -116,7 +116,7 @@ try {
     }
 
     if (process.exitCode !== 1) {
-        console.log(`sign-in smoke OK — Google's button is live on ${loginUrl}, and the fallback link is there.`);
+        console.log(`sign-in smoke OK: Google's button is live on ${loginUrl}, and the fallback link is there.`);
     }
 } catch (error) {
     fail(`the sign-in page did not load: ${error instanceof Error ? error.message : String(error)}`);

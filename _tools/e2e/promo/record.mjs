@@ -1,4 +1,4 @@
-/* THE PROMO RECORDING — one unbroken take of the product's main journey, driven against the interactive demo.
+/* THE PROMO RECORDING: one unbroken take of the product's main journey, driven against the interactive demo.
  *
  * What it records is the real `@intentic-app/web` app (`_site/demo` boots it against a fixture instead of a
  * sandbox), so every frame below is the shipping UI reacting to the shipping protocol: the drop really walks a
@@ -6,12 +6,12 @@
  * the mutation that moves four surfaces at once. Nothing is mocked up for marketing, and nothing is sped up.
  *
  *   pnpm -C _site/demo dev          # the fixture app on :47146
- *   node promo/record.mjs           # from _tools/e2e — writes the mp4 + its chapter marks
+ *   node promo/record.mjs           # from _tools/e2e: writes the mp4 + its chapter marks
  *
  * Two things the take depends on, both of them load-bearing:
  *   · NO RELOADS. The fixture is in-memory, so a reload rewinds the dropped repo and the landed delta. Every
  *     move after the first goto is an in-app click, exactly as a visitor's would be.
- *   · The scripted turn starts on ATTACH, not on page load — opening the agent is what starts it — and it parks
+ *   · The scripted turn starts on ATTACH, not on page load: opening the agent is what starts it, and it parks
  *     on its plan and its question until this script answers. The pauses below are therefore direction, not
  *     synchronisation: the turn waits for the pointer.
  */
@@ -31,7 +31,7 @@ const DROP_SOURCE = "/tmp/promo-drop/checkout-worker";
 /* CAPTURE SIZE MUST EQUAL THE VIEWPORT, and the device scale must be 1. Every other combination measured here
  * misplaces the picture inside the canvas rather than filling it: a 1920×1080 canvas with dsf 2 records the app
  * at quarter size in the corner, and a 2× canvas either letterboxes it or lays the page out at the canvas width.
- * So the take is captured 1:1 and ffmpeg resolves it to 1080p — a 1.09× lift, small enough to stay clean.
+ * So the take is captured 1:1 and ffmpeg resolves it to 1080p: a 1.09× lift, small enough to stay clean.
  *
  * 1760 CSS px is the layout: three fleet lanes carrying their titles unclipped beside a chat wide enough to read
  * a streaming turn, and every element lands ~9% larger on the delivered frame than a native 1080p capture. */
@@ -52,7 +52,7 @@ const chapter = (title, note) => {
     console.log(`  ${new Date(Date.now() - clock).toISOString().slice(14, 22)}  ${title}`);
 };
 
-// Ease-in-out over a short flight so the pointer accelerates away and settles rather than sliding at one speed —
+// Ease-in-out over a short flight so the pointer accelerates away and settles rather than sliding at one speed:
 // the difference between "a script is moving this" and "someone is using this".
 const glide = async (page, to, ms = 620) => {
     const from = { ...pointer };
@@ -79,7 +79,7 @@ const centreOf = async (locator, timeout = 30_000) => {
 // Move, settle, press. The settle is what makes a click readable: a pointer that arrives and fires in the same
 // frame reads as a jump cut, and a viewer never sees what was pressed.
 //
-// The re-aim before pressing is not politeness — a streaming chat reflows under the pointer while it is still in
+// The re-aim before pressing is not politeness: a streaming chat reflows under the pointer while it is still in
 // flight, so the box measured at the start of the glide can be a card and a half stale by the time it lands. It
 // shows up as a small correction, which is also what a hand does.
 const click = async (page, locator, { settle = 260, after = 500, flight = 620 } = {}) => {
@@ -117,7 +117,7 @@ const record = async () => {
 
     const browser = await chromium.launch({ args: ["--force-color-profile=srgb", "--font-render-hinting=none"] });
     const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, recordVideo: { dir: join(OUT, "raw"), size: VIEWPORT } });
-    // A chat wide enough to read a streaming turn from across a room — the panel is drag-resizable, so this is a
+    // A chat wide enough to read a streaming turn from across a room: the panel is drag-resizable, so this is a
     // stored preference, not a special build. Written before the app boots, which is when useLayout reads it.
     await context.addInitScript(`localStorage.setItem("ui-chat-width", "${CHAT_WIDTH}")`);
     await context.addInitScript({ content: readFileSync(join(HERE, "cursor.js"), "utf8") });
@@ -141,9 +141,9 @@ const record = async () => {
     await sleep(1_600);
     clock = Date.now();
 
-    /* 1 — DROP THE REPOS IN. The dragged folder is a real directory on disk: Chromium hands the page its
+    /* 1, DROP THE REPOS IN. The dragged folder is a real directory on disk: Chromium hands the page its
      * FileSystemEntry roots, `collectDroppedFiles` walks it, and the queue uploads what it finds. The ghost and
-     * the pointer are the only theatre — the highlight under them is the app's own drop state. */
+     * the pointer are the only theatre: the highlight under them is the app's own drop state. */
     chapter("Drop a repository in", "the workspace, before any agent");
     const zone = await centreOf(page.getByText("Drop your work here"));
     const cdp = await context.newCDPSession(page);
@@ -172,7 +172,7 @@ const record = async () => {
     // The tree row is the acknowledgement that matters: the daemon has the files.
     await page.getByRole("treeitem", { name: "checkout-worker" }).waitFor({ timeout: 30_000 });
     await sleep(1_400);
-    chapter("The repo lands in the tree", "uploaded, not indexed later — it is on the sandbox now");
+    chapter("The repo lands in the tree", "uploaded, not indexed later: it is on the sandbox now");
     // Exact names throughout: the dropped tree has a `worker` under `cmd` AND is itself `checkout-worker`.
     const row = (name) => page.getByRole("treeitem", { name, exact: true });
     await click(page, row("checkout-worker"), { after: 700 });
@@ -180,7 +180,7 @@ const record = async () => {
     await click(page, row("worker"), { after: 600 });
     await click(page, row("main.go"), { after: 2_400 });
 
-    /* 2 — THE FLEET, AND ONE TURN INSIDE IT. Opening the card is what attaches to the run, so the stream that
+    /* 2: THE FLEET, AND ONE TURN INSIDE IT. Opening the card is what attaches to the run, so the stream that
      * follows starts where the viewer is looking. */
     chapter("Every agent on one board", "attention · active · finished");
     await click(page, railLink("/agents"), { after: 1_500 });
@@ -191,7 +191,7 @@ const record = async () => {
     chapter("Open the one that's running", "Stripe checkout, mid-turn");
     await click(page, card("Add Stripe checkout to the pricing page"), { after: 1_200 });
 
-    // The plan card parks the turn and the app opens the plan document in the main view beside it — approving is
+    // The plan card parks the turn and the app opens the plan document in the main view beside it: approving is
     // a decision taken with the whole plan on screen, which is the point of raising it as a card at all.
     const approve = chat.getByRole("button", { name: "Yes, and auto-accept edits" });
     await approve.waitFor({ timeout: 60_000 });
@@ -199,7 +199,7 @@ const record = async () => {
     await sleep(2_600);
     await click(page, approve, { after: 900 });
 
-    chapter("Approved — it works", "todos tick, tools resolve, the context meter moves");
+    chapter("Approved: it works", "todos tick, tools resolve, the context meter moves");
     const writeCard = chat.getByRole("button", { name: "Write", exact: true });
     await writeCard.waitFor({ timeout: 60_000 });
     await sleep(4_200);
@@ -212,14 +212,14 @@ const record = async () => {
     await click(page, chat.getByRole("button", { name: "Submit" }), { after: 3_200 });
 
     /* The turn has settled, so the transcript stops moving and a card can be opened without the reflow stealing
-     * the press. Unfolded by its NAME, which is the fold toggle — the path beside it is a different control
+     * the press. Unfolded by its NAME, which is the fold toggle: the path beside it is a different control
      * ("open in workspace"), and pressing that one replaces the plan in the main view with the file. */
     chapter("What it actually wrote", "every tool call keeps its diff");
     await glide(page, { x: 1_500, y: 500 }, 500);
     await scroll(page, 5, { step: -110 });
     await click(page, writeCard, { after: 3_000 });
 
-    /* 3 — REVIEW, THEN LAND. The agent's delta lives on its own branch until this press; the press is the whole
+    /* 3: REVIEW, THEN LAND. The agent's delta lives on its own branch until this press; the press is the whole
      * reason the board has a Finished lane rather than a "done" toast. */
     chapter("Back to the board", "one is finished and holding its work");
     await click(page, railLink("/agents"), { after: 1_400 });
@@ -253,7 +253,7 @@ const record = async () => {
     await click(page, railLink("/workspace"), { after: 1_200 });
     await click(page, page.getByRole("tab", { name: /^Changes/ }), { after: 2_600 });
 
-    /* 4 — WHAT CI DID WITH IT. The board is the other half of the loop: the same branches, seen from the remote. */
+    /* 4, WHAT CI DID WITH IT. The board is the other half of the loop: the same branches, seen from the remote. */
     chapter("And CI is already on it", "runs from the repos' GitHub and GitLab remotes");
     await click(page, railLink("/ext/pipelines"), { after: 2_000 });
     await hover(page, page.getByRole("button", { name: "Fix with agent" }).first(), { dwell: 1_800 });
@@ -309,7 +309,7 @@ const encode = ({ videoPath, startedAt }) => {
     ]);
 
     const marks = [
-        "# intentic promo — shot list",
+        "# intentic promo: shot list",
         "",
         "Recorded from the interactive demo (`_site/demo`), which runs the real web app against a fixture.",
         "Silent 1080p30 master: `intentic-promo.mp4`. Times are where each beat STARTS.",

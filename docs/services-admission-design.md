@@ -1,6 +1,6 @@
 # Open admission for paid services
 
-How a third-party business lists a metered service **without a human in the loop** — the rules, the gates, and
+How a third-party business lists a metered service **without a human in the loop**: the rules, the gates, and
 what each one is actually protecting.
 
 Today a listing is a row an operator writes by hand after a Discord conversation
@@ -14,7 +14,7 @@ replacement: a published algorithm anyone can read, run against themselves, and 
 [service-offer.ts](../_sandbox/sandbox/src/platform/service-offer.ts): the agent cannot spend, one click
 releases exactly one run, every number on the card is read from the platform's own catalog, and a run that
 does not answer is refunded before anyone sees a receipt. A malicious listing's entire blast radius is a few
-small, refundable, individually-approved charges — and none of its code ever runs on anyone's machine,
+small, refundable, individually-approved charges: and none of its code ever runs on anyone's machine,
 because a service ships no code at all.
 
 That leaves human review guarding exactly three things, all of which are mechanical questions:
@@ -25,7 +25,7 @@ That leaves human review guarding exactly three things, all of which are mechani
 | Does the endpoint actually implement the contract? | A live probe that a wrong signature must fail |
 | Does the listing text and price describe what it does? | Bounded fields, a price band, a reserved-word check |
 
-Everything left over — "is the answer any good" — is not knowable at admission time by any reviewer, human or
+Everything left over ("is the answer any good") is not knowable at admission time by any reviewer, human or
 otherwise. It is a **behavioral** question, so it is answered behaviorally, after listing, by the watch.
 
 ## The lifecycle
@@ -45,14 +45,14 @@ otherwise. It is a **behavioral** question, so it is answered behaviorally, afte
     { "from": "suspended", "to": "probation", "dashed": true }] }
 ```
 
-A suspended listing is never deleted and its runs stay on the public ledger — the registry's reasoning about
+A suspended listing is never deleted and its runs stay on the public ledger: the registry's reasoning about
 blocked rows applies here too, and for the stronger reason that its earnings history is somebody's money.
 
 ## The four gates
 
 Gates 1–3 run at `publish`, synchronously, and are the whole admission decision. Gate 4 runs forever.
 
-### Gate 1 — identity
+### Gate 1: identity
 
 The caller must **hold a publisher claim** for the name the listing publishes under, and their account's
 **payouts must be enabled**.
@@ -65,7 +65,7 @@ back from Stripe, which collected the identity documents the platform deliberate
 Requiring payouts *before* listing rather than before the first payment is the anti-spam design. It costs a
 spammer a verified identity per listing and costs an honest provider nothing they were not going to do anyway.
 
-### Gate 2 — conformance
+### Gate 2: conformance
 
 A **live probe** of the declared endpoint, run by the platform against the secret it just minted. Three calls,
 all three must pass, no credits involved:
@@ -77,18 +77,18 @@ all three must pass, no credits involved:
 | `rejectsReplay` | Correct signature, timestamp far in the past | Any non-2xx |
 
 The first proves it implements the contract. The other two prove it **verifies**, which is the only reason the
-signature exists — an endpoint that answers a forged call is one that anyone on the internet can bill against
+signature exists: an endpoint that answers a forged call is one that anyone on the internet can bill against
 the provider's own upstream costs, and admitting it would be doing them harm.
 
 The probe reuses [pool-services.ts](../_platform/api/src/pool/pool-services.ts)'s real forward, so what is
-tested is the exact code path a paid run takes — including its five-minute budget, which is why a probe
+tested is the exact code path a paid run takes: including its five-minute budget, which is why a probe
 against a slow endpoint is a slow call. A probe that passed is stamped and expires; publishing needs a fresh
 one, because a probe's whole claim is about right now.
 
 Changing a live listing's endpoint therefore drops it back to `draft`. An endpoint that could be swapped for
-an unproven one after admission would make this gate decorative — it proves an endpoint, not a promise.
+an unproven one after admission would make this gate decorative: it proves an endpoint, not a promise.
 
-### Gate 3 — listing rules
+### Gate 3: listing rules
 
 Bounded, published, checkable by the provider before they ever call the platform:
 
@@ -102,7 +102,7 @@ Bounded, published, checkable by the provider before they ever call the platform
 This is a rules engine, not a judgment. It exists so a listing cannot *claim* to be something it is not on the
 one surface the member reads before clicking.
 
-### Gate 4 — the watch
+### Gate 4: the watch
 
 Behavior is a service's only artifact, so it is the whole ongoing review. Three mechanisms, all threshold
 numbers published as configuration:
@@ -120,7 +120,7 @@ here needs an operator, and every threshold is a number the provider can read in
 ## What this deliberately does not solve
 
 **Semantically bad answers.** A service that returns a confident, complete, wrong answer passes every gate
-above — no refund fires, because it served. Only member feedback catches that, and the honest thing is to say
+above: no refund fires, because it served. Only member feedback catches that, and the honest thing is to say
 so rather than to pretend a probe could. The published run ledger and a future thumbs signal on the receipt
 card are where that belongs; until then, a bad service is caught the slow way, by reputation.
 
@@ -136,5 +136,5 @@ deposit should be priced against observed abuse rather than guessed at.
 ## Rollout
 
 The gates ship enabled. `POOL_OPEN_ADMISSION` turns the self-serve path off entirely for a platform that wants
-the old hand-written flow, and operator-created rows (the demo service among them) keep working unchanged —
+the old hand-written flow, and operator-created rows (the demo service among them) keep working unchanged:
 they carry no owner, so no gate applies to them and nothing about the existing catalog moves.

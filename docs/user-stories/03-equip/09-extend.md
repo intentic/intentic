@@ -4,7 +4,7 @@ As someone whose stack is not in the catalog, I want to add an MCP server, a plu
 
 This section is the escape hatch, and it is the one where the honesty matters most: several of these cards install and run code from a repository I am naming. That is a legitimate thing to want and a dangerous thing to do quietly, so a card that will run someone else's code says so as a marker on the card in the catalog, and again in the list of what it will add before I apply it.
 
-Finding the thing to install should not require knowing its clone URL. A plugin can be found by pointing at a marketplace repository and picking from what it lists, which fills the form for me — including the token, when the plugin lives in the same private repository I just browsed. And an agent that signs in interactively rather than by token gets a sign-in that opens its terminal, because that is where its login actually happens.
+Finding the thing to install should not require knowing its clone URL. A plugin can be found by pointing at a marketplace repository and picking from what it lists, which fills the form for me: including the token, when the plugin lives in the same private repository I just browsed. And an agent that signs in interactively rather than by token gets a sign-in that opens its terminal, because that is where its login actually happens.
 
 ## Acceptance criteria
 

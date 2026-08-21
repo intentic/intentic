@@ -9,13 +9,13 @@ A Docker-in-Docker image that stands in for a user's machine when a test needs a
 
 ## Key files
 
-- [Dockerfile](Dockerfile) — the image.
-- [entrypoint.sh](entrypoint.sh) — bringing the inner daemon up before handing over.
+- [Dockerfile](Dockerfile): the image.
+- [entrypoint.sh](entrypoint.sh): bringing the inner daemon up before handing over.
 
 ## How it fits
 
 Test infrastructure, not product. It exists so the paths that create a sandbox can be exercised end to end
-without a real machine — the same reason `_tools/desktop-smoke` exists for installers.
+without a real machine: the same reason `_tools/desktop-smoke` exists for installers.
 
 ## Conventions & gotchas
 

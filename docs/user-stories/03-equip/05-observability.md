@@ -2,7 +2,7 @@
 
 As someone who wants an agent that can answer "what broke last night", I want to connect my error tracker and my metrics stack, so that debugging starts from what actually happened rather than from what I remember.
 
-These cards are the self-hosted case done properly. My Sentry might be sentry.io or my own instance; my SigNoz is almost certainly mine. So the card takes the instance URL first, and the link to "create a token" follows that URL — it points at my instance once I have named it, and stays hidden until it has somewhere to point.
+These cards are the self-hosted case done properly. My Sentry might be sentry.io or my own instance; my SigNoz is almost certainly mine. So the card takes the instance URL first, and the link to "create a token" follows that URL: it points at my instance once I have named it, and stays hidden until it has somewhere to point.
 
 Connecting is only half the promise. The value shows up in a conversation, where I ask about an error and get the real issue back. Until that works, a connection is a configuration entry, not a capability.
 

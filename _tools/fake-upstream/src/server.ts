@@ -75,7 +75,7 @@ const nativeKey = (request: IncomingMessage): { key?: string; refusal?: string }
     // Google's own answer to a bearer, and the reason `UpstreamAuth` exists: handed one it stops looking for an
     // API key at all. Reproduced here so the platform sending the wrong dialect fails in a test, not in a picker.
     if (request.headers.authorization !== undefined) {
-        return { refusal: `Expected OAuth 2 access token — the native surface takes x-goog-api-key, not a bearer` };
+        return { refusal: `Expected OAuth 2 access token, the native surface takes x-goog-api-key, not a bearer` };
     }
     const key = request.headers[`x-goog-api-key`];
     if (typeof key !== `string` || key === ``) {

@@ -36,9 +36,9 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
     } else {
         harness.fail(
             `no interactive desktop (session 0)`,
-            `The app has a window and a tray icon, and every assertion reads window titles — none of which exist in a service session.\n` +
+            `The app has a window and a tray icon, and every assertion reads window titles: none of which exist in a service session.\n` +
                 `The runner is installed as a Windows service. It has to run in a logged-in user session instead, which is a\n` +
-                `property of how it was REGISTERED — the one thing about this machine a job cannot repair from inside itself,\n` +
+                `property of how it was REGISTERED: the one thing about this machine a job cannot repair from inside itself,\n` +
                 `since the job IS the runner. From an elevated PowerShell on the runner:\n` +
                 `  _tools/scripts/setup-windows-runner.ps1 -Repair`,
         );
@@ -52,7 +52,7 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
     harness.section(`the runtime the app draws with`);
     const runtime = await webView2();
     if (runtime === undefined) {
-        harness.pass(`WebView2 is absent — the installer's bootstrapper will fetch it (slower first run; Windows Server's usual state)`);
+        harness.pass(`WebView2 is absent: the installer's bootstrapper will fetch it (slower first run; Windows Server's usual state)`);
     } else {
         harness.pass(`WebView2 ${runtime}`);
     }
@@ -100,7 +100,7 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
     harness.fail(
         `it runs ${containerOs ?? `unknown`} containers, not linux`,
         `A sandbox is a Linux container. This is the DEFAULT state of the Docker preinstalled on Windows CI images, and it is\n` +
-            `invisible to every check the shipped scripts make — they see a daemon answering and go on to pull a Linux image.\n` +
+            `invisible to every check the shipped scripts make: they see a daemon answering and go on to pull a Linux image.\n` +
             `Switch Docker Desktop to Linux containers, or start it with the WSL2 backend.`,
     );
 };

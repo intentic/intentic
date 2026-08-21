@@ -1,7 +1,7 @@
 # Self-hosting the intentic platform
 
-This compose stack runs the **platform** — the thin identity + sandbox-URL store that lives at
-`app.intentic.dev` / `api.intentic.dev` — from the published images. It is **not** a sandbox: sandboxes are
+This compose stack runs the **platform**: the thin identity + sandbox-URL store that lives at
+`app.intentic.dev` / `api.intentic.dev`, from the published images. It is **not** a sandbox: sandboxes are
 per-user and get provisioned _through_ this platform (see [ARCHITECTURE.md](../../../ARCHITECTURE.md)).
 
 ```
@@ -23,7 +23,7 @@ cookie is `SameSite=Lax`, so `app.<zone>` → `api.<zone>` is cross-origin (CORS
    docker login ghcr.io
    TAGS=latest pnpm publish:platform-images        # or TAGS="latest sha-abc1234"
    ```
-   These packages are **private** — on the deploy host, `docker login ghcr.io` before `up`
+   These packages are **private**: on the deploy host, `docker login ghcr.io` before `up`
    (the sandbox image is public; the platform is not).
 
 2. **A Google OAuth client.** The web SPA's public client id is hardcoded in
@@ -50,37 +50,37 @@ docker compose logs -f api   # first boot runs `prisma migrate deploy`, then ser
 ```
 
 The api entrypoint applies Prisma migrations on every boot (idempotent, advisory-locked), so a fresh Postgres
-volume self-initializes and an image bump self-migrates — no manual db step.
+volume self-initializes and an image bump self-migrates: no manual db step.
 
 ## Notes
 
-- **Email / analytics are optional.** Without mail credentials an invite still stands — the accept link comes
+- **Email / analytics are optional.** Without mail credentials an invite still stands: the accept link comes
   back to the owner in the Access tab (with a Copy button) and is logged server-side; analytics stay off until
   their env vars are set. Google + the tunnel + the secrets are the only hard requirements. The same handover
   happens when `WEB_ORIGIN` is a localhost address: a link only this machine can open is never mailed, because
   the recipient would get an invitation whose button lands on their own empty localhost.
-- **Reaching sandboxes** needs `ZROK_ADMIN_TOKEN` (+ `ZROK_API_ENDPOINT`, `ZROK_ZONE`) — the self-hosted hub in
+- **Reaching sandboxes** needs `ZROK_ADMIN_TOKEN` (+ `ZROK_API_ENDPOINT`, `ZROK_ZONE`): the self-hosted hub in
   [`_tools/selfhost/zrok`](../zrok). The platform mints one account per sandbox on it; each box enables with its
   own and answers under `sandbox-<id>.<zone>`. Without the token, setup can only attach a sandbox the user
   already publishes under their own domain.
 - **Hosted sandboxes** (`HOSTED_FLY_API_TOKEN` + `HOSTED_FLY_ORG`, on top of the hub above) make
   signing in the whole setup: this deployment creates each new user's machine on its own Fly account and can
-  wake, stop and destroy it. That is a deliberate hole in the boundary the rest of this platform keeps — read
+  wake, stop and destroy it. That is a deliberate hole in the boundary the rest of this platform keeps: read
   the hosted paragraph in [ARCHITECTURE.md](../../../ARCHITECTURE.md) before switching it on, and remember the
   bill is yours. Off by default; every other setup lane is unaffected. Create the token org-scoped
-  (`fly tokens create org --org <org> --name intentic-hosted`) — a deploy token cannot create apps. Machines
+  (`fly tokens create org --org <org> --name intentic-hosted`): a deploy token cannot create apps. Machines
   sleep after `HOSTED_IDLE_STOP_MINUTES` of nobody-connected-and-nothing-running and wake on the next visit,
   which is what keeps an idle user's cost at storage alone.
 - **The hosted reaper deletes too.** A daily sweep destroys every Fly app under `HOSTED_APP_PREFIX` whose
   sandbox row is gone. Keep that prefix unique to this deployment, and do not put unrelated apps behind it.
 - **Scaling:** the api is stateless (DB-backed sessions) and safe to run at `--scale api=N`; the retention
   reaper + sandbox-pool top-up take a Postgres advisory lock so replicas don't duplicate the work.
-- **No host ports are published** — everything is reached over the tunnel. Add a `ports:` mapping to `api`/`web`
+- **No host ports are published**: everything is reached over the tunnel. Add a `ports:` mapping to `api`/`web`
   only for local debugging.
 - **Reachability grants are revoked at removal, not swept.** The hub answers no "list accounts" call, so there
   is no nightly reconcile that could find a forgotten grant: removing a sandbox revokes its address FIRST and
   fails the removal if the hub is unreachable, which keeps the row (the only record of the grant) instead of
-  stranding a live address. The one self-healing case is a mint whose write never landed — the next mint drops
+  stranding a live address. The one self-healing case is a mint whose write never landed: the next mint drops
   the stale account and takes a fresh one.
 - **The daily sweep is now just the zone's residue.** One wildcard record serves every sandbox, so the zone no
   longer fills up; what is left to clear are the loopback (`local-*`) records of same-machine sandboxes.
@@ -89,7 +89,7 @@ volume self-initializes and an image bump self-migrates — no manual db step.
   ```sh
   docker compose logs api | grep -E 'orphan DNS|DNS record sweep'
   ```
-- **Back up the database yourself.** The `intentic-platform-db` volume is the stack's only state — accounts,
+- **Back up the database yourself.** The `intentic-platform-db` volume is the stack's only state: accounts,
   sandbox registrations and the encrypted tokens. Nothing here schedules a dump; on the deploy host:
   ```sh
   docker compose exec -T postgres pg_dump -U intentic intentic | gzip > intentic-$(date +%F).sql.gz
@@ -99,9 +99,9 @@ volume self-initializes and an image bump self-migrates — no manual db step.
 
 Run this compose as a **Komodo stack** named `intentic-platform` and every main push redeploys itself:
 `images-platform` ends with [deploy-platform.sh](../../scripts/deploy-platform.sh), which calls Komodo's
-`DeployStack` — the stack's services run `:latest` with `pull_policy: always`, so the redeploy pulls what CI
+`DeployStack`, the stack's services run `:latest` with `pull_policy: always`, so the redeploy pulls what CI
 just pushed. The stack name is set in the job's `env` (`PLATFORM_DEPLOY_STACK`) and the Komodo core origin
-defaults to `https://komodo.radarsu.com`, leaving one thing to configure — the api key, as GitHub Actions
+defaults to `https://komodo.radarsu.com`, leaving one thing to configure: the api key, as GitHub Actions
 secrets:
 
 | Variable | Value |
@@ -109,4 +109,4 @@ secrets:
 | `KOMODO_API_KEY` / `KOMODO_API_SECRET` | an api key minted in Komodo (mask both) |
 
 Optional overrides: `KOMODO_URL` (a different core origin, e.g. `http://192.168.0.x:9120`) and
-`PLATFORM_DEPLOY_STACK` (a different stack name — unsetting it in the rules disables the deploy).
+`PLATFORM_DEPLOY_STACK` (a different stack name: unsetting it in the rules disables the deploy).

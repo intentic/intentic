@@ -1,7 +1,7 @@
 {
     "name": "@intentic/testing",
     "version": "0.0.0",
-    "description": "Test-support seams every package's suites share — the deep, self-naming stand-in for a wide interface",
+    "description": "Test-support seams every package's suites share, the deep, self-naming stand-in for a wide interface",
     "license": "MIT",
     "private": true,
     "type": "module",

@@ -1,10 +1,10 @@
 # The CI runners
 
-> The **Linux** fleet. The one Windows machine — the only runner that can execute the Windows installer — is
+> The **Linux** fleet. The one Windows machine (the only runner that can execute the Windows installer) is
 > [`ci-runner-windows.md`](ci-runner-windows.md), and shares none of the setup below.
 
 CI assumes one thing no runner provides by default: **a persistent host directory at `/ci-cache`**. Without it
-the pipeline still passes — every job just runs cold. This file is the config that makes it warm, the runner
+the pipeline still passes: every job just runs cold. This file is the config that makes it warm, the runner
 setup, and the evidence for why it is shaped this way.
 
 That evidence is not CI-vendor-specific: it is about how pnpm, turbo and cargo behave when their
@@ -18,16 +18,16 @@ content-addressed stores are thrown away between jobs, which is the same anywher
 
 `intentic/intentic` is public, and every property this file spends its length arguing for is also what makes a
 fork's pull request dangerous: the runners are **not ephemeral**, they share **one `/ci-cache`** with `release`,
-and each mounts the **host docker socket**. Building a pull request means running its code — install lifecycle
-scripts, tests, build scripts — so a fork's pull request had a path to host root, and from a poisoned turbo
+and each mounts the **host docker socket**. Building a pull request means running its code: install lifecycle
+scripts, tests, build scripts: so a fork's pull request had a path to host root, and from a poisoned turbo
 entry a path into a published artifact. The credentials that live on these hosts are the ones that matter:
 `TAURI_SIGNING_PRIVATE_KEY`, `KOMODO_API_*`, `CLOUDFLARE_API_TOKEN`.
 
-This is the warning GitHub puts on the runner page. **Two controls hold it, and neither is sufficient alone** —
+This is the warning GitHub puts on the runner page. **Two controls hold it, and neither is sufficient alone**:
 that pairing is the part worth understanding before reviewing an outside pull request.
 
 **1. Approval, for all outside contributors.** Settings → Actions → General, set to *require approval for all
-outside contributors* rather than the default *first-time contributors* — the default stops applying to anyone
+outside contributors* rather than the default *first-time contributors*: the default stops applying to anyone
 the moment one of their pull requests is merged, so it protects a project exactly until it has its first repeat
 contributor. This is the control that covers the case the `if` below cannot: on a `pull_request` event Actions
 runs the workflow file **from the pull request's own merge ref**, so a fork that edits `ci.yml` runs its edited
@@ -35,7 +35,7 @@ copy, guard deleted. Nothing runs before the click, which is what makes that unr
 
 **2. The `if` guard.** This is the control that covers the case approval cannot: a pull request that looks
 harmless and carries its payload in a `postinstall`, a test, or a build script. Clicking approve on one of those
-runs it on the release host as root — no amount of care at the button changes that, because the diff that
+runs it on the release host as root: no amount of care at the button changes that, because the diff that
 matters is 1,800 packages deep. The guard means the click cannot start a build of fork code at all.
 
 **So when you review an outside pull request, read `.github/` first.** A diff that touches a workflow file is
@@ -55,7 +55,7 @@ the one job whose condition names no `needs` output.
 
 **That inheritance is the fragile part, so it is asserted rather than trusted.** `prepass.mjs --checks-only`
 (invariant 4, run by the `preflight` job and the pre-push hook) grows the safe set to a fixpoint from the jobs
-that guard themselves and fails on any self-hosted job left outside it — so a job added with no guard and no
+that guard themselves and fails on any self-hosted job left outside it: so a job added with no guard and no
 `needs` edge to one goes red instead of quietly reopening this.
 
 To run CI on an outside contribution, **read the diff**, then push its branch to this repository and open the
@@ -72,11 +72,11 @@ pull request from there.
 
 **A persistent `/ci-cache`, shared by every concurrent job.** It holds the pnpm store, the turbo task cache,
 the cargo registry, three cargo target directories, and the ~1.1 GB xwin MSVC SDK. All are content-addressed
-stores that every job reads and appends to — exactly what a shared directory is for, and exactly what a
+stores that every job reads and appends to: exactly what a shared directory is for, and exactly what a
 per-job archive is worst at.
 
 **`/ci-cache` on the same filesystem as the build directory.** pnpm hardlinks packages out of its store, and a
-hardlink cannot cross a filesystem — so if the two are different devices, pnpm silently falls back to
+hardlink cannot cross a filesystem: so if the two are different devices, pnpm silently falls back to
 **copying** every file, which is the shape of a 2–3 minute install. One line settles it:
 
 ```sh
@@ -88,19 +88,19 @@ every package.
 
 **A Docker daemon.** The image, release and e2e jobs drive it.
 
-**Room for six concurrent jobs — and that is now exactly the wave, not the wave plus headroom.** Verification is
-split by release group — `verify-core`, `verify-platform` and `verify-site` each gate only their own artifacts
-— and the widest wave of the Actions DAG is **six**: those three plus `migrations`, `ci-base` and
+**Room for six concurrent jobs: and that is now exactly the wave, not the wave plus headroom.** Verification is
+split by release group: `verify-core`, `verify-platform` and `verify-site` each gate only their own artifacts
+- and the widest wave of the Actions DAG is **six**: those three plus `migrations`, `ci-base` and
 `e2e-hermetic`. It was five when six instances were provisioned; `migrations` is the job that took the spare
-slot. The waves also overlap in practice — `images` starts the moment `verify-core` goes green while the other
-two groups are still running — so at six instances a pipeline can already be queueing against itself.
+slot. The waves also overlap in practice: `images` starts the moment `verify-core` goes green while the other
+two groups are still running: so at six instances a pipeline can already be queueing against itself.
 
 Not every job in that wave runs in every pipeline (`migrations` needs a platform change, `ci-base` a Dockerfile
 change, `e2e-hermetic` a pull request), so the six collide only sometimes. **Treat the next job added to wave 1
-as needing a seventh runner process**, and re-derive rather than trust the number — the script below is why it
+as needing a seventh runner process**, and re-derive rather than trust the number: the script below is why it
 is written down as a command instead of a sentence.
 
-Derive it rather than trust it — the graph is the source, and it changes. No dependency, because `yaml` is not
+Derive it rather than trust it: the graph is the source, and it changes. No dependency, because `yaml` is not
 hoisted to the workspace root and `require("yaml")` from there throws:
 
 ```sh
@@ -116,7 +116,7 @@ Under-provision it and the groups queue behind each other, which is the coupling
 remove: the pipeline still passes, it just serializes, and every argument about a site failure not blocking a
 platform deploy stops being true in practice.
 
-**Measured, on a host running one runner process** — 173 jobs over a 17-hour window, every one of them on a
+**Measured, on a host running one runner process**: 173 jobs over a 17-hour window, every one of them on a
 single instance:
 
 | | |
@@ -125,7 +125,7 @@ single instance:
 | peak jobs waiting at once | **21** |
 | median wait before a job starts | **10m29s** |
 | p90 / max wait | **36m43s / 61m10s** |
-| host busy | 7.7h of 17h — **idle 54% of the time** |
+| host busy | 7.7h of 17h: **idle 54% of the time** |
 
 Idle and starved at once is the signature of this mistake: the work is there, the slots are not. With one
 instance the wall clock is the *sum* of every job's duration; with enough of them it is the critical path,
@@ -136,15 +136,15 @@ not a scheduling problem, it is a provisioning one.
 
 ## The runners
 
-### Six runner processes on one host — not six hosts
+### Six runner processes on one host: not six hosts
 
-**The GitHub Actions runner executes one job at a time — there is no concurrency setting.** Six concurrent
+**The GitHub Actions runner executes one job at a time: there is no concurrency setting.** Six concurrent
 jobs therefore means six `actions/runner` processes on the one box, each a systemd service, all sharing the
 one `/ci-cache`.
 
 One machine, six systemd units. If that bookkeeping grates, the alternatives are an autoscaling set or
 [Actions Runner Controller](https://github.com/actions/actions-runner-controller) if this ever moves to
-Kubernetes — both solve the same problem with more moving parts than six `svc.sh` installs.
+Kubernetes: both solve the same problem with more moving parts than six `svc.sh` installs.
 
 Each instance needs **its own directory, its own `--name` and its own `--work`**, and all of them want to be on
 the same filesystem as `/ci-cache`. Run it from `$HOME`, never from inside a runner directory:
@@ -171,7 +171,7 @@ sudo ./svc.sh install $USER && sudo ./svc.sh start
 **`--url` has to match the scope the token came from.** A token minted on the ORG's runner page pairs with
 `https://github.com/intentic`; one minted on the REPO's pairs with `https://github.com/intentic/intentic`.
 Crossing them fails as an unexplained `404 Not Found` from `POST api.github.com/actions/runner-registration`,
-which reads like an expired token and is really a scope mismatch — the token is fine, the URL is wrong. The
+which reads like an expired token and is really a scope mismatch: the token is fine, the URL is wrong. The
 existing runners are org-registered, so the org form above is the one that keeps them in one list. To tell the
 two apart without guessing:
 
@@ -182,12 +182,12 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST https://api.github.com/actions/
 ```
 
 **The download URL has to name the version.** There is no
-`releases/latest/download/actions-runner-linux-x64.tar.gz` — that path 404s, because the asset is published as
+`releases/latest/download/actions-runner-linux-x64.tar.gz`: that path 404s, because the asset is published as
 `actions-runner-linux-x64-<version>.tar.gz`. Piping the 404 body into `tar` is what produces `gzip: stdin:
 unexpected end of file` followed by `./config.sh: not found`, which reads like a broken script and is really a
 broken URL.
 
-**`svc.sh` does not exist until `config.sh` has succeeded** — it is generated by configuration, not shipped in
+**`svc.sh` does not exist until `config.sh` has succeeded**: it is generated by configuration, not shipped in
 the tarball. `sudo ./svc.sh: command not found` therefore means the configure step above it failed.
 
 `config.sh` must run as the normal user (it refuses under `sudo`); only `svc.sh` takes it. Get
@@ -196,7 +196,7 @@ match the `--url` above. It expires in an hour, but within that window it is reu
 many runners as you like, and minting a new one does not invalidate it.
 
 **Runner 2.327.1 is a floor, not a preference.** Every action the workflows use runs on the node24 runtime,
-and a runner below that version cannot execute one — the job fails before the first step. Resolving the version
+and a runner below that version cannot execute one: the job fails before the first step. Resolving the version
 from the releases API above clears it, and nothing here passes `--disableupdate`, so a runner that has been
 running keeps clearing it on its own. Pinning an older tarball, or turning self-update off, is what would break
 the pipeline.
@@ -211,7 +211,7 @@ the pipeline.
 | `[self-hosted, intentic, desktop]` (10) | ci: desktop-check, ic-check, desktop-verify, desktop-windows-build · release: windows-build, linux-build, publish · nightly: desktop-setup, desktop-windows-build, update-survival |
 | `[self-hosted, windows-desktop]` (1 definition, 3 callers) | `windows-smoke.yml`, called by ci (`desktop-verify-windows`), release (`windows-verify`) and nightly (`desktop-windows`) |
 
-Regenerate rather than edit — this table went stale once already, and a stale one reads as a capacity claim:
+Regenerate rather than edit: this table went stale once already, and a stale one reads as a capacity claim:
 
 ```sh
 node -e 'const fs=require("fs");const by={};
@@ -231,13 +231,13 @@ builder id out of the runner's environment and accepts only `github-hosted`, so 
 `ubuntu-24.04` and pays cold caches for it. The file says the rest; prepass invariant 9 keeps it there.
 
 Only `intentic` and `desktop` go in `--labels`. **`self-hosted`, `Linux` and `X64` are applied by the runner
-itself** — naming them again just adds lowercase duplicates that nothing matches on.
+itself**: naming them again just adds lowercase duplicates that nothing matches on.
 
-`desktop` is a superset, so a runner carrying both labels can take any job in the file — which is why the
+`desktop` is a superset, so a runner carrying both labels can take any job in the file: which is why the
 command above gives every instance both. **On a single host that is strictly better than partitioning.** The
 usual reason to pin the desktop jobs to a subset is to keep the ~3.75 GB `ci-desktop` image off the other
 machines, and here there are no other machines: six runner processes share one Docker daemon, so the image is
-pulled once whatever the labels say. Partitioning would buy nothing and cost a real failure mode — `release`
+pulled once whatever the labels say. Partitioning would buy nothing and cost a real failure mode: `release`
 also needs `desktop`, so with only two such runners a `desktop-check` and a `desktop-verify` running together
 leave the release queued while four idle runners watch.
 
@@ -246,7 +246,7 @@ Split the labels when the desktop jobs move to their own machine. Until then, bo
 ### The shared cache and the same-filesystem rule
 
 **The host path is `/ci-cache`, and it is not configurable.** Every workflow hardcodes the mount as
-`/ci-cache:/ci-cache`, so a cache made anywhere else is a cache nothing reads — Docker would silently create an
+`/ci-cache:/ci-cache`, so a cache made anywhere else is a cache nothing reads: Docker would silently create an
 empty `/ci-cache` on the host and every job would run cold against it, which is the failure that looks like
 "the cache is configured and yet nothing is warm".
 
@@ -254,7 +254,7 @@ empty `/ci-cache` on the host and every job would run cold against it, which is 
 mkdir -p /ci-cache
 ```
 
-Put the work directories **on the same filesystem** as it — that is what `--work /srv/actions/work-$N` above is
+Put the work directories **on the same filesystem** as it: that is what `--work /srv/actions/work-$N` above is
 for. If `/srv` is its own volume, either give `/ci-cache` a bind mount onto that volume or move the work dirs
 back onto the root one; the check below is what tells you which situation you are in. Verify after the first
 run:
@@ -285,14 +285,14 @@ The runner user must be in the `docker` group.
 ### The token a checkout leaves behind
 
 `actions/checkout` writes the job's `GITHUB_TOKEN` into `.git/config` as an `http.extraheader` so that later
-`git` calls authenticate. On an **ephemeral** runner that is harmless — the whole machine goes away. Here it is
+`git` calls authenticate. On an **ephemeral** runner that is harmless: the whole machine goes away. Here it is
 not: the workspace persists by design (`clean: false`, which is what keeps `node_modules` warm), and six runner
 processes share one host, so the header sits in the tree while the next job runs.
 
 **So every checkout sets `persist-credentials: false`, with exactly two exceptions.** `release.yml`'s `plan`
 and `publish` run `semantic-release`, which reaches the git remote; both keep the default and say so at the
 step. semantic-release builds its own authenticated URL from `GITHUB_TOKEN` and probably does not need the
-persisted header, but "probably" is not worth finding out by breaking a release — that pair is the one place
+persisted header, but "probably" is not worth finding out by breaking a release: that pair is the one place
 where the token is deliberately left in place.
 
 Nothing else in the pipeline pushes: `publish-action.sh` clones with its own PAT, and `publish-github.sh`,
@@ -304,13 +304,13 @@ than through git.
 
 ### The two host jobs, and the ownership hazard they carry
 
-`ci-base` and `ci-desktop` are the exceptions — they run on the host as the runner user, because docker-building
+`ci-base` and `ci-desktop` are the exceptions: they run on the host as the runner user, because docker-building
 the CI images is the one thing that cannot happen inside them. All jobs, container and host alike, share
 **one persistent workspace per runner**, so the container jobs' checkout leaves a root-owned tree behind and
 the next host job cannot write `.git`. Checkout dies on `index.lock: Permission denied`, then dies again
 trying to delete a tree it also cannot write.
 
-It does not announce itself. When `changes` was still a host job this made it a per-workspace coin flip — four
+It does not announce itself. When `changes` was still a host job this made it a per-workspace coin flip: four
 of the six workspaces were in that state at once, and a failed `changes` makes every image and desktop job
 **skip**, which reads as a green pipeline that published nothing. That is why `changes` now runs in the
 container like everything else (the chown it needed first measured 4+ minutes on every pipeline), leaving the
@@ -326,18 +326,18 @@ docker run --rm --entrypoint chown -v /home/<user>/<work-dir>:/w ghcr.io/intenti
 
 ### What the runner host needs installed
 
-Only Docker and the runner itself. Everything else — node, pnpm, ripgrep, bun, the docker CLI, the Rust and
-Tauri toolchains — is baked into `ci-base` and `ci-desktop`.
+Only Docker and the runner itself. Everything else: node, pnpm, ripgrep, bun, the docker CLI, the Rust and
+Tauri toolchains: is baked into `ci-base` and `ci-desktop`.
 
 ### Keeping it bounded
 
-- **turbo** — the pnpm-setup composite action prunes entries untouched for 14 days on every job
+- **turbo**: the pnpm-setup composite action prunes entries untouched for 14 days on every job
   (`find "$TURBO_CACHE_DIR" -type f -mtime +14 -delete`). Nothing else evicts from the directory now that it
   outlives the job, so this step is load-bearing.
-- **pnpm** — the store only grows when a dependency version is added, so it grows slowly. `pnpm store prune`
+- **pnpm**: the store only grows when a dependency version is added, so it grows slowly. `pnpm store prune`
   is the supported cleanup, but it removes anything not referenced by a currently-installed project and is
   **not safe to run while jobs are installing**. Run it by hand in a quiet window, not from CI.
-- **cargo** — `/ci-cache/cargo` (the shared registry) grows like the pnpm store. The build directories do not:
+- **cargo**: `/ci-cache/cargo` (the shared registry) grows like the pnpm store. The build directories do not:
   `desktop-target` (release), `desktop-verify-target` and `desktop-check-target` are **one per job** on
   purpose, for two reasons. Cargo locks a target directory exclusively for a whole build, so jobs sharing one
   serialize; and a build's fingerprint includes the stamped version, so the release (a new version every time)
@@ -345,16 +345,16 @@ Tauri toolchains — is baked into `ci-base` and `ci-desktop`.
   Measured on the desktop crate: bumping the version recompiles exactly one crate in 20s, rebuilding the same
   version is a 1s no-op. Each dir is a few GB of rebuildable objects; `rm -rf` any of them in a quiet window
   and the next job repays it once.
-- **xwin** — `/ci-cache/xwin` holds the MSVC CRT + Windows SDK that cargo-xwin splats for the release's Windows
+- **xwin**: `/ci-cache/xwin` holds the MSVC CRT + Windows SDK that cargo-xwin splats for the release's Windows
   cross-build (~1.1 GB). Downloaded once, read by every run, never modified. It is here rather than at its
   default under `$HOME/.cache` because that is cleared out from under a job often enough to cost every release
-  a 2m40s re-download. It is not cleared *reliably* — see the entry below, where the same directory keeping
+  a 2m40s re-download. It is not cleared *reliably*: see the entry below, where the same directory keeping
   its contents across two pipelines is what broke a job that never asked for a browser.
-- **playwright** — `/ci-cache/ms-playwright` holds the Chromium that `images-platform`'s sign-in smoke drives
+- **playwright**: `/ci-cache/ms-playwright` holds the Chromium that `images-platform`'s sign-in smoke drives
   (~200 MB with its headless shell and ffmpeg), named by that job's `PLAYWRIGHT_BROWSERS_PATH`. Keeping the
   download warm is the smaller half of the reason. The larger half is that **the default is not private to the
   job**: `$HOME` in a container job is `/github/home`, a host directory the runner process reuses, so a browser
-  installed here outlived the job and was still on disk for the next pipeline's `verify` — which runs in
+  installed here outlived the job and was still on disk for the next pipeline's `verify`: which runs in
   ci-base, ships none of Chromium's shared libraries, and whose browser suites decide whether to run by asking
   whether `chromium.executablePath()` exists. They found one, launched it, and died on `libglib-2.0.so.0`. Two
   suites that were correct in git failed on a host they never touched. pnpm-setup now clears
@@ -365,13 +365,13 @@ are content-addressed files written via atomic rename, and cargo's registry is d
 sharing one `CARGO_HOME`.
 
 **Cargo TARGET directories are the exception, and the hazard is not the lock.** Cargo decides freshness by
-mtime — "is any source newer than the last build of this unit" — while a container job's checkout is always
+mtime ("is any source newer than the last build of this unit") while a container job's checkout is always
 `/__w/intentic/intentic` whichever runner process it belongs to. One cached unit therefore stands for six
 different copies of the repository, and a checkout that PREDATES another process's build of that same path is
 judged up to date: cargo prints `Finished` without `Compiling`, replays the other checkout's warnings, and
 leaves the other checkout's binary uplifted for whatever stages it. Nightly run 32096156841 shipped an `ic`
 built before `ic docker prepare` existed, and the Windows setup tier failed on `unrecognized subcommand
-'docker'` against a source tree that had the command in it. Registry and store sharing are untouched by this —
+'docker'` against a source tree that had the command in it. Registry and store sharing are untouched by this:
 it is a property of build OUTPUTS keyed by path. `build-ic.sh` drops its own crate (`cargo clean -p ic`)
 before every build for that reason; anything else that stages a binary out of a shared target directory needs
 the same, or its own directory.
@@ -382,13 +382,13 @@ the same, or its own directory.
 
 A per-job cache archive was measured against the shared directory and lost twice over.
 
-**Archiving cost more than it ever returned.** The verify job spent **6m19s** — 38% of its wall-clock —
+**Archiving cost more than it ever returned.** The verify job spent **6m19s**: 38% of its wall-clock:
 zipping the store (69,292 files), and the next job's source fetch spent another 40s deleting those same files.
 That CPU is spent whether or not anything reads the result, and an object-store backend would not remove it; it
 would add an upload on top.
 
 **A slot-scoped cache almost never hit.** Local cache storage scoped per concurrent slot meant a cache written
-by one slot was invisible to the next job that landed on another — measured across five consecutive `main`
+by one slot was invisible to the next job that landed on another: measured across five consecutive `main`
 pipelines, a warm turbo cache (71/74 tasks) appeared only when a run happened to land on the slot that wrote
 it, roughly one pipeline in four. Everything else was 0/74.
 
@@ -398,7 +398,7 @@ pipeline onward.
 ### The install that stays slow
 
 With the store warm and nothing to download, `pnpm install --frozen-lockfile` still measured **2m21s–3m43s in
-every job** — the largest uniform cost in the pipeline. Half of that is addressed by keeping a workspace's
+every job**: the largest uniform cost in the pipeline. Half of that is addressed by keeping a workspace's
 installed tree between runs rather than deleting 69k files and re-linking them, which is what
 `actions/checkout`'s `clean: false` is for in every job of `ci.yml`. The other half is the same-filesystem
 rule at the top of this file.

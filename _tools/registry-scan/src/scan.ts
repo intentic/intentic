@@ -91,7 +91,7 @@ const inspectAtSha = async (fullName: string, sha: string, path: string, github:
         return {
             checks: {
                 sha,
-                manifest: `does not parse — ${parsed.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ")}`,
+                manifest: `does not parse, ${parsed.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ")}`,
                 bundle: "unchecked",
             },
         };
@@ -181,7 +181,7 @@ export const scanRegistry = async (file: RegistryFile, github: GithubReader, sca
     for (const [repoName, entry] of listed) {
         const repo = foundByRepo.get(repoName) ?? (await github.getRepo(repoName));
         if (repo === undefined) {
-            warnings.push(`${entry.name}: source repo ${repoName} is gone or no longer readable — listing may need review`);
+            warnings.push(`${entry.name}: source repo ${repoName} is gone or no longer readable, listing may need review`);
             continue;
         }
         if (repo.archived) {

@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-/* POINT GIT AT `.githooks` — the one thing `pnpm install` does to the clone rather than to `node_modules`.
+/* POINT GIT AT `.githooks`: the one thing `pnpm install` does to the clone rather than to `node_modules`.
  *
  * This is a `prepare` script, which means it runs after EVERY install, in every context an install happens in:
  * a developer's clone, a Docker build whose context carries no `.git`, and a Windows CI runner. That last one is
- * why this is JavaScript and not the shell one-liner it used to be — `chmod`, `/dev/null` and `|| true` are all
+ * why this is JavaScript and not the shell one-liner it used to be: `chmod`, `/dev/null` and `|| true` are all
  * POSIX, pnpm hands lifecycle scripts to `cmd.exe` on Windows, and the install died there before a single
  * package was linked. A repo-wide install step cannot be written in a language a third of the machines running
  * it do not speak.
  *
- * The `chmod +x` the shell version ran was removed once the hooks were tracked executable — a clone checks
+ * The `chmod +x` the shell version ran was removed once the hooks were tracked executable: a clone checks
  * them out executable, so there seemed to be nothing left to fix up. A real checkout proved otherwise: its
  * pre-push had been BORN 100644, every later update reached the working tree as a patch (which keeps the mode
  * the file already had on disk), and the index saying 100755 never once touched the file. Git's answer to a
- * hook it cannot execute is a HINT and a push that sails through every gate the hook carries — which is how an
+ * hook it cannot execute is a HINT and a push that sails through every gate the hook carries, which is how an
  * undeclared contract break reached main past a prepass that had said no. So the repair is back, aimed at the
  * disk rather than the index: prepare is the one step that runs on every machine, and it re-arms rather than
  * trusts. prepass invariant 7 is the same fact asserted loudly where pushing happens.
@@ -43,7 +43,7 @@ try {
 try {
     git(`config`, `core.hooksPath`, `.githooks`);
 } catch (error) {
-    console.warn(`git hooks not configured (${error.message}) — commits still work, they just skip the local checks`);
+    console.warn(`git hooks not configured (${error.message}): commits still work, they just skip the local checks`);
 }
 
 // Re-arm, don't trust: a hook without its executable bit is skipped with a hint, not an error. On Windows the
@@ -53,5 +53,5 @@ try {
         chmodSync(join(root, `.githooks`, hook), 0o755);
     }
 } catch (error) {
-    console.warn(`git hooks not re-armed (${error.message}) — a non-executable hook is silently skipped by git`);
+    console.warn(`git hooks not re-armed (${error.message}): a non-executable hook is silently skipped by git`);
 }

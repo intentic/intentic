@@ -64,7 +64,7 @@ export const privacyDoc: LegalDoc = {
             heading: "Who we are",
             paragraphs: [
                 `The intentic platform (intentic.dev and the workspace app at app.intentic.dev) is operated by ${operatorIdentity()}`,
-                "We act in two different roles, and the difference matters. For your account, your billing and the records of which sandboxes exist, we are the data controller and this policy governs. For the contents of a sandbox we host for you, we are a processor acting on your instructions — that relationship is governed by our Data Processing Agreement, which forms part of these documents.",
+                "We act in two different roles, and the difference matters. For your account, your billing and the records of which sandboxes exist, we are the data controller and this policy governs. For the contents of a sandbox we host for you, we are a processor acting on your instructions: that relationship is governed by our Data Processing Agreement, which forms part of these documents.",
             ],
         },
         {
@@ -76,7 +76,7 @@ export const privacyDoc: LegalDoc = {
                 "Sandbox records: sandbox names, their public addresses, and the connection tokens used to reach them. Tokens are stored encrypted.",
                 "Hosted machine records: for a sandbox we host, the machine and volume identifiers at our infrastructure provider and the region it runs in.",
                 "Teammate emails: addresses you enter when sharing a sandbox, stored so the invitee's account can find it. Invitations never accepted are deleted after 90 days.",
-                "Membership and credit records: your subscription status and billing period from Stripe, and the ledger of credits you spent — which extension installs you donated to and which service runs you paid for. Kept 13 months so a full year of the public payout ledger stays auditable and you can query a charge.",
+                "Membership and credit records: your subscription status and billing period from Stripe, and the ledger of credits you spent, which extension installs you donated to and which service runs you paid for. Kept 13 months so a full year of the public payout ledger stays auditable and you can query a charge.",
                 "Trial usage: a per-day count of model messages you used on the free trial, so the daily allowance can be enforced.",
             ],
         },
@@ -97,9 +97,9 @@ export const privacyDoc: LegalDoc = {
         {
             heading: "Sandboxes we host for you",
             paragraphs: [
-                "If you take the free hosted sandbox, we create a virtual machine and a disk for it at Fly.io and we pay for them. Everything you then put in that workspace — repositories, files, environment variables, credentials you choose to store there, and everything the agent writes — sits on that disk, which is infrastructure we arranged rather than infrastructure you own. This is the one part of the service where your working content is in our sphere, and it is why the Data Processing Agreement exists.",
-                "We do not read it, and the product gives us no way to: the command path runs from your browser to the sandbox's own daemon, and the platform holds power over the machine (create it, stop it, start it, destroy it) rather than a path into it. We will not build ourselves such a path to satisfy an abuse complaint — a complaint is answered by stopping or destroying the machine.",
-                "Two honest limits on that. Fly.io, as the operator of the physical infrastructure, necessarily has the access any infrastructure provider has to the memory and disks of the machines it runs; our agreement with them restricts what they may do with it. And a sandbox reachable from the internet is reachable by whatever you expose from it — what you publish from your workspace is published by you.",
+                "If you take the free hosted sandbox, we create a virtual machine and a disk for it at Fly.io and we pay for them. Everything you then put in that workspace: repositories, files, environment variables, credentials you choose to store there, and everything the agent writes, sits on that disk, which is infrastructure we arranged rather than infrastructure you own. This is the one part of the service where your working content is in our sphere, and it is why the Data Processing Agreement exists.",
+                "We do not read it, and the product gives us no way to: the command path runs from your browser to the sandbox's own daemon, and the platform holds power over the machine (create it, stop it, start it, destroy it) rather than a path into it. We will not build ourselves such a path to satisfy an abuse complaint, a complaint is answered by stopping or destroying the machine.",
+                "Two honest limits on that. Fly.io, as the operator of the physical infrastructure, necessarily has the access any infrastructure provider has to the memory and disks of the machines it runs; our agreement with them restricts what they may do with it. And a sandbox reachable from the internet is reachable by whatever you expose from it: what you publish from your workspace is published by you.",
             ],
         },
         {
@@ -108,14 +108,14 @@ export const privacyDoc: LegalDoc = {
                 "If you provision a hosted sandbox from the European Economic Area, the United Kingdom or Switzerland, the machine and its disk are created in the European Union (Stockholm) and your workspace content stays there. Everyone else's is created in the United States (Ashburn, Virginia). The region is decided when the machine is created, from the country of that request, and it is recorded on the machine; the country itself is not stored.",
                 ...(PLATFORM_HOSTING_LOCATION === ``
                     ? []
-                    : [`The rest of the platform — the account database and the API — runs on servers in ${PLATFORM_HOSTING_LOCATION}.`]),
+                    : [`The rest of the platform, the account database and the API, runs on servers in ${PLATFORM_HOSTING_LOCATION}.`]),
             ],
         },
         {
             heading: "AI models and your prompts",
             paragraphs: [
                 "With your own subscription or API key, your prompts, workspace files and command output go from your sandbox directly to your model provider (Anthropic, or whichever you configure) under your agreement with them. That traffic does not pass through the platform, and we neither see nor store it.",
-                "The free model trial is the exception, and it is worth understanding before you use it. It exists so you can chat before you own any AI subscription, and it works by serving your messages with our own Google Gemini keys — so for as long as you are on the trial, your prompts and the context sent with them pass through the platform on their way to Google. We do not store their content; we store only the daily count. Once you configure your own key, that stops. Do not put anything in a trial conversation that you would not want processed this way.",
+                "The free model trial is the exception, and it is worth understanding before you use it. It exists so you can chat before you own any AI subscription, and it works by serving your messages with our own Google Gemini keys, so for as long as you are on the trial, your prompts and the context sent with them pass through the platform on their way to Google. We do not store their content; we store only the daily count. Once you configure your own key, that stops. Do not put anything in a trial conversation that you would not want processed this way.",
             ],
         },
         {
@@ -150,13 +150,13 @@ export const privacyDoc: LegalDoc = {
                 "Credit ledger, donations and service-run records: 13 months.",
                 "Account, sandbox and membership records: until you delete your account.",
                 "Payment records: as long as tax law requires us to keep them, currently five years from the end of the accounting year in Poland.",
-                "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account — and, for a machine without a membership, when it has gone unopened for the period published in the app, which we warn you about by email first. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it — they expire on their own retention schedule, currently five days — so erasure completes within that window rather than instantly. We hold no other copy.",
+                "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account, and, for a machine without a membership, when it has gone unopened for the period published in the app, which we warn you about by email first. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it, they expire on their own retention schedule, currently five days, so erasure completes within that window rather than instantly. We hold no other copy.",
             ],
         },
         {
             heading: "Your rights",
             paragraphs: [
-                "You can access, correct, export and erase your data at any time — Settings offers self-service export and account deletion, and deletion takes effect immediately. You also have the rights to restriction, objection and portability under the GDPR.",
+                "You can access, correct, export and erase your data at any time: Settings offers self-service export and account deletion, and deletion takes effect immediately. You also have the rights to restriction, objection and portability under the GDPR.",
                 `You can complain to the Polish supervisory authority (UODO, uodo.gov.pl) or to the authority where you live. For anything else, write to ${LEGAL_CONTACT_EMAIL} and we will answer within 30 days.`,
             ],
         },
@@ -212,7 +212,7 @@ export const termsDoc: LegalDoc = {
             list: [
                 "There is no availability commitment. It is provided on a best-effort basis, it will sometimes be unavailable, and we owe you no service level, credit or refund for that.",
                 "We run no backup service. Our infrastructure provider takes automatic daily snapshots of the disk and keeps them for a few days, but that is their disaster-recovery mechanism rather than a feature of ours: we offer no way to browse or restore one, and we will not restore one on request. Do not plan around it.",
-                "Your own copy is the one that counts. Turn on desktop sync and the workspace mirrors continuously to a folder on your own computer, or keep your work in a git remote — the workspace is where work happens, not where it is kept.",
+                "Your own copy is the one that counts. Turn on desktop sync and the workspace mirrors continuously to a folder on your own computer, or keep your work in a git remote: the workspace is where work happens, not where it is kept.",
                 "It does not wait for you indefinitely. Without a membership, a machine you have not opened for the period published in the app is destroyed along with its disk, after we email you a warning first. Opening it stops that. A member's machine is not destroyed for going unused.",
                 "It is not for production. Do not run anything on it that other people depend on, and do not store the only copy of anything on it.",
             ],
@@ -222,13 +222,13 @@ export const termsDoc: LegalDoc = {
             paragraphs: [
                 "We can create, stop, start and destroy the machine. We cannot read what is on it, and we will not build ourselves a way to.",
                 "We may stop or destroy a hosted machine: at your request; when you delete the sandbox or your account; immediately and without notice if it breaches our Acceptable Use Policy or if leaving it running would expose us or others to harm or legal liability; after telling you first, if we discontinue the hosted offering or if a machine without a membership has gone unopened for the period published in the app. We may also decline to start a machine whose free monthly running-time allowance is used up, until that allowance resets.",
-                "Because we cannot inspect the machine, stopping or destroying it is the whole of our response to an abuse report — we cannot investigate what is inside, and we will not pretend to. Where we destroy a machine and the circumstances allow it, we will give you a chance to retrieve your data first; where they do not, we will not.",
+                "Because we cannot inspect the machine, stopping or destroying it is the whole of our response to an abuse report: we cannot investigate what is inside, and we will not pretend to. Where we destroy a machine and the circumstances allow it, we will give you a chance to retrieve your data first; where they do not, we will not.",
             ],
         },
         {
             heading: "Your content and your responsibility",
             paragraphs: [
-                "Everything you build stays yours. We claim no rights over your code, your data or what your agent produces, beyond the permission we need to operate the machine that holds it — storing it, moving it between our provider's systems, and restoring it after a restart.",
+                "Everything you build stays yours. We claim no rights over your code, your data or what your agent produces, beyond the permission we need to operate the machine that holds it: storing it, moving it between our provider's systems, and restoring it after a restart.",
                 "You are responsible for what is in your workspace and what leaves it: that you have the right to it, that it is lawful, and that publishing it or connecting it to third-party services complies with those services' terms. You are equally responsible for costs your work incurs in your own accounts, which we neither control nor cover.",
             ],
         },
@@ -237,7 +237,7 @@ export const termsDoc: LegalDoc = {
             paragraphs: [
                 "The product runs an autonomous AI agent that writes files, executes commands and reaches the network on your instruction. Treat everything it does as done by you, because as between us that is exactly what it is.",
                 "AI output can be wrong, insecure or destructive, and an agent given credentials can act on real systems and spend real money. Review what it does before letting it touch anything you care about. We are not responsible for its output, for the actions you allow it to take, for what it deletes, or for what it costs you at your own providers.",
-                "If your agent causes harm to someone else — traffic from a machine we host, a service it disrupts, data it exposes — that is your responsibility, and the indemnity below applies to it.",
+                "If your agent causes harm to someone else: traffic from a machine we host, a service it disrupts, data it exposes, that is your responsibility, and the indemnity below applies to it.",
             ],
         },
         {
@@ -257,7 +257,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "The model trial",
             paragraphs: [
-                "The trial serves a small daily allowance of messages with our own model keys, so your prompts pass through us on their way to the model provider while you use it — the Privacy Policy sets out what that means. It is a courtesy with no guarantee of availability, quality or continuity, we may change or end it at any time, and it is metered per account. Circumventing the meter — extra accounts, automation against it, resale of its output — ends it for you.",
+                "The trial serves a small daily allowance of messages with our own model keys, so your prompts pass through us on their way to the model provider while you use it: the Privacy Policy sets out what that means. It is a courtesy with no guarantee of availability, quality or continuity, we may change or end it at any time, and it is metered per account. Circumventing the meter, extra accounts, automation against it, resale of its output, ends it for you.",
             ],
         },
         {
@@ -271,7 +271,7 @@ export const termsDoc: LegalDoc = {
             heading: "Suspension and termination",
             paragraphs: [
                 "You can stop using the service and delete your account at any time in Settings, which deletes your data immediately and destroys any hosted machine with it.",
-                "We may suspend or terminate an account that breaches these terms or the Acceptable Use Policy — with notice where it is reasonable to give it, and without where the breach is serious or ongoing. We may also discontinue the free parts of the service, giving reasonable notice first. If we terminate for reasons other than your breach and you had paid for a membership, we refund the unused portion.",
+                "We may suspend or terminate an account that breaches these terms or the Acceptable Use Policy: with notice where it is reasonable to give it, and without where the breach is serious or ongoing. We may also discontinue the free parts of the service, giving reasonable notice first. If we terminate for reasons other than your breach and you had paid for a membership, we refund the unused portion.",
             ],
         },
         {
@@ -283,7 +283,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "Liability",
             paragraphs: [
-                "For the parts of the service provided free of charge — the connection layer, hosted sandboxes and the trial — our liability is excluded to the maximum extent the law permits.",
+                "For the parts of the service provided free of charge: the connection layer, hosted sandboxes and the trial, our liability is excluded to the maximum extent the law permits.",
                 "For the paid membership, our total liability for all claims in any 12-month period is limited to what you paid us in that period. We are not liable in any case for indirect or consequential loss, lost profits, lost or corrupted data on infrastructure we do not control, or costs you incur at your own providers.",
                 "Nothing here excludes liability that cannot be excluded by law: intentional harm, personal injury, and, if you are a consumer, your statutory rights.",
             ],
@@ -291,7 +291,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "Indemnity",
             paragraphs: [
-                "If someone brings a claim against us because of what you did with the service — your content, your agent's actions, traffic from a machine we host for you, or your breach of these terms or the Acceptable Use Policy — you will defend us against it and cover the resulting costs, damages and legal fees. We will tell you promptly about any such claim and let you control the defence of it.",
+                "If someone brings a claim against us because of what you did with the service: your content, your agent's actions, traffic from a machine we host for you, or your breach of these terms or the Acceptable Use Policy, you will defend us against it and cover the resulting costs, damages and legal fees. We will tell you promptly about any such claim and let you control the defence of it.",
                 "This clause does not apply to consumers to the extent Polish law does not permit it.",
             ],
         },
@@ -299,7 +299,7 @@ export const termsDoc: LegalDoc = {
             heading: "Changes, law and disputes",
             paragraphs: [
                 "We may update these terms. Material changes are announced in the app, take effect from the stated effective date, and are re-accepted at sign-in; continued use after that date means acceptance. If you do not accept a change, stop using the service and delete your account.",
-                "These terms are governed by Polish law, and the courts of Poland have jurisdiction — except that if you are a consumer, you keep the protection of the mandatory law of your country of residence and may bring proceedings where you live. EU consumers may also use the European Commission's online dispute resolution platform (ec.europa.eu/consumers/odr).",
+                "These terms are governed by Polish law, and the courts of Poland have jurisdiction: except that if you are a consumer, you keep the protection of the mandatory law of your country of residence and may bring proceedings where you live. EU consumers may also use the European Commission's online dispute resolution platform (ec.europa.eu/consumers/odr).",
                 `Contact: ${LEGAL_CONTACT_EMAIL}.`,
             ],
         },
@@ -322,7 +322,7 @@ export const acceptableUseDoc: LegalDoc = {
             paragraphs: ["The prohibitions, in the order they are most likely to come up:"],
             list: [
                 "Mine cryptocurrency, farm tokens or run any workload whose purpose is to convert our compute into value. This is the abuse a free machine attracts most, and it is grounds for immediate destruction with no warning.",
-                "Attack, scan, probe, flood or otherwise interfere with any system — ours, another user's, or anyone else's on the internet.",
+                "Attack, scan, probe, flood or otherwise interfere with any system: ours, another user's, or anyone else's on the internet.",
                 "Send spam or bulk unsolicited messages, or run automation that violates another service's terms of use.",
                 "Host or distribute malware, ransomware, exploit kits, phishing pages, or infrastructure for fraud.",
                 "Store or transmit material that is unlawful where you are or where the machine runs, and in particular child sexual abuse material, which we report to the authorities.",
@@ -342,21 +342,21 @@ export const acceptableUseDoc: LegalDoc = {
         {
             heading: "Credentials in a hosted workspace",
             paragraphs: [
-                "You may put credentials in your workspace — most real work needs them. Understand the trade: they sit on a disk at our infrastructure provider, that provider snapshots the disk daily and keeps those snapshots for a few days, and an agent with access to a credential can use it. So a secret you delete from the workspace today still exists in a snapshot for a short while afterwards. Prefer scoped, short-lived credentials, rotate rather than delete when one leaks, and never put in a hosted workspace a credential whose compromise you could not survive.",
+                "You may put credentials in your workspace, most real work needs them. Understand the trade: they sit on a disk at our infrastructure provider, that provider snapshots the disk daily and keeps those snapshots for a few days, and an agent with access to a credential can use it. So a secret you delete from the workspace today still exists in a snapshot for a short while afterwards. Prefer scoped, short-lived credentials, rotate rather than delete when one leaks, and never put in a hosted workspace a credential whose compromise you could not survive.",
             ],
         },
         {
             heading: "How we enforce this",
             paragraphs: [
                 "We cannot look inside your machine, so our response to a credible report or a clear signal from our infrastructure provider is to act on the machine itself: stop it, or destroy it.",
-                "For anything that is causing active harm — an attack in progress, mining, illegal content reported to us with evidence — we act immediately and tell you afterwards. For anything else, we tell you first and give you a reasonable chance to fix it. Repeated or deliberate breaches end the account.",
+                "For anything that is causing active harm: an attack in progress, mining, illegal content reported to us with evidence, we act immediately and tell you afterwards. For anything else, we tell you first and give you a reasonable chance to fix it. Repeated or deliberate breaches end the account.",
                 "We do not consider a stopped or destroyed machine a punishment to be appealed at length, but if we got it wrong, say so and we will look again.",
             ],
         },
         {
             heading: "Reporting abuse",
             paragraphs: [
-                `Report anything on the platform that breaks these rules to ${LEGAL_CONTACT_EMAIL}. Include what you saw, where, and why it is a problem — and if you are reporting unlawful content, enough for us to find it and to satisfy ourselves that it is what you say it is.`,
+                `Report anything on the platform that breaks these rules to ${LEGAL_CONTACT_EMAIL}. Include what you saw, where, and why it is a problem, and if you are reporting unlawful content, enough for us to find it and to satisfy ourselves that it is what you say it is.`,
                 "We acknowledge reports, act on them, and tell the reporter what we did. Where we act against a user's content or machine, we tell that user what happened and why, unless the law forbids it.",
             ],
         },
@@ -365,12 +365,12 @@ export const acceptableUseDoc: LegalDoc = {
 
 export const dpaDoc: LegalDoc = {
     title: "Data Processing Agreement",
-    intro: `Effective ${LEGAL_VERSION}. This agreement applies when we process personal data on your behalf — in practice, when you use a sandbox we host. It is concluded between you (the controller) and us (the processor) as part of the Terms of Service, and satisfies Article 28 of the GDPR. No signature is needed; accepting the Terms concludes it.`,
+    intro: `Effective ${LEGAL_VERSION}. This agreement applies when we process personal data on your behalf, in practice, when you use a sandbox we host. It is concluded between you (the controller) and us (the processor) as part of the Terms of Service, and satisfies Article 28 of the GDPR. No signature is needed; accepting the Terms concludes it.`,
     sections: [
         {
             heading: "When this applies",
             paragraphs: [
-                "It applies to personal data that ends up inside a sandbox we host for you — in repositories, files, databases or logs in that workspace — where you decide what is there and why.",
+                "It applies to personal data that ends up inside a sandbox we host for you: in repositories, files, databases or logs in that workspace, where you decide what is there and why.",
                 "It does not apply to your account, membership or sandbox records: for those we decide the purposes ourselves and act as controller, governed by the Privacy Policy. It also does not apply to a sandbox you run on your own infrastructure, because nothing of its contents reaches us.",
             ],
         },
@@ -386,7 +386,7 @@ export const dpaDoc: LegalDoc = {
                         "Nature and purpose",
                         "Storage, and the operations needed to run a machine: creating, stopping, starting, restoring and destroying it",
                     ],
-                    ["Type of personal data", "Whatever you place in the workspace — we neither select nor inspect it, so you determine it entirely"],
+                    ["Type of personal data", "Whatever you place in the workspace: we neither select nor inspect it, so you determine it entirely"],
                     ["Categories of data subjects", "Determined by you; typically your own users, customers, employees or test data"],
                     ["Our role", "Processor, acting only on your instructions"],
                 ],
@@ -397,21 +397,21 @@ export const dpaDoc: LegalDoc = {
             paragraphs: ["As your processor we will:"],
             list: [
                 "Process the data only on your documented instructions. Your instructions are: run the machine as the service describes. Creating, starting, stopping, restoring and destroying it are those instructions carried out. We will tell you if we believe an instruction breaches data protection law.",
-                "Not access the contents of your workspace. The platform provides us no path into a running machine, and we will not build one — including to respond to an abuse report, which we answer by stopping or destroying the machine instead.",
+                "Not access the contents of your workspace. The platform provides us no path into a running machine, and we will not build one: including to respond to an abuse report, which we answer by stopping or destroying the machine instead.",
                 "Bind everyone with any access to our systems to confidentiality.",
                 "Keep the security measures described below, and not weaken them for the duration of this agreement.",
-                "Use only the sub-processors listed on our sub-processors page, tell you before adding or replacing one, and give you a chance to object — your remedy if you object is to stop using the hosted sandbox and delete it.",
+                "Use only the sub-processors listed on our sub-processors page, tell you before adding or replacing one, and give you a chance to object: your remedy if you object is to stop using the hosted sandbox and delete it.",
                 "Help you respond to data subject requests. Since we cannot read the workspace, that help is practical rather than substantive: we cannot find, export or erase an individual's data inside your machine, and you must do that yourself with the access you have.",
                 "Help you with security, breach notification and impact assessments under Articles 32 to 36, so far as our role allows, and tell you without undue delay if we learn of a breach affecting data we process for you.",
                 "Delete the data at the end: destroying the sandbox destroys the machine and its disk immediately. Our infrastructure provider's automatic snapshots of that disk then expire on their own schedule, currently five days, which is when erasure is complete. We keep no copy of our own and run no backup service.",
-                "Give you the information you need to demonstrate compliance with Article 28, and accept an audit — in practice, answering your questions and passing on what our infrastructure provider publishes, since we cannot audit the inside of your own machine.",
+                "Give you the information you need to demonstrate compliance with Article 28, and accept an audit: in practice, answering your questions and passing on what our infrastructure provider publishes, since we cannot audit the inside of your own machine.",
             ],
         },
         {
             heading: "What you undertake",
             paragraphs: [
                 "You decide what goes into the workspace, and you are the controller for it. You confirm that you have a lawful basis for the personal data you put there, that you have given the notices your own data subjects are owed, and that your instructions to us comply with data protection law.",
-                "Given that we run no backup service and cannot see inside, you are responsible for your own copies — desktop sync mirrors the workspace to your own computer if you want one — for your own retention decisions inside the workspace, and for judging whether a free, best-effort hosted machine is an appropriate place for the data you are considering putting on it. Special category data under Article 9 is your call to make and your risk to carry.",
+                "Given that we run no backup service and cannot see inside, you are responsible for your own copies: desktop sync mirrors the workspace to your own computer if you want one, for your own retention decisions inside the workspace, and for judging whether a free, best-effort hosted machine is an appropriate place for the data you are considering putting on it. Special category data under Article 9 is your call to make and your risk to carry.",
             ],
         },
         {
@@ -503,7 +503,7 @@ export const subprocessorsDoc: LegalDoc = {
         {
             heading: "Not on this list, deliberately",
             paragraphs: [
-                "Your own model provider — Anthropic, or whoever you configure with your own key — is not our sub-processor. Your sandbox talks to them directly under your own agreement, and that traffic never passes through us. The one exception is the free trial, where the model calls are ours: that is why Google appears above.",
+                "Your own model provider, Anthropic, or whoever you configure with your own key, is not our sub-processor. Your sandbox talks to them directly under your own agreement, and that traffic never passes through us. The one exception is the free trial, where the model calls are ours: that is why Google appears above.",
                 "We use no analytics, advertising, error-tracking or customer-messaging providers, so none appear here.",
             ],
         },

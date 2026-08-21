@@ -116,7 +116,7 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
     if (!reachable) {
         harness.detail(
             `The container publishes its loopback listener on this port so a browser on this machine can skip the tunnel.\n` +
-                `Nothing answering means the publish did not happen — every local workspace would fall back to the tunnel.`,
+                `Nothing answering means the publish did not happen: every local workspace would fall back to the tunnel.`,
         );
         return;
     }
@@ -152,7 +152,7 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
 
     // ── one turn ─────────────────────────────────────────────────────────────────────────────────────────
     if (options.agentAuthVolume === undefined) {
-        harness.section(`one /agents turn — stood down, no INTENTIC_AGENT_AUTH_VOLUME`);
+        harness.section(`one /agents turn: stood down, no INTENTIC_AGENT_AUTH_VOLUME`);
         harness.pass(`everything up to the turn passed. Connect an AI account once on this machine and name its volume to run the turn too.`);
         return;
     }

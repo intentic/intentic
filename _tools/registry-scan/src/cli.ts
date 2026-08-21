@@ -14,7 +14,7 @@ import { scanRegistry } from "./scan.js";
 const scan = async (): Promise<void> => {
     const token = process.env[`GITHUB_TOKEN`];
     if (token === undefined || token === ``) {
-        throw new Error(`GITHUB_TOKEN is required — the search and contents endpoints are rate-limited to nothing without it`);
+        throw new Error(`GITHUB_TOKEN is required: the search and contents endpoints are rate-limited to nothing without it`);
     }
     // Passed in rather than read from the clock so a re-run against a fixed input produces a fixed output.
     const scannedAt = process.env[`SCANNED_AT`] ?? new Date().toISOString();

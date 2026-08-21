@@ -95,7 +95,7 @@ export const requireLoopback = async (port: number, what: string, timeoutMs = 60
     }
     throw new Error(
         `${what} published a port that this process cannot reach at ${HOST}:${port}. The onboarding tier serves its whole ` +
-            `world on loopback, so it has to be running where Docker publishes — on the host, not in a container driving ` +
+            `world on loopback, so it has to be running where Docker publishes: on the host, not in a container driving ` +
             `some other machine's daemon.`,
     );
 };

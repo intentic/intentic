@@ -2,7 +2,7 @@
 
 The stack that takes tunneling in-house: [zrok](https://github.com/openziti/zrok) v2 (Apache-2.0, on the
 OpenZiti zero-trust overlay) as the front door every sandbox connects out to, in place of per-sandbox
-Cloudflare tunnels. One compose file, deployable from Komodo's inline stack config — adapted from the
+Cloudflare tunnels. One compose file, deployable from Komodo's inline stack config: adapted from the
 official self-host bundle (`docker/compose/zrok2-instance` at tag v2.0.4): the two bootstrap scripts the
 bundle bind-mounts are fetched at the same pinned tag into a volume, and the optional Caddy TLS overlay is
 folded in with its Caddyfile written inline.
@@ -10,16 +10,16 @@ folded in with its Caddyfile written inline.
 ## Why this exists
 
 Every sandbox on the Cloudflare path costs the zone ~10 DNS records (workspace + ssh + eight preview slots),
-and a zone has a hard record quota — Cloudflare error 81045 is a full zone refusing every new setup. The
+and a zone has a hard record quota: Cloudflare error 81045 is a full zone refusing every new setup. The
 daily reaper and pruner (platform `retention.ts`) manage that pressure; this stack removes it. Under zrok,
-**one wildcard DNS record and one wildcard certificate serve every sandbox hostname** — the dynamic frontend
+**one wildcard DNS record and one wildcard certificate serve every sandbox hostname**: the dynamic frontend
 routes by name, so a new sandbox costs zero DNS writes. Traffic terminates on hardware we run; and because
 shares ride the OpenZiti overlay, they are end-to-end encrypted even from this hub. Cloudflare keeps exactly
 one job (the DNS-01 challenge Caddy uses to mint the wildcard certificate).
 
 zrok v2 was chosen once its 2.0 line stabilized (v2.0.4, four patch releases in): its v2 names/namespaces
-model decouples a share's public name from the machine backing it — exactly the shape of "a sandbox's address
-survives its machine being recreated" — and the whole stack is Apache-2.0. Versions pinned in the compose
+model decouples a share's public name from the machine backing it: exactly the shape of "a sandbox's address
+survives its machine being recreated": and the whole stack is Apache-2.0. Versions pinned in the compose
 were the latest releases when this was written (zrok2 2.0.4, ziti 2.0.2); bump the `*_TAG` env vars
 deliberately, never ride `:latest`.
 
@@ -38,16 +38,16 @@ already working there while the public path is still being decided.
 ## Before first deploy
 
 1. Pick a zone and create the DNS records (DNS-only / grey-cloud, not proxied):
-   - `*.ZROK2_DNS_ZONE` (e.g. `*.sbx.example.com`) → A/AAAA → this host — the ONE wildcard that replaces
+   - `*.ZROK2_DNS_ZONE` (e.g. `*.sbx.example.com`) → A/AAAA → this host: the ONE wildcard that replaces
      every per-sandbox record. It also covers the stack's own names (`zrok2.`, `ziti.`, `router.` under the
      zone), so one record is genuinely all of it.
 2. Fill the stack environment: `ZROK2_DNS_ZONE`, `ZROK2_ADMIN_TOKEN` (≥32 chars), `ZITI_PWD`,
-   `ZROK2_DB_PASSWORD`, and `CADDY_DNS_PLUGIN_TOKEN` (Cloudflare token, Zone:Read + DNS:Edit on the zone —
+   `ZROK2_DB_PASSWORD`, and `CADDY_DNS_PLUGIN_TOKEN` (Cloudflare token, Zone:Read + DNS:Edit on the zone:
    wildcard-cert challenge only).
 3. Deploy. First boot bootstraps the Ziti overlay, the zrok controller (`https://zrok2.ZROK2_DNS_ZONE`), the
    wildcard frontend, and obtains the wildcard certificate. The deploy log carries the host's public egress IP
    (`fetch-bootstrap`), which is the address the wildcard record needs when the host is behind NAT.
-4. Create the first account — the profile-gated one-shot, run once:
+4. Create the first account: the profile-gated one-shot, run once:
    ```sh
    ZROK2_ACCOUNT_EMAIL=you@example.com ZROK2_ACCOUNT_PASSWORD=… \
      docker compose --profile bootstrap up zrok2-account   # prints the enable token
@@ -59,7 +59,7 @@ already working there while the public path is still being decided.
 
 ## What connects to it
 
-Each sandbox runs the `zrok2` agent — outbound-only, NAT-friendly — enabled with an account token the
+Each sandbox runs the `zrok2` agent (outbound-only, NAT-friendly) enabled with an account token the
 platform mints over the controller's admin API. Shares get `name.ZROK2_DNS_ZONE` under the wildcard; v2
 names are decoupled from the backing environment, so a recreated sandbox re-attaches the same public name.
 
@@ -67,10 +67,10 @@ names are decoupled from the backing environment, so a recreated sandbox re-atta
 
 Going "fully zrok" is two separate moves, and only one of them is done:
 
-- **Traffic** — the part worth moving, and what this stack is for. It cannot switch until phase 2 below is
+- **Traffic**: the part worth moving, and what this stack is for. It cannot switch until phase 2 below is
   written AND this hub is publicly reachable. Nothing reaches a sandbox over Cloudflare any more, so what is
-  left there is the platform's own front door — its tunnel to app/api — which this stack does not touch.
-- **DNS + the certificate challenge** — deliberately staying. The zone has to live at *some* registrar/DNS
+  left there is the platform's own front door (its tunnel to app/api) which this stack does not touch.
+- **DNS + the certificate challenge**: deliberately staying. The zone has to live at *some* registrar/DNS
   host, one wildcard record is not a quota problem, and Caddy's DNS-01 challenge needs an API there. This is
   Cloudflare as a DNS provider, not as a tunnel vendor: no per-sandbox records, no cloudflared, no quota.
 
@@ -82,45 +82,45 @@ rip out by hand, and nothing to remove before the replacement carries traffic.
 
 The platform mints ONE zrok account per sandbox (`_platform/api/src/sandbox/zrok.ts` +
 `zrok-provision.ts`) and hands it down with the setup code or the hosted machine's env: `ZROK_TOKEN`,
-`ZROK_API`, `ZROK_NAMESPACE`. The box's entrypoint enables with it (identity born in the box — the platform
+`ZROK_API`, `ZROK_NAMESPACE`. The box's entrypoint enables with it (identity born in the box: the platform
 can revoke reachability, never impersonate it) and serves the daemon as a public share whose name is the
 `sandbox-<id>` label the browser already knows. Deleting a sandbox deletes its account first and only then
 its row: v2's admin API has create and delete and no listing, so a grant whose row is gone could never be
-found again — the removal fails and is retried instead.
+found again: the removal fails and is retried instead.
 
 Configure the platform with `ZROK_API_ENDPOINT`, `ZROK_ADMIN_TOKEN` (this stack's `ZROK2_ADMIN_TOKEN`),
-`ZROK_ZONE`, and — when sandboxes reach the hub at a different address than the platform does —
+`ZROK_ZONE`, and: when sandboxes reach the hub at a different address than the platform does:
 `ZROK_AGENT_ENDPOINT`.
 
 Preview and panel names (forwarded ports, the public outbox) are attached by the BOX, not the platform: the
 daemon claims each label and binds a share to it on its own account (`panels/preview-route.ts`), so the
-platform can hand out reachability without being able to serve anything through it. Every lane — the connect
-one-liner, the compose file, the hosted machine — runs the same in-box agent; there is no sidecar anywhere.
+platform can hand out reachability without being able to serve anything through it. Every lane: the connect
+one-liner, the compose file, the hosted machine: runs the same in-box agent; there is no sidecar anywhere.
 
 The shape the box actually runs, proven against a 2.0.4 hub rather than read off the spec: `zrok2 enable
 --headless` once (its environment lives on `/history`, symlinked to `~/.zrok2`, so a rebuild re-attaches the
-same names), then `zrok2 agent start` supervised — the agent is what HOLDS every share, which is why adding a
+same names), then `zrok2 agent start` supervised: the agent is what HOLDS every share, which is why adding a
 name later costs two calls that return immediately: `zrok2 create name <label> --namespace-token <ns>` and
 `zrok2 share public <target> --backend-mode proxy --name-selection <ns>:<label>`. Three details bite: the
-binary reads `ZROK2_*` env vars (`ZROK2_API_ENDPOINT`, not `ZROK_API_ENDPOINT` — otherwise it quietly dials
+binary reads `ZROK2_*` env vars (`ZROK2_API_ENDPOINT`, not `ZROK_API_ENDPOINT`: otherwise it quietly dials
 api-v2.zrok.io), its REST API consumes `application/zrok.v1+json` (plain JSON answers 500), and every
 already-exists case is a 409 that means success.
 
 ### The failure mode to know about
 
 A frontend that answers **404 "share not found" for every address**, while the box says its share is
-`active` and the controller shows the name bound, is a frontend with the wrong `frontend_token` — it asks the
+`active` and the controller shows the name bound, is a frontend with the wrong `frontend_token`: it asks the
 controller "what belongs to me?" and is told, correctly, nothing. Its log says `retrieved '0' mappings` and
 nothing else is wrong anywhere. The bootstrap script scrapes that token out of a CLI table and on this
 deployment captured the table's border character instead, so the stack now re-reads it from the API and
 writes it into `frontend.yaml` on every deploy (`zrok2-frontend-token`, which the frontend waits for). If you
-ever see the symptom again, that service's log line — and `grep frontend_token` in the config volume — is the
+ever see the symptom again, that service's log line (and `grep frontend_token` in the config volume) is the
 first place to look.
 
 ### Parked until private shares land
 
 SSH-shaped traffic can't ride a public HTTP frontend, so three things wait for zrok *private* `tcpTunnel`
-shares (both ends running the agent): **desktop sync** (Mutagen over SSH — the card now says it needs an SSH
+shares (both ends running the agent): **desktop sync** (Mutagen over SSH, the card now says it needs an SSH
 way in rather than offering a one-liner that would hang), the sandbox's own `ssh-<id>` name, and
 **connected computers** for the deploy engine, whose one-liner now always carries the user's own Cloudflare
 token. None of them fail silently; each surface says what it needs.

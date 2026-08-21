@@ -60,7 +60,7 @@ const WEB_REPO_DOC = (generatedAt: number): string =>
                 },
             ],
             glossary: [
-                { term: `plan`, means: `One of Starter, Growth or Scale — what a customer picks on the pricing page.` },
+                { term: `plan`, means: `One of Starter, Growth or Scale, what a customer picks on the pricing page.` },
                 {
                     term: `price id`,
                     means: `Stripe's identifier for a plan's monthly price. The storefront never hardcodes an amount; it sends one of these.`,
@@ -115,16 +115,16 @@ Three plans, one checkout, and a small test suite that guards the path between t
 \`\`\`
 
 Notice that the storefront never talks to Stripe directly. It asks our own API for a **checkout session** and
-then hands the visitor to the URL that comes back — which is why no card number is ever handled by this repo,
+then hands the visitor to the URL that comes back, which is why no card number is ever handled by this repo,
 and why the only secret it needs is nothing at all.
 
 ## What each part is for
 
-**The storefront** — The pages a customer actually sees. · \`src/pricing\` · 1.1k lines
+**The storefront**: The pages a customer actually sees. · \`src/pricing\` · 1.1k lines
 
-**Checkout** — Turning a chosen plan into a paid subscription. · \`src/lib\` · 0.6k lines
+**Checkout**: Turning a chosen plan into a paid subscription. · \`src/lib\` · 0.6k lines
 
-**The test suite** — What has to pass before any of this ships. · \`tests\` · 0.7k lines
+**The test suite**: What has to pass before any of this ships. · \`tests\` · 0.7k lines
 
 \`\`\`bars
 { "title": "Where the code is",
@@ -150,7 +150,7 @@ const WEB_PAGES: readonly { readonly dir: string; readonly doc: PageDoc; readonl
             oneLiner: `The three plans, and the button that starts a subscription.`,
             keyFiles: [
                 { path: `src/pricing/PricingPage.tsx`, what: `The page itself: fetches the plans, renders the three cards.` },
-                { path: `src/pricing/CheckoutPanel.tsx`, line: 27, what: `The Growth card's call to action — where a sale begins.` },
+                { path: `src/pricing/CheckoutPanel.tsx`, line: 27, what: `The Growth card's call to action, where a sale begins.` },
                 { path: `src/pricing/plans.ts`, what: `Plan names and the price ids they map to.` },
             ],
         },
@@ -166,14 +166,14 @@ card's call to action asks \`src/lib\` for a checkout session and sends the brow
 
 ## What to read first
 
-\`PricingPage.tsx\` top to bottom — it is short, and the fetch at the top explains the loading state that every
+\`PricingPage.tsx\` top to bottom: it is short, and the fetch at the top explains the loading state that every
 test here has to wait for. \`CheckoutPanel.tsx\` is where the button lives; it is the file most likely to be
 different by the time you read this.
 
 ## Worth knowing
 
 Prices are never rendered from a constant. \`plans.ts\` maps a plan name to a Stripe **price id** and the amount
-comes back with the plan, so a price change in Stripe is live here without a deploy — and a plan missing from
+comes back with the plan, so a price change in Stripe is live here without a deploy, and a plan missing from
 Stripe renders as a card with no price rather than as an error.
 `,
     },
@@ -199,7 +199,7 @@ know how to talk to the API.
 
 ## Worth knowing
 
-Nothing here handles a card, and nothing here holds a Stripe key. The session is created by the API — this
+Nothing here handles a card, and nothing here holds a Stripe key. The session is created by the API: this
 repository's whole part in taking money is one POST and one redirect, which is the reason a compromise of the
 storefront cannot leak a payment.
 `,
@@ -211,7 +211,7 @@ storefront cannot leak a payment.
             oneLiner: `The end-to-end checks that guard the path to a sale.`,
             keyFiles: [
                 { path: `tests/checkout.spec.ts`, what: `Buying a plan, end to end, against a test-mode Stripe.` },
-                { path: `tests/signup.spec.ts`, what: `Creating an account — the suite's historically flaky one.` },
+                { path: `tests/signup.spec.ts`, what: `Creating an account, the suite's historically flaky one.` },
             ],
         },
         prose: `# The test suite
@@ -315,7 +315,7 @@ const API_REPO_DOC = (generatedAt: number): string =>
                     term: `webhook`,
                     means: `Stripe telling us something happened. Retried until we answer 200, so every handler must be safe to run twice.`,
                 },
-                { term: `soft delete`, means: `A row is retired by stamping deleted_at, never removed — every read filters on it.` },
+                { term: `soft delete`, means: `A row is retired by stamping deleted_at, never removed, every read filters on it.` },
             ],
             reading: [`src/routes`, `src/db`],
             provenance: { generatedAt, sourceRev: API_REV, model: `claude-opus-5` },
@@ -389,7 +389,7 @@ that follows a successful payment. \`users.ts\` covers the account lifecycle.
 ## Worth knowing
 
 Stripe retries a webhook until it is acknowledged, so the completion handler is written to be safe to run twice:
-it keys on the event id and does nothing the second time. That is not defensive programming — it is the
+it keys on the event id and does nothing the second time. That is not defensive programming: it is the
 documented contract, and a handler that ignores it double-charges nobody but does create two subscriptions.
 `,
     },
@@ -400,7 +400,7 @@ documented contract, and a handler that ignores it double-charges nobody but doe
             oneLiner: `Where orders, users and subscriptions are kept.`,
             keyFiles: [
                 { path: `src/db/schema.ts`, what: `The tables, and the soft-delete column every read filters on.` },
-                { path: `src/db/migrations.ts`, what: `Ordered migrations — the only way the schema is allowed to change.` },
+                { path: `src/db/migrations.ts`, what: `Ordered migrations, the only way the schema is allowed to change.` },
             ],
         },
         prose: `# The database
@@ -475,7 +475,7 @@ const pageFiles = (base: string, pages: readonly { readonly dir: string; readonl
         const keyFiles = page.doc.keyFiles.map((anchor) => {
             const relative = anchor.path.startsWith(`${page.dir}/`) ? anchor.path.slice(page.dir.length + 1) : anchor.path;
             const target = anchor.line === undefined ? relative : `${relative}#L${anchor.line}`;
-            return `- [${relative}](${target}) — ${anchor.what}`;
+            return `- [${relative}](${target}): ${anchor.what}`;
         });
         return [`${base}/${page.dir}/README.md`, [heading, page.doc.oneLiner, ...rest, `## Key files`, `${keyFiles.join(`\n`)}\n`].join(`\n\n`)];
     });

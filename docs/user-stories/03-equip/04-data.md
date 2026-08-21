@@ -2,7 +2,7 @@
 
 As someone connecting a production-adjacent database, I want to know that the credential stays inside my own sandbox, so that handing over a database password is a decision I can defend.
 
-The data cards ask for the things a connection string is made of — host, port, user, password, database — as separate fields, because a pasted URL hides which half is wrong when it fails. The password field is masked, and the page states plainly that what I enter is stored in my sandbox and nowhere else. That claim is the entire reason this product can be given a database at all.
+The data cards ask for the things a connection string is made of (host, port, user, password, database) as separate fields, because a pasted URL hides which half is wrong when it fails. The password field is masked, and the page states plainly that what I enter is stored in my sandbox and nowhere else. That claim is the entire reason this product can be given a database at all.
 
 Querying a database also needs a client in the image, so this is one of the capabilities that can be configured and still not be ready. That state has to be legible: an instance waiting on a rebuild should say that it is waiting on a rebuild, and point at where the rebuild happens, rather than reading as a connection that simply does not work.
 

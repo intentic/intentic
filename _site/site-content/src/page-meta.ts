@@ -101,7 +101,7 @@ export const pageMeta: Record<string, PageMeta> = {
     "/earn/catalog/": {
         title: "The catalog · Earn · intentic",
         description:
-            "Every paid service agents can run, live from the platform — price, publisher, and each listing's served and refunded runs — plus what agents asked for that nobody serves yet.",
+            "Every paid service agents can run, live from the platform: price, publisher, and each listing's served and refunded runs, plus what agents asked for that nobody serves yet.",
         datePublished: "2026-08-19",
     },
     // The argued version of every promise /earn makes. Its own page so the short one stays scannable.

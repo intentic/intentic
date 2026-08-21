@@ -4,13 +4,13 @@
     // The sandbox image's privacy hardening, re-declared so it survives into task processes. Turbo 2's default
     // envMode is `strict`: a task does NOT inherit the ambient environment, it gets a rebuilt one holding only
     // Turbo's system defaults plus what `globalEnv`/`globalPassThroughEnv`/`env`/`passThroughEnv` name. So the
-    // two ENV blocks in _sandbox/sandbox/Dockerfile — correct, and live in every sandbox shell — were being
+    // two ENV blocks in _sandbox/sandbox/Dockerfile: correct, and live in every sandbox shell, were being
     // deleted before any task started: measured 30 of these 32 stripped, everything except NEXT_ and TURBO_
     // (Turbo ships those two itself). `astro dev` therefore ran with telemetry ON and persisted
     // `enabled: true` plus a tracking id into ~/.config/astro/config.json, which is how this was found.
     //
     // passThrough, not `globalEnv`, because these must not enter the cache key: a passthrough variable's VALUE
-    // does not move a task hash, only the presence of the list does — so this costs ONE global invalidation
+    // does not move a task hash, only the presence of the list does: so this costs ONE global invalidation
     // when it lands and nothing afterwards. Both were verified against turbo 2.10.8 before this was written.
     //
     // This list mirrors the Dockerfile's two ENV blocks and has to keep mirroring them: a name added there and
@@ -58,7 +58,7 @@
         // A suite imports its dependencies' dist, so CI runs this graph as `turbo run build test` and the edge
         // below is what lets each package's tests start the moment its own deps are built.
         //
-        // The edge is also unrunnable in an agent worktree, for the same EXDEV reason as `typecheck` below — so
+        // The edge is also unrunnable in an agent worktree, for the same EXDEV reason as `typecheck` below: so
         // the root `test` script runs the same prepass and then `turbo run test --only`, which drops the edge
         // and keeps the graph. That is the difference between a suite the fleet can run before landing and one
         // only CI ever sees: 67 of 100 main pipelines failed this job while the whole suite ran nowhere else.
@@ -73,7 +73,7 @@
         // The declarations these checks resolve their workspace imports through are emitted by the prepass that
         // the root `typecheck` and `test` scripts both run FIRST (_tools/scripts/prepass.mjs). It is `tsgo -b` rather than a
         // `^build` dependency because `build` goes through pnpm, and pnpm's `syncInjectedDepsAfterScripts`
-        // hardlinks into `node_modules` after it — a different filesystem in an agent worktree, so a `^build`
+        // hardlinks into `node_modules` after it: a different filesystem in an agent worktree, so a `^build`
         // dependency died EXDEV (exit 238) for every agent in the fleet, leaving the check that catches a fake
         // drifting out of shape with its seam runnable only in CI, on main, after the merge.
         //
@@ -129,7 +129,7 @@
             "persistent": true
         },
         // The gated real-infra tiers (@intentic/cli, @intentic/sandbox): a Docker daemon plus whatever
-        // credentials each suite names, and every one of them self-skips when its own env is absent — which is
+        // credentials each suite names, and every one of them self-skips when its own env is absent: which is
         // what lets the nightly CI job be nothing but `pnpm e2e`. A tier that CANNOT self-skip does not belong
         // under this name; see e2e:browser.
         //
@@ -168,28 +168,28 @@
             "passThroughEnv": ["INTENTIC_E2E_HERMETIC", "INTENTIC_HOST_IMAGE", "INTENTIC_LOG_DIR"]
         },
         // The browser tier (@intentic-app/e2e), named apart from `e2e` for the same reason e2e:hermetic is: it
-        // asks for a provisioning of its own. Its whole stack is addressed on LOCALHOST — compose postgres on
-        // :5440, the https API on :6480, vite on :47145, the daemon container on :18787 — and CI jobs run in a
+        // asks for a provisioning of its own. Its whole stack is addressed on LOCALHOST: compose postgres on
+        // :5440, the https API on :6480, vite on :47145, the daemon container on :18787: and CI jobs run in a
         // container that reaches Docker through the HOST's socket, which publishes those ports on the HOST's
         // network namespace, not the job's loopback (`docker compose up postgres` there leaves the server off
         // localhost, and the migrate that follows dies P1001). ci-base carries no Chromium either. Sharing the `e2e` name
         // is what swept it into the nightly, where it can only fail; under its own it runs where its stack is
-        // real — a dev machine, `pnpm e2e:browser`.
+        // real: a dev machine, `pnpm e2e:browser`.
         "e2e:browser": {
             "dependsOn": ["^build"],
             "cache": false,
             "passThroughEnv": ["SANDBOX_E2E_IMAGE"]
         },
-        // The mobile geometry gate (_tools/e2e/mobile/audit.mts) — a phone-shaped browser walked over every
+        // The mobile geometry gate (_tools/e2e/mobile/audit.mts): a phone-shaped browser walked over every
         // mobile route, failing on a blank surface, anything drawn off-screen, or a target under the WCAG floor.
         //
         // Its own task rather than part of e2e:browser, for the reason that suite's own comment above gives:
-        // e2e:browser needs a whole LOCALHOST stack — compose postgres, the https API, a daemon container — and
+        // e2e:browser needs a whole LOCALHOST stack: compose postgres, the https API, a daemon container, and
         // so cannot run in CI at all. This one drives the hermetic demo build, exactly as the shots harness
         // does, so it needs a Chromium and nothing else. That is the entire point: a target-size rule nobody
         // runs is a target-size rule that decays, and this one is cheap enough for every merge request.
         //
-        // The demo build is the root script's job (`pnpm e2e:mobile`), not a dependsOn — this package does not
+        // The demo build is the root script's job (`pnpm e2e:mobile`), not a dependsOn: this package does not
         // depend on the demo, matching the shots harness beside it, and the gate names the build command in its
         // own error when the output is missing. No passThroughEnv: it talks to nothing real, so there is no
         // credential that could gate it and nothing for it to stand down over.

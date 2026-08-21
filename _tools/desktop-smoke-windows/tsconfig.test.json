@@ -1,4 +1,4 @@
-/* Type-checks this package's TESTS along with its source — the build config excludes *.test.ts to keep test
+/* Type-checks this package's TESTS along with its source: the build config excludes *.test.ts to keep test
  * code out of the tree the Windows runner executes. Run by `pnpm typecheck`; noEmit, so it never writes
  * anything. See AGENTS.md, "Tests". */
 {

@@ -16,15 +16,15 @@ Desktop, first paint, default state:
   `sandbox-fa0b431303b8.sbx.intentic.dev`, and a link "Use a different address". For
   anyone who bounced once before, the card's first sentence is "Made last time you were
   here, never started. Use a new sandbox instead."
-- A three-card picker: "We host it — Free · 40h a month, then membership",
-  "A computer I own — Most power · no limits" (preselected), "A cloud machine I own —
+- A three-card picker: "We host it, Free · 40h a month, then membership",
+  "A computer I own: Most power · no limits" (preselected), "A cloud machine I own:
   From free · 12 GB".
 - The consequence of the preselected card:
   `curl -fsSL https://intentic.dev/connect | sudo env SYNC_DIR='…' sh -s -- --vphf_-3wk`
   behind three tabs (Linux / macOS, Windows (PowerShell), Docker Compose), a checkbox
-  reading "I already have Docker — sudo is there for one job: installing Docker if it's
+  reading "I already have Docker, sudo is there for one job: installing Docker if it's
   missing", and a spinner: "Waiting for you to run the command."
-- A right rail: "What this does — Starts your sandbox in Docker. Opens a private
+- A right rail: "What this does, Starts your sandbox in Docker. Opens a private
   Cloudflare tunnel, no inbound ports." Then desktop app buttons (Windows and Linux,
   no macOS), a cleanup command under "Removes all of it", and a sync checkbox showing a
   home directory path.
@@ -122,10 +122,10 @@ page). Mac share among developers is too large for the friendliest path to skip.
 ### Tier 1: copy and defaults, days of work
 
 1. **State the stakes at the picker.** One muted line under the three cards: "Nothing
-   starts until you act below. Switch anytime — your name and address carry over."
+   starts until you act below. Switch anytime: your name and address carry over."
    The cheapest fix in this document, aimed at the exact anxiety.
-2. **Retitle the rungs by intent, not infrastructure.** "Start instantly — we run it",
-   "My computer — most power", "My cloud account". Keep the cost badges. A reader
+2. **Retitle the rungs by intent, not infrastructure.** "Start instantly: we run it",
+   "My computer: most power", "My cloud account". Keep the cost badges. A reader
    picks the sentence that describes them without needing to understand deployment
    topology first. An "Easiest" tag on the hosted card does the guiding that
    reordering or preselecting would, without pushing.
@@ -143,7 +143,7 @@ page). Mac share among developers is too large for the friendliest path to skip.
    rail. Fold "Use a different address" into the same quiet corner as the Cloudflare
    form it opens. The name row can stay, it is human, but it does not need first
    position.
-6. **Rewrite the resume line.** "Picking up where you left off — nothing has run
+6. **Rewrite the resume line.** "Picking up where you left off: nothing has run
    yet. Start over instead." Same information, no bookkeeping tone, and not as the
    page's opening sentence.
 7. **Soften the hosted badge.** On the card: "Free · 40h a month". What happens after
@@ -219,7 +219,7 @@ over-explaining. Rewording at similar length was approved and shipped:
   after the title stopped saying so.
 - The hosted badge's "then membership" became "more with membership": same fact, an
   upgrade instead of a scheduled subscription.
-- The resume line leads with continuity ("Picking up where you left off — nothing has
+- The resume line leads with continuity ("Picking up where you left off: nothing has
   run yet") instead of bookkeeping ("Made last time you were here, never started").
 - A phone now defaults to the hosted rung whenever one is offered. The cloud rung had
   the phone default from before hosting existed, and it opens on a credential paste.
@@ -229,36 +229,36 @@ The two structural items shipped in the same session, after the wording:
 - **The hostname left the top card.** The address row, its "Use a different address"
   escape hatch and the own-Cloudflare form all moved onto the run card, above the
   command whose hostname they describe. The card that opens the page is now one line:
-  the name, with its pencil. First paint reads name, then the three rungs — the
+  the name, with its pencil. First paint reads name, then the three rungs: the
   decision is no longer third in line behind two things nobody typed. The move also
   fixed a smaller lie: the lock under the command used to say "the token above" about a
   field two cards up and off screen.
 - **The app is the front door of "My own computer"**, wherever a build exists for the
   machine reading the page. A browser on Windows or Linux opens that rung on a download
-  button, with the command behind "Prefer a terminal? Show the command" — the same
+  button, with the command behind "Prefer a terminal? Show the command": the same
   disclosure the desktop app and phones already use. macOS has no build, so a Mac keeps
   the command first: a button pointing at a downloads page with nothing on it for you is
   worse than the pipe it would replace. Three things ride along so the page doesn't lie
-  once the command is folded — the wait line names the install rather than a paste, the
+  once the command is folded: the wait line names the install rather than a paste, the
   stuck-wait nudge gets a reader of its own, and the reference column drops its now
   duplicate download buttons.
 
 A third change followed from looking at the result: **the rungs are illustrated rather than
 iconed.** A 16px bolt beside "Start instantly" is a synonym for the word next to it, so the
-space it took said nothing twice. The cards now carry a drawing each — a cloud with a bolt
+space it took said nothing twice. The cards now carry a drawing each: a cloud with a bolt
 in it, a monitor with work on the screen, a rack of three. Where the machine lives is the
 one thing on this page a newcomer cannot look up, and a picture answers it before the
 titles are read. That is what earns the height a glyph could not.
 
 The first attempt at those drawings was rejected on sight, and rightly. It was chunky:
 thick rounded strokes around washed-in fills, a sticker-illustration language this product
-speaks nowhere else. Every icon in the app is Remix's line set — a 24 grid, hollow shapes,
+speaks nowhere else. Every icon in the app is Remix's line set: a 24 grid, hollow shapes,
 a thin even band, sharp geometry, small solid details. The drawings are now the same hand
 at five times the size, and the bolt is literally the app's own `flashlight-line`
 silhouette scaled up, which is the cheapest guarantee it cannot drift from the icon set.
 
 The cloud is the one shape drawn fresh, and it took a second pass to get right. Scaling up
-`cloud-line` looked like the safe move, but that glyph is nearly square on its grid — which
+`cloud-line` looked like the safe move, but that glyph is nearly square on its grid: which
 nobody reads at 16px and everybody reads at 100px. Sat beside a monitor and a rack that are
 both plainly landscape, a square cloud stops looking like a cloud and starts looking like a
 lump. It is now drawn wide, about 1.75:1, in the same band and the same arcs-only geometry
@@ -268,13 +268,13 @@ re-checking against its neighbours, not just against its source.
 One thing to know if these are edited: the artwork's opacities are SVG attributes, not
 utility classes. The first version dimmed its fills with a class used nowhere else in the
 app, so the class was never generated for the running dev server and the drawings shipped
-at full strength — a solid white cloud and a solid orange monitor. Colour survived only
+at full strength: a solid white cloud and a solid orange monitor. Colour survived only
 because those classes existed elsewhere. A drawing's opacity belongs in the drawing.
 
 The Linux half is the one to watch. An AppImage asks more of a reader than an `.exe`
 does, and a Linux desktop user is likelier than most to have wanted the terminal anyway.
 If the funnel shows that rung converting worse on Linux than on Windows, narrow the
-installer-first default to Windows and leave Linux on the command — one condition.
+installer-first default to Windows and leave Linux on the command: one condition.
 
 Dropped on reflection: mounting with no rung preselected, because it hides each choice's
 consequences until after the pick, which is the wizard problem the one page layout exists

@@ -122,7 +122,7 @@ export const platform = async (request: Request, url: URL): Promise<Response> =>
                     defined: false,
                     code: `FORBIDDEN`,
                     status: 403,
-                    message: `Read all 2 repositories listed under acme — no .intentic-claim on the default branch yet. A push that landed on another branch does not count: the file has to be on the branch GitHub shows first.`,
+                    message: `Read all 2 repositories listed under acme, no .intentic-claim on the default branch yet. A push that landed on another branch does not count: the file has to be on the branch GitHub shows first.`,
                     data: {},
                 },
                 403,

@@ -1,5 +1,5 @@
 // The pointer the recording can see. A headless browser draws no cursor and Playwright's mouse leaves no trace,
-// so a video of it looks like the UI operating itself — clicks land with nothing to explain them. This runs as an
+// so a video of it looks like the UI operating itself: clicks land with nothing to explain them. This runs as an
 // init script (before the app), listens to the same trusted mouse events the app receives, and draws a cursor plus
 // a click ripple over everything. Nothing here is reachable from app code: it is one fixed-position layer with
 // pointer-events off, and it never touches the page's own DOM.
@@ -8,7 +8,7 @@
 // files into the page with no visible carrier, and "a repo arrives from off-screen" is the whole first beat.
 //
 // An init script runs before the document has a root element, so the layer is built on DOMContentLoaded while the
-// listeners (and the position they track) are live from the first frame — the pointer is already where it belongs
+// listeners (and the position they track) are live from the first frame: the pointer is already where it belongs
 // when the layer appears, rather than starting at the origin and flying in.
 (() => {
     let cursor;

@@ -54,7 +54,7 @@ describe(`the calls the platform makes`, () => {
         await call(hub, `POST`, `/account`, { email: `sandbox-abc@zone.test`, password: `x` });
 
         expect((await call(hub, `DELETE`, `/account`, { email: `sandbox-abc@zone.test` })).status).toBe(200);
-        // 404 — which the platform's client reads as success, so a retried removal cannot fail on it.
+        // 404, which the platform's client reads as success, so a retried removal cannot fail on it.
         expect((await call(hub, `DELETE`, `/account`, { email: `sandbox-abc@zone.test` })).status).toBe(404);
     });
 });

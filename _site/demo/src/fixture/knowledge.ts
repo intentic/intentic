@@ -35,13 +35,13 @@ relations: [works_on, knows, owns, decided_by, supersedes, about]
 
 # Vocabulary
 
-The words this knowledge base has agreed on. Reuse one before inventing another — four names for one relationship means
+The words this knowledge base has agreed on. Reuse one before inventing another: four names for one relationship means
 it can no longer answer questions by relationship.
 
-- \`person\` — someone real. How to work with them matters as much as what they do.
-- \`project\` — a body of work with an owner.
-- \`decision\` — a choice made, and **why**. The reason is the part that is invisible in six months.
-- \`term\` — a word that means something specific here and something else everywhere else.
+- \`person\`: someone real. How to work with them matters as much as what they do.
+- \`project\`: a body of work with an owner.
+- \`decision\`: a choice made, and **why**. The reason is the part that is invisible in six months.
+- \`term\`: a word that means something specific here and something else everywhere else.
 `,
         60 * 24 * 9,
         now,
@@ -59,7 +59,7 @@ employer: Acme
 timezone: Europe/Lisbon
 ---
 
-Reviews every schema change, without exception — that is a standing agreement, not a preference, and it dates
+Reviews every schema change, without exception: that is a standing agreement, not a preference, and it dates
 from the incident behind [[Soft delete everything]].
 
 Prefers small PRs and will say so. Reviews on Tuesdays and Thursdays; anything landed on a Friday afternoon
@@ -97,7 +97,7 @@ owns: ["[[Ada Okafor]]"]
 repo: acme-shop/web
 ---
 
-The customer-facing shop. Server-rendered, no client router — a decision that predates everyone currently on
+The customer-facing shop. Server-rendered, no client router: a decision that predates everyone currently on
 it and is still the right one for a page whose job is to load fast on a phone.
 
 Talks to [[Checkout API]] and to nothing else directly.
@@ -117,7 +117,7 @@ repo: acme-shop/api
 
 Takes money. Postgres is the only stateful dependency; Stripe is the only third party that can move funds.
 
-Every write path is expected to be safe to retry — see [[Idempotency key]].
+Every write path is expected to be safe to retry: see [[Idempotency key]].
 `,
         60 * 52,
         now,

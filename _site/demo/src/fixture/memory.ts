@@ -29,9 +29,9 @@ const seed = (now: number): Note[] => [
 The storefront (\`web\`) and its API (\`api\`) in one workspace. Postgres is the only stateful dependency;
 Stripe is the only third party that can take money.
 
-- [conventions.md](conventions.md) — how this team writes code
-- [ci.md](ci.md) — what green means here
-- [database.md](database.md) — migrations, and the soft-delete rule
+- [conventions.md](conventions.md): how this team writes code
+- [ci.md](ci.md): what green means here
+- [database.md](database.md): migrations, and the soft-delete rule
 `,
     },
     {
@@ -52,7 +52,7 @@ Stripe is the only third party that can take money.
 
 \`pnpm -C web test\` must pass before a push; the e2e suite runs on CI only.
 
-The \`e2e (chromium)\` job has been flaky since the signup rework — a failure there is worth re-reading before
+The \`e2e (chromium)\` job has been flaky since the signup rework: a failure there is worth re-reading before
 it is worth reverting for.
 `,
     },

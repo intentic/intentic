@@ -5,7 +5,7 @@ afterEach(() => {
     vi.unstubAllEnvs();
 });
 
-test("no opt-in switch, no run — a plain `pnpm test` reaches none of these", () => {
+test("no opt-in switch, no run: a plain `pnpm test` reaches none of these", () => {
     const tier = e2eTier("sandbox daemon", { enabledBy: "INTENTIC_E2E" });
     expect(tier.runs).toBe(false);
 });
@@ -21,7 +21,7 @@ test("a switch left off says so, and is not read as non-empty", () => {
 
 test("asked for, and short of a credential: stands down rather than failing", () => {
     // The bug this seam was written for. The nightly sets one switch for every tier at once, so a tier it was
-    // given no credentials for must skip — the previous spelling threw out of `beforeAll` and reddened CI.
+    // given no credentials for must skip: the previous spelling threw out of `beforeAll` and reddened CI.
     vi.stubEnv("INTENTIC_E2E", "1");
     const tier = e2eTier("intentic CLI end-to-end", { enabledBy: "INTENTIC_E2E", secrets: ["CLOUDFLARE_API_TOKEN"] });
     expect(tier.runs).toBe(false);
@@ -34,10 +34,10 @@ test("what is missing is in the title, which is where vitest prints it", () => {
         enabledBy: "INTENTIC_E2E",
         secrets: ["DISCORD_E2E_BOT_TOKEN", "DISCORD_E2E_SENDER_TOKEN", "DISCORD_E2E_CHANNEL_ID"],
     });
-    expect(tier.title).toBe("discord + whisper — stood down, no DISCORD_E2E_BOT_TOKEN + DISCORD_E2E_CHANNEL_ID");
+    expect(tier.title).toBe("discord + whisper, stood down, no DISCORD_E2E_BOT_TOKEN + DISCORD_E2E_CHANNEL_ID");
 });
 
-test("with e2e not asked for at all, the title stays plain — every tier is off and saying so is noise", () => {
+test("with e2e not asked for at all, the title stays plain: every tier is off and saying so is noise", () => {
     const tier = e2eTier("discord + whisper", { enabledBy: "INTENTIC_E2E", secrets: ["DISCORD_E2E_BOT_TOKEN"] });
     expect(tier.title).toBe("discord + whisper");
 });
@@ -63,6 +63,6 @@ test("reaching for a credential where the tier does not run throws, naming it", 
     // failing on absence, so the read itself has to say that is what happened.
     const tier = e2eTier("intentic CLI end-to-end", { enabledBy: "INTENTIC_E2E", secrets: ["CLOUDFLARE_API_TOKEN"] });
     expect(() => tier.secrets.CLOUDFLARE_API_TOKEN).toThrow(
-        "intentic CLI end-to-end read CLOUDFLARE_API_TOKEN where the tier does not run — a secret may only be read inside the suite",
+        "intentic CLI end-to-end read CLOUDFLARE_API_TOKEN where the tier does not run: a secret may only be read inside the suite",
     );
 });

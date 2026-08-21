@@ -2,9 +2,9 @@
 
 As someone who already runs the container behind a domain of my own, I want to hand over one address and be done, so that I am not provisioning a tunnel I will never use.
 
-This is the one-step lane, offered from the same first step as everything else. I paste the address my sandbox already answers on, the browser checks it, and if it answers I am in the workspace — no command, no tunnel, no waiting for an announcement. The name is optional here, because the address already implies one.
+This is the one-step lane, offered from the same first step as everything else. I paste the address my sandbox already answers on, the browser checks it, and if it answers I am in the workspace: no command, no tunnel, no waiting for an announcement. The name is optional here, because the address already implies one.
 
-The value of this lane is entirely in what it says when the probe fails, because every failure is a different job. Nothing listening is a DNS or container problem. Something listening that never answers is a boot or a proxy port. A tunnel answering with nothing behind it is a container that is not running. And a sandbox that is up but will not let me in is waiting to be claimed — so it asks for the connection token rather than telling me it is broken.
+The value of this lane is entirely in what it says when the probe fails, because every failure is a different job. Nothing listening is a DNS or container problem. Something listening that never answers is a boot or a proxy port. A tunnel answering with nothing behind it is a container that is not running. And a sandbox that is up but will not let me in is waiting to be claimed: so it asks for the connection token rather than telling me it is broken.
 
 ## Acceptance criteria
 

@@ -111,7 +111,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
         } else {
             harness.fail(
                 `ic docker prepare --dry-run exited ${prepared.code} on a PC whose Docker this tier just verified`,
-                `Either the machine really is missing something, or the Windows probe is misreading it — the checklist below says which.\n${prepared.stdout}\n${prepared.stderr}`,
+                `Either the machine really is missing something, or the Windows probe is misreading it: the checklist below says which.\n${prepared.stdout}\n${prepared.stderr}`,
             );
             return undefined;
         }
@@ -121,13 +121,13 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
          * The failure this guards against is the worst one this flow has: not a wrong answer, but no answer.
          * `ic docker prepare` asks for consent before it changes anything, and it decides whether there is
          * somebody to ask by probing for a terminal. The desktop app spawns it from a GUI process with no
-         * window, no console and closed stdin — and a prompt that reaches nobody, on a path where nothing
+         * window, no console and closed stdin, and a prompt that reaches nobody, on a path where nothing
          * times out, is an install that never finishes in front of a user watching a spinner.
          *
          * `execFileAsync` with `windowsHide` gives exactly that shape: hidden console, piped stdio, no
          * stdin. So this runs the REAL consent path (no `--dry-run`, no `-y`) under it, and asserts only
-         * that it came back. The code it comes back with depends on the machine — 0 where nothing is wrong,
-         * 3 where something is and it stopped to ask (docs/cli-output-protocol.md §2c) — and both are
+         * that it came back. The code it comes back with depends on the machine: 0 where nothing is wrong,
+         * 3 where something is and it stopped to ask (docs/cli-output-protocol.md §2c), and both are
          * answers. A timeout is not.
          *
          * Two minutes is far longer than the examination takes and far shorter than "forever", which is the
@@ -143,7 +143,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
         } else {
             harness.fail(
                 `ic docker prepare exited ${asked.code} with no terminal available`,
-                `Expected 0 (nothing to do) or ${NEEDS_CONSENT} (stopped to ask). Anything else — especially a timeout — is the shape of an install that hangs in the desktop app.\n${asked.stdout}\n${asked.stderr}`,
+                `Expected 0 (nothing to do) or ${NEEDS_CONSENT} (stopped to ask). Anything else: especially a timeout, is the shape of an install that hangs in the desktop app.\n${asked.stdout}\n${asked.stderr}`,
             );
             return undefined;
         }
@@ -175,7 +175,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
         { env, timeoutMs: SETUP_TIMEOUT_MS },
     );
     if (setup.code === 0) {
-        harness.pass(`connect.ps1 completed — its own gate is a wait on the daemon's /health`);
+        harness.pass(`connect.ps1 completed: its own gate is a wait on the daemon's /health`);
     } else {
         harness.fail(`connect.ps1 exited ${setup.code}`, `${setup.stdout}\n${setup.stderr}`);
         return undefined;

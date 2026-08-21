@@ -2,13 +2,13 @@
 /* Put this machine's development CA into the trust stores that decide whether the browser shows a lock.
  *
  * WHY THIS EXISTS AS A COMMAND. Minting a root and printing "now go trust it" is where the old setup stopped,
- * and the gap between those two sentences is a browser warning on every `pnpm dev` — the instructions differ
+ * and the gap between those two sentences is a browser warning on every `pnpm dev`: the instructions differ
  * per OS, Firefox keeps a store of its own that no OS instruction touches, and on WSL the file is on one side
  * of the machine while the browser that has to believe it is on the other. All of that is mechanical, so it is
  * done here instead of in a README nobody finishes.
  *
  * IT IS SAFE TO RUN AGAIN. Every store is cleared of our own previous entry before the current root goes in,
- * so re-running after the root is regenerated replaces it rather than stacking a second one — and a stale root
+ * so re-running after the root is regenerated replaces it rather than stacking a second one, and a stale root
  * left behind in a store is exactly the confusion this is meant to end.
  *
  * WHAT IT DELIBERATELY DOES NOT DO. It never installs anything but the root this checkout would serve under,
@@ -23,7 +23,7 @@ import { CA_CRT, CA_NICKNAME } from "./paths.mjs";
 
 const run = (command, ...args) => execFileSync(command, args, { stdio: [`ignore`, `pipe`, `pipe`] }).toString();
 
-/** Run something whose failure is a normal outcome — a store that is absent, a tool that is not installed. */
+/** Run something whose failure is a normal outcome: a store that is absent, a tool that is not installed. */
 const attempt = (command, ...args) => {
     try {
         run(command, ...args);
@@ -39,11 +39,11 @@ const done = [];
 const skipped = [];
 
 /* ── Windows, natively or from WSL ─────────────────────────────────────────────────────────────────────────
- * `certutil -addstore -user Root` writes the current user's root store — the one Chrome and Edge read, and
- * Firefox too via enterprise roots — and unlike the machine-wide store it needs no elevation.
+ * `certutil -addstore -user Root` writes the current user's root store: the one Chrome and Edge read, and
+ * Firefox too via enterprise roots, and unlike the machine-wide store it needs no elevation.
  *
- * WHETHER WINDOWS IS REACHABLE IS A QUESTION ABOUT INTEROP, NOT ABOUT THE KERNEL. The obvious test — does
- * `/proc/version` mention Microsoft — is also true inside any container running on a WSL2 kernel, where there
+ * WHETHER WINDOWS IS REACHABLE IS A QUESTION ABOUT INTEROP, NOT ABOUT THE KERNEL. The obvious test: does
+ * `/proc/version` mention Microsoft: is also true inside any container running on a WSL2 kernel, where there
  * is no Windows to hand a certificate to and the answer is confidently wrong. Finding the binary and getting a
  * store listing out of it asks the same question in a way that cannot lie. */
 const windowsCertutil = () => {
@@ -53,7 +53,7 @@ const windowsCertutil = () => {
 };
 
 /* The root, at a path the Windows side can open. Its own filesystem needs no help; from WSL the Linux path is
- * meaningless to a Windows binary, so `wslpath -w` translates it — and because that yields a `\\wsl.localhost`
+ * meaningless to a Windows binary, so `wslpath -w` translates it, and because that yields a `\\wsl.localhost`
  * UNC path, which certutil reads only when the WSL file server is willing, the caller falls back to putting a
  * copy on the Windows filesystem where no share is involved. */
 const windowsReadable = (scratch) => {
@@ -74,11 +74,11 @@ const trustWindows = () => {
     const certutil = windowsCertutil();
     if (certutil === undefined) return false;
 
-    /* Windows puts up a Security Warning dialog for a new root and blocks until it is answered — correctly,
+    /* Windows puts up a Security Warning dialog for a new root and blocks until it is answered: correctly,
      * since a root is exactly the thing nothing should be able to install behind your back. Say so first: an
      * unannounced wait on a dialog that may be behind other windows reads as a hang, and from WSL the dialog
      * appears on the Windows desktop with nothing in the terminal to explain it. */
-    console.log(`localhost-https: Windows will ask you to confirm the new root — answer Yes on the Security Warning dialog.`);
+    console.log(`localhost-https: Windows will ask you to confirm the new root, answer Yes on the Security Warning dialog.`);
     if (addToWindowsStore(certutil, undefined)) {
         done.push(`Windows (current user)`);
         return true;
@@ -95,7 +95,7 @@ const trustWindows = () => {
             rmSync(scratch, { recursive: true, force: true });
         }
     }
-    skipped.push(`Windows (current user) — certutil would not take the root`);
+    skipped.push(`Windows (current user): certutil would not take the root`);
     return false;
 };
 
@@ -107,13 +107,13 @@ const trustMacos = () => {
     if (attempt(`security`, `add-trusted-cert`, `-d`, `-r`, `trustRoot`, `-k`, keychain, CA_CRT)) {
         done.push(`macOS login keychain`);
     } else {
-        skipped.push(`macOS login keychain — the password prompt was dismissed, or the keychain is locked`);
+        skipped.push(`macOS login keychain: the password prompt was dismissed, or the keychain is locked`);
     }
 };
 
 /* ── Linux ─────────────────────────────────────────────────────────────────────────────────────────────────
  * The system anchor directory is the only store there is, and writing it needs root. Rather than surprising
- * anyone with a sudo prompt inside `pnpm install`, this prints the two lines to run and moves on — the browser
+ * anyone with a sudo prompt inside `pnpm install`, this prints the two lines to run and moves on: the browser
  * on a desktop Linux machine reads Firefox's or Chrome's own NSS store anyway, which is handled below. */
 const linuxAnchor = () => {
     if (existsSync(`/etc/ca-certificates/trust-source/anchors`)) {
@@ -128,7 +128,7 @@ const linuxAnchor = () => {
 const trustLinux = () => {
     const anchor = linuxAnchor();
     if (anchor === undefined) {
-        skipped.push(`Linux system store — no anchor directory found`);
+        skipped.push(`Linux system store: no anchor directory found`);
         return;
     }
     const target = join(anchor.dir, `intentic-localhost-com-ca.crt`);
@@ -136,11 +136,11 @@ const trustLinux = () => {
         done.push(`Linux system store`);
         return;
     }
-    skipped.push(`Linux system store — needs root:\n      sudo cp ${CA_CRT} ${target} && sudo ${anchor.refresh}`);
+    skipped.push(`Linux system store: needs root:\n      sudo cp ${CA_CRT} ${target} && sudo ${anchor.refresh}`);
 };
 
 /* ── Firefox ───────────────────────────────────────────────────────────────────────────────────────────────
- * Firefox ships its own trust store and, on Linux, ignores the system one entirely — so a root that every
+ * Firefox ships its own trust store and, on Linux, ignores the system one entirely, so a root that every
  * other browser accepts still produces a warning there. Each profile is a separate database. On Windows and
  * macOS it reads OS roots by default, so this is a bonus rather than the thing that matters.
  *
@@ -168,7 +168,7 @@ const trustFirefox = () => {
     if (profiles.length === 0) return;
 
     if (!found(`certutil`)) {
-        skipped.push(`Firefox (${profiles.length} profile(s)) — install NSS tools first (Arch: nss, Debian/Ubuntu: libnss3-tools)`);
+        skipped.push(`Firefox (${profiles.length} profile(s)), install NSS tools first (Arch: nss, Debian/Ubuntu: libnss3-tools)`);
         return;
     }
     for (const profile of profiles) {
@@ -180,7 +180,7 @@ const trustFirefox = () => {
 };
 
 if (!existsSync(CA_CRT)) {
-    console.error(`localhost-https: no development CA yet at ${CA_CRT} — run \`pnpm install\` first.`);
+    console.error(`localhost-https: no development CA yet at ${CA_CRT}, run \`pnpm install\` first.`);
     process.exit(1);
 }
 
@@ -205,11 +205,11 @@ for (const store of skipped) {
     console.log(`localhost-https: not trusted in ${store}`);
 }
 if (done.length === 0) {
-    console.error(`localhost-https: nothing was trusted. The root is at ${CA_CRT} — add it by hand, as a certificate authority.`);
+    console.error(`localhost-https: nothing was trusted. The root is at ${CA_CRT}, add it by hand, as a certificate authority.`);
     process.exit(1);
 }
 /* A browser that has already been clicked through to a warning for localhost keeps showing "Not secure" for
- * the rest of its run even once the certificate verifies — the exception is remembered per session, and it
+ * the rest of its run even once the certificate verifies: the exception is remembered per session, and it
  * outlives the reason for it. Restarting is what clears it, and without saying so the command looks like it
  * did nothing. */
 console.log(`Restart the browser: one already running remembers having been told to ignore the old warning.`);

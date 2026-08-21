@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════════
- * THE ANGKOR PLATE LADDER — regenerates the three background rungs from the one master.
+ * THE ANGKOR PLATE LADDER: regenerates the three background rungs from the one master.
  *
  * Run: `node scripts/angkor-plate.mjs`  (from _site/site)
  *
@@ -16,7 +16,7 @@
  *
  * WHY 10-BIT AVIF. This image is nine tenths near-black with long, slow ramps out of it, and it is then
  * laid under a scrim that compresses what is left into an even narrower band. Eight bits of depth band
- * visibly under that treatment — the sky behind the mandalas goes to rings. Ten bits costs about four
+ * visibly under that treatment: the sky behind the mandalas goes to rings. Ten bits costs about four
  * percent and every AVIF decoder that exists reads it.
  * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
 import { mkdir, writeFile } from "node:fs/promises";
@@ -30,7 +30,7 @@ const MASTER = join(here, "../src/assets/angkor/temple-master.png");
 const OUT_DIR = join(here, "../public/assets/angkor");
 
 /* The three rungs the stylesheet asks for by media query: phone, everything, and the wide desktop above
- * 100rem. 16:9 exactly — the master is 1672×941, which is 16:9 to within a twentieth of a percent, and
+ * 100rem. 16:9 exactly: the master is 1672×941, which is 16:9 to within a twentieth of a percent, and
  * pinning it to the nominal ratio keeps the frame-rule arithmetic in global.css honest at every rung.
  *
  * Quality rises as the rung shrinks: at 900 the whole plate is painted into a phone's width, so its

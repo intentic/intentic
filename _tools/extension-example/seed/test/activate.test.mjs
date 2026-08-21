@@ -3,13 +3,13 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 /* Testing an extension without the app: import the BUILT bundle and run `activate()` against a host stub that
- * enforces the same rule the real host does — a registration whose id the manifest never declared is refused.
+ * enforces the same rule the real host does: a registration whose id the manifest never declared is refused.
  *
  * That is the whole trick. The manifest is the contract between an extension and its host, so a test that reads
  * the manifest and checks the code against it catches the failure mode that actually happens in practice: code
  * and manifest drifting apart, which in the real app shows up as a view that silently never appears.
  *
- * Node's own test runner, and no test dependency at all — the bundle's only imports are the ones the host
+ * Node's own test runner, and no test dependency at all: the bundle's only imports are the ones the host
  * provides (`vue`, `@tanstack/vue-query`), and those resolve here from devDependencies. If this import ever fails
  * for a missing package, the bundle is carrying an import the host does not publish, which is a real bug: it
  * would throw inside the browser's blob-URL import, where the failure is far less obvious than here. */
@@ -74,7 +74,7 @@ test(`activate registers exactly what the manifest declares`, async () => {
         view.detect([], []).map((activation) => activation.key),
         [`example`],
     );
-    // The lazily imported component resolved — the SFC really is inside this single-file bundle.
+    // The lazily imported component resolved: the SFC really is inside this single-file bundle.
     assert.equal(typeof (await view.view()), `object`);
 
     for (const subscription of context.subscriptions) {
@@ -88,7 +88,7 @@ test(`the badge stays quiet until there is something unread, and clears the time
     await activate(api, context);
     const view = registered.views[0];
 
-    // The badge's own scan is what fetched — a closed view still knows there is a note.
+    // The badge's own scan is what fetched: a closed view still knows there is a note.
     await new Promise((resolve) => setImmediate(resolve));
     assert.ok(registered.requested.some((path) => path.startsWith(`/workspace/file?path=`)));
     assert.equal(view.badge(view.detect([], [])[0])?.count, 1);
@@ -99,6 +99,6 @@ test(`the badge stays quiet until there is something unread, and clears the time
 });
 
 test(`every route the extension can reach is one the manifest declared`, () => {
-    // Not a runtime assertion — a reminder that this list IS the approval surface the owner sees at install.
+    // Not a runtime assertion: a reminder that this list IS the approval surface the owner sees at install.
     assert.deepEqual(declaredRoutes, [`GET /workspace/file`]);
 });

@@ -1,4 +1,4 @@
-# The install one-liner's output — a UX review and redesign
+# The install one-liner's output: a UX review and redesign
 
 What a person actually sees when they paste the setup command, why it reads as raw, and the shape that fixes
 it. Covers `_site/site/public/scripts/connect.{sh,ps1}` (the bootstrap shim) and `_sandbox/ic` (everything
@@ -58,7 +58,7 @@ Between `waiting-health` and the next line there is up to 30 seconds of nothing.
 first row, up to 120. During the pull there is a wall of hex.
 
 The **prose is good**. Nearly every sentence here was written with care, names a real thing, and offers a
-remedy — `checks.rs`'s `remedy` field is a genuinely unusual piece of discipline. Nothing below is a
+remedy: `checks.rs`'s `remedy` field is a genuinely unusual piece of discipline. Nothing below is a
 complaint about the words. It is entirely about **rendering**: everything is the same size, the same colour,
 and arrives in the same undifferentiated stream.
 
@@ -80,13 +80,13 @@ conveying *less*.
 indistinguishable from a hang, and two minutes is well past where people ctrl-C.
 
 **4 · Machine syntax is leaked into human prose.** `intentic: [waiting-health] waiting for the sandbox
-daemon to come up…` says the same thing twice — once as an id for the desktop app's parser, once as a
+daemon to come up…` says the same thing twice: once as an id for the desktop app's parser, once as a
 sentence. To a person the bracket reads as a log level or an error code. `util.rs`'s comment is right that
 the id must exist; it is wrong that a human has to see it.
 
 **5 · No colour, no symbols, no weight.** Not one escape sequence in the whole binary (`grep` for `\x1b`
 returns nothing). `FAIL` is distinguished from `ok` by capital letters alone. In a 70-line scroll a failure
-is genuinely easy to miss. Every peer installer — rustup, bun, pnpm, homebrew, docker desktop — colours.
+is genuinely easy to miss. Every peer installer (rustup, bun, pnpm, homebrew, docker desktop) colours.
 
 **6 · Five prefixes, no rule.** `intentic: [phase] msg`, `intentic: msg`, `  ok    Name`, bare prose
 (`Your sandbox will be reachable…`), `intentic-requirement: {json}` (Windows), plus raw docker and, at the
@@ -94,8 +94,8 @@ end, a third-party installer script piped from `intentic.dev/computer` with its 
 (`connect.rs:601`). A reader cannot learn one rule and apply it.
 
 **7 · The ending is seven equal lines.** Success, URL, next action, a caveat about deploy targets, and three
-reference commands, all identical in weight. The one instruction that matters right now — *go back to your
-browser* — is third, and the URL that matters second. Commands the user needs in a week are given the same
+reference commands, all identical in weight. The one instruction that matters right now: *go back to your
+browser*: is third, and the URL that matters second. Commands the user needs in a week are given the same
 billing as the action they need in five seconds.
 
 **8 · Detail and headline are the same size.** `  ok    Docker` is a detail row under the preflight step;
@@ -109,7 +109,7 @@ what was slow, and neither can support reading a pasted transcript.
 question goes to stderr as `[Y/n]`. Nothing signals *this has stopped and is waiting for you*.
 
 **11 · Failures have structure but no frame.** `checks::failure_summary` composes a numbered
-problem/fix block — genuinely good information architecture — and then it prints as undifferentiated text
+problem/fix block (genuinely good information architecture) and then it prints as undifferentiated text
 after `error: ` (`main.rs:192`). The structure is invisible.
 
 **12 · No version, no run id.** Nothing identifies which `ic` produced the transcript. The binary is
@@ -138,16 +138,16 @@ or CI changes at all.
 
 ---
 
-## 4. The design already exists — in the wrong place
+## 4. The design already exists: in the wrong place
 
 `_editor/desktop-app/src/setupPlan.ts` is a fully worked progress model:
 
-- **A plan**, drawn in full at t=0 — every step, in order, with the ones that will not happen on this machine
+- **A plan**, drawn in full at t=0: every step, in order, with the ones that will not happen on this machine
   left out (`setupPlan`).
 - **Weights in seconds**, so the bar is honest about time left rather than steps left. Its comment is
   explicit that "9 of 10 steps" on the far side of a four-minute pull is a lie a step counter tells.
 - **Real pull progress**: a regex over docker's line-per-layer output, with a per-state completion fraction
-  (`LAYER`, `LAYER_DONE`) — so the 240-second step reports genuine fractions rather than creeping on a timer.
+  (`LAYER`, `LAYER_DONE`): so the 240-second step reports genuine fractions rather than creeping on a timer.
 - **A monotonic clamp**, so the bar can never go backwards as docker announces new layers.
 - **Windows step reordering**, because Docker's prerequisites are a tree there and the binary must arrive
   before it can examine them.
@@ -155,8 +155,8 @@ or CI changes at all.
 Every one of those decisions is right, and a terminal user gets none of them. The layer lines that the
 desktop app turns into a percentage are the same lines the terminal dumps raw.
 
-So the redesign is mostly **not new thinking**. It is moving this model down into `ic` — where the run
-actually happens — and letting the desktop app read the result instead of re-deriving it. That also removes
+So the redesign is mostly **not new thinking**. It is moving this model down into `ic`: where the run
+actually happens: and letting the desktop app read the result instead of re-deriving it. That also removes
 a real hazard: today the plan lives in TypeScript and the phases live in Rust, and nothing checks that they
 still agree.
 
@@ -181,7 +181,7 @@ still agree.
 
 ---
 
-## 6. What it looks like now — built
+## 6. What it looks like now: built
 
 Everything below is captured from real runs, not drawn. Colour is stripped for this page; the live line is
 shown at one instant rather than as the forty repaints a terminal actually sees.
@@ -246,9 +246,9 @@ to your browser* third.
 ```
 
 The same words `checks::failure_summary` has always composed. Only the frame, the colour and the hanging
-indent under `fix:` are new — long remedies used to run off the right edge.
+indent under `fix:` are new: long remedies used to run off the right edge.
 
-### Piped — byte-for-byte unchanged
+### Piped: byte-for-byte unchanged
 
 ```
 intentic: [preflight] preflight — checking this machine…
@@ -259,7 +259,7 @@ error: found 2 problems — fix them and re-run the same command:
 …
 ```
 
-This is the property that makes the rest safe, and it is verified rather than asserted — see section 9.
+This is the property that makes the rest safe, and it is verified rather than asserted: see section 9.
 
 ---
 
@@ -275,7 +275,7 @@ it, so neither can ever reach the rich path. `INTENTIC_PLAIN=1` forces plain; `N
 honoured.
 
 **The live region is exactly one line.** Redrawing a checklist in place needs the cursor moved up N lines,
-which needs to know when a line wrapped — and this binary runs under `curl | sudo sh`, inside dash, on
+which needs to know when a line wrapped: and this binary runs under `curl | sudo sh`, inside dash, on
 PowerShell 5.1, in terminals of unknown width. A carriage return plus a truncation to a conservative width
 needs none of that. Everything settled scrolls above. The one rule callers follow: anything writing to stdout
 outside the module (docker's own output, a piped installer, an interactive question) is bracketed by
@@ -286,7 +286,7 @@ tick, and Windows VT is three `extern "system"` declarations against the kernel3
 links. The binary is downloaded on every run, so its size is in the user's critical path.
 
 **The pull's layer lines** are parsed into a fraction rather than counted. Docker under-reports `Pull
-complete` when it is not talking to a terminal — a measured six-layer pull reported three — so a completion
+complete` when it is not talking to a terminal (a measured six-layer pull reported three) so a completion
 tally freezes partway and reads as a stuck install. The average always advances, is clamped monotonic against
 a growing denominator, and stops at 99 because only the flow knows a step finished.
 
@@ -307,14 +307,14 @@ quiet in a terminal: its one long step is a Docker install that can run ten minu
 | 6 | Questions bracketed so nothing repaints over them | 10 | **done** |
 | 7 | Shim and binary share one voice in a terminal | 6 | **done** |
 | 8 | Emit the plan on the wire; the desktop app reads it instead of its own copy | drift hazard | **not done** |
-| 9 | The two piped agent installers speak the same vocabulary | 6 | **done** — see §12 |
+| 9 | The two piped agent installers speak the same vocabulary | 6 | **done**: see §12 |
 | 10 | Stamp a real version into `ic` | 12 | **not done** |
 
 **8** is the one worth doing next. `setupPlan.ts` and `connect.rs` now hold the same plan in two languages and
 nothing checks that they agree; a step added to one is a desktop progress bar that silently stops moving.
 Neither is wrong today, and both were verified by hand against each other while this was written.
 
-**9** shipped after the language question in §11 was settled — the answer to that question was the cheap way
+**9** shipped after the language question in §11 was settled: the answer to that question was the cheap way
 to do it. See §12.
 
 **10** stays open because `ic`'s Cargo version is never stamped by the release pipeline (`set-versions.sh`
@@ -326,21 +326,21 @@ does not touch it), so the header would read `ic 0.0.0`. The header prints the v
 ## 9. How it was verified
 
 - **Piped output is byte-identical.** The pre-change binary was built from `f84e1496b` in a throwaway git
-  worktree and run head-to-head with the new one across three flows — a two-failure preflight, `sandbox list`,
+  worktree and run head-to-head with the new one across three flows: a two-failure preflight, `sandbox list`,
   and a real image pull ending at the run contract. 31 lines, diff clean apart from the log timestamp.
 - **The rich path was run, not reasoned about.** Under a pty (`script`), against real registry pulls, and once
-  end to end against `ghcr.io/intentic/sandbox:stable` — a real pull, container start, health wait, postflight
+  end to end against `ghcr.io/intentic/sandbox:stable`: a real pull, container start, health wait, postflight
   chain and the finished block. That is where the pull readout's stall was found and fixed.
 - **The shim's split** was exercised under `dash` both piped and on a pty.
 - 130 unit tests, `clippy -D warnings` clean, `cargo fmt --check` clean. New tests cover layer parsing, the
-  monotonic pull readout, the clamped estimate, wrapping, and the pull-noise rule — the last asserting that an
+  monotonic pull readout, the clamped estimate, wrapping, and the pull-noise rule: the last asserting that an
   `unauthorized` is never swallowed, since that line is the whole diagnosis of a failed pull.
 - `connect.ps1` re-checked against the two Windows-PowerShell-5.1 rules the desktop crate's tests enforce:
   ASCII-only bytes, and no redirection while `Stop` is in force.
 
 **Not verified by running:** the Windows path. There is no Windows cross-target in this workspace, so
-`prepare/mod.rs` and `prepare/fix.rs` changes are read-checked only. They are mechanical — three print sites
-routed through `ui::progress`, one checklist through `ui::row`, two questions bracketed — but they are the one
+`prepare/mod.rs` and `prepare/fix.rs` changes are read-checked only. They are mechanical: three print sites
+routed through `ui::progress`, one checklist through `ui::row`, two questions bracketed: but they are the one
 part of this that has not executed.
 
 ---
@@ -361,7 +361,7 @@ part of this that has not executed.
 ## 11. Should the setup and sync CLIs all be rewritten in Rust?
 
 Asked after the work above landed, and worth answering here because the answer turns on facts this document
-already gathered. **No — but the goal behind the question is reachable for about a twentieth of the cost.**
+already gathered. **No: but the goal behind the question is reachable for about a twentieth of the cost.**
 
 ### 11.1 A version of this was already tried, and shelved
 
@@ -369,18 +369,18 @@ already gathered. **No — but the goal behind the question is reachable for abo
 
 > The first attempt at this app reimplemented the machine work in Rust: an environment probe engine, a
 > reconcile plan, a docker-run builder, the `/setup/claim` call, tunnel provisioning, the sandbox lifecycle.
-> That is ~1400 lines whose ONLY job is to stay bit-identical to `connect.sh` — a lockstep that has never held
+> That is ~1400 lines whose ONLY job is to stay bit-identical to `connect.sh`: a lockstep that has never held
 > anywhere in this repo, and the reason the experiment was shelved.
 
 Read carefully, that is not a verdict against Rust. It is a verdict against **two implementations of one
 flow**. The failure mode was duplication; the language was incidental. And the fix that stuck was not "write
-less Rust" — it was `ic`, which is Rust, and which absorbed the flow so there is only one of it.
+less Rust": it was `ic`, which is Rust, and which absorbed the flow so there is only one of it.
 
 So the honest framing is: **this migration is already chosen and roughly two thirds done.** `connect.sh` used
 to be the whole installer and is now a 299-line bootstrap that gets Docker onto the machine and hands over.
 The question is not whether to start; it is how much further to go, and in which direction.
 
-### 11.2 The actual map — two ecosystems, not five
+### 11.2 The actual map: two ecosystems, not five
 
 | CLI | Language | Lines (non-test) | Ships as | Runs |
 | --- | --- | --- | --- | --- |
@@ -398,7 +398,7 @@ the platform's own typed contract (`@intentic/sandbox-contract`); `_computers/ho
 
 **The agents are not setup tools.** `sync` wraps Mutagen and `host` serves an oRPC surface the sandbox calls
 back into. Both are long-lived daemons whose main job is to speak a Zod-typed contract shared with the sandbox
-and the web app. Porting them to Rust means re-deriving that contract in a second language — which is
+and the web app. Porting them to Rust means re-deriving that contract in a second language: which is
 *exactly* the lockstep the desktop-app header says has never held in this repo. The expensive part of the port
 has nothing to do with UX.
 
@@ -407,49 +407,49 @@ network on *every* invocation of the one-liner, so its size sits in the user's c
 and LTO'd, against roughly 60 MB for a Bun-compiled equivalent. That argument is decisive for `ic` and
 irrelevant for `sync` and `host`, which are installed once and then just sit there.
 
-**The prize is small.** What a rewrite would share is the rendering — the module built above is about 500
+**The prize is small.** What a rewrite would share is the rendering: the module built above is about 500
 lines. Rewriting ~5,000 lines of working agent logic to share 500 lines of presentation is upside-down.
 
 **And it would not even finish the job.** `_deploy/cli` runs inside the sandbox against the graph/engine
-libraries; it is not going to Rust. So "one language" is unreachable from this direction — and from the other
+libraries; it is not going to Rust. So "one language" is unreachable from this direction: and from the other
 direction too, since `ic` cannot become TypeScript for the size reason above.
 
-### 11.4 What to do instead — share the contract, not the code
+### 11.4 What to do instead: share the contract, not the code
 
 The three moves below get one voice across every CLI without moving a single line between languages.
 
 **1 · Write the phase protocol down as a contract.** `intentic: [phase] message` is already a wire format with
 two independent parsers (`setupPlan.ts`, and now `ui.rs`). It is documented only in comments. Promote it to a
-named spec with the phase vocabulary in it, and it becomes the seam every CLI can render behind — which is the
+named spec with the phase vocabulary in it, and it becomes the seam every CLI can render behind: which is the
 same reason the split in section 7 was safe to make at all.
 
 **2 · Give the TypeScript side the renderer it already has a seam for.** `_deploy/cli/src/lib/output.ts`
 defines an `Output` with `text` / `json` / `ndjson` modes and a single `Sink`. That is structurally the same
-seam as `ui.rs`, minus the rich path. Port the *design* — plan, live line, wrapping, ranked ending, the
-`is_terminal` split — into that abstraction and have `sync` and `host` render through it. Roughly 400 lines of
+seam as `ui.rs`, minus the rich path. Port the *design*: plan, live line, wrapping, ranked ending, the
+`is_terminal` split: into that abstraction and have `sync` and `host` render through it. Roughly 400 lines of
 TypeScript, and it retires the hand-rolled `process.stdout.write` calls those two agents use today.
 
 **3 · Have the agents emit phases.** They emit none right now, which is why the two installers this work had
 to bracket with `suspend`/`resume` still look like different programs at the end of a setup. Once they emit
 the protocol, they render in the same checklist, *and* the desktop app gets progress bars for sync and
-computer enrolment for free — from the parser it already ships.
+computer enrolment for free: from the parser it already ships.
 
 Rough cost: about 400 lines of new TypeScript and a spec, against roughly 7,000 lines of Rust rewrite. Same
 user-visible result.
 
 ### 11.5 Where more Rust IS right
 
-Not nowhere — just not in the agents.
+Not nowhere: just not in the agents.
 
 - **Keep shrinking the shims into `ic`.** 1,930 lines of sh and PowerShell is still the least testable surface
   in the install, and the two families drift by hand. The irreducible remainder is small and known: you cannot
   download the binary with the binary, and installing Docker needs root before anything of ours exists.
-- **Finish item 8 of section 8** — emit the plan on the wire so `setupPlan.ts` stops holding a second copy.
+- **Finish item 8 of section 8**: emit the plan on the wire so `setupPlan.ts` stops holding a second copy.
   That is the one live duplication this work introduced, and it is a dozen lines to close.
 
 ---
 
-## 12. The shared renderer — built
+## 12. The shared renderer: built
 
 §11 said the goal behind "rewrite everything in Rust" was reachable for about a twentieth of the cost, by
 sharing the **contract** rather than the code. That is what shipped. No agent logic moved between languages.
@@ -458,14 +458,14 @@ sharing the **contract** rather than the code. That is what shipped. No agent lo
 
 | | |
 | --- | --- |
-| `docs/cli-output-protocol.md` | The line format, the three modes, the row vocabulary and the rules for adding a phase — promoted from comments in two languages to one normative page both implementations point at. |
+| `docs/cli-output-protocol.md` | The line format, the three modes, the row vocabulary and the rules for adding a phase: promoted from comments in two languages to one normative page both implementations point at. |
 | `_computers/local-agent/src/ui.ts` | The renderer, ~460 lines. The TypeScript twin of `ui.rs`, in the package whose stated job is "the plumbing every intentic CLI that lives on a user's own computer needs". |
 | `_sandbox/sync`, `_computers/host` | Both `setup` commands render through it, declare a plan, and emit phases. Their hand-rolled `out()` closures are gone. |
 | `_sandbox/ic` | Sets `INTENTIC_UI=nested` on the agent installers it spawns. |
 
 `@intentic/local-agent` was the right home and not a new package: `sync`, `host` and `acp-bridge` already
 depend on it, it carries no dependencies of its own (these ship as single-file compiled binaries), and its
-`text.ts` already held the sibling lesson — *what a failing agent says to the person running it*.
+`text.ts` already held the sibling lesson: *what a failing agent says to the person running it*.
 
 ### 12.2 The third mode, and why it exists
 
@@ -474,7 +474,7 @@ install that reads as one program and one that reads as three.
 
 `ic sandbox connect` runs these agents *inside* its own checklist. Left alone each would see a terminal, decide
 it owned the screen, and open a second banner with a second plan in the middle of somebody's setup. `nested`
-says "you are detail under somebody else's step": no banner, no numbering, no ending block — just indented
+says "you are detail under somebody else's step": no banner, no numbering, no ending block, just indented
 narration, and one line carrying the verdict up.
 
 A piped parent sets nothing. The child inherits the pipe and reaches the same conclusion on its own, which is
@@ -502,14 +502,14 @@ rich                                   nested                                  p
 `sync-enrolling`, `sync-linking`, `sync-starting`, `computer-enrolling`, `computer-starting`.
 
 None are in `setupPlan.ts`, deliberately. Rule 3 of the protocol makes an unknown phase narration under
-whichever step is running — which is exactly what sync is when it runs inside `ic sandbox connect`. Adding
+whichever step is running: which is exactly what sync is when it runs inside `ic sandbox connect`. Adding
 them to the desktop plan later is a data change with no code behind it, and the desktop app then gets progress
 for sync and computer enrolment from the parser it already ships.
 
 ### 12.4 Verification
 
 - 38 new tests on the renderer, covering the property the rest rests on: **a pipe gets the marker stream and
-  nothing else** — asserted as an exact string, plus "no escape byte reaches either stream in `plain`".
+  nothing else**: asserted as an exact string, plus "no escape byte reaches either stream in `plain`".
 - The repainted line is asserted never to reach the last column at a 60-column width. One character over and
   the terminal wraps it, after which every carriage return lands a row late.
 - The ordering of the ending block (address, then instruction, then footnotes) is asserted rather than
@@ -520,7 +520,7 @@ for sync and computer enrolment from the parser it already ships.
 
 ### 12.5 Still open
 
-- **The plan is still held twice** — in `connect.rs` and in `setupPlan.ts`, in two languages, with nothing
+- **The plan is still held twice**: in `connect.rs` and in `setupPlan.ts`, in two languages, with nothing
   checking that they agree. Item 8 of §8, and now the only live duplication in this area.
 - **`_deploy/cli` was left alone.** It runs *inside* the sandbox against the engine libraries, not on the
   user's machine, and its `Output` already has `text`/`json`/`ndjson` modes driven by engine events. Giving it

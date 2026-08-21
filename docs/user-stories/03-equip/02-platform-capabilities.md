@@ -2,7 +2,7 @@
 
 As someone adding the capabilities that change the sandbox itself, I want to be told what is about to be installed, rebuilt or scaffolded, so that a click I thought was configuration does not turn into a five-minute restart I did not plan.
 
-The Platform section is the consequential one. DevOps scaffolds repositories. The monorepo card creates one. Docker restarts the sandbox privileged, with its own engine. These are not connections — they change what the box is — so each card carries its consequences on its face in the catalog, before I have opened it, and again in full inside the form.
+The Platform section is the consequential one. DevOps scaffolds repositories. The monorepo card creates one. Docker restarts the sandbox privileged, with its own engine. These are not connections (they change what the box is) so each card carries its consequences on its face in the catalog, before I have opened it, and again in full inside the form.
 
 Applying one is not instant and does not pretend to be. The progress is real output from a real shell, in a terminal I can watch, because "installing…" with a spinner is exactly where I would otherwise start wondering whether it had hung. And when a capability needs a rebuild before it can work, it says so where I can act on it rather than sitting at "pending" forever.
 

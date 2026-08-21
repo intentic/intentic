@@ -59,7 +59,7 @@ export const e2eTier = <K extends string = never>(title: string, tier: { enabled
         runs,
         // Annotated only when the switch is on: with e2e not asked for at all, every tier is off and saying so
         // on each of them is noise. The case worth naming is the nightly's, asked for, and short of a secret.
-        title: asked(tier.enabledBy) && missing.length > 0 ? `${title} — stood down, no ${missing.join(" + ")}` : title,
+        title: asked(tier.enabledBy) && missing.length > 0 ? `${title}, stood down, no ${missing.join(" + ")}` : title,
         secrets: new Proxy({} as Record<K, string>, {
             get: (_target, key) => {
                 if (typeof key === "symbol") {
@@ -67,7 +67,7 @@ export const e2eTier = <K extends string = never>(title: string, tier: { enabled
                 }
                 const value = process.env[key];
                 if (value === undefined || value === "") {
-                    throw new Error(`${title} read ${key} where the tier does not run — a secret may only be read inside the suite`);
+                    throw new Error(`${title} read ${key} where the tier does not run: a secret may only be read inside the suite`);
                 }
                 return value;
             },

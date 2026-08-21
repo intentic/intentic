@@ -10,7 +10,7 @@ Run it with `pnpm -C _site/demo dev` (http://localhost:47146/demo/). The app's o
 The finding that shapes everything below: **the app does not need to be decoupled from its logic for this.**
 It needs its two transports pointed somewhere else. Component-level decoupling (props/events instead of
 composable singletons) would touch 19 of the 25 chat/agents components and add exactly the wrapper indirection
-`AGENTS.md` forbids — while the transports are two well-commented modules that already resolve their global
+`AGENTS.md` forbids: while the transports are two well-commented modules that already resolve their global
 per call, on purpose.
 
 ## The seam
@@ -22,33 +22,33 @@ Every browser→outside call in the web app goes through one of two globals, res
 | `globalThis.fetch` | `composables/sandbox/sandboxClient.ts:43` (raw path calls), `sandboxRpc.ts:60` (typed + streams), `useApi.ts` (platform), better-auth's client | the daemon's `OpenAPIHandler` and the platform's `/rpc` + `/api/auth/*` |
 | `globalThis.WebSocket` | `composables/terminal/terminalSession.ts:160`, `composables/browser/useBrowserView.ts:122` | `/system/terminal`, `/system/browser-view` |
 
-`sandboxRpc.ts:43` already documents why its fetch is a hook rather than a captured reference — *"a fetch bound
+`sandboxRpc.ts:43` already documents why its fetch is a hook rather than a captured reference: *"a fetch bound
 then is invisible to anything that replaces it afterwards (a test's stub, an instrumentation wrapper)"*. The demo
 is that wrapper, and it needs no branch anywhere in the app.
 
 ## The package
 
-`@intentic-dev/demo` (`_site/demo/`) — its own package, depending on `@intentic-app/web` and importing the app's
+`@intentic-dev/demo` (`_site/demo/`): its own package, depending on `@intentic-app/web` and importing the app's
 entry through its `./main` export. Its [README](../../_site/demo/README.md) has the file-by-file layout.
 
 It lived inside `_editor/web/src/demo/` first, and that was wrong in three ways that are checkable rather than
 stylistic: a fixture edit matched CI's `_editor/web/**/*` glob and re-released the **product images**, `knip`
 reported all ten files as unused (web's entry list cannot see a second html), and the package emitted a second
-dist beside the one its Dockerfile assumes. The dependency now runs one way only — the demo knows the app, the
-app knows nothing — which is also what stops app code reaching the fixture by accident.
+dist beside the one its Dockerfile assumes. The dependency now runs one way only: the demo knows the app, the
+app knows nothing: which is also what stops app code reaching the fixture by accident.
 
 **It cost the app three lines**, all of which are fixes rather than accommodations, because building the same
 source under a path prefix is what surfaced them:
 
 - `router/index.ts` now passes `import.meta.env.BASE_URL` to `createWebHistory()`. vue-router's default is a
-  `<base href>` element or `/` — it never reads Vite's base — so an app served under a prefix routed as if it
+  `<base href>` element or `/` (it never reads Vite's base) so an app served under a prefix routed as if it
   were at the root. `/` for the app, so nothing there changes.
 - `styles.css` now names its own source in an `@source`. Tailwind's auto-detection is rooted at the *build's*
   root, which was the app's directory only because the app was the only thing building it; the demo's first run
   came up as real markup with three-quarters of a design system.
 - `usePopout.ts` resolves the pop-out window's page against `import.meta.env.BASE_URL` instead of the origin
   root. `/popout.html` under a prefix is the *marketing site's* 404 page, and nothing in it can answer the
-  keeper's handshake — so the window opened and then sat there while the panel stayed docked, which is exactly
+  keeper's handshake: so the window opened and then sat there while the panel stayed docked, which is exactly
   the failure the liveness contract is written to prevent, arriving through the address rather than the realm.
   The demo owns its own `popout.html` (same keeper, its own document, since the page is addressed by URL).
 
@@ -56,7 +56,7 @@ Both fixture handlers are plain `Request → Response` functions with contract t
 (`satisfies AgentsList`, `: SavingsReport`, …), so a shape that drifts from the wire is a build error. They are
 deliberately *not* an oRPC server: `OpenAPIHandler` would put `@orpc/server` in the bundle to re-validate
 payloads this fixture is the only writer of, and the client re-validates none of them anyway. The one piece of
-protocol the demo does own is the event-iterator framing in `sse.ts` — three lines, rather than a dependency on
+protocol the demo does own is the event-iterator framing in `sse.ts`: three lines, rather than a dependency on
 `@orpc/standard-server` (a transitive dep of the client, not one web declares).
 
 ## The three gates, and why none needs a branch
@@ -66,10 +66,10 @@ protocol the demo does own is the event-iterator framing in `sse.ts` — three l
 2. **`requireSetup`** (`router/index.ts:29`) → `apiClient.sandbox.list()`. Answers one sandbox row whose
    `daemonUrl` is the demo daemon's sentinel base, carrying a connect token.
 3. **Daemon credential** (`sandboxSession.ts`) → a Google ID token exchanged at `POST /system/session`. Seed
-   `localStorage` with a fake credential and let the demo daemon mint the session — this is exactly what the e2e
+   `localStorage` with a fake credential and let the demo daemon mint the session: this is exactly what the e2e
    tier already does (`_tools/e2e/README.md`), so it is a proven path, not a new one.
 
-The `hello` frame omits `routes`, which `useDaemonRoutes.ts:22` reads as *assume supported* — so no feature
+The `hello` frame omits `routes`, which `useDaemonRoutes.ts:22` reads as *assume supported*: so no feature
 gates itself off, and the fixture doesn't have to enumerate `SANDBOX_ROUTE_NAMES`.
 
 ## What the fixture must serve
@@ -86,28 +86,28 @@ Per surface, the routes it actually calls and what the fixture answers with:
 
 | Surface | Routes | Fixture |
 | --- | --- | --- |
-| Fleet board `/agents` | `GET /agents`, `/agents/search`, `/agents/{id}/rename`, `/archive`, `/unarchive`, `/{id}/seen` | 9 agents, one in every lane state: `awaiting` (a question), `conflict`, two `running` (one delegating to subagents), two more that are steps of one workflow run, `ready`, `landed`, and an automation's overnight `idle` — how many of them a visitor meets is the mode's call (below) |
-| Review panel | `GET /agents/{id}/diff`, `/{id}/transcript`, `/{id}/{repo}/file-diff` | the soft-deletes agent: 4 files over 2 repos, +210 −55, two of them with real before/after text — and the conversation that produced them, so opening the card lands on its transcript rather than on "start a conversation". Every other agent still answers an empty one |
+| Fleet board `/agents` | `GET /agents`, `/agents/search`, `/agents/{id}/rename`, `/archive`, `/unarchive`, `/{id}/seen` | 9 agents, one in every lane state: `awaiting` (a question), `conflict`, two `running` (one delegating to subagents), two more that are steps of one workflow run, `ready`, `landed`, and an automation's overnight `idle`, how many of them a visitor meets is the mode's call (below) |
+| Review panel | `GET /agents/{id}/diff`, `/{id}/transcript`, `/{id}/{repo}/file-diff` | the soft-deletes agent: 4 files over 2 repos, +210 −55, two of them with real before/after text, and the conversation that produced them, so opening the card lands on its transcript rather than on "start a conversation". Every other agent still answers an empty one |
 | Chat | `POST /agent`, `POST /agent/attach` (stream), `/agent/commands`, `/agent/refusals`, `POST /agent/reply`, `/agent/steer`, `/agent/stop` | the scripted turn, below |
-| Model picker | `GET /claude/accounts`, `/grok/accounts`, `/translator/accounts`, `/{provider}/models` | a connected Claude Max and a ChatGPT subscription in the translator — without these the composer never leaves "Checking your AI accounts…" |
+| Model picker | `GET /claude/accounts`, `/grok/accounts`, `/translator/accounts`, `/{provider}/models` | a connected Claude Max and a ChatGPT subscription in the translator: without these the composer never leaves "Checking your AI accounts…" |
 | Sessions window | `GET /sessions?query=` (searchable), `GET /sessions/{id}` | 12 conversations from 90 seconds to 6 days old |
-| Workspace | `GET /workspace/tree`, `/workspace/children`, `/workspace/file`, `/workspace/raw`, `POST /workspace/upload-diff`, `POST /workspace/upload`, `DELETE /workspace/entry`, `/git/repos`, `/git/changes`, `/git/{repo}/file-diff` | `acme-shop`: a `web` and an `api` repo over one flat path → content table, ~60 files, 5 dirty ones across both. Reads that miss answer "nothing there", writes land in the table — including a dropped folder, which the queue walks for real and uploads file by file |
+| Workspace | `GET /workspace/tree`, `/workspace/children`, `/workspace/file`, `/workspace/raw`, `POST /workspace/upload-diff`, `POST /workspace/upload`, `DELETE /workspace/entry`, `/git/repos`, `/git/changes`, `/git/{repo}/file-diff` | `acme-shop`: a `web` and an `api` repo over one flat path → content table, ~60 files, 5 dirty ones across both. Reads that miss answer "nothing there", writes land in the table, including a dropped folder, which the queue walks for real and uploads file by file |
 | Sandbox hub | `GET /info`, `/settings`, `/settings/savings`, `/system/usage`, `/secrets/inventory`, `/ports`, `/environment`, `/members`, `/extensions`, `/vpn` | a measured cleaner-savings report; the rest answer their empty shape, which is the truth about a recording |
-| Maintenance | `GET /chores`, `POST /chores/ledger`, `/chores/probe` | four probes per repo and the cheap signals behind them, chosen to produce one row of every state the book distinguishes — due, snoozed, clear, unmeasured, not-applicable. The ledger is real state (a snooze holds; a finished run promotes into a row); re-running a probe refuses |
+| Maintenance | `GET /chores`, `POST /chores/ledger`, `/chores/probe` | four probes per repo and the cheap signals behind them, chosen to produce one row of every state the book distinguishes: due, snoozed, clear, unmeasured, not-applicable. The ledger is real state (a snooze holds; a finished run promotes into a row); re-running a probe refuses |
 | Acceptance | `GET /workspace/children`, `/workspace/file`, `/workspace/raw`, `/panels`, `POST /workspace/upload` | five stories in two repos and one recorded run: a pass, a fail with a defect, a blocked story, and a fourth never tested. Its screenshots are the same storefront pages the browser view plays |
-| Documentation | `GET /workspace/children`, `/workspace/file` | `web` published (a map, a reading order, three pages, one marked stale because the fleet is editing that very directory) and `api` staged — the draft that lights the rail badge and the "nothing is in the repository until you publish it" banner |
-| Terminal | `GET /system/terminals` + the `/system/terminal` WebSocket | the featured turn's own tmux session, replaying its vitest run — xterm renders the ANSI for real |
+| Documentation | `GET /workspace/children`, `/workspace/file` | `web` published (a map, a reading order, three pages, one marked stale because the fleet is editing that very directory) and `api` staged: the draft that lights the rail badge and the "nothing is in the repository until you publish it" banner |
+| Terminal | `GET /system/terminals` + the `/system/terminal` WebSocket | the featured turn's own tmux session, replaying its vitest run: xterm renders the ANSI for real |
 | Browsers | `GET /system/browsers` + the `/system/browser-view` WebSocket | the checkout agent's Chromium: the pricing page, the Stripe session it created, and the API docs it read. See below |
-| Pipelines | `GET /ci/runs`, `POST /ci/runs/jobs`, `/ci/seen` | 7 runs over two repos on two hosts (`web` on GitHub, `api` on GitLab) — one still going, one broken, and one job broken twice so the "failing repeatedly" analysis has something true to say |
-| Automations | `GET /automations`, `/automations/pending` | one of each trigger the union has — a nightly chore, a Discord listener, a Front Desk held for approval, a land-triggered doc check, a disabled CI webhook — each with the run history that makes a row honest |
+| Pipelines | `GET /ci/runs`, `POST /ci/runs/jobs`, `/ci/seen` | 7 runs over two repos on two hosts (`web` on GitHub, `api` on GitLab): one still going, one broken, and one job broken twice so the "failing repeatedly" analysis has something true to say |
+| Automations | `GET /automations`, `/automations/pending` | one of each trigger the union has: a nightly chore, a Discord listener, a Front Desk held for approval, a land-triggered doc check, a disabled CI webhook, each with the run history that makes a row honest |
 | Memory | `GET /memory`, `/memory/file` (+ PUT/DELETE) | four notes about acme-shop, editable and forgettable: the fixture is the store, so the red pen works |
 
-## How full it opens — the three modes
+## How full it opens: the three modes
 
 Everything in the table above is what the fixture *can* serve, and for a while it served all of it at once: the
 demo opened on nine agents across three lanes, a question, a land conflict and every extension switched on.
 That is a fair picture of a busy afternoon and a bad first frame. Someone who has just pressed play cannot tell
-the product apart from the demonstration of it — the rail looks like something they would have to configure,
+the product apart from the demonstration of it: the rail looks like something they would have to configure,
 and the board looks like a mess they would have to clean up.
 
 So fullness is a control rather than a constant (`_site/demo/src/mode.ts`), with a bar at the bottom of the
@@ -116,20 +116,20 @@ recording otherwise cannot: *is this what it looks like, or is this what you fil
 
 | Mode | The board | The rail | What it is for |
 | --- | --- | --- | --- |
-| Minimal | the featured agent alone, mid-turn | nothing — three core tiles | the workspace as it arrives: one agent, and the app around it |
+| Minimal | the featured agent alone, mid-turn | nothing, three core tiles | the workspace as it arrives: one agent, and the app around it |
 | **Default** | three agents: one running with subagents, one parked on a question, one holding a finished delta | Acceptance, Documentation, Pipelines | the three moments the landing page claims, and nothing else |
-| Everything | the whole roster, every lane occupied | every extension on — eight tiles in this workspace | a team's Tuesday: what the product looks like in use |
+| Everything | the whole roster, every lane occupied | every extension on, eight tiles in this workspace | a team's Tuesday: what the product looks like in use |
 
 Two knobs decide almost all of it, because they are what the shell builds itself out of: **which agents the
 roster carries** and **which extensions are switched on** (an extension that is off contributes no tile, no
-view and no badge — the loader never activates it). A third drops the teammate's presence from Minimal, because
+view and no badge: the loader never activates it). A third drops the teammate's presence from Minimal, because
 a second avatar is the one remaining piece of furniture nobody chose. Everything else the fixture serves is the
 same in all three: the workspace and its diffs, the sessions history, the pipelines' own record, the connected
 accounts. Those are read on the way IN to a surface the visitor asked for, not things the opening frame is made
 of, and thinning them would only make the recording smaller without making it clearer.
 
-The mode is applied where each thing is **served** rather than by rewriting the fixtures — `daemon.ts` filters
-the roster, the presence frame and the workflow run; `fixture/sandbox.ts` decides each extension's switch — so
+The mode is applied where each thing is **served** rather than by rewriting the fixtures: `daemon.ts` filters
+the roster, the presence frame and the workflow run; `fixture/sandbox.ts` decides each extension's switch: so
 there is still one full cast and a mode is a view onto it. Two consequences worth stating:
 
 - **The workflow run follows the board.** The fleet view draws a run's group card from `/workflows/runs`, not
@@ -140,16 +140,16 @@ there is still one full cast and a mode is a view onto it. Two consequences wort
   live, because that is what the tab does against a real daemon.
 
 Switching **reloads**, and lands on the fleet board. The extension host activates the daemon's list once per app
-load (`useExtensionHost.ts`), so which tiles the rail carries is decided on the way in — rebroadcasting a roster
+load (`useExtensionHost.ts`), so which tiles the rail carries is decided on the way in: rebroadcasting a roster
 without a reload would change half the picture and leave the other half stale. The board rather than the current
 address, because the route the visitor is standing on may belong to an extension the next mode switches off. The
 choice lives in `sessionStorage`: it must survive the reload it causes, and it must not still be in force next
 week, when the curated opening frame is what a new visitor should meet. `?mode=minimal` on the address seeds it
-once and is then stripped from the URL — a `mode` left in the address outranks the switcher, so the next press
+once and is then stripped from the URL: a `mode` left in the address outranks the switcher, so the next press
 would reload into the state the visitor just left.
 
 **`GET /panels` decides which of those rows a visitor can even reach.** It carries the per-repo facts every
-extension's `detect()` runs over, so a fixture that answered it with an empty list — as this one did at first —
+extension's `detect()` runs over, so a fixture that answered it with an empty list: as this one did at first:
 has no Documentation, Acceptance, Maintenance or Preview in the rail at all, and no way to tell that anything is
 missing: an extension that detects nothing contributes nothing, silently. `web` ships a dev server and both
 repos carry `docs/user-stories`, which is the evidence those three areas activate on.
@@ -157,7 +157,7 @@ repos carry `docs/user-stories`, which is the evidence those three areas activat
 **Three of those areas are backed by files rather than by routes**, which is what makes them fixturable at all:
 a story is markdown in a repo, an acceptance run is a directory under `.intentic/records/artifacts/acceptance/`, a document set is
 `docs/architecture/` (published) mirrored by `.intentic/config/docs/` (staged). So they are fixtured by adding paths to
-`fixture/workspace.ts`, and the extensions walk exactly what they would walk against a real daemon — no route
+`fixture/workspace.ts`, and the extensions walk exactly what they would walk against a real daemon: no route
 was invented for them and none of their code knows the difference. What the demo does refuse is STARTING one:
 a `POST /agent` whose conversation id carries a run prefix (`xt-`, `dg-`, `mt-`) is a fan-out of isolated agents
 against a checkout that does not exist here, so it comes back as a refusal the extension already renders.
@@ -174,12 +174,12 @@ does with an approved plan.
 A run keeps a **frame log**, which is not an optimisation but the contract: `attach` replays the log and reports
 the boundary as the head frame's `seq`, so a reload, a second tab, or the panel remounting joins the turn in
 progress instead of restarting the script mid-sentence. `stop`, `steer` and a fresh `POST /agent` all land on the
-same run registry, so the composer starts a short honest reply — "this is a recorded workspace; start a sandbox
-and the same agent works on your repos" — rather than going nowhere.
+same run registry, so the composer starts a short honest reply: "this is a recorded workspace; start a sandbox
+and the same agent works on your repos": rather than going nowhere.
 
 **The agent's browser is the second recorded stream**, and it costs almost nothing: `/system/browser-view` is a
 socket of frames whose payload is a base64 image, so a few hundred lines of generated SVG *are* a screencast as
-far as the view can tell — three pages, a moving cursor, and the page tabs really switching, because the fixture
+far as the view can tell: three pages, a moving cursor, and the page tabs really switching, because the fixture
 answers the `bind` frame the strip sends. No captured PNGs to go stale, nothing in the bundle but markup.
 
 ## Landing, which is the press the board exists for
@@ -190,7 +190,7 @@ card crosses into Finished, the Changes panel grows those files **with that agen
 `workspaceChanged` frame tells every open panel to re-read. It is the difference between a fleet board and a
 list of jobs, and it is one click from the hero.
 
-The conflicted agent is the other half, and it refuses exactly as the daemon does — nothing applied, the
+The conflicted agent is the other half, and it refuses exactly as the daemon does: nothing applied, the
 worktree intact, and a report naming both causes: one file the main line moved under (the agent can rebase it)
 and one held by the owner's own uncommitted edits (only they can clear it). That report is what the panel's
 button ladder is built on, so refusing here is not a dead end but the second half of the story.
@@ -199,26 +199,26 @@ button ladder is built on, so refusing here is not a dead end but the second hal
 
 Three classes, decided per mutation:
 
-- **Real, in memory** — rename, archive, drag between lanes, tab switches, open a file, open a diff, filter,
+- **Real, in memory**: rename, archive, drag between lanes, tab switches, open a file, open a diff, filter,
   the model picker, **landing**, **dropping a folder in**, extension switches, automation edits and approvals,
   memory edits, marking the pipelines board read, sending a message (advances the script). The fixture is
   mutable state; the UI is honest.
-- **Inert with an invitation** — push, secrets writes, capability install, sandbox create, firing an automation,
+- **Inert with an invitation**: push, secrets writes, capability install, sandbox create, firing an automation,
   rerunning or cancelling someone else's pipeline. The handler answers a refusal the app already renders, and
-  the demo shell shows one "this is a demo — start your own sandbox" CTA. Deliberately *not* hidden: seeing the
+  the demo shell shows one "this is a demo, start your own sandbox" CTA. Deliberately *not* hidden: seeing the
   button matters.
-- **Absent** — git-installed extension bundles, and the tar path a drop of more than 20 files takes (a streaming
+- **Absent**: git-installed extension bundles, and the tar path a drop of more than 20 files takes (a streaming
   fetch body the fixture would have to un-tar; under the threshold the per-file path serves the same drop).
 
 **The drop is the third transport, and the only one the app opens by hand.** `sandboxUpload` posts each file
-over `XMLHttpRequest` rather than fetch — a streaming fetch body needs HTTP/2, and the daemon's loopback
-shortcut is HTTP/1.1 — so `installXhr` (`src/transport.ts`) claims the same two origins the fetch shim does and
+over `XMLHttpRequest` rather than fetch: a streaming fetch body needs HTTP/2, and the daemon's loopback
+shortcut is HTTP/1.1: so `installXhr` (`src/transport.ts`) claims the same two origins the fetch shim does and
 routes them to the same handlers. What arrives is written into the flat path table, which is why the tree really
 grows the dropped repository and every file in it opens.
 
 **The extension list is read off the app build, not re-typed.** `GET /extensions` enumerates
 `@intentic-app/web`'s own `builtinModules`, because the extension host treats a compiled-in extension the daemon
-never mentioned as image/app version drift and says so on every row — true of a dogfooding sandbox, alarming
+never mentioned as image/app version drift and says so on every row: true of a dogfooding sandbox, alarming
 nonsense on a marketing page. Listing them from the registry means a new first-party extension appears here the
 day it is added, with a switch that works, instead of appearing as a warning nobody wrote.
 
@@ -227,26 +227,26 @@ the tool: it is how each of the routes in the table above got found, and how the
 
 ## On the site
 
-The hero keeps its static screenshot — it is the LCP, and the page ships essentially no JS. Over it sits a play
+The hero keeps its static screenshot: it is the LCP, and the page ships essentially no JS. Over it sits a play
 button; the scrim is nearly clear until hover, so the screenshot still does its job of being the product.
 
 Pressing it opens the demo in a **near-full-viewport overlay**, not in the hero frame. That was the one design
-decision the implementation changed: the hero column is ~525px, which puts the app in its mobile shell — a real
+decision the implementation changed: the hero column is ~525px, which puts the app in its mobile shell, a real
 surface, but the wrong first impression for a visitor on a desktop, who should meet the whole workspace. The overlay gives it 94vw × 90vh,
 where the fleet board, the docked chat and the terminal are all on screen at once. Escape, the backdrop and a
 Close button all dismiss it, and the iframe is created once and kept, so re-opening returns to the screen the
 visitor left rather than restarting the recording.
 
 **It opens on `/demo/agents`.** The app's own default lands a desktop on the workspace, which for someone who
-has just pressed play is the one screen with nothing in it — an empty tree and a drop zone, for files this
+has just pressed play is the one screen with nothing in it: an empty tree and a drop zone, for files this
 visitor does not have. The fleet board arrives occupied, and it is the thing being claimed. The redirect is written
 into the URL by `src/main.ts` before the app boots, so there is no first paint of the wrong screen and no
 history entry to press Back into; only the bare base is redirected, since every other address is one the
 visitor chose. The app's own routing is untouched.
 
 It sits **above the nav** (`z-200` over the nav's `z-100`), which is what makes it read as a window rather than
-as another section of the page. The nav is `fixed`, so a lower overlay left the marketing header — and its
-bottom border — stapled across the top of the IDE.
+as another section of the page. The nav is `fixed`, so a lower overlay left the marketing header: and its
+bottom border: stapled across the top of the IDE.
 
 Below 1024px or without a fine pointer, the button opens the demo in its own tab instead, where the app's own
 mobile shell can do a better job than any frame of ours. The iframe's `src` is set in the click handler, so until
@@ -256,33 +256,33 @@ someone presses it this page has loaded no part of the app.
 
 It ships **with the marketing site, at the same origin**, and needs no host of its own:
 
-1. `_site/demo` builds (`base: /demo/`) into `_site/site/public/demo/` — gitignored, and Astro copies `public/`
+1. `_site/demo` builds (`base: /demo/`) into `_site/site/public/demo/`, gitignored, and Astro copies `public/`
    into its dist verbatim, so the demo lands in the site's own asset bundle.
 2. The site's Cloudflare worker gains one rule: a navigation under `/demo/` that no asset answers serves
    `/demo/index.html`. That is the SPA fallback its history routes need, and the same rule its dev server runs.
-3. `_site/site` declares `@intentic-dev/demo` as a devDependency purely for ORDER — turbo's `^build` then builds
+3. `_site/site` declares `@intentic-dev/demo` as a devDependency purely for ORDER: turbo's `^build` then builds
    the demo before Astro reads `public/`. Nothing is imported across that edge, and a site built without the
    demo present is still a valid site: `/demo/` simply isn't there.
 
 Locally none of that applies: `public/demo/` is a build output, and `astro dev` runs no build, so the site's dev
-server **proxies `/demo/` to the demo's own dev server** (`_site/site/astro.config.mjs`, dev only). Two servers —
-`pnpm -C _site/site dev` and `pnpm -C _site/demo dev` — and the overlay shows the live app with HMR, with no build
+server **proxies `/demo/` to the demo's own dev server** (`_site/site/astro.config.mjs`, dev only). Two servers:
+`pnpm -C _site/site dev` and `pnpm -C _site/demo dev`: and the overlay shows the live app with HMR, with no build
 step between a fixture edit and the frame. With the demo's server down the proxy answers a page that says which
 command to run, because a silent 404 in the overlay reads as a broken demo.
 
 Same-origin is not just convenience. A cross-origin iframe gets **partitioned storage**, and the demo seeds
-credentials into `localStorage` before the app boots — on a separate host that seeding is one browser policy away
+credentials into `localStorage` before the app boots: on a separate host that seeding is one browser policy away
 from breaking the demo outright. `DEMO_PATH` is a relative `/demo/`, so a preview deploy embeds its own copy.
 
 ## What is left
 
-- **Tour deep links** — `#see-it`'s seven shots could each open the overlay at the matching route, turning the
+- **Tour deep links**: `#see-it`'s seven shots could each open the overlay at the matching route, turning the
   section into seven doors into one app. The overlay already takes a URL, and that URL can now carry `?mode=`
   as well as a route, so a shot could open the state it was captured in; nothing but the wiring is missing.
-- **Screenshot regeneration** — the payoff phase: drive the demo build under Playwright (`_tools/e2e` already
+- **Screenshot regeneration**, the payoff phase: drive the demo build under Playwright (`_tools/e2e` already
   drives this app) so `src/assets/product/*.png` stop being hand-captured. This is also the mitigation for the
   drift risk below.
-- **One `pnpm install`** — `_site/demo` is a new workspace package, so the lockfile has to catch up before its
+- **One `pnpm install`**: `_site/demo` is a new workspace package, so the lockfile has to catch up before its
   `dev`/`build` scripts run anywhere.
 
 ## Risks, honestly
@@ -291,14 +291,14 @@ from breaking the demo outright. `DEMO_PATH` is a relative `/demo/`, so a previe
   never on the marketing page's critical path.
 - **The demo build shares the app build's worktree limitation**: both fail to resolve `@intentic/extension-ui`
   from `_extensions/maintenance` under an agent worktree's overlaid `node_modules` (see the workspace README).
-  The demo's build is no worse off than the app's, and the dev server is unaffected — but neither the demo's
+  The demo's build is no worse off than the app's, and the dev server is unaffected: but neither the demo's
   production bundle nor the site's `/demo/` has been built in an environment where the app's own build passes.
 - **`optimizeDeps.include` is anchored at the consuming config's root**, so `_site/demo` declares the five
   packages that list names (`shiki`, `@shikijs/langs`, `@shikijs/themes`, `@vue-flow/core`, `@dagrejs/dagre`)
-  even though it imports none of them directly — pnpm does not hoist. If that list in `vite.shared.ts` grows,
+  even though it imports none of them directly: pnpm does not hoist. If that list in `vite.shared.ts` grows,
   the demo's `package.json` has to grow with it or its highlighting silently degrades.
 - **Fixture drift** is the failure mode that would embarrass us. Contract-typed handlers catch shape drift at
   build time; they cannot catch *narrative* drift (a fixture that describes a feature we changed). Phase 3 is the
-  mitigation — if the screenshots come from the demo, a stale demo is visible in review.
+  mitigation: if the screenshots come from the demo, a stale demo is visible in review.
 - **The uncanny valley**: a demo that looks live and dead-ends silently is worse than a screenshot. Every inert
   action must say why in the app's own voice, not fail quietly.

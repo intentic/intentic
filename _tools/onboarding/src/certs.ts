@@ -67,7 +67,7 @@ export const mintCertificate = async (): Promise<Certificate> => {
         );
     } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        throw new Error(`could not mint the run's TLS certificate — openssl failed: ${message}`, { cause });
+        throw new Error(`could not mint the run's TLS certificate, openssl failed: ${message}`, { cause });
     }
     return { dir, keyPath, certPath };
 };

@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createHarness, type Harness } from "./harness.js";
 
-/* The polling loop's deadline arithmetic, asserted without spending real seconds — which is the whole reason
+/* The polling loop's deadline arithmetic, asserted without spending real seconds, which is the whole reason
  * `now` and `sleep` are injected. A real timer would make these tests slow AND hide the case that matters:
  * whether the predicate is given its chance before the deadline is consulted. */
 
@@ -28,7 +28,7 @@ test("a predicate that already holds passes on the first attempt", async () => {
     expect(harness.failures()).toBe(0);
 });
 
-test("a zero-second deadline still gets one attempt — the caller asked for a fact, not a delay", async () => {
+test("a zero-second deadline still gets one attempt, the caller asked for a fact, not a delay", async () => {
     const { harness } = collected();
     expect(await harness.untilTrue(0, `it is true`, () => true)).toBe(true);
     expect(harness.failures()).toBe(0);

@@ -3,7 +3,7 @@
 // it, and the fixture daemon writes what arrives. So the tree the viewer sees grow is the tree that is here.
 //
 // Deliberately a Go service: `acme-shop` already has a TypeScript api and web, a third language says "any repo",
-// and no package.json means the upload queue never offers to install dependencies — a subprocess the recorded
+// and no package.json means the upload queue never offers to install dependencies: a subprocess the recorded
 // workspace has no honest answer for. Kept under 20 files so the queue takes its per-file XHR path (the one the
 // demo's transport shim serves) instead of streaming a tar.
 

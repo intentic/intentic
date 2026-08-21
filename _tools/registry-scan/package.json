@@ -1,7 +1,7 @@
 {
     "name": "@intentic/registry-scan",
     "version": "0.0.0",
-    "description": "The nightly scan behind the extension registry — finds topic-tagged repos, refreshes upstream facts, and proposes listings as pull requests",
+    "description": "The nightly scan behind the extension registry, finds topic-tagged repos, refreshes upstream facts, and proposes listings as pull requests",
     "license": "MIT",
     "type": "module",
     "repository": {

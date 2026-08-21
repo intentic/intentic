@@ -4,7 +4,7 @@ import { DEFAULT_REPLY, type FakeUpstream, startFakeUpstream } from "./server.ts
 /* What the platform's trial actually sends, asserted against the stand-in that will answer it in CI.
  *
  * The tests worth having here are the REFUSALS. A fake that answers everything is a fake that goes green on the
- * mix-up it was built to catch — the platform asks two surfaces with two different credentials, and sending the
+ * mix-up it was built to catch: the platform asks two surfaces with two different credentials, and sending the
  * wrong one to either is the failure this package exists to make visible. */
 
 let upstream: FakeUpstream | undefined;
@@ -93,7 +93,7 @@ describe(`Google's own surface beside it`, () => {
         expect(response.status).toBe(200);
         const body = (await response.json()) as { models: { name: string; supportedGenerationMethods: string[] }[] };
         expect(body.models[0]?.name).toBe(`models/alpha`);
-        // Without this the platform reads every model as un-chattable and serves the floor instead — the exact
+        // Without this the platform reads every model as un-chattable and serves the floor instead: the exact
         // silent emptying the catalog's floor exists to survive.
         expect(body.models[0]?.supportedGenerationMethods).toContain(`generateContent`);
     });

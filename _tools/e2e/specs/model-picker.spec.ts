@@ -55,7 +55,7 @@ const openPicker = async (page: import("@playwright/test").Page): Promise<void> 
     await page.getByRole("button", { name: "Provider and model" }).click();
 };
 
-test("search spans providers and Enter picks the top hit — an atomic cross-provider switch", async ({ page }) => {
+test("search spans providers and Enter picks the top hit: an atomic cross-provider switch", async ({ page }) => {
     const { pageErrors, vueErrors } = collectErrors(page);
     await connectAll(page);
     await openPicker(page);

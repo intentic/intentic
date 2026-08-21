@@ -2,9 +2,9 @@
 
 As someone whose real systems are behind SSH and a VPN, I want to hand the agent a host and a tunnel, so that it can operate the infrastructure I actually have rather than only the code in front of it.
 
-SSH is the card that has to branch: a key and a password are different credentials, and a form asking for both is asking me to leave one blank and hope. So choosing the authentication mode changes which field I am asked for, and a private key gets a field that survives being pasted — a single-line input silently eats the newlines and corrupts the key, which is a failure with no visible cause.
+SSH is the card that has to branch: a key and a password are different credentials, and a form asking for both is asking me to leave one blank and hope. So choosing the authentication mode changes which field I am asked for, and a private key gets a field that survives being pasted, a single-line input silently eats the newlines and corrupts the key, which is a failure with no visible cause.
 
-The VPN card knows that nobody types a tunnel's settings from memory. It accepts an exported configuration and fills the form from a connection in it, while being honest that the passwords in that file are encrypted by the exporting client and cannot be read — so it tells me which fields I still have to enter. Dialling the tunnel is not done here: the sandbox's status view owns that flow, and the card links to it rather than growing a thinner copy.
+The VPN card knows that nobody types a tunnel's settings from memory. It accepts an exported configuration and fills the form from a connection in it, while being honest that the passwords in that file are encrypted by the exporting client and cannot be read, so it tells me which fields I still have to enter. Dialling the tunnel is not done here: the sandbox's status view owns that flow, and the card links to it rather than growing a thinner copy.
 
 ## Acceptance criteria
 

@@ -11,7 +11,7 @@ afterEach(() => {
 
 describe(`Delayer`, () => {
     /* The half of the pair that RESTARTS its clock. Two calls 5ms apart under a 50ms delay produce one run,
-     * 50ms after the second — a search box, not a watcher. */
+     * 50ms after the second: a search box, not a watcher. */
     it(`runs once after the caller goes quiet`, async () => {
         const delayer = new Delayer<string>(50);
         const task = vi.fn(() => `done`);
@@ -67,8 +67,8 @@ describe(`Delayer`, () => {
 });
 
 describe(`Coalescer`, () => {
-    /* The half that does NOT restart. This is the whole reason both exist: a source that never goes quiet —
-     * an agent editing continuously — starves a Delayer, and a watcher that only reports once the agent stops
+    /* The half that does NOT restart. This is the whole reason both exist: a source that never goes quiet:
+     * an agent editing continuously: starves a Delayer, and a watcher that only reports once the agent stops
      * reports when the browser no longer needs telling. */
     it(`flushes on the window opened by the first item, however long the burst runs`, () => {
         const flush = vi.fn();
@@ -134,7 +134,7 @@ describe(`Coalescer`, () => {
 
 describe(`SingleFlight`, () => {
     /* The property a token refresh depends on. A second concurrent caller must JOIN the run in flight, not
-     * start its own — presenting a refresh token twice is what some providers answer by revoking the grant. */
+     * start its own: presenting a refresh token twice is what some providers answer by revoking the grant. */
     it(`shares one run between concurrent callers for the same key`, async () => {
         const flight = new SingleFlight<string, number>();
         const task = vi.fn(async () => {
@@ -158,7 +158,7 @@ describe(`SingleFlight`, () => {
         expect(task).toHaveBeenCalledTimes(2);
     });
 
-    // A failure must not be cached as a rejection forever — the next caller has to be able to try again.
+    // A failure must not be cached as a rejection forever: the next caller has to be able to try again.
     it(`lets the next caller retry after a failed run`, async () => {
         const flight = new SingleFlight<string, number>();
         const task = vi.fn().mockRejectedValueOnce(new Error(`transient`)).mockResolvedValueOnce(7);
