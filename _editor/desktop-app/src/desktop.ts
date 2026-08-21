@@ -96,6 +96,24 @@ export const EXIT_NEEDS_RESTART = 4;
 /** Whether an exit code is one of the two designed stops rather than something going wrong. */
 export const expectedStop = (code: number | null): boolean => code === EXIT_NEEDS_CONSENT || code === EXIT_NEEDS_RESTART;
 
+/* WHAT THE APP IS DOING ABOUT ITS OWN VERSION (src-tauri/src/update.rs).
+ *
+ * One value rather than "a newer version exists", which is all the old event carried and the reason this
+ * screen's only available sentence was a guess about the future: "it installs the next time you quit", while
+ * nothing in the app installed anything, ever.
+ *
+ * The states this screen actually distinguishes are three: something is happening (checking, downloading),
+ * nothing needs to happen (current), and something is ON THIS MACHINE and one restart away (ready). `manual`
+ * is the fourth and the only one that asks the user for anything: a .deb or .rpm install, which the release
+ * manifest has no artifact for, or a copy whose signature check can never pass again. */
+export type UpdateStage =
+    | { kind: `idle` }
+    | { kind: `checking` }
+    | { kind: `current` }
+    | { kind: `downloading`; version: string; percent: number }
+    | { kind: `ready`; version: string }
+    | { kind: `manual`; version: string | null; reason: string; url: string };
+
 export const desktopInfo = (): Promise<DesktopInfo> => invoke(`desktop_info`);
 /* Taken, not read, see the Rust side. Two callers race for a parked setup (the arrival event, and this
  * window's own read on mount) and only one of them may have it: the loser used to receive the same request a
@@ -149,8 +167,19 @@ export const onRun = (handler: (event: RunEvent) => void): Promise<UnlistenFn> =
     listen<RunEvent>(`desktop://run`, (event) => handler(event.payload));
 export const onPendingSetup = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-setup`, () => handler());
 export const onPendingRecreate = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-recreate`, () => handler());
-export const onUpdateAvailable = (handler: (version: string) => void): Promise<UnlistenFn> =>
-    listen<string>(`desktop://update-available`, (event) => handler(event.payload));
+
+/* THE APP'S OWN VERSION, READ ONCE AND THEN FOLLOWED — and both halves are load-bearing.
+ *
+ * The event covers everything that changes while this window is open. The read covers the window that OPENS
+ * in the middle of it, which is the ordinary case: this face is built on demand, and a download that started
+ * at launch has usually finished before anyone opens the manager. With only the listener the screen would sit
+ * on whatever it was born with until the next transition — which, on a machine that is up to date, never comes. */
+export const updateState = (): Promise<UpdateStage> => invoke(`update_state`);
+export const onUpdate = (handler: (stage: UpdateStage) => void): Promise<UnlistenFn> =>
+    listen<UpdateStage>(`desktop://update`, (event) => handler(event.payload));
+/* Take the offer. Installing ends this process and comes back on the new version, so nothing after this
+ * resolves; a refusal (a script run in flight) comes back as words for the screen. */
+export const updateInstall = (): Promise<void> => invoke(`update_install`);
 
 /* THE SCRIPTS NARRATE THEMSELVES, AND NAME WHAT THEY ARE NARRATING. Every phase of an install is announced
  * as `intentic: [<phase>] <sentence>`, connect.sh's step(), connect.ps1's Write-Step, ic's util::step, one

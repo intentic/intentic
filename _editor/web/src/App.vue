@@ -16,6 +16,7 @@ import { watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "./composables/useAuth";
 import { useSandbox } from "./composables/sandbox/useSandbox";
+import AppUpdateNotice from "./shell/AppUpdateNotice.vue";
 import GoogleSigninGate from "./sandbox-gates/GoogleSigninGate.vue";
 import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
 
@@ -37,4 +38,8 @@ watch(user, (current, previous) => {
     <WorkspaceRuntime v-if="user && activeSandboxId" />
     <GoogleSigninGate />
     <HostModelPicker />
+    <!-- Above the route rather than inside the shell, and NOT behind a session: being on an old build is true
+         of the login screen and the setup wizard exactly as much as it is of the workspace, and a first-time
+         user stuck on a stale bundle is the one least able to work out why nothing behaves as documented. -->
+    <AppUpdateNotice />
 </template>

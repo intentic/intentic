@@ -679,6 +679,31 @@ pub fn close_workspace(app: AppHandle, action: CloseAction, remember: bool) {
     });
 }
 
+/* WHAT THE APP IS DOING ABOUT ITS OWN VERSION — read on mount, then followed on `desktop://update`.
+ *
+ * Both halves are needed and neither is redundant. The event covers everything that happens while this window
+ * is open; this covers the window that opens in the middle of it, which is the ordinary case here, because the
+ * launcher face is built on demand and a download that started at launch is usually already finished by the
+ * time anybody opens the manager. Without the read the screen would sit on "Checking for updates…" until the
+ * next state change, which on a machine that is up to date never comes.
+ */
+#[tauri::command]
+pub fn update_state(app: AppHandle) -> crate::update::Stage {
+    crate::update::stage(&app)
+}
+
+/// Take the offer: install the downloaded update and come back on it, or open the download page for a copy
+/// that cannot install one (update.rs states which is which). Refusals come back as words for the screen —
+/// a run in flight is the one this exists for, and "it will update once that finishes" is the true sentence.
+#[tauri::command]
+pub fn update_install(app: AppHandle) -> CommandResult<()> {
+    if let Some(refusal) = crate::update::refusal(&app) {
+        return Err(refusal.to_string());
+    }
+    crate::update::act(&app);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn settings_get(state: State<'_, AppState>) -> Settings {
     state.settings.lock().unwrap().clone()

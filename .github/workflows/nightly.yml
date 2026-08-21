@@ -120,6 +120,41 @@ jobs:
       - run: bash _tools/scripts/build-desktop.sh 0.0.0 --linux-only
       - run: bash _tools/scripts/verify-desktop-setup.sh
 
+  # Desktop verification tier 3b: does the app move ITSELF onto the release that was published?
+  #
+  # Its own job rather than a step on desktop-setup, because it shares nothing with that one's inputs: it
+  # builds two AppImages of its own, at two versions, signed with a throwaway key and pointed at a loopback
+  # release endpoint — none of which the shipped artifact carries, and all of which are build-time config
+  # rather than a runtime hook the released app would also have (verify-desktop-update.sh says why).
+  #
+  # This is the tier that would have caught the whole of it: for every release up to v1.213.0 the app checked
+  # once, said "it installs the next time you quit", and installed nothing on any path — green the entire time,
+  # because nothing anywhere asserted the outcome.
+  desktop-update:
+    runs-on: [self-hosted, intentic, desktop]
+    container:
+      image: ghcr.io/intentic/ci-desktop:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 90
+    env:
+      CARGO_HOME: /ci-cache/cargo
+      # Its own target dir: this job builds at two versions, which invalidates the app crate on each pass, and
+      # sharing desktop-setup's store would make the two jobs re-do each other's final link every night.
+      CARGO_TARGET_DIR: /ci-cache/desktop-update-target
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/prepare-workspace
+      - uses: ./.github/actions/pnpm-setup
+      - run: bash _tools/scripts/verify-desktop-update.sh
+
   # The Windows artifacts this file's Windows tiers run, cross-built on Linux exactly as ci.yml's
   # desktop-windows-build does and for the same two reasons — the installer has always been cross-built, and
   # `ic` has to come from THIS checkout or the shim would download the last release's flow and verify that

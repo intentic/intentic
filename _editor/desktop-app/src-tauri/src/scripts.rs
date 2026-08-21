@@ -133,6 +133,19 @@ fn forget(id: &str) {
     }
 }
 
+/// Whether anything this app spawned is still going — the guard the self-updater checks before it replaces
+/// this executable and ends the process (update.rs). An install that lands mid-`connect.ps1` kills a
+/// four-minute run somebody is watching, and takes the window reporting it with it.
+///
+/// A poisoned lock answers "busy": the wrong answer costs one deferred update, and the other wrong answer
+/// costs somebody's install.
+pub fn busy() -> bool {
+    running()
+        .lock()
+        .map(|live| !live.is_empty())
+        .unwrap_or(true)
+}
+
 /// End a run and everything it started. The tree matters more than the process: the shim is `powershell.exe`
 /// or `sh`, and the thing actually doing the work — `ic`, `docker`, an installer — is its child. Killing only
 /// what we spawned would leave a 600 MB download running behind a window that says it stopped.

@@ -9,13 +9,22 @@ import { sourceAliases } from "./source-aliases.ts";
  *
  * Its own module rather than an export off vite.config.ts, because the demo importing that would pull the app's
  * dev-server block with it, including a readFileSync of a certificate the demo has no use for. */
+/* THE ID OF THIS BUILD. One fresh value per build (and per dev-server start), read in the app via buildId()
+ * (composables/buildEpoch.ts). It does two jobs, and the second is why it is a named export rather than an
+ * expression inlined into `define` below:
+ *
+ *   1. it invalidates everything the browser persisted under the PREVIOUS build, so nobody has to remember to
+ *      bump a schema number when a cached shape changes — every deploy is its own bump;
+ *   2. it is written into `build.json` beside the bundle (vite.config.ts), which is how a tab that has been
+ *      open for three days finds out a newer app has been deployed underneath it.
+ *
+ * The two MUST be the same value: the whole comparison is "what I am running" against "what is served", and
+ * two calls to `Date.now()` a few milliseconds apart would make every freshly-loaded page believe it is stale. */
+export const BUILD_ID = String(Date.now());
+
 export const shared = {
     plugins: [vue(), tailwindcss()],
-    // One fresh id per build (and per dev-server start), read via buildId() (composables/buildEpoch.ts). It is
-    // what invalidates everything the browser persisted under the PREVIOUS build, nobody has to remember to
-    // bump a schema number when a cached shape changes, because every deploy is its own bump. The cost is one
-    // stale-while-revalidate paint lost per update, which nothing waits on.
-    define: { "import.meta.env.BUILD_ID": JSON.stringify(String(Date.now())) },
+    define: { "import.meta.env.BUILD_ID": JSON.stringify(BUILD_ID) },
     resolve: {
         // Source-first workspace aliases, shared with vitest.config.ts, see source-aliases.ts for why.
         alias: sourceAliases(),

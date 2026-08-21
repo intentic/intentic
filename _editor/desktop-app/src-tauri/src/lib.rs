@@ -3,11 +3,12 @@ mod commands;
 mod scripts;
 mod setup_link;
 mod state;
+mod update;
 mod windows;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager, RunEvent};
 
 /// Every `intentic://` link — intercepted webview navigation, OS deep link, or second-instance argv — funnels
 /// through here, carrying which of those it was: only the first is a link this app watched its own window ask
@@ -26,7 +27,8 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_process::init());
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
@@ -40,8 +42,7 @@ pub fn run() {
                 }
                 windows::show_workspace(app);
             }))
-            .plugin(tauri_plugin_deep_link::init())
-            .plugin(tauri_plugin_updater::Builder::new().build());
+            .plugin(tauri_plugin_deep_link::init());
     }
 
     let app = builder
@@ -70,10 +71,13 @@ pub fn run() {
             commands::close_workspace,
             commands::settings_get,
             commands::settings_set,
+            commands::update_state,
+            commands::update_install,
         ])
         .setup(|app| {
             app.manage(state::AppState::load(app.handle())?);
             app.manage(auth::PendingAuth::default());
+            app.manage(update::UpdateState::default());
             create_tray(app.handle())?;
 
             #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -102,11 +106,14 @@ pub fn run() {
                         );
                     }
                 }
-                // Air-gapped installs and executable smoke tiers can disable the one background request this
-                // process otherwise makes independently of the workspace origin.
-                if std::env::var_os("INTENTIC_DISABLE_UPDATE_CHECK").is_none() {
-                    spawn_update_check(app.handle().clone());
-                }
+            }
+
+            // Air-gapped installs and executable smoke tiers can disable the one background request this
+            // process otherwise makes independently of the workspace origin. Everything else this app does
+            // about its own version — the schedule, the silent download, the install on the way out — is
+            // behind this switch, so a tier that sets it gets a process that never touches the network.
+            if std::env::var_os("INTENTIC_DISABLE_UPDATE_CHECK").is_none() {
+                update::start(app.handle());
             }
 
             /* BEFORE the link, nothing opens. A first-time user's very first act is clicking "Set up on this
@@ -125,7 +132,19 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("intentic desktop failed to start");
 
-    app.run(|_app, _event| {});
+    /* THE WAY OUT IS ALSO THE WAY A DOWNLOADED UPDATE GETS APPLIED.
+     *
+     * Quitting is the one moment with nothing to interrupt: the window is going anyway, no script run is being
+     * watched, and the next launch is simply the new version with nobody having been asked about it. This is
+     * what the launcher's notice used to CLAIM happened while nothing in the crate installed anything.
+     *
+     * `Exit` rather than `ExitRequested`, because the latter can still be cancelled and an app that installed
+     * its update and then stayed open would be running one version while its files are another. */
+    app.run(|app, event| {
+        if matches!(event, RunEvent::Exit) {
+            update::install_on_exit(app);
+        }
+    });
 }
 
 /// Where the app lives once its window is closed: the × hides the workspace rather than ending the app, so
@@ -137,10 +156,24 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // "This computer", matching the window it opens — the screen covers the machine's sandboxes AND its desktop
     // sync, and a tray entry naming only half of that is the reason nobody looked there for the other half.
     let manager = MenuItemBuilder::with_id("manager", "This computer").build(app)?;
+    /* THE APP'S OWN VERSION, ON THE ONE SURFACE THAT IS THERE WHEN NO WINDOW IS.
+     *
+     * This app spends most of its life as a tray icon with nothing on screen, so a "an update is ready" that
+     * lives only in a window is one most people will never meet. The row is always present and always says
+     * something true — up to date, downloading, ready — rather than appearing out of nowhere on the day there
+     * is news, because a menu that changes shape is a menu nobody learns. It is clickable in exactly the two
+     * states where a click does something: the swap is downloaded, or this copy cannot swap itself at all
+     * (update.rs `Stage::tray`).
+     */
+    let update = MenuItemBuilder::with_id("update", "Checking for updates…")
+        .enabled(false)
+        .build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&open)
         .item(&manager)
+        .separator()
+        .item(&update)
         .separator()
         .item(&quit)
         .build()?;
@@ -151,6 +184,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => windows::show_workspace(app),
             "manager" => windows::show_launcher(app),
+            "update" => update::act(app),
             "quit" => app.exit(0),
             _ => {}
         });
@@ -158,19 +192,8 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
+    // Held so the state can retitle it without rebuilding the menu — a rebuilt tray menu flickers on Windows
+    // and loses whatever the user has open.
+    app.manage(update::TrayUpdate(update));
     Ok(())
-}
-
-/// One startup check; the launcher shows the result and offers the install.
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-fn spawn_update_check(app: AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        use tauri_plugin_updater::UpdaterExt;
-        let Ok(updater) = app.updater() else {
-            return;
-        };
-        if let Ok(Some(update)) = updater.check().await {
-            let _ = app.emit("desktop://update-available", update.version.clone());
-        }
-    });
 }

@@ -83,6 +83,15 @@ pub enum Link {
     /// user's real browser. It carries nothing, because everything it starts is minted afterwards.
     SignIn,
     Auth(AuthArgs),
+    /* `intentic://update` — the workspace banner's button, and the reason the SPA can offer a swap it has no
+     * way to perform. The app tells the page an update is downloaded (update.rs `announce_to_workspace`) and
+     * the page answers with this, which is the same one-way-then-link shape every other action here has.
+     *
+     * [`Source::App`] ONLY, and it carries nothing so there is nothing to strip instead. What this link does
+     * is end the process and run an installer, which is a fine thing for the app's own window to ask for and
+     * not something a page in a browser should be able to do to somebody who clicked "Open Intentic?". A copy
+     * that genuinely wants it from outside has the tray row, which is on the machine rather than on the web. */
+    Update,
 }
 
 pub fn parse_link(url: &str, source: Source) -> Option<Link> {
@@ -115,6 +124,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             })))
         }
         "signin" => Some(Link::SignIn),
+        "update" => (source == Source::App).then_some(Link::Update),
         "recreate" => {
             let rollback = get("rollback").is_some();
             Some(Link::Recreate(RecreateArgs {
@@ -217,6 +227,22 @@ mod tests {
                 rollback: true
             }))
         );
+    }
+
+    /* THE ONE LINK THAT ENDS THE PROCESS, so it is the one link only this app's own window may send.
+     *
+     * `intentic://update` runs an installer over the running application. From the workspace webview that is
+     * the user pressing the button on a banner this app put there. From the OS handler it is any page in any
+     * browser, behind a prompt that said only "Open Intentic?" — and there is nothing to confirm afterwards
+     * that would make it a fair question, because the answer is "your app closes now". The tray row is the
+     * out-of-window way to reach it, and it is on the machine rather than on the web. */
+    #[test]
+    fn only_this_apps_own_window_can_ask_it_to_replace_itself() {
+        assert_eq!(
+            parse_link("intentic://update", Source::App),
+            Some(Link::Update)
+        );
+        assert_eq!(parse_link("intentic://update", Source::External), None);
     }
 
     #[test]

@@ -12,7 +12,7 @@ vi.mock("posthog-js", () => ({
 
 // `desktop` stands in for the app's initialization script (windows.rs), which is the only thing that tells this
 // SPA it is running inside the desktop app rather than a browser tab.
-const bootAnalytics = async (posthogKey: string, desktop?: { version: string; installId: string }) => {
+const bootAnalytics = async (posthogKey: string, desktop?: { version: string; installId: string; update: string | null }) => {
     vi.resetModules();
     vi.stubGlobal(`window`, {
         env: { analytics: { posthogKey, posthogHost: `https://app.intentic.dev/wire` } },
@@ -63,14 +63,14 @@ describe(`initAnalytics`, () => {
         const { posthog: browser } = await bootAnalytics(`phc_test`);
         expect(browser.register).toHaveBeenCalledWith({ client: `browser` });
 
-        const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc` });
+        const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
         expect(app.register).toHaveBeenCalledWith({ client: `desktop`, desktop_version: `1.15.1`, desktop_install_id: `install-abc` });
     });
 
     // reset() empties the store super properties live in, so a sign-out would otherwise strip the client tag off
     // every event that follows it: on the desktop app, off exactly the sessions this exists to count.
     it(`says which client it is again after a sign-out has cleared it`, async () => {
-        const { posthog } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc` });
+        const { posthog } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
         user.value = { id: `u1`, email: `a@b.c`, name: `A`, image: null };
         await nextTick();
         // Counted rather than asserted outright: `user` is a module singleton, so every boot in this file leaves

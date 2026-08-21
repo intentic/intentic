@@ -58,6 +58,14 @@ export XDG_CURRENT_DESKTOP=GNOME
 # The stub SPA (baked into the image) rather than app.intentic.dev: this tier is hermetic, and the workspace
 # window opening at its CONFIGURED origin is what is being asserted, not that the hosted app renders.
 export INTENTIC_APP_URL="http://127.0.0.1:8099"
+# The other half of hermetic, and it stopped being optional the moment the app started ACTING on what it finds.
+# What used to be one harmless GET is now a background download of the current release — around 100 MB of
+# AppImage, twenty seconds into a tier that is about installing and deep-linking and cares about neither.
+# Left on, this tier would spend a release's bandwidth per run, fail on any network hiccup for a reason
+# unrelated to anything it asserts, and install an unrelated build over the artifact under test when the app
+# quits. The Windows tier has always set it (desktop-smoke-windows/src/hermetic.ts); update.sh, beside this
+# file, is where the updater is deliberately let loose against a release endpoint of its own.
+export INTENTIC_DISABLE_UPDATE_CHECK=1
 LOG=/tmp/intentic-app.log
 
 # WebKitGTK inside a container, with no GPU. Its web process sandboxes itself with bubblewrap, which needs user

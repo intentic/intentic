@@ -225,9 +225,19 @@ fn frame_is_inheritable(window: &WebviewWindow) -> bool {
 /// The install id rides along so the SPA's analytics can say which app an event came from, and join it to what
 /// the launcher reported about the same install (state.rs). It is a random per-install id and grants nothing:
 /// remote content that reads it learns only that it is inside an app, which the version already told it.
-fn workspace_init_script(install_id: &str) -> String {
+///
+/// `update` is the third value and the newest: the version this app has already DOWNLOADED and is one restart
+/// away from running, or null. It is here as well as on the event (update.rs `announce_to_workspace`) because
+/// the two cover different orderings — the event reaches a page that is already open, and this reaches a page
+/// that loads afterwards. Without it a webview navigated at any point after the download would draw no banner
+/// and the app would look, from inside, exactly as up to date as it is not.
+fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
+    let update = match update {
+        Some(version) => format!("\"{}\"", crate::update::escape_js(version)),
+        None => "null".to_string(),
+    };
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\" }}); }} }})();",
+        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update} }}); }} }})();",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -250,6 +260,9 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
     };
     if let Some(window) = app.get_webview_window(WORKSPACE) {
         swap_in(&window, app.get_webview_window(LAUNCHER));
+        // The workspace coming back is the cheapest evidence this machine is awake and being used, which the
+        // six-hourly timer cannot see through a night of sleep (update.rs).
+        crate::update::nudge(app);
         if path.is_some() {
             match target.parse() {
                 Ok(url) => {
@@ -276,7 +289,10 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         // Built hidden so `swap_in` can place it on the frame it is taking over before it is ever on screen —
         // a finished setup hands the window back, and the workspace must appear where the setup was standing.
         .visible(false)
-        .initialization_script(workspace_init_script(&install_id))
+        .initialization_script(workspace_init_script(
+            &install_id,
+            crate::update::stage(app).ready_version(),
+        ))
         .on_navigation(move |url| {
             if url.scheme() == "intentic" {
                 // Handle off the navigation callback — creating a window inside the webview's navigation
@@ -690,6 +706,10 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             }
         }
         Some(Link::Auth(args)) => crate::auth::complete(app, &args),
+        // The banner's button. Nothing is parked and no face is swapped: the bytes are already on this machine
+        // (update.rs), so this either installs and comes back, or opens the download page for a copy that
+        // cannot install anything.
+        Some(Link::Update) => crate::update::act(app),
         None => {}
     }
 }

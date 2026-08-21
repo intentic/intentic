@@ -27,7 +27,7 @@ import {
     onPendingRecreate,
     onPendingSetup,
     onRun,
-    onUpdateAvailable,
+    onUpdate,
     parseRequirement,
     parseRequirementState,
     parseStep,
@@ -47,6 +47,8 @@ import {
     signOutForSetup,
     takePendingRecreate,
     takePendingSetup,
+    updateInstall,
+    updateState,
     workspaceOpen,
     type DesktopInfo,
     type MachineReport,
@@ -55,6 +57,7 @@ import {
     type RunEvent,
     type SandboxStatus,
     type SetupArgs,
+    type UpdateStage,
 } from "./desktop";
 
 /* THE APP'S OWN FACE: the other half of the one window, and deliberately not a wizard.
@@ -96,7 +99,23 @@ const listError = ref<string | undefined>(undefined);
 const report = ref<MachineReport | undefined>(undefined);
 const reportError = ref<string | undefined>(undefined);
 const busy = ref<{ slug: string; verb: SandboxVerb } | undefined>(undefined);
-const updateVersion = ref<string | undefined>(undefined);
+
+/* THE APP'S OWN VERSION, as one state rather than a boolean (desktop.ts `UpdateStage`). The screen draws
+ * exactly what is true — checking, downloading with a figure, downloaded and one click away, or "this copy
+ * can't replace itself, here is the download" — and the button exists in exactly the states where pressing it
+ * does something immediately. What it replaces was a notice claiming an install that nothing performed. */
+const update = ref<UpdateStage>({ kind: `idle` });
+const updateError = ref<string | undefined>(undefined);
+
+const applyUpdate = async (): Promise<void> => {
+    updateError.value = undefined;
+    try {
+        await updateInstall();
+    } catch (error) {
+        // The refusal worth showing: a script run is in flight, so the swap waits for it rather than killing it.
+        updateError.value = String(error);
+    }
+};
 
 /* WHAT ONE ROW IS SHOWING BELOW ITSELF. The log tail is the only thing here that outlives its own run: every
  * other verb's lines are progress, and a container's last two hundred lines are read after they arrive, so the
@@ -767,8 +786,13 @@ onMounted(async () => {
         }),
         onPendingSetup(() => void loadPending()),
         onPendingRecreate(() => void drainRecreate()),
-        onUpdateAvailable((version) => (updateVersion.value = version)),
+        onUpdate((stage) => (update.value = stage)),
     ]);
+    // …and the read the listener above cannot stand in for: this window is built on demand, so a download that
+    // began at launch has usually already finished by the time it opens.
+    updateState()
+        .then((stage) => (update.value = stage))
+        .catch(() => undefined);
     // A link that arrived while this screen was opening was PARKED rather than delivered, so it is picked up
     // exactly once: by the event above or by these, whichever finds the request still there.
     await Promise.all([refresh(), loadPending(), drainRecreate()]);
@@ -917,10 +941,28 @@ onUnmounted(() => {
                 </Button>
             </header>
 
-            <!-- The app updates itself; this is the notice, not a gate. -->
-            <Notice v-if="updateVersion" tone="info" class="items-center">
-                Intentic {{ updateVersion }} is available: it installs the next time you quit.
+            <!-- WHAT THIS APP IS DOING ABOUT ITS OWN VERSION, and never a gate.
+                 The rule is that the sentence describes what is TRUE right now rather than what is meant to
+                 happen later. This line used to read "it installs the next time you quit" while nothing in the
+                 app installed anything, on any path, ever: the one kind of copy that is worse than none,
+                 because it is also the reason nobody investigated.
+                 Only `ready` gets a button, and it is a restart rather than a download: by the time it is drawn
+                 the installer is already on this machine (update.rs). -->
+            <Notice v-if="update.kind === `ready`" tone="info" class="items-center">
+                <span>Intentic {{ update.version }} is downloaded. It installs when you quit, or now:</span>
+                <Button class="ml-2" size="small" severity="secondary" label="Update and restart" @click="applyUpdate" />
             </Notice>
+            <Notice v-else-if="update.kind === `downloading`" tone="info" class="items-center">
+                Downloading Intentic {{ update.version }}… {{ update.percent }}%
+            </Notice>
+            <!-- The two populations that can never update themselves: a .deb or .rpm install, which the release
+                 manifest has no artifact for, and a copy installed at or before v1.213.0, compiled with a key
+                 that can no longer verify anything we sign. Both used to be told nothing whatsoever. -->
+            <Notice v-else-if="update.kind === `manual`" tone="warning" class="items-center">
+                <span>{{ update.reason }}</span>
+                <a class="ml-2 text-link hover:underline" :href="update.url" target="_blank" rel="noreferrer">Get the latest version</a>
+            </Notice>
+            <Notice v-if="updateError" tone="warning" class="items-center">{{ updateError }}</Notice>
 
             <p v-if="listError" class="flex items-start gap-2 text-2xs text-muted">
                 <Icon name="box" class="mt-0.5 shrink-0" />

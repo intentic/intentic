@@ -26,6 +26,11 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-process = "2"
+# NOT target-gated, unlike the two below it. Those two are genuinely desktop-OS-specific plumbing; this one is
+# how the app stays on the version that was released (src/update.rs), and gating it would make the whole
+# module — its state, its commands and the tray row that reads them — conditional on a `cfg` for a platform
+# this app does not build for anyway.
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"
@@ -34,11 +39,14 @@ url = "2"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 sha2 = "0.10"
+# The update schedule's only need: a sleep that yields rather than one that holds a thread. Tauri's async
+# runtime IS tokio, so this names what is already in the graph instead of adding to it — and the alternative,
+# `spawn_blocking` around `thread::sleep`, would park a pooled worker for six hours at a time.
+tokio = { version = "1", features = ["time"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
-tauri-plugin-updater = "2"
 
 # Tuned for BUILD time, because that is the only axis this crate can lose on. `lto = true` (fat) with
 # codegen-units = 1 is the slowest release profile rustc offers, and it buys runtime speed this app cannot use:

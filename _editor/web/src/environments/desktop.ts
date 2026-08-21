@@ -17,16 +17,37 @@ import { environment } from "./environment";
 
 declare global {
     interface Window {
-        __INTENTIC_DESKTOP__?: { version: string; installId: string };
+        __INTENTIC_DESKTOP__?: { version: string; installId: string; update: string | null };
     }
 }
 
-/* What the app tells the page about itself: the version, and a random id for that installation of the app.
+/* What the app tells the page about itself: the version, a random id for that installation of the app, and the
+ * version it has ALREADY DOWNLOADED and is one restart away from running.
+ *
  * The id is the only thread between this window's events and the ones the app's own screens report, two
- * webviews with separate storage, which analytics would otherwise read as two unrelated people (analytics.ts). */
-export const desktopApp = (): { version: string; installId: string } | undefined => window.__INTENTIC_DESKTOP__;
+ * webviews with separate storage, which analytics would otherwise read as two unrelated people (analytics.ts).
+ *
+ * `update` is the newest of the three and the only one that changes after load, so it arrives twice: here for
+ * a page that loads after the download finished, and on the event below for a page that was already open when
+ * it did. Neither is IPC — the app injects both, and the page's only way back is the `intentic://` link. */
+export const desktopApp = (): { version: string; installId: string; update: string | null } | undefined => window.__INTENTIC_DESKTOP__;
 
 export const desktopVersion = (): string | undefined => desktopApp()?.version;
+
+/* The app announcing, mid-session, that the next version is downloaded and waiting (desktop-app's update.rs).
+ * A plain DOM event because that is the widest one-way channel there is: no handshake, nothing exposed to the
+ * page, and a browser with no app around it simply never fires it. */
+export const DESKTOP_UPDATE_EVENT = `intentic-desktop-update`;
+
+export interface DesktopUpdateEvent {
+    version: string;
+}
+
+/* Take the offer: the app installs what it has downloaded and comes back on it. Sent as a navigation like
+ * every other action here, so this file still knows nothing about Tauri — but unlike the others this one is
+ * refused when it arrives from anywhere except the app's own window, because what it does is end the process
+ * and run an installer (setup_link.rs). */
+export const DESKTOP_UPDATE_LINK = `intentic://update`;
 
 export interface DesktopSetupArgs {
     code: string;

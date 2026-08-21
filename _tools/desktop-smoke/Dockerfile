@@ -41,7 +41,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN mkdir -p /srv/stub && printf '<!doctype html><title>stub workspace</title><h1>stub</h1>\n' > /srv/stub/index.html
 
 COPY smoke.sh /usr/local/bin/smoke.sh
-RUN chmod +x /usr/local/bin/smoke.sh
+# The second tier this image serves: does the app replace ITSELF (update.sh). Same bare host, same display, and
+# reached by overriding the entrypoint rather than as a third `smoke.sh` kind — it stages two builds and a
+# local release endpoint, which shares nothing with the install/deep-link flow but the container around it.
+COPY update.sh /usr/local/bin/update.sh
+RUN chmod +x /usr/local/bin/smoke.sh /usr/local/bin/update.sh
 
 # The artifact under test is copied to /artifacts by the runner rather than baked in, so one image serves every
 # build. Created here so the copy lands in a directory that already exists whichever way the runner fills it.

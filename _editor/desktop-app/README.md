@@ -326,9 +326,15 @@ Four actions, and it is the whole channel between the SPA and the app
 | `intentic://recreate?slug=…[&hash=…][&rollback=1]` | the Update / Environment cards | update, build the approved overlay, or roll back |
 | `intentic://signin` | the login screen | sign in, in the user's real browser |
 | `intentic://auth?handoff=…&state=…` | the browser, after sign-in | the credential coming back |
+| `intentic://update` | the SPA's own update banner | install the app update already downloaded here |
 
-Each one works from an external browser too, where the OS routes it to the installed app: with the one
-difference the next section is about.
+The first four work from an external browser too, where the OS routes them to the installed app: with the one
+difference the next section is about. **`intentic://update` is the exception and is refused from anywhere but
+this app's own window.** What it does is end the process and run an installer, which is a fine thing for a
+button this app drew to ask for and not something a page in a browser should be able to do to somebody who
+answered *"Open Intentic?"*. There is nothing to confirm afterwards that would make it a fair question: the
+answer is that your app closes now. Out of a window, the tray row is the way to reach it — on the machine,
+rather than on the web.
 
 ### A link from outside is not a link from us
 
@@ -421,8 +427,8 @@ report anything.
   about them. The archived three-persona wizard is not here.
 - `src-tauri/src/`: the Tauri 2 shell. `windows.rs` (the frame swap, the install window and link
   interception), `scripts.rs`
-  (the script runner), `commands.rs` (the UI's backend), `auth.rs` (the sign-in handoff), `state.rs`,
-  `setup_link.rs`.
+  (the script runner), `commands.rs` (the UI's backend), `auth.rs` (the sign-in handoff), `update.rs` (the app
+  keeping itself on the released version), `state.rs`, `setup_link.rs`.
 - `scripts/stage-local-downloads.sh`: build installers from this checkout into `_site/site/public/desktop/`
   (gitignored), so the local site serves them and the web app's dev download links get your own build.
 - `src-tauri/staged-scripts/`: the launcher scripts as the commit carries them (gitignored, rebuilt by
@@ -439,18 +445,70 @@ Release**, exactly like `intentic-sync` and `intentic-host`.
 
 Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in CI (generate a pair with
 `pnpm --filter @intentic/desktop-app exec tauri signer generate`; the pubkey is committed in
-`tauri.conf.json`). Without it the build still produces plain installers and skips `latest.json`: which is
-what every release up to and including v1.213.0 did, so `latest.json` 404s and no copy in the wild has ever
-been offered an update.
+`tauri.conf.json`). Without it the build produces plain installers and skips `latest.json`, which is what every
+release up to and including v1.213.0 did: the manifest 404s, and no copy in the wild was ever offered an
+update. That skip is now **fatal for a release** and silent only at the `0.0.0` sentinel the CI and nightly
+builds pass, so the same mistake fails a release instead of shipping one.
 
 The key that pairs with the committed pubkey was **rotated** when that was fixed, the original having been
-lost. An app verifies the manifest against the pubkey it was COMPILED with, so copies installed from
-v1.213.0 or earlier will reject every manifest this key signs and stay where they are: they need one manual
-reinstall, and everything from the first signed release forward updates itself.
+lost. An app verifies the manifest against the pubkey it was COMPILED with, so copies installed from v1.213.0
+or earlier will reject every manifest this key signs and stay where they are. They need one manual reinstall —
+and they are now *told* so (below), rather than retrying a signature check that can never pass again.
 
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is exported (empty) by `build-desktop.sh` because the signer prints
 `Signing without password.` and then BLOCKS on a prompt when the variable is absent: a release that hangs
 rather than one that fails.
+
+### How the app takes one ([`src/update.rs`](src-tauri/src/update.rs))
+
+Signing the manifest is half the job; the app has to act on it. It did not. What shipped was one check at
+startup, an event, and a notice reading *"Intentic X is available: it installs the next time you quit"* over a
+crate with no install path in it at all — on the manager screen, which most users never open. Nothing failed,
+nothing was red, and the sentence on screen is why nobody went looking.
+
+**The shape is the one the sandbox already uses.** `ic sandbox prepare` pulls and builds the next image without
+touching the running container and writes `/history/update-staged.json` to say so; `ic sandbox update` then
+swaps onto what is already downloaded — seconds of downtime instead of minutes. This is that, for the shell:
+
+```
+check (20s after start, then every 6h) → download to the cache dir, silently → offer the swap → apply it
+```
+
+- **Silent by default, and applied on the way out.** A found release is downloaded and its signature verified
+  with nobody asked about anything. It installs on **quit**, where there is nothing to interrupt — which means
+  the next launch is simply the new version. Taking it sooner is a click, never a wait: `Ready` is the only
+  state with a button on it, because by the time one is drawn the installer is already on this machine.
+- **Never behind a run.** An install replaces this executable and ends the process, so it is refused outright
+  while any script this app spawned is still going (`scripts::busy`) — killing somebody's four-minute
+  `connect.ps1` and the window reporting it is not a trade worth making for a version bump.
+- **Three surfaces, one value.** `Stage` is what the launcher notice, the tray row and the SPA's banner all
+  render, so they cannot describe the same fact differently. The tray row is always there and always says
+  something true (up to date · downloading 42% · restart to update), because this app spends most of its life
+  as an icon with no window on screen.
+- **The bytes go to disk**, under the app's own cache directory, rather than staying resident: an AppImage is
+  around 100 MB and this process routinely lives for days. Nothing is traded away — the staging directory and
+  the installed application belong to the same user on both platforms (`installMode: currentUser` puts the
+  Windows install under `%LOCALAPPDATA%`), so anything that could tamper with a staged installer can already
+  replace the app it would install over.
+- **The two populations that can never update themselves are told so.** `latest.json` names exactly two
+  artifacts — the AppImage and the NSIS installer — so a `.deb` or `.rpm` install has nothing of its own to be
+  updated with, and the plugin left to itself would hand an AppImage to `dpkg`. And every copy from v1.213.0 or
+  earlier holds the lost pubkey. Both end at a download link instead of silence: the first recognised up front
+  from `bundle_type()`, the second after three consecutive failures.
+- **The workspace face gets the news without gaining IPC.** The app injects `update` into the
+  `__INTENTIC_DESKTOP__` marker at load and dispatches a DOM event into the page when a download finishes
+  later; the page's only way back is `intentic://update`. Same one-way-then-link shape as every other action
+  here.
+
+`INTENTIC_DISABLE_UPDATE_CHECK` switches the whole of it off — the schedule, the download and the install on
+exit — which is what the air-gapped installs and the executable smoke tiers rely on.
+
+**The other half of "newest version" is the hosted SPA**, and it is not this crate's. The workspace face is
+`app.intentic.dev` in a webview that is *hidden* on close rather than destroyed, deliberately, so it keeps its
+session — which also means it is never reloaded and can sit on a weeks-old web build. The SPA polls its own
+`build.json` and offers a reload from the same banner
+([`web/src/composables/appUpdate.ts`](../web/src/composables/appUpdate.ts)). One banner, two meanings: *Restart*
+in the app, *Reload* in a browser.
 
 `POSTHOG_KEY` is the release workflow's other secret, and it is set on the desktop jobs only: a compiled app
 has no entrypoint to substitute one at start the way the web image does, so it is baked into the launcher UI
@@ -458,7 +516,7 @@ here. CI and nightly builds get none, which is what keeps artifacts nobody insta
 
 ## How it is tested
 
-Eight tiers, ordered by cost. Each proves something the one before it cannot, and the split is driven by one
+Nine tiers, ordered by cost. Each proves something the one before it cannot, and the split is driven by one
 fact: **this app is cross-built on Linux and its Windows conventions first execute on a user's machine.**
 
 | Tier | Runs | Proves |
@@ -468,6 +526,7 @@ fact: **this app is cross-built on Linux and its Windows conventions first execu
 | `_tools/scripts/verify-desktop-install.sh` | main + nightly (`desktop-verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` (with the app running *and* with it closed, which are different mechanisms) see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
 | `@intentic/desktop-smoke-windows install` | desktop changes on main + every release candidate | the real NSIS installer runs on Windows; the installed app handles cold and warm OS links, renders loopback WebView content, and uninstalls while running. A release publishes the same installer bytes this tier passed |
 | `_tools/scripts/verify-desktop-setup.sh` | nightly | the `connect.sh` **extracted from the installer** brings a sandbox up on a clean Docker host, hermetically (no Cloudflare, no Google, no platform) |
+| `_tools/scripts/verify-desktop-update.sh` | nightly | the app **replaces itself**: two AppImages of its own at two versions, a throwaway key, a loopback release endpoint — it checks, downloads and verifies with nobody pressing anything, installs on close, and comes back on the new bytes reporting itself current. The tier that would have caught the whole of the section above |
 | `@intentic/desktop-smoke-windows setup` | nightly | the installed `connect.ps1`, Windows PowerShell 5.1 conventions, Docker Desktop's Linux-container mode, and a sandbox answering health |
 | `@intentic/desktop-smoke-windows agents` | nightly when the account volume exists | the host loopback route and control-token gate, followed by one real model reply read from that conversation's transcript |
 | `_tools/scripts/verify-images-public.sh` | nightly | the images those scripts pull are readable **without a credential**. The only tier that runs logged out, the setup tiers carry the runner's `ghcr.io` login, so a package published private is invisible to them and surfaces first as a user's install dying at `error from registry: unauthorized` |

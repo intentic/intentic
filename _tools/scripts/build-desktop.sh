@@ -85,6 +85,21 @@ if [ -n "$WINDOWS_PREBUILT" ] && [ ! -f "$WINDOWS_PREBUILT/$NSIS_NAME" ]; then
     echo "error: no $NSIS_NAME in $WINDOWS_PREBUILT — the tested candidate is missing, or was built at a different version" >&2
     exit 2
 fi
+# A RELEASE WITHOUT THE SIGNING KEY IS A RELEASE NOBODY CAN BE UPDATED TO, and it used to be a line of output.
+#
+# The tail of this script skips the .sig files and latest.json when TAURI_SIGNING_PRIVATE_KEY is unset, prints
+# "no auto-update for this release", and exits green. That is exactly right for the CI and nightly builds,
+# which pass 0.0.0 and exist to prove the bundles install — and it is how every release up to and including
+# v1.213.0 shipped with a 404 where its manifest should be. No copy in the wild was ever offered an update, the
+# app said "it installs the next time you quit" over the top of it, and the pipeline was green throughout.
+#
+# A version that is not the 0.0.0 sentinel is a release. Refuse it here, before several minutes of building,
+# rather than announcing it afterwards.
+if [ "$VERSION" != "0.0.0" ] && [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+    echo "error: releasing v${VERSION} with no TAURI_SIGNING_PRIVATE_KEY — the build would publish installers with no latest.json, and no copy of the app could ever update itself onto them. Set the secret, or build at 0.0.0 to verify the bundles without releasing." >&2
+    exit 2
+fi
+
 ROOT="$(repo_root)"
 APP="$ROOT/_editor/desktop-app"
 TAURI_DIR="$APP/src-tauri"
