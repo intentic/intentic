@@ -78,7 +78,7 @@
  * hand-written `tsconfig.libs.json` is the proof: it names 13 of the 23 packages that need building, and the
  * one it happens to omit (`@intentic/constants`) was on its own worth 3 phantom errors in the daemon.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 /* BY FILE, NOT BY PACKAGE NAME. The walker is the same one `@intentic/constants/node` exports, but a BARE
  * specifier is resolved through `node_modules`, and the two callers that matter most here run before there is
@@ -690,15 +690,33 @@ if (!conversation && existsSync(join(root, LOCK_FILE))) {
  *
  * Asserted on disk rather than in the index because the disk is what git consults at push time, and asserted
  * here because this runs on the machine about to push: a fresh CI checkout re-applies the tracked bit and
- * passes untouched. The remedy is the prepare script (it re-arms on every install), so the message names it.
+ * passes untouched.
+ *
+ * RE-ARMED, NOT REFUSED, and this is the one invariant here that repairs rather than reports. The other eleven
+ * describe the tree that is about to be pushed: prepass cannot know what the author meant, so it says no and
+ * stops. This one describes a bit on the pusher's own disk that carries no intent whatsoever, and the fix is a
+ * chmod this process is already entitled to make. Failing was strictly worse on both ends: `pnpm test` died
+ * over a mode that has nothing to do with any test, and the hook stayed disarmed until somebody read the
+ * message and ran a full install. A mode-only flip in the index is invisible to every existing working tree
+ * FOREVER (git rewrites contents, never modes), so the install-time repair alone never reaches a clone that
+ * does not reinstall. Now every prepass arms the hook for the next push, which is the outcome the invariant
+ * was ever asking for. Still reported when the chmod itself fails: a hook nobody can arm is the real finding.
  * Windows has no executable bit and never runs these hooks through one, so it has nothing to assert. */
 const disarmed = [];
+const rearmed = [];
 const hooksDir = join(root, ".githooks");
 if (process.platform !== "win32" && existsSync(hooksDir)) {
     for (const hook of readdirSync(hooksDir)) {
-        if ((statSync(join(hooksDir, hook)).mode & 0o111) === 0) {
+        const path = join(hooksDir, hook);
+        if ((statSync(path).mode & 0o111) !== 0) {
+            continue;
+        }
+        try {
+            chmodSync(path, 0o755);
+            rearmed.push(hook);
+        } catch (error) {
             disarmed.push(
-                `.githooks/${hook} is not executable: git skips it with a hint and the push bypasses every gate in this file; run \`pnpm install\` (or \`chmod +x .githooks/*\`) to re-arm`,
+                `.githooks/${hook} is not executable and could not be made executable (${error.message}): git skips it with a hint and the push bypasses every gate in this file`,
             );
         }
     }
@@ -1014,14 +1032,19 @@ console.log(`release headings: writer and both parsers spell the same two sectio
 console.log(
     `wire contract: ${conversation ? "conversation worktree, the landing draft declares any shrink, and the push re-runs this gate from the primary checkout" : "nothing shrank undeclared against merge-base"}`,
 );
-console.log(`git hooks: every .githooks file is executable, so the pre-push gate actually runs`);
+console.log(
+    rearmed.length > 0
+        ? `git hooks: re-armed ${rearmed.join(", ")} (checked out without the executable bit, so git was skipping ${rearmed.length === 1 ? "it" : "them"}), and now every .githooks file runs`
+        : `git hooks: every .githooks file is executable, so the pre-push gate actually runs`,
+);
 console.log(`workflow permissions: every reusable-workflow call grants what the workflow it calls asks for`);
 console.log(`npm provenance: no job publishes an attested tarball from the self-hosted fleet`);
 console.log(`publish triggers: no workflow waits on a tag push GITHUB_TOKEN can never deliver`);
 console.log(`lockfile reachability: all ${edges.size} packages in the lockfile are depended on by something`);
 
-/* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
- * else. `--checks-only` is that line: it is what the pre-push hook and the CI preflight job run. */
+/* Everything below needs node_modules and generates into the tree; everything above needs neither, and touches
+ * nothing but the executable bit invariant 7 re-arms. `--checks-only` is that line: it is what the pre-push
+ * hook and the CI preflight job run. */
 if (process.argv.includes("--checks-only")) {
     process.exit(0);
 }
