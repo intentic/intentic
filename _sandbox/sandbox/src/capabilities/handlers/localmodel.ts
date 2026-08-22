@@ -222,12 +222,12 @@ const ensureWeights = (source: LocalModelSource, destination: string): Promise<v
 };
 
 // llama-server, one process per entry, one model per process. --jinja because the modern instruct models the
-// card curates carry their chat/tool template in the GGUF and serve tool calls only through it; the context
-// size is a conservative fixed default (per-entry knobs are a decision the card deliberately doesn't offer);
+// card curates carry their chat/tool template in the GGUF and serve tool calls only through it; --ctx-size 0
+// reads the model's native context length from the GGUF metadata rather than capping it to a fixed default;
 // -ngl offloads every layer exactly when the GPU actually rode (the stamp, not the ask).
 const serverCommand = (path: string, port: number): string => {
     const layers = gpuState() === "all" ? " -ngl 999" : "";
-    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size 16384 --jinja${layers}`;
+    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size 0 --jinja${layers}`;
 };
 
 // llama-server's own readiness: /health answers 503 while the model loads, 200 once it serves. Short timeout:
