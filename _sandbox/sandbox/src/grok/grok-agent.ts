@@ -1,7 +1,9 @@
-import type { Event } from "@opencode-ai/sdk";
+import { readFile } from "node:fs/promises";
+import { basename, extname } from "node:path";
+import type { Event, FilePartInput } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../agent/agent.js";
-import { withFileNote } from "../agent/attachment-note.js";
+import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { mentionsSpentAllowance } from "../agent/failure-sentences.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
@@ -57,9 +59,45 @@ export interface GrokTurn {
      * PER MESSAGE, not per session, because that is the only place the field exists, and it is why this is a
      * property of the turn like the model rather than of the runner. */
     readonly system?: string;
+    /* THE PICTURES THIS TURN CAME WITH, already read off disk, sent beside the prompt text as native image
+     * parts rather than named in it as paths.
+     *
+     * Attached files reach an adapter as paths and each one decides what to do with them (attachment-note.ts).
+     * This runtime used to put ALL of them in the prompt as a path list and leave the read tool to fetch them,
+     * which is one hop more than a screenshot needs and, on the Google backend, one hop that did not work at
+     * all. Codex, Pi and ACP all split images out already; this is that same split, arriving late.
+     *
+     * Read in the adapter rather than here so an unreadable path can fall back into the same prompt note the
+     * non-image attachments ride: a deleted attachment then costs a line of text rather than the turn. */
+    readonly images?: readonly FilePartInput[];
     readonly signal: AbortSignal;
 }
 export type GrokRunner = (turn: GrokTurn) => AsyncIterable<Event>;
+
+const IMAGE_MIME: Record<string, string> = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+};
+
+// Native image parts for OpenCode's prompt, base64 data URLs rather than file:// because the server is reached
+// over HTTP and need not share this process's view of the filesystem. Unreadable files come back as `unread`.
+const imageParts = async (paths: readonly string[]): Promise<{ parts: FilePartInput[]; unread: string[] }> => {
+    const parts: FilePartInput[] = [];
+    const unread: string[] = [];
+    for (const path of paths) {
+        try {
+            const data = await readFile(path);
+            const mime = IMAGE_MIME[extname(path).toLowerCase()] ?? "image/png";
+            parts.push({ type: "file", mime, filename: basename(path), url: `data:${mime};base64,${data.toString("base64")}` });
+        } catch {
+            unread.push(path);
+        }
+    }
+    return { parts, unread };
+};
 
 // The session an event belongs to, for filtering the global stream down to this turn's session.
 const eventSessionId = (event: Event): string | undefined => {
@@ -152,7 +190,8 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                     agent: turn.agent,
                     ...(modelId !== undefined && modelId !== "" ? { model: { providerID: turn.provider ?? XAI, modelID: modelId } } : {}),
                     ...(turn.system !== undefined ? { system: turn.system } : {}),
-                    parts: [{ type: "text", text: turn.prompt }],
+                    // Images first, the way a person hands over a screenshot before saying what to do with it.
+                    parts: [...(turn.images ?? []), { type: "text", text: turn.prompt }],
                 },
             });
         // One self-heal attempt per turn: xAI names the account's valid models when it rejects a stale/renamed id.
@@ -497,15 +536,26 @@ async function* streamTurn(
 // No `question` frames. OpenCode's permission channel maps to per-tool approvals, not multiple-choice
 // clarifying questions; a dedicated ask-tool is the upgrade path. Declared as `questions: false` in this
 // runtime's capability row, which is what the composer says out loud.
-async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provider: string, gate: CommandGate): AsyncGenerator<AgentEvent> {
+async function* runGrokPlanTurn(
+    request: AgentRequest,
+    runner: GrokRunner,
+    provider: string,
+    gate: CommandGate,
+    firstTurnImages: readonly FilePartInput[],
+): AsyncGenerator<AgentEvent> {
     // Both phases of the emulation carry the same standing instructions: they are two messages of ONE turn, and
     // a plan proposed under the owner's prompt that is then executed without it would be a different agent
     // doing the work than the one that agreed to it.
     const system = request.systemAppend;
+    // The pictures ride the FIRST planning message only. Every later message of this turn (a revision, then the
+    // execution phase) resumes the same session, whose history already holds them; re-sending would pay for the
+    // same screenshot two or three times.
+    let images = firstTurnImages;
     const planPhase: PlanPhase = async function* (prompt, sessionId) {
         const capture = yield* streamTurn(
             runner({
                 prompt,
+                ...(images.length > 0 ? { images } : {}),
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 cwd: request.cwd,
                 ...(request.model !== undefined ? { model: request.model } : {}),
@@ -519,6 +569,7 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provi
             true,
             sessionId,
         );
+        images = [];
         return { sessionId: capture.sessionId, planText: capture.planText, errored: capture.errored === true };
     };
     const executePhase: ExecutePhase = (sessionId) =>
@@ -546,7 +597,11 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provi
 // this file carries no permission mode but `plan`, and no effort at all.
 export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
     async function* runGrokAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
-        const prompt = withFileNote(request.prompt, request.attachments ?? []);
+        /* Pictures go to the model as pictures; everything else is named in the prompt for the read tool to
+         * fetch, and so is any picture that would not open. See GrokTurn.images. */
+        const { images: attachedImages, others } = splitAttachments(request.attachments);
+        const { parts: images, unread } = await imageParts(attachedImages);
+        const prompt = withFileNote(request.prompt, [...others, ...unread]);
         /* THE TURN'S SAFETY WIRING (guard/turn-gate.ts): the owner's command rulebook, answered over OpenCode's
          * permission channel, and this conversation's outside-content bit, published so the wallet's payment gate
          * can read it from outside this generator.
@@ -559,10 +614,11 @@ export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
         const { gate, release } = createTurnGate(request);
         const turn =
             request.permissionMode === "plan"
-                ? runGrokPlanTurn({ ...request, prompt }, runner, provider, gate)
+                ? runGrokPlanTurn({ ...request, prompt }, runner, provider, gate, images)
                 : streamTurn(
                       runner({
                           prompt,
+                          ...(images.length > 0 ? { images } : {}),
                           ...(request.sessionId !== undefined ? { sessionId: request.sessionId } : {}),
                           cwd: request.cwd,
                           ...(request.model !== undefined ? { model: request.model } : {}),

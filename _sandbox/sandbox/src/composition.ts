@@ -768,7 +768,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
                   gemini: {
                       baseUrl: config.translator.url,
                       token: config.translator.token,
-                      models: async () => (await geminiModels.models()).models.map((model) => model.id),
+                      models: async () =>
+                          (await geminiModels.models()).models.map((model) => ({ id: model.id, inputModalities: model.inputModalities })),
                   },
               }),
     });

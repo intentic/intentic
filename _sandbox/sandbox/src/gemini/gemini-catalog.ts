@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
-import { discoverGeminiModels, SEED_GEMINI_MODELS } from "./gemini-models.js";
+import { discoverGeminiModels, type GeminiModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
 /* The Google-channel model catalog service, the twin of codex-catalog.ts. Resolves the ids a turn on this
  * provider can drive, ALWAYS non-empty so the picker is never blank and a turn always resolves a concrete model.
@@ -16,11 +16,11 @@ import { discoverGeminiModels, SEED_GEMINI_MODELS } from "./gemini-models.js";
  * and only real (discovered) results are cached, the seed stays uncached so a usable source is retried on the
  * next read (e.g. once the user connects their Google account).
  *
- * Labels are PERSISTED alongside the ids rather than re-derived, because the translator publishes real display
- * names ("Gemini 3.1 Pro (High)") that no rule can recover from the id. */
+ * Labels and input modalities are PERSISTED alongside the ids rather than re-derived, because the translator
+ * publishes both ("Gemini 3.1 Pro (High)", text+image) and no rule can recover either from the id. */
 export interface GeminiCatalog {
     // The Google-channel models (+ default id), never empty.
-    readonly models: () => Promise<{ models: { id: string; label: string }[]; default: string }>;
+    readonly models: () => Promise<{ models: GeminiModel[]; default: string }>;
 }
 
 const MODELS_TTL_MS = 60_000;
@@ -28,29 +28,37 @@ const MODELS_TTL_MS = 60_000;
 // The translator's model endpoints publish a SET, not a ranking (see model-order.ts), so the app imposes the
 // order, which is what keeps Pro above Flash in the picker and makes `default` the frontier newest rather than
 // whichever id the endpoint happened to list first.
-const toCatalog = (models: readonly { id: string; label: string }[]): { models: { id: string; label: string }[]; default: string } => {
+const toCatalog = (models: readonly GeminiModel[]): { models: GeminiModel[]; default: string } => {
     const ordered = models.toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));
     return { models: [...ordered], default: ordered[0]!.id };
 };
 
 export const createGeminiCatalog = (config: Config, persistPath: string, fetchImpl: typeof fetch = fetch): GeminiCatalog => {
-    let cache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;
+    let cache: { value: { models: GeminiModel[]; default: string }; expiresAt: number } | undefined;
 
-    const readPersisted = async (): Promise<{ id: string; label: string }[]> => {
+    // A persisted entry must carry the modalities too, so a file written before they were discovered reads as
+    // nothing rather than as a fleet of text-only models: absent sends the caller to the seed floor, which
+    // declares them truthfully, and the next discovery rewrites the file.
+    const readPersisted = async (): Promise<GeminiModel[]> => {
         try {
             const parsed = JSON.parse(await readFile(persistPath, "utf8")) as unknown;
             if (!Array.isArray(parsed)) {
                 return [];
             }
-            return parsed.filter((entry): entry is { id: string; label: string } => {
-                const model = entry as { id?: unknown; label?: unknown };
-                return typeof model.id === "string" && typeof model.label === "string";
+            return parsed.filter((entry): entry is GeminiModel => {
+                const model = entry as { id?: unknown; label?: unknown; inputModalities?: unknown };
+                return (
+                    typeof model.id === "string" &&
+                    typeof model.label === "string" &&
+                    Array.isArray(model.inputModalities) &&
+                    model.inputModalities.every((modality) => typeof modality === "string")
+                );
             });
         } catch {
             return [];
         }
     };
-    const writePersisted = async (models: { id: string; label: string }[]): Promise<void> => {
+    const writePersisted = async (models: readonly GeminiModel[]): Promise<void> => {
         await mkdir(dirname(persistPath), { recursive: true });
         await writeFile(persistPath, JSON.stringify(models));
     };

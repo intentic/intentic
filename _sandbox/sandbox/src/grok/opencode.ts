@@ -10,6 +10,7 @@ import {
     type Permission as OpenCodePermission,
 } from "@opencode-ai/sdk";
 import { noteDelegationSignal } from "../agent/subagents.js";
+import type { InputModality } from "../gemini/gemini-models.js";
 import { type CommandGate, consultWith, vendorSubject } from "../guard/command-gate.js";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
@@ -383,7 +384,8 @@ export interface OpenCodeGeminiConfig {
     // The translator's base URL, its OpenAI-compatible surface is at `${baseUrl}/v1`.
     readonly baseUrl: string;
     readonly token: string;
-    readonly models: () => Promise<readonly string[]>;
+    // Each model's id and what it accepts as input, both as the translator publishes them (gemini-models.ts).
+    readonly models: () => Promise<readonly { id: string; inputModalities: readonly InputModality[] }[]>;
 }
 
 // OpenCode's id for the Gemini-through-the-translator provider. Not "google": that name is taken by OpenCode's
@@ -401,6 +403,48 @@ export const OPENCODE_GEMINI_PROVIDER = "intentic-gemini";
  * Keyed off the OpenCode provider id rather than our own wire id because that is what the runner carries: the
  * turn hands OpenCode a `providerID`, and this is the same value read back for the sentence. */
 export const openCodeBackendLabel = (providerID: string): string => (providerID === OPENCODE_GEMINI_PROVIDER ? "Google" : "Grok");
+
+/* GEMINI AS AN OPENAI-COMPATIBLE ENDPOINT ON THE TRANSLATOR. The models have to be NAMED, and each one has to
+ * DECLARE WHAT IT TAKES. OpenCode builds a custom provider's catalog from config alone (there is no models.dev
+ * row for a loopback endpoint), so an id it has never heard of cannot be selected, and every capability the row
+ * omits falls to OpenCode's default of false.
+ *
+ * That default is not cosmetic. A model whose `modalities.input` lacks "image" has images STRIPPED OUT of the
+ * request on the way past: the user's screenshot never arrives, and the read tool's own image output is thrown
+ * away too, leaving the model the sentence "Image read successfully" and nothing to look at. Every Google model
+ * was registered as `{}` and so was blind, on a channel whose models are almost all multimodal. Grok never
+ * showed the bug because models.dev fills its rows in.
+ *
+ * The modalities come off the translator's own published list (gemini-models.ts) rather than from a rule about
+ * the id, so a text-only model on the channel stays text-only. No models ⇒ no provider registered at all,
+ * rather than one registered serving nothing: an unreadable catalog must not cost Grok its runtime. */
+export const geminiProviderConfig = (
+    gemini: OpenCodeGeminiConfig | undefined,
+    models: readonly { id: string; inputModalities: readonly InputModality[] }[],
+): NonNullable<OpenCodeConfig["provider"]> =>
+    gemini === undefined || models.length === 0
+        ? {}
+        : {
+              [OPENCODE_GEMINI_PROVIDER]: {
+                  npm: "@ai-sdk/openai-compatible",
+                  name: "Gemini",
+                  options: { baseURL: `${gemini.baseUrl.replace(/\/$/, "")}/v1`, apiKey: gemini.token },
+                  models: Object.fromEntries(
+                      models.map((model) => [
+                          model.id,
+                          {
+                              // OpenCode gates the two routes an image can arrive by on two different flags:
+                              // `attachment` for a tool's image output, `modalities.input` for a file part on
+                              // the prompt. Both are needed, and both are read off the same published truth.
+                              // Output is text: the channel's image GENERATORS are filtered out of the catalog
+                              // upstream (isChatModel), so nothing here ever answers with a picture.
+                              attachment: model.inputModalities.some((modality) => modality !== "text"),
+                              modalities: { input: [...model.inputModalities], output: ["text" as InputModality] },
+                          },
+                      ]),
+                  ),
+              },
+          };
 
 /* An options BAG rather than more positionals: the second parameter used to be the test's fetch injection, and
  * adding real configuration behind it would have put a production concern after a test seam, the shape where
@@ -439,21 +483,7 @@ export const createOpenCodeService = (
          * fails degrades to no Gemini provider rather than taking the whole server down with it. Grok would
          * otherwise lose its runtime over a translator that happened to be unreachable at boot. */
         const geminiModels = gemini === undefined ? [] : await gemini.models().catch(() => []);
-        /* Gemini as an OpenAI-compatible endpoint on the translator. The models have to be NAMED. OpenCode
-         * builds a custom provider's catalog from config alone (there is no models.dev row for a loopback
-         * endpoint), so an id it has never heard of cannot be selected. An unreadable catalog leaves this empty
-         * and the provider is not registered at all, rather than registered serving nothing. */
-        const geminiProvider =
-            gemini === undefined || geminiModels.length === 0
-                ? {}
-                : {
-                      [OPENCODE_GEMINI_PROVIDER]: {
-                          npm: "@ai-sdk/openai-compatible",
-                          name: "Gemini",
-                          options: { baseURL: `${gemini.baseUrl.replace(/\/$/, "")}/v1`, apiKey: gemini.token },
-                          models: Object.fromEntries(geminiModels.map((id) => [id, {}])),
-                      },
-                  };
+        const geminiProvider = geminiProviderConfig(gemini, geminiModels);
         // createOpencodeServer spawns `opencode serve` inheriting process.env (it exposes no env option), so pin
         // XDG_DATA_HOME across the synchronous spawn only, the child captures it at launch; restoring right
         // after keeps the daemon's other subprocess spawns (Claude/Codex) unaffected.

@@ -127,7 +127,11 @@ test("a build turn resumes the session on the xai provider, passes the model, an
     expect(turn.model).toBe("grok-4.20-0309-non-reasoning");
     expect(turn.agent).toBe("build");
     expect(turn.prompt).toContain("/work/.intentic/records/artifacts/attachments/a/report.pdf");
+    expect(turn.images).toBeUndefined();
 });
+
+// Images are split out of the attachments and sent as native picture parts; that half needs real files on disk,
+// so it lives in grok-agent.integration.test.ts.
 
 test("a failing tool first seen at its error state arrives as one whole failed tool_call", async () => {
     const { runner } = fakeRunner([

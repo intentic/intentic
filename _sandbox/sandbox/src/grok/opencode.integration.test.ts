@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { createTurnGate } from "../guard/turn-gate.js";
 import { humanizeModelId, SEED_XAI_MODELS } from "./grok-models.js";
-import { createOpenCodeService, registerSessionGate, releaseSessionGate } from "./opencode.js";
+import { createOpenCodeService, geminiProviderConfig, registerSessionGate, releaseSessionGate } from "./opencode.js";
 
 // Capture the server-spawn options instead of booting a real `opencode serve` (client() is otherwise untested).
 // The client is a double too: an event stream the test feeds, and a record of every permission answered on it.
@@ -283,4 +283,34 @@ test("recordModels is a no-op for an empty or media-only list (keeps the seed fl
     await service.recordModels(["grok-2-image", "grok-imagine-video"]);
     expect(await fileExists(modelsPath(xdg))).toBe(false);
     expect(await service.xaiModels()).toEqual(SEED_CATALOG);
+});
+
+/* THE BUG THAT MADE EVERY GOOGLE MODEL BLIND, pinned at the one expression that caused it.
+ *
+ * OpenCode has no models.dev row for this loopback provider, so anything the config omits defaults to false,
+ * and a model that does not declare image input has images stripped out of the request. Registering the models
+ * as bare ids therefore cost the user their screenshot: it never reached the model, and neither did the read
+ * tool's own image output, so the reply was "I can't view the image". */
+test("the Google provider declares each model's published modalities, so a screenshot is not stripped out", () => {
+    const config = geminiProviderConfig({ baseUrl: "http://127.0.0.1:8789/", token: "local", models: async () => [] }, [
+        { id: "claude-opus-4-6-thinking", inputModalities: ["text", "image"] },
+        { id: "gemini-pro-agent", inputModalities: ["text", "image", "audio", "video"] },
+        { id: "gpt-oss-120b-medium", inputModalities: ["text"] },
+    ]);
+
+    const provider = config["intentic-gemini"]!;
+    // The trailing slash on the translator URL is normalized away, and the OpenAI surface is under /v1.
+    expect(provider.options).toEqual({ baseURL: "http://127.0.0.1:8789/v1", apiKey: "local" });
+    expect(provider.models).toEqual({
+        "claude-opus-4-6-thinking": { attachment: true, modalities: { input: ["text", "image"], output: ["text"] } },
+        "gemini-pro-agent": { attachment: true, modalities: { input: ["text", "image", "audio", "video"], output: ["text"] } },
+        // Truthful, not generous: a text-only model on the channel stays text-only.
+        "gpt-oss-120b-medium": { attachment: false, modalities: { input: ["text"], output: ["text"] } },
+    });
+});
+
+// A catalog read that failed must cost Google its provider, not Grok its runtime: one `opencode serve` is both.
+test("no Google models means no Google provider at all, rather than one registered serving nothing", () => {
+    expect(geminiProviderConfig({ baseUrl: "http://127.0.0.1:8789", token: "local", models: async () => [] }, [])).toEqual({});
+    expect(geminiProviderConfig(undefined, [{ id: "gemini-pro-agent", inputModalities: ["text", "image"] }])).toEqual({});
 });
