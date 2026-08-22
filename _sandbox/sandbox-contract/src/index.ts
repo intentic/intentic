@@ -60,7 +60,7 @@ export { hostContract } from "./contracts/host.contract.js";
 export { intenticContract } from "./contracts/intentic.contract.js";
 export { inventoryContract } from "./contracts/inventory.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
-export { REQUEST_ID_HEADER } from "./request-id.js";
+export { REQUEST_ID_EVIDENCE_ROUTE, REQUEST_ID_HEADER } from "./request-id.js";
 export { loopsContract } from "./contracts/loops.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";

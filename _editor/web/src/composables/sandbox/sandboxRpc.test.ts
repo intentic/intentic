@@ -1,5 +1,6 @@
-import type { SystemEvent } from "@intentic/sandbox-contract";
+import { REQUEST_ID_EVIDENCE_ROUTE, REQUEST_ID_HEADER, type SystemEvent } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
+import { resetDaemonRoutes, setDaemonRoutes } from "./useDaemonRoutes";
 
 const authState = vi.hoisted(() => ({ token: `session-token`, rejected: [] as string[] }));
 vi.mock("./sandboxSession", () => ({
@@ -95,6 +96,45 @@ it(`surfaces the daemon's status so a refusal can be told from a failure to conn
     const failure = await sandboxRpc.system.events({ clientId: `c1` }).catch((error: unknown) => error);
     expect(daemonErrorStatus(failure)).toBe(403);
     expect(daemonErrorMessage(failure)).toBe(`not a member`);
+});
+
+/* THE REGRESSION THIS PAIR EXISTS FOR, and it is not about a log field.
+ *
+ * `x-intentic-request-id` is outside the CORS safelist, so sending it forces a preflight, and a daemon built
+ * before the name reached its `allowHeaders` answers a preflight that omits it. A browser then fails the whole
+ * REQUEST, not just the header. Sent unconditionally, that took out every typed call to every older daemon,
+ * `system.events` among them, so the stream never opened, the connection never reached `online`, and a sandbox
+ * that was up and serving `/health` in a millisecond read as "Busy, catching up" until its image was rebuilt.
+ *
+ * A browser ahead of its daemon is the supported, ordinary case (useDaemonRoutes.ts), which is why the gate is
+ * on positive evidence and why the silent case is the one asserted first. */
+it(`withholds the correlation header from a daemon that has not advertised it`, async () => {
+    resetDaemonRoutes();
+    const fetchMock = vi.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
+    vi.stubGlobal(`fetch`, fetchMock);
+    await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
+    expect(fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
+
+    // And an older daemon that DID advertise, i.e. one whose hello frame names routes but not this one: still
+    // positive evidence, and still evidence of the wrong thing.
+    setDaemonRoutes([`system.info`, `system.events`]);
+    await (await sandboxRpc.system.events({ clientId: `c2` }))[Symbol.asyncIterator]().next();
+    expect(fetchMock.mock.calls[1]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
+    resetDaemonRoutes();
+});
+
+it(`sends the correlation header once the daemon advertises the route that ships with it`, async () => {
+    setDaemonRoutes([`system.events`, REQUEST_ID_EVIDENCE_ROUTE]);
+    const fetchMock = vi.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
+    vi.stubGlobal(`fetch`, fetchMock);
+    await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
+    const sent = fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER);
+    // The value is the join key the daemon echoes onto its own `http.request` line: what matters is that it is
+    // there and distinct per call, never its shape.
+    expect(sent).toBeTruthy();
+    await (await sandboxRpc.system.events({ clientId: `c2` }))[Symbol.asyncIterator]().next();
+    expect(fetchMock.mock.calls[1]![0].headers.get(REQUEST_ID_HEADER)).not.toBe(sent);
+    resetDaemonRoutes();
 });
 
 it(`names an unaddressed sandbox as its own condition, before any request goes out`, async () => {

@@ -1,10 +1,11 @@
-import { REQUEST_ID_HEADER, sandboxContract } from "@intentic/sandbox-contract";
+import { REQUEST_ID_EVIDENCE_ROUTE, REQUEST_ID_HEADER, sandboxContract } from "@intentic/sandbox-contract";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
 import { useEndpoint } from "./useEndpoint";
 import { trackPerf } from "../perf";
 import { uuid } from "../uuid";
+import { routeAdvertised } from "./useDaemonRoutes";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
 
 /* The TYPED client for the active sandbox daemon, derived from the same `sandboxContract` the daemon
@@ -60,10 +61,25 @@ const linkOptions: OpenAPILinkOptions<Record<never, never>> = {
          *
          * The app's own `uuid()` rather than `crypto.randomUUID`, for the reason that helper exists: the real
          * generator is secure-context only, and a self-hosted instance opened at `http://192.168.1.x:port` has
-         * no such thing. A diagnostic that throws exactly there would be worse than none. */
-        const requestId = uuid();
+         * no such thing. A diagnostic that throws exactly there would be worse than none.
+         *
+         * ONLY ONTO A DAEMON THAT HAS SAID IT WILL TAKE IT. A custom header is not an additive wire change: it
+         * forces a CORS preflight, and a daemon built before this name was added to `allowHeaders` answers one
+         * that omits it, at which point the browser fails the REQUEST, not just the header. Unconditional, that
+         * costs every typed call to every older daemon, `system.events` first, so the stream never opens and a
+         * healthy sandbox reads as "Busy, catching up" until its image is rebuilt. A browser ahead of its daemon
+         * is the normal, supported case (useDaemonRoutes.ts), so the evidence is required rather than assumed:
+         * see REQUEST_ID_EVIDENCE_ROUTE for why that route's advertisement is the proof, and why the
+         * no-evidence answer here is the opposite of `supportsRoute`'s.
+         *
+         * The cost of the gate is the calls made before the first hello frame, which arrives on the stream this
+         * would otherwise have broken. They keep their span and lose their join key: a fair trade, given the
+         * alternative was no calls at all. */
+        const requestId = routeAdvertised(REQUEST_ID_EVIDENCE_ROUTE) === true ? uuid() : undefined;
         const headers = new Headers(request.headers);
-        headers.set(REQUEST_ID_HEADER, requestId);
+        if (requestId !== undefined) {
+            headers.set(REQUEST_ID_HEADER, requestId);
+        }
         return trackPerf(`rpc.request`, { path, method: request.method, requestId }, () =>
             sandboxAuthenticatedFetch(new Request(request, { headers })),
         );
