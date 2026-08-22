@@ -119,21 +119,6 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                     <p class="mt-4 text-base leading-relaxed text-muted">{lead}</p>
                 </header>
 
-                {
-                    /* THE STANDING NOTE, on every page that carries a playground. It is the one thing about
-                       this book a reader could otherwise get wrong in a way that matters: the answers are made
-                       up in their own tab, and the copyable commands beside them are the real thing. Said once
-                       per page, above the fold, rather than once per operation, where 43 copies of it on the
-                       git page would stop being read by the third. */
-                    simulated && (
-                        <div class="mb-8 flex gap-3 border border-line bg-card px-4 py-3 text-sm text-muted">
-                            <span aria-hidden="true" class="mt-0.5 text-primary-500">
-                                ▲
-                            </span>
-                        </div>
-                    )
-                }
-
                 <DocsToc headings={headings} variant="inline" />
 
                 <div class="docs-body"><slot /></div>
