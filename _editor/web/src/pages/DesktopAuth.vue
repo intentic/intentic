@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { useTheme, Notice, type NoticeModel } from "@intentic/ui";
+import { Button, useTheme, Notice, type NoticeModel, vAction } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { idTokenClaims } from "../composables/googleToken";
@@ -212,7 +211,7 @@ onMounted(() => void hand());
                     v-if="googleReady"
                     type="button"
                     class="w-full text-center text-xs text-subtle transition-colors hover:text-content"
-                    @click="useGooglesOwnPage"
+                    v-action="useGooglesOwnPage"
                 >
                     Trouble signing in? Use Google's own page.
                 </button>

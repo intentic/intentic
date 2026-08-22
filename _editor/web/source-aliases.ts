@@ -86,6 +86,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // its test drives fake timers over plain reactivity, and reaching it through the barrel would boot the
     // component graph (whose theme reader touches `document` at module scope) to ask a question about a clock.
     "@intentic/ui/loading-reveal": fromRoot("_editor/ui/src/composables/loadingReveal.ts"),
+    // And again, for the state machine behind a pressed button. It is the same shape of thing as the gate
+    // above, a clock and two booleans, and both of the surfaces that render it (the kit's <Button>, the
+    // `v-action` directive) share it precisely so the app cannot grow two answers to how a press feels.
+    "@intentic/ui/press": fromRoot("_editor/ui/src/lib/pressLock.ts"),
     // And once more, for the icon VOCABULARY rather than the <Icon> that draws it: every icon name arriving
     // from a manifest is an open string, and the tests that check our own extensions name real glyphs read
     // JSON off disk, no components, no DOM, and nothing to gain from booting Picker.vue to get there.

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
-import { ProgressRing, useDevice } from "@intentic/ui";
+import { Button, ProgressRing, useDevice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";

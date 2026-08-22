@@ -15,7 +15,7 @@
      Never an automatic recall: a URL that happens to be /chat must not close a window under the user. Every
      move of the panel is a button. -->
 <script setup lang="ts">
-import Button from "primevue/button";
+import { Button } from "@intentic/ui";
 import { onMounted, onUnmounted, useTemplateRef } from "vue";
 import { useChatFloating } from "../composables/chat/chatFloating";
 import { useLayout } from "../composables/useLayout";

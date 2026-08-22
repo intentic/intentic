@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Card, Row, StatusBadge, useOsPreference } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, Card, Row, StatusBadge, useOsPreference } from "@intentic/ui";
 import { computed, ref } from "vue";
 import HostRecreate from "../../components/HostRecreate.vue";
 import { turnInFlight } from "../../composables/agents/agentStatus";

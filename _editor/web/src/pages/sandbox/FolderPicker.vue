@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
-import { ui, ResponsiveOverlay, SkeletonRows } from "@intentic/ui";
+import { ui, ResponsiveOverlay, SkeletonRows, vAction } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
 import { WORKSPACE_TREE } from "../../composables/queryKeys";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
@@ -210,7 +210,7 @@ const remove = (path: string): void => {
                         :class="ui.iconButton('h-6 w-5')"
                         :aria-expanded="opened.has(row.entry.path)"
                         :aria-label="`${opened.has(row.entry.path) ? `Collapse` : `Expand`} ${row.entry.path}`"
-                        @click="expand(row.entry)"
+                        v-action="() => expand(row.entry)"
                     >
                         <Icon
                             :name="loading.has(row.entry.path) ? `spinner` : opened.has(row.entry.path) ? `chevron-down` : `chevron-right`"

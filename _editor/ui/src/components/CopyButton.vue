@@ -10,9 +10,13 @@
      other attr, for the emphasised copy that must not outshout the card's own primary action (setup's phone
      command, sitting under the email handoff that is the recommended path there). -->
 <script setup lang="ts">
-import Button from "primevue/button";
+import Button from "./Button.vue";
 import { computed, ref } from "vue";
 import { clipboardOf } from "../lib/clipboard.js";
+// Imported rather than taken off the app's global registration: a kit component must not need the kit's own
+// plugin to have run. `<Button>` above carries the same lock through its click listener; the two quiet
+// spellings below are bare <button>s, which is what the directive is for.
+import { vAction } from "../lib/pressAction.js";
 import { ui } from "../lib/ui.js";
 
 const {
@@ -78,12 +82,12 @@ const copy = async (): Promise<void> => {
         ref="root"
         type="button"
         class="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
-        @click="copy"
+        v-action="copy"
     >
         <Icon :name="copied ? 'check' : 'copy'" :class="[`text-2xs`, copied ? `text-success` : ``]" />
         {{ copied ? `Copied` : label }}
     </button>
-    <button v-else ref="root" type="button" aria-label="Copy" :class="ui.iconButton(`text-subtle`)" @click="copy">
+    <button v-else ref="root" type="button" aria-label="Copy" :class="ui.iconButton(`text-subtle`)" v-action="copy">
         <Icon class="text-2xs" :name="copied ? 'check' : 'copy'" :class="copied ? 'text-success' : ''" />
     </button>
 </template>

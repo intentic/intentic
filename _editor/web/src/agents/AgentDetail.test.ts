@@ -30,16 +30,14 @@ vi.mock("@intentic/ui", async () => {
     const empty = (name: string) => vue.defineComponent({ name, render: () => null });
     return {
         ui: { iconButton: () => `` },
+        // The app's action button comes from the kit now rather than straight from PrimeVue, so the stub does
+        // too: this mount only cares where the buttons ARE, not what they do when pressed.
+        Button: empty(`Button`),
         Modal: empty(`Modal`),
         ResponsiveOverlay: empty(`ResponsiveOverlay`),
         SegmentedControl: vue.defineComponent({ name: `SegmentedControl`, render: () => vue.h(`div`, { "data-mode-switch": `` }) }),
         useDevice: () => ({ mobile: vue.ref(true) }),
     };
-});
-
-vi.mock("primevue/button", async () => {
-    const vue = await import("vue");
-    return { default: vue.defineComponent({ name: `Button`, render: () => null }) };
 });
 
 vi.mock("../chat/ChatPanel.vue", () => ({ default: { render: () => null } }));

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { ProviderService, ProviderServicesState, ServiceProbeResult } from "@intentic-app/api-contract";
-import { Card, ui, useLoadingReveal, type NoticeModel, Notice, Row } from "@intentic/ui";
+import { Button, Card, ui, useLoadingReveal, type NoticeModel, Notice, Row } from "@intentic/ui";
 import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, reactive, ref } from "vue";
 import { apiClient } from "../../composables/useApi";
 

@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
 import { type InventoryEntry } from "@intentic-app/api-contract";
-import { Card, ui, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { Button, Card, ui, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import SecretField from "../../components/SecretField.vue";
 import { bashCommand } from "../../environments/scriptCommand";
@@ -619,8 +618,8 @@ onUnmounted(progress.stopWatching);
     >
         <div class="flex flex-col gap-3">
             <p class="text-sm text-muted">
-                This forgets <b class="text-content">{{ removingServer }}</b> from your inventory: its entry and stored SSH key. The machine itself
-                is not touched: <b>everything already deployed keeps running on it</b> until you clean it up.
+                This forgets <b class="text-content">{{ removingServer }}</b> from your inventory: its entry and stored SSH key. The machine itself is
+                not touched: <b>everything already deployed keeps running on it</b> until you clean it up.
             </p>
             <Code :code="cleanupHostCommand" lang="bash" label="Run on the server (as root) to wipe everything intentic put there" :wrap="true" />
             <p class="text-xs text-subtle">

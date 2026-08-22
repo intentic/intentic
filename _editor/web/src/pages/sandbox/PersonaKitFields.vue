@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary, SystemPromptMode } from "@intentic/sandbox-contract";
-import { Icon, Notice, Row, SegmentedControl, ui } from "@intentic/ui";
+import { Button, Icon, Notice, Row, SegmentedControl, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import SkillForm from "./agent/SkillForm.vue";
 import SkillRow from "./agent/SkillRow.vue";

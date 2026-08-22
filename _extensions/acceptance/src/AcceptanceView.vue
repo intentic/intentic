@@ -95,6 +95,11 @@ const remembered = computed<Readonly<Record<string, string>>>(() => {
     return Object.fromEntries(found);
 });
 const targets = useTargets(remembered);
+// Both halves of what "Refresh" means here, as ONE promise: an inline pair of statements in the template
+// returns nothing, and nothing is what the button would then have to draw a wait from.
+const refreshEverything = async (): Promise<void> => {
+    await Promise.all([refreshStories(), targets.refresh()]);
+};
 
 /* TICKED FOR THE NEXT RUN, and EMPTY MEANS ALL. "Run them all" is the overwhelmingly common gesture and
  * unpicking is cheaper than picking, so an untouched list is already a complete run and needs no selecting mode
@@ -401,8 +406,8 @@ const run = async (model: PickedModel): Promise<void> =>
                         versioned with the code it describes. Editing one here writes that file; there is no separate copy.
                     </p>
                     <p class="mt-2 text-xs text-muted">
-                        A subdirectory of that is a group, and a run walks one address per group, so a repository serving both a marketing site and
-                        an app can test each of them, against its own server, in the same run. The agents reach these from inside the sandbox, so a
+                        A subdirectory of that is a group, and a run walks one address per group, so a repository serving both a marketing site and an
+                        app can test each of them, against its own server, in the same run. The agents reach these from inside the sandbox, so a
                         localhost address is the direct route.
                     </p>
                 </InfoHint>
@@ -411,16 +416,7 @@ const run = async (model: PickedModel): Promise<void> =>
                 <!-- One Refresh for the whole page. The dev-server states are as re-readable as the stories
                      are, and a panel started from Preview while this was open is exactly the staleness someone
                      presses this to clear. -->
-                <PageAction
-                    quiet
-                    icon="refresh"
-                    label="Refresh"
-                    hint="Re-read the stories and the dev-server states"
-                    @click="
-                        refreshStories();
-                        targets.refresh();
-                    "
-                />
+                <PageAction quiet icon="refresh" label="Refresh" hint="Re-read the stories and the dev-server states" @click="refreshEverything" />
             </template>
         </PageHeader>
 

@@ -443,6 +443,10 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         return own.length > 0 ? own : (providerCommands.value[conversation.value.provider.value] ?? []);
     }),
     awaitingDecision: computed(() => conversation.value.awaitingDecision.value),
+    /* This card's answer is already on its way, so the OTHER answers beside it must stop offering themselves.
+     * A card is one question with several buttons, and locking only the pressed one leaves the two next to it
+     * live over a decision that has already been made (see Conversation.deciding). */
+    isDeciding: (message: ChatMessage): boolean => conversation.value.isDeciding(message.id),
     pendingPlanMessage: computed(() => conversation.value.pendingPlanMessage.value),
     /* This conversation's last turn ended before its work did (Conversation.resumable), and the sentence that
      * would pick it up. Two values rather than one because the composer needs them at different moments: the

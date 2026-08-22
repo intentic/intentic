@@ -37,6 +37,15 @@ vi.mock("@intentic/ui", async () => {
     const vue = await import("vue");
     return {
         useDevice: () => ({ mobile: vue.ref(false) }),
+        // A real <button> carrying its attrs, because the card's answers are what half these assertions click.
+        // The kit's own press lock has its own suite (components/pressLock.test.ts); this only needs the tag.
+        Button: vue.defineComponent({
+            inheritAttrs: false,
+            setup:
+                (_props, { attrs, slots }) =>
+                () =>
+                    vue.h(`button`, attrs, slots[`default`]?.()),
+        }),
         /* WHICH picture a figure gets is the design system's question (MarkdownFigure, and mermaid's own parser
          * below it); what this row owns is whether a figure part reaches the bubble at all. So it stands in as a
          * marker naming the kind, rather than dragging a megabyte of diagram grammars into a jsdom transcript. */
@@ -104,6 +113,8 @@ vi.mock("../composables/chat/useChat", async () => {
             decidePermission: vi.fn(),
             streaming: computed(() => pane.streaming),
             awaitingDecision: ref(false),
+            // No answer is ever in flight in these mounts; the card's buttons stay offered.
+            isDeciding: () => false,
             editing: computed(() => pane.editing),
             beginEdit,
         }),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
+import { Button } from "@intentic/ui";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { useAuth } from "../composables/useAuth";
@@ -33,10 +33,11 @@ const wrongGoogleAccount = computed(
 // auto-select), and the liveness retries share the same in-flight establish.
 const title = computed(() => `No access to "${active.value?.name}"`);
 
-const switchAccount = (): void => {
+const switchAccount = async (): Promise<void> => {
     clearCredential();
     invalidateSession();
-    void getSessionToken();
+    // Awaited, not fired and forgotten: the promise is what holds the button while the token is fetched.
+    await getSessionToken();
 };
 </script>
 

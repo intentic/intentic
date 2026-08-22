@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, Popover, SearchBar, timeAgo } from "@intentic/extension-ui";
+import { Icon, Popover, SearchBar, timeAgo, vAction } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { useBranches } from "./useBranches.js";
 
@@ -117,7 +117,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 type="button"
                                 class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left"
                                 :disabled="busy"
-                                @click="pick(branch.name)"
+                                v-action="() => pick(branch.name)"
                             >
                                 <Icon
                                     :name="branch.local?.current ? 'check' : branch.local ? 'code' : 'cloud'"
@@ -170,7 +170,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 type="button"
                                 class="rounded border border-danger/50 px-1.5 py-0.5 text-2xs text-danger transition-colors hover:bg-danger/10"
                                 :disabled="busy"
-                                @click="confirmDelete(branch.name)"
+                                v-action="() => confirmDelete(branch.name)"
                             >
                                 {{ forceFor === branch.name ? "Force delete" : "Delete" }}
                             </button>
@@ -203,7 +203,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             type="button"
                             class="rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                             :disabled="busy || newName.trim() === ''"
-                            @click="submitCreate"
+                            v-action="submitCreate"
                         >
                             Create
                         </button>

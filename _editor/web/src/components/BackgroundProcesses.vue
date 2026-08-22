@@ -68,7 +68,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     type="button"
                     :class="ui.iconButton(`hover:bg-content/10`)"
                     :disabled="busy === row.id"
-                    @click="void start(row)"
+                    @click="start(row)"
                     v-tooltip.top="'Start'"
                     aria-label="Start"
                 >
@@ -79,7 +79,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     type="button"
                     :class="ui.iconButton(`hover:bg-content/10`)"
                     :disabled="busy === row.id"
-                    @click="void start(row)"
+                    @click="start(row)"
                     v-tooltip.top="'Restart'"
                     aria-label="Restart"
                 >
@@ -90,7 +90,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     type="button"
                     :class="ui.iconButton(`hover:bg-content/10 hover:text-danger`)"
                     :disabled="busy === row.id"
-                    @click="void stop(row)"
+                    @click="stop(row)"
                     v-tooltip.top="'Stop'"
                     aria-label="Stop"
                 >

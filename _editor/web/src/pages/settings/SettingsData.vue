@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Row, RowGroup } from "@intentic/ui";
+import { Button, Row, RowGroup } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiClient } from "../../composables/useApi";

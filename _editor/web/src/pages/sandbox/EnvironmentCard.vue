@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { EnvironmentSchema } from "@intentic-app/api-contract";
-import { Card, Code, Notice, type NoticeModel, Row, SegmentedControl, StatusBadge } from "@intentic/ui";
+import { Button, Card, Code, Notice, type NoticeModel, Row, SegmentedControl, StatusBadge } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
-import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
@@ -70,9 +69,9 @@ const shown = computed(() => (unsupported.value ? `recipe` : view.value));
 
 // One refresh for both reads, and it forces a re-probe, so "it says missing but I just installed it" is a click
 // rather than a restart.
-const load = (): void => {
-    void query.refetch();
+const load = async (): Promise<void> => {
     reprobe();
+    await query.refetch();
 };
 
 const decide = (path: string, body?: object): Promise<void> =>

@@ -286,7 +286,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                 label="Reload"
                 hint="Re-read the latest results: to measure again, open a chore"
                 :disabled="busy"
-                @click="void refresh()"
+                @click="refresh"
             />
         </template>
 

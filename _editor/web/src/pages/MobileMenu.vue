@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ViewBadge } from "@intentic/extension-api";
-import { Avatar, type IconName } from "@intentic/ui";
+import { Avatar, type IconName, vAction } from "@intentic/ui";
 import { computed, onMounted } from "vue";
 import { RouterLink } from "vue-router";
 import { useAuth } from "../composables/useAuth";
@@ -299,7 +299,7 @@ const logout = async (): Promise<void> => {
             <button
                 type="button"
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"
-                @click="logout"
+                v-action="logout"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
                 Sign out

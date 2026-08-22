@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import Button from "primevue/button";
 import type { Disposable } from "@intentic/extension-api";
 import { isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
-import { clipboardOf, ui, ContextMenu, Modal, SearchBar, useDevice, useNarrow } from "@intentic/ui";
+import { Button, clipboardOf, ui, ContextMenu, Modal, SearchBar, useDevice, useNarrow } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -426,14 +425,14 @@ const confirmPurge = async (): Promise<void> => {
         purging.value = false;
     }
 };
-const toggleArchive = (): void => {
+const toggleArchive = async (): Promise<void> => {
     archiveOpen.value = !archiveOpen.value;
     purged.value = false;
     if (archiveOpen.value) {
         // Back to one page on every opening: the door is pressed to look something up, and it should cost the
         // same the tenth time as the first however far the last visit scrolled.
         archiveShown.value = ARCHIVE_PAGE;
-        void loadArchived();
+        await loadArchived();
     }
 };
 /* --- Saying that an archive happened -------------------------------------------------------------------- */

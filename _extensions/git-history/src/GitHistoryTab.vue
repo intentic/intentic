@@ -12,6 +12,7 @@ import {
     SegmentedControl,
     timeAgo,
     useLoadingReveal,
+    vAction,
 } from "@intentic/extension-ui";
 import type { GitActionResult, GitChange, GitCommit, GitDiffSide } from "@intentic/sandbox-contract";
 import { computed, onScopeDispose, ref, watch } from "vue";
@@ -311,10 +312,12 @@ const workingRawSides = (change: GitChange, side: GitDiffSide): { beforeRaw?: st
  * staged file's staged and unstaged halves are two different diffs, and opening whichever happened to be found
  * first would show the user the wrong one. Keyed `working:<repo>` so it is the same tab identity the app's own
  * Changes panel opens, which means clicking a file in either place focuses one tab rather than stacking two. */
-const openFileDiff = (commit: GitCommit, change: GitChange): void => {
+// Awaited rather than fired and forgotten: the promise is what holds the row while the diff is fetched, so a
+// second click on a slow one cannot open it twice.
+const openFileDiff = async (commit: GitCommit, change: GitChange): Promise<void> => {
     if (commit.sha === WORKING) {
         const side = working.sideOf(change);
-        void workingFileDiff(change.path, side).then((body) => {
+        await workingFileDiff(change.path, side).then((body) => {
             host().workspace.openDiff({
                 key: `working:${repoRef.value}`,
                 scope: repoRef.value,
@@ -329,7 +332,7 @@ const openFileDiff = (commit: GitCommit, change: GitChange): void => {
         });
         return;
     }
-    void commitFileDiff(commit.sha, change.path).then((body) => {
+    await commitFileDiff(commit.sha, change.path).then((body) => {
         host().workspace.openDiff({
             key: `commit:${repoRef.value}:${commit.sha}`,
             scope: repoRef.value,
@@ -610,7 +613,7 @@ const runPending = async (): Promise<void> => {
                 type="button"
                 class="shrink-0 rounded px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                 :disabled="undo.busy.value"
-                @click="runUndo"
+                v-action="runUndo"
                 v-tooltip.bottom="
                     `${undo.action.value?.description ?? ''}: moves ${undo.action.value?.branch ?? 'the branch'} back. A restore point is saved first.`
                 "

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BrowserPage } from "@intentic/sandbox-contract";
-import { Icon } from "@intentic/ui";
+import { Icon, vAction } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { activePageOf } from "../composables/browser/activePage";
@@ -236,14 +236,14 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                     <button
                         type="button"
                         class="shrink-0 rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90"
-                        @click="resolveHelp(true)"
+                        v-action="() => resolveHelp(true)"
                     >
                         Done: hand back
                     </button>
                     <button
                         type="button"
                         class="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted transition-colors hover:text-content"
-                        @click="resolveHelp(false)"
+                        v-action="() => resolveHelp(false)"
                     >
                         Can't help now
                     </button>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
+import { Button } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { Requirement, RequirementAction, RequirementProgress } from "../desktop";
 

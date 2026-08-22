@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    Button,
     CopyButton,
     Notice,
     noticeOf,
@@ -10,7 +11,6 @@ import {
     StatusBadge,
     type StatusVariant,
 } from "@intentic/ui";
-import Button from "primevue/button";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { frameSandbox, pickTarget, type PreviewTarget } from "../composables/preview/previewModel";

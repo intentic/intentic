@@ -8,9 +8,8 @@ import {
     type MigrationReport,
     type MigrationSource,
 } from "@intentic-app/api-contract";
-import { Card, Code, NoticeStack, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
+import { Button, Card, Code, NoticeStack, Row, RowGroup, StatusBadge, ui, vAction } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
-import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, ref } from "vue";
@@ -194,7 +193,7 @@ const cancel = (): Promise<void> =>
                                 :class="ui.iconButton()"
                                 aria-label="Check this computer again"
                                 v-tooltip.top="'Check again'"
-                                @click="recheck"
+                                v-action="recheck"
                             >
                                 <Icon name="refresh" class="text-sm" :class="probing ? `animate-spin` : ``" />
                             </button>
@@ -204,8 +203,7 @@ const cancel = (): Promise<void> =>
                 <!-- Said to the owner who has connected no computer at all: the shortcut exists, and knowing
                      it exists is what makes them reach for it next time rather than packing again. -->
                 <p v-else-if="probed" class="text-2xs text-subtle">
-                    If you connect the computer that runs it (Capabilities → your computer), the setup can be read straight off it: no packing at
-                    all.
+                    If you connect the computer that runs it (Capabilities → your computer), the setup can be read straight off it: no packing at all.
                 </p>
 
                 <!-- Step 1, and it is a question rather than a form: which tool you run is the one thing you

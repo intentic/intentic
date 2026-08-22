@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, Icon } from "@intentic/ui";
 import { useLocalShortcut } from "../composables/sandbox/localShortcut";
 import { useEndpoint } from "../composables/sandbox/useEndpoint";
 
@@ -31,9 +30,9 @@ const { resolve } = useEndpoint();
  * moment the user is thinking about the question, so the browser's own dialog lands while the card that
  * explains it is still on screen. And the fetch happens inside their click, which is the friendliest moment
  * there is to ask a browser for anything. */
-const accept = (): void => {
+const accept = async (): Promise<void> => {
     allow();
-    void resolve().catch(() => undefined);
+    await resolve().catch(() => undefined);
 };
 
 const refuse = (): void => {

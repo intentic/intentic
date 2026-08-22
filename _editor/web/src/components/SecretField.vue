@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ui, Notice } from "@intentic/ui";
+import { Button, ui, Notice } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { devFillGet } from "../composables/devFill";
 import { useCapabilitySecret } from "../composables/extensions/useCapabilities";
@@ -112,7 +111,8 @@ const onEnter = (event: KeyboardEvent): void => {
         </div>
         <Notice v-if="notice" :of="notice" />
         <p v-else-if="!noHint" class="text-xs text-muted">
-            Stored in your sandbox's <span class="font-mono">.env</span> as <span class="font-mono">{{ secretKey }}</span>: never on the platform.
+            Stored in your sandbox's <span class="font-mono">.env</span> as <span class="font-mono">{{ secretKey }}</span
+            >: never on the platform.
         </p>
     </div>
 </template>

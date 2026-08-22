@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
-import { AnchoredOverlay, ContextMenu, SearchBar } from "@intentic/ui";
+import { AnchoredOverlay, Button, ContextMenu, SearchBar } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";

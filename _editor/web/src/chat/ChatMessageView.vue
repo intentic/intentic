@@ -59,6 +59,7 @@ const {
     declineBrowserHelp,
     declineTerminalHelp,
     awaitingDecision,
+    isDeciding,
     editing,
     beginEdit,
     streaming: conversationStreaming,
@@ -68,6 +69,12 @@ const {
 // /browsers, so the primary button is a navigation, not a decision: the card resolves from over there. It is
 // therefore a LINK (ChatDecisionButton's `to`): an address to hover, and a Ctrl/⌘-click that puts the stage in
 // its own tab beside the conversation asking for help, rather than replacing it.
+/* THIS CARD'S ANSWER IS ALREADY ON ITS WAY, so none of its answers may be pressed again. The pressed button
+ * holds itself (the kit's <Button> does that for any handler that returns a promise); this is the OTHER half,
+ * the two buttons beside it, which are a different answer to the same question and were still live over a
+ * decision that had already been made. Every card's answering buttons carry it. */
+const settling = computed(() => isDeciding(props.message));
+
 const router = useRouter();
 const helpBrowserAt = (session: string): string => `/browsers/${session}`;
 
@@ -82,9 +89,11 @@ const openHelpTerminal = (help: TerminalHelpRequest): void =>
  * opened straight on the asked card, so the user lands on the form rather than the grid. "Open setup" while
  * connecting is the navigation alone, for whoever closed the page mid-setup. */
 const capabilitySetupAt = (card: string): string => `/capabilities/${card}`;
-const connectCapability = (message: ChatMessage): void => {
-    void decideCapabilityOffer(message, true);
+const connectCapability = async (message: ChatMessage): Promise<void> => {
+    // The reply is awaited, not fired and forgotten, so the button holds while it is in the air. The
+    // navigation is not: the page it opens is where the setup happens, and it should not wait on the daemon.
     void router.push(capabilitySetupAt(message.capabilityOffer?.offer.card ?? ``));
+    await decideCapabilityOffer(message, true);
 };
 
 // The card's one line of catalog prose, when the static catalog knows the card (a contributed card's frame
@@ -110,8 +119,8 @@ const holdOffer = computed(
         effectiveAutoLand(agentById(conversation.value.conversationId), landsByDefault(sandboxSettings.value?.rules ?? [])),
 );
 // Best-effort like markSeen: a failed write leaves the offer standing to press again.
-const holdFutureLands = (): void => {
-    void setAutoLand(conversation.value.conversationId, false).catch(() => undefined);
+const holdFutureLands = async (): Promise<void> => {
+    await setAutoLand(conversation.value.conversationId, false).catch(() => undefined);
 };
 
 /* The outage notice's opt-out, on exactly the same reasoning one line up, and now with the same reach, which
@@ -127,8 +136,8 @@ const outageOptOutOffer = computed(
         props.message.noticeAction === `outageOptOut` &&
         effectiveOutageResume(agentById(conversation.value.conversationId), sandboxSettings.value?.resumeAfterOutage),
 );
-const stopResumingOutages = (): void => {
-    void setResumeAfterOutage(conversation.value.conversationId, false).catch(() => undefined);
+const stopResumingOutages = async (): Promise<void> => {
+    await setResumeAfterOutage(conversation.value.conversationId, false).catch(() => undefined);
 };
 
 /* The dependency reconcile's one press: a REVEAL, not a setting. The daemon started an install because the
@@ -442,7 +451,10 @@ const picksFor = (index: number): string[] =>
 
 const canSubmit = computed(() => props.message.question?.questions.every((_, index) => picksFor(index).length > 0 && !otherPending(index)) ?? false);
 
-const submitAnswers = (): void => {
+// Hands the promise back rather than dropping it on the floor: that promise is what holds Submit while the
+// answers are in the air, and a `void` in front of it is the button going stale under an impatient second
+// click (see @intentic/ui's <Button>).
+const submitAnswers = async (): Promise<void> => {
     const question = props.message.question;
     if (!question || !canSubmit.value) {
         return;
@@ -451,7 +463,7 @@ const submitAnswers = (): void => {
     question.questions.forEach((q, index) => {
         answers[q.question] = picksFor(index);
     });
-    void answerQuestion(props.message, answers);
+    await answerQuestion(props.message, answers);
 };
 
 /* Enter submits, Shift+Enter breaks the line: the chat composer's bargain, held to here so one keystroke does
@@ -1060,8 +1072,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <!-- One approval, not a posture menu: saying yes to a plan is saying yes to the work in it,
                          and the container is the isolation boundary. -->
-                    <ChatDecisionButton tone="primary" icon="check" @click="decidePlan(message, true)">Approve</ChatDecisionButton>
-                    <ChatDecisionButton tone="secondary" icon="pencil" @click="decidePlan(message, false)">No, keep planning</ChatDecisionButton>
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePlan(message, true)"
+                        >Approve</ChatDecisionButton
+                    >
+                    <ChatDecisionButton tone="secondary" icon="pencil" :disabled="settling" @click="decidePlan(message, false)"
+                        >No, keep planning</ChatDecisionButton
+                    >
                 </div>
             </div>
 
@@ -1223,10 +1239,16 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     </div>
 
                     <div v-if="message.question.status === 'pending'" class="flex items-center gap-2 pt-1">
-                        <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit" @click="submitAnswers">Submit</ChatDecisionButton>
+                        <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers"
+                            >Submit</ChatDecisionButton
+                        >
                         <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
                              does not say, so the tooltip does, before the click rather than after it. -->
-                        <ChatDecisionButton tone="secondary" v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)"
+                        <ChatDecisionButton
+                            tone="secondary"
+                            :disabled="settling"
+                            v-tooltip.bottom="'Also stops the turn'"
+                            @click="cancelQuestion(message)"
                             >Dismiss</ChatDecisionButton
                         >
                     </div>
@@ -1255,13 +1277,16 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <div v-if="message.permission.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
-                    <ChatDecisionButton tone="primary" icon="check" @click="decidePermission(message, 'once')">Allow once</ChatDecisionButton>
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePermission(message, 'once')"
+                        >Allow once</ChatDecisionButton
+                    >
                     <!-- An approval in the secondary tone: the card is asking for the one-off allow, and a second
                          filled button beside it would make the pair read as a coin flip (see ChatDecisionButton). -->
                     <ChatDecisionButton
                         v-if="message.permission.alwaysLabel"
                         tone="secondary"
                         icon="lock"
+                        :disabled="settling"
                         @click="decidePermission(message, 'always')"
                         >{{ message.permission.alwaysLabel }}</ChatDecisionButton
                     >
@@ -1270,6 +1295,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <ChatDecisionButton
                         tone="secondary"
                         icon="times"
+                        :disabled="settling"
                         v-tooltip.bottom="'Also stops the turn'"
                         @click="decidePermission(message, 'deny')"
                         >No</ChatDecisionButton
@@ -1300,7 +1326,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <ChatDecisionButton tone="primary" icon="desktop" :to="helpBrowserAt(message.browserHelp.session)"
                         >Open the browser</ChatDecisionButton
                     >
-                    <ChatDecisionButton tone="secondary" icon="times" @click="declineBrowserHelp(message)">Can't help now</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineBrowserHelp(message)"
+                        >Can't help now</ChatDecisionButton
+                    >
                 </div>
             </div>
 
@@ -1325,7 +1353,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <ChatDecisionButton tone="primary" icon="terminal" @click="openHelpTerminal(message.terminalHelp)"
                         >Open the terminal</ChatDecisionButton
                     >
-                    <ChatDecisionButton tone="secondary" icon="times" @click="declineTerminalHelp(message)">Can't help now</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineTerminalHelp(message)"
+                        >Can't help now</ChatDecisionButton
+                    >
                 </div>
             </div>
 
@@ -1387,11 +1417,13 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <div v-if="message.serviceOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
-                    <ChatDecisionButton tone="primary" icon="check" @click="decideServiceOffer(message, true)"
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decideServiceOffer(message, true)"
                         >Run: {{ formatCredits(message.serviceOffer.offer.creditsPerRun) }} credits</ChatDecisionButton
                     >
                     <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
-                    <ChatDecisionButton tone="secondary" icon="times" @click="decideServiceOffer(message, false)">Skip: free</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decideServiceOffer(message, false)"
+                        >Skip: free</ChatDecisionButton
+                    >
                 </div>
             </div>
 
@@ -1446,11 +1478,13 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <div v-if="message.paymentOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
-                    <ChatDecisionButton tone="primary" icon="check" @click="decidePaymentOffer(message, true)"
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePaymentOffer(message, true)"
                         >Pay ${{ message.paymentOffer.offer.amountUsd }}</ChatDecisionButton
                     >
                     <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
-                    <ChatDecisionButton tone="secondary" icon="times" @click="decidePaymentOffer(message, false)">Skip: free</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decidePaymentOffer(message, false)"
+                        >Skip: free</ChatDecisionButton
+                    >
                 </div>
             </div>
 
@@ -1503,12 +1537,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <div v-if="message.capabilityOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
-                    <ChatDecisionButton tone="primary" icon="check" @click="connectCapability(message)"
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="connectCapability(message)"
                         >Connect {{ message.capabilityOffer.offer.name }}</ChatDecisionButton
                     >
                     <!-- Final for this conversation: the agent is told to continue without it and not to ask
                          again; nothing stops the turn. -->
-                    <ChatDecisionButton tone="secondary" icon="times" @click="decideCapabilityOffer(message, false)">Not now</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decideCapabilityOffer(message, false)"
+                        >Not now</ChatDecisionButton
+                    >
                 </div>
             </div>
 

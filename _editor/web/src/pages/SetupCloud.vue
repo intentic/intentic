@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { CloudOptions, CloudProvider, SandboxSummary } from "@intentic-app/api-contract";
-import { ui, Notice, type NoticeModel, NoticeStack, Picker, type PickerOption, SegmentedControl, useDevice } from "@intentic/ui";
+import { Button, ui, Notice, type NoticeModel, NoticeStack, Picker, type PickerOption, SegmentedControl, useDevice } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { track } from "../composables/analytics";

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { STATE_DIR } from "@intentic/constants";
-import { clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, SegmentedControl, useNarrow } from "@intentic/ui";
+import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, SegmentedControl, useNarrow } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
-import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ui } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { type AgentProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
 import { accessKnown, connectPitch } from "../composables/chat/access";
@@ -95,14 +94,11 @@ const chooseModel = async (): Promise<void> => {
  * is where the connection shows up afterwards and the two must not disagree about what was just connected.
  * Which mechanism runs is the daemon's own split, mirrored: ChatGPT, Kimi and Google authenticate through the
  * bundled translator, everything else through a daemon-stored account of the provider's own. */
-const connect = (): void => {
+const connect = async (): Promise<void> => {
     const target = provider.value;
     setManagedProvider(target);
-    if (target === `codex` || target === `kimi` || target === `gemini`) {
-        void connectTranslator(target);
-        return;
-    }
-    void startConnect();
+    // Awaited so the button holds while the flow is being opened, rather than looking untouched.
+    await (target === `codex` || target === `kimi` || target === `gemini` ? connectTranslator(target) : startConnect());
 };
 </script>
 

@@ -22,6 +22,7 @@ import {
     Avatar,
     BarChart,
     BrandMark,
+    Button,
     Card,
     ChangeStatusMark,
     ui,
@@ -63,7 +64,6 @@ import {
     useTextSize,
     useTheme,
 } from "@intentic/ui";
-import Button from "primevue/button";
 import { ref } from "vue";
 
 const { scheme, set: setScheme } = useTheme();

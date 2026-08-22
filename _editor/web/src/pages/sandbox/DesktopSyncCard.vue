@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Card, ConfirmDialog, CopyButton, ui, Code, Row } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, Card, ConfirmDialog, CopyButton, ui, Code, Row } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useDesktopSync } from "../../composables/sandbox/useDesktopSync";
 import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
@@ -307,8 +306,8 @@ onUnmounted(stop);
                  is the one fact that makes "which sandbox is this?" answerable without leaving the dialog. -->
             <p v-if="syncingPath !== undefined" class="mt-2 break-all font-mono text-xs text-content">{{ syncingPath }}</p>
             <p class="mt-2">
-                Nothing on that computer is deleted and its sync agent stays installed, but turning this back on means running a fresh pairing
-                command there.
+                Nothing on that computer is deleted and its sync agent stays installed, but turning this back on means running a fresh pairing command
+                there.
             </p>
         </ConfirmDialog>
     </Card>

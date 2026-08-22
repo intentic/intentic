@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, ui, Icon, Picker, type PickerOption, ProseField, SegmentedControl } from "@intentic/extension-ui";
+import { Button, Checkbox, ui, Icon, Picker, type PickerOption, ProseField, SegmentedControl, vAction } from "@intentic/extension-ui";
 import { HARNESSES, type OutputField, providerLabel, type WorkflowStep } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { host } from "./host";
@@ -442,7 +442,7 @@ const advancedSummary = computed(() => {
                             type="button"
                             class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-left text-xs text-content transition-colors hover:border-line-strong"
                             :aria-label="`Model for this step: ${pinLabel}`"
-                            @click="choose"
+                            v-action="choose"
                         >
                             <Icon name="sparkles" class="shrink-0 text-subtle" />
                             <span class="min-w-0 flex-1 truncate" :class="{ 'text-muted': step.agent === undefined }">{{ pinLabel }}</span>

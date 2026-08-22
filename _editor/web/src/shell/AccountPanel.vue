@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Avatar, browserOwnsClick } from "@intentic/ui";
+import { AnchoredOverlay, Avatar, browserOwnsClick, vAction } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { creditSummary } from "../composables/membership/creditMeter";
@@ -147,7 +147,7 @@ const logout = async (): Promise<void> => {
             <button
                 type="button"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
-                @click="logout"
+                v-action="logout"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-xs text-muted" /></span>
                 Sign out

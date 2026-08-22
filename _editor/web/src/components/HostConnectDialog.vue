@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Code, Modal } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, Code, Modal } from "@intentic/ui";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { useHostConnect } from "../composables/sandbox/useHostConnect";
 import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
@@ -54,8 +53,9 @@ onBeforeUnmount(stop);
     <Modal :open="visible" size="lg" :header="`Connect ${id}`" @update:open="emit(`update:visible`, $event)">
         <div class="flex flex-col gap-4">
             <p class="text-sm text-content">
-                Run this on <b>{{ id }}</b>: in {{ shell }}, as yourself. It installs a small agent that dials this sandbox and keeps one outbound
-                connection open. No ports are opened on your network and there is nothing to configure on your router.
+                Run this on <b>{{ id }}</b
+                >: in {{ shell }}, as yourself. It installs a small agent that dials this sandbox and keeps one outbound connection open. No ports are
+                opened on your network and there is nothing to configure on your router.
             </p>
 
             <div v-if="online" class="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-content">
@@ -77,8 +77,8 @@ onBeforeUnmount(stop);
 
             <div class="rounded-md border border-subtle px-3 py-2">
                 <p class="text-2xs text-muted">
-                    Once connected, the agent may: <b>{{ permissions }}</b>, and nothing else. Those switches live on this card, the computer
-                    enforces them itself, and Revoke here cuts it off immediately.
+                    Once connected, the agent may: <b>{{ permissions }}</b
+                    >, and nothing else. Those switches live on this card, the computer enforces them itself, and Revoke here cuts it off immediately.
                 </p>
             </div>
         </div>

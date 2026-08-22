@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
-import { ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice } from "@intentic/ui";
+import { Button, ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
@@ -169,9 +168,9 @@ const pressLand = (): void => {
     }
     void changes.land();
 };
-const confirmForceLand = (): void => {
+const confirmForceLand = async (): Promise<void> => {
     pendingForceLand.value = false;
-    void changes.land(`check`, `outstanding`, true);
+    await changes.land(`check`, `outstanding`, true);
 };
 
 // The role split on the toolbar's primary action: maintainers land, collaborators ask (the daemon floors the
@@ -209,9 +208,9 @@ const closeMenu = (): void => {
 // Destructive and unrecoverable (the branch and worktree go), so it asks in the same modal every other
 // irreversible git action in this app uses.
 const pendingDiscard = ref(false);
-const confirmDiscard = (): void => {
+const confirmDiscard = async (): Promise<void> => {
     pendingDiscard.value = false;
-    void changes.discard();
+    await changes.discard();
 };
 </script>
 

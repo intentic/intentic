@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
+import { Button } from "@intentic/ui";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
@@ -27,10 +27,11 @@ const notice = computed(() => connectionNotice(connection.value.failure, active.
 const setupTo = computed(() => ({ path: `/setup`, query: { sandbox: active.value?.id } }));
 // Drop both credentials so the re-establish goes through a fresh Google proof (with the account chooser:
 // clearCredential disables auto-select) instead of replaying whatever the daemon just refused.
-const signIn = (): void => {
+const signIn = async (): Promise<void> => {
     clearCredential();
     invalidateSession();
-    void getSessionToken();
+    // Awaited, not fired and forgotten: the promise is what holds the button while the token is fetched.
+    await getSessionToken();
 };
 </script>
 

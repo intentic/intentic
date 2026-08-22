@@ -89,3 +89,4 @@ export const useNoteDraft = m["useNoteDraft"];
 export const useNow = m["useNow"];
 export const useRailMemory = m["useRailMemory"];
 export const useTheme = m["useTheme"];
+export const vAction = m["vAction"];

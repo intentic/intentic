@@ -19,7 +19,7 @@
      The event is unchanged (`act`), so neither app knows any of this happened. -->
 <script setup lang="ts">
 import type { MenuItem } from "primevue/menuitem";
-import Button from "primevue/button";
+import Button from "./Button.vue";
 import { computed, ref } from "vue";
 import type { IconName } from "../icons/iconSets.js";
 import ContextMenu from "./ContextMenu.vue";

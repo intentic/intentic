@@ -8,9 +8,8 @@
      It ends on the link itself. Sharing is a gesture with a result, and a dialog that closed on success would
      leave the user hunting for the thing they just made. -->
 <script setup lang="ts">
-import { ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
+import { Button, ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
 import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract";
-import Button from "primevue/button";
 import { ref, watch } from "vue";
 import { jsonBody } from "../composables/sandbox/jsonBody";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
@@ -51,6 +50,11 @@ const DETAILS: readonly { readonly value: ShareDetail; readonly label: string; r
 ];
 
 const share = async (): Promise<void> => {
+    // A share already in the air owns this dialog. The button holds itself once pressed, but Enter in the name
+    // field submits the form directly, and a second Enter used to publish the conversation twice.
+    if (busy.value) {
+        return;
+    }
     busy.value = true;
     error.value = undefined;
     try {
@@ -68,12 +72,7 @@ const share = async (): Promise<void> => {
 </script>
 
 <template>
-    <Modal
-        :open="visible"
-        size="md"
-        header="Share this conversation"
-        @update:open="emit(`update:visible`, $event)"
-    >
+    <Modal :open="visible" size="md" header="Share this conversation" @update:open="emit(`update:visible`, $event)">
         <!-- After: the link, and nothing to decide. -->
         <div v-if="result" class="flex flex-col gap-3">
             <p class="text-xs text-muted">Anyone with this link can read the conversation. It shows what was said up to now, and nothing after.</p>

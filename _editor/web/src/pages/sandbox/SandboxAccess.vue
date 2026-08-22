@@ -3,6 +3,7 @@ import type { InviteDelivery, InviteRecord } from "@intentic-app/api-contract";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
 import {
     Avatar,
+    Button,
     clipboardOf,
     ui,
     Notice,
@@ -15,7 +16,6 @@ import {
     SkeletonRows,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Icon, Notice, type NoticeModel } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, Icon, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useAuth } from "../composables/useAuth";

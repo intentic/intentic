@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import Button from "primevue/button";
 import type { LandConflict } from "@intentic/sandbox-contract";
-import { useDevice } from "@intentic/ui";
+import { Button, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { agentBlockers, type Blocker, blockerLabel, blockersOf, REASON_COPY, userBlockers } from "../composables/agents/conflictResolution";
 
@@ -94,7 +93,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             <template v-if="blockedCount === 0">Couldn't reach your workspace's copy of this repo</template>
             <template v-else>
                 {{ blockedCount }} file{{ blockedCount === 1 ? "" : "s" }} couldn't be applied<template v-if="cleanCount > 0">
-                   , holding back {{ cleanCount }} that {{ cleanCount === 1 ? "would" : "would all" }} land cleanly</template
+                    , holding back {{ cleanCount }} that {{ cleanCount === 1 ? "would" : "would all" }} land cleanly</template
                 >
             </template>
         </span>

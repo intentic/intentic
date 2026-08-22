@@ -12,9 +12,8 @@
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import type { Marketplace } from "@intentic-app/api-contract";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
-import { BrandMark, ui, type NoticeModel, RowGroup } from "@intentic/ui";
+import { BrandMark, Button, ui, type NoticeModel, RowGroup } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { browseMarketplace } from "../composables/extensions/useCapabilities";
 import { formatCredits } from "../composables/membership/creditMeter";

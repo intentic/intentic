@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Card, ui, Notice, type NoticeModel } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, Card, ui, Notice, type NoticeModel } from "@intentic/ui";
 import { computed } from "vue";
 import { type PlanStep, statusDot } from "../../composables/extensions/reconcileStatus";
 import SecretField from "../../components/SecretField.vue";

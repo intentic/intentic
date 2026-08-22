@@ -10,7 +10,7 @@
      recall it. Never an automatic recall: a URL that happens to be /preview must not close a window under the
      user. Every move of the panel is a button. (The same contract as pages/ChatArea.vue.) -->
 <script setup lang="ts">
-import Button from "primevue/button";
+import { Button } from "@intentic/ui";
 import { onMounted, onUnmounted, useTemplateRef } from "vue";
 import { markPreviewOpened } from "../composables/preview/previewSurface";
 import { usePreviewFloating } from "../composables/preview/previewFloating";

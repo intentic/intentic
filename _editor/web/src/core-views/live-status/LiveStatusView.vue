@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ResourceGroupSchema, type Deployment } from "@intentic-app/api-contract";
-import { Card, ui, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
+import { Button, Card, ui, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../../components/PlanStepRow.vue";
 import { convergedBadge, type PlanOrphan, type PlanStep, readPlanSteps, statusDot, statusLabel } from "../../composables/extensions/reconcileStatus";

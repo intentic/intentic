@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { BrandMark, ui, Modal, Notice, type NoticeModel, Picker, type PickerOption } from "@intentic/ui";
+import { BrandMark, Button, ui, Modal, Notice, type NoticeModel, Picker, type PickerOption, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
-import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useWorkspaceApps } from "../../composables/extensions/useWorkspaceApps";
@@ -248,7 +247,7 @@ const submit = async (): Promise<void> => {
                         type="button"
                         class="flex items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay disabled:cursor-default disabled:opacity-60 disabled:hover:border-line disabled:hover:bg-card"
                         :disabled="declaredApps.has(candidate.app)"
-                        @click="pick({ kind: `app`, ...candidate })"
+                        v-action="() => pick({ kind: `app`, ...candidate })"
                     >
                         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
                             <Icon name="code" class="text-sm text-link" />
@@ -271,7 +270,7 @@ const submit = async (): Promise<void> => {
                     :key="service.service"
                     type="button"
                     class="flex items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
-                    @click="pick({ kind: `service`, service })"
+                    v-action="() => pick({ kind: `service`, service })"
                 >
                     <BrandMark :size="32" :name="service.label" :logo="service.logo" :icon="service.icon ?? `server`" />
                     <div class="min-w-0">

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { BottomSheet, clipboardOf, ConfirmDialog, Modal, type NoticeModel, NoticeStack, PullToRefresh, SegmentedControl } from "@intentic/ui";
-import Button from "primevue/button";
+import { BottomSheet, Button, clipboardOf, ConfirmDialog, Modal, type NoticeModel, NoticeStack, PullToRefresh, SegmentedControl } from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useLoadingReveal } from "@intentic/ui";

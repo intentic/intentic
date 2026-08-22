@@ -4,6 +4,7 @@ import type { SandboxSummary } from "@intentic-app/api-contract";
 import {
     AnchoredOverlay,
     browserOwnsClick,
+    Button,
     Code,
     commandLang,
     ConfirmDialog,
@@ -14,7 +15,6 @@ import {
 } from "@intentic/ui";
 import { cloudProviderMeta } from "../pages/setupCloud";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
-import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
@@ -436,7 +436,7 @@ const confirmRemove = async (): Promise<void> => {
         <p v-if="pending?.role === 'owner' && pending.cloud !== null" class="mt-3 text-sm text-muted">
             Its machine <span class="font-mono text-content">{{ pending.cloud.serverName }}</span> keeps running in your
             {{ cloudProviderMeta(pending.cloud.provider).label }} account<template v-if="pending.cloud.provider !== 'oracle'">
-               , and billing you</template
+                , and billing you</template
             >. Delete it in the {{ cloudProviderMeta(pending.cloud.provider).label }} console when you're done with it.
         </p>
         <template v-else-if="pending?.role === 'owner' && pending.hosted === null && cleanupCommand !== undefined">

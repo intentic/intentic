@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Card, Icon } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, Card, Icon } from "@intentic/ui";
 import { computed } from "vue";
 import { formatCredits as n, installsFor } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";

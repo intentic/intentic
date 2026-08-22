@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { WorkspaceLink, WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { clipboardOf, ConfirmDialog, ContextMenu, type IconName, useExplorerStyle } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, clipboardOf, ConfirmDialog, ContextMenu, type IconName, useExplorerStyle, vAction } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, type VNode, watch } from "vue";
 import { useLayout } from "../../composables/useLayout";
@@ -676,6 +675,14 @@ const revealBarren = async (entry: WorkspaceTreeEntry): Promise<void> => {
     await nextTick();
     rowEls.get(entry.path)?.scrollIntoView({ block: `nearest` });
 };
+// The one-folder line's own press. A closure in the template would read `soleBarren` outside the `v-if` that
+// proved it exists, so the row asks for it here instead, where the check is an ordinary early return.
+const revealSoleBarren = async (): Promise<void> => {
+    const sole = soleBarren.value;
+    if (sole !== undefined) {
+        await revealBarren(sole.entry);
+    }
+};
 /* Remove barren branches without ceremony, and hold the way back: the branch shapes are recorded BEFORE the
  * delete (afterwards the tree no longer knows them), and Undo recreates the deepest folder of each chain:
  * recursive create rebuilds the exact shape, which is what makes this the one delete that is genuinely
@@ -731,9 +738,9 @@ const confirmDelete = (): void => {
 };
 // Keep a barren branch on purpose: drop the standard placeholder into its DEEPEST folder, so the whole chain
 // is non-empty from then on: real for git, carried by clones, and out of the empty-folder list for good.
-const keepFolder = (entry: WorkspaceTreeEntry): void => {
+const keepFolder = async (entry: WorkspaceTreeEntry): Promise<void> => {
     const tail = chainOf(entry).tail;
-    void run(async () => {
+    await run(async () => {
         await saveText(joinPath(tail.path, `.gitkeep`), ``);
         say(`Folder kept`);
     }, `Couldn't keep that folder.`);
@@ -1359,7 +1366,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     <button
                         type="button"
                         class="min-w-0 flex-1 cursor-pointer py-0.5 text-left text-2xs text-subtle hover:text-content"
-                        @click="revealBarren(branch.entry)"
+                        v-action="() => revealBarren(branch.entry)"
                         @mouseenter="pointedBarren = branch.entry.path"
                         @mouseleave="pointedBarren = undefined"
                         @focus="pointedBarren = branch.entry.path"
@@ -1388,7 +1395,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     v-if="soleBarren !== undefined"
                     type="button"
                     class="min-w-0 flex-1 cursor-pointer text-left hover:text-content"
-                    @click="revealBarren(soleBarren.entry)"
+                    v-action="revealSoleBarren"
                     @mouseenter="pointedBarren = soleBarren?.entry.path"
                     @mouseleave="pointedBarren = undefined"
                     @focus="pointedBarren = soleBarren?.entry.path"

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { MachineSandboxOp } from "@intentic/sandbox-contract";
-import { ui, Code, commandLang, MachineRunLog, Notice, type NoticeModel, SegmentedControl, useOsPreference } from "@intentic/ui";
+import { Button, ui, Code, commandLang, MachineRunLog, Notice, type NoticeModel, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { manageMachineSandbox, useHostRunning } from "../composables/sandbox/useComputers";
 import { DESKTOP_DOWNLOADS, desktopRecreateLink, desktopVersion, openDesktopLink } from "../environments/desktop";

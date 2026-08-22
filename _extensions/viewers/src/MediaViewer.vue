@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/extension-ui";
+import { Icon, vAction } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { formatDuration, seekTargets, SPEEDS } from "./mediaControls";
 
@@ -563,7 +563,7 @@ watch(
                     :class="{ 'text-primary-500': pictureInPicture }"
                     aria-label="Picture in picture"
                     v-tooltip.top="'Picture in picture (P)'"
-                    @click="togglePictureInPicture"
+                    v-action="togglePictureInPicture"
                 >
                     <Icon name="picture-in-picture" />
                 </button>
@@ -576,7 +576,7 @@ watch(
                     class="media-btn"
                     :aria-label="fullscreen ? `Exit full screen` : `Full screen`"
                     v-tooltip.top="'Full screen (F)'"
-                    @click="toggleFullscreen"
+                    v-action="toggleFullscreen"
                 >
                     <Icon :name="fullscreen ? `compress` : `expand`" />
                 </button>

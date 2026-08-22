@@ -31,6 +31,16 @@ export {
      * failure the kit's own tooltip directive exists to avoid. */
     AnchoredOverlay,
     Avatar,
+    /* <Button> MOVED OUT OF THE RAW PRIMITIVES BELOW, and that one line is why every extension got the press
+     * lock without touching a file of its own: a button whose click handler returns a promise now locks in the
+     * same tick it was pressed and draws the wait if it outlives a beat. Extension actions are the slowest in
+     * the app — a deployment, a workflow run, an agent — so they are exactly the ones an impatient second
+     * click used to fire twice. `vAction` ships beside it as the same behaviour for a hand-styled control:
+     * `<button v-action="run">`. Imported rather than left to the host's global registration on purpose, an
+     * unresolved directive is a button that silently does nothing, which is a worse failure than a missing
+     * tooltip and not one a reviewer would spot. */
+    Button,
+    vAction,
     BarChart,
     BottomSheet,
     /* <BrandMark> ships because the drafts queue is the second surface to draw a platform as its brand (the
@@ -258,7 +268,6 @@ export type {
  * no viewport clamp, the exact spread that <Modal> above now exists to end. The shell is here, so the raw one
  * is not. <Popover> stays only because <ResponsiveOverlay>/<AnchoredOverlay> do not yet cover every menu shape,
  * and it is on the same clock: those two are the ones that open in the right window when a panel is popped out. */
-export { default as Button } from "primevue/button";
 export { default as Checkbox } from "primevue/checkbox";
 export type { MenuItem } from "primevue/menuitem";
 export { default as Popover } from "primevue/popover";

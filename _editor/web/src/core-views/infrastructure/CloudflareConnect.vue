@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ui, InfoHint, Notice, type NoticeModel } from "@intentic/ui";
+import { Button, ui, InfoHint, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, ref } from "vue";
 import CloudflareTokenField from "../../components/CloudflareTokenField.vue";
 import { CF_TOKEN_KEY, useCloudflareZones } from "../../composables/extensions/useCloudflareZones";

@@ -788,7 +788,7 @@ const closeTab = (event: Event, id: string): void => {
                         dashed
                         :selected="runOnScreen(run)"
                         :aria-label="`Open the workflow run ${run.workflow.name}`"
-                        @click="void openRunInChat(run)"
+                        @click="openRunInChat(run)"
                     >
                         <template #meta>
                             <span class="min-w-0 truncate text-subtle">

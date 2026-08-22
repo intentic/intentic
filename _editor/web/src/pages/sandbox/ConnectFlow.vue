@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { AgentProvider } from "@intentic/sandbox-contract";
-import { ui, CopyButton } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, ui, CopyButton } from "@intentic/ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useChat } from "../../composables/chat/useChat";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
@@ -212,15 +211,7 @@ watch(flow, (live) => {
     <div v-if="flow" class="flex flex-col gap-2.5">
         <!-- `self-start`: in a column the button would stretch edge to edge, which reads as a banner rather than
              as the first step of three. -->
-        <Button
-            as="a"
-            class="self-start"
-            size="small"
-            :href="flow.url"
-            target="_blank"
-            rel="noopener"
-            @click="wentToProvider = true"
-        >
+        <Button as="a" class="self-start" size="small" :href="flow.url" target="_blank" rel="noopener" @click="wentToProvider = true">
             <ProviderLogo :provider="provider" />Open {{ destination }}<Icon name="external-link" />
         </Button>
         <!-- Above what it describes, never below: this line is the instruction for the code or the field that

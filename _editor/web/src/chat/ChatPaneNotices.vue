@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/ui";
+import { Icon, vAction } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { isTrialProvider, TRIAL_NOTICE } from "@intentic/sandbox-contract";
@@ -182,7 +182,7 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
             type="button"
             class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
             :disabled="!reachable || streaming"
-            @click="retryTrial"
+            v-action="retryTrial"
         >
             Retry
         </button>
@@ -227,7 +227,7 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
             type="button"
             class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
             :disabled="!reachable || arming"
-            @click="setOutageResume(false)"
+            v-action="() => setOutageResume(false)"
         >
             Stop
         </button>
@@ -246,7 +246,7 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
             type="button"
             class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
             :disabled="!reachable || arming"
-            @click="setOutageResume(true)"
+            v-action="() => setOutageResume(true)"
         >
             Keep this chat going
         </button>

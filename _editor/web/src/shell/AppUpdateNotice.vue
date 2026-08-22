@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
+import { Button } from "@intentic/ui";
 import { useAppUpdate } from "../composables/appUpdate";
 
 /* THERE IS A NEWER INTENTIC — the whole of what this app says about its own version, in one line.

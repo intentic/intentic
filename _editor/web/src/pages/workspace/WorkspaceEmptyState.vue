@@ -1,8 +1,7 @@
 <!-- Shown in the viewer pane when no file is open. -->
 <script setup lang="ts">
-import Button from "primevue/button";
 import { computed, nextTick, ref } from "vue";
-import { Notice, type NoticeModel } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, vAction } from "@intentic/ui";
 import { startAgent } from "../../composables/agents/agentActions";
 import { useAddRepo } from "../../composables/workspace/useAddRepo";
 
@@ -84,7 +83,7 @@ const askAgent = (): void => {
             <div class="flex w-full max-w-md flex-col gap-2 text-left">
                 <!-- 1: A REPOSITORY. The common case, so it leads and it is the one that is spelled out. -->
                 <div class="rounded-xl border border-line bg-card p-3">
-                    <button v-if="!cloneOpen" type="button" class="flex w-full items-center gap-3 text-left" @click="openClone">
+                    <button v-if="!cloneOpen" type="button" class="flex w-full items-center gap-3 text-left" v-action="openClone">
                         <Icon name="code" class="shrink-0 text-lg text-link" />
                         <span class="min-w-0 flex-1">
                             <span class="block text-xs font-semibold text-content">Clone a repository</span>

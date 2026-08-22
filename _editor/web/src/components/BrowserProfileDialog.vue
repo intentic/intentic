@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
+import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeOf } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import BrowserSelectMenu from "./BrowserSelectMenu.vue";
 import { keyIntent, type KeyFrame } from "../composables/browser/keyIntent";

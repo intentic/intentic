@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
+import { Button } from "@intentic/ui";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 

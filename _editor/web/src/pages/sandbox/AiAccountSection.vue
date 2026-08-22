@@ -8,8 +8,7 @@ import {
     type TranslatorAccount,
     providerLabel,
 } from "@intentic/sandbox-contract";
-import { formatTokens, InfoHint, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, formatTokens, InfoHint, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { providerReady } from "../../composables/chat/access";

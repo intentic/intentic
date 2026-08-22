@@ -187,6 +187,26 @@ export class Conversation {
     // isn't generating, so the composer should drop the Stop spinner and show a ready Send (Claude Code style).
     readonly awaitingDecision = computed(() => this.messages.value.some(isAwaitingDecision));
 
+    /* THE CARDS WHOSE ANSWER IS CURRENTLY IN THE AIR, by message id.
+     *
+     * A decision card is answered by ONE of several buttons: Allow once, Always allow, Deny; Approve, Keep
+     * planning. Locking the pressed button (which the kit's <Button> now does on its own) stops the same
+     * answer being sent twice, and does nothing at all about the user who presses Approve and then, a beat
+     * later, changes their mind and presses the one beside it. Both are legitimate presses of two live
+     * controls, and both used to go out: the daemon un-parks the turn on whichever lands first and answers the
+     * second with a 404, which the card reported as "the turn may have ended" over a decision that had in fact
+     * landed perfectly.
+     *
+     * So the guard belongs to the CARD, not to the button. The status check at the top of each `decideX`
+     * cannot do it: `pending` only stops being `pending` once the reply has come back, so it is blind for
+     * exactly the window it exists to cover. This is written synchronously, before the request leaves. */
+    private readonly deciding = ref<ReadonlySet<number>>(new Set());
+
+    /** Whether this card's answer is on its way, for the view that must stop offering the other answers. */
+    isDeciding(id: number): boolean {
+        return this.deciding.value.has(id);
+    }
+
     // The message carrying a plan currently awaiting the user's decision, if any. Lets the composer route
     // typed feedback into a plan rejection (reject-with-feedback) instead of starting a fresh turn.
     readonly pendingPlanMessage = computed(() => this.messages.value.find((message) => message.plan?.status === `pending`));
@@ -1531,14 +1551,31 @@ export class Conversation {
      * answered while the agent is still waiting on it.
      *
      * Returns whether the decision landed. What happens NEXT genuinely differs per card, a notice, the
-     * rejection feedback as a user bubble, stopping the turn, so the callers keep their own tails. */
+     * rejection feedback as a user bubble, stopping the turn, so the callers keep their own tails.
+     *
+     * ONE ANSWER PER CARD, and the claim is staked before the request goes out rather than after it comes
+     * back (see `deciding` above for why the `pending` check upstairs cannot do this job). A second answer
+     * arriving while the first is in the air is dropped in silence: it is not an error, it is a person
+     * clicking, and the card is about to show them what their first press decided. */
     private async decide(id: number, body: AgentReply, failure: string, decided: Pick<ChatMessage, CardKind>): Promise<boolean> {
-        if (!(await postTurnControl(`/agent/reply`, body))) {
-            this.error.value = failure;
+        if (this.deciding.value.has(id)) {
             return false;
         }
-        this.transcript.attachCard(id, decided);
-        return true;
+        this.deciding.value = new Set(this.deciding.value).add(id);
+        try {
+            if (!(await postTurnControl(`/agent/reply`, body))) {
+                this.error.value = failure;
+                return false;
+            }
+            this.transcript.attachCard(id, decided);
+            return true;
+        } finally {
+            // Released even on the failure path: the card is back to `pending` on screen, so it has to be
+            // answerable again, and the error line beside it is the reason to try.
+            const left = new Set(this.deciding.value);
+            left.delete(id);
+            this.deciding.value = left;
+        }
     }
 
     /* Answers a pending plan card. The turn is parked on ExitPlanMode, so on approval it executes the plan and

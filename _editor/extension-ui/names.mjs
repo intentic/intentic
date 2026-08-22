@@ -90,4 +90,5 @@ export const extensionUiNames = [
     "useNow",
     "useRailMemory",
     "useTheme",
+    "vAction",
 ];

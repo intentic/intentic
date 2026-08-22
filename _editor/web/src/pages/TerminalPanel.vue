@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { clipboardOf, ui, ConfirmDialog, ContextMenu, Icon, type IconName, Modal, useDevice } from "@intentic/ui";
+import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, Icon, type IconName, Modal, useDevice, vAction } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { TerminalScrollback } from "@intentic/sandbox-contract";
-import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
@@ -498,10 +497,10 @@ const closeScrollback = (): void => {
 };
 
 // Through the dialog's own element, so a floating panel writes from the window the user is actually in.
-const copyScrollback = (): void => {
+const copyScrollback = async (): Promise<void> => {
     const text = scrollback.value?.text;
     if (text !== undefined) {
-        void clipboardOf(scrollbackText.value).writeText(text);
+        await clipboardOf(scrollbackText.value).writeText(text);
     }
 };
 
@@ -1155,7 +1154,7 @@ const endResize = (event: PointerEvent): void => {
                     v-else
                     type="button"
                     :class="ui.iconButton()"
-                    @click="void tabs.refresh().catch(() => undefined)"
+                    @click="tabs.refresh().catch(() => undefined)"
                     v-tooltip.top="'Refresh sessions'"
                     aria-label="Refresh sessions"
                 >
@@ -1198,14 +1197,14 @@ const endResize = (event: PointerEvent): void => {
                     <button
                         type="button"
                         class="shrink-0 rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90"
-                        @click="resolveHelp(true)"
+                        v-action="() => resolveHelp(true)"
                     >
                         Done: hand back
                     </button>
                     <button
                         type="button"
                         class="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted transition-colors hover:text-content"
-                        @click="resolveHelp(false)"
+                        v-action="() => resolveHelp(false)"
                     >
                         Can't help now
                     </button>

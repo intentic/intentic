@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Card, Code, CopyButton, Row } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, Card, Code, CopyButton, Row } from "@intentic/ui";
 import { computed } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "../../composables/sandbox/useDaemonRoutes";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";

@@ -16,12 +16,16 @@ import { onScopeDispose, ref, watch, type Ref } from "vue";
  * the floor exists to stop one wait flickering, never to hold a stale outline over something else.
  */
 
-// Under this, the answer reads as immediate and nothing should be drawn. Roughly the interval below which a
-// response feels like a direct consequence of the click (Nielsen's 0.1–1s band, at the fast end because the
-// tab and its title are already on screen by then, the click is acknowledged with or without this).
-const REVEAL_DELAY_MS = 200;
+/* Under this, the answer reads as immediate and nothing should be drawn. Roughly the interval below which a
+ * response feels like a direct consequence of the click (Nielsen's 0.1–1s band, at the fast end because the
+ * tab and its title are already on screen by then, the click is acknowledged with or without this).
+ *
+ * Exported because a pressed button waits on exactly the same rule as a loading pane, and the two answering
+ * it with different numbers is how one screen ends up flashing a spinner at a wait the screen beside it
+ * decided was instant. See lib/pressLock.ts, which imports these rather than re-deciding them. */
+export const REVEAL_DELAY_MS = 200;
 // Long enough that a revealed outline registers as a state the view was in, rather than as a blink.
-const MINIMUM_HOLD_MS = 400;
+export const MINIMUM_HOLD_MS = 400;
 
 export const useLoadingReveal = (loading: Ref<boolean>, subject: Ref<string>): Ref<boolean> => {
     const revealed = ref(false);

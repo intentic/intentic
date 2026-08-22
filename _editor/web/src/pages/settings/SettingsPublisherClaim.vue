@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import type { ClaimableName, ClaimChallenge } from "@intentic-app/api-contract";
 import type { GitPublishFileResult, GitRemoteRepos } from "@intentic/sandbox-contract";
-import { type NoticeModel, Notice, ui } from "@intentic/ui";
+import { Button, type NoticeModel, Notice, ui } from "@intentic/ui";
 import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
@@ -172,10 +171,7 @@ const prove = async (): Promise<void> => {
     } catch (caught) {
         // The platform's refusal now names the repositories it read and what each one said, so it rides as the
         // detail under this line rather than being replaced by it.
-        proveNotice.value = noticeFrom(
-            caught,
-            published.value ? `Pushed, but GitHub isn't serving it yet.` : `That claim couldn't be verified yet.`,
-        );
+        proveNotice.value = noticeFrom(caught, published.value ? `Pushed, but GitHub isn't serving it yet.` : `That claim couldn't be verified yet.`);
     } finally {
         proving.value = false;
         step.value = undefined;
@@ -187,8 +183,8 @@ const prove = async (): Promise<void> => {
     <div class="flex flex-col gap-2">
         <h3 class="text-xs font-semibold">Claim a publisher name</h3>
         <p class="text-xs text-muted">
-            Earnings add up against the publisher name in your extension's manifest, or, for a paid service with no extension, against your
-            domain. Prove it's yours and they become payable to you.
+            Earnings add up against the publisher name in your extension's manifest, or, for a paid service with no extension, against your domain.
+            Prove it's yours and they become payable to you.
         </p>
 
         <!-- Names the creator's own repositories publish under. Absent rather than empty when there are none:

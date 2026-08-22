@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ui } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, ui } from "@intentic/ui";
 import SuggestedSessionBox from "../agents/SuggestedSessionBox.vue";
 import { usePushFlow } from "../composables/workspace/usePushFlow";
 

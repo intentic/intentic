@@ -24,7 +24,7 @@
      Cancel is `@cancel` rather than a `v-model`, because the call sites hold state of every shape: a payload,
      a path set, a plain boolean, and none of them wants this component deciding what "closed" means for it. -->
 <script setup lang="ts" generic="T">
-import Button from "primevue/button";
+import Button from "./Button.vue";
 import { type IconName } from "../icons/iconSets.js";
 import Icon from "./Icon.vue";
 import Modal from "./Modal.vue";
@@ -66,14 +66,7 @@ const NAMED = 5;
 </script>
 
 <template>
-    <Modal
-        :open="open"
-        :size="size"
-        :append-to="appendTo"
-        :header="header"
-        @update:open="emit(`cancel`)"
-        @hide="emit(`hide`)"
-    >
+    <Modal :open="open" :size="size" :append-to="appendTo" :header="header" @update:open="emit(`cancel`)" @hide="emit(`hide`)">
         <ul v-if="items !== undefined && items.length > 0" class="flex flex-col gap-1">
             <li v-for="(item, index) in items.slice(0, NAMED)" :key="index" class="flex min-w-0 items-center gap-2 text-sm">
                 <slot name="item" :item="item" />

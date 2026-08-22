@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceFileWindow } from "@intentic-app/api-contract";
-import { formatBytes } from "@intentic/ui";
+import { formatBytes, vAction } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FILE_WINDOW_BYTES, readFileWindow } from "../../../composables/workspace/fileWindow";
@@ -165,7 +165,7 @@ watch(
                 type="button"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
                 :disabled="busy"
-                @click="loadMore"
+                v-action="loadMore"
                 v-tooltip.bottom="`Read the next ${formatBytes(Math.min(remaining, FILE_WINDOW_BYTES))}`"
             >
                 <Icon :name="busy ? `spinner` : `download`" :spin="busy" class="text-[0.7rem]" /> Load more
@@ -174,7 +174,7 @@ watch(
                 type="button"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-overlay hover:text-content"
                 :class="following ? `text-primary-500` : ``"
-                @click="toggleFollow"
+                v-action="toggleFollow"
                 v-tooltip.bottom="'Jump to the end and append new lines as they are written'"
             >
                 <Icon :name="following ? `wave-pulse` : `chevron-down`" class="text-[0.7rem]" /> Follow

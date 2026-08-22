@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SearchBar, useDevice } from "@intentic/ui";
+import { SearchBar, useDevice, vAction } from "@intentic/ui";
 import { computed, nextTick, type Ref, ref, toRef } from "vue";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import UsageRing from "../components/UsageRing.vue";
@@ -300,7 +300,7 @@ const pickAccount = (id: string): void => {
             class="ui-row-select -mx-3 flex items-center gap-1.5 px-3 py-1.5 text-left text-2xs text-subtle max-md:min-h-11"
             :aria-expanded="accountsOpen"
             aria-controls="picker-account-list"
-            @click="void toggleAccounts()"
+            v-action="toggleAccounts"
         >
             <Icon :name="accountsOpen ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
             <span>{{ accountsOpen ? `Show fewer` : `All ${accountRows.length} accounts` }}</span>
@@ -354,7 +354,7 @@ const pickAccount = (id: string): void => {
             class="ui-row-select -mx-3 flex items-center gap-1.5 px-3 py-1.5 text-left text-2xs text-subtle max-md:min-h-11"
             :aria-expanded="routedOpen"
             aria-controls="picker-routed-list"
-            @click="void toggleRouted()"
+            v-action="toggleRouted"
         >
             <Icon :name="routedOpen ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
             <span>{{ routedOpen ? `Show fewer` : `All ${routedRows.length} accounts` }}</span>

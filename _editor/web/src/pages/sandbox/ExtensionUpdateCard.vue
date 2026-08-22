@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract";
-import { timeAgo } from "@intentic/ui";
+import { Button, timeAgo, vAction } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { ui, SegmentedControl, StatusBadge } from "@intentic/ui";
-import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import ActionLink from "../../components/ActionLink.vue";
 import { startAgent } from "../../composables/agents/agentActions";
@@ -224,7 +223,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
         <!-- The way back, ordinary and visible: "the last update made it worse" needs no failing probe. -->
         <p v-if="extension.previous && extension.health?.state !== `unhealthy`" class="text-2xs text-subtle">
             The previous version is kept{{ extension.previous.version !== undefined ? ` (v${extension.previous.version})` : `` }}.
-            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="busy" @click="revert">
+            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="busy" v-action="revert">
                 Revert to {{ short(extension.previous.ref) }}
             </button>
         </p>

@@ -56,10 +56,10 @@ const archiveBusy = computed(() => busyIds.value.includes(agentId));
 const { settings: sandboxSettings } = useSandboxSettings();
 const sandboxLands = computed(() => landsByDefault(sandboxSettings.value?.rules ?? []));
 const autoLandOn = computed(() => effectiveAutoLand(agentById(agentId), sandboxLands.value));
-const toggleAutoLand = (): void => {
+const toggleAutoLand = async (): Promise<void> => {
     const next = !autoLandOn.value;
-    void changes.setAutoLand(next === sandboxLands.value ? null : next);
     emit(`selected`);
+    await changes.setAutoLand(next === sandboxLands.value ? null : next);
 };
 
 // The ship-tier items (land, re-land, auto-land posture, discard) leave the menu below maintainer rather

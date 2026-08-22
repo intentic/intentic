@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
-import { ui, formatDateTime, Icon, Picker, type PickerOption, ProseField, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
+import { ui, formatDateTime, Icon, Picker, type PickerOption, ProseField, ResizeSeam, ToggleSwitch, vAction } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { glyph } from "./catalog";
@@ -736,7 +736,7 @@ const setProvider = (provider: string): void => {
                                 type="button"
                                 class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2 text-left text-sm text-content transition-colors hover:border-line-strong"
                                 :aria-label="`Provider, account and model for this automation: ${runsOnLabel}`"
-                                @click="choose"
+                                v-action="choose"
                             >
                                 <Icon name="sparkles" class="shrink-0 text-subtle" />
                                 <span class="min-w-0 flex-1 truncate">{{ runsOnLabel }}</span>

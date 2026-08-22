@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui, Icon, Popover } from "@intentic/extension-ui";
+import { ui, Icon, Popover, vAction } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { host } from "./host";
 import { panelSessionOf, type useTargets } from "./useTargets";
@@ -68,12 +68,9 @@ const start = async (): Promise<void> => {
          line, which is the opposite of what this row needs. It borrows the danger tint, not the shape, and it
          spells that tint out rather than sharing a recipe with the box, because a shared recipe is exactly how
          thirty-two views ended up drawing a notice that was not one. -->
-    <span
-        v-else-if="failure"
-        class="truncate rounded-lg border border-danger/40 bg-danger/10 px-2 py-0.5 text-2xs text-danger"
-        :title="failure"
-        >{{ failure }}</span
-    >
+    <span v-else-if="failure" class="truncate rounded-lg border border-danger/40 bg-danger/10 px-2 py-0.5 text-2xs text-danger" :title="failure">{{
+        failure
+    }}</span>
 
     <!-- READY, SERVING ONE THING, FROM A TERMINAL. The address is the label: the one fact worth checking at a
          glance, and it is that terminal's trigger rather than sitting beside a second button for it. -->
@@ -137,7 +134,7 @@ const start = async (): Promise<void> => {
         :disabled="starting"
         :class="ui.linkButton(`gap-1.5 text-2xs hover:no-underline`, blocked ? `text-warning hover:text-warning` : `text-muted hover:text-content`)"
         v-tooltip.bottom="`Start this repository's dev server`"
-        @click="start"
+        v-action="start"
     >
         <Icon name="play" class="shrink-0" />
         Start dev server

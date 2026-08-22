@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { BuiltinPromptText, SystemPromptMode } from "@intentic/sandbox-contract";
-import { ui, CopyButton, Modal, Notice, Row, RowGroup, SegmentedControl } from "@intentic/ui";
+import { Button, ui, CopyButton, Modal, Notice, Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
-import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { sandboxJson } from "../../../composables/sandbox/sandboxClient";
@@ -300,8 +299,8 @@ const reachLine =
             <p class="mt-3 text-xs text-muted">
                 <template v-if="viewingBase === `claude`">
                     Claude Code's own prompt, read out of the CLI in your sandbox
-                    <span class="font-mono text-content">{{ builtinPrompts[viewingBase]?.version }}</span>, not a copy kept by this app. Choose
-                    Claude and it keeps updating with the sandbox; fork it and you own it from here.
+                    <span class="font-mono text-content">{{ builtinPrompts[viewingBase]?.version }}</span
+                    >, not a copy kept by this app. Choose Claude and it keeps updating with the sandbox; fork it and you own it from here.
                 </template>
                 <template v-else>
                     Intentic's own prompt: the default, and the one we tune for this app. Choose Intentic and it keeps updating with the app; fork it

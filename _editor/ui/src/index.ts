@@ -25,6 +25,13 @@ export { default as BottomSheet } from "./components/BottomSheet.vue";
 // <Avatar> for things rather than people: the logo → glyph → initials ladder every surface that LISTS
 // something needs, and that four call sites had each got a different amount of right.
 export { default as BrandMark } from "./components/BrandMark.vue";
+/* THE APP'S ACTION BUTTON, and the reason nothing should import `primevue/button` directly any more. It is
+ * PrimeVue's, pixel for pixel, with the one thing a bare button cannot do: a press whose handler returns a
+ * promise locks the button in the same tick and draws itself working if the wait outlives a beat. Every
+ * "I clicked Approve twice and got an error" is that lock missing, and a design system is the only place to
+ * fix it once for three hundred call sites. `v-action` is the same behaviour for hand-styled elements. */
+export { default as Button } from "./components/Button.vue";
+export { vAction } from "./lib/pressAction.js";
 export { default as Card } from "./components/Card.vue";
 // The two halves of a changed-file row, shipped together because they are always drawn together: git's status
 // letter in its fixed-width cell, and the +/- line-count badge beside it. Six surfaces had each written both by

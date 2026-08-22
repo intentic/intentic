@@ -1,8 +1,20 @@
 <script setup lang="ts">
-import Button from "primevue/button";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { ui, FilterBar, Notice, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows, StatusBadge, timeAgo } from "@intentic/ui";
+import {
+    Button,
+    ui,
+    FilterBar,
+    Notice,
+    type NoticeModel,
+    NoticeStack,
+    RowGroup,
+    SegmentedControl,
+    SkeletonRows,
+    StatusBadge,
+    timeAgo,
+    vAction,
+} from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
@@ -225,7 +237,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             <Button label="New extension" size="small" @click="creating = true">
                 <template #icon><Icon name="plus" /></template>
             </Button>
-            <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
+            <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" v-action="reload">
                 <Icon name="refresh" :spin="reloading" />
             </button>
         </div>
@@ -270,7 +282,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
              until the first check has run: a blank claim is worse than none. -->
         <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">
             Updates checked {{ timeAgo(Date.parse(updatesCheckedAt)) }} ·
-            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="checking" @click="checkNow">
+            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="checking" v-action="checkNow">
                 {{ checking ? `Checking…` : `Check now` }}
             </button>
         </p>

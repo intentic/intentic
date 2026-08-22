@@ -26,6 +26,11 @@ export function useAddRepo() {
      * (a fresh checkout re-frames what "the root scope" holds, see git.routes). Returns whether it landed, so
      * the caller can close its form on success and keep the typed URL on failure. */
     const addRepo = async (cloneUrl: string): Promise<boolean> => {
+        // A clone already running owns this form. The button that started it holds itself, but Enter in the
+        // address field does not go through a button, and a second Enter used to start the same clone twice.
+        if (cloning.value) {
+            return false;
+        }
         const url = cloneUrl.trim();
         const name = repoNameFromUrl(url);
         if (url.length === 0 || name.length === 0) {

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft } from "@intentic-app/api-contract";
-import { ui, CodeField, Markdown, ProseField, SegmentedControl } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, ui, CodeField, Markdown, ProseField, SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
 
 /* WRITING ONE SKILL: three boxes, in the order the model reads them.

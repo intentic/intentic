@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
+import Button from "./Button.vue";
 import { type ComponentPublicInstance, computed, ref } from "vue";
 import Icon from "./Icon.vue";
 import type { IconName } from "../icons/iconSets.js";

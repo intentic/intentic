@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Card, Icon, Notice, type NoticeModel, Row } from "@intentic/ui";
+import { Button, Card, Icon, Notice, type NoticeModel, Row } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import MembershipOffer from "../components/MembershipOffer.vue";
@@ -244,8 +243,8 @@ const view = computed(() => {
                 <MembershipOffer :return-to="`join`" :join-label="buyLabel" :working="working" @checkout="checkout">
                     <template #headline>Let your agent run paid services.</template>
                     <template #promise>
-                        One membership, a day's credits, and an approval link for every run, so your agent can ask for paid research, data and
-                        compute without ever being able to spend on its own.
+                        One membership, a day's credits, and an approval link for every run, so your agent can ask for paid research, data and compute
+                        without ever being able to spend on its own.
                     </template>
                 </MembershipOffer>
             </template>

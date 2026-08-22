@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import Button from "primevue/button";
 import { githubRepoOf } from "@intentic/registry";
-import { BrandMark, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
+import { BrandMark, Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed } from "vue";
 import { formatCredits } from "../../composables/membership/creditMeter";
 import { useMembership } from "../../composables/membership/useMembership";

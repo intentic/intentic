@@ -16,6 +16,7 @@ import {
     SegmentedControl,
     SkeletonRows,
     useLoadingReveal,
+    vAction,
 } from "@intentic/extension-ui";
 import { computed, onUnmounted, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
@@ -442,7 +443,7 @@ const toggleDetail = (id: string): void => {
                         :class="ui.addTile(`bg-card px-2.5 py-1.5 disabled:cursor-default disabled:opacity-50`)"
                         :disabled="enabling !== undefined"
                         v-tooltip.top="recipe.description"
-                        @click="enableChore(recipe)"
+                        v-action="() => enableChore(recipe)"
                     >
                         <Icon
                             :name="enabling === recipe.id ? `spinner` : `plus`"

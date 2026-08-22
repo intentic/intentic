@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { Deployment, ResourceView } from "@intentic-app/api-contract";
-import { Card, StatusBadge } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, Card, StatusBadge } from "@intentic/ui";
 import { computed, reactive } from "vue";
 import { statusLabel, statusVariant } from "../../composables/extensions/reconcileStatus";
 import { groupAccent, resourceIcon, resourceLogoUrl } from "../../composables/extensions/resourceVisual";

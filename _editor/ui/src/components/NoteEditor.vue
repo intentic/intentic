@@ -17,7 +17,7 @@
      neighbours are left linking to something nobody has written, "Forget" for a memory note, which the agent
      stops recalling, and it spells the button, the tooltip and the accessible name from one word. -->
 <script setup lang="ts">
-import Button from "primevue/button";
+import Button from "./Button.vue";
 import { ui } from "../lib/ui.js";
 import CodeField from "./CodeField.vue";
 import CopyButton from "./CopyButton.vue";

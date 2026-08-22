@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import Button from "primevue/button";
 import { OFFICIAL_REGISTRY_URL } from "@intentic/registry";
-import { ui, FilterBar, Notice, type NoticeModel, NoticeStack, SegmentedControl } from "@intentic/ui";
+import { Button, ui, FilterBar, Notice, type NoticeModel, NoticeStack, SegmentedControl } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";

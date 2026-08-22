@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { useTheme, Notice, type IconName, type NoticeModel } from "@intentic/ui";
+import { Button, useTheme, Notice, type IconName, type NoticeModel, vAction } from "@intentic/ui";
 import { noticeOf } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
@@ -214,7 +213,7 @@ watch(
                     v-if="googleReady && !desktop"
                     type="button"
                     class="mt-4 w-full text-center text-xs text-subtle transition-colors hover:text-content"
-                    @click="redirectSignIn"
+                    v-action="redirectSignIn"
                 >
                     Trouble signing in? Use Google's own page.
                 </button>

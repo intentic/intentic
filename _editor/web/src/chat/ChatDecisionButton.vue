@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
-import type { IconName } from "@intentic/ui";
+import { Button, type IconName } from "@intentic/ui";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 
 /* The answer to a decision card: the plan's Approve, the question's Submit, the permission's Allow once, and
@@ -26,6 +25,11 @@ import { type RouteLocationRaw, RouterLink } from "vue-router";
  * these buttons commit an agent to an action, so on a phone they get a full 44px regardless of which tone or
  * size the card called for. Everything else (the tint, the neutral fill, the radius, the two sizes) now comes
  * from the same place as the rest of the app.
+ *
+ * IT LOCKS WHILE THE ANSWER IS IN THE AIR, and gets that from the kit's <Button> rather than from anything
+ * written here: a handler that returns a promise holds its button until the promise settles. These are the
+ * presses where that matters most in the whole app, and where it was most visibly missing: two clicks on
+ * Approve, 50ms apart, sent the reply twice and the second one came back "the turn may have ended".
  *
  * `to` IS FOR THE ANSWER THAT IS A PLACE. Some of these cards answer with a journey rather than a decision:
  * "Open the browser", "Open setup", and those were <button>s that pushed the router, so the one control on

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ImportReportSchema, type BundleExport, type ImportReport } from "@intentic-app/api-contract";
-import { Card, ui, formatDateTime, type NoticeModel, NoticeStack, Row, RowGroup, StatusBadge } from "@intentic/ui";
+import { Button, Card, ui, formatDateTime, type NoticeModel, NoticeStack, Row, RowGroup, StatusBadge, vAction } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
-import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
@@ -169,7 +168,7 @@ const sizeLabel = (bytes: number): string => {
                         :class="ui.iconButton()"
                         aria-label="Download export"
                         v-tooltip.top="'Download'"
-                        @click="download(entry)"
+                        v-action="() => download(entry)"
                     >
                         <Icon name="download" class="text-sm" />
                     </button>

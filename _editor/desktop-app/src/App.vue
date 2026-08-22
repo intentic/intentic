@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    Button,
     Card,
     MachineDetail,
     MachineRunLog,
@@ -10,10 +11,10 @@ import {
     SandboxVerbs,
     sandboxVerbPrompt,
     VERB_LABEL,
+    vAction,
 } from "@intentic/ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import Requirements from "./components/Requirements.vue";
@@ -807,7 +808,7 @@ onUnmounted(() => {
                     <button
                         type="button"
                         class="-my-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs text-subtle hover:bg-canvas hover:text-content"
-                        @click="dismissSetup"
+                        v-action="dismissSetup"
                     >
                         <Icon name="arrow-up-right" />
                         <span>Back to your workspace</span>
@@ -880,13 +881,13 @@ onUnmounted(() => {
                  offer, so a run that had gone wrong could be abandoned and not ended. The log is written for
                  every run whether or not anyone asks (scripts.rs); these are the two ways to reach it. -->
                 <div v-if="!expired" class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-2xs">
-                    <button v-if="running" type="button" class="text-link hover:underline" :disabled="stopping" @click="stopSetup">
+                    <button v-if="running" type="button" class="text-link hover:underline" :disabled="stopping" v-action="stopSetup">
                         {{ stopping ? `Stopping…` : `Stop` }}
                     </button>
-                    <button type="button" class="text-link hover:underline" @click="copyLog">
+                    <button type="button" class="text-link hover:underline" v-action="copyLog">
                         {{ logCopied ? `Copied` : `Copy log` }}
                     </button>
-                    <button v-if="setupLog" type="button" class="text-link hover:underline" @click="openLogFolder">Open log folder</button>
+                    <button v-if="setupLog" type="button" class="text-link hover:underline" v-action="openLogFolder">Open log folder</button>
                     <span v-if="setupLog" class="ml-auto truncate font-mono text-subtle">{{ setupLog }}</span>
                 </div>
             </Card>

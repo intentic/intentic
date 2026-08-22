@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
-import { ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
+import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 
@@ -65,8 +64,8 @@ const submit = async (): Promise<void> => {
     <Modal v-model:open="open" size="md" header="New extension">
         <div class="flex flex-col gap-4">
             <p class="text-2xs text-subtle">
-                Writes a working extension into this workspace and switches it on. Nothing is installed and nothing is built: the files are what
-                runs, so an edit shows up on the next reload.
+                Writes a working extension into this workspace and switches it on. Nothing is installed and nothing is built: the files are what runs,
+                so an edit shows up on the next reload.
             </p>
 
             <div class="flex items-end gap-2">

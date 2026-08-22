@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic-app/api-contract";
-import { BrandMark, CodeField, Icon, Markdown, SegmentedControl } from "@intentic/ui";
-import Button from "primevue/button";
+import { BrandMark, Button, CodeField, Icon, Markdown, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import SkillForm from "./SkillForm.vue";
@@ -140,13 +139,7 @@ watch(
             </p>
             <template v-else>
                 <!-- The reader's own skill: the form IS how they read it. -->
-                <SkillForm
-                    v-if="editing !== undefined"
-                    :skill="editing"
-                    :disabled="disabled"
-                    @save="emit(`save`, $event)"
-                    @cancel="emit(`toggle`)"
-                />
+                <SkillForm v-if="editing !== undefined" :skill="editing" :disabled="disabled" @save="emit(`save`, $event)" @cancel="emit(`toggle`)" />
                 <div v-else class="flex flex-col gap-3">
                     <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                         <!-- Someone else's skill states its trigger line in full: it is the half a reader is most

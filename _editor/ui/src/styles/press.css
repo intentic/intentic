@@ -1,0 +1,40 @@
+/* HOW A HAND-STYLED CONTROL LOOKS WHILE THE WORK BEHIND IT IS STILL RUNNING — the raw-element half of the
+ * press lock (lib/pressAction.ts sets these attributes, lib/pressLock.ts decides when).
+ *
+ * The design system's button dims through PrimeVue's own disabled opacity, so a `v-action` element borrows the
+ * same token rather than picking a second number: a dimmed menu item and a dimmed button must be the same
+ * amount of dimmed, or the app has two ideas of "not right now".
+ *
+ * WHAT IS DELIBERATELY ABSENT IS A SPINNER. This is somebody else's element with somebody else's classes on
+ * it, and a spinner needs either a positioning context it may not have or a box of its own that would shove
+ * the row sideways the moment it appeared — at 200ms, which is precisely when the user is reading the row. So
+ * the wait is drawn in the two ways that cost no layout at all: it dims on the press, and it breathes once the
+ * wait is long enough to be worth saying so. */
+@layer components {
+    [data-press] {
+        opacity: var(--p-disabled-opacity, 0.6);
+        /* Not `pointer-events: none`: that hands the click to whatever sits underneath, which on a dense row
+           is another control. The press is already refused in JS; this only stops it looking pressable. */
+        cursor: default;
+    }
+
+    [data-press="working"] {
+        animation: ui-press-breathe 1.4s ease-in-out infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        [data-press="working"] {
+            animation: none;
+        }
+    }
+}
+
+@keyframes ui-press-breathe {
+    0%,
+    100% {
+        opacity: var(--p-disabled-opacity, 0.6);
+    }
+    50% {
+        opacity: 1;
+    }
+}

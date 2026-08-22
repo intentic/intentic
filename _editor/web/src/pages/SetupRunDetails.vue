@@ -13,8 +13,7 @@
      remedy: put it in the layout, not over it (CredentialGuide reached the same conclusion for the capability
      forms). This is the third time, so the content moved out to where both surfaces can share it. -->
 <script setup lang="ts">
-import { CopyButton } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, CopyButton } from "@intentic/ui";
 import { computed } from "vue";
 import { DESKTOP_DOWNLOADS, desktopVersion } from "../environments/desktop";
 

@@ -468,7 +468,7 @@ onMounted(() => {
                     <template v-if="!searching && section.provider !== undefined && section.rowCount === 0">
                         <div v-if="stateFor(section.provider) === `error`" class="flex items-center gap-2 px-3 py-1.5 text-2xs text-danger">
                             <span>Couldn't load models.</span>
-                            <button type="button" class="text-link" @click="void loadProviderModels(section.provider)">Retry</button>
+                            <button type="button" class="text-link" @click="loadProviderModels(section.provider)">Retry</button>
                         </div>
                         <div v-else-if="stateFor(section.provider) === `loaded`" class="px-3 py-1.5 text-2xs text-subtle">No models discovered.</div>
                         <div v-else class="flex items-center gap-2 px-3 py-1.5 text-2xs text-subtle">

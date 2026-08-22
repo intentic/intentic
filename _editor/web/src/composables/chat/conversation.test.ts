@@ -1091,6 +1091,80 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
     });
 
+    /* ONE ANSWER PER CARD, HOWEVER FAST THE SECOND CLICK IS. This is the bug the whole press lock was built
+     * for, at the layer where a button cannot fix it: a card is one question wearing three buttons, so the
+     * user who presses Allow once and then, half a beat later, changes their mind and presses No, has pressed
+     * two live controls, both legitimately. Both replies used to go out. The daemon un-parks the turn on
+     * whichever lands first and answers the second with a 404, and the card reported that as "the turn may have
+     * ended" over a decision that had in fact landed perfectly.
+     *
+     * The second answer is dropped in silence rather than surfaced: it is not an error, it is a person
+     * clicking, and the card is about to show them what their first press decided. */
+    it(`sends one reply for a card answered twice in the same breath, and shows no error for the second`, async () => {
+        const conversation = new Conversation(`c1`);
+        // A reply the test holds open, so both clicks land inside the window the round trip is in flight for.
+        let release = (): void => undefined;
+        const inFlight = new Promise<void>((resolve) => {
+            release = () => resolve();
+        });
+        const stream = sseResponse([{ kind: `permission`, requestId: `p1`, toolName: `Bash` }], { stayOpen: true });
+        sandboxRequestMock.mockImplementation(async (path, init) => {
+            if (path === `/agent/reply`) {
+                await inFlight;
+                return { ok: true } as Response;
+            }
+            return stream(path, init);
+        });
+
+        const turn = conversation.send(`run it`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const card = conversation.messages.value.find((message) => message.permission !== undefined)!;
+
+        const allow = conversation.decidePermission(card, `once`);
+        // Not awaited between the two: that is the whole point. The first reply has not come back yet.
+        const deny = conversation.decidePermission(card, `deny`);
+        release();
+        await Promise.all([allow, deny]);
+
+        const replies = sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/reply`);
+        expect(replies).toHaveLength(1);
+        expect(conversation.error.value).toBeNull();
+        // The card reads as what the FIRST press said, and the turn carries on because that press was an allow.
+        expect(conversation.messages.value.find((message) => message.permission !== undefined)?.permission?.status).toBe(`allowed`);
+
+        conversation.stop();
+        await turn;
+    });
+
+    // And the other side of it: once a card's answer has come back, the next one is free to go out. The guard
+    // covers the window a reply is in flight for, not the card's whole life.
+    it(`lets a fresh card be answered after the one before it has landed`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse(
+                [
+                    { kind: `permission`, requestId: `p1`, toolName: `Bash` },
+                    { kind: `permission`, requestId: `p2`, toolName: `Write` },
+                ],
+                { stayOpen: true },
+            ),
+        );
+
+        const turn = conversation.send(`run it`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const cards = (): ChatMessage[] => conversation.messages.value.filter((message) => message.permission !== undefined);
+        const [first, second] = cards();
+
+        await conversation.decidePermission(first!, `once`);
+        await conversation.decidePermission(second!, `once`);
+
+        expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/reply`)).toHaveLength(2);
+        expect(cards().map((card) => card.permission!.status)).toEqual([`allowed`, `allowed`]);
+
+        conversation.stop();
+        await turn;
+    });
+
     /* THE SPEND CARD. Approving does NOT predict the outcome: the receipt is its own frame, from the platform's
      * answer, and a skip leaves the turn running: the agent was told to continue without the service, which is
      * work, not an ending. Both clicks travel the same /agent/reply side channel as every other card. */

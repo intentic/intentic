@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type Computer, type MachineSandboxOp, watcherStalled } from "@intentic/sandbox-contract";
 import {
+    Button,
     groupNeedsAttention,
     InfoHint,
     MachineDetail,
@@ -22,7 +23,6 @@ import {
     timeAgo,
 } from "@intentic/ui";
 import { noticeFrom, useNow } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, ref, watch } from "vue";
 import { type RouteLocationRaw, RouterLink, useRoute } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
@@ -482,7 +482,8 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                         running on it.
                     </span>
                     <span class="mt-2 block text-xs text-muted">
-                        A port that couldn't be mirrored shows under the sandbox that claimed it first. To expose a port to the public internet, use the
+                        A port that couldn't be mirrored shows under the sandbox that claimed it first. To expose a port to the public internet, use
+                        the
                         <b>Ports</b> tab.
                     </span>
                 </InfoHint>

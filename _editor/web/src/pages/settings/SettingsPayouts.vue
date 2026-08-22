@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { CreatorState } from "@intentic-app/api-contract";
-import { Card, useLoadingReveal, type NoticeModel, Notice, Row } from "@intentic/ui";
+import { Button, Card, useLoadingReveal, type NoticeModel, Notice, Row } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { apiClient } from "../../composables/useApi";
@@ -140,7 +139,8 @@ const connect = async (): Promise<void> => {
                 <div v-if="state.claims.length > 0" class="flex flex-col gap-1.5">
                     <h3 class="text-xs font-semibold">Your publisher names</h3>
                     <p v-for="claim in state.claims" :key="claim.publisher" class="text-xs text-muted">
-                        <span class="font-medium text-content">{{ claim.publisher }}</span>, proved with
+                        <span class="font-medium text-content">{{ claim.publisher }}</span
+                        >, proved with
                         <span class="font-mono">{{ claim.repo }}</span>
                     </p>
                 </div>
@@ -153,8 +153,8 @@ const connect = async (): Promise<void> => {
                         {{ money(owedTotal) }} across {{ statements.length }} closed {{ statements.length === 1 ? `month` : `months` }}.
                     </p>
                     <p v-for="statement in statements" :key="`${statement.month}-${statement.publisher}`" class="text-xs text-muted">
-                        <span class="font-medium text-content">{{ monthName(statement.month) }}</span>, {{ money(statement.amountCents) }} for
-                        <span class="font-mono">{{ statement.publisher }}</span
+                        <span class="font-medium text-content">{{ monthName(statement.month) }}</span
+                        >, {{ money(statement.amountCents) }} for <span class="font-mono">{{ statement.publisher }}</span
                         >, payable {{ day(statement.payableAt) }}
                     </p>
                     <p v-if="!payouts?.payoutsEnabled" class="text-2xs text-muted">

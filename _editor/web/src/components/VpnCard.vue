@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ui, Notice, type NoticeModel, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { Button, ui, Notice, type NoticeModel, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import type { VpnLink } from "@intentic/sandbox-contract";
-import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
 import { useVpn } from "../composables/sandbox/useVpn";
 

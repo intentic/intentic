@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Card, ui, CopyButton, Notice, type NoticeModel, Row } from "@intentic/ui";
+import { Button, Card, ui, CopyButton, Notice, type NoticeModel, Row } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { ref } from "vue";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../../composables/extensions/memoryImport";
 import { useSandbox } from "../../../composables/sandbox/useSandbox";

@@ -11,6 +11,7 @@ import {
 import { type CapabilityRecommendation, type CapabilitySummary } from "@intentic-app/api-contract";
 import {
     BrandMark,
+    Button,
     ui,
     ConfirmDialog,
     FilterBar,
@@ -25,7 +26,6 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import { type CapabilityKind, type ForticlientConnection } from "@intentic/sandbox-contract";
-import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { type ComputedRef, computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -1159,7 +1159,7 @@ const submitLabel = computed(() => {
                                             size="small"
                                             :text="true"
                                             :disabled="processBusy === row.id"
-                                            @click="void startProcess(row)"
+                                            @click="startProcess(row)"
                                         >
                                             <template #icon><Icon :name="row.running ? 'refresh' : 'play'" /></template>
                                         </Button>
@@ -1170,7 +1170,7 @@ const submitLabel = computed(() => {
                                             severity="danger"
                                             :text="true"
                                             :disabled="processBusy === row.id"
-                                            @click="void stopProcess(row)"
+                                            @click="stopProcess(row)"
                                         >
                                             <template #icon><Icon name="stop" /></template>
                                         </Button>

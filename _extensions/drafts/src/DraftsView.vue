@@ -20,6 +20,7 @@ import {
     useAsyncAction,
     useLoadingReveal,
     useNow,
+    vAction,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import DraftMeta from "./DraftMeta.vue";
@@ -442,7 +443,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     :aria-label="`Edit ${headline(draft)}`"
                                     :aria-pressed="edit.isEditing(draft)"
                                     v-tooltip.top="edit.isEditing(draft) ? `Done editing` : `Edit the post`"
-                                    @click="toggleEdit(draft)"
+                                    v-action="() => toggleEdit(draft)"
                                 >
                                     <Icon name="pencil" />
                                 </button>
@@ -525,7 +526,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     :aria-label="`Edit ${headline(draft)}`"
                                     :aria-pressed="edit.isEditing(draft)"
                                     v-tooltip.top="edit.isEditing(draft) ? `Done editing` : `Edit the post`"
-                                    @click="toggleEdit(draft)"
+                                    v-action="() => toggleEdit(draft)"
                                 >
                                     <Icon name="pencil" />
                                 </button>
@@ -636,7 +637,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     :class="ui.iconButton()"
                                     :aria-label="`Put ${headline(draft)} back in review`"
                                     v-tooltip.top="`Put back in review`"
-                                    @click="holdBack(draft)"
+                                    v-action="() => holdBack(draft)"
                                 >
                                     <Icon name="undo" />
                                 </button>

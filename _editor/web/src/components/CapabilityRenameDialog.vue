@@ -13,8 +13,7 @@
      have been rejected there. What it cannot know is which kinds refuse a rename outright and which names are
      already taken elsewhere in the sandbox: those are the daemon's answers, and they arrive as its sentence. -->
 <script setup lang="ts">
-import { ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { nameError } from "../pages/capabilities/form";
 

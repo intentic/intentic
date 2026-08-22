@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Card, Icon, Notice, Row, useLoadingReveal } from "@intentic/ui";
+import { Button, Card, Icon, Notice, Row, useLoadingReveal } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import MembershipOffer from "../../components/MembershipOffer.vue";

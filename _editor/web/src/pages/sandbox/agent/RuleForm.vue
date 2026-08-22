@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { Rule, RuleMoment } from "@intentic-app/api-contract";
-import { ui, Icon, Picker, ProseField, SegmentedControl } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, ui, Icon, Picker, ProseField, SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { ACTIONS, type Choice, globsOf, MOMENTS, momentOf, nameOf, type RuleDraft } from "./ruleWords";
 

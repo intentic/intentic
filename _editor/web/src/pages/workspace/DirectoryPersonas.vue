@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { ui, Modal, Notice, type NoticeModel, PersonaFace, StatusBadge } from "@intentic/ui";
+import { Button, ui, Modal, Notice, type NoticeModel, PersonaFace, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import {

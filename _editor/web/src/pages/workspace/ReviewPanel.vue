@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import Button from "primevue/button";
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
-import { ChangeStatusMark, ui, Modal, useDevice, type IconName } from "@intentic/ui";
+import { Button, ChangeStatusMark, ui, Modal, useDevice, type IconName, vAction } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
@@ -1243,7 +1242,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         type="button"
                         class="mt-1 inline-flex items-center whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                         :disabled="!commitReady"
-                        @click="runCommit(unaffected)"
+                        v-action="() => runCommit(unaffected)"
                         v-tooltip.right="`Commits ${unaffected.map((group) => group.repo).join(`, `)}`"
                     >
                         <Icon name="check" class="mr-1 text-2xs" />Commit
@@ -1591,7 +1590,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                 type="button"
                                 :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                                 :disabled="changes.actionBusy.value"
-                                @click="stageSide(group, section.side)"
+                                v-action="() => stageSide(group, section.side)"
                                 v-tooltip.right="sideVerbHint(group, section.side)"
                                 :aria-label="`${sideVerbHint(group, section.side)} in ${group.repo}`"
                             >
@@ -1708,7 +1707,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         type="button"
                                         class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-subtle transition-colors hover:bg-overlay hover:text-content disabled:opacity-40 group-hover/file:text-muted max-md:h-8 max-md:w-8"
                                         :disabled="changes.actionBusy.value"
-                                        @click="stageRow({ repo: group.repo, side: section.side, path: change.path })"
+                                        v-action="() => stageRow({ repo: group.repo, side: section.side, path: change.path })"
                                         v-tooltip.top="INDEX_VERB[section.side].one"
                                         :aria-label="`${INDEX_VERB[section.side].one}: ${change.path}`"
                                     >

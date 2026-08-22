@@ -43,7 +43,7 @@
          save them. Same rule for the deployment console: Komodo's stacks, not Komodo. -->
 
 <script setup lang="ts">
-import Button from "primevue/button";
+import Button from "./Button.vue";
 import { computed } from "vue";
 import { ui } from "../lib/ui.js";
 import Icon from "./Icon.vue";

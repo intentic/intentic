@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { ServiceOfferCard } from "@intentic-app/api-contract";
-import { Card, Icon, Notice, type NoticeModel, Row } from "@intentic/ui";
+import { Button, Card, Icon, Notice, type NoticeModel, Row } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { formatCredits as n } from "../composables/membership/creditMeter";
@@ -244,8 +243,8 @@ const view = computed(() => {
                 <!-- The four things a reader silently asks at this button. Same four as the membership page,
                      narrowed to this decision. -->
                 <p class="mt-4 text-xs text-muted">
-                    This approves one run and nothing else: a second run asks again. If the service doesn't answer, the credits come straight back
-                    and no receipt is written.
+                    This approves one run and nothing else: a second run asks again. If the service doesn't answer, the credits come straight back and
+                    no receipt is written.
                 </p>
             </template>
 

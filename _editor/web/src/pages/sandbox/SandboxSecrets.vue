@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ui, FilterBar, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
+import { Button, ui, FilterBar, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import SecretEntryRow from "../../components/SecretEntryRow.vue";

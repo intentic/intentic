@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BrandMark, ui, CopyButton, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { BrandMark, ui, CopyButton, Notice, type NoticeModel, StatusBadge, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, ref, watch } from "vue";
@@ -163,7 +163,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         :class="ACTION"
                         :disabled="!canReveal"
                         :aria-label="revealedValue !== undefined ? `Hide value` : `Reveal value (owner only)`"
-                        @click="toggleReveal"
+                        v-action="toggleReveal"
                     >
                         <Icon :name="revealedValue !== undefined ? `eye-slash` : `eye`" class="text-xs" />
                     </button>
@@ -195,7 +195,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                                 type="button"
                                 :class="ui.iconButton(`text-danger hover:bg-danger/10 hover:text-danger`)"
                                 aria-label="Confirm remove"
-                                @click="removeKey"
+                                v-action="removeKey"
                             >
                                 <Icon name="check" class="text-xs" />
                             </button>

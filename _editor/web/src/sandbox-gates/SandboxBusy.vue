@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Button from "primevue/button";
+import { Button } from "@intentic/ui";
 import { computed } from "vue";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -14,10 +14,11 @@ const { clearCredential } = useGoogleIdentity();
 const { invalidateSession, getSessionToken } = useSandboxSession();
 const needsSignin = computed(() => connection.value.failure?.kind === "unauthenticated");
 
-const signIn = (): void => {
+const signIn = async (): Promise<void> => {
     clearCredential();
     invalidateSession();
-    void getSessionToken();
+    // Awaited, not fired and forgotten: the promise is what holds the button while the token is fetched.
+    await getSessionToken();
 };
 </script>
 

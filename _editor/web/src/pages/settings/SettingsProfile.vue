@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Avatar, Card, ui, Row } from "@intentic/ui";
+import { Avatar, Button, Card, ui, Row } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useAuth } from "../../composables/useAuth";

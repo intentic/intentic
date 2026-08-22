@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { BarChart, Card, ui, Notice, type NoticeModel, NoticeStack, SegmentedControl } from "@intentic/ui";
+import { BarChart, Card, ui, Notice, type NoticeModel, NoticeStack, SegmentedControl, vAction } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../composables/agents/useAgents";
@@ -201,7 +201,7 @@ const hasSpend = computed(() => current.value.length > 0);
                 type="button"
                 class="ml-auto flex cursor-pointer items-center gap-1 text-2xs text-muted hover:text-content"
                 :disabled="isFetching"
-                @click="() => void refetch()"
+                v-action="() => refetch()"
             >
                 <Icon name="refresh" :class="isFetching ? `animate-spin` : ``" />Refresh
             </button>
@@ -377,10 +377,10 @@ const hasSpend = computed(() => current.value.length > 0);
                         >
                             <template #hint>
                                 Every command carries its own raw baseline, so this is realized, not estimated. Each stage is weighed against what
-                                reached it: sequential attribution, which is what makes the parts sum to the whole and lets them be stacked at all.
-                                It is not "what turning this cleaner off would cost you": the cap downstream would have eaten some of the same lines.
-                                The retrieval footers are the price of the trimming being reversible: the pointers that let the agent grep the full
-                                output back.
+                                reached it: sequential attribution, which is what makes the parts sum to the whole and lets them be stacked at all. It
+                                is not "what turning this cleaner off would cost you": the cap downstream would have eaten some of the same lines. The
+                                retrieval footers are the price of the trimming being reversible: the pointers that let the agent grep the full output
+                                back.
                             </template>
 
                             <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />

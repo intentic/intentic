@@ -23,8 +23,7 @@
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
 import type { HostSummary } from "@intentic/sandbox-contract";
-import { ContextMenu, CopyButton, type IconName, Row, StatusBadge } from "@intentic/ui";
-import Button from "primevue/button";
+import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { useMenuLink } from "../composables/menuLink";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Card, ui, StatusBadge } from "@intentic/ui";
+import { AnchoredOverlay, Card, ui, StatusBadge, vAction } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, nextTick, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
@@ -233,7 +233,7 @@ const save = async (): Promise<void> => {
                             <button
                                 type="button"
                                 class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger transition-colors hover:bg-danger/10"
-                                @click="removeLogo"
+                                v-action="removeLogo"
                             >
                                 <Icon name="trash" class="shrink-0 text-sm" />Remove logo
                             </button>
@@ -292,7 +292,7 @@ const save = async (): Promise<void> => {
                                             :disabled="busy || !canSave"
                                             aria-label="Save sandbox name"
                                             v-tooltip.bottom="`Save · Enter`"
-                                            @click="save"
+                                            v-action="save"
                                         >
                                             <Icon :name="busy ? `spinner` : `check`" :spin="busy" />
                                         </button>
@@ -313,7 +313,7 @@ const save = async (): Promise<void> => {
                                         :class="ui.iconButton(`h-8 w-8 text-subtle`)"
                                         aria-label="Rename sandbox"
                                         v-tooltip.bottom="`Rename sandbox`"
-                                        @click="startEdit"
+                                        v-action="startEdit"
                                     >
                                         <Icon name="pencil" class="text-xs" />
                                     </button>

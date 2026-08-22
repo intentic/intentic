@@ -71,6 +71,10 @@
             "types": "./src/lib/async.ts",
             "default": "./src/lib/async.ts"
         },
+        "./press": {
+            "types": "./src/lib/pressLock.ts",
+            "default": "./src/lib/pressLock.ts"
+        },
         "./loading-reveal": {
             "types": "./src/composables/loadingReveal.ts",
             "default": "./src/composables/loadingReveal.ts"

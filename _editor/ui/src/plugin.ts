@@ -4,6 +4,7 @@ import type { App } from "vue";
 import Icon from "./components/Icon.vue";
 import { BUNDLED_ICONS } from "./icons/iconData.generated.js";
 import { Theme } from "./styles/theme.js";
+import { vAction } from "./lib/pressAction.js";
 import { vLongpress } from "./lib/longPress.js";
 import { vTooltip } from "./lib/tooltip.js";
 
@@ -32,6 +33,10 @@ export function installUi(app: App): void {
     app.directive(`tooltip`, vTooltip);
     // Touch counterpart of the context menu: `v-longpress` opens bottom sheets on coarse-pointer devices.
     app.directive(`longpress`, vLongpress);
+    /* `v-action` is <Button>'s behaviour for the hand-styled controls that are not it: a press that starts
+     * async work locks its element and shows the wait. Global for the same reason the tooltip is — the
+     * elements that need it are spread across every view, and a per-file import is a thing to forget. */
+    app.directive(`action`, vAction);
     // Register the icon primitive globally so every `<Icon name="…">` resolves without a per-file import.
     app.component(`Icon`, Icon);
 }

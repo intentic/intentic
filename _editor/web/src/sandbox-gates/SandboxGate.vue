@@ -46,10 +46,11 @@ const accountMismatch = computed(
         presentedEmail.value !== undefined &&
         user.value.email.toLowerCase() !== presentedEmail.value.toLowerCase(),
 );
-const switchAccount = (): void => {
+const switchAccount = async (): Promise<void> => {
     clearCredential();
     invalidateSession();
-    void getSessionToken();
+    // Awaited, not fired and forgotten: the promise is what holds the button while the token is fetched.
+    await getSessionToken();
 };
 </script>
 

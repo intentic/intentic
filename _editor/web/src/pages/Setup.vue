@@ -3,6 +3,7 @@ import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode, SetupReport 
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import {
+    Button,
     ui,
     Code,
     commandLang,
@@ -14,9 +15,9 @@ import {
     StepSection,
     useDevice,
     useOsPreference,
+    vAction,
 } from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
-import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
@@ -2030,7 +2031,7 @@ watch(commandReady, (ready) => {
                                                 :class="ui.iconButton(`h-8 w-8 text-subtle`)"
                                                 aria-label="Rename sandbox"
                                                 v-tooltip.bottom="`Rename sandbox`"
-                                                @click="startRename"
+                                                v-action="startRename"
                                             >
                                                 <Icon name="pencil" class="text-xs" />
                                             </button>
@@ -2041,7 +2042,7 @@ watch(commandReady, (ready) => {
                                                 :class="ui.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
                                                 aria-label="Save name"
                                                 v-tooltip.bottom="`Save · Enter`"
-                                                @click="saveName"
+                                                v-action="saveName"
                                             >
                                                 <Icon :name="savingName ? `spinner` : `check`" :spin="savingName" />
                                             </button>
@@ -2130,7 +2131,7 @@ watch(commandReady, (ready) => {
                                         ? `border-link bg-overlay`
                                         : `border-line bg-card hover:border-line-strong hover:bg-overlay/40`
                                 "
-                                @click="chooseMachine(option.value)"
+                                v-action="() => chooseMachine(option.value)"
                             >
                                 <!-- A PICTURE, NOT A GLYPH (SetupRungArt carries the reasoning). This row used
                                      to be a 16px icon beside the title, after a stacked 2xl glyph was pulled
