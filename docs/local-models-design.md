@@ -82,10 +82,13 @@ mechanisms above. Chosen. The rest of this document is D.
    (`extension-manifest/src/points/capabilities.ts` cites the docker card's pair of identical-looking
    switches, one costing five seconds and the other five minutes).
 3. Add. On the standard image with the GPU switch off, **nothing rebuilds**: the CPU inference server is
-   already baked (see §runtime). The card streams download progress as apply log lines, the server starts,
-   and the closing message sells the two things worth doing next: *"…is serving, it appears as its own
-   provider in the chat's model picker. Pin it as the quick model in Settings and commit messages run on it
-   for free."*
+   already baked (see §runtime). The add **returns immediately** and the weights arrive behind it: the
+   entry lands, and its row on the card carries the progress (`downloading 2.1 / 18.6 GB`) on the poll
+   clock the connections list already runs for anything pending, so a refresh or a visit tomorrow reads the
+   same live answer. An add that streamed to the end of the download instead held a spinner for the length
+   of a twenty-gigabyte transfer, said nothing while it did (an apply's log frames have no surface on that
+   form: the progress surface there is a tmux pane, and an in-process download has no pane), and lost the
+   download with the tab, since the manifest entry is not written until apply returns.
 4. GPU on: the fragment lands in the overlay, the card reads "pending, rebuild required", the owner
    approves the same Environment-card rebuild every other image change rides. After the rebuild the server
    starts with the GPU, or the card says exactly why not (`SANDBOX_GPU=unsupported` → "this host's Docker
@@ -118,12 +121,20 @@ what they want.
   `config.gpu === "on"`, `packFragment("llamacpp-cuda")` and `# intentic:runtime --gpus=all`. The GPU story
   here is *simpler* than docker's: no nested engine, so no toolkit, no `nvidia-ctk`, no daemon.json merge.
   The outer flag is the whole grant.
-- `apply`: download weights if absent (streamed progress log lines; resumable; verified by size/hash),
-  start `llama-server` as the `panel-model-<id>` session, probe `/v1/models`, report. Pre-rebuild and
-  mid-download are soft outcomes the card reports as such, per the endpoint/docker precedent.
+- `apply`: **start** the background job (download the weights if absent, then start `llama-server` as the
+  `panel-model-<id>` session) and return one line saying so. The job is per entry and idempotent, so Update
+  during a download joins the one in flight; the download itself is keyed by destination path, so two cards
+  naming the same weights watch one transfer. Pre-rebuild and mid-download are soft outcomes the card
+  reports as such, per the endpoint/docker precedent.
+- Resume: the part file is named after the model (`<weights>.part`), not after the attempt, and the next
+  attempt asks for a range from wherever it stopped: HF through the hub blob's own `slice`, a custom URL
+  through a `Range` header, with a 200 answer meaning "this server won't, start over". A daemon restart
+  mid-download therefore costs the bytes in flight rather than the whole transfer, and boot picks it up
+  beside the servers it restores.
 - `status`: server answering → `active`, detail naming the model; downloading → `pending`, detail
   `2.1 / 4.6 GB`; GPU asked but `SANDBOX_GPU` missing → `pending`, `rebuild required`; `unsupported` → the
-  docker card's error sentence; server dead → `error` pointing at the panel terminal.
+  docker card's error sentence; server dead → `error` pointing at the panel terminal. It is also where a
+  background failure surfaces, since a job nobody is streaming has no error frame to throw.
 - `remove`: stop the panel, drop the translator entry, *leave the weights*. A multi-GB delete should be its
   own deliberate step, and the agent can do it on request; the card's model-field hint says the download is
   kept.
