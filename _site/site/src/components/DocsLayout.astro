@@ -219,13 +219,26 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                 }
             });
 
-            /* And put the page you are on in view. The rail's job is "where am I", and on a Build-on-it page the
-               marked row was below the fold. So the rail opened showing four shelves, none of them yours.
-               `nearest` scrolls only when it has to, so the common case does not move. */
-            sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+            /* THE RAIL STAYS PUT ACROSS A NAVIGATION. Every link in this book is a full page load, so the rail —
+               its own scroll region — reset to the top on each click and the reader lost their place in a long
+               list. Its position is remembered per book and restored on the next page. Only on a first visit,
+               with nothing saved, does it fall back to putting the page you are on in view: the rail's job is
+               "where am I", and on a Build-on-it page the marked row is below the fold, so `nearest` reveals it
+               without moving the common case where it already shows. */
+            const scrollKey = `rail-scroll:${location.pathname.split("/")[1] || "root"}`;
+            const saved = sessionStorage.getItem(scrollKey);
+            if (saved !== null) sidebar.scrollTop = Number(saved);
+            else sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
 
             edges();
-            sidebar.addEventListener("scroll", edges, { passive: true });
+            sidebar.addEventListener(
+                "scroll",
+                () => {
+                    edges();
+                    sessionStorage.setItem(scrollKey, String(sidebar.scrollTop));
+                },
+                { passive: true },
+            );
             // The rail's height is the viewport's, so a resize is the only other thing that changes whether it
             // overflows.
             window.addEventListener("resize", edges);

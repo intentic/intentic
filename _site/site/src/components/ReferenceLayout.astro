@@ -197,10 +197,24 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                 }
             });
 
-            sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+            /* THE RAIL STAYS PUT ACROSS A NAVIGATION. Every link in this book is a full page load, so the rail —
+               its own scroll region — reset to the top on each click and the reader lost their place in a long
+               list. Its position is remembered per book and restored on the next page; only on a first visit,
+               with nothing saved, does it fall back to revealing the current page. */
+            const scrollKey = `rail-scroll:${location.pathname.split("/")[1] || "root"}`;
+            const saved = sessionStorage.getItem(scrollKey);
+            if (saved !== null) sidebar.scrollTop = Number(saved);
+            else sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
 
             edges();
-            sidebar.addEventListener("scroll", edges, { passive: true });
+            sidebar.addEventListener(
+                "scroll",
+                () => {
+                    edges();
+                    sessionStorage.setItem(scrollKey, String(sidebar.scrollTop));
+                },
+                { passive: true },
+            );
             window.addEventListener("resize", edges);
         }
     </script>

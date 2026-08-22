@@ -82,7 +82,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                                     <li>
                                                         <a
                                                             href={item.href}
-                                                            class:list={["menu-item", { current: isCurrentPage(item.href), flat: !item.description }]}
+                                                            class:list={["menu-item", { current: isCurrentPage(item.href), "menu-item--flat": !item.description }]}
                                                             target={item.external ? "_blank" : undefined}
                                                             rel={item.external ? "noopener" : undefined}
                                                         >
@@ -426,8 +426,11 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         text-decoration: none;
         transition: background-color 0.24s ease;
     }
-    /* Label-only rows (the reference menu) have one line to sit against, so the icon centres on it. */
-    .menu-item.flat {
+    /* Label-only rows (the reference menu) have one line to sit against, so the icon centres on it. The
+       modifier is namespaced rather than a bare `flat`: Astro scopes this file's selectors with `:where()`,
+       which gives them class-only specificity, so a bare `.flat` here loses to any page's own `.flat` (the
+       landing page has one), and the menu inherited that page's padding. */
+    .menu-item--flat {
         align-items: center;
     }
     .menu-item:hover,
@@ -445,7 +448,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
             color 0.2s ease,
             transform 0.26s cubic-bezier(0.34, 1.5, 0.64, 1);
     }
-    .menu-item.flat .menu-item-icon {
+    .menu-item--flat .menu-item-icon {
         margin-top: 0;
     }
     .menu-item:hover .menu-item-icon,
