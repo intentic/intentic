@@ -2092,7 +2092,13 @@ const loadCapabilityProviders = async (): Promise<void> => {
         .filter((entry) => entry.kind === `endpoint` || entry.kind === `localmodel`)
         .map((entry) => {
             const id = endpointProvider(entry.id);
-            return { id, label: isTrialProvider(id) ? TRIAL_LABEL : entry.id };
+            // The kind is carried through, not discarded: it is the only thing that tells a locally-run model
+            // from a remote server once both are `endpoint/<id>` providers, and the picker draws them apart.
+            return {
+                id,
+                label: isTrialProvider(id) ? TRIAL_LABEL : entry.id,
+                kind: entry.kind === `localmodel` ? (`localmodel` as const) : (`endpoint` as const),
+            };
         });
     // Each endpoint's catalog is daemon-owned like every other provider's, so load them on the same seam. Not
     // part of loadAllProviderModels: that one runs over a fixed list, and which endpoints exist is what we have

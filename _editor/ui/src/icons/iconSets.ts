@@ -40,6 +40,7 @@ export type IconName =
     | "code"
     | "cog"
     | "collapse-all"
+    | "cpu"
     | "comments"
     | "compress"
     | "copy"
@@ -65,6 +66,7 @@ export type IconName =
     | "folder-open"
     | "fork"
     | "forward"
+    | "gift"
     | "github"
     | "gitlab"
     | "globe"
@@ -159,6 +161,11 @@ export const ICONS: Record<IconName, string> = {
     // arrows glyph is the same idea and keeps the whole table on one prefix.
     "collapse-all": "ri:collapse-vertical-line",
     comments: "ri:chat-2-line",
+    /* A model whose weights run on the user's own hardware, in this sandbox: the picker's rail and rows draw it
+     * where a hosted provider draws its brand mark. A chip is the one glyph that says "this computation happens
+     * here" without saying which vendor; `server` is the neighbouring idea and stays with a REMOTE endpoint the
+     * user pointed us at, so the two never share a silhouette in the same rail. */
+    cpu: "ri:cpu-line",
     copy: "ri:file-copy-line",
     "credit-card": "ri:bank-card-line",
     database: "ri:database-2-line",
@@ -187,6 +194,10 @@ export const ICONS: Record<IconName, string> = {
      * picture the cut line in the transcript is already drawing. */
     fork: "ri:git-branch-line",
     forward: "ri:forward-end-line",
+    /* The free allowance the product hands a new sandbox: given, not bought and not owned. Chosen over `star`
+     * (which reads as a favourite, and is already spent on that) and over `sparkles`, whose meaning here is
+     * "an AI thing", i.e. every row in the picker. */
+    gift: "ri:gift-line",
     github: "ri:github-line",
     gitlab: "ri:gitlab-line",
     globe: "ri:global-line",

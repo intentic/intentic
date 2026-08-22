@@ -47,6 +47,20 @@ const isChatModel = (model: Model): boolean => !/(embedding|embed|whisper|tts|au
  * whatever the server says about a model is what the picker shows. */
 const ModelsResponseSchema = z.object({ data: z.array(z.object({ id: z.string().min(1), display_name: z.string().optional() })) });
 
+/* WHAT TO CALL A MODEL WHOSE SERVER PUBLISHED NO NAME. The id is what turns dial, so it is never touched; this
+ * is only the row's text.
+ *
+ * A bare id stands as it is. A PATH-SHAPED one does not: llama-server names the model by the weights file it
+ * loaded, which for a sandbox-run local model is an absolute cache path, so the picker's row read
+ * "/work/.intentic/local/cache/models/…" truncated to nothing a person could tell two models apart by. The
+ * last segment is the part that names the model, and the `.gguf` suffix is a fact about the file, not about the
+ * model, so both go. A repo-qualified id ("meta-llama/Llama-3-8B") lands on the same rule and reads better for
+ * it: the owner is not what distinguishes one row from the next either. */
+const labelFor = (id: string): string => {
+    const name = (id.split("/").at(-1) ?? "").replace(/\.gguf$/i, "");
+    return name === "" ? id : name;
+};
+
 const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promise<Model[]> => {
     const response = await fetchImpl(`${versionedBase(config.baseUrl)}/models`, {
         headers: endpointHeaders(config),
@@ -59,7 +73,7 @@ const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promis
     if (!parsed.success) {
         return [];
     }
-    return parsed.data.data.map((entry) => ({ id: entry.id, label: entry.display_name ?? entry.id }));
+    return parsed.data.data.map((entry) => ({ id: entry.id, label: entry.display_name ?? labelFor(entry.id) }));
 };
 
 const ordered = (models: readonly Model[]): { models: Model[]; default: string } => {

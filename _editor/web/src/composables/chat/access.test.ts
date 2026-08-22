@@ -30,7 +30,7 @@ beforeEach(() => {
 it(`counts a configured endpoint as ready: it carries its own credential`, () => {
     expect(providerReady(OLLAMA)).toBe(false);
 
-    endpointProviders.value = [{ id: OLLAMA, label: `ollama` }];
+    endpointProviders.value = [{ id: OLLAMA, label: `ollama`, kind: `endpoint` }];
 
     expect(providerReady(OLLAMA)).toBe(true);
     // The composer's gate is this same rule, so it cannot disagree, which it did, and that disagreement is
@@ -40,7 +40,7 @@ it(`counts a configured endpoint as ready: it carries its own credential`, () =>
 });
 
 it(`serves the trial while there is allowance left, and stops when there is none`, () => {
-    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
+    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
 
     // Discovered but not yet confirmed by the platform: no trial. Unknown is treated as absent everywhere the
     // trial is read, because offering an allowance that may not exist costs the user their first message.

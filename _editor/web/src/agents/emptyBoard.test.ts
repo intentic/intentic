@@ -169,7 +169,7 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
  * question before anything is connected at all. What is pinned is the whole point of the trial: the chat lands
  * ON it, so there is something to send with the moment setup finishes. */
 it(`chats on the free trial rather than demanding a sign-in first`, async () => {
-    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
+    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
     trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
     // The repoint pass is a watcher: it moves the untouched conversation onto the trial on the next flush.
     await nextTick();
@@ -186,7 +186,7 @@ it(`chats on the free trial rather than demanding a sign-in first`, async () => 
 // A SPENT ALLOWANCE IS STILL NOT A WALL. The chat can no longer send, and that is the chat's own strip to say;
 // this screen keeps asking for a task, because the way out of it is a model choice and not a press on this board.
 it(`keeps asking for a task once the trial is used up`, async () => {
-    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
+    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
     trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0, health: `healthy` };
     await nextTick();
 

@@ -219,7 +219,7 @@ describe(`useChat provider reconciliation`, () => {
          * beat before the trial landed. `resetChat` above cleared it, as a sandbox switch does. */
         mockConnections();
         await refreshConnections(true);
-        endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
+        endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
         endpointsLoaded.value = true;
         trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
         await nextTick();

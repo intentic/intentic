@@ -101,7 +101,7 @@ it(`leads the locked rows with the way in that costs nothing, and prices the res
 // The trial is what a fresh sandbox on the hosted platform actually sends with, so it is a working row with a
 // count on it rather than a price: connected providers lead, and cost only ever separates the locked ones.
 it(`seats the working free trial above the locked rows, with its allowance rather than a price`, async () => {
-    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
+    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
     trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
     providerModels.value = { ...providerModels.value, [TRIAL_PROVIDER]: oneModel(`Free trial`) };
     const element = mount();

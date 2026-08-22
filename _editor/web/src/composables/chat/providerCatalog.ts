@@ -2,6 +2,7 @@ import {
     type AgentCommand,
     type AgentProvider,
     type CatalogOption,
+    isTrialProvider,
     type ModelBadge,
     modelsFor,
     NATIVE_PROVIDERS,
@@ -115,7 +116,30 @@ export const trialStatus = ref<{
 // Installed model endpoints (endpoint-kind capabilities), as their `endpoint/<id>` provider ids, loaded on the
 // same seam and from the same /capabilities read. Unlike an ACP agent, each of these HAS a catalog: the models
 // come from the endpoint's own server, so they land in providerModels like every other provider's.
-export const endpointProviders = ref<readonly { id: string; label: string }[]>([]);
+//
+// `kind` rides along because the two families are one provider to everything that ROUTES a turn and two
+// different things to a person reading the list: weights running on their own hardware here, versus a server
+// somewhere they pointed us at. Nothing in the provider id says which, so the picker's glyph would have to
+// guess (see ProviderLogo) if the capability's kind were dropped on the way in.
+export const endpointProviders = ref<readonly { id: string; label: string; kind: "endpoint" | "localmodel" }[]>([]);
+
+/* WHICH GLYPH STANDS IN FOR A PROVIDER WITH NO BRAND MARK, the one place that decision is made (ProviderLogo
+ * draws it; the rail, the rows, the composer pill and the account panel all draw ProviderLogo).
+ *
+ * Everything here used to fall to one `sparkles`, which made the free trial, a locally-run model and a
+ * user-added server indistinguishable in a rail whose whole job is telling providers apart. */
+export const providerGlyph = (provider: AgentProvider): "gift" | "cpu" | "server" | "sparkles" => {
+    if (isTrialProvider(provider)) {
+        return `gift`;
+    }
+    const endpoint = endpointProviders.value.find((entry) => entry.id === provider);
+    if (endpoint !== undefined) {
+        return endpoint.kind === `localmodel` ? `cpu` : `server`;
+    }
+    // An installed ACP agent (or a provider we have not heard of yet): the agent brings its own model and its
+    // own vendor, and nothing here knows either, so the generic "an AI runs this" glyph is the honest one.
+    return `sparkles`;
+};
 
 /* Whether the CAPABILITY half of the picture has been read: which endpoints exist, and, for the trial, how much
  * of today's allowance is left. `accountsLoaded` is the same flag for the other half, and the two are not one
