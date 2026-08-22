@@ -304,8 +304,8 @@ const endResize = (event: PointerEvent): void => {
          column you touch least. Navigation before content, and the scroll you use against the frame. -->
     <div
         ref="root"
-        class="chat-panel relative flex h-full min-h-0 overflow-hidden bg-card"
-        :class="[chatWide ? 'flex-row' : 'flex-col', { 'is-resizing': resizing }]"
+        class="chat-panel relative flex h-full min-h-0 overflow-hidden"
+        :class="[chatWide ? 'flex-row bg-canvas chat-wide' : 'flex-col bg-card', { 'is-resizing': resizing }]"
     >
         <div
             v-if="!chatWide && !mobile"

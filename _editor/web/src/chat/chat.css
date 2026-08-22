@@ -38,13 +38,13 @@
    from the output you were reading.
    The pin is bounded by the per-turn <section> the panel groups messages into; without that grouping every
    prompt would stick to the same top edge and stack.
-   Opaque --color-card (the scroller's own background) because a pinned row floats over the messages it holds
-   above: invisible in place, solid once it lifts. Applied ONLY in the pinned state, though: the padding above
-   and below the bubble is air the next and previous rows' margins reach into, and a run bar's row is pulled a
-   half-rem into exactly that space (see .chat-message:has(.chat-run-bar)) — with the band painted in flow, its
-   bottom strip lay over the count mark's top and shaved its ring off whenever a turn's calls sat right under
-   their prompt (and the top strip did the same to a run just above one). In flow nothing passes under the band,
-   so the paint is needed only once it lifts.
+   Opaque --chat-ground (the scroller's own background: --color-card docked, --color-canvas wide/popped out)
+   because a pinned row floats over the messages it holds above: invisible in place, solid once it lifts. Applied
+   ONLY in the pinned state, though: the padding above and below the bubble is air the next and previous rows'
+   margins reach into, and a run bar's row is pulled a half-rem into exactly that space (see
+   .chat-message:has(.chat-run-bar)) — with the band painted in flow, its bottom strip lay over the count
+   mark's top and shaved its ring off whenever a turn's calls sat right under their prompt (and the top strip did
+   the same to a run just above one). In flow nothing passes under the band, so the paint is needed only once it lifts.
    content-visibility is dropped for the same reason — a pinned row is on screen for the whole turn, so it must
    never be skipped.
    `top: -1px` rather than 0 so the row's top edge lifts a pixel clear of the scroller's the moment it pins,
@@ -87,7 +87,7 @@
    stops at the edge of the reading measure, which is what the inset in that container query is for. Gated
    because a divider under an in-flow row would fence the prompt off from the transcript it sits in. */
 .chat-prompt-pinned {
-    background: var(--color-card);
+    background: var(--chat-ground, var(--color-card));
 }
 /* WHAT AN UNSENT EDIT WOULD THROW AWAY (ChatPane's `doomed`) — the edited prompt and everything under it, drawn
    as already gone while still entirely there.
@@ -158,7 +158,7 @@
     border-radius: var(--radius-md);
     padding: 0.125rem 0.25rem;
     color: var(--color-subtle);
-    background: color-mix(in srgb, var(--color-overlay) 55%, var(--color-card));
+    background: color-mix(in srgb, var(--color-overlay) 55%, var(--chat-ground, var(--color-card)));
     /* An open bubble scrolls its text under the chip, so it needs an edge of its own to read as a control
        floating over the text rather than as a smudge in it. */
     border: 1px solid var(--color-line);
@@ -177,15 +177,15 @@
    background included — so the bubble's bottom edge dissolved mid-curve and whatever sat below showed through
    it, reading as a shadow bleeding over the edge rather than as text continuing past a fold. The overlay fades
    the text into the bubble's resting colour and leaves the box crisp. That colour is mixed by hand because
-   .chat-surface is a translucent wash: what the eye sees is the wash composited over the card everything in
-   the panel sits on — the same mix pinned (the row's own card backdrop) or in flow (the scroller's). */
+   .chat-surface is a translucent wash: what the eye sees is the wash composited over the ground everything in
+   the panel sits on — the same mix pinned (the row's own backdrop) or in flow (the scroller's). */
 .chat-prompt-clamped::after {
     content: "";
     position: absolute;
     inset: auto 0 0 0;
     height: 1.75rem;
     border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
-    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-overlay) 55%, var(--color-card)));
+    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-overlay) 55%, var(--chat-ground, var(--color-card))));
     pointer-events: none;
 }
 /* Opening a prompt is a deliberate "I want to read this again" — asked, more often than not, while the answer
@@ -289,8 +289,20 @@
    rendered report, not a stack), and `gap` on something that is not a flex container is simply ignored —
    whereas a display declared here would silently reflow it. Every stack still says it is one in its own
    markup. */
+.chat-panel {
+    --chat-ground: var(--color-card);
+}
+.chat-panel.bg-canvas,
+.chat-panel.chat-wide {
+    --chat-ground: var(--color-canvas);
+}
 .chat-turns {
+    --chat-ground: var(--color-card);
     --chat-gap: 0.5rem;
+}
+.chat-panel.bg-canvas .chat-turns,
+.chat-panel.chat-wide .chat-turns {
+    --chat-ground: var(--color-canvas);
 }
 .chat-turns,
 .chat-stack {
@@ -581,22 +593,22 @@
    the transparency reads as depth — messages visibly pass beneath a floating box. Nothing passes through this
    band: it is the end of the scroller, so what shows in it is a sliver of a message cut off top and bottom,
    sitting in a slot of its own between the composer and the status row. It reads as a rendering fault rather
-   than as a layer, which is what it looked like in every screenshot of it. Painted with the panel's own surface
-   (--color-card, the scroller's background and the ground the status bar below sits on) the composer meets that
-   row on one continuous background, and the transcript ends where the composer's opaque box cuts it off.
-   Its height IS the footer's bottom padding (py-3 in ChatPanel) — the strip the composer's box does not cover.
-   The pseudo-element resolves against .chat-footer, which is positioned by being sticky. Behind that box
-   (z-index: -1) rather than over it: the composer's drop shadow falls into exactly this band, and an opaque
-   rectangle painted on top of it would cut the shadow off square at the box's edge. Negative only WITHIN the
-   footer's own stacking context (sticky + z-10), so the band still covers the transcript — it is the footer's
-   background, not a layer between the panel and the messages. */
+    than as a layer, which is what it looked like in every screenshot of it. Painted with the panel's own surface
+    (--chat-ground, the scroller's background and the ground the status bar below sits on) the composer meets that
+    row on one continuous background, and the transcript ends where the composer's opaque box cuts it off.
+    Its height IS the footer's bottom padding (py-3 in ChatPanel) — the strip the composer's box does not cover.
+    The pseudo-element resolves against .chat-footer, which is positioned by being sticky. Behind that box
+    (z-index: -1) rather than over it: the composer's drop shadow falls into exactly this band, and an opaque
+    rectangle painted on top of it would cut the shadow off square at the box's edge. Negative only WITHIN the
+    footer's own stacking context (sticky + z-10), so the band still covers the transcript — it is the footer's
+    background, not a layer between the panel and the messages. */
 .chat-footer::after {
     content: "";
     position: absolute;
     inset: auto 0 0 0;
     height: 0.75rem;
     z-index: -1;
-    background: var(--color-card);
+    background: var(--chat-ground, var(--color-card));
     pointer-events: none;
 }
 .composer-ghost {
