@@ -8,7 +8,16 @@
 # host's driver libraries (which --gpus injects at run time), the CUDA runtime is the binary's own dependency.
 # Arch spread rather than `native` — there is no GPU at build time; Turing through Hopper covers the cards the
 # directive's nvidia-runtime host probe admits.
-# ponytail: bump the llama.cpp pin together with llamacpp.Dockerfile, the two build one tag.
+# THE `rm -f` BEFORE THE INSTALL IS LOAD-BEARING. The CPU pack no longer puts a file at
+# /usr/local/bin/llama-server; it puts a SYMLINK there, into /opt/llamacpp where the prebuilt release keeps its
+# binary and shared libraries together (that binary's RUNPATH is `$ORIGIN`). `install` opens its destination for
+# writing, which FOLLOWS a symlink — so without the unlink this would quietly write the CUDA binary into
+# /opt/llamacpp/llama-server and leave /usr/local/bin pointing at it. That happens to run, which is exactly what
+# makes it worth a line of comment: it would look correct while the CPU pack's install path held a CUDA binary.
+#
+# ponytail: this pack still BUILDS llama.cpp while llamacpp.Dockerfile downloads it — upstream publishes no
+# prebuilt CUDA server for Linux (only Windows CUDA, and Vulkan/SYCL for Linux). Bump both pins together
+# regardless; they are one upstream tag.
 #
 # THE MOST EXPENSIVE FRAGMENT IN THE PROJECT, and the reason the build-cache mounts exist: ~600MB of CUDA
 # toolkit and ~900 translation units across five architectures. Nothing about it depends on the sandbox's own
@@ -30,6 +39,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
     && cmake --build /tmp/llama.cpp/build -j --target llama-server \
     && ccache --show-stats \
+    && rm -f /usr/local/bin/llama-server \
     && install /tmp/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server \
     && rm -rf /tmp/llama.cpp \
     && apt-get purge -y cmake ccache cuda-nvcc-12-6 cuda-cudart-dev-12-6 libcublas-dev-12-6 \
