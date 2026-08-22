@@ -12,7 +12,7 @@ import { workloadStamp } from "../platform/leftovers.js";
 import { browserOutputDir } from "./browser-artifacts.js";
 import { type ProfileExit, resolveProfileExit } from "./browser-exit.js";
 import { ensureXvfb } from "./display.js";
-import { browserFingerprint, type BrowserFingerprint } from "./fingerprint.js";
+import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "./fingerprint.js";
 import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
@@ -189,6 +189,9 @@ export const writeBrowserConfig = async (
      * passes the identical pair to launchPersistentContext (browser-profile.ts) — they share a profile, so a
      * site must meet the same machine whichever of the two is driving.
      *
+     * `Accept-Language` is set EXPLICITLY rather than left to `locale`, which would send only the one tag and
+     * contradict the `navigator.languages` the init script installs (see acceptLanguage in fingerprint.ts).
+     *
      * `launchOptions.proxy` is the other half of the same file, and the reason a geo exit needs no flag of its
      * own: @playwright/mcp has none for either. The clock above already agrees with it, because the
      * fingerprint this was built from was derived with the exit's country as its place (fingerprint.ts) — an
@@ -199,7 +202,11 @@ export const writeBrowserConfig = async (
                 args: [`--remote-debugging-port=${port}`],
                 ...(exit === undefined ? {} : { proxy: { server: exit.proxy } }),
             },
-            contextOptions: { locale: fingerprint.locale, timezoneId: fingerprint.timezoneId },
+            contextOptions: {
+                locale: fingerprint.locale,
+                timezoneId: fingerprint.timezoneId,
+                extraHTTPHeaders: { "Accept-Language": acceptLanguage(fingerprint.languages) },
+            },
         },
     };
     await writeFile(path, JSON.stringify(config), { flag: "wx", mode: 0o600 });
@@ -318,6 +325,15 @@ export const isolatedBrowserSpec = (
  * (the slowest bounded thing in there is a 60s navigation) and turns an unbounded stall into an error the agent
  * reads and moves on from. */
 const BROWSER_CALL_TIMEOUT_MS = 120_000;
+
+/* HOW LONG TURN SETUP MAY SPEND BRINGING A BOUND OWNER'S GEO EXIT UP. Small on purpose: an exit that is
+ * already up costs a probe and never comes near this, so the budget is only ever paid by the FIRST turn after
+ * a cold start, and paying it belongs to whichever turn actually wants the browser rather than to every turn.
+ *
+ * Ten seconds is chosen to split the two cases cleanly. A tunnel provider re-dialling a known server lands
+ * inside it, so the common re-start is invisible. A cold tor bootstrap (up to two minutes on its own) does
+ * not, so it runs on in the background and the owner rejoins the next turn with the exit already up. */
+const EXIT_START_BUDGET_MS = 10_000;
 
 /* THE LAZY PATH for the logged-in browsers, why a turn starts no process per connected account.
  *
@@ -455,15 +471,33 @@ export const browserServersOf = async (
         return { ...NO_BROWSER_TOOLS, servers, ports };
     }
     const backends: Record<string, { command: string; args: readonly string[]; env: Record<string, string> }> = {};
+    /* A profile BOUND TO A GEO EXIT is resolved before anything is spawned, and an exit that cannot be brought
+     * up DROPS THE OWNER from this turn rather than degrading. That is the whole point of the binding: an
+     * account set to browse from Berlin must never quietly browse from this sandbox's own address instead, and
+     * a backend spawned without the proxy would do exactly that. The router's refusal for a missing account is
+     * what the agent then reads.
+     *
+     * RESOLVED ALL AT ONCE, AND ON A BUDGET, because this runs on the turn's critical path, before every turn,
+     * for every bound owner, whether or not the turn goes near a browser. Serially and unbounded it was the
+     * slowest thing in turn setup by a wide margin: three bound owners on cold tor exits could hold a turn that
+     * only wanted to edit a file for several minutes. Neither half of the fix loses the guarantee, a start that
+     * outlives its budget carries on in the background (startExitOnce) and the next turn joins or finds it up,
+     * and an owner whose exit is not up yet is simply absent from this turn. */
+    const resolved = new Map(
+        await Promise.all(
+            [...owners].map(
+                async (owner) =>
+                    [
+                        owner,
+                        await resolveProfileExit(capabilities, owner, EXIT_START_BUDGET_MS).catch((error: unknown) => ({
+                            refusal: `${owner}: its exit could not be resolved (${error instanceof Error ? error.message : String(error)})`,
+                        })),
+                    ] as const,
+            ),
+        ),
+    );
     for (const owner of owners) {
-        /* A profile BOUND TO A GEO EXIT is resolved before anything is spawned, and an exit that cannot be
-         * brought up DROPS THE OWNER from this turn rather than degrading. That is the whole point of the
-         * binding: an account set to browse from Berlin must never quietly browse from this sandbox's own
-         * address instead, and a backend spawned without the proxy would do exactly that. The router's
-         * refusal for a missing account is what the agent then reads. */
-        const bound = await resolveProfileExit(capabilities, owner).catch((error: unknown) => ({
-            refusal: `${owner}: its exit could not be resolved (${error instanceof Error ? error.message : String(error)})`,
-        }));
+        const bound = resolved.get(owner);
         if (bound !== undefined && "refusal" in bound) {
             delete accounts[owner];
             for (const [id, mapped] of Object.entries(accounts)) {

@@ -137,6 +137,18 @@ export interface BrowserFingerprint {
 
 const languagesFor = (locale: string): readonly string[] => (locale === "en-US" ? [locale, "en"] : [locale, "en-US", "en"]);
 
+/* `Accept-Language`, spelled the way Chrome spells it: the SAME list `navigator.languages` reports, with
+ * descending q-values after the first.
+ *
+ * This exists because Playwright derives the header from `locale` ALONE, which sends a one-entry
+ * `Accept-Language: de-DE` underneath a three-entry `navigator.languages`. That is not a small discrepancy: a
+ * header and a JS property disagreeing about the same fact is exactly the internal contradiction detectors
+ * weight above any unusual value, and it would arrive precisely on the profiles that moved country, which are
+ * the ones that can least afford it. Both launch paths pass this, for the same reason they share everything
+ * else in this module: they share a profile, so a site must meet one machine whichever is driving. */
+export const acceptLanguage = (languages: readonly string[]): string =>
+    languages.map((language, index) => (index === 0 ? language : `${language};q=${(1 - index / 10).toFixed(1)}`)).join(",");
+
 /* Where this profile is, when it is NOT wherever the sandbox is: a profile bound to a geo exit. Only the
  * clock and the language, because that is the whole of what moving changes, the GPU, cores and memory are
  * still drawn from the seed below, so the same machine turns up in the new place rather than a new machine.

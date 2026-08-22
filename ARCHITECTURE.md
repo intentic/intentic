@@ -909,8 +909,21 @@ a New York clock is a sharper signal than never having moved. Those three are no
 already owns the rule that the clock follows the EGRESS and a bound profile is simply one whose egress is not
 the sandbox's; everything else about its device (GPU, cores, memory) still comes from the seed, so it is the
 same machine sitting somewhere else. The country codes become a zone and a language through ICU rather than a
-table ([exit-countries.ts](_sandbox/sandbox/src/exit/exit-countries.ts)). An exit that cannot be brought up
+table ([exit-countries.ts](_sandbox/sandbox/src/exit/exit-countries.ts)). `Accept-Language` is spelled out from
+that list rather than left to Playwright, which derives the header from the locale alone and would send one tag
+under a three-tag `navigator.languages` — a header contradicting a page property about the same fact is the
+kind of internal inconsistency detectors weight above any unusual value. An exit that cannot be brought up
 **refuses the browser** rather than opening it from the sandbox's own address.
+
+**A bound profile's exit is started on a budget, and only on the turn path.** Resolving the binding runs before
+*every* turn, for every bound owner, whether or not the turn goes near a browser, so an unbounded start put a
+cold tor bootstrap's two minutes in front of a turn that only wanted to edit a file. Turn setup now resolves
+every owner concurrently and waits a few seconds each
+([browser-tools.ts](_sandbox/sandbox/src/browser/browser-tools.ts)); the owner's own login window, where a
+person is watching a spinner, still waits as long as it takes. Neither half of the guarantee is traded away: a
+start that outruns the budget carries on in the background under `startExitOnce`, which shares one attempt per
+exit so the next turn joins it rather than dialling a second time against the same interface and proxy port,
+and the owner is simply **absent from this turn** — never a browser opened without the proxy.
 
 **The agent drives the same routes the operator does.** `/usr/local/bin/geo`
 ([bin/geo](_sandbox/sandbox/bin/geo)) is a thin client over `/exit`, taught by the shared `geo` skill, on the

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { BrowserFingerprint } from "./fingerprint.js";
+import { acceptLanguage, type BrowserFingerprint } from "./fingerprint.js";
 import { stealthInit } from "./stealth.js";
 
 /* The PURE half: what the init script says, given a device. Deriving the device touches the workspace (the seed
@@ -42,4 +42,20 @@ test("the constants that identified this product are gone", () => {
 // one tell becomes a louder tell of its own.
 test("the patched WebGL getter does not advertise itself", () => {
     expect(stealthInit(device)).toContain("[native code]");
+});
+
+/* THE HEADER AND THE JS PROPERTY HAVE TO AGREE. Playwright builds `Accept-Language` from `locale` alone, which
+ * sends one tag under a three-tag `navigator.languages`: a header contradicting a property about the same fact
+ * is the shape detectors weight above any unusual value, and it would land on exactly the profiles that moved
+ * country. So the header is spelled out from the same list the init script installs. */
+test("Accept-Language spells out the same list the init script installs", () => {
+    expect(acceptLanguage(device.languages)).toBe("en-GB,en-US;q=0.9,en;q=0.8");
+    // The moved-country case, which is the one this exists for.
+    expect(acceptLanguage(["de-DE", "de", "en"])).toBe("de-DE,de;q=0.9,en;q=0.8");
+});
+
+// A single-language device is the degenerate case, and a trailing ";q=1.0" on the only entry would be a tell of
+// its own: no browser writes one.
+test("a one-language device gets a bare header", () => {
+    expect(acceptLanguage(["en-US"])).toBe("en-US");
 });

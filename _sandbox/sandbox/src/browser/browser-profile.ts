@@ -14,7 +14,7 @@ import {
     type ScreencastClientMessage,
 } from "./screencast.js";
 import { resolveProfileExit } from "./browser-exit.js";
-import { browserFingerprint } from "./fingerprint.js";
+import { acceptLanguage, browserFingerprint } from "./fingerprint.js";
 import { acquireProfileLock, markConnected, passkeyPath, profileOwner, releaseProfileLock, sessionDir } from "./session-store.js";
 import { stealthInit } from "./stealth.js";
 import type { Services } from "../composition.js";
@@ -183,6 +183,9 @@ export const createBrowserProfileRoute = (services: Services) =>
                          * its traffic actually leaves by and an unbound one claims the sandbox's. */
                         locale: fingerprint.locale,
                         timezoneId: fingerprint.timezoneId,
+                        // Explicit, not derived from `locale`: Playwright would send only the one tag, which
+                        // contradicts the `navigator.languages` the init script installs a few lines below.
+                        extraHTTPHeaders: { "Accept-Language": acceptLanguage(fingerprint.languages) },
                         // Where that traffic goes. Set together with the pair above, never one without the
                         // other: an address in Berlin under a New York clock is worse than not having moved.
                         ...(boundExit === undefined ? {} : { proxy: { server: boundExit.proxy } }),

@@ -41,11 +41,19 @@ test("an exit-bound config carries the proxy and the matching clock", async () =
         place: berlin,
     });
     const config = JSON.parse(readFileSync(path, "utf8")) as {
-        browser: { launchOptions: { proxy?: { server: string } }; contextOptions: { locale: string; timezoneId: string } };
+        browser: {
+            launchOptions: { proxy?: { server: string } };
+            contextOptions: { locale: string; timezoneId: string; extraHTTPHeaders: Record<string, string> };
+        };
     };
     expect(config.browser.launchOptions.proxy?.server).toBe("socks5://127.0.0.1:19042");
     expect(config.browser.contextOptions.timezoneId).toBe("Europe/Berlin");
     expect(config.browser.contextOptions.locale).toBe("de-DE");
+    /* THE THIRD HALF, and the one that is easy to leave out because Playwright appears to handle it. It builds
+     * `Accept-Language` from `locale`, so without this line the header would say `de-DE` while the init script
+     * told the page `["de-DE","de","en"]`. A German address and a German clock under a header that disagrees
+     * with the page's own property is the contradiction the other two lines exist to avoid. */
+    expect(config.browser.contextOptions.extraHTTPHeaders["Accept-Language"]).toBe("de-DE,de;q=0.9,en;q=0.8");
 });
 
 // An unbound profile gets no proxy at all: nothing is routed through an exit unless something asked for it,

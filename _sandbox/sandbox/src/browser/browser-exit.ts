@@ -1,7 +1,7 @@
 import type { BrowserConfig, Capability, ExitConfig, IdentityConfig } from "@intentic/sandbox-contract";
 import { countryLocale } from "../exit/exit-countries.js";
 import type { FingerprintPlace } from "./fingerprint.js";
-import { exitLink, proxyUrl, startExit } from "../exit/exit-links.js";
+import { exitLink, proxyUrl, startExitOnce } from "../exit/exit-links.js";
 
 /* BINDING A BROWSER PROFILE TO A COUNTRY, which is the form this feature actually gets used in. Nobody
  * proxies a browser by hand for long; what they want is "this account lives in Berlin", set once.
@@ -59,13 +59,29 @@ export const boundExitId = (capabilities: readonly Capability[], owner: string):
  * worst one available: a browser bound to a stopped exit would open perfectly happily from this sandbox's own
  * address, under an account whose whole point was that it appears to be somewhere else.
  *
- * So a down exit is STARTED here, and a start that fails is a hard `undefined` with a reason the caller must
- * surface as a refusal rather than a warning. There is no degraded mode: "open it anyway from the real
- * address" is precisely what must not happen.
+ * So a down exit is STARTED here, and a start that fails is a refusal the caller must surface rather than a
+ * warning. There is no degraded mode: "open it anyway from the real address" is precisely what must not happen.
+ *
+ * `budgetMs` IS HOW LONG THE CALLER MAY BE MADE TO WAIT, and the two callers want opposite answers.
+ *
+ *   The owner's own login window (browser-profile.ts) passes none. A person clicked a button and is watching a
+ *     spinner; waiting out a cold tor bootstrap is the correct thing to do and giving up on them would be rude.
+ *   A turn's tool setup (browser-tools.ts) passes one, because that path is NOT a person waiting on a browser:
+ *     it runs before every turn, for every bound owner, whether or not the turn will browse at all. Tor alone
+ *     allows two minutes to bootstrap, so an unbudgeted start there stalls a turn that was going to edit a file.
+ *
+ * Crucially a timeout does NOT cancel the start: it goes on in the background under startExitOnce, so the next
+ * turn finds the exit up (or joins the same attempt) instead of restarting it. The budgeted caller just declines
+ * to open a browser this turn, which is the same fail-closed answer it already gave for every other reason.
  */
+// How a start ended, from the waiting caller's side: it worked, it threw, or the caller's budget ran out first
+// and it is still going. The three take different refusals, so they are three shapes rather than one value.
+type StartOutcome = { ok: true } | { failed: unknown } | { timedOut: true };
+
 export const resolveProfileExit = async (
     capabilities: readonly Capability[],
     owner: string,
+    budgetMs?: number | undefined,
 ): Promise<{ exit: ProfileExit } | { refusal: string } | undefined> => {
     const exitId = boundExitId(capabilities, owner);
     if (exitId === undefined) {
@@ -80,13 +96,30 @@ export const resolveProfileExit = async (
     const exitEntry = { id: entry.id, config: entry.config as ExitConfig };
     let link = await exitLink(exitEntry);
     if (link.state !== "up") {
-        try {
-            for await (const line of startExit(exitEntry, link.country)) {
-                void line;
-            }
-        } catch (error) {
+        // Shared with any start already in flight, so two owners bound to one exit dial it once between them.
+        const start = startExitOnce(exitEntry, link.country);
+        /* Tagged rather than a bare `boolean | unknown`, because the three outcomes have to stay tellable
+         * apart and a rejection value is `unknown`: overloading `false` for "the budget ran out" would read a
+         * driver that threw `false` as a timeout and give the wrong refusal. `Promise.race` over a one-element
+         * array is the unbudgeted case, which is why the timer is spread in rather than branched around. */
+        const settled = await Promise.race<StartOutcome>([
+            start.then<StartOutcome, StartOutcome>(
+                () => ({ ok: true }),
+                (failed: unknown) => ({ failed }),
+            ),
+            // unref'd: a start nobody is waiting on any more must not hold the process open by itself.
+            ...(budgetMs === undefined
+                ? []
+                : [new Promise<StartOutcome>((resolve) => setTimeout(() => resolve({ timedOut: true }), budgetMs).unref())]),
+        ]);
+        if ("timedOut" in settled) {
             return {
-                refusal: `${owner} browses through the exit "${exitId}", which could not be brought up, so this browser was not opened: opening it would have connected from this sandbox's own address instead. ${error instanceof Error ? error.message : String(error)}`,
+                refusal: `${owner} browses through the exit "${exitId}", which is still coming up. It was not opened from this sandbox's own address instead, so try again once the exit reports up.`,
+            };
+        }
+        if ("failed" in settled) {
+            return {
+                refusal: `${owner} browses through the exit "${exitId}", which could not be brought up, so this browser was not opened: opening it would have connected from this sandbox's own address instead. ${settled.failed instanceof Error ? settled.failed.message : String(settled.failed)}`,
             };
         }
         link = await exitLink(exitEntry);

@@ -132,6 +132,37 @@ export async function* startExit(entry: ExitEntry, country: string | undefined):
     };
 }
 
+/* ONE START PER EXIT AT A TIME, shared by everyone waiting on it.
+ *
+ * `startExit` is not safe to run twice concurrently against one id: both would write the same conf, dial the
+ * same interface and race on the same proxy port, and the loser's failure would stop the winner's working
+ * exit. Nothing needed this while every caller was a person clicking a button. It became load-bearing the
+ * moment a start could be ABANDONED by its caller and left running (see resolveProfileExit's budget): a turn
+ * that gives up waiting must leave the start in flight, and the next turn must join that one rather than
+ * begin a second.
+ *
+ * Progress lines are dropped, not buffered. The callers that want them (the CLI, the Status card) stream
+ * `startExit` directly; the callers that reach for this one only ever asked "is it up yet".
+ */
+const starting = new Map<string, Promise<void>>();
+
+export const startExitOnce = (entry: ExitEntry, country: string | undefined): Promise<void> => {
+    const inFlight = starting.get(entry.id);
+    if (inFlight !== undefined) {
+        return inFlight;
+    }
+    const run = (async () => {
+        for await (const line of startExit(entry, country)) {
+            void line;
+        }
+    })().finally(() => starting.delete(entry.id));
+    // Marks the rejection handled for the abandoned case. Callers still see the real failure through `run`;
+    // without this, a start nobody is waiting on any more would crash the daemon as an unhandled rejection.
+    void run.catch(() => undefined);
+    starting.set(entry.id, run);
+    return run;
+};
+
 // The driver already recorded which server it picked; preserve it when the links layer rewrites the selection
 // with the confirmed country, or a rotate would lose track of what to avoid next time.
 const selectionServer = async (id: string): Promise<{ server?: string }> => {
