@@ -146,6 +146,21 @@ const systemdUserAvailable = (): boolean => {
  * agent supervised here must exit NON-ZERO on a signal (128+signal) and reserve 0 for the exits it decides on;
  * systemd distinguishes its own stops by itself, so a deliberate one stays stopped regardless of the code.
  *
+ * `RestartForceExitStatus=` IS THE OTHER HALF, and without it the exit code above covers only the cases where the
+ * agent was still alive enough to choose one. A handler is code, and code runs at a point in time: SIGTERM
+ * delivered before `process.on("SIGTERM", …)` is installed, or to a process wedged before it, kills by the
+ * signal's DEFAULT disposition, and systemd's rule is explicit that SIGHUP, SIGINT, SIGTERM and SIGPIPE are a
+ * clean termination (systemd.service(5), SuccessExitStatus=), so `on-failure` skips exactly the kill that most
+ * needs restarting. Listing the four forces the restart regardless, and it does NOT cost the deliberate stop:
+ * "the unit was stopped by explicit request" is a separate, higher gate than any Restart= setting, verified here
+ * against `systemctl --user stop` and `disable --now`, both of which still stay stopped.
+ *
+ * Both halves earn their place. The exit code is what makes a HANDLED stop honest (and is what a shell or a log
+ * reader sees); the force list is what makes an UNHANDLED one survivable. Observed: a sandbox image build drove
+ * this machine deep into swap, the watcher took two SIGTERMs a few seconds apart, and the two took different
+ * paths, the first exited 143 and was restarted, the second died by default disposition and was left for dead.
+ * Same signal, same unit, same minute; only the timing differed.
+ *
  * The visible cost of that, and it is the whole cost: after `systemctl --user stop` the unit rests in `failed`
  * rather than `inactive (dead)`, because 143 is not a clean code and systemd labels the state by the code even
  * when it asked for it. `SuccessExitStatus=SIGTERM` would tidy it and would also switch the restart back off,
@@ -182,6 +197,7 @@ StandardOutput=append:${spec.logPath}
 StandardError=append:${spec.logPath}
 Restart=on-failure
 RestartSec=5
+RestartForceExitStatus=SIGHUP SIGINT SIGTERM SIGPIPE
 StartLimitIntervalSec=0
 Environment=PATH=${join(homedir(), ".local", "bin")}:/usr/local/bin:/usr/bin:/bin
 

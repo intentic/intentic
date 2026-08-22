@@ -89,6 +89,15 @@ describe("systemdUserUnit", () => {
         expect(systemdUserUnit(SPEC, BINARY)).toContain("StartLimitIntervalSec=0");
     });
 
+    /* THE KILL `on-failure` WOULD OTHERWISE CALL CLEAN. systemd counts SIGHUP/SIGINT/SIGTERM/SIGPIPE as a
+     * successful termination, so an agent killed by one before its own handler is installed — which is where a
+     * machine under memory pressure kills things — is left for dead by the very setting meant to revive it. The
+     * agent's non-zero exit only covers the kills it was alive enough to handle; this covers the rest. */
+    it("forces a restart after the signals systemd would call a clean exit", () => {
+        const unit = systemdUserUnit(SPEC, BINARY);
+        expect(unit).toContain("RestartForceExitStatus=SIGHUP SIGINT SIGTERM SIGPIPE");
+    });
+
     /* A user unit does NOT inherit a login shell's environment. Both agents shell out to `git` and `ssh` on every
      * tick (the git bridge) and Mutagen's transport needs ssh too, so a unit that starts from systemd's minimal
      * PATH is one whose bridge silently fails every pass. */
