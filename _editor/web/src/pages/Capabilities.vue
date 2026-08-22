@@ -920,6 +920,15 @@ const submit = async (): Promise<void> => {
         const added = capabilities.value.find((capability) => capability.id === input.id);
         if (added?.status.state === `pending`) {
             handOff(entry, added);
+            /* A PENDING ADD IS THE ONE PATH THAT LEAVES THE FORM STANDING, and a form still holding the name it
+             * just used reads as a failure: the connection above now owns that name, so the untouched box lights
+             * up "already exists" under a submit that in fact worked. Reset it the way arriving on the card does,
+             * down to the next free name. An edit is exempt: it keeps its connection's name by design, and the
+             * collision check ignores it anyway. */
+            if (!wasEditing) {
+                clearForm();
+                name.value = suggestName(entry, instancesFor(entry));
+            }
             return;
         }
         /* A SAVED EDIT STAYS ON THE CARD, where an add leaves it. The two look alike and are opposite: an add
