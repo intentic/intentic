@@ -28,7 +28,7 @@ defineProps<{ label?: string; count?: string | number; caption?: string; flat?: 
     <section>
         <div
             v-if="label !== undefined || $slots[`label`] || $slots[`info`] || $slots[`actions`]"
-            class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5"
+            class="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1"
         >
             <slot name="label"
                 ><span v-if="label !== undefined" :class="ui.sectionLabel()">{{ label }}</span></slot
@@ -40,7 +40,7 @@ defineProps<{ label?: string; count?: string | number; caption?: string; flat?: 
             <span v-if="caption !== undefined" class="min-w-0 text-2xs text-subtle">{{ caption }}</span>
             <div v-if="$slots[`actions`]" class="ml-auto flex items-center gap-2"><slot name="actions" /></div>
         </div>
-        <div class="divide-y divide-line" :class="flat === true ? `` : `overflow-hidden rounded-lg border border-line bg-card`">
+        <div class="divide-y divide-line" :class="flat === true ? `` : `overflow-hidden rounded-xl border border-line bg-card`">
             <slot />
         </div>
     </section>

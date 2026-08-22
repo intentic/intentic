@@ -339,7 +339,7 @@ const emptyNote = computed<string | undefined>(() => {
             <!-- Container queries: how many cards fit is a fact about this pane, which shares the page with the
                  hub's index column and the shell with a chat panel the user drags. -->
             <div class="@container">
-                <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3">
+                <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @xl:gap-4 @4xl:grid-cols-3">
                     <DiscoverCard v-for="listing in section.listings" :key="listing.entry.name" :listing="listing" @open="openListing(listing)" />
                 </div>
             </div>

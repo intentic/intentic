@@ -699,10 +699,10 @@ const endResize = (event: PointerEvent): void => {
                                  review isn't about stops taking up the screen. Same three-part heading as the
                                  repo's above: fold on the left, sweep on the right, totals between, because
                                  they are the same two jobs at a smaller scope. -->
-                                <div v-if="viewOf(group.repo).named" class="group/head flex items-center border-b border-line/40 bg-canvas/60 pr-1">
+                                <div v-if="viewOf(group.repo).named" class="group/head flex items-center border-b border-line/40 bg-canvas/60 pr-1.5">
                                     <button
                                         type="button"
-                                        class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-1.5 pr-1 text-left"
+                                        class="flex min-w-0 flex-1 items-center gap-2 py-1 pl-2 pr-1.5 text-left"
                                         @click="toggleModule(group.repo, bucket.key)"
                                     >
                                         <Icon
@@ -751,7 +751,7 @@ const endResize = (event: PointerEvent): void => {
                                     >
                                         <button
                                             type="button"
-                                            class="flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-1.5 pr-1 text-left max-md:min-h-11"
+                                            class="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 pr-1.5 text-left max-md:min-h-11"
                                             :class="isViewed(file) ? 'opacity-50' : ''"
                                             @click="select(file)"
                                         >

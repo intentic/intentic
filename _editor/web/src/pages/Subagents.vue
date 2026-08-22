@@ -410,8 +410,8 @@ watch(
                  CLIPS, so with the padding on the scroller the lane's cap pinned eight pixels below the top of
                  the rail and every card scrolled through the strip above it: a sliver of card, selection ring
                  and all, riding over the header. -->
-            <div class="flex w-72 shrink-0 flex-col p-2">
-                <aside class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            <div class="flex w-72 shrink-0 flex-col p-3">
+                <aside class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
                     <!-- WHAT NARROWED THIS LIST, and the way out of it. A filtered rail that does not say it is
                          filtered is how a reader concludes the sandbox has only ever run two agents. -->
                     <RouterLink
@@ -503,7 +503,7 @@ watch(
                      hairline; a line across the top of the pane put the only border on the surface exactly
                      where the eye lands first, and cut the header off from the transcript it names. Height and
                      the title's weight are what separate them now: the same way the lanes separate the rail. -->
-                <div v-if="current" class="flex shrink-0 items-center gap-2 px-3 py-2 text-2xs text-muted">
+                <div v-if="current" class="flex shrink-0 items-center gap-2.5 px-4 py-2.5 text-2xs text-muted">
                     <IdentityTile :title="titleOf(current)" :provider="providerOf(current)" class="h-5 w-5 text-2xs" />
                     <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ titleOf(current) }}</span>
                     <!-- Wrapped rather than tooltipped directly: the mark is a component, and the note is what
@@ -546,7 +546,7 @@ watch(
                      tail of the same output and must not be said twice. Held apart from the transcript by its
                      own tinted panel rather than by rules above and below it: the colour already says this
                      block is not the conversation, and a hairline is the app's least specific way to repeat it. -->
-                <p v-if="current?.error" class="mx-3 shrink-0 whitespace-pre-wrap rounded-md bg-danger/10 px-2 py-1.5 text-2xs text-danger">
+                <p v-if="current?.error" class="mx-4 shrink-0 whitespace-pre-wrap rounded-md bg-danger/10 px-3 py-2 text-2xs text-danger">
                     {{ current.error }}
                 </p>
 
@@ -560,13 +560,13 @@ watch(
                      label in the lane header's own voice and by air. No rule between them, for the reason the
                      pane's own header has none — this surface's structure is cards, lanes and gaps, and a
                      hairline here would be its only one. -->
-                <div ref="pane" class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto py-2" @scroll.passive="onPaneScroll">
+                <div ref="pane" class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-1 py-3" @scroll.passive="onPaneScroll">
                     <div class="chat-turns">
                         <!-- The two sections' own spacing, set here rather than borrowed from the column's
                              --chat-gap: that gap is the distance between two events INSIDE a transcript, and
                              the distance between the report and the entire transcript is a bigger fact than
                              the distance between one tool call and the next. -->
-                        <div class="flex min-w-0 flex-col gap-5">
+                        <div class="flex min-w-0 flex-col gap-6">
                             <!-- ITS REPORT, keeping the top of the column: the answer is what the delegation
                                  was for. Two things it must not be: raw, and unbounded. A child's last words
                                  are a document — headings, tables, file references — which poured out as
@@ -578,7 +578,7 @@ watch(
                                  That it FAILED is not said in here: the header's status glyph already says
                                  so, and a page of body text in danger red is the least readable way to
                                  repeat it. -->
-                            <section v-if="report !== undefined" class="flex min-w-0 flex-col gap-1.5">
+                            <section v-if="report !== undefined" class="flex min-w-0 flex-col gap-2">
                                 <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Report</span>
                                 <!-- THE CEILING IS A SHARE OF THE WINDOW, not a count of pixels. A fixed one
                                      (this was 14rem, then 20rem) is wrong at both ends: on a tall window it

@@ -48,7 +48,7 @@ const premiumHint = computed(() =>
          second time this surface told them nothing. -->
     <button
         type="button"
-        class="flex h-full w-full flex-col gap-2 rounded-lg border border-line bg-card px-3 py-2.5 text-left transition-colors hover:border-line-strong hover:bg-overlay"
+        class="flex h-full w-full flex-col gap-2.5 rounded-xl border border-line bg-card p-3.5 text-left transition-colors hover:border-line-strong hover:bg-overlay sm:p-4"
         @click="emit(`open`)"
     >
         <div class="flex w-full items-start gap-2.5">

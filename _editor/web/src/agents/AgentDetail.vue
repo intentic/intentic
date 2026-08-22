@@ -218,7 +218,7 @@ const confirmDiscard = async (): Promise<void> => {
     <div class="flex h-full min-h-0 flex-col">
         <!-- A @container: the header thins out against ITS OWN width, which is the workspace pane's and not
              the window's: with the chat panel open the two are nowhere near each other. -->
-        <div class="view-header @container flex items-center gap-2 border-b border-line px-3">
+        <div class="view-header @container flex items-center gap-2.5 border-b border-line px-3.5 py-1">
             <!-- The board is a place, so the way back to it is a link: hoverable, copyable, and openable in
                  a tab of its own beside the agent being read. -->
             <RouterLink

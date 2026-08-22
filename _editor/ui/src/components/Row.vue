@@ -79,9 +79,9 @@ const {
  * too big beside a rail row's `text-xs` title: the icon then reads as the row's subject and the name as its
  * annotation, which is backwards. */
 const TIERS = {
-    comfortable: { pad: `px-4 py-3`, gap: `gap-2.5`, icon: `text-lg`, title: `font-semibold leading-tight`, description: `text-xs` },
-    compact: { pad: `px-4 py-2`, gap: `gap-2.5`, icon: `text-sm`, title: `text-sm font-medium leading-tight`, description: `text-2xs` },
-    dense: { pad: `px-2 py-1.5`, gap: `gap-2`, icon: `text-xs`, title: `text-xs font-medium leading-tight`, description: `text-2xs` },
+    comfortable: { pad: `px-4.5 py-3.5`, gap: `gap-3`, icon: `text-lg`, title: `font-semibold leading-tight`, description: `text-xs` },
+    compact: { pad: `px-4 py-2.5`, gap: `gap-3`, icon: `text-sm`, title: `text-sm font-medium leading-tight`, description: `text-2xs` },
+    dense: { pad: `px-2.5 py-2`, gap: `gap-2.5`, icon: `text-xs`, title: `text-xs font-medium leading-tight`, description: `text-2xs` },
 } as const;
 
 /* The lead icon's colour, as a tone rather than as a class the caller brings. The three semantic ones are not
