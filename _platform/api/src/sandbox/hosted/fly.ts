@@ -143,14 +143,20 @@ export const startMachine = async (token: string, app: string, machineId: string
     await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}/start`);
 };
 
-// Replace a machine's whole config (Fly's update semantics: the posted config IS the new one, nothing is
-// merged), the warm pool's claim writes a sandbox's real identity into a machine built before it had one.
-// Same image ⇒ no new pull, and the machine stays on its host, which is what keeps its volume attached.
+/* Replace a machine's whole config (Fly's update semantics: the posted config IS the new one, nothing is
+ * merged), the warm pool's claim writes a sandbox's real identity into a machine built before it had one.
+ * Same image ⇒ no new pull, and the machine stays on its host, which is what keeps its volume attached.
+ *
+ * THE UPDATE IS THE POWER TRANSITION, and this is the whole reason the warm pool works at all. An update
+ * replaces the machine, which Fly performs as a state of its own: for a few seconds the machine reads
+ * `replacing` and refuses every start with `412 failed_precondition: machine getting replaced`. A caller that
+ * posted `skip_launch: true` and then started the machine itself therefore lost that race EVERY time — the
+ * measured effect was 100% of pool claims refused, both warm machines of a region burned and stranded per
+ * sign-up, and the reader handed the exact cold build the pool exists to spare. So the launch rides WITH the
+ * config: one call, no window to lose, and the caller's own start becomes a cheap idempotent confirmation
+ * (hosted.ts's wakeHosted) rather than the operation that has to succeed. */
 export const updateMachine = async (token: string, app: string, machineId: string, config: FlyMachineConfig): Promise<void> => {
-    // Keep the update and the power transition separate. Both warm-pool claims and explicit repairs update a
-    // stopped machine, then use the ordinary idempotent start path; without skip_launch Fly starts as part of
-    // the update and the following start is a provider error rather than the operation its caller requested.
-    await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`, { config, skip_launch: true });
+    await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`, { config });
 };
 
 export const stopMachine = async (token: string, app: string, machineId: string): Promise<void> => {

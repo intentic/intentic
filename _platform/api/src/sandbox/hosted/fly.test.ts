@@ -73,7 +73,10 @@ describe(`fly`, () => {
         expect(calls).toHaveLength(2);
     });
 
-    it(`updates a stopped machine without launching it: callers own the one explicit start`, async () => {
+    /* THE OUTAGE THIS PINS SHUT: posting `skip_launch: true` and starting the machine afterwards raced Fly's
+     * own `replacing` state and lost every time (412 "machine getting replaced"), so no warm machine was ever
+     * claimable and every sign-up paid the cold build. The launch must ride with the config. */
+    it(`launches the machine with the replaced config, never as a separate start`, async () => {
         const config = flyMachineConfig({
             name: `app`,
             image: `ghcr.io/intentic/sandbox:stable`,
@@ -83,7 +86,7 @@ describe(`fly`, () => {
         });
         const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ ok: true }) }]);
         await updateMachine(`tok`, `app`, `m1`, config);
-        expect(calls[0]?.body).toEqual({ config, skip_launch: true });
+        expect(calls[0]?.body).toEqual({ config });
     });
 
     it(`names the operator's problem on 401 and relays Fly's refusal otherwise`, async () => {

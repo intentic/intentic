@@ -1,20 +1,34 @@
 import { expect, test } from "@playwright/test";
+import { DAEMON_URL } from "../stack.js";
 
 /* THE FIRST SESSION, in the browser: what somebody sees the moment setup finishes and the shell opens for the
  * first time. What each screen shows is decided by real state, the workspace pane reads whether the tree is
- * empty, the board reads whether anything is connected, so this drives the app the way a new user meets it
- * and reads what it actually put on screen.
+ * empty, the board reads what is in it, so this drives the app the way a new user meets it and reads what it
+ * actually put on screen.
+ *
+ * A FRESH SANDBOX IS NO LONGER EMPTY. The daemon seeds a one-page starter site out of the image on its first
+ * boot and starts its dev server (sandbox src/scaffold/starter-site.ts), so "first run" now means "a running
+ * site the user has not touched yet", and the first two specs read that. The empty workspace is still a real
+ * state, the one a user reaches by clearing the box out, so the third spec makes it rather than assuming it.
  *
  * Serial and first: `workers: 1` means these specs share one seeded world, and every fact under test here is
  * "nothing has happened yet". A spec that started an agent or uploaded a file before this one would be
  * asserting against a workspace that is no longer new. */
 test.describe.configure({ mode: `serial` });
 
-test(`the first landing is the workspace`, async ({ page }) => {
-    // The shell's own entry, not /workspace directly: the redirect IS what is under test. Desktop lands on the
-    // workspace, the code, the doors for getting code in, and the docked chat already sitting to be typed at.
+test(`the first landing is the starter site, already running`, async ({ page }) => {
+    // The shell's own entry, not /preview directly: the automatic open IS what is under test. A new box lands
+    // on its site, with the docked chat beside it, rather than on an empty file tree.
     await page.goto(`/`);
 
+    await expect(page).toHaveURL(/\/preview$/);
+    await expect(page.getByLabel(`Which app to preview`)).toBeVisible();
+    // Seeded AND started: the offer is Stop, which only a running dev server can be offered.
+    await expect(page.getByRole(`button`, { name: `Stop` })).toBeVisible();
+
+    // Once, ever. The reader's own choice owns every later visit, so a reload lands where they last were.
+    await page.goto(`/workspace`);
+    await page.reload();
     await expect(page).toHaveURL(/\/workspace$/);
 });
 
@@ -30,8 +44,10 @@ test(`the agent board asks for a task rather than for a sign-in`, async ({ page 
     await expect(page.getByText(`Try free with Google`)).toHaveCount(0);
     await expect(page.getByRole(`button`, { name: /Continue with Google/ })).toHaveCount(0);
 
-    // What stands here instead: tasks to press. This world has no repositories, so it is the build ladder.
-    await expect(page.getByRole(`button`, { name: `A page for my business` })).toBeVisible();
+    // What stands here instead: tasks to press, read off what is actually in the workspace. This world has the
+    // starter site in it, so the offer is about code that exists rather than the build-something ladder an
+    // empty box gets.
+    await expect(page.getByRole(`button`, { name: `Explain this codebase` })).toBeVisible();
 
     // THE ONE COMPOSER IN THIS PRODUCT IS THE CHAT'S. The board used to carry a second one here.
     await expect(page.getByRole(`textbox`, { name: `What should the first agent do?` })).toHaveCount(0);
@@ -44,7 +60,14 @@ test(`the agent board asks for a task rather than for a sign-in`, async ({ page 
     await expect(page.getByRole(`button`, { name: `Choose a model` })).toBeVisible();
 });
 
-test(`an empty workspace offers every way of getting code in, repository first`, async ({ page }) => {
+/* LAST IN THE FILE, because it empties the box: the doors are the empty tree's own screen, and a user reaches
+ * it by clearing out what they were given (or by pointing a local daemon at an empty folder, which seeds
+ * nothing). Cleared through the daemon's own delete route rather than by driving the file tree, the subject
+ * here is the screen that follows, not the deleting. */
+test(`a workspace with nothing in it offers every way of getting code in, repository first`, async ({ page, request }) => {
+    const cleared = await request.delete(`${DAEMON_URL}/workspace/entry`, { data: { path: `site` } });
+    expect(cleared.ok()).toBe(true);
+
     await page.goto(`/workspace`);
 
     await expect(page.getByText(`Get your code in`)).toBeVisible();

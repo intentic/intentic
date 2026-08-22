@@ -96,10 +96,14 @@ export const repoTargets = (panels: readonly PanelSummary[]): PreviewTarget[] =>
             startable: true,
         }));
 
+// One app instance's target id. Named because a second caller now builds one without the list in hand: the
+// shell names the starter site's app to open it on a fresh sandbox's first visit.
+export const appTargetId = (repo: string, app: string): string => `app:${repo}/${app}`;
+
 // One monorepo's apps. The session name is the process manager's own convention (appPanelKey: `<repo>--<app>`).
 export const appTargets = (repo: string, apps: readonly RepoApp[]): PreviewTarget[] =>
     apps.map((app) => ({
-        id: `app:${repo}/${app.app}`,
+        id: appTargetId(repo, app.app),
         kind: `app`,
         label: app.app,
         detail: undefined,

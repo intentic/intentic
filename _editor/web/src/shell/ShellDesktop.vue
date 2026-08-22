@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
+import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 // `initialsOf` is the rail tile's glyph for a repository (my-shop-api → MS), so repositories stay
 // distinguishable instead of all sharing one icon: the same monogram <Avatar> and <BrandMark> fall back to.
 import { ui, ContextMenu, type IconName, initialsOf } from "@intentic/ui";
@@ -25,7 +26,8 @@ import { uiLength } from "../composables/uiScale";
 import { ICON_RAIL_WIDTH_REM, useIconRailSize } from "../composables/useIconRailSize";
 import { presenceOthers } from "../composables/usePresence";
 import { usePanels } from "../composables/extensions/usePanels";
-import { previewEvidence, previewHealthyCount } from "../composables/preview/previewModel";
+import { appTargetId, previewEvidence, previewHealthyCount } from "../composables/preview/previewModel";
+import { openPreviewOnFirstVisit } from "../composables/preview/previewSurface";
 import { usePublicOutbox } from "../composables/workspace/usePublicOutbox";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { useChanges } from "../composables/workspace/useChanges";
@@ -193,6 +195,31 @@ const previewTile = computed<AreaTile | undefined>(() => {
         ...(healthy > 0 ? { badge: { count: healthy, tone: `neutral` as const, tooltip: `${healthy} running` } } : {}),
     };
 });
+
+/* THE STARTER SITE, SHOWN RATHER THAN MENTIONED. A brand-new sandbox has a one-page site running before the
+ * user's first frame (the daemon seeds it from the image at boot), so the first arrival lands on it instead of
+ * on an empty workspace with a tile they have no reason to press. Once per box, ever: previewSurface's stored
+ * flag is what makes this a welcome rather than a habit, and any later visit goes wherever the user left off.
+ *
+ * Waits for the panels list to actually name the starter repo, not for a clock: on a fresh box the seed and
+ * the first page load race, and `immediate` covers the boot that finished first. A workspace where the user
+ * has since deleted the starter simply never matches, which is the correct amount of insistence.
+ *
+ * DESKTOP ONLY, deliberately: here the chat is docked beside the main area, so the site appears NEXT TO the
+ * conversation, which is the whole point. A phone screen holds one surface at a time, and taking it for a
+ * preview would be answering the arrival by hiding the chat. */
+watch(
+    panels,
+    (list) => {
+        // ONLY FROM THE LANDING, never over a place the reader asked for. `/` lands on the workspace, so that
+        // is the one screen this replaces: somebody who opened a link straight to their agents or a terminal
+        // said where they wanted to be, and a welcome that overrode it would be the shell talking over them.
+        if (route.name === `workspace` && list.some((panel) => panel.repo === STARTER_REPO)) {
+            openPreviewOnFirstVisit(router, appTargetId(STARTER_REPO, STARTER_APP));
+        }
+    },
+    { immediate: true },
+);
 
 // The thin shell: the always-present areas plus the evidence-driven Preview above, then one tile per EXTENSION
 // ACTIVATION: extensions detect workspace content (repo facts from /panels) and contribute their own sidebar

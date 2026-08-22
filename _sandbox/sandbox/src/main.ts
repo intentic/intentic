@@ -70,6 +70,7 @@ import { browserSessionMetrics } from "./browser/browser-sessions.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
+import { seedStarterSite } from "./scaffold/starter-site.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
 import { recordNewestRun } from "./store/newest-run.js";
@@ -101,6 +102,7 @@ const BOOT_STEPS = [
     { key: "sshHosts", label: "Linking ssh hosts" },
     { key: "vaultSecrets", label: "Securing stored credentials" },
     { key: "rootRepo", label: "Preparing the workspace repo" },
+    { key: "starterSite", label: "Putting your starter site in place" },
     { key: "referenceShelf", label: "Ensuring the reference shelf" },
     { key: "staleExports", label: "Sweeping interrupted exports" },
     { key: "repoGitDirs", label: "Healing repository git dirs" },
@@ -567,6 +569,27 @@ const main = async (): Promise<void> => {
                   },
               ),
     );
+
+    /* THE STARTER SITE, on a fresh workspace only: the baked one-page site copied in and its dev server
+     * started, so the first screen a new user sees has something of theirs running on it (scaffold/starter-site.ts).
+     *
+     * Awaited, and BEFORE the baseline commit: the seed creates a nested repo, and root's excludes and its
+     * "Initialize workspace" commit both have to be taken with that repo already on disk, or the starter's
+     * files surface as a phantom add in the Changes review. It costs a fresh boot one file copy and nothing at
+     * all on every later boot; a failure is logged and the sandbox opens with an empty workspace, exactly as it
+     * did before this existed. */
+    await boot.step("starterSite", async () => {
+        if (!role.roots || !freshRoot || !traits.ownsWorkspaceConfig) {
+            return;
+        }
+        const seeded = await seedStarterSite(services).catch((error: unknown) => {
+            logger.warn({ err: error }, "starter site not seeded, the workspace opens empty");
+            return undefined;
+        });
+        if (seeded !== undefined) {
+            logger.info({ repo: seeded }, "starter site seeded");
+        }
+    });
 
     // The reference shelf (REFERENCE_DIR, @intentic/workspace-ignore): furniture, like .intentic, its presence
     // IS the affordance. Every scanner already excludes it; without the dir on disk the convention is invisible

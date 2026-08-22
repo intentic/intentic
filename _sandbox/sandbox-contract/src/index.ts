@@ -113,6 +113,7 @@ export * from "./output-fields.js";
 export * from "./publish-drafts.js";
 export * from "./schemas.js";
 export * from "./search-globs.js";
+export * from "./starter.js";
 export * from "./terminal-protocol.js";
 export * from "./title.js";
 export * from "./versions.js";

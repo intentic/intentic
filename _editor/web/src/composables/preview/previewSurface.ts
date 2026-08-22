@@ -79,5 +79,28 @@ export const openPreview = (router: Router, targetId?: string): void => {
     void router.push(`/preview`);
 };
 
+/* THE ONE PREVIEW A SANDBOX OPENS BY ITSELF, and it is only ever the first one.
+ *
+ * A new sandbox arrives with a starter site already running (the daemon copies it out of the image on its first
+ * boot), and a running site nobody has been shown is the same as no site at all: the product's claim is "say
+ * what you want changed and watch it change", which needs the thing on screen. So the first arrival opens the
+ * preview, once, and never again for that box, the reader's own last choice (or their decision to keep it shut)
+ * outranks anything this could offer them later.
+ *
+ * Keyed by sandbox and stored, not held in memory: the flag has to survive the reload the user does five
+ * seconds later, or the panel reopens over whatever they went to look at instead. Answers whether it opened,
+ * for the caller that wants to log or test it. */
+const autoShownKey = (sandboxId: string | undefined): string => `intentic-preview-autoshown:${sandboxId ?? ``}`;
+
+export const openPreviewOnFirstVisit = (router: Router, targetId: string): boolean => {
+    const key = autoShownKey(useSandbox().activeSandboxId.value);
+    if (storedValue(key) !== undefined) {
+        return false;
+    }
+    storeValue(key, `1`);
+    openPreview(router, targetId);
+    return true;
+};
+
 /* The window toggle lives in previewFloating.ts rather than here: this module is imported by sandboxScope,
  * whose tests run without a DOM, and the floating surface reaches for the window at module scope. */

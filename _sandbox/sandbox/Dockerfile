@@ -254,6 +254,21 @@ RUN arch="$(dpkg --print-architecture)" \
 COPY --from=trees cli /opt/intentic-cli
 RUN chmod +x /opt/intentic-cli/dist/cli.js \
     && ln -s /opt/intentic-cli/dist/cli.js /usr/local/bin/intentic
+# THE STARTER SITE, built here so a new sandbox never builds it. A fresh workspace used to open empty, with
+# nothing running and nothing to look at; the daemon's first boot now copies this tree into /work and starts its
+# dev server (src/scaffold/starter-site.ts), so the preview is live seconds after the machine is. The install is
+# the whole reason this is baked: it takes a minute or two and cannot be made shorter, so it is paid once, at
+# image build time, instead of on every new user's clock.
+#
+# Built by the SAME CLI the Add-app button runs — one code path, so the baked starter and a hand-added landing
+# app cannot drift — and installed INSIDE the image, so every native dependency matches this platform rather
+# than whichever host prepared the trees. The `.git` the scaffold leaves behind is dropped: the daemon inits the
+# repo itself when it seeds it, with the git dir on /history like every other workspace repo. Pinned by ref so a
+# template push cannot silently change what an image built yesterday ships.
+ARG STARTER_TEMPLATE_REF=main
+RUN intentic scaffold monorepo --dir /opt --name starter --ref "$STARTER_TEMPLATE_REF" \
+    && intentic scaffold add-app --dir /opt/starter --apps landing --ref "$STARTER_TEMPLATE_REF" \
+    && rm -rf /opt/starter/.git
 # `tsx` as a shim over node's own type stripping. Agents reach for tsx to run a one-off .ts script because that
 # is what the ecosystem taught them, and a project that lists it in devDependencies resolves its own — but a
 # scratch script outside any package hit `tsx: not found` and the agent went looking for workarounds. Node 24

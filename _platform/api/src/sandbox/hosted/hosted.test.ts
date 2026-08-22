@@ -173,7 +173,7 @@ describe(`provisionHosted`, () => {
         // The identity goes in before the machine ever runs the sandbox, and the no-op boot override goes out.
         const update = calls.find((entry) => entry.url.endsWith(`/machines/m7`))?.body as {
             config: { env: Record<string, string>; init?: unknown; mounts: { volume: string }[]; metadata: Record<string, string> };
-            skip_launch: boolean;
+            skip_launch?: boolean;
         };
         // The stamp flips with the identity, in the same call: the app name will say `pool` forever, so this
         // is the only thing that can tell Fly this machine stopped being the platform's stock.
@@ -183,7 +183,9 @@ describe(`provisionHosted`, () => {
         expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://sandbox-abc.sbx.test`);
         expect(update.config.init).toBeUndefined();
         expect(update.config.mounts).toEqual([{ volume: `vol_7`, path: `/data` }]);
-        expect(update.skip_launch).toBe(true);
+        // The branding call IS the launch. Holding it back (skip_launch) and starting afterwards raced Fly's
+        // `replacing` state and refused every claim this pool ever made.
+        expect(update.skip_launch).toBeUndefined();
         expect(calls.some((entry) => entry.url.endsWith(`/machines/m7/start`))).toBe(true);
         // The user's clock starts here: the pool's own no-op boot was the platform's cost, not theirs.
         expect(created).toHaveBeenCalledWith({
@@ -196,6 +198,38 @@ describe(`provisionHosted`, () => {
                 wokeAt: expect.any(Date),
             },
         });
+        expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
+    });
+
+    /* THE OUTAGE THIS PINS SHUT, read off production logs: the branding update puts a machine through Fly's
+     * `replacing` state for a few seconds, and the confirming start lands inside that window and is refused
+     * with `412 machine getting replaced`. Every claim died there, both warm machines of the caller's region
+     * were burned and stranded per sign-up, and every reader was handed the cold build the pool exists to
+     * spare. A machine Fly reports as replacing is a machine coming up: the claim must finish, not fall back. */
+    it(`finishes the claim when the confirming start lands mid-replacement: replacing is coming up, not gone`, async () => {
+        const created = vi.fn().mockResolvedValue({});
+        const poolDelete = vi.fn().mockResolvedValue({});
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `replacing` }) },
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`),
+                respond: () => json({ error: `failed_precondition: machine getting replaced, refusing to start` }, 412),
+            },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => json({ id: `m7`, state: `replacing` }) },
+        ]);
+        const prisma = fakePrisma({
+            hostedMachine: { create: created },
+            hostedPoolMachine: {
+                findMany: vi.fn().mockResolvedValue([poolRow]),
+                updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+                delete: poolDelete,
+            },
+        });
+        const result = await provisionHosted(prisma as never, config(), logger, args);
+        expect(result).toEqual({ appName: `intentic-sbx-pool-abc123`, region: `iad` });
+        // No cold build was touched, and the hand-off committed: the reader owns the warm machine.
+        expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(false);
+        expect(created).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m7` }) }));
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
     });
 
@@ -506,13 +540,14 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
         const update = calls.find((entry) => entry.url.endsWith(`/machines/m1`))?.body as {
             config: { image: string; mounts: { volume: string; path: string }[]; env: Record<string, string> };
-            skip_launch: boolean;
+            skip_launch?: boolean;
         };
         expect(update.config.image).toBe(`ghcr.io/intentic/sandbox:stable`);
         expect(update.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(`tok`);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
-        expect(update.skip_launch).toBe(true);
+        // The replacement carries the launch; the wake that follows only confirms it (fly.ts).
+        expect(update.skip_launch).toBeUndefined();
         expect(calls.findIndex((entry) => entry.url.endsWith(`/machines/m1`))).toBeLessThan(
             calls.findIndex((entry) => entry.url.endsWith(`/machines/m1/start`)),
         );

@@ -71,12 +71,34 @@ const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineN
     metadata: flySandboxRole(args.sandboxId),
 });
 
+/* Power on a (probably) stopped machine, and the one place "it is coming up" is decided. Idempotent by reading
+ * the state on refusal: Fly answers an error for a machine that is already started/starting, and for one it is
+ * mid-`replacing` (the state an update passes through), and every one of those answers IS success here — the
+ * browser's daemon probe is what decides when the sandbox is actually back. Only a refusal over a machine Fly
+ * still reports as stopped/failed is a real refusal. */
+const LIVE_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
+export const wakeHosted = async (config: Config, hosted: { appName: string; machineId: string }): Promise<void> => {
+    try {
+        await startMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId);
+    } catch (error) {
+        const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch(() => undefined);
+        if (machine !== undefined && LIVE_STATES.has(machine.state)) {
+            return;
+        }
+        throw error;
+    }
+};
+
 /* Claim a warm machine for this sandbox, or answer undefined and let the cold path build one. The pool row
  * is won by a guarded update (`ready` → `claimed`), so two simultaneous claims can never brand the same
  * machine; the winner writes the sandbox's real config into it (identity in, no-op boot override out, one
- * `hostedMachineConfig`, so pool-born and built-to-order machines cannot drift), starts it, and commits the
- * hand-off in one transaction: the HostedMachine row appears and the pool row disappears together, so no
- * crash leaves a machine that is both claimable and somebody's.
+ * `hostedMachineConfig`, so pool-born and built-to-order machines cannot drift), which is also what starts it
+ * (the update carries the launch, see fly.ts: a separate start loses a race against Fly's own `replacing`
+ * state and refused every claim this pool ever made), and commits the hand-off in one transaction: the
+ * HostedMachine row appears and the pool row disappears together, so no crash leaves a machine that is both
+ * claimable and somebody's. The start below is the same idempotent confirmation a wake uses: it turns "Fly
+ * launched it" into "Fly says it is live", and a machine that is genuinely not coming up still fails here and
+ * moves the claim to the next candidate.
  *
  * Region is a hard filter, not a preference: an EEA caller may only ever claim an EEA machine, or the privacy
  * policy's residency promise breaks. `wokeAt` opens the hour meter here, at claim, the pool's own no-op boot
@@ -112,7 +134,7 @@ const claimPoolMachine = async (
             // oxlint-disable-next-line eslint/no-await-in-loop
             await updateMachine(config.hosted.flyApiToken, row.appName, row.machineId, hostedMachineConfig(config, args, row.appName, row.volumeId));
             // oxlint-disable-next-line eslint/no-await-in-loop
-            await startMachine(config.hosted.flyApiToken, row.appName, row.machineId);
+            await wakeHosted(config, row);
             // oxlint-disable-next-line eslint/no-await-in-loop
             await prisma.$transaction([
                 prisma.hostedMachine.create({
@@ -179,27 +201,12 @@ export const provisionHosted = async (
     }
 };
 
-// Power on a (probably) stopped machine. Idempotent by reading the state on refusal: Fly answers an error for
-// a machine that is already started/starting, and that answer IS success here, the browser's daemon probe is
-// what decides when the sandbox is actually back.
-const LIVE_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
-export const wakeHosted = async (config: Config, hosted: { appName: string; machineId: string }): Promise<void> => {
-    try {
-        await startMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId);
-    } catch (error) {
-        const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch(() => undefined);
-        if (machine !== undefined && LIVE_STATES.has(machine.state)) {
-            return;
-        }
-        throw error;
-    }
-};
-
 /* An explicit "start it over" is also the hosted lane's repair/update boundary. A plain stop/start keeps the
  * rootfs Fly resolved when the Machine was first created, so a corrected image behind the configured tag can
  * never repair a boot-crashing machine: every click simply runs the same broken bytes again. Replace the full
  * config while the machine is stopped, preserving its volume id and identity, then take the ordinary wake
- * path. `updateMachine` uses skip_launch, so the start remains one explicit, metered transition. */
+ * path, which the replacement has already started: still exactly one metered transition, with the wake as its
+ * confirmation. */
 export const refreshHosted = async (
     config: Config,
     args: HostedProvisionArgs,

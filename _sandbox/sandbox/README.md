@@ -36,6 +36,14 @@ reports the profile.
   output: so the agent writes no sleep loop and holds no turn open. The CLI's own scheduling tools
   (ScheduleWakeup, the Cron family) are disallowed on every turn: they live in a process that dies with the
   turn, so they accept schedules that can never fire.
+- Open a brand-new sandbox with something running in it. A fresh workspace used to arrive empty, so the first
+  screen of a product whose claim is "say what you want changed and watch it change" had nothing to change; the
+  first boot now seeds a one-page starter site as its own repo and starts its dev server
+  ([src/scaffold/starter-site.ts](src/scaffold/starter-site.ts)), and the browser puts that preview on screen on
+  the first visit. It is a file COPY, not a scaffold: the image bakes the whole monorepo with its dependencies
+  already installed, so the wait is a few seconds rather than the minute or two an install costs. Fresh
+  workspaces only, and only where the daemon owns the workspace, a local daemon runs over a folder the user
+  chose and never seeds anything into it.
 - Run the `intentic` CLI in-workspace and stream its ndjson lines; commit/push the repos.
 - Turn the composer's voice into text without the audio leaving the box: the browser records and segments
   utterances itself and posts each one's WAV to `/speech/transcribe`, where whisper.cpp answers
