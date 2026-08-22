@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { watch, type FSWatcher } from "chokidar";
 import type { Logger } from "pino";
+import { Coalescer } from "@intentic/base/async";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 /* REF-MOVE PUSH, the third change feed, beside the file watcher and the repo-set differ.
@@ -29,7 +30,22 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 // One batch fires this long after the FIRST move in a window, so a rebase replaying forty commits is one frame
 // rather than forty. Matches the file watcher's own debounce.
-const BATCH_MS = 250;
+export const BATCH_MS = 250;
+
+/* The coalescing rule itself, apart from the watcher that feeds it: repo names accumulate while the window is
+ * open and go out as one sorted, deduplicated batch when it closes, so a commit that writes both a ref and the
+ * reflog names its repo once.
+ *
+ * It is a separate factory for the same reason createPathBatcher is one in workspace-watch.ts: it is the only
+ * part of this file a test can pin down. Counting batches behind a real watcher measures how fast a loaded
+ * machine ran three git subprocesses and delivered their inotify events, not what this code does, the "green on
+ * a box, red on a busy runner" trap _tools/testing/src/vitest.ts is written against. Reached without a watcher
+ * in front of it, the rule answers to timers the test owns.
+ *
+ * A Coalescer, not a Delayer: the window opens on the FIRST move and later ones join it rather than pushing the
+ * deadline out, so a rebase that never goes quiet still reports within a window instead of only once it ends. */
+export const createRepoBatcher = (emit: (repos: string[]) => void): Coalescer<string> =>
+    new Coalescer<string>(BATCH_MS, (batch) => emit([...new Set(batch)].toSorted()));
 
 export interface RefWatch {
     subscribe(listener: (repos: string[]) => void): () => void;
@@ -70,25 +86,11 @@ export const createRefWatch = (
 ): RefWatch & { close: () => void } => {
     const listeners = new Set<(repos: string[]) => void>();
     const watchers = new Map<string, FSWatcher>();
-    const moved = new Set<string>();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const flush = (): void => {
-        timer = undefined;
-        const batch = [...moved].toSorted();
-        moved.clear();
-        if (batch.length === 0) {
-            return;
-        }
+    const batcher = createRepoBatcher((batch) => {
         for (const listener of listeners) {
             listener(batch);
         }
-    };
-
-    const note = (repo: string): void => {
-        moved.add(repo);
-        timer ??= setTimeout(flush, BATCH_MS).unref();
-    };
+    });
 
     const watchRepo = async (repo: string): Promise<void> => {
         if (watchers.has(repo)) {
@@ -108,7 +110,7 @@ export const createRefWatch = (
          * `refs/heads/<name>` and `refs/remotes/<remote>/<name>` are the deep cases, and a ref hierarchy nested
          * further than that is not one any surface here renders. */
         const watcher = watch(watchPaths(dirs), { ignoreInitial: true, depth: 2 });
-        watcher.on("all", () => note(repo));
+        watcher.on("all", () => batcher.add(repo));
         watcher.on("error", (error) => logger?.warn({ err: error, repo }, "ref watch error"));
         watchers.set(repo, watcher);
     };
@@ -139,10 +141,7 @@ export const createRefWatch = (
         },
         close: () => {
             unsubscribe();
-            if (timer !== undefined) {
-                clearTimeout(timer);
-                timer = undefined;
-            }
+            batcher.dispose();
             for (const watcher of watchers.values()) {
                 void watcher.close();
             }

@@ -75,7 +75,10 @@ const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve,
  * is the proof, and it costs exactly what attaching took. Each `move` puts the repo back as it found it, so
  * the case still starts from the state it was written against. */
 const attached = async (batches: string[][], move: () => Promise<void>): Promise<void> => {
-    const deadline = Date.now() + 10_000;
+    // A hang detector, not a latency budget: attaching plus one probe measured ~7s with every package's suite
+    // running at once, so a ten-second ceiling was about to fail a watcher that was merely waiting its turn.
+    // Well clear of that, still a fraction of the suite's own minute, so a watcher that never attaches says so.
+    const deadline = Date.now() + 30_000;
     while (batches.length === 0) {
         if (Date.now() >= deadline) {
             throw new Error("the ref watch never reported a probe move");
@@ -160,7 +163,14 @@ test("a checkout inside a linked worktree is reported, HEAD being per-worktree",
     await waitFor(() => batches.some((batch) => batch.includes("linked")));
 });
 
-test("a burst of commits coalesces into one batch", async () => {
+/* HOW MANY BATCHES A BURST BECOMES IS NOT ASKED HERE, and that is the point of the case rather than a gap in
+ * it. Counting them behind a real watcher measures whether the runner got three git subprocesses and their
+ * inotify events through inside one 250ms window: true on an idle box, false on one running every package's
+ * vitest at once, where each commit opened its own window and the case failed as "expected 3 to be less than
+ * 3", reading as a broken debounce over a watcher that was working. The coalescing is settled in ref-watch.test
+ * .ts against timers the test owns; what only real git can say is what a burst of real commits is reported AS,
+ * which is this. */
+test("every batch from a burst of commits names the repo that moved, and nothing else", async () => {
     const root = await workspace();
     const batches = watchRoot(root);
     await attached(batches, probeBranch(root));
@@ -174,6 +184,4 @@ test("a burst of commits coalesces into one batch", async () => {
     // Past the debounce window, so a straggler batch would have landed by the assertion.
     await settle();
     expect(batches.every((batch) => batch.length === 1 && batch[0] === "root")).toBe(true);
-    // The point of the debounce: three commits are not three round trips to every connected browser.
-    expect(batches.length).toBeLessThan(3);
 });

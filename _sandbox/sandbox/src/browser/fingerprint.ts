@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { SingleFlight } from "@intentic/base/async";
 import { statePath } from "../workspace/state-paths.js";
 
 /* ONE STABLE, PLAUSIBLE DEVICE PER PROFILE OWNER.
@@ -45,27 +46,59 @@ import { statePath } from "../workspace/state-paths.js";
 const seedPath = (root: string): string => statePath(root, ".intentic/local/browser/", ".fingerprint-seed");
 
 let cachedSeed: { root: string; seed: string } | undefined;
+const minting = new SingleFlight<string, string>();
 
-// Read the sandbox's seed, minting it on first use. `wx` makes the mint exclusive, so two turns racing on a
-// cold workspace agree on whichever won rather than each overwriting the other's devices.
+// What a seed read back off disk has to look like before it is believed: the 32 bytes this module writes, hex.
+const SEED_SHAPE = /^[0-9a-f]{64}$/;
+
+/* PUBLISHING A FRESH SEED SO NO READER CAN SEE HALF OF IT.
+ *
+ * `writeFile(…, { flag: "wx" })` is exclusive but it is not atomic: it CREATES the file and then writes the
+ * bytes, and whoever lost the race opens it in between, reads an EMPTY STRING, and uses that as the sandbox's
+ * seed. Two profiles in one sandbox then derive two different machines from two different seeds, which is the
+ * property at the top of this file broken by an interleaving rather than by anything anyone wrote.
+ *
+ * Staging the bytes under a private name and LINKING them into place closes the window: the link is atomic, it
+ * fails with EEXIST if another writer got there first (so the mint stays exclusive), and a reader sees either no
+ * file at all or the whole seed. */
+const publishSeed = async (path: string, seed: string): Promise<boolean> => {
+    const staging = `${path}.${randomBytes(6).toString("hex")}`;
+    try {
+        await writeFile(staging, seed, { mode: 0o600 });
+        await link(staging, path);
+        return true;
+    } catch {
+        return false;
+    } finally {
+        await rm(staging, { force: true });
+    }
+};
+
+const mintSeed = async (root: string): Promise<string> => {
+    const path = seedPath(root);
+    await mkdir(dirname(path), { recursive: true });
+    const minted = randomBytes(32).toString("hex");
+    if (await publishSeed(path, minted)) {
+        return minted;
+    }
+    // Either it already existed or the write lost the race; the file on disk is the answer either way. A read
+    // that fails, or that comes back as anything but a seed, leaves the process seed, which is stable for this
+    // daemon's lifetime and beats throwing a browser away over a fingerprint detail.
+    const onDisk = (await readFile(path, "utf8").catch(() => "")).trim();
+    return SEED_SHAPE.test(onDisk) ? onDisk : minted;
+};
+
+/* Read the sandbox's seed, minting it on first use.
+ *
+ * ONE MINT PER ROOT AT A TIME, and single-flighting it is about the device rather than about the cost of a
+ * second hash. Two callers reaching a cold workspace together each minted their own seed, and each fell back to
+ * its own if the publish or the read-back hiccuped: two profiles in one sandbox, two machines, two clocks, on
+ * one egress address. Everyone who asks while a mint is in flight now gets that mint's answer. */
 const sandboxSeed = async (root: string): Promise<string> => {
     if (cachedSeed?.root === root) {
         return cachedSeed.seed;
     }
-    const path = seedPath(root);
-    await mkdir(dirname(path), { recursive: true });
-    const seed = await (async () => {
-        const minted = randomBytes(32).toString("hex");
-        try {
-            await writeFile(path, minted, { flag: "wx", mode: 0o600 });
-            return minted;
-        } catch {
-            // Either it already existed or the write lost the race; the file on disk is the answer either way.
-            // A read that also fails leaves the process seed, which is stable for this daemon's lifetime and
-            // beats throwing a browser away over a fingerprint detail.
-            return await readFile(path, "utf8").catch(() => minted);
-        }
-    })();
+    const seed = await minting.run(root, () => mintSeed(root));
     cachedSeed = { root, seed };
     return seed;
 };

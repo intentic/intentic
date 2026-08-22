@@ -68,6 +68,24 @@ test("every profile in one sandbox agrees on the clock and the language", async 
     expect(two.locale).toBe(one.locale);
 });
 
+/* THE SAME PROPERTY ON A COLD WORKSPACE, which is where it was actually breaking: the case above went red on a
+ * loaded runner, two profiles in one sandbox on two clocks, and green everywhere else.
+ *
+ * The seed is minted on first use, so profiles that ask together all ask before it exists. Each minted its own
+ * and published it exclusively, and the loser then had to read the winner's file back to agree with it: any
+ * hiccup in that hand-off left it deriving from the seed it had minted instead. The reachable one is the
+ * exclusive create's own window, an existing but still EMPTY file, which reads back as a perfectly usable
+ * different seed. One mint now serves everyone who asked while it was in flight. */
+test("profiles that all reach a cold workspace at once still agree on one device", async () => {
+    const root = tempRoot();
+    const owners = ["alice", "bob", "carol", "dave", "erin", "frank", "grace", "heidi"];
+    const devices = await Promise.all(owners.map((owner) => browserFingerprint(root, owner)));
+    expect(new Set(devices.map((device) => `${device.timezoneId}|${device.locale}`)).size).toBe(1);
+    // And the seed they agreed on is the one on disk, so the next launch meets the same machines.
+    const again = await Promise.all(owners.map((owner) => browserFingerprint(root, owner)));
+    expect(again).toEqual(devices);
+});
+
 /* THE EXCEPTION THAT KEEPS THE RULE. The clock agrees across a sandbox because every profile leaves by the
  * same address — and a profile bound to a geo exit does not. Handed that exit's country as its `place`, it
  * claims that country's clock and language while every unbound profile beside it still claims the sandbox's.
