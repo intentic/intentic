@@ -74,11 +74,19 @@ describe("systemdUserUnit", () => {
     });
 
     // A deliberate `systemctl --user stop` must stay stopped: the same call the macOS LaunchAgent makes by
-    // omitting KeepAlive. `always` would fight the user.
+    // omitting KeepAlive. `always` would fight the user. What the agent owes in return is a non-zero exit on a
+    // signal, or `on-failure` reads every kill it did not choose as a clean stop (see systemdUserUnit).
     it("restarts on failure but not on a clean stop", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
         expect(unit).toContain("Restart=on-failure");
         expect(unit).not.toContain("Restart=always");
+    });
+
+    /* The start limit is the same silent death reached slowly: systemd's default gives up after a few restarts
+     * and parks the unit in `failed`, so an agent that cannot start stops being retried AND stops being
+     * mentioned. A resident agent should keep trying, and keep saying so in its own log. */
+    it("never gives up on a unit that keeps restarting", () => {
+        expect(systemdUserUnit(SPEC, BINARY)).toContain("StartLimitIntervalSec=0");
     });
 
     /* A user unit does NOT inherit a login shell's environment. Both agents shell out to `git` and `ssh` on every

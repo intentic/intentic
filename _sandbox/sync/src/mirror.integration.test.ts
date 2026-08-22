@@ -13,8 +13,16 @@ import type { ForwardExecutor } from "./mirror.js";
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { mirrorPidPath } = await import("./config.js");
-const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, retirePairingMirror, runMirrorWatch, stopWatcher, SyncAuthError } =
-    await import("./mirror.js");
+const {
+    fetchWorkspacePorts,
+    reconcileForwards,
+    readLiveWatcherPid,
+    retirePairingMirror,
+    runMirrorWatch,
+    signalExitCode,
+    stopWatcher,
+    SyncAuthError,
+} = await import("./mirror.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
 // setup() creates ~/.intentic/sync when it writes the state; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(mirrorPidPath), { recursive: true });
@@ -205,6 +213,28 @@ describe("runMirrorWatch single-holder guard", () => {
         } finally {
             other.kill("SIGKILL");
         }
+    });
+});
+
+/* THE NUMBER THAT DECIDES WHETHER SYNC COMES BACK. The watcher is supervised by `Restart=on-failure` (a systemd
+ * user unit, so a deliberate `systemctl --user stop` stays stopped), which means a clean exit is never restarted.
+ * A signal is not a clean exit: it is something ELSE stopping this process, and the only kinds that should stay
+ * stopped are the ones systemd itself initiates, which it already refuses to restart whatever the code says.
+ *
+ * Field failure: the watcher took a SIGTERM it never asked for, exited 0, and desktop sync was off for five
+ * hours with both endpoints reading `Connected: No` and nothing restarting it. Exiting 0 here is what said
+ * "someone meant this". */
+describe("signalExitCode", () => {
+    it("reports a signal as a failure, so a supervisor restarts what it did not stop", () => {
+        expect(signalExitCode("SIGTERM")).toBe(143);
+        expect(signalExitCode("SIGINT")).toBe(130);
+    });
+
+    // 128+signal, the shell's own convention, rather than a number of ours: a supervisor's logs and `$?` both
+    // read it as "terminated by SIGTERM" without anyone consulting this file.
+    it("uses 128 + the signal number", () => {
+        expect(signalExitCode("SIGTERM")).toBe(128 + 15);
+        expect(signalExitCode("SIGINT")).toBe(128 + 2);
     });
 });
 

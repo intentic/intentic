@@ -253,11 +253,29 @@ export const readLiveWatcherPid = async (): Promise<number | undefined> => await
  * cost of a failed write is a status line that under-claims, which is the safe direction for a liveness signal. */
 const beat = async (): Promise<void> => await writeFile(mirrorHeartbeatPath, String(Date.now())).catch(() => {});
 
-// On SIGTERM/SIGINT the watcher drops its pidfile and exits, leaving the forwards up (Mutagen's daemon holds
-// them) so a restart never breaks live connections. The heartbeat goes with the pidfile: a stopped watcher must
-// not leave behind a stamp that reads as a pass finishing moments ago.
-const watcherShutdown = (): void =>
-    void Promise.all([rm(mirrorPidPath, { force: true }), rm(mirrorHeartbeatPath, { force: true })]).finally(() => process.exit(0));
+/* On SIGTERM/SIGINT the watcher drops its pidfile and exits, leaving the forwards up (Mutagen's daemon holds
+ * them) so a restart never breaks live connections. The heartbeat goes with the pidfile: a stopped watcher must
+ * not leave behind a stamp that reads as a pass finishing moments ago.
+ *
+ * IT EXITS 128+SIGNAL, NOT 0, and that number is the whole difference between "sync came back" and "sync was
+ * silently off for a day". A signal is not this process deciding to stop, it is something else deciding for it,
+ * and the supervisor is the only party that can tell WHICH something: systemd never restarts a unit whose stop it
+ * initiated, whatever the exit code, so `systemctl --user stop`, `disable --now` and the `unregisterAutostart`
+ * every teardown path runs first all still stay stopped. Everything ELSE that delivers a SIGTERM (a WSL session
+ * torn down under the distro, a logind session ending, a stray `pkill`) is exactly the case that must come back,
+ * and under `Restart=on-failure` an exit of 0 told systemd it was a clean stop and it never did.
+ *
+ * Observed, and the reason for the change: this machine's watcher took a SIGTERM it never asked for, exited 0,
+ * and stayed down for five hours with `Connected: No` on both endpoints. Nothing restarted it and nothing said
+ * so, because the thing that would have said so was the loop. The exits the watcher CHOOSES: nothing paired any
+ * more, and another watcher already holding the pidfile, still return normally and so still exit 0, which is what
+ * keeps a refusing watcher from being restarted into refusing again every RestartSec. */
+export const signalExitCode = (signal: NodeJS.Signals): number => (signal === "SIGINT" ? 130 : 143);
+
+const watcherShutdown = (signal: NodeJS.Signals): void =>
+    void Promise.all([rm(mirrorPidPath, { force: true }), rm(mirrorHeartbeatPath, { force: true })]).finally(() =>
+        process.exit(signalExitCode(signal)),
+    );
 
 // Persist one pairing's port picture, leaving every other pairing's alone. Targeted because the watcher and a
 // concurrent `setup` write this file for different reasons, a whole-state write from the tick's stale read is

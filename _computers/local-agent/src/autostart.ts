@@ -138,9 +138,29 @@ const systemdUserAvailable = (): boolean => {
  * launchd and the desktop session.
  *
  * `Restart=on-failure` and not `always`: a deliberate `systemctl --user stop` must stay stopped, which is the same
- * call the macOS LaunchAgent makes by omitting KeepAlive. And PATH is set explicitly because a user unit does NOT
- * inherit a login shell's environment, it starts from a minimal PATH, while these agents shell out to `git` and
- * `ssh` on every tick (the git bridge) and to Mutagen's own ssh transport.
+ * call the macOS LaunchAgent makes by omitting KeepAlive. What that leaves resting on the AGENT is its exit code,
+ * and it is worth stating here because the two halves are written in different packages: `on-failure` restarts a
+ * clean exit never, so an agent that answers a SIGTERM by exiting 0 is telling systemd that every kill it did not
+ * choose was a clean stop. It is not, and the cost is a resident agent that is simply gone, with a unit reading
+ * `inactive (dead)` and a status line that says `code=exited, status=0/SUCCESS` as though someone had asked. An
+ * agent supervised here must exit NON-ZERO on a signal (128+signal) and reserve 0 for the exits it decides on;
+ * systemd distinguishes its own stops by itself, so a deliberate one stays stopped regardless of the code.
+ *
+ * The visible cost of that, and it is the whole cost: after `systemctl --user stop` the unit rests in `failed`
+ * rather than `inactive (dead)`, because 143 is not a clean code and systemd labels the state by the code even
+ * when it asked for it. `SuccessExitStatus=SIGTERM` would tidy it and would also switch the restart back off,
+ * since it works by redefining what `on-failure` considers a failure: the tidier state and the restart are the
+ * same setting. The state after an UNREQUESTED kill is `failed` too, which is the honest reading, and none of the
+ * agents' own surfaces (`status`, the pidfile, the log) consult the unit state at all.
+ *
+ * `StartLimitIntervalSec=0` for the same invariant one layer out: the default start limit gives up on a unit that
+ * restarts too often and parks it in `failed`, which is the silent-permanent-death this whole comment is about,
+ * reached the slow way. A background agent that cannot start is one that should keep saying so every RestartSec,
+ * into the log below, rather than one systemd stops mentioning.
+ *
+ * And PATH is set explicitly because a user unit does NOT inherit a login shell's environment, it starts from a
+ * minimal PATH, while these agents shell out to `git` and `ssh` on every tick (the git bridge) and to Mutagen's
+ * own ssh transport.
  *
  * THE OUTPUT GOES WHERE THE AGENT SAYS IT GOES. A unit with no StandardOutput sends the loop's stdout to the
  * journal, while the agent's own commands, its notes and its docs all name its log file, so on exactly the
@@ -162,6 +182,7 @@ StandardOutput=append:${spec.logPath}
 StandardError=append:${spec.logPath}
 Restart=on-failure
 RestartSec=5
+StartLimitIntervalSec=0
 Environment=PATH=${join(homedir(), ".local", "bin")}:/usr/local/bin:/usr/bin:/bin
 
 [Install]
