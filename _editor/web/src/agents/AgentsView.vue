@@ -1169,7 +1169,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     v-for="lane in LANES"
                     :key="lane.key"
                     :data-drop="lane.key === 'finished' && archiveOpen ? undefined : lane.key"
-                    class="lane flex min-w-0 flex-col rounded-xl transition-colors"
+                    class="flex min-w-0 flex-col rounded-xl transition-colors"
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
                     <!-- The Finished lane doubles as the archive's window, so its header is the one that
@@ -1178,9 +1178,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                          one page is a page and a half of cards, and a card is only readable as "finished" if
                          the lane it belongs to is still on screen. It pins inside its own section, so it
                          leaves with it rather than sitting over the next lane's cards. -->
-                    <!-- Pinned, it paints the LANE's own fill (.lane-header) rather than canvas: a header a
-                         shade off the slab it caps is a seam across the column. -->
-                    <header class="flex items-center gap-2.5 px-3.5 py-2.5" :class="narrow ? 'lane-header sticky top-0 z-10 rounded-t-xl' : ''">
+                    <header class="flex items-center gap-2.5 px-1 py-2" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
                         <template v-if="lane.key === 'finished' && archiveOpen">
                             <button
                                 type="button"
@@ -1262,7 +1260,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <!-- The lane's HELD WAKES, first of all: a hold is the one row here that is WHOLLY waiting
                          on you: everything below it is at least running. Attention lane only (HeldWakeCard
                          says why), and outside the TransitionGroup for the runs' reason. -->
-                    <div v-if="lane.key === 'attention' && !archiveOpen && heldWakes.length > 0" class="flex flex-col gap-2.5 px-2.5 pb-2.5">
+                    <div v-if="lane.key === 'attention' && !archiveOpen && heldWakes.length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <HeldWakeCard
                             v-for="entry in heldWakes"
                             :key="entry.id"
@@ -1278,7 +1276,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                          fleet, and a row of another kind moving through it would drag the cards it holds.
                          In the archive it is the archived runs that list here, in the same slot: the steps
                          filed away with a run have no cards of their own there either. -->
-                    <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-2.5 px-2.5 pb-2.5">
+                    <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <WorkflowRunCard
                             v-for="run in runsFor(lane.key)"
                             :key="run.runId"
@@ -1295,7 +1293,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </div>
                     <p
                         v-if="lane.key === 'finished' && archiveOpen && archivedCards.length === 0 && runsFor('finished').length === 0"
-                        class="px-3.5 pb-3.5 text-2xs text-subtle"
+                        class="px-1 pb-3 text-2xs text-subtle"
                     >
                         {{
                             purged
@@ -1312,11 +1310,11 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         v-else-if="
                             cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && heldWakes.length > 0)
                         "
-                        class="px-3.5 pb-3.5 text-2xs text-subtle"
+                        class="px-1 pb-3 text-2xs text-subtle"
                     >
                         {{ filtering ? "No matches in this lane." : lane.empty }}
                     </p>
-                    <TransitionGroup v-else tag="div" name="lane" class="relative flex flex-col gap-2.5 px-2.5 pb-2.5">
+                    <TransitionGroup v-else tag="div" name="lane" class="relative flex flex-col gap-2.5 pb-2.5">
                         <AgentCard
                             v-for="agent in cardsFor(lane.key)"
                             :key="agent.id"
@@ -1348,7 +1346,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <button
                         v-if="lane.key === 'finished' && !archiveOpen && !filtering && hiddenFinished > 0"
                         type="button"
-                        :class="ui.addTile(`mx-2.5 mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
+                        :class="ui.addTile(`mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
                         @click="showAllFinished = !showAllFinished"
                     >
                         <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
@@ -1361,7 +1359,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <button
                         v-if="lane.key === 'finished' && archiveOpen && archiveHidden > 0"
                         type="button"
-                        :class="ui.addTile(`mx-2.5 mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
+                        :class="ui.addTile(`mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
                         @click="archiveShown += ARCHIVE_PAGE"
                     >
                         <Icon name="chevron-down" class="text-2xs" />
