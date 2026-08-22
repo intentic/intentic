@@ -993,20 +993,70 @@
     }
 
     /* ── AND WHEN IT CANNOT BE PRESSED IT IS A PLATE STILL IN THE WALL ────────────────────────────────────
-     * "Commit" spends most of its life disabled with nothing staged, and the app's global disabled treatment
-     * is opacity alone — which on a plaque this pale still leaves a bright object, so the state that used to
-     * be read by mistake would now be the one state that is genuinely unavailable. It loses its stain, its
-     * lift and its contact shadow instead: an uncut blank sunk flush into the surface, with the shadow turned
-     * INWARD. Nothing about it says press me, and the moment a file is staged the whole object comes up out
-     * of the wall — which is a state change a person catches out of the corner of their eye. */
-    [data-skin="sanctum"] .p-button.p-button-success:where(:not(.p-button-text, .p-button-outlined, .p-button-link)):disabled {
-        color: #6a6f63;
-        text-shadow: 0 1px 0 rgba(255, 250, 238, 0.08);
-        background-color: #3a3a34;
+     * A disabled button in this skin loses its lift and its contact shadow, becoming an uncut blank sunk flush
+     * into the surface with the shadow turned INWARD. It overrides the app's generic `opacity: 0.6` so that
+     * dark text or pale stone does not turn into an illegible muddy wash: the label stays crisp in a dedicated
+     * muted tone (~4.5:1 contrast against the sunken ground), and the object unmistakably reads as unavailable. */
+    [data-skin="sanctum"]
+        .p-button:where(
+            :not(
+                    .p-button-secondary,
+                    .p-button-info,
+                    .p-button-contrast,
+                    .p-button-text,
+                    .p-button-outlined,
+                    .p-button-link,
+                    .p-button-danger,
+                    .p-button-warn,
+                    .p-button-success,
+                    .ui-button-loud
+                )
+        ):disabled {
+        color: #8c8375;
+        text-shadow: none;
+        background-color: #38342e;
+        background-image: none;
         border-color: rgba(0, 0, 0, 0.45);
+        opacity: 1;
         box-shadow:
             inset 0 1px 2px rgba(0, 0, 0, 0.5),
             inset 0 -1px 0 rgba(255, 250, 238, 0.05);
+    }
+    [data-skin="sanctum"] .p-button.p-button-success:where(:not(.p-button-text, .p-button-outlined, .p-button-link)):disabled {
+        color: #7d8a77;
+        text-shadow: none;
+        background-color: #2e3830;
+        background-image: none;
+        border-color: rgba(0, 0, 0, 0.45);
+        opacity: 1;
+        box-shadow:
+            inset 0 1px 2px rgba(0, 0, 0, 0.5),
+            inset 0 -1px 0 rgba(255, 250, 238, 0.05);
+    }
+    [data-skin="sanctum"] .p-button.ui-button-loud:disabled {
+        color: #8c7d68;
+        text-shadow: none;
+        background-color: #383024;
+        background-image: none;
+        border-color: rgba(70, 50, 25, 0.4);
+        opacity: 1;
+        box-shadow:
+            inset 0 1px 2px rgba(0, 0, 0, 0.5),
+            inset 0 -1px 0 rgba(255, 250, 238, 0.05);
+    }
+    [data-skin="sanctum"]
+        .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn):where(
+            :not(.p-button-text, .p-button-outlined, .p-button-link)
+        ):disabled {
+        color: #8a7c68;
+        background-color: color-mix(in oklab, var(--ui-button-tone) 4%, var(--color-card));
+        border-color: rgba(201, 160, 92, 0.08);
+        opacity: 1;
+        box-shadow: none;
+    }
+    [data-skin="sanctum"] .p-button:where(.p-button-text, .p-button-outlined, .p-button-link):disabled {
+        color: #8a7c68;
+        opacity: 1;
     }
 
     /* ── THE LOUD BUTTON, AS THE SITE'S OWN GOLD PLATE ────────────────────────────────────────────────────
