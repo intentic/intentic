@@ -16,7 +16,7 @@ import { screenshotImage } from "../browser/browser-artifacts.js";
 import { browserServerOfTool } from "../browser/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
-import { errorFrame, rateLimitFrame, trialRetryFrame } from "./error-frames.js";
+import { errorFrame, rateLimitFrame, retryStormFrame, trialRetryFrame } from "./error-frames.js";
 import type { TurnAllowance } from "./harness-credentials.js";
 import { opt } from "./opt.js";
 import { noteDelegation, noteSubagentSpawn, noteSubagentTask, settleDelegation, type SubagentTaskMessage, type SubagentTurn } from "./subagents.js";
@@ -84,6 +84,31 @@ const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>):
  * which the daemon owns and outlives the turn, and holding on one would keep a turn spinning for as long as a
  * dev server runs. `monitor` is ambient by design and lives exactly as long as the session, never waited on. */
 const HELD_TASK_TYPES: ReadonlySet<string> = new Set(["subagent", "workflow", "local_workflow"]);
+
+/* HOW DEEP AN IN-TURN RETRY STORM MAY GET BEFORE THE TURN STOPS CLAIMING TO BE WORKING.
+ *
+ * The harness's own budget is three hundred attempts with no ceiling on the wait it will honour
+ * (CLAUDE_CODE_RETRY_WATCHDOG, harness-credentials.ts), and for a provider having a bad minute that is exactly
+ * right: retrying inside the live turn keeps the session, the prompt cache and everything the agent has already
+ * done, where dying costs a respawn. It is exactly wrong for a provider that refuses EVERY request, and from in
+ * here the two are indistinguishable, so the only honest bound is how many refusals in a row a turn sits through
+ * before handing itself to the layer built for waiting.
+ *
+ * THAT LAYER IS BETTER AT WAITING IN EVERY WAY THAT MATTERS. The breaker (provider-health.ts) escalates 30s →
+ * 20m over six attempts, spends ONE probe per provider however many conversations are stranded, and the resume
+ * continues from the session the dead turn reported (turn-resume.ts), so the work is kept rather than re-done.
+ * What it also does, and the harness's budget cannot, is tell the truth while it waits: a turn spinning inside
+ * that budget reads as `running` everywhere, which is a card sitting in the Active lane under a "Working…"
+ * spinner for as long as the storm lasts. That is what this bound is really for. A local model whose
+ * llama-server refused the harness's tool schema outright (500 on every request, packs/llamacpp.Dockerfile has
+ * the story) held its card there indefinitely, saying work was in flight while nothing had happened at all.
+ *
+ * Eight is roughly two minutes of the SDK's own backoff: long enough that an ordinary capacity burst or a
+ * rolling deploy is absorbed in place and nobody learns it happened, short enough that a provider which cannot
+ * serve this turn at all becomes news inside the pause a person will stare at a spinner for. `attempt` is per
+ * REQUEST and resets on every response the harness accepts, so a long turn losing the odd socket never
+ * approaches it; only a run of consecutive refusals does. */
+const MAX_IN_TURN_RETRIES = 8;
 
 // Live in-process background work, off the SDK's own level signal (replace semantics, a missed edge cannot
 // wedge a stale hold). Undefined on every other message, so the caller keeps its last count.
@@ -727,14 +752,26 @@ class TurnFold {
                     );
                     return true;
                 }
+                /* The storm is not clearing, so stop riding it out in here: the frame the harness would have
+                 * ended on eventually goes out now, agent.routes files it as the outage it is, and the resume
+                 * scheduler owns the waiting from this point (MAX_IN_TURN_RETRIES has the argument). */
+                if (message.attempt >= MAX_IN_TURN_RETRIES) {
+                    yield retryStormFrame(message.attempt, message.error_status ?? undefined);
+                    return true;
+                }
                 /* Every other retry is still happening INSIDE this turn, so nothing has failed yet and there is
                  * nothing in the transcript to write. Forwarded because the retry budget is deliberately long
                  * (CLAUDE_CODE_RETRY_WATCHDOG in harness-credentials.ts): without this status a turn riding out
-                 * an outage is indistinguishable from one that hung. */
+                 * an outage is indistinguishable from one that hung.
+                 *
+                 * The bound on the wire is whichever of the two will actually be honoured, and on this path that
+                 * is almost always OURS: promising the harness's three hundred while the branch above ends the
+                 * turn at eight is a countdown to a number nothing intends to reach. Read as a min rather than
+                 * hard-coded so a harness release that lowers its own budget under ours still governs. */
                 yield {
                     kind: "provider_retry",
                     attempt: message.attempt,
-                    maxAttempts: message.max_retries,
+                    maxAttempts: Math.min(message.max_retries, MAX_IN_TURN_RETRIES),
                     nextAttemptAt: Date.now() + message.retry_delay_ms,
                     ...opt("status", message.error_status ?? undefined),
                 };

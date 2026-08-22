@@ -758,7 +758,8 @@ test("an in-turn retry surfaces as a waiting status with its own next-attempt cl
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
-        { kind: "provider_retry", attempt: 3, maxAttempts: 300, nextAttemptAt: expect.any(Number), status: 529 },
+        // 300 is the harness's budget; 8 is the one the daemon will honour, and the wire carries the honoured one.
+        { kind: "provider_retry", attempt: 3, maxAttempts: 8, nextAttemptAt: expect.any(Number), status: 529 },
         { kind: "done" },
     ]);
 });
@@ -781,7 +782,58 @@ test("a retry with no HTTP status behind it omits the status instead of faking o
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
-        { kind: "provider_retry", attempt: 1, maxAttempts: 300, nextAttemptAt: expect.any(Number) },
+        { kind: "provider_retry", attempt: 1, maxAttempts: 8, nextAttemptAt: expect.any(Number) },
+        { kind: "done" },
+    ]);
+});
+
+/* THE STORM THAT IS NOT CLEARING. The harness would keep asking three hundred times, which for a provider that
+ * refuses every request is a card in the Active lane under a "Working…" spinner for the rest of the afternoon.
+ * The turn ends on the provider's own condition instead, which is what puts the waiting in the hands of the
+ * breaker and the resume scheduler, and the card where a reader can see it. */
+test("a retry storm past the in-turn bound ends the turn as an outage rather than spinning on", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            {
+                type: "system",
+                subtype: "api_retry",
+                session_id: "s",
+                attempt: 8,
+                max_retries: 300,
+                retry_delay_ms: 1_000,
+                error_status: 500,
+                error: "server_error",
+            },
+            // Never reached: the stream is over, which is the whole point, the CLI is not left retrying behind a
+            // card that has already settled.
+            { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "never" } } },
+        ),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "provider-outage", message: expect.stringContaining("refused 8 requests in a row (HTTP 500)") },
+        { kind: "done" },
+    ]);
+});
+
+test("a retry storm short of the bound is still absorbed in place: the turn keeps its session and says so", async () => {
+    const events = await collect(
+        request,
+        fakeQuery({
+            type: "system",
+            subtype: "api_retry",
+            session_id: "s",
+            attempt: 7,
+            max_retries: 300,
+            retry_delay_ms: 1_000,
+            error_status: 500,
+            error: "server_error",
+        }),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "provider_retry", attempt: 7, maxAttempts: 8, nextAttemptAt: expect.any(Number), status: 500 },
         { kind: "done" },
     ]);
 });

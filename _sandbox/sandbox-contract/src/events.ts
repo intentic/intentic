@@ -677,7 +677,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * a hang. The one action a user takes against an apparent hang is Stop, which is the only action that
      * actually loses the work, so the wait has to be visible, with its own next-attempt clock.
      *
-     * `attempt`/`maxAttempts` are the harness's own counters; `nextAttemptAt` (epoch ms) is when it will try
+     * `attempt` is the harness's own counter and `maxAttempts` is the bound that will actually be honoured,
+     * which on the Claude path is the daemon's own cap on how deep a storm may get rather than the harness's
+     * far longer budget (MAX_IN_TURN_RETRIES in sdk-stream.ts, which ends the turn at the cap and hands the
+     * waiting to the outage breaker). `nextAttemptAt` (epoch ms) is when it will try
      * again, so the readout counts down instead of freezing on a number nobody can interpret. BOTH are optional
      * for the same reason, which is that each runtime publishes a different half of the wait and none of them
      * publishes all of it: Claude's harness reports the delay and the bound, Codex says which attempt it is on

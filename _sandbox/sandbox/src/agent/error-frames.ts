@@ -109,6 +109,25 @@ export const rateLimitFrame = async (allowance: TurnAllowance | undefined, named
     };
 };
 
+/* THE PROVIDER IS REFUSING EVERY REQUEST, said as the outage it is, so the daemon's own waiting machinery takes
+ * the turn from here (sdk-stream.ts's api_retry cap has the whole argument for why the wait moves out of the
+ * live process).
+ *
+ * Coded `provider-outage` because that is what the harness's own last attempt would have called it, and the
+ * whole recovery path keys off the code: the breaker opens, the resume offer appears, the card settles. The
+ * count and the status are in the sentence because they are the only evidence the reader has that this is a
+ * provider refusing everything rather than a slow turn, and the last clause is the one that matters for the
+ * case this bound was written for: a provider that fails identically on every send is misconfigured, not down,
+ * and no amount of waiting fixes a request it will never accept. */
+export const retryStormFrame = (attempts: number, status: number | undefined): ErrorEvent => ({
+    kind: "error",
+    code: "provider-outage",
+    message:
+        `The provider refused ${attempts} requests in a row${status === undefined ? `` : ` (HTTP ${status})`}, so this turn stopped ` +
+        `waiting on it. Whatever it had already done is kept, and sending again picks it up. If every send fails the same way, ` +
+        `the endpoint is turning the request away rather than having a bad minute: check the model and endpoint on its card.`,
+});
+
 /* WHICH CONDITION an API failure actually is, the frame the client branches on.
  *
  * Two of these read the CATEGORY the SDK filed, and two read the SENTENCE, and the split is not arbitrary. A

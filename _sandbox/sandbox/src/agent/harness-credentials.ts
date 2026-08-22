@@ -153,6 +153,12 @@ export const harnessEnv = (credentials: {
      * turns that die anyway, and the `provider_retry` frame (agent.ts) as the thing that makes the resulting
      * long silence legible instead of looking like a hang.
      *
+     * THE THREE HUNDRED IS NOT THE OPERATIVE BOUND, and reading this comment alone as the policy is how a turn
+     * came to sit on the board saying "Working…" for half an hour against an endpoint that was refusing every
+     * single request. What this flag buys is patience for a provider having a bad minute; sdk-stream.ts caps how
+     * deep one storm may get (MAX_IN_TURN_RETRIES) and hands anything longer to the outage breaker, which waits
+     * better and, unlike a live process, says out loud that it is waiting.
+     *
      * Cost: the harness stops falling back to a cheaper model on server errors. We never set a fallback model,
      * so there is nothing to lose here.
      *
@@ -267,7 +273,8 @@ const resolveTrialCredentials = async (services: Services): Promise<HarnessCrede
         return {
             ok: false,
             code: "trial-unavailable",
-            message: "The free trial needs the sandbox's bundled model translator. Rebuild this sandbox from the published image, or connect Google in Sandbox ▸ Agent.",
+            message:
+                "The free trial needs the sandbox's bundled model translator. Rebuild this sandbox from the published image, or connect Google in Sandbox ▸ Agent.",
         };
     }
     return {
@@ -317,7 +324,8 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
     if (services.config.translator.url === "") {
         return {
             ok: false,
-            message: "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
+            message:
+                "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
         };
     }
     return {
