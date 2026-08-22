@@ -21,6 +21,7 @@ import { modelLabelFor, providerDisplayLabel } from "../composables/chat/provide
 import { type ChatMessage, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
 import { formatWait } from "../composables/chat/usageStatus";
 import { withShortcut } from "../composables/commands/useCommands";
+import { navigateInApp } from "../composables/mainWindow";
 import { invalidateAgentTranscript } from "../composables/chat/agentTranscript";
 import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
 import { CHAT_SURFACE } from "./chatSurface";
@@ -166,7 +167,11 @@ provide(
         agent: () => (props.conversation.isolated.value ? props.conversation.conversationId : undefined),
         terminal: () => props.conversation.agentTerminal.value,
         browser: () => props.conversation.agentBrowser.value,
-        navigate: (route) => void router.push(route),
+        /* Every destination a card offers is an APP view (a browser session, a subagent's transcript), and a
+         * popped-out chat is a window with no app in it: navigating there would replace the chat the reader is
+         * in. So out there the destination is handed to the app's own window, exactly as a file reference is
+         * (composables/mainWindow.ts); docked, this window IS that window and the push is the whole of it. */
+        navigate: (route) => navigateInApp(router, route),
     }),
 );
 const { activeSandboxId, reachable, connection } = useSandbox();

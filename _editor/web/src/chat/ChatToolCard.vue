@@ -123,7 +123,12 @@ const subagentFacts = computed<string[]>(() => {
  * load the page. Hand-written rather than a <RouterLink> for the reason chatSurface.ts gives. */
 const openSubagent = (event: MouseEvent, toolId: string): void => {
     const route = surface.subagentRoute?.(toolId);
-    if (route === undefined || surface.navigate === undefined || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    // Already answered: in a popped-out window every in-app link is caught on the way down and sent to the
+    // app's own window (composables/mainWindow.ts), so acting again here would open the transcript twice.
+    if (event.defaultPrevented || route === undefined || surface.navigate === undefined) {
+        return;
+    }
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
         return;
     }
     event.preventDefault();

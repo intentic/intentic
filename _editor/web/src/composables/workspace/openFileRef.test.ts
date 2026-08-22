@@ -3,7 +3,8 @@
 // The gesture end to end: markdown the agent wrote → rendered anchors → a real click on one → the editor tab
 // that opens. Every piece in between (the link markup, the delegated listener, the modifier gating) only means
 // anything joined up, and this is the only test that joins them.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { effectScope } from "vue";
 
 const openFile = vi.fn();
 const openAtLine = vi.fn();
@@ -21,6 +22,7 @@ const { fileLinkDecorator, renderMarkdown } = await import("../renderMarkdown");
 const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 const { openFileRefFromEvent } = await import("./openFileRef");
 const { workspaceAgent } = await import("./workspaceScope");
+const { claimFloating } = await import("../floating");
 
 // A prose surface bound exactly as ChatMessageView and MarkdownViewer bind it: one delegated listener on the
 // root, the rendered markdown injected beneath it.
@@ -45,6 +47,10 @@ beforeEach(() => {
     push.mockClear();
     resolved.mockReturnValue({});
     workspaceAgent.value = undefined;
+});
+
+afterEach(() => {
+    vi.unstubAllGlobals();
 });
 
 describe(`clicking a file the agent mentioned`, () => {
@@ -115,5 +121,27 @@ describe(`clicking a file an isolated conversation mentioned`, () => {
         clickFileLink(surface(`Also in src/foo.ts.`));
         await vi.waitFor(() => expect(openFile).toHaveBeenCalledWith(`src/foo.ts`));
         expect(workspaceAgent.value).toBeUndefined();
+    });
+});
+
+/* THE PANEL IS IN A WINDOW OF ITS OWN, and there is no app around it to put a file in: routing it would take
+ * away the chat the reader is reading. So the reference leaves for the app's own window and this one does not
+ * move (composables/mainWindow.ts). */
+describe(`clicking a file in a popped-out panel`, () => {
+    it(`sends it to the app's own window rather than routing this one`, () => {
+        const open = vi.fn(() => null);
+        vi.stubGlobal(`open`, open);
+        const scope = effectScope();
+        scope.run(() => claimFloating(`chat`, vi.fn()));
+
+        clickFileLink(surface(`Fixed in src/foo.ts:42.`));
+
+        // Nothing was asked of this window: no editor tab, no navigation, nothing resolved against its tree.
+        expect(openAtLine).not.toHaveBeenCalled();
+        expect(openFile).not.toHaveBeenCalled();
+        expect(push).not.toHaveBeenCalled();
+        // No window of the app is up, so the click opens one; with one already up it would simply be told.
+        expect(open).toHaveBeenCalledWith(`/workspace`, `intentic-main`);
+        scope.stop();
     });
 });

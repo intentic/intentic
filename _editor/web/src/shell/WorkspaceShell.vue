@@ -3,6 +3,8 @@ import { useDevice } from "@intentic/ui";
 import { defineAsyncComponent, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
+import { useMainWindow } from "../composables/mainWindow";
+import { openWorkspaceRef } from "../composables/workspace/openFileRef";
 import { prefetchViewsAtIdle } from "../router/prefetch";
 
 /* The persistent post-login CHROME, split by form factor: ShellDesktop (rail + docked chat column + terminal
@@ -28,6 +30,19 @@ useExtensionHost();
 onMounted(prefetchViewsAtIdle);
 const router = useRouter();
 const route = useRoute();
+
+/* WHERE A LINK PRESSED IN A POPPED-OUT PANEL LANDS. This window has the app in it, so it says so while
+ * something is floating and does the errands that window cannot: opening a file it was asked about, or taking
+ * the route a tool card offered. Announced from HERE rather than from the app's root because the promise is
+ * exactly "there is a shell in this window": a window on /login or /setup has nowhere to put a file, and a
+ * floating window that believed it did would hand its errand into a void (composables/mainWindow.ts). */
+useMainWindow((errand) => {
+    if (errand.kind === `file`) {
+        void openWorkspaceRef(errand.path, errand.line, errand.scope);
+    } else {
+        void router.push(errand.path);
+    }
+});
 
 // The form-factor route guards only fire on navigation, not on a live resize. If the viewport grows past the
 // mobile breakpoint while parked on a mobile-only page (menu, terminal), the desktop shell would render it in

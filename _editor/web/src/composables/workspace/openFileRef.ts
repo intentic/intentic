@@ -1,4 +1,5 @@
 import { router } from "../../router";
+import { handOffToMainWindow } from "../mainWindow";
 import { resolveWorkspaceRef } from "./resolveFileRef";
 import { useWorkspaceTabs } from "./useWorkspaceTabs";
 import { workspaceAgent } from "./workspaceScope";
@@ -16,6 +17,16 @@ import { workspaceAgent } from "./workspaceScope";
  * `_editor/web/src`. A reference nothing matches is opened as written, which lands on the file viewer's
  * not-found state naming exactly what was clicked. */
 export const openWorkspaceRef = async (path: string, line?: number, scope?: { readonly agent: string | undefined }): Promise<void> => {
+    /* NOT IN A POPPED-OUT PANEL. A floating window holds one panel and no app: routing it to the editor would
+     * take away the chat the reader is reading to make room for a view that window was never meant to hold. So
+     * the reference is handed to the app's own window, which opens the file and raises itself, and this window
+     * does not move at all. With no such window left, that call opens one (composables/mainWindow.ts).
+     *
+     * Handed over WHOLE and unresolved, before the scope below is touched: resolution asks the daemon within
+     * one workspace's tree, so it belongs to the window that will do the opening. */
+    if (handOffToMainWindow({ kind: `file`, path, line, scope })) {
+        return;
+    }
     /* WHOSE COPY, and the difference between "the shared tree" and "whichever one we are already in".
      *
      * A caller that KNOWS, a link in a conversation's prose, a tool card, passes the scope, and passing

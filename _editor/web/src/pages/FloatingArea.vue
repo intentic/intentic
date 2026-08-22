@@ -20,6 +20,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useKeybindings } from "../composables/commands/useKeybindings";
 import { useShellCommands } from "../composables/commands/useShellCommands";
 import { claimFloating, type FloatingPanel } from "../composables/floating";
+import { sendLinkToMainWindow } from "../composables/mainWindow";
 import { markPreviewOpened } from "../composables/preview/previewSurface";
 import { ACTIVE_KEY } from "../composables/sandbox/activeSandbox";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -72,6 +73,18 @@ if (panel === `terminal`) {
         }
     });
 }
+
+/* LINKS LEAD OUT OF HERE, NOT THROUGH HERE. This window is one panel and no app: a link followed inside it
+ * would replace the panel the reader deliberately put on a second screen with a view wearing an icon rail. So
+ * every in-app link pressed anywhere in this window is handed to the app's own window, which opens it and
+ * raises itself, and this window does not move at all — and with no such window left, one is opened
+ * (composables/mainWindow.ts).
+ *
+ * On the DOCUMENT rather than the panel's box, because the panel's overlays (menus, pickers, dialogs) teleport
+ * to the body and their links are links too. In the capture phase, because that is what lets it answer before
+ * a RouterLink acts on its own click. */
+onMounted(() => document.addEventListener(`click`, sendLinkToMainWindow, true));
+onUnmounted(() => document.removeEventListener(`click`, sendLinkToMainWindow, true));
 
 /* FOLLOWING THE WORKSPACE. Which sandbox the app is pointed at is one localStorage fact for the whole origin,
  * and `storage` is the browser's own notification that another window changed it. A floating panel is a view of

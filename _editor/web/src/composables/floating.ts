@@ -142,6 +142,12 @@ const claimants = new Set<(note: FloatingNote) => void>();
  *  into an empty rectangle. */
 export const floatingWindowPanel: ComputedRef<FloatingPanel | undefined> = computed(() => mine.value);
 
+/** SOMETHING IS POPPED OUT, and it is not this window. The one reading a window with the app in it needs about
+ *  the arrangement: while a panel sits in a window of its own, that window may have to hand work back here
+ *  (composables/mainWindow.ts), so this is when it is worth saying "the app is over here". Nothing floating,
+ *  nobody asking, and the announcement costs nothing. */
+export const floatsElsewhere: ComputedRef<boolean> = computed(() => elsewhere.value.size > 0);
+
 /* WHERE A FLOATING WINDOW COMES BACK. Kept per panel in localStorage, not the session, because the two are
  * different claims: where the user keeps this window is a habit that outlives tabs and browser restarts. Only
  * the floating window itself writes it, from its own realm, so the four numbers are always its own honest

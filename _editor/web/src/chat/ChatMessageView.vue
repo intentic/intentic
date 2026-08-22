@@ -15,6 +15,7 @@ import { formatCredits } from "../composables/membership/creditMeter";
 import { useAgents } from "../composables/agents/useAgents";
 import { errandOf } from "../composables/chat/errands";
 import { type ChatMessage, foldsIntoTurn, type PlanRequest, type TerminalHelpRequest } from "../composables/chat/transcript";
+import { navigateInApp } from "../composables/mainWindow";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { invalidateWorkspace } from "../composables/workspace/useHistory";
@@ -92,7 +93,8 @@ const capabilitySetupAt = (card: string): string => `/capabilities/${card}`;
 const connectCapability = async (message: ChatMessage): Promise<void> => {
     // The reply is awaited, not fired and forgotten, so the button holds while it is in the air. The
     // navigation is not: the page it opens is where the setup happens, and it should not wait on the daemon.
-    void router.push(capabilitySetupAt(message.capabilityOffer?.offer.card ?? ``));
+    // In a popped-out chat it lands in the app's own window, which is where a setup form belongs.
+    navigateInApp(router, capabilitySetupAt(message.capabilityOffer?.offer.card ?? ``));
     await decideCapabilityOffer(message, true);
 };
 

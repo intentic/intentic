@@ -6,6 +6,7 @@ import { useAgents } from "../agents/useAgents";
 import { useLoopDesigns } from "../agents/useLoopDesigns";
 import { startLoop, stopLoop } from "../agents/useLoops";
 import { useWorkflowRuns } from "../agents/useWorkflowRuns";
+import { navigateInApp } from "../mainWindow";
 import type { Conversation } from "./conversation";
 import { openRunInChat } from "./openRun";
 
@@ -192,7 +193,8 @@ export const useRunThrough = (
         // composer carries none.
         manage: (): void => {
             open.value = false;
-            void router.push({ name: `extension`, params: { ext: `workflows` }, query: { loop: `list` } });
+            // In a popped-out chat the form opens in the app's own window, not over the conversation.
+            navigateInApp(router, { name: `extension`, params: { ext: `workflows` }, query: { loop: `list` } });
         },
         end: async (): Promise<void> => {
             if (!composer.reachable.value) {
