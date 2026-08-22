@@ -1,9 +1,10 @@
-import { sandboxContract } from "@intentic/sandbox-contract";
+import { REQUEST_ID_HEADER, sandboxContract } from "@intentic/sandbox-contract";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
 import { useEndpoint } from "./useEndpoint";
 import { trackPerf } from "../perf";
+import { uuid } from "../uuid";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
 
 /* The TYPED client for the active sandbox daemon, derived from the same `sandboxContract` the daemon
@@ -48,7 +49,24 @@ const linkOptions: OpenAPILinkOptions<Record<never, never>> = {
                 return request.url;
             }
         })();
-        return trackPerf(`rpc.request`, { path, method: request.method }, () => sandboxAuthenticatedFetch(request));
+        /* THE JOIN KEY between the two halves of one slow interaction, minted here because here is the only
+         * place that sees both.
+         *
+         * The daemon's `http.request` span times what it served; this browser's `rpc.request` span times what
+         * the user waited for; and until both carried the same id, "the panel stuttered at 15:22" and "slow
+         * http.request at 15:22" could only be matched by eye, on a busy sandbox serving several a second. The
+         * id goes out on a header, into this side's span, and the daemon echoes it onto its own line
+         * (app.ts's outermost middleware), so the two are one grep apart.
+         *
+         * The app's own `uuid()` rather than `crypto.randomUUID`, for the reason that helper exists: the real
+         * generator is secure-context only, and a self-hosted instance opened at `http://192.168.1.x:port` has
+         * no such thing. A diagnostic that throws exactly there would be worse than none. */
+        const requestId = uuid();
+        const headers = new Headers(request.headers);
+        headers.set(REQUEST_ID_HEADER, requestId);
+        return trackPerf(`rpc.request`, { path, method: request.method, requestId }, () =>
+            sandboxAuthenticatedFetch(new Request(request, { headers })),
+        );
     },
     // Read per request, not captured: a sandbox switch (or a daemon that re-announced a new URL after a
     // restart) must be picked up by the very next call, with no client rebuild. Same reason the loopback

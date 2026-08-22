@@ -16,6 +16,8 @@
  * Unhandled REJECTIONS are deliberately not a trigger: the first seconds of a session legitimately reject
  * promises, a daemon asleep behind its tunnel, a lost loopback probe, and none of that is storage's fault. */
 
+import { describeError, flushClientDiagnostics, reportClient } from "./clientDiagnostics";
+
 // How long after boot an error still reads as "the app failed to start" rather than "the app hit a bug".
 // Generous on purpose: hydration paints from mirrors well within this, and a false positive costs one wipe of
 // caches that refetch plus one reload, cheap next to a workspace stuck broken.
@@ -44,6 +46,17 @@ const marked = (): boolean => {
 const heal = (error: unknown): void => {
     healing = true;
     console.error(`[self-heal] startup crashed, wiping this origin's stored state and reloading once:`, error);
+    /* SAY IT BEFORE DESTROYING IT. This recovery is correct and it was also the app's most effective piece of
+     * evidence destruction: the bug class likeliest to need investigating is the one that fixes itself here, and
+     * every trace of it went into a console the reload then cleared. The user's account of it afterwards is "it
+     * flashed and reloaded", which is not something anybody can act on.
+     *
+     * Reported and flushed synchronously, ahead of the clear and the reload, and the post is `keepalive` so it
+     * outlives the navigation (clientDiagnostics.ts). Best-effort by construction: reporting cannot throw, and a
+     * report that does not make it costs a diagnostic, not the recovery. */
+    const { message, fields } = describeError(error);
+    reportClient(`self-heal.wipe`, message, { fields });
+    flushClientDiagnostics();
     try {
         localStorage.clear();
         sessionStorage.clear();

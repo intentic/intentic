@@ -4,7 +4,8 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import { initAnalytics } from "./composables/analytics";
 import { dropOutdatedMirrors } from "./composables/buildEpoch";
-import { installPerfConsole } from "./composables/perf";
+import { describeError, installClientDiagnostics, reportClient } from "./composables/clientDiagnostics";
+import { installPerfConsole, installPerfReporter } from "./composables/perf";
 import { queryClient } from "./composables/queryPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./composables/selfHeal";
 // Registers the module-level watch that re-scopes chat / editor / file-action state on sandbox switch.
@@ -22,6 +23,9 @@ import "./styles.css";
 // have left for this one: the wipe it marked (awaited, every mirror below must find the deletes done), and
 // the build-change drop of mirrors no restore gate covers (buildEpoch.ts).
 installSelfHeal();
+// Right after it: the same window's crashes now also leave a durable record, and the wipe below is one of the
+// things worth recording (composables/clientDiagnostics.ts).
+installClientDiagnostics();
 await purgeIfMarked();
 dropOutdatedMirrors();
 
@@ -30,6 +34,13 @@ initAnalytics();
 // Before anything mounts, so the spans of a slow first paint are in the ring buffer too. `__intenticPerf` in
 // the console is the whole interface, see composables/perf.ts.
 installPerfConsole();
+/* And a durable copy of the SLOW ones. Handed in rather than imported by perf.ts, which sits under the daemon
+ * client and must not point back into the app's graph (installPerfReporter says why). Only the slow spans
+ * leave the browser: every span still lands in the ring buffer, and a durable copy of all of them would be
+ * hundreds of lines a second during a streaming turn. */
+installPerfReporter((_op, _ms, fields, requestId) =>
+    reportClient(`perf.slow`, `slow ${fields["op"]} ${fields["ms"]}ms`, { level: `warn`, fields, ...(requestId !== undefined ? { requestId } : {}) }),
+);
 
 // Inside the native iOS shell only (a no-op everywhere else): the tap that launched the app is queued until a
 // listener exists, so this must precede the mount to land the user where the notification pointed.
@@ -45,6 +56,11 @@ const app = createApp(App);
 // render error is how a poisoned hydrated blob first bites, and self-heal turns it into a wipe + one reload.
 app.config.errorHandler = (err, _instance, info) => {
     console.error(`[vue] ${info}:`, err);
+    // …and somewhere it survives the reload. The console line is for whoever is watching; this is for everyone
+    // else, which is almost always who actually hit it (composables/clientDiagnostics.ts). `info` names the
+    // hook, which is most of the diagnosis on a render error whose message names nothing.
+    const { message, fields } = describeError(err);
+    reportClient(`vue.${info.replace(/\s+/g, `-`)}`, message, { fields });
     reportStartupError(err);
 };
 app.use(router);

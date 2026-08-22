@@ -57,6 +57,24 @@ export const createPerfLogger = (config: Pick<Config, "logLevel" | "logPretty" |
     return file === undefined ? undefined : pino(loggerOptions(config), file);
 };
 
+/* THE CLIENT SINK (historyRoot/logs/client.jsonl), what the BROWSER saw.
+ *
+ * Its own file for a reason that is about trust rather than volume. Every other log here is the daemon's own
+ * account of what it did, and that is exactly what makes those files worth reading. These lines are a browser's
+ * account of itself: honest, unverifiable, and arriving over an authenticated route anyone signed in can post
+ * to. Mixed into daemon.log they would dilute a record whose whole value is that only the daemon writes it.
+ *
+ * Its OWN LEVEL FLOOR, deliberately not the daemon's `logLevel`. A sandbox running at `warn` would otherwise
+ * drop the client's warn-level stall reports, which is the half of this that answers "the UI feels slow", and
+ * the browser has already decided what is worth sending before it sends anything.
+ *
+ * Undefined when there is nowhere to write, and the route then records nothing and says so, rather than
+ * pretending to have filed a report. */
+export const createClientLogger = (config: Pick<Config, "historyRoot">): Logger | undefined => {
+    const file = logFile(config.historyRoot, "client.jsonl");
+    return file === undefined ? undefined : pino(loggerOptions({ logLevel: "warn" }), file);
+};
+
 export const createLogger = (config: Pick<Config, "logLevel" | "logPretty" | "historyRoot">): Logger => {
     const options = loggerOptions(config);
     if (config.logPretty) {

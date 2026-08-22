@@ -394,6 +394,24 @@ conversation's worktree instead of a path that still reaches the shared checkout
   never edit it — and they are withheld from a persona whose `files` power is `none`. Their results are
   deliberately **not** in `INTERNAL_SERVERS`: two of the four relay a provider's own sentence verbatim, and a
   third party's words dressed as the platform's own log is what the outside-content envelope is for.
+- **The browser is the only witness to its own crashes**, so it gets the one write on the logs router.
+  `POST /logs/client` (`src/logs/logs.routes.ts`) accepts a capped batch of what the editor caught, measured or
+  recovered from and appends it to `logs/client.jsonl`; `mcp__diagnostics__errors` reads it under
+  `source: "browser"`. Its own file rather than `daemon.log`, and every line stamped `client: true`, because the
+  other files are trustworthy precisely in that only the daemon writes them, and a reader who could not tell the
+  two apart would eventually trust the wrong one. What the page sent rides under `report` so nothing it chooses
+  to send can collide with `time`, `level` or `message` and rewrite the frame the daemon put around it. Its own
+  level floor too, not the daemon's `logLevel`: a sandbox running at `warn` would otherwise drop the client's
+  stall reports, which are the half that answers "the UI feels slow". It floors at **viewer** against a
+  maintainer prefix and a maintainer mutation default, because a viewer whose page just white-screened is
+  exactly who needs to report it and cannot raise their own role to do it.
+- **One id joins a browser call to the daemon line that served it.** Both halves of a slow interaction were
+  measured already and could not be paired: the browser times what the user waited for, the daemon times what it
+  served, and on a sandbox answering several calls a second the only join was a timestamp and hope. The web app
+  mints an id per call and sends it as `REQUEST_ID_HEADER` (`@intentic/sandbox-contract`, shared so the two sides
+  cannot silently disagree on the name); the outermost middleware in `src/app.ts` echoes it onto the
+  `http.request` span. The header is in the CORS allowlist deliberately — one the preflight does not allow is one
+  the browser drops without telling anyone, which would leave this permanently and inexplicably empty.
 - **An OOM kill is the loudest thing in the log, not a number in a file.** The cgroup counters were always in
   every sample, which is indistinguishable from not recording them: "agents spawn too many subagents and some get
   killed" cost 185 tool calls against data already on disk. `resource-metrics.ts` now diffs each sample's

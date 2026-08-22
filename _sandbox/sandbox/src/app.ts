@@ -7,6 +7,7 @@ import {
     MachineReportSchema,
     MigrationApplySchema,
     MigrationScanSchema,
+    REQUEST_ID_HEADER,
     roleAtLeast,
 } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -268,10 +269,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         const from = process.hrtime.bigint();
         await next();
+        // The browser's own id for this call, echoed onto the line that served it. This is the half of the
+        // correlation the daemon owns: with it, "the panel stuttered" and "slow http.request" are one grep
+        // apart instead of a guess by timestamp on a sandbox serving several a second. Absent for every caller
+        // that is not our web app (the CLI, an extension's own fetch, curl), which is why it is spread.
+        const requestId = c.req.header(REQUEST_ID_HEADER);
         services.perf.record("http.request", Number(process.hrtime.bigint() - from) / 1e6, {
             method: c.req.method,
             path: c.req.path,
             status: c.res.status,
+            ...(requestId !== undefined ? { requestId } : {}),
         });
     });
 
@@ -336,7 +343,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 return originAllowed(origin) ? origin : null;
             },
             allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            allowHeaders: ["authorization", "content-type", "x-intentic-connect", "x-intentic-base-hash"],
+            // REQUEST_ID_HEADER rides here too: a header the preflight does not allow is one the browser
+            // silently drops, which would leave the daemon's side of the correlation permanently empty.
+            allowHeaders: ["authorization", "content-type", "x-intentic-connect", "x-intentic-base-hash", REQUEST_ID_HEADER],
             maxAge: 600,
         }),
     );

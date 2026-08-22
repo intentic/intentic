@@ -162,3 +162,53 @@ test("a misspelled metric path is diagnosed rather than answered with an empty s
     expect(text).toContain("No numeric values at `daemon.memory.rssByttes`");
     expect(text).toContain("1 samples");
 });
+
+/* THE BROWSER'S OWN ACCOUNT, read through the same tool. Its own source rather than folded into the daemon's
+ * lines, because the two are different kinds of evidence: one is the daemon describing what it did, the other is
+ * a page describing itself over a route anyone signed in can post to. */
+test("the browser source reads the client file and names itself as such", async () => {
+    const deps = await setup({
+        "daemon.log": [JSON.stringify({ time: at(2), level: "error", message: "turn failed" })],
+        "client.jsonl": [
+            JSON.stringify({
+                time: at(3),
+                level: "error",
+                client: true,
+                event: "vue.render-function",
+                message: "TypeError: x is undefined",
+                report: { route: "/agents" },
+            }),
+            JSON.stringify({
+                time: at(1),
+                level: "warn",
+                client: true,
+                event: "perf.slow",
+                message: "slow chat.frame 48ms",
+                report: { op: "chat.frame" },
+            }),
+        ],
+    });
+
+    const text = await call(deps, "errors", { source: "browser" });
+    expect(text).toContain("2 browser reports");
+    expect(text).toContain("/agents");
+    // The daemon's own log is a different question, so it is not mixed in.
+    expect(text).not.toContain("turn failed");
+    expect(await call(deps, "errors", {})).toContain("turn failed");
+});
+
+test("a self-heal wipe is findable by name, which is the report that used to be destroyed", async () => {
+    const deps = await setup({
+        "client.jsonl": [
+            JSON.stringify({ time: at(1), level: "error", client: true, event: "self-heal.wipe", message: "TypeError: cannot read hydrated blob" }),
+        ],
+    });
+
+    // The bug class that fixes itself by clearing storage and reloading, which is why it left no evidence at all.
+    expect(await call(deps, "errors", { source: "browser", contains: "self-heal" })).toContain("cannot read hydrated blob");
+});
+
+test("no browser reports yet reads as quiet, not as an error", async () => {
+    // client.jsonl does not exist until a browser has something to say.
+    expect(await call(await setup({}), "errors", { source: "browser" })).toBe("No browser reports in that window.");
+});

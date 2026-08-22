@@ -42,6 +42,13 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "system.presence": "viewer",
     // Opening a media file in the workspace view is a read; the ticket is strictly narrower than the bearer.
     "workspace.mediaTicket": "viewer",
+    /* Reporting that YOUR OWN page crashed. Below both defaults it would otherwise take: the `/logs` prefix is
+     * maintainer because reading the daemon's diagnostics is the operator's business, and an unlisted mutation
+     * floors at maintainer too. Neither applies to this one. The whole point is to hear from the browser that
+     * just broke, a viewer's browser breaks exactly as often as an owner's, and a viewer cannot raise their own
+     * role to tell anybody. Its blast radius is a capped append to a file of its own, plainly marked as a
+     * browser's word (logs/logs.routes.ts `report`), which is a smaller grant than the reads above it. */
+    "logs.report": "viewer",
     // Driving agents, the collaborator grant. Work stays on isolated branches; what leaves the sandbox
     // (land, discard, purge, drafts, the terminal) stays at the maintainer default.
     "agent.run": "collaborator",

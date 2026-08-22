@@ -75,11 +75,18 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
         tools: [
             tool(
                 "errors",
-                "What the daemon logged as going wrong, newest first. Reach for this BEFORE re-instrumenting code or trying to " +
-                    "reproduce a bug: a failing turn, a refused provider, a crashed automation and an unhandled rejection all " +
-                    "already leave a line here, with the conversation and session ids to join on. Filtered, not tailed: a raw " +
-                    "tail of this file is mostly routine and ordered the wrong way.",
+                "What went wrong, newest first. Reach for this BEFORE re-instrumenting code or trying to reproduce a bug. " +
+                    '`source: "daemon"` (the default) is the sandbox\'s own log: failing turns, refused providers, crashed ' +
+                    "automations, unhandled rejections, each with the conversation and session ids to join on. " +
+                    '`source: "browser"` is what the EDITOR reported about itself: render errors, stalls the user felt, and ' +
+                    "startup recoveries, each with the page the user was on. Reach for the browser source whenever the " +
+                    "complaint is about the interface rather than about a turn, and note that a report can only be there if " +
+                    "the app was running a build that sends them.",
                 {
+                    source: z
+                        .enum(["daemon", "browser"])
+                        .optional()
+                        .describe("Whose account of it: the sandbox's own log, or what the editor sent about itself. Defaults to the daemon."),
                     sinceMinutes: z
                         .number()
                         .int()
@@ -95,18 +102,21 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                         .string()
                         .max(200)
                         .optional()
-                        .describe("Case-insensitive substring, matched anywhere in the line: a conversation id, an error code, a repo, a message."),
+                        .describe("Case-insensitive substring, matched anywhere in the line: a conversation id, an error code, a route, a message."),
                     limit: z.number().int().min(1).max(MAX_LINES).optional(),
                 },
-                async ({ sinceMinutes, level, contains, limit }) => {
+                async ({ source, sinceMinutes, level, contains, limit }) => {
+                    const browser = source === "browser";
                     const result = await readLogLines(deps.historyRoot, {
-                        file: "daemon.log",
+                        file: browser ? "client.jsonl" : "daemon.log",
                         level: (level ?? "warn") as LevelName,
                         ...(sinceOf(now(), sinceMinutes) !== undefined ? { sinceMs: sinceOf(now(), sinceMinutes) } : {}),
                         ...(contains !== undefined ? { contains } : {}),
                         limit: limit ?? DEFAULT_LINES,
                     });
-                    return ok(render(result, "lines"));
+                    // Named differently on purpose: these lines are a browser's account of itself, and a reader
+                    // who cannot tell that from the daemon's own account would eventually trust the wrong one.
+                    return ok(render(result, browser ? "browser reports" : "lines"));
                 },
             ),
             tool(

@@ -182,7 +182,7 @@ import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { DAEMON_OWNER } from "./platform/leftovers.js";
 import { type PlatformTunnel, startPlatformTunnel } from "./platform/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./platform/reaper.js";
-import { createPerfLogger } from "./logger.js";
+import { createClientLogger, createPerfLogger } from "./logger.js";
 import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
 import { panePids } from "./terminal/terminal-session.js";
@@ -232,6 +232,10 @@ import { createDependencyCoordinator, type DependencyCoordinator } from "./works
 export interface Services {
     readonly config: Config;
     readonly logger: Logger;
+    /* The sink for what the BROWSER reports about itself (logs/client.jsonl), separate from `logger` above
+     * because that file's value is that only the daemon writes it. Undefined when there is nowhere to write, and
+     * the route then records nothing and says so rather than pretending, see logs/logs.routes.ts `report`. */
+    readonly clientLogger: Logger | undefined;
     // Where the daemon's time goes. Every expensive path (git subprocesses, the Changes scan, repo-lock waits,
     // HTTP requests, event fan-out) measures itself through this, so a "the panel felt slow" report has a log
     // line naming the op instead of a stall with no attribution, see platform/perf.ts.
@@ -1129,6 +1133,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const services: Services = {
         config,
         logger,
+        // The browser's own reports, in their own file (createClientLogger says why it is not `logger`).
+        clientLogger: createClientLogger(config),
         perf,
         resourceOwners: () => {
             const operations = perf.ranked();

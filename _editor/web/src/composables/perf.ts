@@ -85,6 +85,25 @@ let verbose = ((): boolean => {
 
 const round = (ms: number): number => (ms < 10 ? Math.round(ms * 100) / 100 : Math.round(ms));
 
+// A span's fields minus the `undefined`s, which PerfFields allows and the report schema does not. Dropped
+// rather than stringified: "undefined" in a log line reads as a value somebody meant to set.
+const primitives = (fields: PerfFields): Record<string, string | number | boolean> =>
+    Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined));
+
+/* WHERE A SLOW SPAN GOES BESIDES THE CONSOLE, injected rather than imported.
+ *
+ * This module is imported by the daemon client itself (sandboxRpc wraps every call in `trackPerf`), so it is on
+ * the hot path and near the root of the import graph. Importing the reporter here would point it at
+ * clientDiagnostics → sandboxAuthFetch → sandboxSession → useSandbox, back into the app's own graph, and a cycle
+ * at module-init time resolves to `undefined` at exactly the moment nobody is looking for it. Inversion keeps
+ * the arrow pointing outward: main.ts hands the sink in (installPerfReporter), and until it does, or in a test
+ * that never calls it, a slow span costs one comparison. */
+type SlowReporter = (op: string, ms: number, fields: Record<string, string | number | boolean>, requestId: string | undefined) => void;
+let reportSlow: SlowReporter | undefined;
+export const installPerfReporter = (reporter: SlowReporter): void => {
+    reportSlow = reporter;
+};
+
 /** File a span. Called from the timing helpers below and from the two places that measure by hand (the stream
  *  reducer and the typewriter, which are synchronous and re-enter too often to afford a closure each). */
 export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): void => {
@@ -103,6 +122,19 @@ export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): voi
         // `seen`/`slowSeen` answer the question the single line otherwise raises, is this the first time, or
         // has it been doing this all along, without needing the table.
         console.warn(`[perf] slow ${op} ${round(ms)}ms`, { ...fields, seen: stat.count, slowSeen: stat.slowCount });
+        /* …and durably, at `warn`, because "the UI feels slow" is a complaint nobody can act on from a console
+         * line in a browser nobody was watching. The reporter coalesces by (event, message) and caps itself, so
+         * a span stalling every frame sends the first few and a count rather than a flood, and it never throws.
+         *
+         * Only the SLOW ones leave the browser. Every span still lands in the ring buffer and in the table; a
+         * durable copy of all of them would be a few hundred lines a second during a streaming turn, which is
+         * how a diagnostic channel becomes the thing that needs diagnosing. */
+        reportSlow?.(
+            op,
+            round(ms),
+            { op, ms: round(ms), seen: stat.count, slowSeen: stat.slowCount, ...primitives(fields) },
+            typeof fields["requestId"] === `string` ? fields["requestId"] : undefined,
+        );
         return;
     }
     if (verbose) {
