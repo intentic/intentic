@@ -7,6 +7,7 @@ import { useRoute, useRouter } from "vue-router";
 import { activityIcon } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
+import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
 import { SUBAGENT_TRANSCRIPT } from "../composables/queryKeys";
 import { subagentLive, useSubagentsQuery } from "../composables/subagents/subagentsQuery";
@@ -39,6 +40,10 @@ import { fileLinkDecorator } from "../composables/renderMarkdown";
  * kind of object from the agents the user started, two screens apart in the same app. Everything a row needs
  * beyond the shared card is a fact about delegation and only that: which turn started it, that it was
  * backgrounded, and (for a delegation) the shell it runs in.
+ *
+ * SAME CARD MEANS SAME FORM AND SAME FACTS. It is the card's `tight` shape here as it is in the chat, so a row
+ * is the same height in both lists, and the model rides the facts line here as it does there, so the one thing
+ * this list used to leave unanswered ("which model is that child burning?") is answered where it is asked.
  *
  * TWO KINDS IN ONE LIST, deliberately: an Agent/Task subagent and a `codex exec` the agent drove from its own
  * shell are the same fact from out here: another agent, working, that you did not start. What differs is only
@@ -142,6 +147,15 @@ const openParent = (session: SubagentSession): void => {
 const providerOf = (session: SubagentSession): AgentProvider =>
     session.kind === `subagent` ? (agentById(session.conversationId)?.provider ?? `claude`) : session.kind;
 
+/* WHICH MODEL IT RUNS ON, in the chat rail's own words (modelLabelFor): the same fact, the same short label,
+ * in the same slot on the same card, because the rail here and the rail in the floating chat are read minutes
+ * apart by one eye. It used to be left off on the argument that the tile already says whose runtime it is and
+ * that the exact model is a header fact: but the tile says `claude`, not which Claude, and "is this the cheap
+ * one or the expensive one" is exactly what a column of a dozen delegations is scanned for. Falls back to the
+ * runtime's own name when the child never reported a model, which is what the chat's card does too. */
+const modelOf = (session: SubagentSession): string | undefined =>
+    session.model === undefined || session.model === `` ? undefined : modelLabelFor(providerOf(session), session.model);
+
 /* THE BRAND MARK FOR AN AGENT TYPE THAT NAMES A RUNTIME. `claude` set as a lowercase word among the header's
  * other grey facts reads as a stray label rather than as the vendor it is; the same fact as a glyph is read in
  * one pass and costs a fifth of the width. Only the native runtimes have a mark: an `Explore` or a
@@ -192,6 +206,7 @@ const hasFacts = (session: SubagentSession): boolean =>
     (session.background === true && subagentLive(session)) ||
     (focus.value === undefined && parentOf(session) !== undefined) ||
     session.agentType !== undefined ||
+    modelOf(session) !== undefined ||
     (session.toolUses ?? 0) > 0 ||
     (session.tokens ?? 0) > 0 ||
     (!subagentLive(session) && session.activityAt > 0);
@@ -419,6 +434,7 @@ watch(
                                     :status="STATUS[session.status]"
                                     :live="liveOf(session)"
                                     :now="now"
+                                    tight
                                     :selected="session.id === selected"
                                     :to="rowTo(session.id)"
                                 >
@@ -440,10 +456,10 @@ watch(
                                             <span class="max-w-24 truncate">{{ parentOf(session) }}</span>
                                         </span>
                                         <span v-if="session.agentType !== undefined" class="shrink-0">{{ session.agentType }}</span>
-                                        <!-- The MODEL is not on this line, and the omission is the reason the line
-                                             fits one row: the tile already wears whose runtime it is, and the exact
-                                             model is a thing you read once, on the header of the transcript you
-                                             opened, not fourteen times down a rail. -->
+                                        <!-- WHICH MODEL, in the chat rail's slot and clipped to its width: the
+                                             fact this list was missing, and the one that decides whether a
+                                             delegation is worth reading before you open it. -->
+                                        <span v-if="modelOf(session) !== undefined" class="max-w-24 truncate">{{ modelOf(session) }}</span>
                                         <!-- HOW FAR IT HAS GOT, as one chip rather than two: what it has done and
                                              what that has cost answer a single question here ("is this one
                                              working, or is it stuck?"), they are read together, and at this width
@@ -462,13 +478,12 @@ watch(
                                                     .join(` · `)
                                             }}
                                         </span>
-                                        <!-- The age keeps to the settled rows: a live one's clock is the activity
-                                             line's ticking elapsed, and two clocks on one card disagree by
-                                             construction. It FLOWS with the facts rather than taking the chat
-                                             rail's right-aligned slot: a wrapping line pushes an `ml-auto` item
-                                             onto a row of its own, and "3m" alone on a row is a fifth of a card's
-                                             height spent on the least of its facts. -->
-                                        <span v-if="!subagentLive(session) && session.activityAt > 0" class="shrink-0">{{
+                                        <!-- The age keeps to the settled rows: a live one's clock is the live
+                                             readout's ticking elapsed, which on this card now ends the same
+                                             line, and two clocks on one card disagree by construction. Right-
+                                             aligned, the chat rail's slot: the "when" of a card has one corner
+                                             whether or not the turn has ended. -->
+                                        <span v-if="!subagentLive(session) && session.activityAt > 0" class="ml-auto shrink-0">{{
                                             relativeTime(session.activityAt)
                                         }}</span>
                                     </template>
@@ -501,7 +516,9 @@ watch(
                         <ProviderLogo :provider="typeMark(current)!" />
                     </span>
                     <span v-else-if="current.agentType !== undefined" class="shrink-0">{{ current.agentType }}</span>
-                    <span v-if="current.model !== undefined" class="shrink-0">{{ current.model }}</span>
+                    <!-- The same label the row above it wears (modelOf): a header that spelled the raw id while
+                         the card said the short name read as two different models. -->
+                    <span v-if="modelOf(current) !== undefined" class="shrink-0">{{ modelOf(current) }}</span>
                     <Icon v-bind="STATUS[current.status]" class="shrink-0" />
                     <button
                         v-if="current.terminal"

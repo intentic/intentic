@@ -63,7 +63,11 @@ const props = defineProps<{
      * thin: the floating chat's rail, where the card's own line of facts is short (the model, and little
      * else) and a second row for "Bash · 12s" bought a third of a card's height per running chat. It TRAILS
      * that line, in the corner a settled card puts its age in, so the clock sits in one place whether or not
-     * the turn has ended. Everywhere with room for it (the Subagents list) the readout keeps its own row. */
+     * the turn has ended.
+     *
+     * EVERY RAIL IN THE APP PASSES IT, and that is the point: the Subagents list used to take the full-height
+     * form, so the same card was a row taller there than in the chat beside it and the two lists read as two
+     * components. The full-height branch stays for a rail that has real width to spend, and nothing has yet. */
     tight?: boolean;
     /* A card whose chat has a COLUMN on screen: a ring and a lifted surface.
      *
