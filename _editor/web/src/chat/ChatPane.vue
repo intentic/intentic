@@ -28,6 +28,7 @@ import { CHAT_SURFACE } from "./chatSurface";
 import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 import { useRole } from "../composables/sandbox/useRole";
+import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { useChatAttachments } from "../composables/chat/useChatAttachments";
 import { useComposerVoice } from "../composables/chat/useComposerVoice";
 import { useEditorContextChip } from "../composables/chat/useEditorContextChip";
@@ -1442,7 +1443,7 @@ watch(
                                         class="relative flex items-center gap-2 overflow-hidden rounded-lg border py-1.5 pl-2 pr-1 text-xs"
                                         :class="a.status === 'failed' ? 'border-danger' : 'border-line bg-card'"
                                     >
-                                        <ChatImageThumb v-if="a.previewUrl" :src="a.previewUrl" :alt="a.name" size="h-9 w-9" />
+                                        <ChatImageThumb v-if="a.previewUrl ?? attachmentPreview(a.path)" :src="a.previewUrl ?? attachmentPreview(a.path) ?? ''" :alt="a.name" size="h-9 w-9" />
                                         <Icon name="file" v-else class="text-sm text-subtle" />
                                         <span class="max-w-36 truncate text-content" v-tooltip.top="a.error ?? a.name">{{ a.name }}</span>
                                         <!-- The chip's own state, in a glyph. The progress hairline below is

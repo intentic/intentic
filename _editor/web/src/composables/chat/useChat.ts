@@ -217,7 +217,8 @@ const active = computed<Conversation>(() => {
 let scopedSandboxId: string | undefined;
 
 // One persisted tab, back as a live conversation. Restored attachments carry upload metadata only (no
-// previewUrl/controller, those are client-session objects); the chip falls back to the file icon.
+// previewUrl/controller, those are client-session objects); the composer re-mints thumbnails from the
+// workspace bytes on render (attachmentPreview).
 const restoreTab = (tab: StoredTab): Conversation => {
     const conversation = new Conversation(tab.conversationId);
     conversation.isolated.value = tab.isolated;
