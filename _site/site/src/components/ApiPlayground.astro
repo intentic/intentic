@@ -352,8 +352,12 @@ const { payload } = Astro.props;
         border-collapse: collapse;
         font-size: 0.8125rem;
     }
+    /* THE CELLS ARE PADDED ON EVERY SIDE, because this table sits in `.docs-body` and inherits its 1px frame
+       (`.docs-body table`). An earlier version zeroed the left padding and the last cell's right padding for a
+       borderless, flush look — but the inherited frame turned that into text printed onto the border, top row
+       and last column both. Symmetric padding keeps every field clear of the frame. */
     .api-table th {
-        padding: 0.4rem 1.5rem 0.4rem 0;
+        padding: 0.5rem 0.9rem;
         border-bottom: 1px solid var(--color-line);
         font-family: var(--font-mark);
         font-size: 0.7rem;
@@ -364,34 +368,27 @@ const { payload } = Astro.props;
         color: var(--color-subtle);
     }
     .api-table td {
-        padding: 0.6rem 1.5rem 0.6rem 0;
+        padding: 0.6rem 0.9rem;
         border-bottom: 1px solid var(--color-line);
         vertical-align: top;
         color: var(--color-muted);
     }
-    /* The type/where columns are narrow, so their own text is the right edge; a trailing gap on the last cell
-       would only push them off it. The separation belongs BETWEEN the columns, which is the right padding on
-       every cell before the last. */
-    .api-table th:last-child,
-    .api-table td:last-child {
-        padding-right: 0;
-    }
-    /* Nesting, and the rule that draws it has to sit at the same weight as the padding above or it loses. A
-       hairline down the left of an indented run is what makes four levels legible: the indent alone reads as
-       a ragged left edge once the names differ in length. */
+    /* Nesting, indented from the cell's own padding rather than from the frame. A hairline down the left of an
+       indented run is what makes four levels legible: the indent alone reads as a ragged left edge once the
+       names differ in length. The padding is the base 0.9rem plus 0.75rem per level. */
     .api-table td[data-depth="1"],
     .api-table td[data-depth="2"],
     .api-table td[data-depth="3"] {
         border-left: 1px solid var(--color-line);
     }
     .api-table td[data-depth="1"] {
-        padding-left: 0.75rem;
+        padding-left: 1.65rem;
     }
     .api-table td[data-depth="2"] {
-        padding-left: 1.5rem;
+        padding-left: 2.4rem;
     }
     .api-table td[data-depth="3"] {
-        padding-left: 2.25rem;
+        padding-left: 3.15rem;
     }
     .api-table code {
         font-family: var(--font-mono);
@@ -500,7 +497,10 @@ const { payload } = Astro.props;
         gap: 0.6rem;
         padding: 0 0.9rem 0.9rem;
     }
-    /* The two corners cut off the leading edge, which is the button shape the rest of the site uses. */
+    /* A full rectangular border, paired with Reset beside it. It once cut the top-left and bottom-right corners
+       with a `clip-path`, but a clip cuts the border too: the diagonal edges it made had no line on them, so the
+       button read as missing two corners. A carved notch needs its border drawn along the cut (a border-image or
+       a stacked fill), which is more than a playground control earns; a clean rectangle is the honest fix. */
     .api-send {
         padding: 0.4rem 1.1rem;
         border: 1px solid var(--color-primary-600);
@@ -510,7 +510,6 @@ const { payload } = Astro.props;
         font-weight: 600;
         color: var(--color-primary-200);
         cursor: pointer;
-        clip-path: polygon(0.5rem 0, 100% 0, 100% calc(100% - 0.5rem), calc(100% - 0.5rem) 100%, 0 100%, 0 0.5rem);
         transition:
             background 0.15s ease,
             color 0.15s ease;
