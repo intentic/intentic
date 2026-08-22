@@ -118,9 +118,31 @@ test("a Claude turn gets the readiness tools instead of the paragraph, however f
 
     expect(request.prompt).toBe("do the thing");
     expect(request.sdkServers?.["deps"]).toBeDefined();
+    // And the daemon's own records, so the answer to "why did that fail" is a tool call rather than a rebuild
+    // of the instrumentation (logs/diagnostics-tools.ts).
+    expect(request.sdkServers?.["diagnostics"]).toBeDefined();
     // The daemon-side readers still have to be able to find the real tree: an isolated turn's cwd names its
     // worktree, where every dependency directory is an empty mount point.
     expect(request.workspaceRoot).toBe(root);
+});
+
+/* A card that may not read the workspace may not read the daemon's log either. Withheld whole rather than
+ * degraded: half an answer about why something failed is worse than being told to ask the owner. */
+test("a persona with no file reads does not get the diagnostic tools", async () => {
+    const root = await workspaceWithMissingDeps();
+    const services = servicesIn(root, {
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        codexAgent: async function* () {},
+        agent: async function* () {},
+        personas: unstubbed<Services["personas"]>("personas", {
+            list: async () => [{ id: "reader", name: "Reader", powers: { files: "none", shell: false } }] as never,
+        }),
+    });
+
+    const plan = await planTurn(services, { prompt: "do the thing", actsAs: "reader" } as AgentTurn, contextIn(root));
+    expect(plan).toMatchObject({ ok: true });
+    expect((plan as { request: AgentRequest }).request.sdkServers?.["diagnostics"]).toBeUndefined();
 });
 
 test("a native Codex turn is told the tree's dependencies are missing, exactly as a Claude turn no longer is", async () => {

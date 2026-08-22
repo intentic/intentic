@@ -419,11 +419,74 @@ export interface ResourceMetrics {
 
 export interface ResourceMetricsOptions {
     readonly historyRoot: string;
-    readonly logger: Pick<Logger, "warn">;
+    readonly logger: Pick<Logger, "warn" | "error">;
     readonly owners?: () => Readonly<Record<string, unknown>>;
     readonly intervalMs?: number;
     readonly sampler?: ResourceSampler;
 }
+
+/* THE KERNEL KILLED SOMETHING, said out loud.
+ *
+ * The cgroup's OOM counters have always been in every sample, and being in a 4KB line in a file nobody reads is
+ * indistinguishable from not being recorded: "agents spawn too many subagents and some of them get killed" was
+ * answered over 185 tool calls, including a 111-call stretch with no code change, against data that was sitting
+ * on disk the whole time. An OOM kill is not a data point to be found later, it is the loudest thing that can
+ * happen to this process tree, so it logs at `error` the minute it is observed.
+ *
+ * Reported as a DELTA against the previous sample, because the counters are cumulative for the container's life:
+ * their absolute value says a kill happened at some point, which is true forever after the first one and
+ * therefore useless as an alarm. The first sample after a daemon start has nothing to diff against and is
+ * skipped rather than compared against zero, which would re-announce every historical kill on every restart.
+ *
+ * The roles come along because "something was killed" is not actionable and "the browser lost 4 of 17 processes"
+ * is. A role whose count merely dropped may have exited normally; named beside a confirmed kill it is the
+ * shortlist, which is what the reader needs and all this can honestly claim. */
+const OOM_EVENTS = ["event_oom_kill", "event_oom_group_kill"] as const;
+
+const numberAt = (source: unknown, path: readonly string[]): number | undefined => {
+    const value = path.reduce<unknown>(
+        (held, key) => (held !== null && typeof held === "object" ? (held as Record<string, unknown>)[key] : undefined),
+        source,
+    );
+    return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+};
+
+const roleCounts = (snapshot: ResourceSnapshot): Record<string, number> => {
+    const byRole = ((snapshot.processes as Record<string, unknown> | undefined)?.["byRole"] ?? {}) as Record<string, unknown>;
+    return Object.fromEntries(
+        Object.entries(byRole).flatMap(([role, summary]) => {
+            const count = numberAt(summary, ["count"]);
+            return count === undefined ? [] : [[role, count]];
+        }),
+    );
+};
+
+// The kills observed between two samples, and which roles shrank across the same window. Undefined when nothing
+// was killed, so the caller's check is one comparison and the quiet path costs nothing.
+export const oomSinceSample = (
+    previous: ResourceSnapshot,
+    current: ResourceSnapshot,
+): { readonly kills: Record<string, number>; readonly lostByRole: Record<string, number> } | undefined => {
+    const kills = Object.fromEntries(
+        OOM_EVENTS.flatMap((event) => {
+            const was = numberAt(previous, ["system", "cgroup", event]);
+            const now = numberAt(current, ["system", "cgroup", event]);
+            return was === undefined || now === undefined || now <= was ? [] : [[event, now - was]];
+        }),
+    );
+    if (Object.keys(kills).length === 0) {
+        return undefined;
+    }
+    const before = roleCounts(previous);
+    const after = roleCounts(current);
+    const lostByRole = Object.fromEntries(
+        Object.entries(before).flatMap(([role, count]) => {
+            const lost = count - (after[role] ?? 0);
+            return lost > 0 ? [[role, lost]] : [];
+        }),
+    );
+    return { kills, lostByRole };
+};
 
 const resourceMetricsPath = (historyRoot: string): string => join(logsRoot(historyRoot), RESOURCE_METRICS_FILE);
 
@@ -440,6 +503,9 @@ export const startResourceMetrics = ({
     const sampler = suppliedSampler ?? createResourceSampler(owners);
     let inFlight: Promise<void> | undefined;
     let persistenceFailed = false;
+    // The sample this one is diffed against, for the OOM alarm. Held in memory rather than read back off the
+    // file: the alarm is about the window that just passed, and a restart deliberately has nothing to compare.
+    let previous: ResourceSnapshot | undefined;
     const path = resourceMetricsPath(historyRoot);
     const sample = (): Promise<void> => {
         if (inFlight !== undefined) {
@@ -450,6 +516,16 @@ export const startResourceMetrics = ({
             await mkdir(logsRoot(historyRoot), { recursive: true });
             await appendFile(path, `${JSON.stringify(snapshot)}\n`, "utf8");
             persistenceFailed = false;
+            // Persisted first: the line on disk is the record, and an alarm about a sample nobody can go and
+            // read afterwards is half an answer. See oomSinceSample for why this is a delta and not a level.
+            const killed = previous === undefined ? undefined : oomSinceSample(previous, snapshot);
+            previous = snapshot;
+            if (killed !== undefined) {
+                logger.error(
+                    { ...killed.kills, lostByRole: killed.lostByRole, at: snapshot.at },
+                    "the kernel killed processes in this container for running out of memory",
+                );
+            }
         })()
             .catch((error: unknown) => {
                 // One warning per uninterrupted failure spell. A read-only/missing history volume should be

@@ -143,9 +143,16 @@ describe("sealResult: the content fields, not the shape", () => {
  * classified internal or deliberately left to be wrapped. Adding a server without deciding fails here. */
 describe("conformance: every daemon-mounted MCP server is classified", () => {
     const SRC = join(import.meta.dirname, "..");
-    // Deliberately wrapped despite being daemon-mounted: the browser servers, whose whole job is to bring the
-    // internet's text back. Keyed by the literal that mounts them.
-    const WRAPPED_ON_PURPOSE = new Set(["web"]);
+    /* Deliberately wrapped despite being daemon-mounted. Keyed by the literal that mounts them.
+     *
+     * `web`: the browser servers, whose whole job is to bring the internet's text back.
+     *
+     * `diagnostics`: reads the daemon's own log and ledger, which sounds internal and is not. Two of its four
+     * tools relay a PROVIDER'S OWN SENTENCE verbatim, `errors` through the failed-turn line's `reason` and
+     * `turns` through the ledger's `errorMessage`, and a third party's words arriving dressed as the platform's
+     * own log is exactly the shape the envelope exists for. Wrapping costs nothing here: the surrounding text
+     * is the daemon's, and a model that treats a relayed refusal as data rather than instruction is the point. */
+    const WRAPPED_ON_PURPOSE = new Set(["web", "diagnostics"]);
 
     /* Keys at the TOP level of the mount block: depth-aware rather than indentation-aware, because a server
      * is mounted as `name: server(...)` whose arguments carry keys of their own (`conversationId:`), and those

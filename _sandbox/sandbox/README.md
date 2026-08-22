@@ -380,6 +380,28 @@ conversation's worktree instead of a path that still reaches the shared checkout
   ranked summary stays in `daemon.log`, where somebody investigating an incident is already looking. A turn
   failure logs there too: `error` for an unclassified one, `warn` for the four codes that already own a durable
   trace elsewhere (a spent allowance, an outage, a refused token, a disabled seat).
+- **The records are asked, not tailed** (`src/logs/diagnostics-tools.ts`). Everything above was written well and
+  was, in practice, unreachable: measured over 728 sessions the `/logs` route was used *zero* times, `daemon.log`
+  150 times and the resource series 69, against 1,679 hand-rolled `/tmp/*.log` files and 178 occasions where an
+  agent added a `console.log` to find out what was happening. A raw tail of a 5MB JSON log is worse than the
+  print statement it replaces — oldest-first, unfiltered, mostly routine — so the unit is a filtered read:
+  `mcp__diagnostics__errors` (level floor, time window, substring, newest first), `slow` (the perf file, by
+  operation), `turns` (outcomes from the ledger, optionally failures only) and `resources` (a dotted path into
+  the metric series, with a summary). On the live sandbox that is 4,084 warnings and 6 errors in one file
+  reduced to "the 35 warnings from the last ten minutes". An answer whose read started mid-file says so, because
+  an empty result over a window nothing could see reads exactly like proof that nothing happened. The tools are
+  read-only and confined to `historyRoot/logs` plus the ledger — a turn reads the record of what it did and can
+  never edit it — and they are withheld from a persona whose `files` power is `none`. Their results are
+  deliberately **not** in `INTERNAL_SERVERS`: two of the four relay a provider's own sentence verbatim, and a
+  third party's words dressed as the platform's own log is what the outside-content envelope is for.
+- **An OOM kill is the loudest thing in the log, not a number in a file.** The cgroup counters were always in
+  every sample, which is indistinguishable from not recording them: "agents spawn too many subagents and some get
+  killed" cost 185 tool calls against data already on disk. `resource-metrics.ts` now diffs each sample's
+  `event_oom_kill` against the previous one and logs at `error`, naming the roles that lost processes. A delta,
+  not a level — the counters are cumulative for the container's life, so their absolute value is true forever
+  after the first kill — and silent on the first sample after a restart, which has nothing to compare against.
+  The series also gets its own retention (`FILE_CAPS` in `src/logs/log-files.ts`): at ~4KB a minute the shared
+  5MB ceiling was about 21 hours, so it could not answer "what did memory do yesterday" no matter who asked.
 - **This process is the control plane, so weight is kept out of it.** Every browser request, agent turn and git
   poll goes through one event loop, and what makes them slow is usually not their own work but the daemon's
   resident size: `fork()` copies page tables in proportion to it (1.5 ms from 55 MB, 27 ms at the 1.8 GB this

@@ -1,0 +1,164 @@
+import { mkdtempSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { UsageTurn } from "@intentic/sandbox-contract";
+import { expect, test } from "vitest";
+import { createDiagnosticsServer, type DiagnosticsToolDeps } from "./diagnostics-tools.js";
+
+/* The tools as the model meets them: called by name, answered in text. What these pin is the WORDING as much as
+ * the filtering, because the whole reason these exist rather than a documented file path is that the answer has
+ * to be readable by whoever asked without a second call to work out what it meant. */
+
+const NOW = Date.UTC(2026, 7, 22, 12, 30, 0);
+const at = (minutesAgo: number): string => new Date(NOW - minutesAgo * 60_000).toISOString();
+
+const turn = (over: Partial<UsageTurn>): UsageTurn => ({
+    at: NOW - 60_000,
+    day: "2026-08-22",
+    provider: "claude",
+    harness: "native",
+    turns: 1,
+    inputTokens: 1,
+    outputTokens: 1,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    costUsd: 0.1,
+    durationMs: 100,
+    ...over,
+});
+
+const setup = async (files: Record<string, readonly string[]>, turns: readonly UsageTurn[] = []): Promise<DiagnosticsToolDeps> => {
+    const historyRoot = mkdtempSync(join(tmpdir(), "diag-tools-"));
+    await mkdir(join(historyRoot, "logs"), { recursive: true });
+    for (const [name, lines] of Object.entries(files)) {
+        await writeFile(join(historyRoot, "logs", name), `${lines.join("\n")}\n`);
+    }
+    return { historyRoot, usage: { turns: async () => [...turns] }, now: () => NOW };
+};
+
+/* Call one tool by name and return the text it answered with, which is all the model ever sees.
+ *
+ * Through the SDK server's own registry rather than a hand-rolled seam: the registry is what the harness
+ * actually dispatches on, so a tool renamed or dropped fails these tests instead of quietly disappearing from
+ * the prompt. `_registeredTools` is private to McpServer, hence the one cast. */
+const call = async (deps: DiagnosticsToolDeps, name: string, args: Record<string, unknown>): Promise<string> => {
+    const server = createDiagnosticsServer(deps);
+    const registry = server.instance as unknown as {
+        _registeredTools: Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>;
+    };
+    const registered = registry["_registeredTools"][name];
+    expect(registered, `no tool named ${name}`).toBeDefined();
+    const result = (await registered?.handler(args, {})) as { content: { text: string }[] };
+    return result.content.map((part) => part.text).join("\n");
+};
+
+test("errors defaults to warn and worse, newest first", async () => {
+    const deps = await setup({
+        "daemon.log": [
+            JSON.stringify({ time: at(5), level: "info", message: "chores: probe finished" }),
+            JSON.stringify({ time: at(4), level: "warn", message: "host: heartbeat failed" }),
+            JSON.stringify({ time: at(3), level: "error", message: "turn failed", code: "claude-not-entitled" }),
+        ],
+    });
+
+    const text = await call(deps, "errors", {});
+    expect(text).toContain("2 lines, newest first");
+    // The error is above the warning, and the routine line is not there at all.
+    expect(text.indexOf("turn failed")).toBeLessThan(text.indexOf("heartbeat"));
+    expect(text).not.toContain("probe finished");
+});
+
+test("errors narrows by window and by substring", async () => {
+    const deps = await setup({
+        "daemon.log": [
+            JSON.stringify({ time: at(600), level: "error", message: "ancient", conversationId: "a" }),
+            JSON.stringify({ time: at(2), level: "error", message: "recent", conversationId: "wise-condor" }),
+        ],
+    });
+
+    expect(await call(deps, "errors", { sinceMinutes: 10 })).not.toContain("ancient");
+    expect(await call(deps, "errors", { contains: "wise-condor" })).toContain("recent");
+});
+
+test("an empty window says so plainly, so nobody reads it as a crash", async () => {
+    const deps = await setup({ "daemon.log": [JSON.stringify({ time: at(500), level: "error", message: "old" })] });
+    expect(await call(deps, "errors", { sinceMinutes: 5 })).toBe("No lines in that window.");
+});
+
+test("slow reads its own file and can be narrowed to one operation", async () => {
+    const deps = await setup({
+        "perf.jsonl": [
+            JSON.stringify({ time: at(3), level: "warn", perf: "git.run", ms: 500, load1: 19.2, message: "slow git.run" }),
+            JSON.stringify({ time: at(2), level: "warn", perf: "http.request", ms: 2000, load1: 0.2, message: "slow http.request" }),
+        ],
+    });
+
+    const all = await call(deps, "slow", {});
+    // The load rides along: it is what separates a real regression from a busy machine.
+    expect(all).toContain("19.2");
+    expect(await call(deps, "slow", { op: "git." })).not.toContain("http.request");
+});
+
+test("turns reports what ran and what failed, and names the asked-for model only when it differs", async () => {
+    const deps = await setup({}, [
+        turn({ outcome: "ok", model: "claude-opus-5", modelRequested: "claude-opus-5", conversationId: "c1" }),
+        turn({
+            outcome: "error",
+            errorCode: "claude-not-entitled",
+            errorMessage: "Claude Code is not enabled",
+            model: "grok-4",
+            modelRequested: "opus-4-6-thinking",
+            conversationId: "c2",
+            turns: 0,
+            costUsd: 0,
+        }),
+    ]);
+
+    const text = await call(deps, "turns", {});
+    expect(text).toContain("2 turns, 1 failed");
+    expect(text).toContain("claude-not-entitled");
+    // The divergence is the answer, so it is printed; a matching pair would only be noise on every row.
+    expect(text).toContain(`"asked":"opus-4-6-thinking"`);
+    expect(text).not.toContain(`"asked":"claude-opus-5"`);
+});
+
+test("turns can be narrowed to failures and to one conversation", async () => {
+    const deps = await setup({}, [
+        turn({ outcome: "ok", conversationId: "c1" }),
+        turn({ outcome: "error", errorCode: "rate_limit", conversationId: "c2" }),
+        turn({ outcome: "cancelled", conversationId: "c3" }),
+    ]);
+
+    const failed = await call(deps, "turns", { failedOnly: true });
+    expect(failed).toContain("2 turns");
+    expect(failed).not.toContain("c1");
+    expect(await call(deps, "turns", { conversationId: "c2" })).toContain("1 turns");
+});
+
+test("a turn with no recorded outcome is reported as unrecorded, never as a success", async () => {
+    const deps = await setup({}, [turn({})]);
+    // Absent means the row predates outcome being recorded. Printing "ok" here would be inventing a fact.
+    expect(await call(deps, "turns", {})).toContain(`"outcome":"unrecorded"`);
+});
+
+test("resources turns a dotted path into a series with a summary", async () => {
+    const deps = await setup({
+        "resource-metrics.jsonl": [
+            JSON.stringify({ at: at(3), system: { cgroup: { event_oom_kill: 0 } } }),
+            JSON.stringify({ at: at(2), system: { cgroup: { event_oom_kill: 4 } } }),
+        ],
+    });
+
+    const text = await call(deps, "resources", { field: "system.cgroup.event_oom_kill" });
+    expect(text).toContain("2 samples, min 0, mean 2, max 4");
+});
+
+test("a misspelled metric path is diagnosed rather than answered with an empty series", async () => {
+    const deps = await setup({ "resource-metrics.jsonl": [JSON.stringify({ at: at(1), daemon: { memory: { rssBytes: 5 } } })] });
+
+    const text = await call(deps, "resources", { field: "daemon.memory.rssByttes" });
+    // The failure mode this prevents: a confident "no data" that was really a typo.
+    expect(text).toContain("No numeric values at `daemon.memory.rssByttes`");
+    expect(text).toContain("1 samples");
+});

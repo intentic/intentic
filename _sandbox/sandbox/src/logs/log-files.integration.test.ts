@@ -51,3 +51,27 @@ test("pruneLogFiles truncates oversized files to their tail and drops stale ones
     await expect(readFile(join(root, "stale.log"))).rejects.toThrow();
     expect((await readFile(join(root, "fresh.log"), "utf8")).toString()).toBe("new");
 });
+
+/* THE RESOURCE SERIES GETS ITS OWN CAP, because 5MB of it is about 21 hours.
+ *
+ * It writes one ~4KB object a minute, so the shared debug-log ceiling meant the file could not answer "what did
+ * memory do yesterday" no matter who asked. That is the same failure as not recording it at all. */
+test("resource-metrics.jsonl keeps a week where a debug log keeps 5MB", async () => {
+    const root = await tempRoot();
+    // Six megabytes: past the shared cap, nowhere near this file's own.
+    await writeFile(join(root, "resource-metrics.jsonl"), Buffer.alloc(6_000_000, 120));
+    await writeFile(join(root, "daemon.log"), Buffer.alloc(6_000_000, 120));
+    await pruneLogFiles(root);
+
+    // Untouched: it is well inside its 40MB budget.
+    expect((await stat(join(root, "resource-metrics.jsonl"))).size).toBe(6_000_000);
+    // The ordinary log is still held to the shared cap, so the exception is an exception.
+    expect((await stat(join(root, "daemon.log"))).size).toBe(1_000_000);
+});
+
+test("past its own cap the series is truncated to a tail that still holds most of the week", async () => {
+    const root = await tempRoot();
+    await writeFile(join(root, "resource-metrics.jsonl"), Buffer.alloc(40_000_001, 120));
+    await pruneLogFiles(root);
+    expect((await stat(join(root, "resource-metrics.jsonl"))).size).toBe(30_000_000);
+});

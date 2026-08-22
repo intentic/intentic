@@ -10,13 +10,32 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 // (resource-metrics.jsonl). Living under historyRoot keeps them outside the agent's /work mount, the same
 // placement rationale as activity.jsonl.
 
-// Prune policy: copy-truncate any file past MAX_FILE_BYTES to its newest TAIL_BYTES (safe under the writers'
-// O_APPEND fds, later appends land after the rewritten tail), drop files idle past MAX_AGE_MS, and cap the
-// tree at MAX_FILES newest-first.
+// Prune policy: copy-truncate any file past its cap to its newest tail (safe under the writers' O_APPEND fds,
+// later appends land after the rewritten tail), drop files idle past MAX_AGE_MS, and cap the tree at MAX_FILES
+// newest-first.
 const MAX_FILE_BYTES = 5_000_000;
 const TAIL_BYTES = 1_000_000;
 const MAX_AGE_MS = 30 * 24 * 3_600_000;
 const MAX_FILES = 100;
+
+/* PER-FILE CAPS, for the series whose honest size is not a debug log's.
+ *
+ * The shared 5MB cap is a sensible ceiling for text nobody plans to query. It is the wrong ceiling for
+ * resource-metrics.jsonl, which writes one ~4KB object a minute: 5MB is about 21 hours, so the file could not
+ * answer "what did memory do yesterday" no matter who asked it. That is the same failure as not recording it.
+ *
+ * A week of one-minute samples is ~40MB, which buys the question "was this happening before the weekend" for
+ * the price of a rounding error on the /history volume, and the tail kept on truncation is sized to leave most
+ * of that week rather than a fifth of it. The 30-day idle expiry and the file cap still apply.
+ *
+ * By exact name rather than by extension: this is a decision about one known writer's known cadence, and a
+ * pattern would quietly hand the same budget to the next .jsonl anybody adds. */
+const FILE_CAPS: Readonly<Record<string, { readonly maxBytes: number; readonly tailBytes: number }>> = {
+    "resource-metrics.jsonl": { maxBytes: 40_000_000, tailBytes: 30_000_000 },
+};
+
+const capFor = (root: string, path: string): { readonly maxBytes: number; readonly tailBytes: number } =>
+    FILE_CAPS[relative(root, path).split(sep).join("/")] ?? { maxBytes: MAX_FILE_BYTES, tailBytes: TAIL_BYTES };
 
 export const logsRoot = (historyRoot: string): string => join(historyRoot, "logs");
 
@@ -84,10 +103,10 @@ export const pruneLogFiles = async (root: string): Promise<void> => {
     await Promise.all(evicted.map((file) => rm(file.path, { force: true })));
     await Promise.all(
         live
-            .filter((file) => file.size > MAX_FILE_BYTES)
+            .filter((file) => file.size > capFor(root, file.path).maxBytes)
             .map(async (file) => {
-                // ponytail: read-then-rewrite drops appends racing the rewrite, fine for debug logs at a 5MB cap.
-                const tail = (await readFile(file.path)).subarray(-TAIL_BYTES);
+                // ponytail: read-then-rewrite drops appends racing the rewrite, fine for debug logs at these caps.
+                const tail = (await readFile(file.path)).subarray(-capFor(root, file.path).tailBytes);
                 await writeFile(file.path, tail);
             }),
     );

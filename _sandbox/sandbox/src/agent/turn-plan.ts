@@ -38,6 +38,7 @@ import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import type { Services } from "../composition.js";
 import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
+import { createDiagnosticsServer } from "../logs/diagnostics-tools.js";
 import { runRuleCommand } from "../rules/rule-command.js";
 import { standing } from "../rules/rules.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
@@ -864,6 +865,18 @@ export const planHarnessTurn = async (
                 ...(dependencyTitle === undefined ? {} : { title: dependencyTitle }),
             },
         }),
+        /* The daemon's own records, asked instead of re-derived (logs/diagnostics-tools.ts). What the daemon
+         * wrote down about failures, slow work, turn outcomes and machine resources, filtered by window and
+         * level rather than tailed.
+         *
+         * Gated on `files` rather than on a power of its own: these are reads of daemon-owned files, and a
+         * persona that may not read the workspace has no business reading the daemon's log either. Nothing here
+         * writes, and nothing reaches outside historyRoot/logs and the spend ledger, so a turn can read the
+         * record of what it did and never edit it. Withheld from a `none` card whole rather than degraded, a
+         * half-answer about why something failed is worse than being told to ask the owner. */
+        ...(persona.powers.files === "none"
+            ? {}
+            : { diagnostics: createDiagnosticsServer({ historyRoot: services.config.historyRoot, usage: services.usage }) }),
     };
     /* CODEX_HOME and the local bearer, for the one loop whose Bash can delegate. The NOTE that goes with them
      * is already in this turn's instructions, both were resolved above the provider split (planTurn), because
