@@ -9,18 +9,29 @@
 # Arch spread rather than `native` — there is no GPU at build time; Turing through Hopper covers the cards the
 # directive's nvidia-runtime host probe admits.
 # ponytail: bump the llama.cpp pin together with llamacpp.Dockerfile, the two build one tag.
-RUN install -m 0755 -d /etc/apt/keyrings \
+#
+# THE MOST EXPENSIVE FRAGMENT IN THE PROJECT, and the reason the build-cache mounts exist: ~600MB of CUDA
+# toolkit and ~900 translation units across five architectures. Nothing about it depends on the sandbox's own
+# source, yet it sits above it in the overlay, so it re-ran in full on every rebuild — 19 minutes of a
+# 40-minute one. The apt mounts keep the toolkit bytes and the ccache mount keeps the object files, so a
+# re-run after an image update recompiles almost nothing. ccache understands nvcc, hence the CUDA launcher.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.cache/ccache \
+    install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub -o /etc/apt/keyrings/nvidia-cuda.asc \
     && echo "deb [signed-by=/etc/apt/keyrings/nvidia-cuda.asc] https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/ /" \
         > /etc/apt/sources.list.d/nvidia-cuda.list \
-    && apt-get update && apt-get install -y --no-install-recommends cmake g++ make libgomp1 cuda-nvcc-12-6 cuda-cudart-dev-12-6 libcublas-dev-12-6 \
+    && apt-get update && apt-get install -y --no-install-recommends cmake ccache g++ make libgomp1 cuda-nvcc-12-6 cuda-cudart-dev-12-6 libcublas-dev-12-6 \
     && git clone --depth 1 --branch b10581 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp \
     && cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
         -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
         -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
     && cmake --build /tmp/llama.cpp/build -j --target llama-server \
+    && ccache --show-stats \
     && install /tmp/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server \
     && rm -rf /tmp/llama.cpp \
-    && apt-get purge -y cmake cuda-nvcc-12-6 cuda-cudart-dev-12-6 libcublas-dev-12-6 \
+    && apt-get purge -y cmake ccache cuda-nvcc-12-6 cuda-cudart-dev-12-6 libcublas-dev-12-6 \
     && apt-get install -y --no-install-recommends cuda-cudart-12-6 libcublas-12-6 \
-    && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+    && apt-get autoremove -y

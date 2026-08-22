@@ -78,9 +78,12 @@ export const until = async <T>(read: () => Promise<T | undefined>, what: string,
 };
 
 // `docker build` the composed overlay from stdin, the exact command recreate.sh runs (`docker build - <overlay`).
+// BuildKit is pinned on for the same reason the ic recreate flow pins it (see docker.rs stream_with_stdin): the
+// fragments carry `RUN --mount=type=cache`, which the legacy builder fails on rather than ignores, so a runner
+// with DOCKER_BUILDKIT=0 in its environment would fail these tests for a reason that has nothing to do with them.
 export const dockerBuild = (dockerfile: string, tag: string): Promise<void> =>
     new Promise((resolve, reject) => {
-        const build = spawn("docker", ["build", "-t", tag, "-"]);
+        const build = spawn("docker", ["build", "-t", tag, "-"], { env: { ...process.env, DOCKER_BUILDKIT: "1" } });
         let output = "";
         build.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
         build.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));

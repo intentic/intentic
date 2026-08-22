@@ -53,6 +53,9 @@ const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; re
     if (contributes?.environment !== undefined) {
         promised.push({ what: "image fragment", path: contributes.environment.fragment });
     }
+    /* A capability's `pack` promises no FILE — it names a feature pack that ships inside the image — so there is
+     * nothing in the checkout for this walk to find missing. A name no pack answers to is caught where the pack
+     * is resolved (environment/fragment-sources.ts), the only place that knows the pack list. */
     for (const capability of contributes?.capabilities ?? []) {
         if ("skill" in capability) {
             promised.push({ what: `skill for ${capability.id}`, path: capability.skill });

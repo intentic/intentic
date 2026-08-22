@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
-import { contributionFor, contributionFragmentPath, contributionRegistry } from "../capabilities/contributions.js";
+import { contributionFor, contributionFragmentPath, contributionPackName, contributionRegistry } from "../capabilities/contributions.js";
+import { packFragment, readPack } from "./packs.js";
 import { registry } from "../capabilities/registry.js";
 import { extensionDir, extensionRead, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
 import { enabledExtensions } from "../extensions/installed-extensions.js";
@@ -66,16 +67,40 @@ export const capabilityFragments = async (services: Services, capability: Capabi
             fragments.push(...(await readFragment(services, capability.id, join(dir, fragmentPath))));
         }
     }
-    // A cli connector's image fragment (psql/mysql/whisper client) lives in the extension that declares the
-    // connector, resolve it the same allowlisted way.
+    // A cli connector's tools (psql/mysql/whisper client) come either from a feature pack it NAMES — the
+    // stamp-aware route, nothing composed when the base already bakes it — or from a fragment file in the
+    // extension that declares the connector, read the same allowlisted way.
     if (capability.kind === "cli") {
         const connector = contributionFor(await contributionRegistry(services), "cli", capability.config);
+        const pack = connector === undefined ? undefined : contributionPackName(connector);
+        if (pack !== undefined) {
+            fragments.push(...(await resolvePack(services, capability.id, pack)));
+        }
         const fragmentPath = connector === undefined ? undefined : contributionFragmentPath(connector);
         if (fragmentPath !== undefined) {
             fragments.push(...(await readFragment(services, capability.id, fragmentPath)));
         }
     }
     return fragments;
+};
+
+/* A named feature pack as an overlay fragment, or NOTHING when the running base image already bakes that exact
+ * pack version — which is the whole reason a contribution should name a pack rather than copy one. The two
+ * empty-handed cases that are NOT that are warned about, because they are manifest bugs that would otherwise
+ * present as a capability silently missing its tool: a name no pack answers to, and a bake-only pack (one that
+ * COPYs from the image build context, which an overlay build has no context for). */
+const resolvePack = async (services: Services, id: string, name: string): Promise<string[]> => {
+    const pack = await readPack(name);
+    if (pack === undefined) {
+        services.logger.warn({ id, pack: name }, "contribution names a feature pack that does not exist: skipping");
+        return [];
+    }
+    if (!pack.overlayable) {
+        services.logger.warn({ id, pack: name }, "contribution names a bake-only feature pack (it COPYs from the build context): skipping");
+        return [];
+    }
+    const fragment = await packFragment(name);
+    return fragment === undefined ? [] : [fragment];
 };
 
 // A WORKSPACE extension's contributes.environment fragment. It has no capability entry, so the per-capability

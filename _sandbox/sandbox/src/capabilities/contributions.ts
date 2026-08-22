@@ -120,6 +120,11 @@ export const contributionFragmentPath = (contribution: ResolvedContribution): st
         ? join(contribution.extension.dir, contribution.spec.fragment)
         : undefined;
 
+// The feature pack a cli contribution names instead of shipping its own fragment: the stamp-aware route, so a
+// base image that already bakes the tool composes nothing. See the schema's `pack` field for why it is preferred.
+export const contributionPackName = (contribution: ResolvedContribution): string | undefined =>
+    contribution.spec.kind === "cli" ? contribution.spec.pack : undefined;
+
 /* THE CARD'S SKILL.md, read and rendered for ONE instance, the cli and host kinds, whose skills stay
  * per-entry (a browser pack's renders once per SITE instead: capabilities/account-skills.ts). Three
  * substitutions:

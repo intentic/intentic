@@ -5,7 +5,8 @@
 # lockstep with @opencode-ai/sdk — a version skew surfaces as server-start / event-shape errors;
 # packs.integration.test.ts holds the two in step.
 # ponytail: bump together with @opencode-ai/sdk.
-RUN npm install -g opencode-ai@1.18.18 && opencode --version && npm cache clean --force
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g opencode-ai@1.18.18 && opencode --version
 # OpenCode privacy defaults, in the GLOBAL config (the only level where autoupdate:false is honored): no
 # auto-update (the CLI is version-pinned above) and no session sync to opncd.ai, even manual /share. The
 # daemon's server-spawn config (grok/opencode.ts) merges over this file, so runtime overrides are unaffected.

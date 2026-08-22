@@ -16,11 +16,16 @@
 # it look like a turn that was merely thinking. Upstream now treats a typeless schema as the free-form value it
 # is, which is the floor this pack has to clear: a local model is only useful to an agent that can call tools.
 # ponytail: bump the pin deliberately; a llama.cpp server-API change surfaces as a local-model-only failure.
-RUN apt-get update && apt-get install -y --no-install-recommends cmake g++ make libgomp1 \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.cache/ccache \
+    apt-get update && apt-get install -y --no-install-recommends cmake ccache g++ make libgomp1 \
     && git clone --depth 1 --branch b10581 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp \
     && cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
         -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     && cmake --build /tmp/llama.cpp/build -j --target llama-server \
+    && ccache --show-stats \
     && install /tmp/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server \
     && rm -rf /tmp/llama.cpp \
-    && apt-get purge -y cmake && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+    && apt-get purge -y cmake ccache && apt-get autoremove -y

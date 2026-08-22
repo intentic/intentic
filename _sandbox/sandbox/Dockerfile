@@ -22,6 +22,18 @@
 FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc AS runtime
 # Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
+
+# THE BUILD-CACHE CONTRACT, set once here and relied on by every apt block downstream: in this file, in every
+# feature pack, and in every environment-overlay fragment. Each of those mounts /var/cache/apt and
+# /var/lib/apt/lists as BuildKit caches, so a re-run that misses the layer cache still does not re-download.
+# That matters because an overlay is `FROM` this image: publishing a new sandbox image changes this image's
+# digest, which invalidates EVERY overlay layer above it, so a sandbox re-installs its whole environment on
+# every update. The layer miss is unavoidable (the parent chain really did change); paying for the bytes twice
+# is not. _tools/scripts/build-cache-mounts.mjs enforces the mounts, and enforcement is what makes removing
+# docker-clean safe: Debian's drop-in deletes the archives after each install, which would empty the very cache
+# mount it is meant to fill, but with it gone an UNMOUNTED apt block would commit its .debs into the image.
+RUN rm -f /etc/apt/apt.conf.d/docker-clean \
+    && printf 'Binary::apt::APT::Keep-Downloaded-Packages "true";\n' > /etc/apt/apt.conf.d/99intentic-keep-downloads
 # procps gives the interactive terminal (system/terminal.ts) real process tools — `ps`, `top`, `kill` — so the
 # owner can see what's running in the sandbox and reap a stuck dev command. zsh is the terminal's shell (below).
 # tmux backs the terminal's sessions: each web tab attaches a tmux session, and the tmux server outlives the
@@ -37,7 +49,8 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # Dockerfile fragment the daemon composes into the sandbox's environment overlay on enable (see
 # capabilities/capability.ts `fragment`), applied by an owner-run rebuild. whisper.cpp graduated out of that
 # set into the `whisper` feature pack (composer voice input needs it on every standard image); Discord's
-# connector still composes it as a fragment for images without the pack.
+# connector NAMES that pack rather than shipping its own copy of the build, so a standard image composes
+# nothing for it (see the pack's own header).
 # python3 + make + g++ are the node-gyp toolchain: runtime `pnpm install` (ensure-intent.ts, scaffold
 # inject-template.ts, or a dev in /work) compiles native deps from source — node-pty ships no linux
 # prebuild, so it ALWAYS builds here. Uncommon toolchains (cmake, -dev headers) stay an overlay concern.
@@ -56,9 +69,10 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # python-is-python3 for the rarer sibling: `python` unqualified is only 2 sessions in 1146, but both came
 # from runners that are not this image's usual agent (a delegated CLI, a loop attempt) writing `python -m`
 # out of habit, and Debian ships no such name. One package ends a whole class of no-such-command.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++ ripgrep \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++ ripgrep
 # Docker Engine, Chromium, provider CLIs et al. are NOT here — each is a feature pack (packs/<name>.Dockerfile)
 # spliced at the markers below for the profiles that bake it, or riding the environment overlay on demand.
 # Every runner still mounts a named volume at /var/lib/docker (empty until the docker capability's privilege
@@ -161,13 +175,19 @@ RUN corepack enable && corepack prepare pnpm@11.21.0 --activate \
 # like every other tool in this image so a bad upstream release fails a deliberate bump, not the next pipeline.
 # ponytail: bump alongside the node base image — node-gyp tracks the headers it compiles against.
 #
-# EVERY `npm install` IN THIS FILE ENDS IN A CACHE CLEAN. npm keeps the downloaded tarball in ~/.npm/_cacache
-# next to the package it unpacked, and cacache stores that tarball exactly as the registry served it — already
-# gzipped — so an uncleaned layer pays for the same bytes twice in every pull, and the second copy barely
-# compresses. Measured in the published image: 420 MiB of tarballs left behind by the global installs and another
-# 45 MiB by the playwright layer, ~23% of a 2 GB pull, for a cache nothing reads (installs in /work are pnpm's,
-# and its store lives on the volume).
-RUN npm install -g node-gyp@13.0.1 && node-gyp --version && npm cache clean --force
+# EVERY `npm install` IN THIS FILE MOUNTS ~/.npm AS A BUILD CACHE. npm keeps the downloaded tarball in
+# ~/.npm/_cacache next to the package it unpacked, and cacache stores it exactly as the registry served it —
+# already gzipped — so a layer that KEEPS that directory pays for the same bytes twice in every pull, and the
+# second copy barely compresses. Measured in the published image: 420 MiB of tarballs left behind by the global
+# installs and another 45 MiB by the playwright layer, ~23% of a 2 GB pull, for a cache nothing reads at runtime
+# (installs in /work are pnpm's, and its store lives on the volume).
+#
+# These installs used to end in `npm cache clean --force` for that reason. A cache MOUNT is strictly better and
+# replaces it: mounted content is never committed to a layer, so the image is just as small, and the tarballs
+# survive for the next build instead of being thrown away — which matters because every layer here re-runs
+# whenever the image's own base or an earlier layer moves. Cleaning it now would only empty the mount.
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g node-gyp@13.0.1 && node-gyp --version
 # The provider CLIs — `opencode` (Grok), `cli-proxy-api` (the subscription translator) and `codex` — are
 # feature packs: connected-provider state decides whether each rides the overlay (environment/provider-packs.ts),
 # and the standard profile bakes them all.
@@ -225,14 +245,15 @@ RUN arch="$(dpkg --print-architecture)" \
 # present under the wrong name costs more turns than an absent one). Placed after the pinned installs above
 # so adding a staple here never re-runs the Docker/Chromium layers, and before the tree COPYs so it stays
 # cache-stable across source changes.
-RUN apt-get update \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update \
     && apt-get install -y --no-install-recommends \
         lsof psmisc net-tools iputils-ping traceroute dnsutils netcat-openbsd socat strace \
         file tree unzip zip xz-utils zstd bzip2 sqlite3 patch bsdextrautils xxd libxml2-utils moreutils \
         less nano vim-tiny bc gettext-base uuid-runtime dos2unix wget git-lfs \
     && ln -s /usr/bin/vim.tiny /usr/local/bin/vim \
-    && git lfs install --system \
-    && rm -rf /var/lib/apt/lists/*
+    && git lfs install --system
 # yq on PATH — jq's counterpart for YAML, for editing a compose file, a CI pipeline or a k8s manifest from a
 # shell pipeline instead of hand-patching it with sed. It was baked to cover the missing-PyYAML case too, and
 # the transcripts say it did not: yq usage held at 0.6% of sessions across the bake while agents went on

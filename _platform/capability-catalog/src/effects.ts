@@ -132,7 +132,13 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         if (secret) {
             effects.push({ kind: "secret", exposure: "agent-env" });
         }
-        if (input.contribution?.kind === "cli" && input.contribution.fragment !== undefined) {
+        /* A connector touches the image either by shipping a fragment or by NAMING a feature pack. Both count
+         * here, and the pack case is deliberately disclosed even though it often costs nothing: whether the
+         * running base image already bakes that pack is a fact only the daemon can read (it lives in the
+         * image's pack stamps), and this panel is computed in the browser before the add. Over-disclosing "may
+         * need a rebuild" is the safe direction — the daemon's own derived status is what actually decides
+         * whether one is pending, and on a standard image it will simply say no. */
+        if (input.contribution?.kind === "cli" && (input.contribution.fragment !== undefined || input.contribution.pack !== undefined)) {
             effects.push({ kind: "image" });
         }
         return effects;

@@ -188,6 +188,20 @@ export const CapabilityContributionSchema = z
                 .min(1)
                 .optional()
                 .describe("A Dockerfile fragment holding the client binary this tool needs (psql, mysql, whisper)."),
+            /* PREFER THIS over `fragment` whenever the sandbox already ships a pack for the tool. A pack
+             * reference is resolved through the image's pack stamps, so on an image that BAKES the pack the
+             * capability enables with no overlay and no rebuild at all, and on one that doesn't, the overlay
+             * gets the pack's own fragment — the same bytes the image would have baked, never a second copy
+             * that can drift from it. Discord's voice transcription was exactly that second copy: a fragment
+             * whose RUN lines were byte-identical to the `whisper` pack, so a standard image compiled
+             * whisper.cpp once at publish and again in every overlay rebuild, for the same binary. */
+            pack: z
+                .string()
+                .min(1)
+                .optional()
+                .describe(
+                    "A sandbox feature pack name (whisper, llamacpp, browser, …) supplying this tool. Preferred over `fragment`: an image that already bakes the pack needs no rebuild, and there is no copy to drift.",
+                ),
         }),
         /* A site the agent acts on AS THE OWNER, through the shared logged-in Chromium. `loginUrl` is what the
          * sign-in window opens; the profile it persists is the credential. `homeUrl` is where that same profile

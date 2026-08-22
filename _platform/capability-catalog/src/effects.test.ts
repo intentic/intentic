@@ -94,12 +94,14 @@ describe("capabilityEffects", () => {
             contribution: connector({ id: "postgres", fragment: "env/postgres.Dockerfile" }),
         });
         expect(postgres).toContainEqual({ kind: "image" });
-        // Discord's whisper fragment is connector spec data like any other: the image effect derives from it.
+        // Discord NAMES the whisper pack rather than shipping a fragment, and that touches the image just the
+        // same: whether the running base already bakes the pack is a stamp only the daemon can read, so the
+        // pre-add panel discloses the rebuild either way.
         const discord = capabilityEffects({
             kind: "cli",
             id: "discord",
             config: { provider: "discord" },
-            contribution: connector({ id: "discord", fragment: "env/whisper.Dockerfile" }),
+            contribution: connector({ id: "discord", pack: "whisper" }),
         });
         expect(discord).toContainEqual({ kind: "image" });
     });

@@ -55,15 +55,64 @@ owner-approved custom section. You propose ONLY custom-section content.
    the image put there.
 4. Steps must be self-contained: install (and clean up) your own build deps, capability fragments purge
    theirs, so don't rely on another layer's compilers.
-5. apt hygiene: `RUN apt-get update && apt-get install -y --no-install-recommends <pkgs> && rm -rf /var/lib/apt/lists/*`.
+5. **Mount the build caches — this is the one rule with teeth.** Every `RUN` that installs with apt must
+   carry both apt cache mounts, and must NOT delete `/var/lib/apt/lists` (see below for why). Every `RUN`
+   that compiles with cmake must mount ccache and route the compilers through it. The published packs are
+   held to the same rule by `_tools/scripts/build-cache-mounts.mjs`; copy the shapes below verbatim.
+
+### Why the mounts matter more than they look
+
+This overlay is `FROM` the sandbox image. When a new sandbox image is published, that image's digest changes,
+which invalidates **every layer of this overlay** — so on each update the sandbox reinstalls its entire
+environment from scratch, and the bill grows with every tool anyone has ever added. One measured rebuild spent
+19 minutes recompiling a GPU llama.cpp and 14 more downloading 175MB of Debian packages, none of whose recipes
+had changed.
+
+The layer miss is unavoidable: the image underneath genuinely did change. Re-downloading the bytes and
+recompiling the same objects is not. A cache mount survives the miss, and it is never committed to the image,
+so the cache costs nothing in image size — which is why the old `rm -rf /var/lib/apt/lists/*` is now both
+harmful (it empties the cache the next rebuild would have read) and pointless (the lists never reach a layer).
+
+Example (apt packages):
+
+```dockerfile
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends build-essential
+```
 
 Example (Rust toolchain):
 
 ```dockerfile
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
-RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends build-essential
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
 ```
+
+Example (anything built with cmake — the ccache mount is what makes a rebuild cheap):
+
+```dockerfile
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.cache/ccache \
+    apt-get update && apt-get install -y --no-install-recommends cmake ccache g++ \
+    && cmake -S /tmp/src -B /tmp/build -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    && cmake --build /tmp/build -j \
+    && apt-get purge -y cmake ccache && apt-get autoremove -y
+```
+
+Other package managers take the same treatment where they have a cache directory worth keeping:
+`/root/.cargo/registry` for cargo, `/root/.npm` for npm, `/root/.cache/pip` for pip.
+
+6. **Don't hand-write a fragment for a tool the sandbox already packs.** If the thing you need is one of the
+   feature packs (a browser, whisper, llama.cpp, a Docker engine), enabling its capability composes it for
+   you — and on an image that already bakes it, composes nothing at all and needs no rebuild. A copied
+   fragment is a second pin that drifts from the pack's, and on a standard image it builds the same binary a
+   second time.
 
 ## After writing the file
 

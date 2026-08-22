@@ -97,7 +97,7 @@
                     "DISCORD_BOT_TOKEN": "${botToken}"
                 },
                 "skill": "skills/discord/SKILL.md",
-                "fragment": "env/whisper.Dockerfile"
+                "pack": "whisper"
             }
         ]
     }

@@ -179,8 +179,16 @@ pub fn stream(args: &[&str], log: &Log) -> Result<bool> {
 
 /// `stream`, with stdin fed from `input` — the stdin `docker build -t <tag> -` shape, where progress is the
 /// user experience (the terminal) and the log is the postmortem.
+///
+/// BUILDKIT IS FORCED ON, not merely assumed. Every apt block in the sandbox image, in a feature pack and in
+/// an overlay fragment carries `RUN --mount=type=cache` (the build-cache contract in the core Dockerfile's
+/// header), and the legacy builder does not merely ignore that flag — it fails the build outright. This runs on
+/// whatever machine the owner keeps their sandbox on, so a host with `DOCKER_BUILDKIT=0` in its environment or
+/// daemon config would otherwise turn a rebuild into a hard error the owner cannot read. Docker has defaulted
+/// to BuildKit since 23, so this only ever overrides an explicit opt-out.
 pub fn stream_with_stdin(args: &[&str], input: &[u8], log: &Log) -> Result<bool> {
     let mut child = docker(args)
+        .env("DOCKER_BUILDKIT", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
