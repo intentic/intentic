@@ -277,3 +277,107 @@ test("a steer taken mid-turn lands in the run's frames, and in the record, betwe
         { role: "assistant", text: "will do" },
     ]);
 });
+
+/* THE LEDGER NOW SAYS HOW A TURN ENDED, and this is the case that used to leave nothing at all.
+ *
+ * A turn refused before the provider charged a token emits no usage frame, and the ledger used to skip those
+ * rows on the reasoning that a zero-cost row would inflate the turn count. So the failures likeliest to arrive
+ * in a burst, a dead seat, a spent allowance, a refused token, were exactly the ones that left no record, and
+ * "four sessions all broke a minute ago" had to be answered by re-running the destructive act in a live sandbox.
+ *
+ * The count is protected in the rollup instead (usage-store.ts `billed`), which is why `turns` is 0 here: the
+ * row exists for the post-mortem and contributes nothing to the money. */
+test("a turn that fails before the provider bills anything still lands on the ledger, with its code and its sentence", async () => {
+    const ledger: Record<string, unknown>[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "error", code: "claude-not-entitled", message: "Claude Code is not enabled for this organization" };
+                    yield { kind: "done" };
+                },
+                usage: { record: async (turn) => void ledger.push(turn) },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "go", conversationId: "conv-failed" });
+
+    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    expect(ledger[0]).toMatchObject({
+        outcome: "error",
+        errorCode: "claude-not-entitled",
+        errorMessage: "Claude Code is not enabled for this organization",
+        turns: 0,
+        costUsd: 0,
+    });
+    /* And the experiment metrics are ABSENT, not zero. A turn that died before the provider spoke has no prose
+     * and no searches as a matter of arithmetic; fed to the arms as zeros, a burst of refusals would read as
+     * whichever arm was running having silenced the model. Absent is the value those readers already discard. */
+    expect("proseChars" in (ledger[0] ?? {})).toBe(false);
+    expect("searchCalls" in (ledger[0] ?? {})).toBe(false);
+});
+
+test("a turn that succeeds is recorded as such, with the experiment metrics it earned", async () => {
+    const ledger: Record<string, unknown>[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "delta", text: "done" };
+                    yield { kind: "usage", costUsd: 0.5, inputTokens: 10, outputTokens: 20 };
+                    yield { kind: "done" };
+                },
+                usage: { record: async (turn) => void ledger.push(turn) },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "go", conversationId: "conv-ok" });
+
+    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    expect(ledger[0]).toMatchObject({ outcome: "ok", costUsd: 0.5, proseChars: 4 });
+    // Nothing failed, so there is no code and no sentence to carry.
+    expect("errorCode" in (ledger[0] ?? {})).toBe(false);
+    expect("errorMessage" in (ledger[0] ?? {})).toBe(false);
+});
+
+/* THE MODEL ASKED FOR, BESIDE THE ONE THAT RAN. A pick is resolved past the tier judge, a provider default and
+ * a catalog validity check that silently substitutes, and none of those substitutions was recorded, so "I chose
+ * one model and got another's error" could only be answered by reading four resolution paths. */
+test("the ledger carries the requested model as well as the resolved one", async () => {
+    const ledger: Record<string, unknown>[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "usage", costUsd: 0.1 };
+                    yield { kind: "done" };
+                },
+                usage: { record: async (turn) => void ledger.push(turn) },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "go", conversationId: "conv-model", model: "opus-4-6-thinking" });
+
+    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    expect(ledger[0]).toMatchObject({ modelRequested: "opus-4-6-thinking" });
+});
+
+test("an empty model pick is recorded as no pick at all, not as an empty one", async () => {
+    const ledger: Record<string, unknown>[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "usage", costUsd: 0.1 };
+                    yield { kind: "done" };
+                },
+                usage: { record: async (turn) => void ledger.push(turn) },
+            }),
+        ),
+    );
+    // The wire allows it and the Codex path reads it as "the catalog default", so it is not a pick.
+    await runAgentTurn(client, { prompt: "go", conversationId: "conv-blank", model: "" });
+
+    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    expect("modelRequested" in (ledger[0] ?? {})).toBe(false);
+});

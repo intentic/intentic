@@ -603,6 +603,26 @@ async function* runConversationTurn(
 // already shown the user a "connecting" flash.
 const SLOW_PREFLIGHT_MS = 5_000;
 
+/* How much of a failure's own sentence the spend ledger keeps (UsageTurn.errorMessage).
+ *
+ * Enough to hold any real provider refusal whole; short enough that a run of failures cannot turn a
+ * never-pruned file into something too big to read in one pass, which is the one property that makes this
+ * ledger worth having over the activity log. */
+const ERROR_MESSAGE_CHARS = 400;
+
+/* The four codes that already own a durable trace of their own, and the reason a failed turn is not
+ * automatically an `error` line.
+ *
+ * A spent allowance, a provider outage, a refused token and a disabled seat are all operational facts about
+ * somewhere else. Each is filed where the surfaces that care actually read it (provider-refusals.json, the
+ * outage breaker, the auth-resume record, claude-seats.ts), each is expected to happen, and logging them at
+ * `error` would restore exactly the problem the level exists to solve: 5,465 warnings in one log file, of which
+ * 4,700 were routine, and six real errors nobody could find among them.
+ *
+ * Anything NOT in this set is an unclassified turn failure, which is the case nothing downstream knows how to
+ * handle and the one worth waking up for. */
+const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set(["rate_limit", "provider-outage", "claude-token-refused", "claude-not-entitled"]);
+
 /* The session this turn resumes: the one it named, or none, because the runtime serving it does not have that
  * one any more. Which store answers is the adapter's (adapter.ts holdsSession); what a "no" MEANS is here, and
  * it is the same for all four: the turn opens a fresh session, seeded from the conversation's record by the
@@ -967,6 +987,13 @@ async function* runTurn(
     let searchCalls = 0;
     let openingSearches = 0;
     let reachedTheWork = false;
+    /* THE LAST ERROR FRAME THIS TURN EMITTED, for the ledger's `outcome` and the one `error` line the log was
+     * missing. LAST, not first: a turn that fails, resumes past an outage and then fails again ended on the
+     * second failure, and the second is what a reader asking "why did this turn die" needs.
+     *
+     * A frame reached here at all means it was not an abort, the branch above drops those before anything sees
+     * them, so a user pressing Stop can never be recorded as a failure. */
+    let failure: { readonly code: string | undefined; readonly message: string } | undefined;
     const record = (event: Omit<ActivityEvent, "id" | "at" | "provider" | "direction">): void => {
         // Read per event, never captured once: nameAgentTitle runs concurrently with this turn, so turn.started
         // often writes before a fresh conversation has a name and turn.completed writes after. The feed takes the
@@ -1105,6 +1132,38 @@ async function* runTurn(
                 record({ type: "turn.plan", content: event.text, extra: { requestId: event.requestId } });
             } else if (event.kind === "error") {
                 record({ type: "turn.error", outcome: "error", error: event.message });
+                failure = { code: event.code, message: event.message };
+                /* AND THE LOG SAYS SO. The daemon's own log carried no record of a failed turn at all: the
+                 * trace went to the activity feed, which prunes, and to the client's stream, which exists only
+                 * while a browser is attached. So the most common failure in the product was also the one least
+                 * likely to leave a mark, and a log holding 6 errors across 3.5MB was describing its own
+                 * instrumentation rather than the system's health.
+                 *
+                 * Split by whether anything downstream already handles this code (HANDLED_FAILURE_CODES says
+                 * why): an unclassified failure is an `error`, a refusal that is already filed somewhere a
+                 * surface reads is a `warn`. Both are durable, which was the whole gap; the level is what keeps
+                 * `error` worth grepping for.
+                 *
+                 * The fields are the join keys, not the story: whoever reads this line next wants to pull the
+                 * turn out of the transcript and the ledger, and these are what let them. */
+                const failed = event.code === undefined || !HANDLED_FAILURE_CODES.has(event.code);
+                services.logger[failed ? "error" : "warn"](
+                    {
+                        turnId,
+                        provider,
+                        harness: input.harness ?? "native",
+                        ...(event.code !== undefined ? { code: event.code } : {}),
+                        ...(request.model !== undefined ? { model: request.model } : {}),
+                        ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
+                        ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+                        ...(sessionId !== undefined ? { sessionId } : {}),
+                        // `reason`, not `message`: the logger's messageKey IS `message` (see logger.ts), so a
+                        // field of that name would overwrite the line's own text and the level would be all a
+                        // reader had left.
+                        reason: event.message.slice(0, ERROR_MESSAGE_CHARS),
+                    },
+                    failed ? "turn failed" : "turn refused",
+                );
                 /* THE PLAN SAID NO, file it, so the account surfaces can say when it last happened.
                  *
                  * The three codes that mean "this provider would not serve the turn", as opposed to the workspace
@@ -1231,55 +1290,80 @@ async function* runTurn(
             });
         }
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });
-        // The spend ledger, the durable, never-pruned record the cost dashboard reads. Only turns the provider
-        // actually billed land here: no usage frame means no spend to attribute, and a zero row would inflate
-        // the turn count with turns that cost nothing (the activity log already carries those for the audit
-        // trail). Aborted turns DO land, a cancelled turn still spent what it spent before the stop.
-        // `request.model` is the model resolved past the client's pick and every provider default, which is the
-        // one the money was spent on; `harness` and the conversation make cost-by-model and cost-by-agent
-        // answerable without a second source. Fire-and-forget, same contract as every other turn-end write.
-        if (usage !== undefined) {
-            services.usage
-                .record({
-                    provider,
-                    ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
-                    ...(request.model !== undefined ? { model: request.model } : {}),
-                    harness: input.harness ?? "native",
-                    ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
-                    turns: usage.numTurns ?? 1,
-                    inputTokens: usage.inputTokens ?? 0,
-                    outputTokens: usage.outputTokens ?? 0,
-                    cacheReadTokens: usage.cacheReadTokens ?? 0,
-                    cacheCreationTokens: usage.cacheCreationTokens ?? 0,
-                    costUsd: usage.costUsd ?? 0,
-                    durationMs: usage.durationMs ?? 0,
-                    // Counted off this turn's own frames rather than taken from the provider, which reports one
-                    // output total and no breakdown, see UsageTurn.proseChars.
-                    proseChars,
-                    // Likewise off the frames, and in their order, see UsageTurn.searchCalls for why the
-                    // search-teaching experiment is judged on these and not on what the turn cost.
-                    searchCalls,
-                    openingSearches,
-                    // The turn experiments' arms, when this turn was in them, the ledger is the only place they
-                    // are recorded, and without them the steer's and the teaching's effects are unmeasurable
-                    // after the fact.
-                    ...(plan.terseArm !== undefined ? { terse: plan.terseArm } : {}),
-                    ...(plan.searchArm !== undefined ? { iqSearchArm: plan.searchArm } : {}),
-                    ...(plan.searchCohort !== undefined ? { iqSearchCohort: plan.searchCohort } : {}),
-                    /* What the complexity judge said, and whether anything came of it. Absent together when
-                     * the judge did not run (settings.autoTier "off"), which the ledger must be able to tell
-                     * apart from a turn that scored zero, see UsageTurn.tierScore.
-                     *
-                     * `tierRouted` is not implied by the score: in shadow mode every turn is judged and none is
-                     * moved, and even switched on, a turn judged fast still runs standard when the provider
-                     * publishes nothing cheaper than the pick. Reading the score as the decision would report
-                     * savings that were never made. */
-                    ...(tier !== undefined
-                        ? { tierScore: tier.verdict.score, tierRules: [...tier.verdict.rules], tierRouted: tier.model !== undefined }
-                        : {}),
-                })
-                .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
-        }
+        /* The spend ledger, the durable, never-pruned record the cost dashboard reads, and now the only place a
+         * turn's FATE survives longer than the feed that prunes it.
+         *
+         * EVERY TURN LANDS, which is the change. It used to be billed turns only, on the reasoning that a
+         * zero-cost row would inflate the turn count with turns that cost nothing. That reasoning was right
+         * about the money and it is what made an incident unreadable: a turn refused before the provider
+         * charged a token, which is what an auth refusal, a spent allowance and a dead seat all are, produced no
+         * usage frame and therefore no row, so the failures likeliest to arrive in a burst were exactly the ones
+         * that left nothing behind. The count is protected where it belongs instead, in the rollup, which sums
+         * money and skips rows that carry none (usage-store.ts).
+         *
+         * `outcome` is read off what the stream actually did: the abort signal (a user pressing Stop, never a
+         * failure), then the last error frame, then success. `model` is resolved past the client's pick and
+         * every provider default, which is the one the money was spent on; `modelRequested` is the pick itself,
+         * and the pair is what makes a routing surprise a diff.
+         *
+         * The EXPERIMENT metrics ride only on a turn that ran. A turn that died before the provider spoke has
+         * `proseChars: 0` and `searchCalls: 0` as a matter of arithmetic, not of behaviour, and feeding those
+         * zeros to the arms would let a burst of auth refusals read as a treatment that silenced the model.
+         * Omitted rather than zeroed, because absent is the one value those readers already discard.
+         *
+         * Fire-and-forget, same contract as every other turn-end write. */
+        const outcome = signal?.aborted === true ? "cancelled" : failure !== undefined ? "error" : "ok";
+        const billed = usage !== undefined;
+        services.usage
+            .record({
+                provider,
+                ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
+                ...(request.model !== undefined ? { model: request.model } : {}),
+                // Empty as well as absent: the wire allows `model: ""` and the Codex path treats it as "the
+                // catalog default", so recording it would write a pick nobody made (turn-plan.ts line 545).
+                ...(input.model !== undefined && input.model !== "" ? { modelRequested: input.model } : {}),
+                harness: input.harness ?? "native",
+                outcome,
+                ...(failure?.code !== undefined ? { errorCode: failure.code } : {}),
+                ...(failure !== undefined ? { errorMessage: failure.message.slice(0, ERROR_MESSAGE_CHARS) } : {}),
+                ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+                turns: usage?.numTurns ?? (billed ? 1 : 0),
+                inputTokens: usage?.inputTokens ?? 0,
+                outputTokens: usage?.outputTokens ?? 0,
+                cacheReadTokens: usage?.cacheReadTokens ?? 0,
+                cacheCreationTokens: usage?.cacheCreationTokens ?? 0,
+                costUsd: usage?.costUsd ?? 0,
+                durationMs: usage?.durationMs ?? 0,
+                ...(billed
+                    ? {
+                          // Counted off this turn's own frames rather than taken from the provider, which reports
+                          // one output total and no breakdown, see UsageTurn.proseChars.
+                          proseChars,
+                          // Likewise off the frames, and in their order, see UsageTurn.searchCalls for why the
+                          // search-teaching experiment is judged on these and not on what the turn cost.
+                          searchCalls,
+                          openingSearches,
+                      }
+                    : {}),
+                // The turn experiments' arms, when this turn was in them, the ledger is the only place they
+                // are recorded, and without them the steer's and the teaching's effects are unmeasurable
+                // after the fact.
+                ...(plan.terseArm !== undefined ? { terse: plan.terseArm } : {}),
+                ...(plan.searchArm !== undefined ? { iqSearchArm: plan.searchArm } : {}),
+                ...(plan.searchCohort !== undefined ? { iqSearchCohort: plan.searchCohort } : {}),
+                /* What the complexity judge said, and whether anything came of it. Absent together when
+                 * the judge did not run (settings.autoTier "off"), which the ledger must be able to tell
+                 * apart from a turn that scored zero, see UsageTurn.tierScore.
+                 *
+                 * `tierRouted` is not implied by the score: in shadow mode every turn is judged and none is
+                 * moved, and even switched on, a turn judged fast still runs standard when the provider
+                 * publishes nothing cheaper than the pick. Reading the score as the decision would report
+                 * savings that were never made. */
+                ...(tier !== undefined
+                    ? { tierScore: tier.verdict.score, tierRules: [...tier.verdict.rules], tierRouted: tier.model !== undefined }
+                    : {}),
+            })
+            .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
         sniffer.flush();
         // Fire-and-forget workspace snapshot at turn end (aborted turns included), history must never delay
         // or fail a turn. The raw prompt (not the enriched request) labels the checkpoint in the user's words.

@@ -8839,7 +8839,47 @@ export const UsageTurnSchema = z.object({
         .describe(
             "The model that actually ran, past whatever was asked for and every default. Absent only when the provider's own default served it without being named.",
         ),
+    /* WHAT THE CLIENT ASKED FOR, beside `model` above, which is what ran. The pair is the point: a routing
+     * surprise is then a diff on one row rather than an investigation through the routing code.
+     *
+     * The gap between the two is real and was unreadable. A pick is resolved past the tier judge's downgrade,
+     * a provider's own subscription default, a catalog validity check that silently substitutes (Grok rejects
+     * a retired models.dev id, so an invalid pin becomes the catalog default), and CLIProxyAPI's own choice on
+     * a routed turn. Every one of those is a legitimate substitution and none of them was recorded, so "I
+     * chose one model and got another's error" could only be answered by reading four resolution paths and
+     * guessing which had fired.
+     *
+     * Absent ⇒ the client named nothing and asked for the default, which is not the same as asking for what it
+     * got. Equal to `model` on the overwhelming majority of turns; the rows where they differ are the whole
+     * reason this is here. */
+    modelRequested: z
+        .string()
+        .optional()
+        .describe("The model that was asked for, when one was named. Differs from `model` when something resolved it."),
     harness: z.string().describe("Which agentic loop it ran on."),
+    /* HOW THE TURN ENDED. The field that turns the ledger from an accounting record into a diagnostic one.
+     *
+     * Without it a turn that died is byte-for-byte indistinguishable from one that succeeded, except that it
+     * cost less, so "four sessions all broke a minute ago" had no record to read and had to be answered by
+     * re-running the destructive act in a live sandbox. The failure was never nowhere: it was in the activity
+     * log, which prunes to its most recent entries, so an incident survives only until the feed rolls past it.
+     * This log is never pruned, which is the entire difference.
+     *
+     * "cancelled" is a user pressing Stop, which is not a failure and must never be read as one, the registry
+     * learned that lesson already (see the abort branch in streamAgent). "error" is a turn the provider or the
+     * request killed. Both still carry whatever they spent before they ended.
+     *
+     * Absent ⇒ the row predates this being recorded, NOT a turn that succeeded. Readers that count failures
+     * must treat absent as unknown, and the experiment readers do exactly that. */
+    outcome: z.enum(["ok", "error", "cancelled"]).optional().describe("How it ended: finished, failed, or was stopped by the user."),
+    // The failing frame's code, when it carried one, e.g. `rate_limit`, `provider-outage`, `claude-not-entitled`.
+    // Present only alongside outcome "error", and absent even then for a failure that named no code, which is
+    // itself the interesting case: an unclassified failure is one nothing downstream knows how to handle.
+    errorCode: z.string().optional().describe("The failure's code, when it had one."),
+    // The failing frame's own sentence, capped at ERROR_MESSAGE_CHARS. Capped rather than omitted because the
+    // provider's wording is routinely the only thing that distinguishes two failures sharing one code, and
+    // uncapped it would let one bad provider message dominate a file that must stay cheap to read whole.
+    errorMessage: z.string().optional().describe("What the failure said, trimmed."),
     // The conversation this turn belonged to, so spend can join to a fleet agent. Absent only for an internal
     // one-shot turn that has no conversation identity.
     conversationId: z

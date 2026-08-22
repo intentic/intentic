@@ -2,9 +2,16 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { type UsageRollupRow, type UsageTurn, UsageTurnSchema } from "@intentic/sandbox-contract";
 
-/* The durable spend ledger (historyRoot/usage.jsonl): one append-only line per attributed turn, written by the
+/* The durable spend AND OUTCOME ledger (historyRoot/usage.jsonl): one append-only line per turn, written by the
  * daemon only. Living under historyRoot keeps it outside the agent's /work mount, so the agent can't rewrite
  * its own spend record, the same placement rationale as the activity log and workspace history.
+ *
+ * It carries two things now, and the second one is why every turn lands rather than only the billed ones: what
+ * the turn cost, and how it ENDED. A turn's fate used to live in the activity feed, which prunes to its most
+ * recent entries, so an incident was readable until the feed rolled past it and unanswerable afterwards. Money
+ * needed a log that never prunes; it turns out a post-mortem needs the same log, and the row is the same row.
+ * `rollup` keeps the money honest by summing only turns the provider counted (see `billed`), so a file that
+ * holds every failure still projects a cost panel that holds none of them.
  *
  * Why a second log rather than reusing activity.jsonl: that log prunes to its most recent entries, which is
  * right for an audit feed and wrong for money. Under pruning a spend total SHRINKS as newer turns evict older
@@ -42,6 +49,19 @@ const groupKey = (row: Pick<UsageTurn, "day" | "provider" | "account" | "model" 
 // Inclusive UTC day bounds; an absent bound is unbounded on that side.
 const inWindow = (turn: UsageTurn, query: { from?: string | undefined; to?: string | undefined }): boolean =>
     (query.from === undefined || turn.day >= query.from) && (query.to === undefined || turn.day <= query.to);
+
+/* DID THIS TURN COST ANYTHING. The rollup's filter, and the line that lets the ledger hold every turn while the
+ * money projection still only sums money.
+ *
+ * The ledger records failures now (see the outcome fields on UsageTurnSchema), and a turn refused before the
+ * provider charged a token carries nothing but zeros. Those rows are the point of recording failures at all and
+ * they have no business in a cost readout: grouped, they would add rows reading "0 turns, $0.00" to every panel
+ * that groups by model, one per distinct failure key per day.
+ *
+ * `turns`, not `costUsd`: a real turn can legitimately cost nothing (a cached-through exchange on a plan with no
+ * per-token price) and it still happened and still belongs in the count. A turn the provider never counted is
+ * the one that did not. */
+const billed = (turn: UsageTurn): boolean => turn.turns > 0;
 
 export const fileUsageStore = (path: string, now: () => number = Date.now): UsageStore => {
     let queue: Promise<unknown> = Promise.resolve();
@@ -83,7 +103,7 @@ export const fileUsageStore = (path: string, now: () => number = Date.now): Usag
         rollup: async (query) => {
             const rows = new Map<string, UsageRollupRow>();
             for (const turn of await read()) {
-                if (!inWindow(turn, query)) {
+                if (!inWindow(turn, query) || !billed(turn)) {
                     continue;
                 }
                 const key = groupKey(turn);

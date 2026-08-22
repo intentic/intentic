@@ -1,3 +1,4 @@
+import { loadavg } from "node:os";
 import type { Logger } from "pino";
 
 /* WHERE THE DAEMON'S TIME GOES, the attribution layer the stall detector next door cannot provide.
@@ -8,16 +9,19 @@ import type { Logger } from "pino";
  * stalled 4s, and there was no way to tell a slow `git status` from a request queued behind an agent's land
  * from a browser that asked ten times.
  *
- * So the expensive paths measure themselves. Three outputs, deliberately different in cost and audience:
+ * So the expensive paths measure themselves. Three outputs, deliberately different in cost, audience AND
+ * DESTINATION:
  *
  *  - SLOW spans warn immediately, one line each, carrying the fields that identify the instance (which repo,
- *    which argv, how long it waited before it even started). This is what you grep during an incident.
+ *    which argv, how long it waited before it even started) and the machine's load at the time. They go to
+ *    logs/perf.jsonl, NOT to daemon.log, see `slowLogger` below for why that split had to happen.
  *  - EVERY span logs at debug, so raising logLevel turns the same instrumentation into a trace without a
  *    rebuild. Off at the default level, and the fields are built lazily so an off debug costs one comparison.
- *  - A rolling SUMMARY prints periodically, ranked by TOTAL time rather than by worst case. That ranking is the
- *    point: a 4s scan that happens twice an hour is not the bottleneck a 40ms read that happens 900 times a
- *    minute is, and only the sum tells the two apart. This is what you read after the fact, when the complaint
- *    is "it was slow ten minutes ago".
+ *  - A rolling SUMMARY prints periodically to daemon.log, ranked by TOTAL time rather than by worst case. That
+ *    ranking is the point: a 4s scan that happens twice an hour is not the bottleneck a 40ms read that happens
+ *    900 times a minute is, and only the sum tells the two apart. This is what you read after the fact, when
+ *    the complaint is "it was slow ten minutes ago", and it stays in the main log because that is where
+ *    somebody investigating an incident is already looking.
  *
  * Everything is in-memory and bounded (one row per op name, one retained sample per row). Nothing here is on a
  * request's critical path beyond a hrtime read and a map lookup. */
@@ -90,11 +94,41 @@ export interface PerfTracker {
 
 const elapsedMs = (from: bigint): number => Number(process.hrtime.bigint() - from) / 1e6;
 
+/* THE MACHINE'S ONE-MINUTE LOAD, cached, stamped onto every slow span.
+ *
+ * This is the field that turns a slow line from a report into a diagnosis. The single most expensive lesson in
+ * this repository's CI history is that the same operation is a fifth of a second idle and 5.7 seconds on a busy
+ * build machine, and that a check calling the second one a hang cost a red main. Without the load beside the
+ * duration, "slow" and "broken" are the same line, and the reader has to go and join a second file on timestamp
+ * to tell them apart, which in practice means nobody does.
+ *
+ * `loadavg()` is a cheap read, but a slow span can fire hundreds of times a second under exactly the conditions
+ * this measures, so it is cached for a window well under the metric's own resolution: the kernel's 1-minute
+ * average does not move meaningfully inside a second, and a cache miss is one syscall rather than one per span.
+ * Rounded to one decimal, which is all the precision a load average has ever deserved. */
+const LOAD_CACHE_MS = 1_000;
+let loadCache: { at: number; value: number } | undefined;
+const load1 = (now: number): number => {
+    if (loadCache === undefined || now - loadCache.at >= LOAD_CACHE_MS) {
+        loadCache = { at: now, value: Math.round((loadavg()[0] ?? 0) * 10) / 10 };
+    }
+    return loadCache.value;
+};
+
 // Two decimals below 10ms, whole numbers above: a sub-millisecond git read and a four-second scan both have to
 // be readable in the same column, and rounding the former to 0 loses the only thing it had to say.
 const round = (ms: number): number => (ms < 10 ? Math.round(ms * 100) / 100 : Math.round(ms));
 
-export const createPerfTracker = (logger: Logger): PerfTracker => {
+/* `slowLogger` is where the per-span slow lines go, and it is a separate destination on purpose.
+ *
+ * Pointed at logs/perf.jsonl (logger.ts createPerfLogger). Undefined ⇒ nowhere else to write, a dev run with no
+ * /history volume or a pretty single-stream console, and the lines fall back to `logger` as before, because
+ * losing them is worse than crowding one dev console.
+ *
+ * The reason for the split is in createPerfLogger's own comment: these lines outnumbered everything else in
+ * daemon.log by roughly three to one and made six real errors unfindable. */
+export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined = undefined): PerfTracker => {
+    const slowSink = slowLogger ?? logger;
     const stats = new Map<string, PerfStat>();
     // Anything measured since the last summary. A daemon nobody is using must not print a table of zeroes
     // every minute, an idle sandbox's log is where a real incident has to stay visible.
@@ -118,7 +152,8 @@ export const createPerfTracker = (logger: Logger): PerfTracker => {
         if (slow) {
             // The op's own running count rides along so one line answers "is this the first time or the
             // four-hundredth", the question that decides whether to look at this instance or at the pattern.
-            logger.warn({ perf: op, ms: round(ms), ...fields, seen: stat.count, slowSeen: stat.slowCount }, `slow ${op}`);
+            // `load1` answers the other one: whether this was the machine or the code (see load1 above).
+            slowSink.warn({ perf: op, ms: round(ms), ...fields, seen: stat.count, slowSeen: stat.slowCount, load1: load1(Date.now()) }, `slow ${op}`);
             return;
         }
         // Every span at debug: the same instrumentation becomes a full trace by raising logLevel, with no

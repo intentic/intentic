@@ -359,6 +359,27 @@ conversation's worktree instead of a path that still reaches the shared checkout
   `tail -n 20 /history/logs/resource-metrics.jsonl | jq .`) and through the existing authenticated
   `GET /logs/file?name=resource-metrics.jsonl&bytes=1000000` route. The normal logs retention applies: files are
   tail-truncated after 5 MB, expire after 30 days, and participate in the 100-file cap.
+- **A failed turn leaves a record that outlives the feed it happened in.** Two facts about a turn used to live
+  only in `activity.jsonl`, which prunes to its most recent entries, and in the client's event stream, which
+  exists only while a browser is attached: that it failed, and what it failed with. So the most common failure in
+  the product was the one least likely to leave a mark, and a burst of them, four sessions dying together, was
+  unreadable an hour later. The spend ledger (`src/usage/usage-store.ts`) carries them instead, because it is the
+  one daemon log that is never pruned: every turn appends a row with `outcome` (`ok` / `error` / `cancelled`),
+  the failing frame's `errorCode` and trimmed `errorMessage`, and `modelRequested` beside the `model` that
+  actually ran, so a routing surprise is a diff on one row rather than a walk through four resolution paths.
+  Every turn, not only billed ones: a refusal that arrives before the provider charges a token is exactly the
+  kind that arrives in bursts. `rollup` keeps the money honest by summing only turns the provider counted, and
+  the experiment readers drop failed and cancelled turns, whose zero prose and zero searches are arithmetic
+  rather than behaviour.
+- **`slow` spans live in their own file so that `daemon.log` can be read.** `src/platform/perf.ts` warns one line
+  per slow span, which is right, and in a live 3.5 MB `daemon.log` those lines were 5,465 of the warnings against
+  six errors in the whole file: a log whose signal could not be found. The per-span lines now go to
+  `logs/perf.jsonl` (`createPerfLogger`, same format and timestamps, so a merged timeline is one `sort` away),
+  each stamped with the machine's one-minute load, because the same operation is a fifth of a second idle and
+  5.7 seconds on a loaded builder and without the load beside the duration "slow" and "broken" are one line. The
+  ranked summary stays in `daemon.log`, where somebody investigating an incident is already looking. A turn
+  failure logs there too: `error` for an unclassified one, `warn` for the four codes that already own a durable
+  trace elsewhere (a spent allowance, an outage, a refused token, a disabled seat).
 - **This process is the control plane, so weight is kept out of it.** Every browser request, agent turn and git
   poll goes through one event loop, and what makes them slow is usually not their own work but the daemon's
   resident size: `fork()` copies page tables in proportion to it (1.5 ms from 55 MB, 27 ms at the 1.8 GB this

@@ -247,12 +247,28 @@ const experimentOf = (
     };
 };
 
+/* A TURN THAT DIED MEASURES NOTHING, and the ledger now holds those turns, so this is where they leave again.
+ *
+ * The metrics both experiments read are counted off the frame stream: prose the model wrote, searches the turn
+ * ran. A turn refused before the provider spoke has none of either, and its arm was assigned at plan time,
+ * before anything could know it would fail. Kept in, a burst of auth refusals or a spent allowance reads as
+ * whichever arm happened to be running at the time producing silent, search-free turns, which is a treatment
+ * effect the treatment did not cause. Failures do not distribute evenly across arms on any timescale an
+ * experiment runs on, so this is not noise that cancels.
+ *
+ * "cancelled" goes too, for the plainer reason: the user stopped it, so its metrics describe how long they
+ * waited rather than how the turn would have gone.
+ *
+ * Absent `outcome` STAYS. Those are the rows written before this was recorded, they are the running experiments'
+ * entire history, and dropping them to gain a filter would reset both arms to nothing. */
+const measurable = (turn: UsageTurn): boolean => turn.outcome !== "error" && turn.outcome !== "cancelled";
+
 // One read of the ledger serves both experiments; each is then its own pair of populations over those turns.
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
 ): Promise<{ readonly output?: TurnExperiment; readonly search?: TurnExperiment }> => {
-    const turns = await usage.turns(window);
+    const turns = (await usage.turns(window)).filter(measurable);
     const output = experimentOf(turns, (turn) => turn.terse, [PROSE_CHARS]);
     const search = conversationExperimentOf(turns, [SEARCH_CALLS, OPENING_SEARCHES]);
     return {

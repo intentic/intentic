@@ -242,3 +242,38 @@ test("only turns inside the window count", async () => {
     await readTurnExperiments(spy, { from: "2026-07-01", to: "2026-07-29" });
     expect(seen).toEqual({ from: "2026-07-01", to: "2026-07-29" });
 });
+
+/* A TURN THAT DIED MEASURES NOTHING, and the ledger holds those turns now.
+ *
+ * Both metrics are counted off the frame stream, so a turn refused before the provider spoke has no prose and
+ * no searches. Its arm was assigned at plan time, before anything could know it would fail. Left in, a burst of
+ * refusals reads as whichever arm was running at the time producing silent, search-free turns, and failures do
+ * not distribute evenly across arms on any timescale an experiment runs on, so it is not noise that cancels. */
+test("failed and cancelled turns are dropped from both experiments' populations", async () => {
+    const healthy = terseArms(MIN_ARM_TURNS, MIN_ARM_TURNS, 1000, 1000);
+    // Enough failures on ONE arm to move its mean hard, if they counted.
+    const failures = Array.from({ length: MIN_ARM_TURNS }, () => turn({ terse: true, proseChars: 0, outcome: "error" }));
+    const stopped = Array.from({ length: MIN_ARM_TURNS }, () => turn({ terse: true, proseChars: 0, outcome: "cancelled" }));
+
+    const clean = await readTurnExperiments(storeOf(healthy), {});
+    const polluted = await readTurnExperiments(storeOf([...healthy, ...failures, ...stopped]), {});
+
+    // Identical readings: the failures never entered the population, so they moved nothing.
+    expect(polluted.output).toEqual(clean.output);
+});
+
+/* Absent `outcome` STAYS IN. Those rows are every turn written before this was recorded, they are the running
+ * experiments' entire history, and dropping them to gain a filter would reset both arms to nothing. */
+test("turns written before outcome was recorded still count", async () => {
+    // The same two arms twice: once stamped `ok`, once with nothing, which is what every row on disk today is.
+    // The `index % 2` jitter mirrors terseArms, so the two populations are identical but for the stamp.
+    const armsWith = [
+        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) => turn({ terse: true, proseChars: 800 + (index % 2), outcome: "ok" })),
+        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) => turn({ terse: false, proseChars: 1000 + (index % 2), outcome: "ok" })),
+    ];
+    const withOutcome = await readTurnExperiments(storeOf(armsWith), {});
+    const without = await readTurnExperiments(storeOf(terseArms(MIN_ARM_TURNS, MIN_ARM_TURNS, 800, 1000)), {});
+
+    expect(without.output).toEqual(withOutcome.output);
+    expect(without.output).toBeDefined();
+});

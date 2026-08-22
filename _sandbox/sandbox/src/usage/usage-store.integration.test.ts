@@ -144,6 +144,68 @@ test("rollup on a ledger that was never written is empty, not a failure", async 
     expect(await fileUsageStore(storePath()).rollup({})).toEqual([]);
 });
 
+test("a failed turn is kept whole by the ledger and left out of the money rollup", async () => {
+    const store = fileUsageStore(storePath(), () => DAY_ONE);
+    await store.record(turn({ account: "work", model: "opus-5" }));
+    // A turn refused before the provider charged anything: no usage frame, so every number is zero. This is the
+    // row that used never to be written at all, which is why a burst of refusals left no record to read.
+    await store.record(
+        turn({
+            account: "work",
+            model: "opus-5",
+            outcome: "error",
+            errorCode: "claude-not-entitled",
+            errorMessage: "Claude Code is not enabled for this organization",
+            turns: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            costUsd: 0,
+            durationMs: 0,
+        }),
+    );
+
+    // The rollup is the money projection: one row, and the zero-cost failure is not folded into it.
+    const rows = await store.rollup({});
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ turns: 1, costUsd: 0.25 });
+
+    // The raw reader keeps both, which is the whole point: the failure survives, with its code and its sentence.
+    const turns = await store.turns({});
+    expect(turns).toHaveLength(2);
+    expect(turns[1]).toMatchObject({
+        outcome: "error",
+        errorCode: "claude-not-entitled",
+        errorMessage: "Claude Code is not enabled for this organization",
+    });
+});
+
+test("a turn the provider counted but charged nothing for still counts as spend", async () => {
+    const store = fileUsageStore(storePath(), () => DAY_ONE);
+    // `billed` reads `turns`, not `costUsd`: a cached-through exchange on a flat plan really happened.
+    await store.record(turn({ outcome: "ok", costUsd: 0 }));
+
+    expect(await store.rollup({})).toMatchObject([{ turns: 1, costUsd: 0 }]);
+});
+
+test("a cancelled turn keeps what it spent before the user stopped it", async () => {
+    const store = fileUsageStore(storePath(), () => DAY_ONE);
+    await store.record(turn({ outcome: "cancelled", costUsd: 0.1 }));
+
+    // A stop is not a failure and the money was real, so it rolls up like any other turn.
+    expect(await store.rollup({})).toMatchObject([{ turns: 1, costUsd: 0.1 }]);
+    expect((await store.turns({}))[0]).toMatchObject({ outcome: "cancelled" });
+});
+
+test("the model asked for is recorded beside the one that ran, so a routing surprise is a diff", async () => {
+    const store = fileUsageStore(storePath(), () => DAY_ONE);
+    await store.record(turn({ modelRequested: "opus-4-6-thinking", model: "grok-4" }));
+
+    const [row] = await store.turns({});
+    expect(row).toMatchObject({ modelRequested: "opus-4-6-thinking", model: "grok-4" });
+});
+
 test("utcDay buckets by UTC, not the host zone", () => {
     expect(utcDay(Date.UTC(2026, 6, 20, 23, 59, 59))).toBe("2026-07-20");
     expect(utcDay(Date.UTC(2026, 6, 21, 0, 0, 0))).toBe("2026-07-21");

@@ -182,6 +182,7 @@ import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { DAEMON_OWNER } from "./platform/leftovers.js";
 import { type PlatformTunnel, startPlatformTunnel } from "./platform/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./platform/reaper.js";
+import { createPerfLogger } from "./logger.js";
 import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
 import { panePids } from "./terminal/terminal-session.js";
@@ -829,7 +830,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
 
     // Hoisted: the members below that measure themselves (the worktree op chains, the git routes' Changes scan)
     // must file into the SAME tracker the summary line reads, or each would rank its own slice in isolation.
-    const perf = createPerfTracker(logger);
+    // Its per-span slow lines go to logs/perf.jsonl rather than daemon.log (createPerfLogger says why); the
+    // ranked summary stays on the main logger, where an incident reader will meet it.
+    const perf = createPerfTracker(logger, createPerfLogger(config));
 
     /* Hoisted for the same reason the perf tracker is: the invariant companions registered at the end of this
      * function observe the very instances built here, and a second journal would let a check read a directory
