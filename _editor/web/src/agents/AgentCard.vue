@@ -242,11 +242,19 @@ const model = computed(() => {
     }
     return category.value === undefined ? undefined : providerLabel(props.agent.provider);
 });
-// A nameless card, named for what it IS: a tab waiting to be typed into, a past conversation whose session
-// never earned a title, or an agent whose own naming has yet to land.
+/* A nameless card, named for what it IS: a tab waiting to be typed into, a past conversation whose session
+ * never earned a title, or an agent whose own naming has yet to land.
+ *
+ * ...unless the user has already written the thing that names it. A title is minted by the first turn, so a
+ * lane of cards waiting to be sent all read "New agent" at exactly the moment the reader has to tell them
+ * apart, while the sentence that would tell them apart sits in each one's composer (FleetAgent.preview). The
+ * card wears it until a real title lands and then never again. */
 const displayTitle = computed(() => {
     if (props.agent.title !== undefined) {
         return props.agent.title;
+    }
+    if (props.agent.preview !== undefined) {
+        return props.agent.preview;
     }
     if (props.agent.status === `draft`) {
         return `New agent`;

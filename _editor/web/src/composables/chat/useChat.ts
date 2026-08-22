@@ -24,6 +24,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
 import { agentTranscript, type AgentTranscript } from "./agentTranscript";
+import { draftPreview, elsewhereDrafts, publishDrafts, type UnsentDraft } from "./draftEcho";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
 import { accountsLoaded, providerAccounts, providerRefusals, rememberedAccountFor, selectedAccountId, translatorAccounts } from "./providerAccounts";
@@ -93,11 +94,17 @@ const activeId = ref<string>(``);
  * are one conversation under two skins, so an abandoned empty draft doesn't just crowd the strip, it squats in
  * the board's Active lane looking like work in flight. Anything at all in it makes it real and it stays:
  * anything unsent (Conversation.unsent, composer text, a staged attachment, a queued message), a transcript,
- * a session, a running turn, a rename, an unread error, or a fleet registration. */
+ * a session, a running turn, a rename, an unread error, or a fleet registration.
+ *
+ * ...and words in the composer count WHICHEVER WINDOW's composer they are in (draftEcho). A popped-out chat is
+ * a window of its own, so a draft being typed out there is empty here, and this sweep was taking the board's
+ * card for it away on the next click: the one thing in this app that exists nowhere but in front of the user,
+ * dropped because it was in front of them on another screen. */
 const untouchedDraft = (conversation: Conversation): boolean =>
     !conversation.registered.value &&
     !conversation.streaming.value &&
     !conversation.unsent.value &&
+    !elsewhereDrafts.value.has(conversation.conversationId) &&
     conversation.messages.value.length === 0 &&
     conversation.session.value === undefined &&
     conversation.title.value === null &&
@@ -349,6 +356,32 @@ watch(showsChat, (shows) => {
     }
     forgetTabSnapshot(scopedSandboxId);
 });
+
+/* ...and the same strip, told to the windows that are NOT drawing it, cut down to the one fact only this
+ * window can know: which chats hold words that have not gone out, and the first few of them (draftEcho has the
+ * whole argument). It is what keeps the fleet board's card for a draft alive while the chat is popped out, and
+ * what lets that card wear the message's opening words instead of "New agent".
+ *
+ * A stringified getter, like the snapshot above: the previews stop changing after the first line or so, and
+ * from then on typing publishes nothing. Gated on drawing the panel, since a window that isn't is repeating
+ * hearsay, and the gate is IN the key so that becoming the drawing window publishes at once rather than at the
+ * next keystroke. */
+watch(
+    () =>
+        showsChat.value
+            ? JSON.stringify(
+                  conversations.value
+                      .filter((conversation) => conversation.unsent.value)
+                      .map((conversation) => ({ id: conversation.conversationId, preview: draftPreview(conversation.draft.value) ?? `` })),
+              )
+            : undefined,
+    (json) => {
+        if (json !== undefined) {
+            publishDrafts(JSON.parse(json) as UnsentDraft[]);
+        }
+    },
+    { immediate: true },
+);
 
 // Persist the account pick per provider, the seed a NEW conversation (and a fresh window) starts from. A watch
 // rather than a write inside selectAccount, because the pick also moves on its own: a connect makes the new

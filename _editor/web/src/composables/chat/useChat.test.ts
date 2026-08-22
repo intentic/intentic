@@ -832,6 +832,30 @@ describe(`abandoned drafts`, () => {
         expect(chat.activeId.value).toBe(pressed.conversationId);
     });
 
+    /* THE WORDS MAY BE IN ANOTHER WINDOW, and the sweep has to count them all the same. With the chat popped
+     * out, the composer is out there and this window's copy of the tab is empty, so clicking another card on
+     * the board swept a draft the user was in the middle of writing: the one thing here that exists nowhere
+     * else. The window drawing the chat says what it is holding (draftEcho) and this reads it. */
+    it(`keeps a draft whose words are being typed in the popped-out chat`, async () => {
+        const { receiveDraftNote } = await import("./draftEcho");
+        const { receiveFloatingNote } = await import("../floating");
+        const chat = useChat();
+        const first = chat.active.value.conversationId;
+        chat.draft.value = `real work`;
+        const elsewhere = newChat();
+        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
+        receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [{ id: elsewhere.conversationId, preview: `half a thought` }] });
+        await nextTick();
+
+        chat.setActive(first);
+        await nextTick();
+
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first, elsewhere.conversationId]);
+
+        receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [] });
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+    });
+
     it(`leaves a draft the fleet has registered alone: that tab is a real agent now`, async () => {
         const chat = useChat();
         const first = chat.active.value.conversationId;

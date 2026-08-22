@@ -4,6 +4,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import type { Conversation } from "../chat/conversation";
 import { invalidateAgentTranscript } from "../chat/agentTranscript";
+import { draftPreview, elsewhereDrafts } from "../chat/draftEcho";
 import { agentTabOf, type AgentTabSeed, useChat } from "../chat/useChat";
 import { summonChat } from "../chat/summon";
 import { onScreen } from "../onScreen";
@@ -295,10 +296,15 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly status: AgentSummary["status"] | ClientAgentStatus;
     readonly open: boolean;
     readonly unread: boolean;
-    // The user has words in this chat that have not gone out (Conversation.unsent). A fact about the OPEN TAB,
-    // so it is false for every agent this window isn't holding, including one being written to on another
-    // device, whose composer this browser has no account of.
+    /* The user has words in this chat that have not gone out (Conversation.unsent). A fact about an OPEN TAB in
+     * THIS BROWSER, this window's own or one of its other windows' (draftEcho, which is what makes a popped-out
+     * chat's composer visible to the board it is no longer beside). False for a chat being written to on
+     * another device, whose composer nothing here has an account of. */
     readonly unsent: boolean;
+    // The opening words of those unsent words, for a card that has no name of its own yet: a draft is named by
+    // the first turn it sends, so until then the message IS the only name it has. Absent once a title lands, and
+    // absent for a chat holding an attachment rather than typed text.
+    readonly preview?: string;
 }
 
 // How many finished entries a Finished lane shows before the rest collapse behind one row. The lane's job is
@@ -369,11 +375,18 @@ const fleet = computed<FleetAgent[]>(() => {
     const { conversations } = useChat();
     const openIds = new Set(conversations.value.map((conversation) => conversation.conversationId));
     const carded = new Set(registry.value.map((agent) => agent.id));
-    // The tabs of this window holding words that have not gone out, the one thing the daemon's roster cannot
-    // know, and the reason the two halves below are joined against it rather than against `openIds` alone.
-    const unsentIds = new Set(
-        conversations.value.filter((conversation) => conversation.unsent.value).map((conversation) => conversation.conversationId),
-    );
+    /* The tabs holding words that have not gone out, the one thing the daemon's roster cannot know, and the
+     * reason the two halves below are joined against it rather than against `openIds` alone.
+     *
+     * BOTH HALVES OF "THIS BROWSER": the composers in this window, and the ones in the window that has the chat
+     * panel when that is somewhere else (draftEcho). Without the second the board went blind exactly when it
+     * was the only surface left showing the work: the chat popped out onto another screen, its composer out
+     * there, and the card over here claiming there was nothing in it. */
+    const elsewhere = elsewhereDrafts.value;
+    const unsentIds = new Set([
+        ...conversations.value.filter((conversation) => conversation.unsent.value).map((conversation) => conversation.conversationId),
+        ...elsewhere.keys(),
+    ]);
     // A draft is a conversation the fleet has never heard of. NOT one that is merely absent from the live
     // roster, which is also true of every agent the user has archived and of every agent at all while the
     // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
@@ -381,6 +394,14 @@ const fleet = computed<FleetAgent[]>(() => {
     const drafts = conversations.value
         .filter((conversation) => !conversation.registered.value && !carded.has(conversation.conversationId))
         .map((conversation): FleetAgent => {
+            /* WHAT THE CARD IS CALLED BEFORE ANYTHING HAS NAMED IT: the opening words of the message waiting in
+             * its composer, read from this window's own conversation, or from the window holding the chat panel
+             * when that is another one. A board of drafts otherwise says "New agent" as many times as there are
+             * cards, at the one moment the reader is trying to tell them apart.
+             *
+             * Both halves go through the same fold, which is also what turns "unsent, but an attachment rather
+             * than words" into no name at all: such a card wears the mark and keeps its "New agent". */
+            const preview = draftPreview(conversation.draft.value) ?? draftPreview(elsewhere.get(conversation.conversationId) ?? ``);
             const draft: FleetAgent = {
                 id: conversation.conversationId,
                 status: clientStatus(conversation),
@@ -390,7 +411,8 @@ const fleet = computed<FleetAgent[]>(() => {
                 attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
                 open: true,
                 unread: false,
-                unsent: conversation.unsent.value,
+                unsent: conversation.unsent.value || elsewhere.has(conversation.conversationId),
+                preview,
             };
             if (conversation.title.value !== null) {
                 draft.title = conversation.title.value;

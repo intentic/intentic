@@ -290,6 +290,41 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([`workspace-fresh`]);
     });
 
+    /* WHAT A CARD NOBODY HAS NAMED IS CALLED: the opening words of the message waiting in it. A title is minted
+     * by the first turn, so a lane of drafts read "New agent" as many times as there were cards, at exactly the
+     * moment the reader was trying to tell them apart. */
+    it("names a draft card after the words waiting in its composer", () => {
+        const conversation = new Conversation(`fresh`);
+        conversation.draft.value = `fix the login redirect`;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(useAgents().lanes.value.active.map((card) => ({ id: card.id, preview: card.preview, unsent: card.unsent }))).toEqual([
+            { id: `fresh`, preview: `fix the login redirect`, unsent: true },
+        ]);
+    });
+
+    /* THE SAME DRAFT, BEING TYPED IN THE POPPED-OUT CHAT: the reported bug. The composer is a window away, so
+     * over here the tab looks untouched, and clicking another card swept it: the board threw away the one card
+     * whose contents nothing else could rebuild. The window drawing the chat says what it is holding
+     * (draftEcho), and the board joins against that, mark, name and all. */
+    it("keeps a draft alive, named and marked when its words are in the popped-out chat's composer", async () => {
+        const { receiveDraftNote } = await import("../chat/draftEcho");
+        const { receiveFloatingNote } = await import("../floating");
+        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
+        receiveDraftNote({ kind: `drafts`, sandbox: undefined, drafts: [{ id: `fresh`, preview: `fix the login redirect` }] });
+        // The tab as this window holds it: opened by the summons that made it, and empty, because the typing
+        // happened out there.
+        const conversation = new Conversation(`fresh`);
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(useAgents().lanes.value.active.map((card) => ({ id: card.id, preview: card.preview, unsent: card.unsent }))).toEqual([
+            { id: `fresh`, preview: `fix the login redirect`, unsent: true },
+        ]);
+
+        receiveDraftNote({ kind: `drafts`, sandbox: undefined, drafts: [] });
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+    });
+
     /* AN UNREGISTERED CONVERSATION CARRYING AN ERROR IS NOT A DRAFT. The only way one gets here is that its send
      * was REFUSED: the daemon turns a request away and never makes an entry, which is precisely why the fleet
      * has never heard of it. Reading that as a draft put a card nobody can act on into the Active lane, sorted

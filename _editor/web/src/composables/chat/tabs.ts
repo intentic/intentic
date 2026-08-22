@@ -2,6 +2,7 @@ import type { AgentOrigin } from "@intentic/sandbox-contract";
 import { type FleetAgent, useAgents } from "../agents/useAgents";
 import { type FleetLane, laneOf } from "../agents/agentStatus";
 import type { Conversation } from "./conversation";
+import { draftPreview } from "./draftEcho";
 import { useChat } from "./useChat";
 
 /* What the open-chat list KNOWS about a tab, as projections rather than as component state, because two
@@ -11,9 +12,16 @@ import { useChat } from "./useChat";
  * (which acts on the one under the pointer). When those lived in the strip component, the header could only
  * get at them by being the same file, which is what kept a 1000-line component from being split. */
 
-// What a tab calls a conversation: its derived title, else the noun for where it works, an untitled isolated
-// conversation IS a draft agent card on the fleet board.
-export const tabLabel = (conversation: Conversation): string => conversation.title.value ?? (conversation.isolated.value ? `New agent` : `New chat`);
+/* What a tab calls a conversation: its derived title, else the words it is holding, else the noun for where it
+ * works, an untitled isolated conversation IS a draft agent card on the fleet board.
+ *
+ * THE COMPOSER NAMES A CHAT THAT NOTHING ELSE HAS NAMED YET. A title arrives with the first turn, so a strip of
+ * chats waiting to be sent read "New agent, New agent, New agent" at the exact moment the reader has to tell
+ * them apart, and the one thing that would have told them apart, the message they just wrote, was on screen a
+ * hand's width away. It is a stand-in and it is replaced, not merged: the moment a turn earns a real title
+ * (or the user renames it) that wins, here as everywhere. */
+export const tabLabel = (conversation: Conversation): string =>
+    conversation.title.value ?? draftPreview(conversation.draft.value) ?? (conversation.isolated.value ? `New agent` : `New chat`);
 
 // Opened by an outside message (a Discord mention, a visitor, a webhook) rather than by the user. The registry
 // entry is where that fact lives, so it is read from the fleet; the surfaces wear the source glyph alone,

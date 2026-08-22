@@ -36,7 +36,7 @@ const sandboxRequestMock = vi.mocked(sandboxRequest);
 const { resetChat, useChat } = await import("./useChat");
 const { Conversation } = await import("./conversation");
 const { chatRun } = await import("./chatRun");
-const { receiveSummons, summonChat, wireSummons } = await import("./summon");
+const { receiveSummons, relaySummons, summonChat, wireSummons } = await import("./summon");
 
 beforeEach(() => {
     local.clear();
@@ -144,4 +144,19 @@ it(`applies locally even where no channel exists`, () => {
     const clicked = new Conversation();
     summonChat({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false });
     expect(chat.activeId.value).toBe(clicked.conversationId);
+});
+
+/* THE PANEL'S OWN GESTURES ARE TOLD, NOT PERFORMED TWICE. A click on a rail row has already moved the panel it
+ * was made in, under rules only that surface knows (whether it offers panes at all, which row anchored a
+ * range), so the relay exists to tell the OTHER windows, whose fleet boards ring whatever the chat is pointing
+ * at. Re-running the reveal here would be a second answer to a question already answered. */
+it(`relays a panel gesture without re-applying it in the window that made it`, () => {
+    const chat = useChat();
+    const held = chat.activeId.value;
+    const other = new Conversation();
+
+    relaySummons({ kind: `reveal`, verb: `show`, entries: [other], focus: other.conversationId, caret: false });
+
+    expect(chat.activeId.value).toBe(held);
+    expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(other.conversationId);
 });

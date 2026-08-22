@@ -29,7 +29,8 @@ import type { Conversation } from "../composables/chat/conversation";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import ChatShareDialog from "./ChatShareDialog.vue";
-import { useChat } from "../composables/chat/useChat";
+import { relaySummons } from "../composables/chat/summon";
+import { type RevealVerb, useChat } from "../composables/chat/useChat";
 import { useChatFloating } from "../composables/chat/chatFloating";
 import { chatWide, toggleChatFloating } from "../composables/chat/chatSurface";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
@@ -556,10 +557,33 @@ const paneable = computed(() => chatWide.value);
 const rowOrder = computed<string[]>(() => occupiedLanes.value.flatMap((lane) => cardsIn(lane.key).map((entry) => entry.conversation.conversationId)));
 const anchor = ref<string>();
 
+/* ...AND THE BOARD IS TOLD WHAT THE RAIL POINTED AT. The gesture acts here, on the panel it was made in (the
+ * calls below are unchanged); this is the same reveal SAID OUT LOUD, so every other window's fleet board rings
+ * the conversation the chat is actually showing (summon.ts's relaySummons has the argument). It matters most in
+ * the arrangement the rail is built for: the chat in a window of its own, the board on the other screen, and
+ * nothing else out there able to see this click.
+ *
+ * The rows carry live conversations, which fold into their portable form on the wire, so a window that has
+ * never opened one of them rebuilds the tab exactly as a reload would. */
+const relayRows = (verb: RevealVerb, ids: readonly string[], focus: string): void => {
+    const entries = ids.flatMap((id) => conversations.value.filter((conversation) => conversation.conversationId === id));
+    relaySummons({ kind: `reveal`, verb, entries, focus, caret: false });
+};
+
+// The other list in this column raises the same selection (ChatPersonaRail), so it is told the same way: which
+// list the reader happened to be looking at is no reason for the board to fall out of step with the chat.
+const onPersonaSelect = (id: string): void => {
+    emit(`select`, id);
+    relayRows(`focus`, [id], id);
+};
+
 const onRowClick = (event: MouseEvent, id: string): void => {
     if (!paneable.value) {
         anchor.value = id;
         emit(`select`, id);
+        // `focus`, not `show`: this surface offers no panes, so it has no split of its own to collapse and no
+        // business collapsing anyone else's.
+        relayRows(`focus`, [id], id);
         return;
     }
     if (event.shiftKey) {
@@ -567,7 +591,9 @@ const onRowClick = (event: MouseEvent, id: string): void => {
         const from = order.indexOf(anchor.value ?? activeId.value);
         const to = order.indexOf(id);
         if (to !== -1) {
-            setPanes(from === -1 ? [id] : order.slice(Math.min(from, to), Math.max(from, to) + 1));
+            const run = from === -1 ? [id] : order.slice(Math.min(from, to), Math.max(from, to) + 1);
+            setPanes(run);
+            relayRows(`panes`, run, id);
         }
         return;
     }
@@ -576,9 +602,11 @@ const onRowClick = (event: MouseEvent, id: string): void => {
         // Toggle: a chat that already has a column gives it back, one that doesn't takes one beside the focus.
         if (showing(id) && split.value) {
             closePane(id);
+            relayRows(`unpane`, [id], id);
             return;
         }
         openBeside(id);
+        relayRows(`beside`, [id], id);
         return;
     }
     anchor.value = id;
@@ -588,6 +616,8 @@ const onRowClick = (event: MouseEvent, id: string): void => {
     // drawn, and collapsing one the reader cannot see would quietly lose the arrangement the floating window returns
     // to. The select above has already moved the focus, so this keeps the row that was clicked.
     collapsePanes();
+    // `show` is that pair as one verb, which is exactly what the other windows have to apply.
+    relayRows(`show`, [id], id);
 };
 
 /* The share dialog's target, held here rather than on the card: the menu acts on the RIGHT-CLICKED chat, and
@@ -718,7 +748,7 @@ const closeTab = (event: Event, id: string): void => {
         <!-- THE PEOPLE, in place of the chats: its own component because it is a different list, not this one
              regrouped (ChatPersonaRail carries the argument). It emits the same `select` this file does, so the
              host focuses a chat the same way whichever list raised it. -->
-        <ChatPersonaRail v-if="grouping === `persona`" @select="(id) => emit(`select`, id)" />
+        <ChatPersonaRail v-if="grouping === `persona`" @select="onPersonaSelect" />
         <div v-else ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
             <!-- A lane with nothing in it is not drawn at all (occupiedLanes, and see the note there before
                  reaching for `v-show` here); a lane the FILTER emptied keeps its header and says so, so the
@@ -859,25 +889,28 @@ const closeTab = (event: Event, id: string): void => {
                                     class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px font-semibold text-link"
                                     >{{ unreadBadge(agent)!.label }}</span
                                 >
+                                <!-- WORDS OF THE USER'S STILL IN THIS CHAT'S COMPOSER, as a CHIP and not a lone
+                                     glyph. It sits with the two chips above rather than off among the marks,
+                                     because it answers their question ("why should I look at this one") and
+                                     answers it about the reader's own unfinished business, the one thing on
+                                     this row that nobody else can clear. The bare paper plane it replaces was
+                                     a 10px mark in a row of marks: findable once you knew it was there, and
+                                     invisible while skimming, which is precisely when a half-written message
+                                     gets lost. The board's card says it in the same words. -->
+                                <span
+                                    v-if="c.unsent.value"
+                                    v-tooltip.top="'You have an unsent message here'"
+                                    class="flex shrink-0 items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px font-semibold text-link"
+                                    aria-label="Unsent message"
+                                >
+                                    <Icon name="send" class="text-2xs" />Unsent
+                                </span>
                                 <!-- Came in from outside (a Discord mention, a visitor, a webhook), and
                                      off the board, still open: both are marks about the card's PROVENANCE
                                      rather than its name, so they ride the meta line the way the board
                                      puts its OriginMark in the card body. -->
                                 <OriginMark :origin="originOf(c)" compact />
                                 <WorkflowMark :workflow="agent?.workflow" compact />
-                                <!-- Words of the user's still in this chat's composer: the board's own mark
-                                     (AgentCard) at the width a rail row can spend on it: the glyph alone, in
-                                     the same link hue, with the sentence in its tooltip. Beside the archived
-                                     box on purpose, since the pair is what an old chat being written into
-                                     wears. -->
-                                <span
-                                    v-if="c.unsent.value"
-                                    v-tooltip.top="'You have an unsent message here'"
-                                    class="flex shrink-0 items-center text-link"
-                                    aria-label="Unsent message"
-                                >
-                                    <Icon name="send" class="text-2xs" />
-                                </span>
                                 <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
                                     <Icon name="box" class="text-2xs text-subtle" />
                                 </span>

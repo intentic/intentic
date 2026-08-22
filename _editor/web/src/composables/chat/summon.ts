@@ -26,7 +26,9 @@ import { useSandbox } from "../sandbox/useSandbox";
  *     sent again by that window's own queue drain: acts happen once, in the window that was pressed; the
  *     resulting turn reaches everyone through the daemon.
  *   · gestures INSIDE the panel, its rail, its tabs, its pane ×. A gesture on the panel acts on the panel it
- *     was made in: the reader is pointing at the thing itself, so there is nothing to route.
+ *     was made in: the reader is pointing at the thing itself, so there is nothing to route. What such a
+ *     gesture does do is SAY what it pointed at, once it has acted (relaySummons, at the foot of this file):
+ *     the fleet board rings whatever the chat is showing, and it is a whole window away.
  *
  * Scoped by SANDBOX, because the summons names conversations of one sandbox's daemon: a window looking at
  * another sandbox has no such chats and quietly ignores it. Same-origin only (a BroadcastChannel's own scope),
@@ -77,10 +79,27 @@ const channel = typeof window === `undefined` || window.BroadcastChannel === und
 
 channel?.addEventListener(`message`, (event: MessageEvent<WireSummons>) => receiveSummons(event.data));
 
+/* TELL THE OTHER WINDOWS, WITHOUT PERFORMING IT HERE, for a gesture that has ALREADY acted on the panel it was
+ * made in: the panel's own rail and tabs (ChatTabList).
+ *
+ * The rule above about panel gestures not being routed was right about the ACT and wrong about the SELECTION.
+ * A click on a rail row points the chat at a conversation, and the fleet board draws a ring around whatever the
+ * chat is pointing at, so a rail click in the popped-out window left the board ringing the chat before it: two
+ * surfaces on two screens disagreeing about which conversation the user is in, with the board's answer being
+ * the stale one. The board's own clicks had always been broadcast, so the disagreement was one-way, which is
+ * the worst kind, everything looked wired up until you clicked on the side that wasn't.
+ *
+ * Told rather than performed because the panel has already done its half, with the rules only it knows (whether
+ * this surface offers panes at all, which row was the anchor of a range). Re-running the reveal over that would
+ * be a second answer to a question the panel has already answered. */
+export const relaySummons = (summons: Summons): void => {
+    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
+    channel?.postMessage(wireSummons(summons));
+};
+
 // Apply here, tell everyone else, a BroadcastChannel does not deliver to its own poster, so the local apply
 // and the broadcast together are what make every window (this one included) run the identical reveal.
 export const summonChat = (summons: Summons): void => {
     apply(summons);
-    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
-    channel?.postMessage(wireSummons(summons));
+    relaySummons(summons);
 };
