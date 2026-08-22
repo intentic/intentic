@@ -44,6 +44,7 @@
         "tslib": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@typescript/native-preview": "catalog:",
         "vitest": "catalog:"

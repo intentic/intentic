@@ -8,6 +8,29 @@
 > Everything quoted below comes from a real log or a real commit. Run and job ids are given so any claim can
 > be re-read at source.
 
+## Status
+
+Five of the seven recommendations are applied. Two are not, and both for reasons the work turned up.
+
+**Applied:** 1, the release no longer reports a skipped release as a failure. 2, the workflow-lint exceptions
+moved onto their steps. 3, all 41 packages now name a test budget, held by prepass invariant 13. 4, the rule is
+stated and the template gate reaches the push. 6, the store shells run nightly.
+
+**Withdrawn:** 5. The sweep it proposed is the wrong change, and Class B says why with the failing output.
+
+**Left to the team:** 7(c), branch protection. It is a decision about how the repository is worked, not a code
+change.
+
+**Two findings arrived while the fixes were being made**, and both changed what got done:
+
+- **Eleven more packages ran vitest with no config at all**, which the original count missed because it counted
+  config files. Two of them were running `*.integration.test.ts` under the 5s hang detector. They are converted
+  too, so recommendation 3 covers 41 packages rather than 30.
+- **`pnpm verify` already caught Class A**, through the invariant 12 that landed hours after the outage, so
+  recommendation 7(a) as written was unnecessary — and would have broken the main development path, because
+  `pnpm build` dies EXDEV under agent worktree isolation. The real remaining gap was the pre-push hook, which
+  could not reach that gate. That is what was fixed instead.
+
 ## The number that frames everything
 
 Of the last 100 `CI` runs on `main`: **61 failed, 34 succeeded, 4 cancelled, 1 startup failure.** All 100 were
@@ -197,21 +220,29 @@ Its comment names the disease exactly: *"that list was a tripwire… every addit
 with 'no such export on the mock' long before any test ran."* `verify.yml` had already written down the same
 lesson from a different angle: *"hand-built fakes drifted out of shape with the seams they stand in for."*
 
-**What is still open.** The pattern was fixed in one file. **Five allow-list mocks of `@intentic/ui` remain**,
-the same shape over a workspace package that changes at least as often:
+**What is NOT open, having been checked.** Five other allow-list mocks of `@intentic/ui` look like the same
+shape (`ChatMessageView.test.ts:36`, `ChatForkCut.test.ts:32`, `AgentDetail.test.ts:28`, `useMonaco.test.ts:5`,
+`agentActions.test.ts:29`). Converting them to spread-then-stub was the obvious next sweep, and it is wrong.
+Tried on the smallest of them, it fails before a test runs:
 
 ```
-_editor/web/src/chat/ChatMessageView.test.ts:36        _editor/web/src/chat/ChatForkCut.test.ts:32
-_editor/web/src/agents/AgentDetail.test.ts:28          _editor/web/src/composables/workspace/useMonaco.test.ts:5
-_editor/web/src/composables/agents/agentActions.test.ts:29
+Caused by: ReferenceError: document is not defined
+ ❯ read ../ui/src/composables/useTheme.ts:33:5
+ ❯ ../ui/src/components/MermaidDiagram.vue:22:1
 ```
 
-Only `WorkspaceSearchResults.test.ts` uses `importOriginal`. Each of the five is one new export away from being
-this failure again.
+`@intentic/ui` is a Vue component graph whose module scope touches the DOM, and these suites run under
+`environment: "node"`. The one suite that does spread it, `WorkspaceSearchResults.test.ts`, opens with
+`// @vitest-environment jsdom` and pays for it. Spreading the rest would mean jsdom everywhere, which the web
+package's own measurements price at ~45-60s of setup — the Class E pressure, bought back to prevent a Class B
+that cannot happen here anyway. A mock that REPLACES a module outright is never asked for its missing exports,
+because nothing loads the original.
 
-**Fix.** Convert the five to spread-then-stub. Then make it a rule rather than five repairs: a whole-module
-`vi.mock` of a *workspace* package must spread the original. That is mechanically checkable in prepass, and it
-is the difference between fixing this incident and fixing this class.
+So the two cases differ in the one way that matters. `sandbox-contract` is loaded by the graph regardless (its
+vocabulary is evaluated at import), so the mock had to track it and an allow-list was a tripwire. `@intentic/ui`
+is fully substituted, and the allow-list is the only form that works. **There is no sweep to do, and no
+prepass rule to write** — a blanket "must spread the original" would demand exactly the change that breaks
+these five.
 
 ---
 
@@ -310,49 +341,64 @@ path filter keeps doing its job for cost.
 
 Ranked by runs removed over effort.
 
-### 1. Stop reporting a skipped release as a failure. Removes 30% of these failures
+### 1. Stop reporting a skipped release as a failure — done, removes 30% of these failures
 
 Gate the dispatch, the provenance attach and the version echo on "semantic-release actually released". A no-op
 release is green. Make `dispatch-publish.sh` say what went wrong instead of surfacing `curl: (22)`.
 
 *Effort: an hour. Payoff: 3 of 10.*
 
-### 2. Move the two workflow-lint exceptions onto the steps they describe. Removes 20%
+### 2. Move the two workflow-lint exceptions onto the steps they describe — done, removes 20%
 
 Inline `# zizmor: ignore[artipacked]` with the reason, delete the line-number pins. Keeps the guarantee that a
 third credential-persisting checkout fails the lint, and stops unrelated edits from going red.
 
 *Effort: fifteen minutes. Payoff: 2 of 10, plus every future recurrence.*
 
-### 3. Finish the shared test-budget rollout, and make it the only option
+### 3. Finish the shared test-budget rollout, and make it the only option — done, and wider than planned
 
-Convert the 30 hold-out configs to `UNIT_SUITE` and `INTEGRATION_SUITE`, leaving `_editor/web` on its measured
-ceilings. Then add a prepass invariant refusing a `vitest.config.ts` that spreads neither suite and offers no
-written reason: the same shape as the existing invariants, and the thing that stops the eight-incident history
-from reaching nine.
+**41 packages converted**, not the 30 the count above predicted: eleven more ran `vitest run` with no config
+file at all, so they never appeared in a survey of configs. `_computers/local-agent` and `_computers/host` were
+running `*.integration.test.ts` files — real git, real subprocesses — under the 5s detector, and had simply not
+lost the race yet. `_editor/web` keeps its own measured 20s/30s ceilings.
 
-Separately, measure `turbo run test --concurrency=N` against the current full-width run. If wall clock is
-neutral it removes the worker-start failures for free. If it is not, record the number beside the `maxWorkers`
-measurement so nobody re-derives it.
+**Prepass invariant 13** now refuses any package that runs vitest and names no ceiling: it must spread
+`UNIT_SUITE`/`INTEGRATION_SUITE`, or state a `testTimeout` of its own. Verified both ways — it fires on a
+reverted config and on a deleted one, and the whole suite passes with it green.
 
-*Effort: half a day of mechanical conversion plus one measurement. Payoff: the class with the longest history.*
+**The concurrency measurement was attempted and is not reported**, because no honest number came out of this
+sandbox: an unrelated full-repo run was in flight for part of it, and the box is 16 cores against a fleet of
+six runner processes on different hardware. It should be run where it matters. What the attempt *did* produce
+is a live reproduction of the class: at `concurrency: "200%"` under load, two `_extensions/deployments` **unit**
+tests failed the 5s ceiling after 15s and 18s of wall clock. Turbo's 200% is 32 concurrent tasks on 16 cores,
+each starting its own vitest pool, and the shared budgets do not save a unit test from that. The web config
+already measured that capping *vitest's* `maxWorkers` costs 2.5×; capping *turbo's* task concurrency is the
+untested lever, and it is the one worth a fleet measurement.
 
-### 4. Declare the "cheapest gate that can see it" rule, and hold new checks to it
+### 4. Declare the "cheapest gate that can see it" rule, and hold new checks to it — done, plus the gap it exposed
 
-Invariant 12 is the pattern. Write the rule where checks get added: **if a defect class is visible only to the
-50-minute job, it gets a detector in the second-long one.** Audit the remaining bundled formats against it once.
+The rule is now stated in the prepass header: **if a defect class is visible only to the 50-minute job, it gets
+a detector in the second-long one.**
 
-*Effort: a page and one sweep. Payoff: prevents the five-hour outage shape.*
+Holding invariant 12 to its own rule found that it did not meet it. The template compiler comes from
+node_modules, so the gate sat below the `--checks-only` line and **the pre-push hook never reached it** — the
+check that exists because of a five-hour outage was missing from the last thing standing between that outage
+and `main`. It now runs there, and says so and carries on where the compiler cannot be resolved (the CI
+preflight job, which runs before its install; the verify groups read every template minutes later regardless).
 
-### 5. Convert the five remaining allow-list mocks, then make it a rule
+Verified end to end: reinstating the original broken quote makes `bash .githooks/pre-push` exit 1 naming
+`KnowledgePane.vue:207:109` with the bundler's own message, and hiding `vue/compiler-sfc` makes the same hook
+print what it skipped and exit 0.
 
-The contract mock was fixed the right way an hour after it broke. Five `@intentic/ui` mocks of the same shape
-are still armed. Convert them to spread-then-stub, then add the prepass check: a whole-module `vi.mock` of a
-workspace package must spread the original.
+### 5. Nothing to do — checked, and the obvious sweep is the wrong change
 
-*Effort: five files and one invariant. Payoff: 1 of 10, plus five loaded traps.*
+The contract mock was fixed the right way an hour after it broke. The five `@intentic/ui` mocks that look like
+the same shape are not: the real barrel cannot load under `environment: "node"`, and substituting it outright
+is what makes these suites cheap. Class B above has the failing output and the reasoning.
 
-### 6. Put the store shells on the nightly schedule
+*Effort: none. Recorded so the sweep is not proposed again.*
+
+### 6. Put the store shells on the nightly schedule — done
 
 Four lifetime runs, three of them red. Keep the path filter for pushes and add the same two jobs to
 `nightly.yml`, so generator drift surfaces on a schedule instead of on someone's unrelated push.
@@ -367,15 +413,18 @@ branch protection, and the pipeline is the first reader.**
 
 Three options, cheapest first.
 
-**(a) Make `pnpm verify` match what CI gates.** Today `verify` is `typecheck && test`. CI runs
-`turbo run build test`. The Class A outage lived in precisely that gap: someone who ran `pnpm verify` and
-pushed had done everything the repo asked and still broke `main` for five hours. Adding `build` to `verify` is
-a one-line change that closes it.
+**(a) ~~Make `pnpm verify` match what CI gates.~~ Withdrawn: it already does, and the change would break the
+worktrees.** `verify` is `typecheck && test` where CI runs `turbo run build test`, and the Class A outage
+looked like it lived in exactly that gap. It does not, twice over. Invariant 12 closed it hours after the
+outage: reinstating the broken quote fails `pnpm verify` today, at the right line. And adding `build` would
+have been actively harmful, because `pnpm build` dies EXDEV under agent worktree isolation — which is why
+`verify` was written without it, and is documented in three places. The gap that was real is the pre-push
+hook's, and recommendation 4 closed it.
 
-**(b) Extend the pre-push hook to the affected closure.** The hook is deliberately install-free and about
-70 ms, and that property is worth keeping for what it does today. A second, opt-out tier
-(`turbo run typecheck build test --filter=...[origin/main]`) is nearly free with a warm turbo cache and catches
-everything in classes A, B and E before the push. `--no-verify` remains the escape hatch it already is.
+**(b) Extend the pre-push hook to the affected closure.** Still open, and now smaller than it looked. The hook
+gained the template gate under 4, which covers Class A. A second, opt-out tier
+(`turbo run typecheck build test --filter=...[origin/main]`) would cover B and E too, and is nearly free with a
+warm turbo cache — but it is a change to how every push feels, and worth deciding rather than slipping in.
 
 **(c) Branch protection with the three verify groups as required checks.** The real fix, and the one this
 workflow layout was built for: `ci-audit.md` explains that the three groups exist as separately nameable

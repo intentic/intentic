@@ -30,6 +30,7 @@
         "zod": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "typescript": "catalog:",
         "vite": "catalog:",

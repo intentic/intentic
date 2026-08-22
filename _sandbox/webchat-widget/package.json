@@ -28,6 +28,7 @@
     },
     "devDependencies": {
         "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@typescript/native-preview": "catalog:",
         "jsdom": "catalog:",

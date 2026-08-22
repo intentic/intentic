@@ -2,15 +2,19 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Twelve invariants live here, and all of them exist because the checks that catch drift used to run
- * in exactly one place (CI, on main, after the merge. (5 through 12) the release-heading contract, the
+ * --only`. Thirteen invariants live here, and all of them exist because the checks that catch drift used to run
+ * in exactly one place (CI, on main, after the merge. (5 through 13) the release-heading contract, the
  * undeclared-shrink gate on the wire contract, the armed-hooks check, the reusable-workflow permission
  * ceiling, the runner npm will attest a publish from, the tag pushes GitHub never delivers, the packages a
- * lockfile keeps after nothing depends on them, and the Vue templates no type checker reads: are documented at
- * their own blocks below.)
+ * lockfile keeps after nothing depends on them, the Vue templates no type checker reads, and the vitest ceiling
+ * a package inherits by saying nothing: are documented at their own blocks below.)
  *
- * All but invariants 2 and 12 need no node_modules and no network, which is what lets `--checks-only` run them
- * from a `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
+ * All but invariant 2 need no network, which is what lets `--checks-only` run them from a `pre-push` hook and
+ * from a CI job that has not installed anything yet (ci.yml, the `preflight` job). Two of them read
+ * node_modules and are written to do without it: invariant 2 regenerates, so it stays below the `--checks-only`
+ * line entirely; invariant 12 compiles templates when the compiler is there and says so when it is not, which
+ * is what puts the gate in front of a push instead of behind one.
+ *
  * Measured over 40 main pipelines, 10 of the 22 red ones died on invariant 1 or 3: each after 0.6-2.0 min of
  * runner time, in four jobs at once, for a fact that is readable from the checkout in under a second.
  *
@@ -1001,9 +1005,56 @@ if (stranded.length === 0) {
     }
 }
 
+/* 13. BUDGETS: no package inherits vitest's 5s ceiling by accident.
+ *
+ * That default is a HANG DETECTOR, right for a test that composes objects in memory and nonsense for one that
+ * indexes a workspace, clones a repo or boots a container — @intentic/testing/vitest is the long version, and
+ * UNIT_SUITE / INTEGRATION_SUITE are the two ceilings it draws from the file name.
+ *
+ * THE BUDGETS WERE ALREADY RIGHT; ADOPTION WAS NOT, and this invariant is about the second one. The shared
+ * pair had reached 21 of 52 configs, and eleven packages ran `vitest run` with no config at all. The rest sat
+ * on the bare default with nothing said, which is how the same failure kept arriving under new names: a suite
+ * green on a developer's box and red on a runner with every core busy, repaired with its own private constant,
+ * after it had already broken main. `_tools/testing/src/vitest.ts` names six of those by hand; `_search/iq`
+ * and `_editor/web` were the seventh and eighth, in one pipeline, the day this was written
+ * (docs/ci-failure-audit.md, class E). Two of the config-less packages were running `*.integration.test.ts`
+ * files — real git, real subprocesses — under the 5s detector, and had simply not lost the race yet.
+ *
+ * EITHER SUITE, OR A NUMBER SAID OUT LOUD. `_editor/web` states `testTimeout: 20_000` with forty lines of
+ * measurement behind it, and that is a better answer than the shared pair for that package; the thing being
+ * refused is neither. A package that names no ceiling is not choosing the default, it is unaware of it.
+ *
+ * MATCHED ON THE SUITE NAMES rather than the import specifier, because `_tools/testing` imports them from its
+ * own source — it is the package. Text, not evaluation: this runs before `pnpm install`, in front of the CI
+ * preflight job and the pre-push hook, where node_modules may not exist. */
+const VITEST_CONFIG = "vitest.config.ts";
+const budgetless = [];
+for (const { name, dir, pkg } of packages) {
+    if (!/vitest/.test(pkg.scripts?.test ?? "") || walk(dir).length === 0) {
+        continue;
+    }
+    const config = join(dir, VITEST_CONFIG);
+    if (!existsSync(config)) {
+        budgetless.push(
+            `${name}: runs vitest with no ${VITEST_CONFIG}, so every suite gets the 5s hang detector. Add one: ` +
+                `\`projects: [{ test: UNIT_SUITE }, { test: INTEGRATION_SUITE }]\` from @intentic/testing/vitest.`,
+        );
+        continue;
+    }
+    const source = readFileSync(config, "utf8");
+    if (!/\bUNIT_SUITE\b|\bINTEGRATION_SUITE\b/.test(source) && !/\btestTimeout\b/.test(source)) {
+        budgetless.push(
+            `${name}: ${VITEST_CONFIG} spreads neither UNIT_SUITE nor INTEGRATION_SUITE and sets no testTimeout, ` +
+                `so its suites inherit the 5s hang detector silently. Use the shared pair, or state the ceiling ` +
+                `this package needs and why (see _editor/web/vitest.config.ts).`,
+        );
+    }
+}
+
 // Every report before any exit, so one run says everything that is wrong rather than the first thing.
 const reports = [
     ["Test files outside the program or the budget they belong in", problems],
+    ["A package's tests run on vitest's default 5s ceiling without saying so", budgetless],
     ["pnpm-lock.yaml is out of date: run `pnpm install` and commit it (this is CI's ERR_PNPM_OUTDATED_LOCKFILE)", drift],
     ["Self-hosted CI is reachable from a fork's pull request (docs/ci-runner.md, 'The fork boundary')", exposed],
     ["The release-body headings drifted apart (they are parsed, not prose)", headingDrift],
@@ -1026,6 +1077,7 @@ if (reports.some(([, lines]) => lines.length > 0)) {
     process.exit(1);
 }
 console.log(`typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one`);
+console.log(`test budgets: every package running vitest names its ceiling instead of inheriting the 5s hang detector`);
 console.log(`lockfile: ${importers.length} importers record the specifiers their package.json declares`);
 console.log(`fork boundary: no self-hosted job is reachable from a fork's pull request`);
 console.log(`release headings: writer and both parsers spell the same two sections`);
@@ -1042,12 +1094,7 @@ console.log(`npm provenance: no job publishes an attested tarball from the self-
 console.log(`publish triggers: no workflow waits on a tag push GITHUB_TOKEN can never deliver`);
 console.log(`lockfile reachability: all ${edges.size} packages in the lockfile are depended on by something`);
 
-/* Everything below needs node_modules and generates into the tree; everything above needs neither, and touches
- * nothing but the executable bit invariant 7 re-arms. `--checks-only` is that line: it is what the pre-push
- * hook and the CI preflight job run. */
-if (process.argv.includes("--checks-only")) {
-    process.exit(0);
-}
+const checksOnly = process.argv.includes("--checks-only");
 
 /* 12. TEMPLATES: every .vue template in the repository parses and compiles.
  *
@@ -1068,9 +1115,16 @@ if (process.argv.includes("--checks-only")) {
  * shape nobody thought of. It costs ~0.8s for ~400 templates, which is why it can sit here in front of the
  * type check rather than at the end of a build.
  *
- * It is BELOW the `--checks-only` line for that same reason: the compiler comes from node_modules. Resolved
- * through the first workspace package that declares `vue` rather than a root devDependency — every package
- * with a template already depends on it, discovery beats another entry to keep in step, and the root's
+ * IT RUNS UNDER `--checks-only` TOO, WHEN IT CAN, which is the one thing about its placement that changed.
+ * The compiler comes from node_modules, so this used to sit below that line and the pre-push hook never
+ * reached it — the gate that exists because of a five-hour outage was absent from the last thing standing
+ * between the outage and main. A push happens from a working clone, where node_modules is present and ~0.8s
+ * is nothing; the CI preflight job runs before its install, where it is not, and the three verify groups
+ * compile every template minutes later regardless. So: attempt it, and when the compiler cannot be resolved,
+ * SAY THAT and carry on rather than failing a check for a tool that was never promised.
+ *
+ * Resolved through the first workspace package that declares `vue` rather than a root devDependency — every
+ * package with a template already depends on it, discovery beats another entry to keep in step, and the root's
  * manifest carries tooling, not the app's runtime. */
 // From the root rather than per package: `_tools/extension-example/seed` is the tree `intentic extension
 // create` copies onto someone else's machine, it belongs to no workspace package, and a template that cannot
@@ -1078,12 +1132,25 @@ if (process.argv.includes("--checks-only")) {
 const templates = walk(root, VUE_FILE);
 const vueHost = packages.find(({ pkg }) => pkg.dependencies?.vue !== undefined || pkg.devDependencies?.vue !== undefined);
 const uncompilable = [];
+// Absent only before an install: `vue` is a real dependency of every package that renders one, so a resolution
+// failure here means node_modules, not a missing declaration. That is the checks-only case, and it is not an
+// error — see the paragraph above.
+const compiler = (() => {
+    if (templates.length === 0 || vueHost === undefined) {
+        return undefined;
+    }
+    try {
+        return createRequire(join(vueHost.dir, "package.json"))("vue/compiler-sfc");
+    } catch {
+        return undefined;
+    }
+})();
 if (templates.length > 0 && vueHost === undefined) {
     // Unreachable while any package renders one: a template is compiled by the `vue` its package depends on.
     uncompilable.push(`${templates.length} templates, and no package declares vue: nothing here can compile them`);
 }
-if (templates.length > 0 && vueHost !== undefined) {
-    const { parse: parseSfc, compileTemplate } = createRequire(join(vueHost.dir, "package.json"))("vue/compiler-sfc");
+if (compiler !== undefined) {
+    const { parse: parseSfc, compileTemplate } = compiler;
     for (const file of templates) {
         const relative = file.slice(root.length + 1);
         // A CompilerError carries `loc`; a plain SyntaxError out of a script block does not, and both arrive here.
@@ -1108,7 +1175,18 @@ if (uncompilable.length > 0) {
     );
     process.exit(1);
 }
-console.log(`vue templates: all ${templates.length} parse and compile, so the bundler has nothing left to discover`);
+console.log(
+    compiler === undefined
+        ? `vue templates: ${templates.length} not compiled (vue/compiler-sfc needs node_modules, and this ran before the install) — the verify jobs read them`
+        : `vue templates: all ${templates.length} parse and compile, so the bundler has nothing left to discover`,
+);
+
+/* Everything below GENERATES into the tree and needs node_modules for more than one optional read; everything
+ * above touches nothing but the executable bit invariant 7 re-arms. `--checks-only` is that line: it is what
+ * the pre-push hook and the CI preflight job run. */
+if (checksOnly) {
+    process.exit(0);
+}
 
 /* A package needs building exactly when its `exports` hand a dependent a MODULE out of `dist/`: that `.js` is
  * what a dependent's compiler reads (through the `.d.ts` beside it), so a stale or absent dist there is a

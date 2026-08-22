@@ -49,6 +49,11 @@ Thumbs.db
 # Claude Code per-user local settings — never shared across devs.
 /.claude/settings.local.json
 
+# Written by semantic-release's successCmd, read by release.yml's `Release` step to tell "published 1.223.0"
+# apart from "declined because main moved on". Never committed: it is a fact about one run of one job, on a
+# runner whose workspace survives between jobs.
+/.release-cut
+
 # intentic dogfood / demo (local only)
 /.intentic
 /intent

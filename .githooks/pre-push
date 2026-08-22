@@ -3,8 +3,17 @@
 #
 # Wired by the root `prepare` script alongside commit-msg (core.hooksPath=.githooks). What it runs is the check
 # half of _tools/scripts/prepass.mjs — the repo invariants readable from the checkout alone: test-file coverage,
-# integration-suite naming, lockfile drift, the fork boundary, the release-heading contract, and the gate that a
-# shrunk wire contract pushes with a declared break. No node_modules, no network, ~70ms.
+# the vitest budget every package must name, integration-suite naming, lockfile drift, the fork boundary, the
+# release-heading contract, and the gate that a shrunk wire contract pushes with a declared break. No network,
+# ~70ms.
+#
+# ONE OF THEM READS node_modules WHEN IT IS THERE: the .vue templates, which no type checker looks at and only
+# the app bundle used to. That gate was born below the `--checks-only` line because its compiler is a
+# dependency, which left it out of reach of the very hook that stands between a broken template and main — and
+# a broken template is what cost five hours and three red pipelines the day it landed
+# (docs/ci-failure-audit.md, class A). A push comes from a working clone, so the compiler is present and the
+# ~0.8s for ~400 templates is not worth noticing. Where it is absent (the CI preflight job, which runs before
+# its install) prepass says so and moves on rather than failing for a tool nobody promised it.
 #
 # It is here because of what those failures cost in CI. Measured over 40 main pipelines, 10 of the 22 red ones
 # died on one of these three, every one of them AFTER `pnpm install --frozen-lockfile` had resolved 1,800+

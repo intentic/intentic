@@ -29,6 +29,7 @@
     },
     "devDependencies": {
         "@intentic/constants": "workspace:*",
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "@tauri-apps/cli": "catalog:",

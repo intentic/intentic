@@ -286,3 +286,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: bash _tools/scripts/verify-update-survival.sh
+
+  # THE STORE SHELLS, on the schedule as well as on their path filter. Both jobs prove a project a pinned
+  # external generator writes from a checked-in manifest, and that pair drifts with no commit of ours: a
+  # Bubblewrap that began requiring a manifest key wrote `splashScreenFadeOutDuration: ,` into build.gradle,
+  # and a Capacitor that moved to Swift-package wiring stopped writing the App.xcworkspace both mobile
+  # workflows opened. Under the path filter alone nothing looks until someone touches a shell, so the shells
+  # sat broken for a day across three red runs on pushes that changed neither (docs/ci-failure-audit.md,
+  # class F). Here it costs nobody's push.
+  #
+  # A CALL, not a copy: mobile.yml owns the two jobs and gained `workflow_call` for this. It runs on
+  # GitHub-hosted runners and touches no secret, so it needs nothing from this file's env or credentials —
+  # `contents: read` is the whole grant, which is what this workflow already holds.
+  mobile:
+    uses: ./.github/workflows/mobile.yml

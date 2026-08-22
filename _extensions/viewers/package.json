@@ -25,6 +25,7 @@
         "read-excel-file": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "typescript": "catalog:",
         "vitest": "catalog:",

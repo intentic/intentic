@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { INTEGRATION_SUITE, UNIT_SUITE } from "@intentic/testing/vitest";
 
 /* The launcher's own suite, and it covers exactly one kind of thing: the PURE readings of what the installer
  * says (src/desktop.ts, src/setupPlan.ts).
@@ -14,7 +15,6 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
     test: {
-        include: ["./src/**/*.test.ts"],
-        environment: "node",
+        projects: [{ test: UNIT_SUITE }, { test: INTEGRATION_SUITE }],
     },
 });

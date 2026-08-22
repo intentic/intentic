@@ -26,6 +26,7 @@
         "croner": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "typescript": "catalog:",
         "vitest": "catalog:",

@@ -44,6 +44,7 @@
     },
     "devDependencies": {
         "@intentic-app/example-provider": "workspace:*",
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
         "@types/pg": "catalog:",

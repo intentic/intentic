@@ -8,7 +8,8 @@
             "@semantic-release/exec",
             {
                 "prepareCmd": "bash _tools/scripts/release-prepare.sh ${nextRelease.version}",
-                "publishCmd": "bash _tools/scripts/publish-github.sh ${nextRelease.version} && bash _tools/scripts/release-images.sh ${nextRelease.version} && bash _tools/scripts/ship-stable.sh ${nextRelease.version}"
+                "publishCmd": "bash _tools/scripts/publish-github.sh ${nextRelease.version} && bash _tools/scripts/release-images.sh ${nextRelease.version} && bash _tools/scripts/ship-stable.sh ${nextRelease.version}",
+                "successCmd": "bash _tools/scripts/mark-release-cut.sh ${nextRelease.version}"
             }
         ]
     ]

@@ -58,7 +58,12 @@ jobs:
       # workspace six runner processes share (docs/ci-runner.md, "The token a checkout leaves behind"). These
       # two run semantic-release, which reaches the git remote, and whether its own GITHUB_TOKEN-derived auth
       # URL fully replaces the persisted header is not a thing to find out by breaking a release.
+      #
+      # The suppression rides on the step rather than on a line number in .github/zizmor.yml, so it survives
+      # the step moving; that file says what the pins cost. A checkout added anywhere else carries no comment
+      # and still fails the lint, which is the whole guarantee.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # zizmor: ignore[artipacked] `plan` runs semantic-release, which reaches the git remote
         with:
           fetch-depth: 0
           clean: false
@@ -383,6 +388,7 @@ jobs:
       # The other checkout that keeps its credential — see `plan` above. This is the job that actually pushes
       # the tag.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # zizmor: ignore[artipacked] `publish` runs semantic-release, which pushes the tag
         with:
           fetch-depth: 0
           clean: false
@@ -419,7 +425,29 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm exec semantic-release
+      # THE RELEASE, AND WHETHER IT HAPPENED — which are two different facts, and everything below this step
+      # depends on the second one.
+      #
+      # `plan` computed PLANNED_RELEASE_VERSION before five build jobs ran; by the time this job starts, an
+      # hour of commits has landed on main and semantic-release declines with "the local branch main is behind
+      # the remote one". It exits 0. At this commit rate that is the ORDINARY outcome, and every step below
+      # publishes a tag that in that case was never pushed — which is how three of the ten most recent red
+      # pipelines died at the end of a 90-minute build with nothing wrong (docs/ci-failure-audit.md, class D).
+      #
+      # `.release-cut` is written by the `successCmd` in .releaserc.json, which semantic-release runs only
+      # after a publish it actually performed. Removed FIRST because `clean: false` keeps this workspace
+      # between jobs, so a marker from an earlier run would otherwise answer for this one.
+      - name: Release
+        id: release
+        run: |
+          rm -f .release-cut
+          pnpm exec semantic-release
+          if [ -f .release-cut ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=No release cut::main moved on during the build, so semantic-release published nothing at ${PLANNED_RELEASE_VERSION}. The next pipeline releases these commits. Nothing below this step runs."
+          fi
 
       # The registries. Everything semantic-release just did lives on GitHub — the tag, the Release, the
       # installers attached to it — and the workflows that carry this version to npm and to the GitHub
@@ -430,6 +458,7 @@ jobs:
       # AFTER semantic-release for the obvious reason — the tag they check out does not exist until it has
       # run — and before the attestation below, which is about a different set of artifacts entirely.
       - name: Publish to npm and the GitHub Marketplace
+        if: ${{ steps.release.outputs.released == 'true' }}
         run: bash _tools/scripts/dispatch-publish.sh "$PLANNED_RELEASE_VERSION"
 
       # --- provenance -------------------------------------------------------------------------------------
@@ -445,6 +474,7 @@ jobs:
       # npm-publish.yml's refusal to fall back when the provenance exchange fails.
       - name: Attest the release assets
         id: attest-assets
+        if: ${{ steps.release.outputs.released == 'true' }}
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
           # The same four directories publish-github.sh attaches to the Release: the desktop installers and
@@ -459,6 +489,7 @@ jobs:
       # A copy of that same bundle, attached to the Release next to the installers it vouches for. The script
       # says why a second copy is worth having; it never fails the job.
       - name: Attach the provenance to the Release
+        if: ${{ steps.release.outputs.released == 'true' }}
         shell: bash
         env:
           BUNDLE_PATH: ${{ steps.attest-assets.outputs.bundle-path }}
@@ -469,6 +500,7 @@ jobs:
       # just published.
       - name: Resolve the published image digests
         id: digests
+        if: ${{ steps.release.outputs.released == 'true' }}
         shell: bash
         run: |
           version="$PLANNED_RELEASE_VERSION"
@@ -479,6 +511,7 @@ jobs:
           done
 
       - name: Attest the sandbox image
+        if: ${{ steps.release.outputs.released == 'true' }}
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
           subject-name: ghcr.io/intentic/sandbox
@@ -488,6 +521,7 @@ jobs:
           push-to-registry: true
 
       - name: Attest the dind-host image
+        if: ${{ steps.release.outputs.released == 'true' }}
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
           subject-name: ghcr.io/intentic/dind-host

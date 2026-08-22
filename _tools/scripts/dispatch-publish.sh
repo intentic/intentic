@@ -47,15 +47,33 @@ if [ -z "${GITHUB_TOKEN:-}" ]; then
   exit 0
 fi
 
+# THE TAG HAS TO BE THERE, and saying so here is the difference between a diagnosis and a puzzle. A dispatch
+# at a ref that does not exist is a 422 with an empty body, which `curl --fail` reports as the bare line
+# `curl: (22) The requested URL returned error: 422` — three of the ten most recent red pipelines ended on
+# exactly that and nothing else (docs/ci-failure-audit.md, class D). release.yml no longer calls this script
+# when semantic-release declined to release, so reaching here without the tag now means something worse than
+# the old race, and it should read that way.
+if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1 \
+  && ! git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+  echo "${TAG} does not exist, locally or on origin — semantic-release did not tag this version, so there is" >&2
+  echo "nothing for npm-publish.yml or action-publish.yml to check out. Not dispatching." >&2
+  exit 1
+fi
+
 # `actions: write` is what this needs from the job's permissions block, and it is easy to lose: a job's
 # `permissions:` REPLACES the set it inherits, so release.yml names it alongside contents/packages/id-token.
 for workflow in "${WORKFLOWS[@]}"; do
-  curl --fail --silent --show-error \
+  if ! curl --fail --silent --show-error \
     --request POST \
     --header "Authorization: Bearer ${GITHUB_TOKEN}" \
     --header "Accept: application/vnd.github+json" \
     --header "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${REPO}/actions/workflows/${workflow}/dispatches" \
-    --data "{\"ref\":\"${TAG}\"}"
+    --data "{\"ref\":\"${TAG}\"}"; then
+    echo "dispatching ${workflow} at ${TAG} failed — ${TAG} is released on GitHub but this target is not." >&2
+    echo "Start it by hand from the Actions tab at ref ${TAG}, or publish npm from a maintainer PC with" >&2
+    echo "  bash _tools/scripts/publish-catchup.sh ${VERSION}" >&2
+    exit 1
+  fi
   echo "  dispatch ${workflow} @ ${TAG}"
 done

@@ -6,6 +6,15 @@
 # filter is the budget: the shells are thin configuration over the hosted web app, so almost no product
 # change should ever start these jobs.
 #
+# AND THE PATH FILTER IS WHY nightly.yml CALLS THIS TOO. Both jobs here prove a GENERATED project, and what
+# generates it is a pinned external tool reading a checked-in manifest. That pair drifts on its own: neither
+# defect this file has ever caught was a product change. Bubblewrap started requiring a manifest key that was
+# not there and emitted `splashScreenFadeOutDuration: ,`, a Groovy syntax error; Capacitor moved its dependency
+# wiring to a Swift package, so the App.xcworkspace both workflows opened stopped being written at all. With
+# only the path filter, nothing looks until someone touches a shell — this workflow had run four times in its
+# life, and was broken from its first run to its fourth, a full day, on a push that changed neither shell
+# (docs/ci-failure-audit.md, class F). A schedule is what makes drift arrive on nobody's push.
+#
 # What each job actually proves, since neither shell has tests of its own:
 #   android  the Play manifest still generates a project Bubblewrap can assemble and sign end-to-end —
 #            the same command sequence the release runs, minus the store upload.
@@ -29,6 +38,9 @@ on:
       - "_tools/scripts/mobile-android-sdk.sh"
       - ".github/workflows/mobile.yml"
   workflow_dispatch:
+  # Called by nightly.yml, so the same two jobs are the schedule's answer as well as the push's. A second copy
+  # of them there would be the drift this file exists to catch, one layer up.
+  workflow_call:
 
 # Same shape as ci.yml: supersede on a pull request, never on main.
 concurrency:

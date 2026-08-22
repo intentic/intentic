@@ -16,6 +16,7 @@
         "baileys": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",

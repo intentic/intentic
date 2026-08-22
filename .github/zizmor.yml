@@ -61,25 +61,21 @@ rules:
         ignore:
             - npm-publish.yml
 
-    # The two checkouts that keep their credential, named by line so a THIRD one fails the lint.
+    # `artipacked` HAS NO ENTRY HERE ON PURPOSE — its two exceptions live on the steps they describe, as
+    # `# zizmor: ignore[artipacked]` comments in release.yml.
     #
-    # Every other checkout in this repository now sets `persist-credentials: false`: the token checkout writes
-    # into .git/config outlives the job on a workspace six runner processes share, and nothing else here
-    # pushes (docs/ci-runner.md, "The token a checkout leaves behind"). These two run semantic-release, which
-    # reaches the git remote — it builds its own authenticated URL from GITHUB_TOKEN and probably does not need
-    # the persisted header, but "probably" is not worth finding out by breaking a release.
+    # They used to be line pins in this file, and the line pins were chosen deliberately: file-scoping would
+    # silently cover the next checkout added to release.yml, which is the erosion that made this a 34-finding
+    # backlog in the first place, and a stale pin forces a moved exception to be re-read.
     #
-    # LINE-SCOPED ON PURPOSE, not file-scoped: a file-wide ignore would silently cover the next checkout added
-    # to release.yml, which is exactly the erosion that made this a 34-finding backlog in the first place. The
-    # line numbers going stale is the point — a moved exception has to be re-read and re-approved.
+    # WHAT THAT COST. The pin does not move when the step does. It was 349, then 358, then 385, and each move
+    # was discovered the same way: a red `preflight` on a push that changed nothing about the checkout — twice
+    # in the two days docs/ci-failure-audit.md covers (class C), the second time because twenty-seven lines of
+    # Windows signing config landed above it.
     #
-    # DELETE THIS SUPPRESSION IF: someone confirms against a real release that semantic-release pushes fine
-    # without the persisted header. Then both jobs join the other thirty-one and this block goes.
-    artipacked:
-        ignore:
-            - release.yml:61
-            # Was 349, then 358, now 385 — `publish`'s checkout keeps sliding down as steps and `env:` land
-            # above it, most recently the twenty-seven lines of Windows Authenticode signing config. Re-read
-            # and re-approved as the paragraph above requires: same checkout, same `publish` job, same
-            # `pnpm exec semantic-release` a few steps below it, same reason.
-            - release.yml:385
+    # An inline comment keeps the whole guarantee and drops the bookkeeping: it travels with the step, so
+    # unrelated edits above it cost nothing, and a NEW credential-persisting checkout carries no comment and
+    # still fails the lint. The re-reading the pins were meant to force now happens where a reviewer is already
+    # looking, on the step, next to the reason.
+    #
+    # The rule this file still enforces is the one that mattered: no file-wide `artipacked` ignore, ever.

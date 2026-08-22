@@ -31,6 +31,7 @@
         "tslib": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",

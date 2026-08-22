@@ -27,6 +27,7 @@
         "@intentic-app/web": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@intentic/ui": "workspace:*",
         "@tailwindcss/vite": "catalog:",

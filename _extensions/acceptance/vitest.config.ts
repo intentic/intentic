@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { INTEGRATION_SUITE, UNIT_SUITE } from "@intentic/testing/vitest";
 
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
@@ -12,17 +13,24 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
  * `PanelsListSchema` precisely so the shapes are real rather than invented, and a `z.object` strips keys it does
  * not know about. Against a stale build, every fixture field the contract had just gained was quietly deleted on
  * its way in, and the assertions then failed as though the code under test were wrong. Aliasing the package ROOT
- * (not its index) keeps the subpath entries resolving to source too. Same reasoning as _sandbox/sandbox/vitest.config.ts. */
-export default defineConfig({
-    resolve: {
-        alias: {
-            "@intentic/extension-api": here(`../../_sandbox/extension-api/src`),
-            "@intentic/registry": here(`../../_sandbox/registry/src`),
-            "@intentic/sandbox-contract": here(`../../_sandbox/sandbox-contract/src`),
-        },
+ * (not its index) keeps the subpath entries resolving to source too. Same reasoning as _sandbox/sandbox/vitest.config.ts.
+ *
+ * ON EACH PROJECT, not at the top level: a project is its own Vite config, and a `resolve` stated once above
+ * `projects` is silently ignored, which lands right back on the stale build described above. Same reasoning as
+ * _search/iq/vitest.config.ts. */
+const resolve = {
+    alias: {
+        "@intentic/extension-api": here(`../../_sandbox/extension-api/src`),
+        "@intentic/registry": here(`../../_sandbox/registry/src`),
+        "@intentic/sandbox-contract": here(`../../_sandbox/sandbox-contract/src`),
     },
+};
+
+export default defineConfig({
     test: {
-        include: ["./src/**/*.test.ts"],
-        environment: "node",
+        projects: [
+            { resolve, test: UNIT_SUITE },
+            { resolve, test: INTEGRATION_SUITE },
+        ],
     },
 });
