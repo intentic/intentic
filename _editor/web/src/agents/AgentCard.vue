@@ -338,7 +338,7 @@ const grab = (event: PointerEvent): void => {
         role="button"
         tabindex="0"
         :aria-label="`Focus agent: ${displayTitle}`"
-        class="session-card group flex w-full select-none flex-col gap-1.5 rounded-lg border p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col gap-2 rounded-xl border p-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
             /* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. `selected` (this card's chat is on screen)
                and the Attention lane are unrelated facts, told apart by WHERE they are drawn: selection is a
@@ -362,7 +362,7 @@ const grab = (event: PointerEvent): void => {
         @keydown.enter.self.prevent="openCard()"
         @keydown.space.self.prevent="openCard()"
     >
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2.5">
             <!-- The IDENTITY TILE (IdentityTile): the kind-of-work glyph on a tint of this agent's CATEGORY
                  hue (sessionCategory: the title's action word read as a Conventional Commit type, audits a
                  blue magnifier, redesigns purple arrows, new work a green plus, fixes a red wrench). Shape
@@ -465,7 +465,7 @@ const grab = (event: PointerEvent): void => {
         <!-- The card's body, in whichever direction it has room for. Column: one block per row, the only thing
              that fits a kanban lane. Row (`dense`): the same blocks along one wrapping line, each block already
              shrinks or wraps internally, so the line degrades on its own as the board narrows. -->
-        <div :class="dense ? 'flex flex-wrap items-center gap-x-3 gap-y-1' : 'flex flex-col gap-1.5'">
+        <div :class="dense ? 'flex flex-wrap items-center gap-x-3.5 gap-y-1.5' : 'flex flex-col gap-2'">
             <!-- WHY this card survived the filter: the line the query hit, and which side of the chat said it.
                  Leads the body, because while a filter is on that is the question the card is being read to
                  answer: and only renders when the hit was NOT the title, which is marked in place above
@@ -473,7 +473,7 @@ const grab = (event: PointerEvent): void => {
                  screen). Two lines before the clamp: a snippet cut to one is usually cut mid-phrase, and a
                  fragment that doesn't contain the sentence is no longer evidence. Full width in the `dense`
                  row form, so it stays a line of prose rather than a column squeezed between two stat blocks. -->
-            <p v-if="match !== undefined" class="flex min-w-0 items-start gap-1.5 text-2xs text-muted" :class="dense ? 'w-full' : ''">
+            <p v-if="match !== undefined" class="flex min-w-0 items-start gap-2 text-2xs text-muted" :class="dense ? 'w-full' : ''">
                 <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
                 <MatchLine :snippet="match" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
             </p>
@@ -488,7 +488,7 @@ const grab = (event: PointerEvent): void => {
                  one Ready-to-land wears): nothing is wrong here, so none of the warning colours apply. The
                  text itself is deliberately NOT shown: a board is read at a glance, often over someone's
                  shoulder, and a half-written message is the most private thing this app holds. -->
-            <p v-if="agent.unsent" class="flex min-w-0 items-center gap-1.5 text-2xs text-link" v-tooltip.top="'You have an unsent message here'">
+            <p v-if="agent.unsent" class="flex min-w-0 items-center gap-2 text-2xs text-link" v-tooltip.top="'You have an unsent message here'">
                 <Icon name="send" class="shrink-0 text-2xs" />
                 <span class="truncate font-medium">Unsent message</span>
             </p>
@@ -499,7 +499,7 @@ const grab = (event: PointerEvent): void => {
                  this the board said "Error", and the sentence naming the spent plan or the organization that
                  switched Claude Code off lived only inside the dead session. Two lines, then the full text on
                  hover: a provider's explanation is a sentence, and a fragment of one is not an explanation. -->
-            <p v-if="agent.failure" class="flex min-w-0 items-start gap-1.5 text-2xs text-danger" v-tooltip.top="agent.failure">
+            <p v-if="agent.failure" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="agent.failure">
                 <Icon name="exclamation-circle" class="mt-px shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ agent.failure }}</span>
             </p>
@@ -517,7 +517,7 @@ const grab = (event: PointerEvent): void => {
                  variant (`group-hover:`) always sorts after its unvaried counterpart, so that pair is safe. -->
             <div
                 v-if="model !== undefined || agent.branch !== undefined"
-                class="min-w-0 items-center gap-1.5 text-2xs text-subtle"
+                class="min-w-0 items-center gap-2 text-2xs text-subtle"
                 :class="model !== undefined || mobile ? 'flex' : 'hidden group-hover:flex'"
             >
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
@@ -576,7 +576,7 @@ const grab = (event: PointerEvent): void => {
                  confirmation dialog (see useAgentDrag.resolveNow) and so had to be readable without a pointer:
                  hover reaches no touch device, and a paragraph in a box that closes on the first click is not
                  disclosure, it is a formality. -->
-            <div v-if="resolvable" class="flex min-w-0 flex-col gap-0.5">
+            <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
                 <Button size="small" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
                     <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" />{{
                         handingOver ? "Handing it over…" : "Have the agent resolve it"
@@ -641,7 +641,7 @@ const grab = (event: PointerEvent): void => {
                  a card only ever offers this button to somebody who went into settings and turned auto-land
                  off. Two lines of standing explanation per card, on a board of forty, for a fact its own reader
                  configured. The board is scanned; a card earns its height from what changes what you do next. -->
-            <div v-if="landable && canShip" class="flex min-w-0 flex-col gap-0.5">
+            <div v-if="landable && canShip" class="flex min-w-0 flex-col gap-1">
                 <!-- The standing ask leads the button it is about: a maintainer reading top-to-bottom meets the
                      reason before the press. -->
                 <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
@@ -655,7 +655,7 @@ const grab = (event: PointerEvent): void => {
             <!-- The same ready card in a collaborator's hands: the land is a maintainer's press, so the card
                  offers the ask instead: same spot, same size, quieter chrome. Once asked, the card says so
                  and stands down (re-asking only re-stamps the same fact). A viewer gets neither. -->
-            <div v-else-if="landable && canDrive" class="flex min-w-0 flex-col gap-0.5">
+            <div v-else-if="landable && canDrive" class="flex min-w-0 flex-col gap-1">
                 <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}: waiting for a maintainer</span>
                 </p>
@@ -671,7 +671,7 @@ const grab = (event: PointerEvent): void => {
                  the right of the same line (see `summary`). -->
             <div
                 v-if="summary"
-                class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-muted"
+                class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
                 :class="dense ? 'min-w-32 flex-1' : ''"
             >
                 <!-- No hover labels on the numbers. Chips side by side each raising its own box turned a glance

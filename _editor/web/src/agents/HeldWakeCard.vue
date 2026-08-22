@@ -42,10 +42,10 @@ const autoRunLabel = computed(() => {
 
 <template>
     <div
-        class="group flex w-full select-none flex-col gap-1.5 rounded-lg border border-dashed border-line bg-card p-3 text-left"
+        class="group flex w-full select-none flex-col gap-2 rounded-xl border border-dashed border-line bg-card p-3.5 text-left"
         :class="busy ? 'pointer-events-none opacity-60' : ''"
     >
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2.5">
             <!-- The pause glyph where an agent card carries its identity tile: this row is a held wake, not a
                  session: nothing is running behind it. -->
             <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-warning/15">
@@ -55,7 +55,7 @@ const autoRunLabel = computed(() => {
             <span class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">held</span>
         </div>
         <div v-if="snippet !== undefined" class="truncate text-2xs text-muted">{{ snippet }}</div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2.5">
             <OriginMark :origin="entry.origin" />
             <span class="min-w-0 flex-1 truncate text-2xs text-subtle">
                 {{ autoRunLabel ?? `waiting for you` }} · {{ timeAgo(entry.createdAt) }}

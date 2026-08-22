@@ -47,7 +47,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         role="button"
         tabindex="0"
         :aria-label="`Open the sessions of ${run.workflow.name}`"
-        class="session-card group flex w-full select-none flex-col gap-1.5 rounded-lg border border-dashed p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col gap-2 rounded-xl border border-dashed p-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
             /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it
                rather than one of them. Everything else — fill, border, hover, the selection ring and the
@@ -65,7 +65,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         @keydown.enter.self.prevent="emit(`open`)"
         @keydown.space.self.prevent="emit(`open`)"
     >
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2.5">
             <!-- The graph glyph, where an agent card carries its identity tile: one look says "this row is a
                  shape, not a session". -->
             <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary-600/15">
@@ -143,7 +143,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
              and absent for a run started from the workflows page, which had no composer to read one from. -->
         <p v-if="run.request" class="line-clamp-2 text-2xs italic leading-4 text-muted">{{ run.request }}</p>
 
-        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-muted">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted">
             <span :class="TONE[run.state]">{{ run.state === `running` ? `${live.length} live` : run.state }}</span>
             <span>{{ done }}/{{ run.steps.length }} steps</span>
             <span v-if="spent > 0">${{ spent.toFixed(2) }}</span>
