@@ -27,6 +27,8 @@ interface GsiButtonConfig {
     readonly text?: "signin_with" | "signup_with" | "continue_with" | "signin";
     readonly shape?: "rectangular" | "pill" | "circle" | "square";
     readonly logo_alignment?: "left" | "center";
+    /** Rendered width in px. Google accepts 200–400 and shortens its own label to fit. */
+    readonly width?: number;
 }
 interface GoogleAccountsId {
     initialize(config: GoogleIdConfig): void;
@@ -295,6 +297,12 @@ const renderButton = async (parent: HTMLElement, dark: boolean): Promise<boolean
     if (id === undefined) {
         return false;
     }
+    /* FITTED TO THE BOX IT IS GIVEN, because left alone it sizes itself to its own label and that label is
+     * translated. "Continue with Google" is 245px and the Polish for it is 305px, so a slot measured against
+     * English overflows in half the locales this app is opened in. Google shortens its own text to whatever
+     * width it is handed, so the button crops its wording instead of the layout. Below 200px the parameter is
+     * refused (and an unmeasurable box reports 0), so the natural width stays the fallback. */
+    const measured = Math.floor(parent.clientWidth);
     id.renderButton(parent, {
         type: `standard`,
         theme: dark ? `filled_black` : `outline`,
@@ -302,6 +310,7 @@ const renderButton = async (parent: HTMLElement, dark: boolean): Promise<boolean
         text: `continue_with`,
         shape: `pill`,
         logo_alignment: `center`,
+        ...(measured >= 200 ? { width: Math.min(measured, 400) } : {}),
     });
     return true;
 };
