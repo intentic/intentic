@@ -1,5 +1,6 @@
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
+import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.js";
 import { EXTENSION_PROCESS_PREFIX } from "../extensions/extension-processes.js";
 import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
 import type { ListeningPort } from "./port-scan.js";
@@ -305,6 +306,14 @@ export const identifyPort = (listener: ListeningPort, attribution: PortAttributi
                     ? "A background service an extension asked the sandbox to run."
                     : `A background service the ${owner.extensionId} extension asked the sandbox to run.`,
             origin: "extension",
+            kind: "system",
+        };
+    }
+    if (key !== undefined && key.startsWith(LOCAL_MODEL_PREFIX)) {
+        return {
+            title: "Local model server",
+            purpose: "Serves a local language model for your agents.",
+            origin: "sandbox",
             kind: "system",
         };
     }

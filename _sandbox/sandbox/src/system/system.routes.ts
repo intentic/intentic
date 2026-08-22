@@ -16,6 +16,7 @@ import { manageMachineSandbox } from "../hosts/machine-reports.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/browser-sessions.js";
 import { readSubagentTranscript } from "../sessions/subagent-transcript.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
+import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { EXTENSION_PROCESS_PREFIX, extensionProcessIndex } from "../extensions/extension-processes.js";
@@ -426,7 +427,7 @@ export const createSystemRoutes = (services: Services) => {
                     }
                     if (name.startsWith(PANEL_SESSION_PREFIX)) {
                         const key = name.slice(PANEL_SESSION_PREFIX.length);
-                        if (key === DOCKER_PANEL_KEY || key.startsWith(EXTENSION_PROCESS_PREFIX)) {
+                        if (key === DOCKER_PANEL_KEY || key.startsWith(EXTENSION_PROCESS_PREFIX) || key.startsWith(LOCAL_MODEL_PREFIX)) {
                             // An orphan (its extension uninstalled while the session lingers) has no index entry,
                             // still a process row, addressable only by its session name.
                             const owner = extensionProcesses.get(key);

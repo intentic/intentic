@@ -51,9 +51,11 @@ import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
 const exec = promisify(execFile);
 
-// The visible tmux session one entry's llama-server runs in (`panel-model-<id>`), where its load/serve output
-// lives and where a user goes when the card says something is wrong.
-export const localModelPanelKey = (id: string): string => `model-${id}`;
+// The tmux session one entry's llama-server runs in (`panel-model-<id>`), classified as a background process
+// (kind "process") by the terminals list so it sits with extension gateways and dockerd rather than as a
+// visible panel tab. Its output is still attachable when the card says something is wrong.
+export const LOCAL_MODEL_PREFIX = "model-";
+export const localModelPanelKey = (id: string): string => `${LOCAL_MODEL_PREFIX}${id}`;
 
 // The GPU half of the fragment (config.gpu === "on"): the CUDA build of llama-server (overlay-only, hundreds of
 // MB of CUDA runtime, which is why it is never baked) plus the directive that asks the runner for the devices.
@@ -441,7 +443,7 @@ export const localModelHandler: CapabilityHandler = {
         yield {
             kind: "log",
             message: held
-                ? `Starting llama-server for ${localModelLabel(model)}; the connection's row says when it is serving, and its output is in the panel-${localModelPanelKey(id)} terminal.`
+                ? `Starting llama-server for ${localModelLabel(model)}; the connection's row says when it is serving, and its output is in the background processes list.`
                 : `Downloading ${source.file} in the background. The connection's row shows how far along it is and starts serving when it lands, so you can leave this page.`,
         };
     },
