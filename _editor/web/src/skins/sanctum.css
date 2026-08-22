@@ -1113,11 +1113,18 @@
      * the texture it is meant to be lighting. `drop-shadow` composites behind the finished element instead: two
      * pale edges up and left for the lit face of the cut, then a hard black one below for the cut's depth.
      *
-     * MIND THE LINE HEIGHT: a background stops at the element's box, so anything a glyph reaches below its line
-     * box is not painted. Playfair's descenders are long, and `leading-tight` (1.25) is the floor. */
+     * DESCENDERS ARE BOUGHT WITH PADDING, NOT WITH LEADING. A background is painted across the element's padding
+     * box, so anything a glyph reaches below that box is not painted and the tail of a "g" goes missing. Playfair's
+     * descenders are long, and any size utility (`text-4xl` is 1.111, `leading-none` is 1) outranks a line-height
+     * set here — so the clearance is padding, taken straight back out with a matching negative margin: the painted
+     * box grows, the laid-out box does not move, and it holds at any leading. Keep the pair together, and do not
+     * put `mb-*` on this heading — that would cancel the takeback and open a gap. */
     [data-skin="sanctum"] h1.text-4xl {
         font-family: var(--sanctum-display);
         font-weight: 600;
+        --display-descender: 0.2em;
+        padding-block-end: var(--display-descender);
+        margin-block-end: calc(-1 * var(--display-descender));
         text-shadow: none;
         background-image:
             url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='70'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.7' intercept='0.15'/%3E%3CfeFuncG type='linear' slope='0.7' intercept='0.15'/%3E%3CfeFuncB type='linear' slope='0.7' intercept='0.15'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='70' height='70' filter='url(%23g)'/%3E%3C/svg%3E"),

@@ -16,13 +16,16 @@
 }
 
 .home .h2 {
-    margin: 0.9rem 0 0;
+    /* The bottom margin is NEGATIVE on purpose, and it is not a spacing choice: `.display` pays for its
+       descenders with `padding-block-end` (a clipped background is not painted past the padding box, so the
+       tail of a "g" would go missing) and takes that padding back out with a matching negative margin. A
+       plain `0` here would win over it and leave the padding standing as a visible gap. Any rule that sets
+       the bottom margin of a `.display` element has to carry the takeback with it. */
+    margin: 0.9rem 0 calc(-1 * var(--display-descender));
     max-width: 24ch;
     font-size: clamp(1.9rem, 3.2vw, 2.75rem);
-    /* 1.24, not the 1.16 this used to run. Playfair's content box is ~1.33em and its descenders are long,
-       so a heading set tighter than ~1.2 loses the tail of a "g" or "y" — and here it loses it outright
-       rather than just tightly, because `.display` paints the letters as a background clipped to their
-       shape, and a background stops at the element's box. */
+    /* 1.24, not the 1.16 this used to run: Playfair's content box is ~1.33em, and set tighter than ~1.2 the
+       lines crowd. The descenders themselves no longer depend on this number. */
     line-height: 1.24;
 }
 .home .lede {
