@@ -3,6 +3,7 @@ import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { once } from "node:events";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { downloadFile } from "@huggingface/hub";
 import type { Capability, CapabilityStatus, LocalModelConfig } from "@intentic/sandbox-contract";
@@ -17,6 +18,13 @@ import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
  * derived loopback port (endpoints/local-model.ts). From there the entry IS an endpoint: the translator routes
  * turns at it, the picker lists its model, quick-model pins hold, all through the same seams a user-added
  * endpoint rides, and none of that code knows this kind exists.
+ *
+ * ONE OF THOSE SEAMS HAD TO LEARN A NEW MOMENT, and it is the only place this kind is not simply an endpoint.
+ * The translator's routing table is synced by the capability route, from the endpoint's live catalog, at
+ * add/update/rename/remove. For a user-added endpoint that IS the truth: the server it names is already
+ * running. For this kind the add happens minutes before the entry can serve anything, so that sync writes an
+ * empty model list and the entry then routes nothing, forever. So the background job re-syncs when the server
+ * actually begins serving (syncWhenServing), and that is what makes a fresh add drivable at all.
  *
  * THE ADD DOES NOT WAIT FOR THE WEIGHTS, and this is the one thing about this kind that could not be borrowed
  * from the handlers around it. Every other apply is seconds of work with a terminal to watch; this one is tens
@@ -87,7 +95,8 @@ const weightsReady = async (path: string): Promise<boolean> =>
         () => false,
     );
 
-/* THE WORK RUNNING BEHIND THE CARDS, and why there are three maps rather than one.
+/* THE WORK RUNNING BEHIND THE CARDS, and why there are this many maps rather than one (`servings`, the fourth,
+ * is declared beside the watcher it belongs to).
  *
  * `downloads` is keyed by the DESTINATION PATH because that is what is actually shared: weights are cached by
  * file name, so two entries naming the same model must watch one download rather than start a second onto the
@@ -237,8 +246,88 @@ const startServer = async (ctx: CapabilityCtx, id: string, path: string): Promis
     await ctx.panels.start(key, { command: serverCommand(path, localModelPort(id)), cwd: ctx.workspace.root });
 };
 
-/* WHAT THE ADD HANDS OFF TO. Fetch the weights if they aren't here, then serve them; never throws, because
- * nothing is holding it, and what went wrong belongs on the card rather than in an unhandled rejection.
+/* THE MOMENT THE ENTRY BECOMES ROUTABLE, which is neither the moment it was added nor the moment the process
+ * spawned: llama-server publishes nothing until the weights are mapped and the model is loaded, and the
+ * catalog read that feeds the translator's routing table is exactly that publication (endpoint-catalog.ts).
+ * Every read before it answers an empty list, and an entry routing an empty list refuses every turn.
+ *
+ * Polled rather than awaited on the process, because "the process is up" and "the model is loaded" are minutes
+ * apart for a large model and only the second is the readiness anything downstream cares about. /health is
+ * llama-server's own answer to that question: 503 loading, 200 serving.
+ *
+ * Ends on a DEAD PANEL as readily as on the ceiling: a server that exited during its load will never publish,
+ * and the card's own status says so far better than a watcher still counting down would.
+ *
+ * BOUNDED, and false is a real answer rather than a timeout to throw on. A model still not serving twenty
+ * minutes in has something wrong with it that the panel terminal is already reporting, and the next Update
+ * starts a fresh watcher anyway. */
+const SERVING_CEILING_MS = 20 * 60_000;
+const SERVING_POLL_MS = 2_000;
+
+const waitUntilServing = async (ctx: CapabilityCtx, id: string, signal: AbortSignal): Promise<boolean> => {
+    const deadline = Date.now() + SERVING_CEILING_MS;
+    const port = localModelPort(id);
+    while (!signal.aborted && Date.now() < deadline) {
+        if (await serverHealthy(port)) {
+            return true;
+        }
+        if (!ctx.panels.running(localModelPanelKey(id))) {
+            return false;
+        }
+        await delay(SERVING_POLL_MS, undefined, { signal }).catch(() => undefined);
+    }
+    return false;
+};
+
+/* THE WATCHER THAT MAKES A LOCAL MODEL DRIVABLE, held OUTSIDE `jobs` on purpose.
+ *
+ * Folding it into the job would hold that job open for the whole load, and `jobs.has` is what makes a second
+ * Update a no-op, so a user watching a model that is stuck loading would press Update, be told the server is
+ * starting, and get nothing. The download job's shape stays exactly what it was; this rides alongside it.
+ *
+ * One watcher per entry, and a fresh start CANCELS the last: the only caller runs right after a server was
+ * (re)started, so an older watcher is counting down on a process that no longer exists. */
+const servings = new Map<string, AbortController>();
+
+const syncWhenServing = (ctx: CapabilityCtx, id: string): void => {
+    servings.get(id)?.abort();
+    const abort = new AbortController();
+    servings.set(id, abort);
+    void waitUntilServing(ctx, id, abort.signal)
+        .then(async (serving) => {
+            if (serving && !abort.signal.aborted) {
+                await ctx.syncEndpoints();
+            }
+        })
+        .catch((error: unknown) => {
+            ctx.logger.warn(`localmodel ${id}: ${error instanceof Error ? error.message : String(error)}`);
+        })
+        .finally(() => {
+            if (servings.get(id) === abort) {
+                servings.delete(id);
+            }
+        });
+};
+
+// Stop watching an entry that is going away, the removal and rename halves of the map above. Separate from the
+// job's abort because the two have different lifetimes: the job is done once the server is spawned, the
+// watcher runs until it serves.
+const stopWatching = (id: string): void => {
+    servings.get(id)?.abort();
+    servings.delete(id);
+};
+
+/* WHAT THE ADD HANDS OFF TO. Fetch the weights if they aren't here, serve them, and tell the translator the
+ * moment they are actually being served; never throws, because nothing is holding it, and what went wrong
+ * belongs on the card rather than in an unhandled rejection.
+ *
+ * THE SYNC AT THE END IS THE HALF THAT MAKES THE ENTRY DRIVABLE, and it has to be here rather than on the
+ * route that added it. The route's sync ran while the weights were still arriving, so it wrote the truth of
+ * that moment, an endpoint publishing no models, and nothing else in the daemon is watching for the moment
+ * that stops being true. This job IS that watcher: it is the only code that knows a download finished and a
+ * server came up for this entry. Without it the card reads "active", the server answers on loopback, and every
+ * turn is refused with "unknown provider for model" because the routing table still says the endpoint serves
+ * nothing (ctx.syncEndpoints has the whole argument).
  *
  * Idempotent per entry: a second Update while the first is still downloading joins the job in flight rather
  * than racing a second writer onto the same part file. The abort check before the server starts is the removal
@@ -257,6 +346,7 @@ const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSou
             return;
         }
         await startServer(ctx, id, destination);
+        syncWhenServing(ctx, id);
     })()
         .catch((error: unknown) => {
             // A job stopped on purpose is not a fault to report: the card that would have shown it is the one
@@ -402,6 +492,7 @@ export const localModelHandler: CapabilityHandler = {
      * download only when no other card is fed by the same file. */
     remove: async (ctx, id, config) => {
         jobs.get(id)?.abort.abort();
+        stopWatching(id);
         failures.delete(id);
         await ctx.panels.stop(localModelPanelKey(id));
         await ctx.endpointModels.forget(id);
@@ -419,6 +510,7 @@ export const localModelHandler: CapabilityHandler = {
     rename: {
         carry: async (ctx, from) => {
             jobs.get(from)?.abort.abort();
+            stopWatching(from);
             failures.delete(from);
             await ctx.panels.stop(localModelPanelKey(from));
             await ctx.endpointModels.forget(from);

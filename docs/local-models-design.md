@@ -158,6 +158,17 @@ translator, the catalog prober, the picker and `endpoint/<id>` quick-model pinni
 The one deliberate divergence from a user-added endpoint: the daemon owns the URL, so the card never shows
 one.
 
+The one seam that could **not** be inherited untouched is *when* the routing table is written. The capability
+routes sync it on add/update/rename/remove, and for a user-added endpoint that is right: the server it names is
+already running, so the catalog read at add time is the truth. A local model is added minutes before it can
+serve, so that sync writes `models: []` — and an `openai-compatibility` entry declaring no models is not an
+endpoint waiting to fill in, it is a provider that refuses every request with `unknown provider for model`.
+Nothing else in the daemon watches for the download to finish, so the entry stayed unroutable for the life of
+the sandbox while its card read "active" and llama-server sat healthy on loopback. The background job therefore
+polls `/health` after it spawns the server and re-syncs the moment it answers 200 (`syncWhenServing`). The
+watcher is bounded (twenty minutes), ends early on a dead panel, and is cancelled by remove and rename; it is
+held outside the download job's map so that pressing Update on a model stuck loading still restarts it.
+
 ### What the card's copy promises
 
 A 4B model does not drive the frontier harness well, and the card should not imply it does. The hint sells

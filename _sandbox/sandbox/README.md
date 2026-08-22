@@ -56,8 +56,11 @@ reports the profile.
   starts the download and returns, the entry's status carries the progress, and a part file is resumed by
   range rather than re-fetched, so a restart mid-download costs seconds. To everything downstream it is an
   `endpoint/<id>` provider like any user-added model API: src/endpoints/local-model.ts is the one place the
-  two kinds are joined, and src/capabilities/handlers/localmodel.ts owns the download, the panel session and
-  the boot restore.
+  two kinds are joined, and src/capabilities/handlers/localmodel.ts owns the download, the panel session, the
+  boot restore, and the one moment this kind does not share with a user-added endpoint. The translator's
+  routing table is synced by the capability route at add time, which for a local model is minutes before it
+  can serve anything, so the handler re-syncs when llama-server actually answers /health; without that the
+  entry routes an empty model list and every turn on it is refused while the card reads "active".
 - Manage the app dev server and report preview status, including what is ACTUALLY answering inside the box: each
   listening port with the process that took it and the terminal that process descends from, whoever started it.
 - Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the

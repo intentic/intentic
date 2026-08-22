@@ -9,6 +9,7 @@ import { relayWalletEnsure, type WalletPolicyMirror } from "../wallet/wallet-sig
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
 import type { EndpointCatalog } from "../endpoints/endpoint-catalog.js";
+import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import type { HostHub } from "../hosts/host-hub.js";
 import type { HostsStore } from "../hosts/hosts-store.js";
 import type { ResolvedContribution } from "./contributions.js";
@@ -48,6 +49,20 @@ export interface CapabilityCtx {
     // it is the same catalog the picker and the translator reconciler read, so a card can never claim a model
     // list the turn path would disagree with.
     readonly endpointModels: EndpointCatalog;
+    /* REBUILD THE TRANSLATOR'S ROUTING TABLE FROM THE LIVE CATALOG, for the one kind whose model list is
+     * knowably WRONG at the moment the route syncs it.
+     *
+     * The routes sync on add/update/rename/remove, which is every moment a user-added endpoint changes: that
+     * kind points at a server the user already has running, so the catalog read at add time is the truth. A
+     * local model is the opposite by construction, the add starts a multi-gigabyte download and returns, so at
+     * add time the entry serves nothing, the sync writes `models: []`, and that empty list IS the routing
+     * table until something says otherwise. Nothing did, so every turn on a local model was refused with
+     * "unknown provider for model" while its server sat healthy on loopback.
+     *
+     * So the handler that started the server owns the correction, and this is its reach: the job waits for the
+     * server to actually serve, then calls this. Non-throwing like the sync it wraps, a proxy that is absent or
+     * mid-restart re-renders the same entries from the same catalog at its next start. */
+    readonly syncEndpoints: () => Promise<void>;
     // The image-baked extensions dir (services.config.extensionsDir), lets the cli handler build the connector
     // registry (installedExtensions) from the narrow ctx without holding Services.
     readonly extensionsDir: string;
@@ -150,6 +165,7 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         hosts: services.hosts,
         hostHub: services.hostHub,
         endpointModels: services.endpointModels,
+        syncEndpoints: () => syncEndpointCompat(services),
         extensionsDir: services.config.extensionsDir,
         donatePremium: (extensionId) => donateForExtension(services.config, extensionId),
         walletEnsure: (network, policy) => relayWalletEnsure(services.config, network, policy),

@@ -48,32 +48,56 @@ interface Panels {
     readonly stop: ReturnType<typeof vi.fn>;
 }
 
-const context = (root: string): { ctx: CapabilityCtx; panels: Panels } => {
+interface Context {
+    readonly ctx: CapabilityCtx;
+    readonly panels: Panels;
+    readonly syncEndpoints: ReturnType<typeof vi.fn>;
+}
+
+// `panelRunning` is what the serving watcher polls alongside /health, so a test that wants the watcher to keep
+// looking has to say the server is up; the default is the dead-panel exit, which is what stops every test that
+// is not about the watcher from leaving one running.
+const context = (root: string, panelRunning = false): Context => {
     const panels: Panels = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    const syncEndpoints = vi.fn(async () => undefined);
     const ctx = {
         workspace: { root },
         logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
-        panels: { ...panels, running: () => false },
+        panels: { ...panels, running: () => panelRunning },
         capabilities: { list: async () => [] },
         endpointModels: { forget: async () => undefined },
+        syncEndpoints,
     } as unknown as CapabilityCtx;
-    return { ctx, panels };
+    return { ctx, panels, syncEndpoints };
 };
 
-// The health probe answers "not serving" throughout: these tests are about the weights arriving, and a card
-// that claimed to be serving would just hide the states being asserted on.
+// The health probe answers "not serving" unless a test says otherwise: most of these are about the weights
+// arriving, and a card that claimed to be serving would just hide the states being asserted on.
 const serve = (body: ReadableStream<Uint8Array>, headers: Record<string, string>, status: number): Response =>
     new Response(body, { status, headers });
 
-const stubFetch = (onModel: (init: RequestInit | undefined) => Response): void => {
+const stubFetch = (onModel: (init: RequestInit | undefined) => Response, healthy = false): void => {
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.startsWith(MODEL_URL)) {
             return onModel(init);
         }
-        return new Response(null, { status: 503 });
+        return new Response(null, { status: healthy && url.endsWith("/health") ? 200 : 503 });
     });
 };
+
+// Whole weights in one chunk, the shape every test that isn't about resuming wants.
+const wholeFile = (): Response =>
+    serve(
+        new ReadableStream<Uint8Array>({
+            start(controller) {
+                controller.enqueue(WEIGHTS);
+                controller.close();
+            },
+        }),
+        { "content-length": String(WEIGHTS.byteLength) },
+        200,
+    );
 
 // The add, run to the end of its (now short) stream.
 const drain = async (id: string, ctx: CapabilityCtx): Promise<void> => {
@@ -159,6 +183,47 @@ test("an interrupted download resumes from the part file rather than fetching it
     expect(ranges).toEqual([`bytes=${already}-`]);
     // The whole model, which is only true if the three chunks already on disk were kept and appended to.
     expect(await readFile(modelPath(root))).toEqual(WEIGHTS);
+    vi.unstubAllGlobals();
+    await rm(root, { recursive: true, force: true });
+});
+
+/* THE REGRESSION THAT MADE EVERY LOCAL MODEL UNUSABLE, and the reason this file asserts on a sync at all.
+ *
+ * The capability route syncs the translator's routing table when the entry is ADDED, which for this kind is
+ * minutes before it can serve: the weights are still arriving, the endpoint publishes no models, and the route
+ * writes `models: []`. Nothing else in the daemon watches for that to stop being true, so the table kept saying
+ * the endpoint served nothing while llama-server sat healthy on loopback, and every turn came back "unknown
+ * provider for model <id>/<model>" against a card reading "active".
+ *
+ * So: the sync must happen AFTER the server answers /health, not when the download was handed off. */
+test("the translator is re-synced once the server actually serves, not when the download starts", async () => {
+    const root = await workspace();
+    const { ctx, panels, syncEndpoints } = context(root, true);
+    stubFetch(wholeFile, true);
+
+    await drain("serving", ctx);
+    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+    await vi.waitFor(() => expect(syncEndpoints).toHaveBeenCalledTimes(1), SETTLES);
+
+    await localModelHandler.remove?.(ctx, "serving", { model: "custom", gpu: "off", url: MODEL_URL });
+    vi.unstubAllGlobals();
+    await rm(root, { recursive: true, force: true });
+});
+
+/* The other half of the same rule: a server that never comes up must not be announced as routable. A sync on
+ * spawn rather than on readiness would publish the endpoint's model list from a catalog read that answers
+ * nothing, which is the empty-list entry this whole watcher exists to stop being written. */
+test("a server that never serves leaves the routing table alone", async () => {
+    const root = await workspace();
+    // Panel dead and /health refusing: the watcher's two exits, neither of which may reach a sync.
+    const { ctx, panels, syncEndpoints } = context(root);
+    stubFetch(wholeFile);
+
+    await drain("never-serves", ctx);
+    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+    await vi.waitFor(() => expect(existsSync(modelPath(root))).toBe(true), SETTLES);
+    expect(syncEndpoints).not.toHaveBeenCalled();
+
     vi.unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
