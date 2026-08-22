@@ -8,6 +8,7 @@ import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { signInThroughBrowser } from "../environments/desktop";
+import AppBrand from "../components/AppBrand.vue";
 
 /* SIGNING IN FOR THE DESKTOP APP: this page runs in the user's REAL BROWSER, never in the app's webview.
  *
@@ -166,7 +167,7 @@ onMounted(() => void hand());
                 <span
                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary-600/30 bg-linear-to-br from-primary-600/20 to-primary-600/5"
                 >
-                    <img src="/assets/intentic-logo-sized.png" alt="" class="h-5 w-5 object-contain" />
+                    <AppBrand shape="mark" class="text-base" />
                 </span>
                 <div class="min-w-0">
                     <h1 class="text-lg font-semibold">Signing in to the Intentic app</h1>

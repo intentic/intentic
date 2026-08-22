@@ -6,6 +6,7 @@ import { useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { desktopVersion, signInThroughBrowser } from "../environments/desktop";
+import AppBrand from "../components/AppBrand.vue";
 
 const { signInWithGoogle, signInWithGoogleCredential } = useAuth();
 const { getIdToken, renderButton } = useGoogleIdentity();
@@ -138,7 +139,7 @@ watch(
             ></div>
 
             <div class="animate-fade-in-up relative">
-                <img src="/assets/intentic-full.png" alt="intentic platform" class="h-8 w-auto" />
+                <AppBrand class="text-2xl" />
             </div>
 
             <div class="animate-fade-in-up relative max-w-2xl" style="animation-delay: 60ms">
@@ -178,7 +179,7 @@ watch(
             <div class="animate-fade-in w-full max-w-sm">
                 <!-- Compact brand mark for mobile (brand panel is hidden there). -->
                 <div class="mb-10 flex lg:hidden">
-                    <img src="/assets/intentic-full.png" alt="intentic platform" class="h-8 w-auto" />
+                    <AppBrand class="text-2xl" />
                 </div>
 
                 <div class="mb-8">

@@ -7,6 +7,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import AppBrand from "../components/AppBrand.vue";
 
 /* Public accept-invite landing for the emailed link (/invite/:token). It previews the token (no session needed),
  * resolves the current session, then routes the invitee: sign in as the invited address → accept → into the
@@ -82,7 +83,7 @@ const switchAccount = async (): Promise<void> => {
 <template>
     <div class="flex min-h-screen w-full items-center justify-center bg-canvas p-6 text-content">
         <div class="animate-fade-in w-full max-w-sm">
-            <img src="/assets/intentic-full.png" alt="intentic platform" class="mb-10 h-8 w-auto" />
+            <AppBrand class="mb-10 text-2xl" />
 
             <div v-if="view === 'loading'" class="flex items-center gap-3 text-sm text-muted">
                 <Icon name="spinner" spin />

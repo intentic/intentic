@@ -48,6 +48,7 @@ import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
 import { hostedWaitView } from "./hostedWait";
 import type { HostedStatus } from "@intentic-app/api-contract";
+import AppBrand from "../components/AppBrand.vue";
 
 /* The setup gate's destination (outside the workspace shell). THERE ARE TWO STEPS, and the first asks for
  * NOTHING: the sandbox is created on arrival under a name this page picks (autoCreate + setupName.ts) and its
@@ -1716,7 +1717,7 @@ watch(commandReady, (ready) => {
                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary-600/30 bg-linear-to-br from-primary-600/20 to-primary-600/5 shadow-md md:h-12 md:w-12"
                     aria-label="intentic platform"
                 >
-                    <img src="/assets/intentic-logo-sized.png" alt="intentic" class="h-5 w-5 object-contain md:h-6 md:w-6" />
+                    <AppBrand shape="mark" class="text-base md:text-lg" />
                 </span>
                 <!-- `contents` on a phone: the h1 becomes the logo's row-mate and the subtitle a full-width row
                      of its own, so the promise gets the whole width instead of a 200px column. From md up the

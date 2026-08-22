@@ -13,7 +13,11 @@
         <meta name="theme-color" content="#141210" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <link rel="apple-touch-icon" href="/assets/intentic-logo-sized.png" />
+        <!-- THE LOTUS, AND THE SAME FILES THE SITE SERVES. The mark is the product's, not this app's, so the
+             icon a tab shows here and the icon a tab shows on the marketing pages are literally the same
+             drawings — copied into this app's public/ rather than linked, because the two are separate
+             origins and a favicon must be reachable with no network hop to the other one. -->
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <!-- Runtime config: esbuild bundles environment.local|deployment.ts into public/assets/js/env.js,
              setting window.env BEFORE the app boots (so environment.ts can read it synchronously). A classic
              script, so it runs before the deferred app module. $API_URL is substituted (envsubst) at deploy. -->
@@ -64,14 +68,23 @@
         <link rel="preconnect" href="https://accounts.google.com" crossorigin />
         <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
         <script src="https://accounts.google.com/gsi/client" async></script>
-        <link rel="icon" type="image/png" href="/assets/intentic-logo-sized.png" />
+        <!-- The .ico is first and unqualified because that is the one every crawler, feed reader and pinned-tab
+             list asks for by convention; the SVG is what a modern browser actually draws. -->
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <!-- The app's two faces: Inter for --font-sans, JetBrains Mono for --font-mono. display=swap keeps it
              non-blocking. (Space Grotesk and DM Sans were loaded here for two of the brand themes; the accent
-             picker that replaced them changes colour, never type.) -->
+             picker that replaced them changes colour, never type.)
+             Baloo 2 is here for the WORDMARK alone, at one weight: the brand's own face, which the marketing
+             pages set the name in, so the logo on this app's entry screens is the same object as the logo on
+             the page the visitor arrived from. One family added to a request that was already being made
+             rather than a second request, and it carries no fallback risk — the mark beside the word is drawn,
+             not typed. (The sanctum skin asks for the same family plus Playfair through its own link; a
+             duplicate family costs nothing, the browser serves the second from cache.) -->
         <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
             rel="stylesheet"
         />
     </head>

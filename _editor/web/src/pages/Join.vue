@@ -8,6 +8,7 @@ import { formatCredits as n, hasReturned, joinLabel, resetsAtLocal } from "../co
 import { useMembership } from "../composables/membership/useMembership";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
+import AppBrand from "../components/AppBrand.vue";
 
 /* BUYING A MEMBERSHIP WITHOUT THE PRODUCT: the door for somebody whose agent asked for a paid run and who
  * has never opened this app in their life.
@@ -127,7 +128,7 @@ const view = computed(() => {
 <template>
     <div class="min-h-screen w-full bg-canvas p-6 text-content @container">
         <div class="animate-fade-in mx-auto flex w-full max-w-4xl flex-col gap-4">
-            <img src="/assets/intentic-full.png" alt="intentic platform" class="mb-4 h-8 w-auto" />
+            <AppBrand class="mb-4 text-2xl" />
 
             <div v-if="view === 'loading'" class="flex items-center gap-3 text-sm text-muted">
                 <Icon name="spinner" spin />

@@ -7,6 +7,7 @@ import { useRoute } from "vue-router";
 import { formatCredits as n } from "../composables/membership/creditMeter";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
+import AppBrand from "../components/AppBrand.vue";
 
 /* THE APPROVAL CARD, AS A PAGE, and the reason a Claude Code session can be trusted with a spending catalogue
  * at all.
@@ -133,7 +134,7 @@ const view = computed(() => {
 <template>
     <div class="flex min-h-screen w-full items-start justify-center bg-canvas p-6 text-content @container">
         <div class="animate-fade-in mt-8 w-full max-w-xl">
-            <img src="/assets/intentic-full.png" alt="intentic platform" class="mb-8 h-8 w-auto" />
+            <AppBrand class="mb-8 text-2xl" />
 
             <div v-if="view === 'loading'" class="flex items-center gap-3 text-sm text-muted">
                 <Icon name="spinner" spin />

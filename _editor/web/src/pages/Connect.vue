@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { environment } from "../environments/environment";
+import AppBrand from "../components/AppBrand.vue";
 
 /* WHERE A CODING AGENT'S OWNER SIGNS IN: the landing Better Auth's `mcp` plugin sends an unauthenticated
  * OAuth authorize to (api auth.ts `loginPage`).
@@ -72,7 +73,7 @@ const switchAccount = async (): Promise<void> => {
 <template>
     <div class="flex min-h-screen w-full items-center justify-center bg-canvas p-6 text-content">
         <div class="animate-fade-in w-full max-w-sm">
-            <img src="/assets/intentic-full.png" alt="intentic platform" class="mb-10 h-8 w-auto" />
+            <AppBrand class="mb-10 text-2xl" />
 
             <div v-if="resolving" class="flex items-center gap-3 text-sm text-muted">
                 <Icon name="spinner" spin />
