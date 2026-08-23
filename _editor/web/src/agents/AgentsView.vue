@@ -80,14 +80,11 @@ const { mobile } = useDevice();
 const {
     lanes,
     fleet,
-    blocking,
-    unread,
     heldWakes,
     releaseHeld,
     refresh,
     open,
     markSeen,
-    markAllSeen,
     archived,
     archiveLoading,
     loadArchived,
@@ -1037,26 +1034,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              and both pills UNDER it: invisible, and the unread pill is the only way to mark all read, so the
              board lost it entirely. Below the same width at which the lanes stack, the field takes a row of its
              own and the flanks keep the first one to themselves. -->
-        <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
+        <div class="flex min-h-[2.25rem] flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
-                <span class="shrink-0 text-sm font-semibold text-content">Agents</span>
-                <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a
-                     question, a conflict, an error) and earns the warning colour; "unread" is only "you haven't
-                     looked yet" and stays informational: with its own way out, so silencing the board never
-                     means clicking through every card. -->
-                <span v-if="blocking > 0" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">
-                    {{ blocking }} need{{ blocking === 1 ? "s" : "" }} you
-                </span>
-                <button
-                    v-if="unread > 0"
-                    type="button"
-                    aria-label="Mark all agents read"
-                    v-tooltip.bottom="'Mark all read'"
-                    class="touch-target inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
-                    @click="markAllSeen"
-                >
-                    <Icon name="check" class="text-2xs" />{{ unread }} unread
-                </button>
             </div>
             <SearchBar
                 ref="filterField"
